@@ -78,9 +78,24 @@ struct TabsTests {
         #expect(Tabs.showsAgentsTab(subagentIds: c.input?.map(\.id)) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("tabs", "openingTabCases", input: [IdRef]?.self, output: TicketTab?.self))
-    fileprivate func openingTab(_ c: Fixture.Case<[IdRef]?, TicketTab?>) {
-        #expect(Tabs.openingTab(summaryCount: c.input?.count) == c.output)
+    @Test(arguments: Fixture.cases("tabs", "openingTabCases", input: JSONValue?.self, output: TicketTab.self))
+    func openingTab(_ c: Fixture.Case<JSONValue?, TicketTab>) {
+        #expect(Tabs.openingTab() == c.output)
+    }
+
+    @Test func renamedTabsMatch() throws {
+        let ts = try Fixture.value("tabs", "renamedTabs", as: [String: String].self)
+        #expect(Tabs.renamedTabs.mapValues(\.rawValue) == ts)
+    }
+
+    @Test(arguments: Fixture.cases("tabs", "ticketTabFromCases", input: String?.self, output: TicketTab?.self))
+    func ticketTabFrom(_ c: Fixture.Case<String?, TicketTab?>) {
+        #expect(Tabs.ticketTabFrom(c.input) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("tabs", "logsMessagesCases", input: TicketTab.self, output: Bool.self))
+    func logsMessages(_ c: Fixture.Case<TicketTab, Bool>) {
+        #expect(Tabs.logsMessages(c.input) == c.output)
     }
 
     @Test(arguments: Fixture.cases("tabs", "effectiveTabCases", input: EffectiveInput.self, output: TicketTab.self))

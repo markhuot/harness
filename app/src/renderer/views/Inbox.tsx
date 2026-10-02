@@ -165,7 +165,7 @@ function TriageSession({ session }: { session: Session }) {
             <Markdown text={session.outcome} />
           </div>
           {dispatched && (
-            <button className="btn btn-sm" onClick={() => navigate({ view: "board", projectId: null, ticketKey: dispatched.key, tab: "summaries" })}>
+            <button className="btn btn-sm" onClick={() => navigate({ view: "board", projectId: null, ticketKey: dispatched.key, tab: "spec" })}>
               Open {keyLabel(dispatched)} <Icon name="chevronRight" size={12} />
             </button>
           )}

@@ -174,9 +174,6 @@ export function Pane({
   // the editor, so the prompt keeps the keyboard and what's typed after it.
   const { state } = useStore();
   const draft = c.kind === "ticket" ? ticketByKey(state, c.ticketKey) : undefined;
-  const shownDraft = useRef<string | null>(null);
-  const wasDraft = !!draft && shownDraft.current === draft.id;
-  shownDraft.current = draft?.draft ? draft.id : null;
   return (
     <section
       className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${active ? "active" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
@@ -201,7 +198,7 @@ export function Pane({
         ) : c.kind === "ticket" && draft?.draft ? (
           <DraftEditor key={draftEditorKey(leaf.id, draft.id)} paneId={leaf.id} ticket={draft} zoomed={zoomed} />
         ) : c.kind === "ticket" ? (
-          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} tabChosen={wasDraft} />
+          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
         ) : c.kind === "compose" ? (
           <DraftEditor key={`draft:${c.id}`} paneId={leaf.id} compose={c} zoomed={zoomed} />
         ) : c.kind === "file" ? (

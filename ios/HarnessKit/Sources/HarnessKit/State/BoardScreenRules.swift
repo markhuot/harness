@@ -106,12 +106,12 @@ public enum BoardScreenRules {
         return "\(Keys.keyLabel(t)) \(t.title)\(suffix)"
     }
 
-    /// The card's title line: its title, else a draft's first description line ("Empty draft").
+    /// The card's title line: its title, else a draft's first spec line ("Empty draft").
     public static func cardTitle(_ t: Ticket) -> String {
         if !t.title.isEmpty { return t.title }
         guard t.draft == true else { return "Untitled" }
         // JS `split("\n")[0]` splits on the code unit, so "\r\n" keeps its "\r" (a Character split wouldn't split it at all).
-        let scalars = t.description.unicodeScalars
+        let scalars = t.spec.unicodeScalars
         let first = String(String.UnicodeScalarView(scalars.prefix { $0 != "\n" }))
         return first.isEmpty ? "Empty draft" : first
     }

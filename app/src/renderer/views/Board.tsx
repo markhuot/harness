@@ -14,7 +14,7 @@ import {
   doneCount,
   hasCustomDriver,
   hideOnBoard,
-  latestSummary,
+  latestActivity,
   plainText,
   progressOf,
   scopeOf,
@@ -48,7 +48,7 @@ export function BoardPane() {
   // A draft's delete is Discard; it asks only when there's a prompt to lose.
   const discardDraft = useCallback(
     (t: Ticket) => {
-      if (t.description.trim() && !confirm(`Discard the draft ${keyLabel(t)}? Its prompt and settings are deleted.`)) return;
+      if (t.spec.trim() && !confirm(`Discard the draft ${keyLabel(t)}? Its spec and settings are deleted.`)) return;
       void act(() => client.deleteTicket(t.key), `${keyLabel(t)} discarded`);
     },
     [act, client],
@@ -352,7 +352,7 @@ const TicketCard = memo(function TicketCard({
   const children = isConductor(t) ? childrenOf(state, t.id) : [];
   const progress = isConductor(t) ? progressOf(children) : null;
   const dim = dimOnBoard(t);
-  const summary = latestSummary(state, t.sessionId);
+  const latest = latestActivity(state, t.sessionId);
   const customDriver = hasCustomDriver(state, t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;
@@ -425,7 +425,7 @@ const TicketCard = memo(function TicketCard({
           <span>{t.blockedReason}</span>
         </div>
       )}
-      {summary && t.status !== "blocked" && !t.pendingApproval && <div className="card-summary">{plainText(summary.body)}</div>}
+      {latest && t.status !== "blocked" && !t.pendingApproval && <div className="card-summary">{plainText(latest.body)}</div>}
 
       {progress && <ConductorRollup progress={progress} />}
 
@@ -455,7 +455,7 @@ function cardPropsEqual(a: CardProps, b: CardProps) {
   if (a.ticket !== b.ticket || a.selected !== b.selected || a.isCursor !== b.isCursor || a.showProject !== b.showProject || a.related !== b.related) return false;
   const s1 = a.state;
   const s2 = b.state;
-  if (s1.summaries[a.ticket.sessionId] !== s2.summaries[b.ticket.sessionId]) return false;
+  if (s1.activity[a.ticket.sessionId] !== s2.activity[b.ticket.sessionId]) return false;
   if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
   if (s1.keyAliases !== s2.keyAliases || s1.missingKeys !== s2.missingKeys) return false;
   // Deps, children and the parent live in the tickets map.

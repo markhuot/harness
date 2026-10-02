@@ -103,8 +103,9 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
 
 public struct CreateTicketBody: Codable, Sendable, Equatable {
     public var projectId: String
-    /// First message / brief. Title is derived from it when title is omitted.
-    public var prompt: String
+    /// The ticket's spec: revision 1, and the first run's message. Title is derived from it when
+    /// title is omitted.
+    public var spec: String
     public var title: String?
     public var kind: TicketKind?
     public var driver: String?
@@ -135,11 +136,11 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     public var key: String?
     public var externalRef: Patch<ExternalRef>
     /// Save it as a draft (Ticket.draft): created in planning with no run, whatever `start` says.
-    /// POST /tickets/:key/submit launches it later. The prompt may be empty for a draft.
+    /// POST /tickets/:key/submit launches it later. The spec may be empty for a draft.
     public var draft: Bool?
 
     public init(
-        projectId: String, prompt: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
+        projectId: String, spec: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
         model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent, start: Bool? = nil,
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
@@ -147,7 +148,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         draft: Bool? = nil
     ) {
         self.projectId = projectId
-        self.prompt = prompt
+        self.spec = spec
         self.title = title
         self.kind = kind
         self.driver = driver
@@ -170,7 +171,14 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
 
 public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var title: String?
-    public var description: String?
+    /// A new spec revision, written by the human. Needs baseRevision unless the ticket is a draft.
+    public var spec: String?
+    /// The spec revision the edit started from (Ticket.specRevision when the editor opened). A spec
+    /// that moved on since answers 409 with the current revision in `data` (SpecConflict), so a
+    /// human's edit never overwrites an agent's without them seeing it.
+    public var baseRevision: Int?
+    /// A few words on what the edit changed, kept with the revision (default "Edited by hand")
+    public var specNote: String?
     /// manual moves from the board
     public var status: TicketStatus?
     /// Changing the driver clears the model unless `model` is given too
@@ -204,14 +212,16 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var projectId: String?
 
     public init(
-        title: String? = nil, description: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
+        title: String? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
         model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
         kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil
     ) {
         self.title = title
-        self.description = description
+        self.spec = spec
+        self.baseRevision = baseRevision
+        self.specNote = specNote
         self.status = status
         self.driver = driver
         self.model = model
@@ -259,10 +269,15 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
     /// (planning → the plan run; blocked, review, done → a chat run with the work tools).
     public var move: Bool?
+    /// true: the message also goes into the ticket's Activity, as a `message` entry, and the agent's
+    /// final answer follows as an `answer` entry. Clients send true from the Spec and Activity tabs
+    /// and false from every other tab (the Transcript shows the message either way). Default false.
+    public var log: Bool?
 
-    public init(text: String, move: Bool? = nil) {
+    public init(text: String, move: Bool? = nil, log: Bool? = nil) {
         self.text = text
         self.move = move
+        self.log = log
     }
 }
 

@@ -50,9 +50,9 @@ public final class BoardStore {
     public static let restFallbackMs: Double = 1500
     /// Snapshot poll while disconnected, so a 401 (rotated token) is noticed (ms).
     public static let disconnectedPollMs: Double = 8000
-    /// Summaries backfilled after a snapshot: every non-done ticket plus this many newest done.
-    public static let summaryBackfillDone = 12
-    public static let summaryConcurrency = 6
+    /// Activity backfilled after a snapshot: every non-done ticket plus this many newest done.
+    public static let activityBackfillDone = 12
+    public static let activityConcurrency = 6
 
     public private(set) var state = BoardState.initial
     /// Bumped on every reconnect so views can refetch what they own.
@@ -310,7 +310,7 @@ public final class BoardStore {
 
     // MARK: Snapshot
 
-    /// The full snapshot for the current scope. Returns once it's applied; the summaries backfill
+    /// The full snapshot for the current scope. Returns once it's applied; the Activity backfill
     /// it starts runs on its own.
     public func refresh() async {
         do {
@@ -324,7 +324,7 @@ public final class BoardStore {
             authError = nil
             loadError = nil
             // Not awaited: pull to refresh ends once the snapshot lands.
-            Task { await self.backfillSummaries(snapshot) }
+            Task { await self.backfillActivity(snapshot) }
         } catch {
             guard !closed else { return }
             if Connection.isUnauthorized(error) {
@@ -358,21 +358,21 @@ public final class BoardStore {
             donePage: page.map { .init(scope: scope, page: $0) })
     }
 
-    private func backfillSummaries(_ snapshot: BoardSnapshot) async {
+    private func backfillActivity(_ snapshot: BoardSnapshot) async {
         let done = snapshot.donePage?.page.tickets
             ?? snapshot.tickets.filter { $0.status == .done }.sorted { Paging.completedAtOf($0) > Paging.completedAtOf($1) }
-        let wanted = snapshot.tickets.filter { $0.status != .done } + done.prefix(Self.summaryBackfillDone)
+        let wanted = snapshot.tickets.filter { $0.status != .done } + done.prefix(Self.activityBackfillDone)
         let client = client
         var queue = wanted[...]
-        await withTaskGroup(of: (String, [Summary]?).self) { group in
+        await withTaskGroup(of: (String, [ActivityEntry]?).self) { group in
             func next() -> Bool {
                 guard let t = queue.popFirst() else { return false }
-                group.addTask { (t.sessionId, try? await client.listSummaries(t.key)) }
+                group.addTask { (t.sessionId, try? await client.listActivity(t.key)) }
                 return true
             }
-            for _ in 0..<Self.summaryConcurrency { if !next() { break } }
-            while let (sessionId, summaries) = await group.next() {
-                if let summaries, !closed { dispatch(.summaries(sessionId: sessionId, summaries: summaries)) }
+            for _ in 0..<Self.activityConcurrency { if !next() { break } }
+            while let (sessionId, activity) = await group.next() {
+                if let activity, !closed { dispatch(.activity(sessionId: sessionId, activity: activity)) }
                 _ = next()
             }
         }

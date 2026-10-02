@@ -41,7 +41,7 @@
       "system.children",
       "system.branches",
       "system.files",
-      "system.summaries",
+      "system.spec",
       "system.file_links",
       "system.board",
       "system.board_changes",

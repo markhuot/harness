@@ -15,13 +15,13 @@ struct BoardStoreTests {
             var donePage: TicketPage? = TicketPage(tickets: [], nextCursor: nil, total: 0)
             var pageError: (any Error)?
             var snapshotError: (any Error)?
-            var summaryHold: [String: Deferred<[Summary]>] = [:]
+            var activityHold: [String: Deferred<[ActivityEntry]>] = [:]
             var details: [String: TicketDetail] = [:]
         }
 
         let s = Mutex(State())
         let calls = CallLog<String>()
-        let inFlightSummaries = Mutex((now: 0, max: 0))
+        let inFlightActivity = Mutex((now: 0, max: 0))
 
         func listProjects() async throws -> [Project] {
             calls.append("projects")
@@ -72,12 +72,12 @@ struct BoardStoreTests {
             return []
         }
 
-        func listSummaries(_ key: String) async throws -> [Summary] {
-            calls.append("summaries \(key)")
-            inFlightSummaries.withLock { $0.now += 1; $0.max = max($0.max, $0.now) }
-            defer { inFlightSummaries.withLock { $0.now -= 1 } }
-            if let hold = s.withLock({ $0.summaryHold[key] }) { return try await hold.value() }
-            return [Summary(id: "sum-\(key)", sessionId: "s-\(key)", author: .agent, body: key, createdAt: 1)]
+        func listActivity(_ key: String) async throws -> [ActivityEntry] {
+            calls.append("activity \(key)")
+            inFlightActivity.withLock { $0.now += 1; $0.max = max($0.max, $0.now) }
+            defer { inFlightActivity.withLock { $0.now -= 1 } }
+            if let hold = s.withLock({ $0.activityHold[key] }) { return try await hold.value() }
+            return [ActivityEntry(id: "act-\(key)", sessionId: "s-\(key)", author: .agent, body: key, createdAt: 1)]
         }
 
         func count(_ prefix: String) -> Int { calls.all.filter { $0.hasPrefix(prefix) }.count }
@@ -123,11 +123,11 @@ struct BoardStoreTests {
     }
 
     static func tk(_ id: String, status: TicketStatus = .inProgress, completedAt: Double? = nil, dependsOn: [String] = []) -> Ticket {
-        Ticket(id: id, key: id.uppercased(), projectId: "p1", title: id, description: "", status: status, sessionId: "s-\(id.uppercased())", driver: "dummy",
+        Ticket(id: id, key: id.uppercased(), projectId: "p1", title: id, spec: "", status: status, sessionId: "s-\(id.uppercased())", driver: "dummy",
                dependsOn: dependsOn, completedAt: completedAt.map { .value($0) } ?? .null, createdAt: 1, updatedAt: 1)
     }
 
-    @Test func everyConnectFetchesTheSnapshotAndBackfillsSummaries() async {
+    @Test func everyConnectFetchesTheSnapshotAndBackfillsActivity() async {
         let h = Harness(boardProject: "p1")
         let done = (0..<15).map { Self.tk("d\($0)", status: .done, completedAt: Double(100 - $0)) }
         h.client.s.withLock {
@@ -137,7 +137,7 @@ struct BoardStoreTests {
         h.store.start()
         #expect(!h.store.state.ready)
         h.socket.connect(true)
-        await eventually { h.store.state.ready && h.client.count("summaries") == 14 }
+        await eventually { h.store.state.ready && h.client.count("activity") == 14 }
         #expect(h.store.state.connected)
         #expect(h.client.calls.all.contains("tickets planning,in_progress,blocked,review"))
         #expect(h.client.calls.all.contains("page done p1 50 -"))
@@ -145,48 +145,48 @@ struct BoardStoreTests {
         #expect(h.store.state.watchers.isEmpty && h.store.state.settings == nil) // optional calls failed, snapshot still applied
         // Every non-done ticket plus the 12 newest done ones.
         await settle()
-        let asked = Set(h.client.calls.all.filter { $0.hasPrefix("summaries") })
-        let expected = (["W1", "W2"] + (0..<12).map { "D\($0)" }).map { "summaries \($0)" }
+        let asked = Set(h.client.calls.all.filter { $0.hasPrefix("activity") })
+        let expected = (["W1", "W2"] + (0..<12).map { "D\($0)" }).map { "activity \($0)" }
         #expect(asked == Set(expected))
-        #expect(h.store.state.latestSummary("s-W1")?.id == "sum-W1")
+        #expect(h.store.state.latestActivity("s-W1")?.id == "act-W1")
         #expect(h.store.epoch == 0)
         #expect(h.store.loadError == nil)
     }
 
-    @Test func summaryBackfillRunsAtMostSixAtATime() async {
+    @Test func activityBackfillRunsAtMostSixAtATime() async {
         let h = Harness()
         let live = (0..<10).map { Self.tk("t\($0)") }
-        let holds = Dictionary(uniqueKeysWithValues: live.map { ($0.key, Deferred<[Summary]>()) })
+        let holds = Dictionary(uniqueKeysWithValues: live.map { ($0.key, Deferred<[ActivityEntry]>()) })
         h.client.s.withLock {
             $0.live = live
-            $0.summaryHold = holds
+            $0.activityHold = holds
         }
         h.store.start()
         h.socket.connect(true)
-        await eventually { h.client.count("summaries") == 6 }
+        await eventually { h.client.count("activity") == 6 }
         await settle()
-        #expect(h.client.count("summaries") == 6)
+        #expect(h.client.count("activity") == 6)
         for d in holds.values { d.resolve([]) }
-        await eventually { h.client.count("summaries") == 10 }
-        #expect(h.client.inFlightSummaries.withLock { $0.max } == 6)
+        await eventually { h.client.count("activity") == 10 }
+        #expect(h.client.inFlightActivity.withLock { $0.max } == 6)
     }
 
-    @Test func refreshReturnsOnceTheSnapshotLandsWithoutWaitingForSummaries() async {
+    @Test func refreshReturnsOnceTheSnapshotLandsWithoutWaitingForActivity() async {
         let h = Harness()
-        let never = Deferred<[Summary]>() // never settled
+        let never = Deferred<[ActivityEntry]>() // never settled
         h.client.s.withLock {
             $0.live = [Self.tk("w1")]
-            $0.summaryHold = ["W1": never]
+            $0.activityHold = ["W1": never]
         }
         var returned = false
         let refresh = Task { await h.store.refresh(); returned = true }
-        await eventually { h.client.count("summaries W1") == 1 }
+        await eventually { h.client.count("activity W1") == 1 }
         // A refresh that waited on the backfill would still be pending here.
         let finished = await eventually({ returned }, timeout: .milliseconds(500))
         #expect(finished)
         #expect(h.store.state.ready)
         #expect(!never.isSettled)
-        #expect(h.store.state.summaries["s-W1"] == nil)
+        #expect(h.store.state.activity["s-W1"] == nil)
         never.resolve([]) // let the backfill (and a waiting refresh) finish
         await refresh.value
     }
@@ -291,7 +291,7 @@ struct BoardStoreTests {
         #expect(h.store.loader.legacy)
         #expect(h.store.state.boardColumns(nil).done.map(\.id) == ["old"])
         #expect(h.store.loader.ensureFirstPage("p2") == nil)
-        await eventually { h.client.count("summaries") == 2 }
+        await eventually { h.client.count("activity") == 2 }
     }
 
     @Test func aFailingDonePageOtherThan404FailsTheSnapshot() async {

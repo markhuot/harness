@@ -8,6 +8,7 @@ const NATIVE_READ = ["read_file", "list_files", "bash"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CONDUCTOR = ["review_ticket", "complete_ticket"];
+const SPEC = ["read_spec", "edit_spec", "update_spec"];
 
 const CONFIG_READ = ["list_watchers", "get_settings", "list_drivers"];
 const CONFIG_WRITE = [
@@ -29,14 +30,14 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
     // update_ticket edits only the plan run's own ticket (the orchestrator checks).
-    plan: ["post_summary", "update_plan", "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    work: ["post_summary", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
-    review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    complete: ["post_summary", "record_pull_request", ...BOARD, ...CONFIG_READ],
-    conductor: ["post_summary", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    work: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    review: ["post_note", "read_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    complete: ["post_note", ...SPEC, "record_pull_request", ...BOARD, ...CONFIG_READ],
+    conductor: ["post_note", ...SPEC, "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
     // A chat (a message to a blocked, review or done task ticket) gets the work run's tools.
-    chat: ["post_summary", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    chat: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,
@@ -74,9 +75,12 @@ describe("toolsForRun", () => {
     expect(who("unblock")).toEqual(["work", "conductor", "chat"]);
     expect(who("resume_work")).toEqual(["work", "conductor", "chat"]);
     expect(who("submit_for_review")).toEqual(["work", "conductor", "chat"]);
-    expect(who("update_plan")).toEqual(["plan"]);
+    expect(who("read_spec")).toEqual(["plan", "work", "review", "complete", "conductor", "chat"]);
+    // Review runs read the spec but never change it; triage never sees it.
+    expect(who("edit_spec")).toEqual(["plan", "work", "complete", "conductor", "chat"]);
+    expect(who("update_spec")).toEqual(["plan", "work", "complete", "conductor", "chat"]);
     expect(who("review_decision")).toEqual(["review"]);
-    expect(who("post_summary")).toEqual(["plan", "work", "review", "complete", "conductor", "chat"]);
+    expect(who("post_note")).toEqual(["plan", "work", "review", "complete", "conductor", "chat"]);
     expect(who("dispatch_ticket")).toEqual(["triage"]);
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor", "chat"]);
     for (const read of BOARD) expect(who(read)).toEqual(kinds);

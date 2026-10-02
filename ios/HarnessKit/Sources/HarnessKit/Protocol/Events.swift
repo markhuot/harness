@@ -4,7 +4,7 @@ import Foundation
 // Events (service → client over WebSocket)
 // ---------------------------------------------------------------------------
 
-/// A change the service broadcasts, discriminated by `kind` (17 kinds). An unknown `kind`
+/// A change the service broadcasts, discriminated by `kind` (18 kinds). An unknown `kind`
 /// decodes to `.unknown(kind:raw:)` and re-encodes `raw` unchanged.
 public enum HarnessEvent: Codable, Sendable, Equatable {
     case projectUpserted(project: Project)
@@ -18,7 +18,10 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     case subagentUpserted(subagent: Subagent)
     /// Ephemeral streaming text; the full block is persisted later as transcript.appended
     case transcriptDelta(sessionId: String, runId: String, text: String)
-    case summaryAdded(summary: Summary)
+    case activityAdded(entry: ActivityEntry)
+    /// A new spec revision; the ticket.upserted that follows carries the new body. Services from
+    /// before runId / runKind / createdAt omit them.
+    case specRevised(ticketId: String, rev: Int, author: SpecRevisionAuthor, note: String, runId: Patch<String> = .absent, runKind: Patch<RunKind> = .absent, createdAt: Timestamp? = nil)
     case watcherUpserted(watcher: Watcher)
     case watcherDeleted(id: String)
     case settingsUpdated(settings: PublicSettings)
@@ -33,7 +36,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     public static let knownKinds = [
         "project.upserted", "project.deleted", "ticket.upserted", "ticket.deleted", "session.upserted",
         "session.deleted", "run.upserted", "transcript.appended", "subagent.upserted", "transcript.delta",
-        "summary.added", "watcher.upserted", "watcher.deleted", "settings.updated", "browser.frame",
+        "activity.added", "spec.revised", "watcher.upserted", "watcher.deleted", "settings.updated", "browser.frame",
         "browser.state", "service.status",
     ]
 
@@ -50,7 +53,8 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case .transcriptAppended: "transcript.appended"
         case .subagentUpserted: "subagent.upserted"
         case .transcriptDelta: "transcript.delta"
-        case .summaryAdded: "summary.added"
+        case .activityAdded: "activity.added"
+        case .specRevised: "spec.revised"
         case .watcherUpserted: "watcher.upserted"
         case .watcherDeleted: "watcher.deleted"
         case .settingsUpdated: "settings.updated"
@@ -79,7 +83,12 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case "subagent.upserted": self = .subagentUpserted(subagent: try field("subagent"))
         case "transcript.delta":
             self = .transcriptDelta(sessionId: try field("sessionId"), runId: try field("runId"), text: try field("text"))
-        case "summary.added": self = .summaryAdded(summary: try field("summary"))
+        case "activity.added": self = .activityAdded(entry: try field("entry"))
+        case "spec.revised":
+            self = .specRevised(
+                ticketId: try field("ticketId"), rev: try field("rev"), author: try field("author"), note: try field("note"),
+                runId: try c.decode(Patch<String>.self, forKey: "runId"), runKind: try c.decode(Patch<RunKind>.self, forKey: "runKind"),
+                createdAt: try c.decodeIfPresent(Timestamp.self, forKey: "createdAt"))
         case "watcher.upserted": self = .watcherUpserted(watcher: try field("watcher"))
         case "watcher.deleted": self = .watcherDeleted(id: try field("id"))
         case "settings.updated": self = .settingsUpdated(settings: try field("settings"))
@@ -110,7 +119,15 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
             try c.encode(sessionId, forKey: "sessionId")
             try c.encode(runId, forKey: "runId")
             try c.encode(text, forKey: "text")
-        case let .summaryAdded(summary): try c.encode(summary, forKey: "summary")
+        case let .activityAdded(entry): try c.encode(entry, forKey: "entry")
+        case let .specRevised(ticketId, rev, author, note, runId, runKind, createdAt):
+            try c.encode(ticketId, forKey: "ticketId")
+            try c.encode(rev, forKey: "rev")
+            try c.encode(author, forKey: "author")
+            try c.encode(note, forKey: "note")
+            try c.encode(runId, forKey: "runId")
+            try c.encode(runKind, forKey: "runKind")
+            try c.encodeIfPresent(createdAt, forKey: "createdAt")
         case let .watcherUpserted(watcher): try c.encode(watcher, forKey: "watcher")
         case let .settingsUpdated(settings): try c.encode(settings, forKey: "settings")
         case let .browserFrame(sessionId, tabId, data, width, height):

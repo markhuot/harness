@@ -7,8 +7,15 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var projectId: String
     public var kind: TicketKind
     public var title: String
-    /// The brief / plan. Humans edit this in planning; the planning agent may update it.
-    public var description: String
+    /// The spec (DESIGN.md "Spec revisions and attachments"): a living markdown document with the
+    /// goal, plan, status and open questions. Agents keep it current with edit_spec / update_spec;
+    /// every write is a revision. This is the current revision's body.
+    public var spec: String
+    /// The current spec revision (1 for a new ticket). Optional so older fixtures decode.
+    public var specRevision: Int?
+    /// The revision that was current when the human pressed Start (planning → work): the approved
+    /// baseline the agent review diffs against. null until the ticket first starts.
+    public var specBaselineRevision: Patch<Int>
     public var status: TicketStatus
     /// The session holding this ticket's transcript
     public var sessionId: String
@@ -100,7 +107,8 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var updatedAt: Timestamp
 
     public init(
-        id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, description: String,
+        id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, specRevision: Int? = nil,
+        specBaselineRevision: Patch<Int> = .absent,
         status: TicketStatus, sessionId: String, driver: String, parentId: String? = nil, childCount: Int? = nil,
         dependsOn: [String] = [], autoStart: Bool = false, agentReview: ReviewState = .pending,
         humanReview: ReviewState = .pending, externalRef: ExternalRef? = nil, workdir: String? = nil,
@@ -117,7 +125,9 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.projectId = projectId
         self.kind = kind
         self.title = title
-        self.description = description
+        self.spec = spec
+        self.specRevision = specRevision
+        self.specBaselineRevision = specBaselineRevision
         self.status = status
         self.sessionId = sessionId
         self.driver = driver
@@ -302,7 +312,8 @@ public struct TicketDetail: Codable, Sendable, Equatable {
     public var resolvedFrom: String?
     public var ticket: Ticket
     public var session: Session
-    public var summaries: [Summary]
+    /// The ticket's Activity, oldest first
+    public var activity: [ActivityEntry]
     public var runs: [Run]
     public var dependents: [String]
     public var children: [Ticket]
@@ -316,14 +327,14 @@ public struct TicketDetail: Codable, Sendable, Equatable {
     public var relatedTickets: [RelatedTicket]?
 
     public init(
-        resolvedFrom: String? = nil, ticket: Ticket, session: Session, summaries: [Summary] = [], runs: [Run] = [],
+        resolvedFrom: String? = nil, ticket: Ticket, session: Session, activity: [ActivityEntry] = [], runs: [Run] = [],
         dependents: [String] = [], children: [Ticket] = [], parent: Patch<Ticket> = .absent,
         subagents: [Subagent]? = nil, relatedTickets: [RelatedTicket]? = nil
     ) {
         self.resolvedFrom = resolvedFrom
         self.ticket = ticket
         self.session = session
-        self.summaries = summaries
+        self.activity = activity
         self.runs = runs
         self.dependents = dependents
         self.children = children

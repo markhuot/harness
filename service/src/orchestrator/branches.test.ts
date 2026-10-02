@@ -70,14 +70,14 @@ describe("base branch settings", () => {
     expectHttp(() => h.orch.updateProject(h.project.id, { baseBranch: "x..y" }), 400, /can't contain \.\./);
     expect(h.orch.updateProject(h.project.id, { baseBranch: " release " }).baseBranch).toBe("release");
     expect(h.orch.updateProject(h.project.id, { baseBranch: "" }).baseBranch).toBeNull();
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", baseBranch: "-x", start: false })).rejects.toThrow(/can't start with -/);
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", branch: "a b", start: false })).rejects.toThrow(/isn't a valid branch name/);
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", baseBranch: "-x", start: false })).rejects.toThrow(/can't start with -/);
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", branch: "a b", start: false })).rejects.toThrow(/isn't a valid branch name/);
   });
 
   test("ticket beats project beats settings; the stored setting survives a reload", async () => {
     const h = await setup();
     h.orch.updateSettings({ baseBranch: "develop" });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     await h.git("branch", "develop");
     expect(await h.orch.refreshBaseBranch(h.get(t))).toEqual({ branch: "develop", source: "settings" });
@@ -91,14 +91,14 @@ describe("base branch settings", () => {
 
   test("a repo without the default branch falls back to its checked-out branch; an explicit base doesn't", async () => {
     const h = await setup({ init: "master" });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     expect(h.get(t).branch).toBe("harness/repo-1");
     expect(await h.orch.refreshBaseBranch(h.get(t))).toEqual({ branch: "master", source: "checkout" });
     expect(await h.rev("harness/repo-1")).toBe(await h.rev("master"));
 
     h.orch.updateProject(h.project.id, { baseBranch: "main" });
-    const u = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
+    const u = await h.orch.createTicket({ projectId: h.project.id, spec: "y" });
     await h.orch.idle();
     const blocked = h.get(u);
     expect(blocked.status).toBe("blocked");
@@ -115,7 +115,7 @@ describe("completion after a restart (nothing cached about the repo's branches)"
     test(`${how}: the complete run's prompt names the fallback base, same as its system prompt`, async () => {
       const h = await setup({ init: "master" });
       h.driver.commitsWork = true;
-      const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+      const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
       await h.orch.idle();
       forget(h);
       if (how === "Complete button") await h.orch.completeTicket(t.key);
@@ -131,7 +131,7 @@ describe("completion after a restart (nothing cached about the repo's branches)"
 
   test("while the complete run is being prepared the ticket counts as completing", async () => {
     const h = await setup({ init: "master" });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const pending = h.orch.completeTicket(t.key);
     await expect(h.orch.completeTicket(t.key)).rejects.toThrow(/already completing/);
@@ -147,7 +147,7 @@ describe("the ticket's worktree branch", () => {
     const h = await setup({ baseBranch: "develop" });
     const tip = await commitOn(h, "develop", "main");
     expect(await h.rev("HEAD")).not.toBe(tip);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const cur = h.get(t);
     expect(cur.branch).toBe("harness/repo-1");
@@ -159,12 +159,12 @@ describe("the ticket's worktree branch", () => {
   test("an existing branch is checked out as is; a new name is created from the base branch", async () => {
     const h = await setup();
     const feature = await commitOn(h, "feature/x", "main");
-    const a = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", branch: "feature/x" });
+    const a = await h.orch.createTicket({ projectId: h.project.id, spec: "x", branch: "feature/x" });
     await h.orch.idle();
     expect([h.get(a).branch, h.get(a).requestedBranch]).toEqual(["feature/x", "feature/x"]);
     expect(await h.rev("HEAD", h.get(a).workdir!)).toBe(feature);
 
-    const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "y", branch: "medl-1223-ai-app" });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "y", branch: "medl-1223-ai-app" });
     await h.orch.idle();
     expect(h.get(b).branch).toBe("medl-1223-ai-app");
     expect(await h.rev("medl-1223-ai-app")).toBe(await h.rev("main"));
@@ -174,7 +174,7 @@ describe("the ticket's worktree branch", () => {
     const h = await setup();
     const herdr = join(h.home, "herdr-medl");
     await h.git("worktree", "add", "-q", "-b", "medl-1223-ai-app", herdr);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", branch: "medl-1223-ai-app" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", branch: "medl-1223-ai-app" });
     await h.orch.idle();
     const cur = h.get(t);
     expect(cur.status).toBe("blocked");
@@ -190,8 +190,8 @@ describe("the ticket's worktree branch", () => {
 
   test("branch needs a worktree; it can't be changed from outside once the worktree exists", async () => {
     const h = await setup();
-    await expect(h.orch.createTicket({ projectId: h.project.id, prompt: "x", branch: "b", useWorktree: false })).rejects.toThrow(/needs a worktree/);
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", branch: "b", useWorktree: false })).rejects.toThrow(/needs a worktree/);
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.updateTicket(t.key, { branch: "chosen" });
     expect(h.get(t).requestedBranch).toBe("chosen");
     await h.orch.startTicket(t.key);
@@ -199,7 +199,7 @@ describe("the ticket's worktree branch", () => {
     expect(h.get(t).branch).toBe("chosen");
     await expect(h.orch.updateTicket(t.key, { branch: "later" })).rejects.toThrow(/update_branch tool/);
     // The board tool says the same thing to another ticket's agent.
-    const other = await h.orch.createTicket({ projectId: h.project.id, prompt: "caller", start: false });
+    const other = await h.orch.createTicket({ projectId: h.project.id, spec: "caller", start: false });
     await expect(h.orch.ops.updateTicket(h.ctx("work", other), t.key, { branch: "later" })).rejects.toThrow(/send it a message/);
     await h.orch.ops.updateTicket(h.ctx("work", other), t.key, { baseBranch: "develop" });
     expect(h.get(t).baseBranch).toBe("develop");
@@ -207,8 +207,8 @@ describe("the ticket's worktree branch", () => {
 
   test("create_ticket passes branch and base_branch through for a child", async () => {
     const h = await setup();
-    const me = await h.orch.createTicket({ projectId: h.project.id, prompt: "parent", start: false });
-    const child = await h.orch.ops.createTicket(h.ctx("work", me), { title: "c", description: "d", child: true, autoStart: false, branch: "feat/c", baseBranch: "develop" });
+    const me = await h.orch.createTicket({ projectId: h.project.id, spec: "parent", start: false });
+    const child = await h.orch.ops.createTicket(h.ctx("work", me), { title: "c", spec: "d", child: true, autoStart: false, branch: "feat/c", baseBranch: "develop" });
     expect([child.requestedBranch, child.baseBranch, child.branch]).toEqual(["feat/c", "develop", null]);
   });
 });
@@ -216,7 +216,7 @@ describe("the ticket's worktree branch", () => {
 describe("update_branch", () => {
   test("a branch checked out in another worktree re-points the ticket there; nothing is deleted", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const before = h.get(t);
     await commitOn(h, before.branch!); // work the agent did on harness/repo-1
@@ -253,7 +253,7 @@ describe("update_branch", () => {
 
   test("once that worktree is gone, starting again puts the leftover harness worktree on the ticket's branch", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /block which branch?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /block which branch?" });
     await h.orch.idle();
     const harnessDir = h.get(t).workdir!;
     const herdr = join(h.home, "herdr-medl");
@@ -269,7 +269,7 @@ describe("update_branch", () => {
 
   test("when the ticket's branch can't go back into the leftover harness worktree, the ticket blocks saying why", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x /block which branch?" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /block which branch?" });
     await h.orch.idle();
     const harnessDir = h.get(t).workdir!;
     const herdr = join(h.home, "herdr-medl");
@@ -295,7 +295,7 @@ describe("update_branch", () => {
     const h = await setup();
     await h.git("branch", "old-feature"); // made before main moved on
     await commitOn(h, "main"); // main moves ahead
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     await commitOn(h, h.get(t).branch!); // the ticket's one commit
     const out = await h.orch.ops.updateBranch(h.ctx("work", t), { branch: "old-feature" });
@@ -304,7 +304,7 @@ describe("update_branch", () => {
 
   test("otherwise it switches the ticket's worktree, creating the branch at HEAD when new; a dirty tree is refused", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     const wt = h.get(t).workdir!;
     const head = await h.rev("HEAD", wt);
@@ -328,7 +328,7 @@ describe("update_branch", () => {
 
   test("base_branch alone; refused without a worktree, with nothing to change, and outside work runs", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     await h.git("branch", "develop");
     expect(await h.orch.ops.updateBranch(h.ctx("work", t), { baseBranch: "develop" })).toContain("Base branch: develop (set on this ticket)");
@@ -336,7 +336,7 @@ describe("update_branch", () => {
     expect(await h.orch.ops.updateBranch(h.ctx("work", t), { baseBranch: null })).toContain("Base branch: main (inherited from Settings)");
     await expect(h.orch.ops.updateBranch(h.ctx("work", t), {})).rejects.toThrow(/Nothing to update/);
     await expect(h.orch.ops.updateBranch(h.ctx("review", t), { branch: "x" })).rejects.toThrow(/only available in work, conductor and chat runs/);
-    const plain = await h.orch.createTicket({ projectId: h.project.id, prompt: "y", useWorktree: false });
+    const plain = await h.orch.createTicket({ projectId: h.project.id, spec: "y", useWorktree: false });
     await h.orch.idle();
     await expect(h.orch.ops.updateBranch(h.ctx("work", plain), { branch: "x" })).rejects.toThrow(/runs in the project checkout/);
   });

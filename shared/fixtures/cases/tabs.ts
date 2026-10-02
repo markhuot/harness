@@ -2,16 +2,19 @@
 import {
   effectiveTab,
   isTicketTab,
+  logsMessages,
   nextTab,
   openingTab,
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
+  RENAMED_TABS,
   showsAgentsTab,
   subagentTabRoute,
   TAB_LABEL,
   TICKET_TABS,
   tabStripTab,
+  ticketTabFrom,
   type TicketTab,
   visibleTabs,
 } from "../../src/state/tabs";
@@ -19,16 +22,20 @@ import { cases } from "../case";
 
 export const ticketTabs = TICKET_TABS;
 export const tabLabel = TAB_LABEL;
+export const renamedTabs = RENAMED_TABS;
 
 /** Strings every parser sees. */
 const tabStrings: Record<string, string> = {
-  summaries: "summaries",
+  spec: "spec",
+  activity: "activity",
+  "renamed summaries": "summaries",
   children: "children",
   transcript: "transcript",
   agents: "agents",
   browser: "browser",
   details: "details",
-  "capitalized built-in": "Summaries",
+  "capitalized built-in": "Spec",
+  "capitalized renamed": "Summaries",
   empty: "",
   plugin: "plugin:git:changes",
   "plugin with digits, dash and underscore": "plugin:a1_b-c:t_2-x",
@@ -66,6 +73,18 @@ export const parsePluginTabCases = cases(parsePluginTab, tabStrings);
 export const parseSubagentTabCases = cases(parseSubagentTab, tabStrings);
 export const tabStripTabCases = cases((t: string) => tabStripTab(t as TicketTab), tabStrings);
 export const isTicketTabCases = cases(isTicketTab, { ...tabStrings, null: null });
+export const ticketTabFromCases = cases(ticketTabFrom, { ...tabStrings, null: null, "renamed with trailing space": "summaries " });
+export const logsMessagesCases = cases((t: string) => logsMessages(t as TicketTab), {
+  spec: "spec",
+  activity: "activity",
+  children: "children",
+  transcript: "transcript",
+  agents: "agents",
+  browser: "browser",
+  details: "details",
+  plugin: "plugin:git:changes",
+  agent: "agent:toolu_1",
+});
 
 export const showsAgentsTabCases = cases(showsAgentsTab, {
   null: null,
@@ -73,18 +92,15 @@ export const showsAgentsTabCases = cases(showsAgentsTab, {
   one: [{ id: "a" }],
 });
 
-export const openingTabCases = cases(openingTab, {
-  "not loaded": null as unknown as undefined,
-  "no summaries": [],
-  "some summaries": [{ id: "s1" }],
-});
+export const openingTabCases = cases(() => openingTab(), { "every ticket": null });
 
 type Opts = { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null; subagents?: { id: string }[] | null };
 
 const git = { pluginId: "git", id: "changes" };
 
 export const effectiveTabCases = cases(({ requested, opts }: { requested: string; opts: Opts }) => effectiveTab(requested as TicketTab, opts), {
-  "summaries stays": { requested: "summaries", opts: { conductor: false, pluginTabs: null } },
+  "spec stays": { requested: "spec", opts: { conductor: false, pluginTabs: null } },
+  "activity stays": { requested: "activity", opts: { conductor: false, pluginTabs: [], subagents: [] } },
   "children on a plain ticket": { requested: "children", opts: { conductor: false, pluginTabs: null } },
   "children on a conductor": { requested: "children", opts: { conductor: true, pluginTabs: null } },
   "agents without sub-agents": { requested: "agents", opts: { conductor: false, pluginTabs: null } },
@@ -116,24 +132,24 @@ export const visibleTabsCases = cases(visibleTabs, {
   "plugin tabs only": { conductor: false, pluginTabs: [git] },
 });
 
-const strip = ["summaries", "transcript", "details", "plugin:git:changes"];
+const strip = ["spec", "activity", "transcript", "details", "plugin:git:changes"];
 
 export const nextTabCases = cases(({ tabs, current, delta }: { tabs: string[]; current: string; delta: number }) => nextTab(tabs as TicketTab[], current as TicketTab, delta), {
   forward: { tabs: strip, current: "transcript", delta: 1 },
   back: { tabs: strip, current: "transcript", delta: -1 },
   "wraps forward": { tabs: strip, current: "plugin:git:changes", delta: 1 },
-  "wraps back": { tabs: strip, current: "summaries", delta: -1 },
-  "sub-agent steps forward from Agents": { tabs: ["summaries", "agents", "details"], current: "agent:toolu_1", delta: 1 },
-  "sub-agent steps back from Agents": { tabs: ["summaries", "agents", "details"], current: "agent:toolu_1", delta: -1 },
+  "wraps back": { tabs: strip, current: "spec", delta: -1 },
+  "sub-agent steps forward from Agents": { tabs: ["spec", "agents", "details"], current: "agent:toolu_1", delta: 1 },
+  "sub-agent steps back from Agents": { tabs: ["spec", "agents", "details"], current: "agent:toolu_1", delta: -1 },
   "not in strip forward": { tabs: strip, current: "children", delta: 1 },
   "not in strip back": { tabs: strip, current: "children", delta: -1 },
   "not in strip two forward": { tabs: strip, current: "children", delta: 2 },
   "not in strip two back": { tabs: strip, current: "children", delta: -2 },
-  "no tabs": { tabs: [], current: "summaries", delta: 1 },
+  "no tabs": { tabs: [], current: "spec", delta: 1 },
   "zero delta": { tabs: strip, current: "details", delta: 0 },
   "zero delta not in strip": { tabs: strip, current: "children", delta: 0 },
-  "big forward wraps around": { tabs: strip, current: "summaries", delta: 9 },
-  "big back wraps around": { tabs: strip, current: "summaries", delta: -9 },
+  "big forward wraps around": { tabs: strip, current: "spec", delta: 9 },
+  "big back wraps around": { tabs: strip, current: "spec", delta: -9 },
   "one tab": { tabs: ["details"], current: "details", delta: -1 },
   "duplicate tab uses the first": { tabs: ["a", "b", "a", "c"], current: "a", delta: 1 },
 });

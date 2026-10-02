@@ -116,7 +116,7 @@ export function newSessionPlaceholder(kind: TicketKind): string {
 // Tools, approvals, permissions
 // ---------------------------------------------------------------------------
 
-/** mcp__harness__post_summary → post_summary */
+/** mcp__harness__post_note → post_note */
 export const shortToolName = (name: string) => name.replace(/^mcp__[^_]+__/, "");
 
 export type ShownInput = { label: string; value: string; code: boolean };
@@ -223,7 +223,7 @@ export function groupTranscript(entries: TranscriptEntry[]): TranscriptItem[] {
 export function toolPreview(name: string, input: unknown): string {
   if (input && typeof input === "object") {
     const o = input as Record<string, unknown>;
-    for (const k of ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "summary", "expression", "text"]) {
+    for (const k of ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "note", "expression", "text"]) {
       if (typeof o[k] === "string" && o[k]) return String(o[k]).split("\n")[0]!;
     }
     const s = JSON.stringify(o);

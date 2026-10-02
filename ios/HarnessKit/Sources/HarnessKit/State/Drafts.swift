@@ -48,7 +48,7 @@ public enum Drafts {
     public static func blankDraftTicket(project: Project, settings: DraftSettings?, key: String, now: Double = Date().timeIntervalSince1970 * 1000) -> Ticket {
         let skips = projectReviewSkips(project)
         return Ticket(
-            id: "", key: key, projectId: project.id, kind: .task, title: "", description: "", status: .planning,
+            id: "", key: key, projectId: project.id, kind: .task, title: "", spec: "", specRevision: 1, specBaselineRevision: .null, status: .planning,
             sessionId: "", driver: projectDriver(project, settings), parentId: nil, childCount: 0, dependsOn: [],
             autoStart: false, agentReview: .pending, humanReview: .pending, externalRef: nil, workdir: nil, branch: nil,
             requestedBranch: .null, baseBranch: .null, useWorktree: .null, skipAgentReview: skips.skipAgentReview, skipHumanReview: skips.skipHumanReview, draft: true,
@@ -64,7 +64,7 @@ public enum Drafts {
     public static func applyTicketPatch(_ t: Ticket, _ patch: UpdateTicketBody) -> Ticket {
         var next = t
         if let title = patch.title { next.title = title }
-        if let description = patch.description { next.description = description }
+        if let spec = patch.spec { next.spec = spec }
         if let driver = patch.driver, !Branches.jsEqual(driver, t.driver) {
             next.driver = driver
             if !patch.model.isPresent { next.model = nil }
@@ -95,7 +95,7 @@ public enum Drafts {
     /// that's still empty doesn't ask.
     public static func draftIsEmpty(_ t: Ticket, project: Project?, settings: DraftSettings?) -> Bool {
         let skips = projectReviewSkips(project)
-        return JSCompat.trim(t.description).isEmpty
+        return JSCompat.trim(t.spec).isEmpty
             && t.kind == .task
             && choiceDriver(t, project, settings) == nil
             && t.permissionMode == nil
@@ -114,7 +114,7 @@ public enum Drafts {
         let worktree = draftUsesWorktree(t, project: project)
         return CreateTicketBody(
             projectId: t.projectId,
-            prompt: t.description,
+            spec: t.spec,
             kind: t.kind,
             driver: Branches.nonEmpty(t.driver),
             model: Patch(t.model),
@@ -136,7 +136,7 @@ public enum Drafts {
     public static func draftPatch(_ prev: Ticket, _ next: Ticket) -> UpdateTicketBody? {
         var p = UpdateTicketBody()
         if !Branches.jsEqual(next.projectId, prev.projectId) { p.projectId = next.projectId }
-        if !Branches.jsEqual(next.description, prev.description) { p.description = next.description }
+        if !Branches.jsEqual(next.spec, prev.spec) { p.spec = next.spec }
         if next.kind != prev.kind { p.kind = next.kind }
         if !Branches.jsEqual(next.driver, prev.driver) { p.driver = next.driver }
         if !optionalEqual(next.model, prev.model) || (p.driver != nil && Branches.nonEmpty(next.model) != nil) { p.model = Patch(next.model) }

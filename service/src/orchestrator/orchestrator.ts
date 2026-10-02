@@ -31,9 +31,16 @@ import type {
   RunKind,
   Session,
   Settings,
-  Summary,
-  SummaryAttachment,
-  SummaryAuthor,
+  ActivityAuthor,
+  ActivityEntry,
+  ActivityKind,
+  ActivityMeta,
+  Attachment,
+  SpecConflict,
+  SpecDiff,
+  SpecRevision,
+  SpecRevisionAuthor,
+  SpecRevisionInfo,
   Ticket,
   TicketDetail,
   TicketPage,
@@ -71,7 +78,7 @@ import {
   watcherDriver,
   watcherModel,
 } from "@harness/shared";
-import type { Store } from "../store";
+import { SpecConflictError, type Store } from "../store";
 import { grantKey, type TicketPatch } from "../store/tickets";
 import { cachedPullRequestTarget, insideGitCheckout } from "../store/projects";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
@@ -110,6 +117,7 @@ import {
   commitsNotIn,
   currentBranch,
   ensureWorktree,
+  headCommit,
   hasChangesToLand,
   isGitRepo,
   isInside,
@@ -131,6 +139,7 @@ import {
 } from "./settings";
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
+import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../spec";
 import { confineOutputPath, readSnapshot, readTaskOutput, snapshotTaskOutput, unavailable } from "../task-output";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
 import { CommandCatalog, type CommandCatalogOptions } from "../drivers/commands";
@@ -145,7 +154,17 @@ export interface ConductorChange {
   title: string;
   from: TicketStatus;
   to: TicketStatus;
-  summary?: string;
+  /** What came with the change: the child's submit note, review notes, its question */
+  note?: string;
+  /** The child's spec revision at the time */
+  specRevision?: number;
+}
+
+/** Who writes a spec revision: the human (PATCH), the service, or an agent's run. */
+export interface SpecAuthorship {
+  author: SpecRevisionAuthor;
+  runId?: string | null;
+  runKind?: RunKind | null;
 }
 
 /** Minimal surface of WatcherRunner the orchestrator uses (injectable for tests). */
@@ -209,6 +228,11 @@ interface ActiveRun {
   offeredGrants: number[];
   /** The agent recorded a pull request during this run (record_pull_request) */
   pullRequest?: boolean;
+  /**
+   * A human message logged to Activity (POST /messages log: true) started or steered this run:
+   * its final answer goes into Activity as an `answer` entry.
+   */
+  logAnswer: boolean;
   /** Human messages sent while the run is going (steering); null when the run can't take them */
   input: RunInput | null;
   /** The run's working directory, for @-mentions in steered messages */
@@ -264,7 +288,12 @@ const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]
 const STEERABLE_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 /** Why a plan run can't leave Claude Code's plan mode itself (ExitPlanMode). */
 export const PLAN_APPROVAL_MESSAGE =
-  "The human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved with update_plan, then end your turn.";
+  "The human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved in the spec with update_spec, then end your turn.";
+/** submit_for_review without spec_is_up_to_date: true */
+export const SPEC_NOT_UP_TO_DATE_MESSAGE =
+  "Bring the spec up to date with edit_spec or update_spec first (Status, decisions, verification, screenshots), then submit again with spec_is_up_to_date: true.";
+/** How many recent Activity entries a run's system prompt shows */
+export const PROMPT_ACTIVITY_ENTRIES = 5;
 /** Transcript note when a message meant for the running agent had to wait for the next run */
 export const STEER_FALLBACK_STATUS = "Couldn't reach the running agent; queued for the next run";
 export const MAX_AGENT_REJECTIONS = 3;
@@ -400,6 +429,8 @@ export class Orchestrator {
   private ruleFailures = new Set<string>();
   /** ticketId → classifier denials retried in a row without a human (MAX_AUTO_RETRIES) */
   private autoRetries = new Map<string, number>();
+  /** Queued runs whose message was logged to Activity: their final answer is logged too (ActiveRun.logAnswer) */
+  private logAnswerRuns = new Set<string>();
   private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
   private conductorBuffer = new Map<string, ConductorChange[]>();
   private starting = new Set<string>();
@@ -477,6 +508,7 @@ export class Orchestrator {
 
   /** Recover from a previous process and start watchers. */
   start() {
+    this.warnStaleOverrides();
     const stale = this.recoverStaleRuns();
     if (stale) this.log(`marked ${stale} stale run(s) from a previous process as failed; nothing re-enqueued`);
     this.syncWatchers();
@@ -490,6 +522,18 @@ export class Orchestrator {
         }
       }, this.reconcileIntervalMs);
       this.reconcileTimer.unref?.();
+    }
+  }
+
+  /**
+   * Saved prompt overrides that still name the tools the spec replaced (update_plan,
+   * post_summary) would steer agents to tools they no longer have: say so in the log.
+   */
+  private warnStaleOverrides() {
+    const overrides = this.settings().prompts ?? {};
+    for (const [id, text] of Object.entries(overrides)) {
+      const old = ["update_plan", "post_summary"].filter((name) => typeof text === "string" && text.includes(name));
+      if (old.length) this.log(`warning: the saved override of prompt ${id} names ${old.join(" and ")}, which are now update_spec / edit_spec and post_note; edit it in Settings → Prompts`);
     }
   }
 
@@ -914,7 +958,7 @@ export class Orchestrator {
       relatedTickets: this.relatedTickets(found.alias ?? ticket.key, ticket).map((t) => this.relatedView(t)),
       ticket,
       session: this.store.sessions.get(ticket.sessionId)!,
-      summaries: this.store.summaries.listBySession(ticket.sessionId),
+      activity: this.store.activity.listBySession(ticket.sessionId),
       runs: this.store.runs.listBySession(ticket.sessionId),
       dependents: this.store.tickets.dependents(ticket.key).map((t) => t.key),
       children: this.store.tickets.list({ parentId: ticket.id }),
@@ -1010,18 +1054,43 @@ export class Orchestrator {
     return root;
   }
 
-  summaries(key: string): Summary[] {
-    return this.store.summaries.listBySession(this.requireTicket(key).sessionId);
+  /** GET /tickets/:key/activity */
+  activity(key: string): ActivityEntry[] {
+    return this.store.activity.listBySession(this.requireTicket(key).sessionId);
+  }
+
+  /** GET /tickets/:key/spec/revisions: every revision's metadata, oldest first. */
+  specRevisions(key: string): SpecRevisionInfo[] {
+    return this.store.specs.list(this.requireTicket(key).id);
+  }
+
+  /**
+   * GET /tickets/:key/spec/revisions/:rev: the revision with its body, or with `diff` (another
+   * revision) the unified diff from `diff` to `rev`.
+   */
+  specRevision(key: string, rawRev: string, rawDiff?: string | null): SpecRevision | SpecDiff {
+    const ticket = this.requireTicket(key);
+    const revOf = (raw: string, what: string) => {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1) throw badRequest(`${what} must be a revision number`);
+      const r = this.store.specs.get(ticket.id, n);
+      if (!r) throw notFound(`${ticket.key} has no spec revision ${n} (it's at ${ticket.specRevision ?? 1})`);
+      return r;
+    };
+    const rev = revOf(rawRev, "rev");
+    if (rawDiff === undefined || rawDiff === null || rawDiff === "") return rev;
+    const other = revOf(rawDiff, "diff");
+    return { from: other.rev, to: rev.rev, diff: unifiedDiff(other.body, rev.body, `${ticket.key} spec rev ${other.rev}`, `${ticket.key} spec rev ${rev.rev}`) };
   }
 
   /** Where an attachment's stored copy lives (agents read it from there). */
-  attachmentFilePath(a: Pick<SummaryAttachment, "id" | "mimeType">): string {
+  attachmentFilePath(a: Pick<Attachment, "id" | "mimeType">): string {
     return attachmentPath(this.paths.attachmentsDir, a);
   }
 
-  /** A summary attachment and its stored file for GET /attachments/:id, or null when either is gone. */
-  attachmentFile(id: string): { attachment: SummaryAttachment; path: string } | null {
-    const attachment = this.store.summaries.attachment(id);
+  /** A ticket attachment and its stored file for GET /attachments/:id, or null when either is gone. */
+  attachmentFile(id: string): { attachment: Attachment; path: string } | null {
+    const attachment = this.store.attachments.get(id);
     if (!attachment) return null;
     const path = this.attachmentFilePath(attachment);
     return existsSync(path) ? { attachment, path } : null;
@@ -1031,9 +1100,9 @@ export class Orchestrator {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     const project = this.store.projects.get(body.projectId);
     if (!project) throw notFound(`Unknown project: ${body.projectId}`);
-    const prompt = typeof body.prompt === "string" ? body.prompt : "";
+    const prompt = typeof body.spec === "string" ? body.spec : "";
     const draft = validBoolean("draft", body.draft) ?? false;
-    if (!draft && !prompt.trim() && !body.title?.trim()) throw badRequest("prompt is required");
+    if (!draft && !prompt.trim() && !body.title?.trim()) throw badRequest("spec is required");
     const kind = body.kind ?? "task";
     if (kind !== "task" && kind !== "conductor") throw badRequest(`Invalid kind: ${kind}`);
     const driver = body.driver ?? project.defaultDriver ?? this.settings().defaultDriver;
@@ -1079,7 +1148,7 @@ export class Orchestrator {
         projectId: project.id,
         kind,
         title,
-        description: prompt,
+        spec: prompt,
         status: "planning",
         sessionId: session.id,
         driver,
@@ -1129,7 +1198,7 @@ export class Orchestrator {
 
   /**
    * Launch a draft (POST /tickets/:key/submit): it stops being a draft and goes the way a ticket
-   * created with the same `start` would. Its prompt is its description.
+   * created with the same `start` would. Its spec is the first run's message.
    */
   async submitTicket(key: string, body: SubmitTicketBody): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
@@ -1137,8 +1206,8 @@ export class Orchestrator {
     if (start === undefined) throw badRequest("start must be true or false");
     const ticket = this.requireTicket(key);
     if (!ticket.draft) throw conflict(`${ticket.key} isn't a draft; it was already submitted`);
-    const prompt = ticket.description;
-    if (!prompt.trim()) throw badRequest("prompt is required");
+    const prompt = ticket.spec;
+    if (!prompt.trim()) throw badRequest("spec is required");
     const launched = this.store.tickets.update(ticket.id, { draft: false, autoStart: start && ticket.dependsOn.length > 0 })!;
     this.touchSession(launched.sessionId);
     this.appendStatus(launched.sessionId, null, "Ticket created");
@@ -1160,7 +1229,12 @@ export class Orchestrator {
     return out;
   }
 
-  async updateTicket(key: string, body: UpdateTicketBody): Promise<Ticket> {
+  /**
+   * PATCH /tickets/:key. A spec change is a new revision written by `as` (the human, unless an
+   * agent's update_ticket sent it): `baseRevision` is required for it outside drafts, and a spec
+   * that moved on since answers 409 with the current revision (SpecConflict).
+   */
+  async updateTicket(key: string, body: UpdateTicketBody, as: SpecAuthorship = { author: "human" }): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     let ticket = this.requireTicket(key);
     for (const field of ["kind", "useWorktree", "projectId"] as const) {
@@ -1181,11 +1255,16 @@ export class Orchestrator {
     const projectOf = () => moveTo ?? this.store.projects.get(ticket.projectId);
     const patch: TicketPatch = {};
     if (body.title !== undefined) patch.title = String(body.title);
-    if (body.description !== undefined) {
-      patch.description = String(body.description);
-      // A draft's title follows its prompt until someone names it.
-      if (ticket.draft && body.title === undefined && (ticket.title === UNTITLED_DRAFT || ticket.title === draftTitle(ticket.description))) {
-        patch.title = draftTitle(patch.description);
+    let spec: string | undefined;
+    if (body.spec !== undefined) {
+      if (typeof body.spec !== "string") throw badRequest("spec must be text");
+      spec = body.spec;
+      if (!ticket.draft && body.baseRevision === undefined) throw badRequest("baseRevision is required with spec: the revision your edit started from (Ticket.specRevision)");
+      if (body.baseRevision !== undefined && (!Number.isInteger(body.baseRevision) || body.baseRevision < 1)) throw badRequest("baseRevision must be a revision number");
+      if (body.specNote !== undefined && typeof body.specNote !== "string") throw badRequest("specNote must be text");
+      // A draft's title follows its spec until someone names it.
+      if (ticket.draft && body.title === undefined && (ticket.title === UNTITLED_DRAFT || ticket.title === draftTitle(ticket.spec))) {
+        patch.title = draftTitle(spec);
       }
     }
     if (body.kind !== undefined && body.kind !== ticket.kind) patch.kind = body.kind;
@@ -1239,6 +1318,18 @@ export class Orchestrator {
     if (skipHuman !== undefined && skipHuman !== !!ticket.skipHumanReview) patch.skipHumanReview = skipHuman;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
     const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket.externalRef, body.externalRef) : undefined;
+    // The spec first: a conflict refuses the whole PATCH before anything else changed.
+    if (spec !== undefined) {
+      if (ticket.draft) {
+        if (spec !== ticket.spec) {
+          this.store.specs.replaceDraft(ticket.id, spec);
+          this.touchTicket(ticket.id);
+        }
+      } else {
+        this.reviseSpec(ticket, { body: spec, baseRevision: body.baseRevision, note: body.specNote?.trim() || (as.author === "human" ? "Edited by hand" : "Rewritten with update_ticket"), ...as });
+      }
+      ticket = this.store.tickets.get(ticket.id)!;
+    }
     if (moveTo) ticket = this.moveDraft(ticket, moveTo);
     if (externalRef !== undefined) {
       const before = ticket.externalRef?.key ?? null;
@@ -1329,7 +1420,7 @@ export class Orchestrator {
     }
     this.conductorBuffer.delete(ticket.id);
     await this.browser.close(ticket.sessionId).catch(() => {});
-    const files = this.store.summaries.attachmentsBySession(ticket.sessionId).map((a) => attachmentPath(this.paths.attachmentsDir, a));
+    const files = this.store.attachments.listByTicket(ticket.id).map((a) => attachmentPath(this.paths.attachmentsDir, a));
     this.store.transaction(() => {
       this.store.tickets.delete(ticket.id);
       this.store.sessions.delete(ticket.sessionId);
@@ -1360,8 +1451,10 @@ export class Orchestrator {
    *  - blocked, review, done: a chat run with the ticket's work tools, whose agent moves the
    *    ticket itself (unblock once the block is resolved, resume_work before changing reviewed work, submit_for_review, block).
    * A message to a ticket waiting on a tool approval answers it as a deny.
+   * `log` (sent from the Spec and Activity tabs) also puts the message in Activity, and the run's
+   * final answer after it; otherwise it goes only to the agent and the transcript.
    */
-  async sendMessage(key: string, text: string, opts: { move?: boolean } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean; log?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "messaged (it has no agent yet)");
@@ -1369,16 +1462,18 @@ export class Orchestrator {
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
+    const log = opts.log === true;
+    if (log) this.addActivity(ticket, "message", "human", text.trim());
     switch (ticket.status) {
       case "planning":
-        await this.steerOrEnqueue(ticket.sessionId, "plan", text);
+        await this.steerOrEnqueue(ticket.sessionId, "plan", text, log);
         break;
       case "in_progress":
-        await this.steerOrEnqueue(ticket.sessionId, this.workKind(ticket), text);
+        await this.steerOrEnqueue(ticket.sessionId, this.workKind(ticket), text, log);
         break;
       case "review":
         if (!opts.move) {
-          await this.chat(ticket, text);
+          await this.chat(ticket, text, log);
           break;
         }
         this.transition(
@@ -1387,14 +1482,17 @@ export class Orchestrator {
           { agentReview: "pending", humanReview: "pending", blockedReason: null },
           `Moved back to in progress (human message)`,
         );
-        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
+        this.markLogged(this.enqueueRun(ticket.sessionId, this.workKind(ticket), text), log);
         break;
       case "done":
-        if (opts.move) await this.reopen(ticket, text, "Re-opened by human message");
-        else await this.chat(ticket, text);
+        if (opts.move) {
+          this.addActivity(ticket, "reopened", "human", "Re-opened by a message");
+          await this.reopen(ticket, text, "Re-opened by human message");
+          if (log) this.markLoggedLatest(ticket.sessionId);
+        } else await this.chat(ticket, text, log);
         break;
       case "blocked":
-        await this.chat(ticket, text);
+        await this.chat(ticket, text, log);
         break;
     }
     return this.store.tickets.get(ticket.id)!;
@@ -1402,21 +1500,34 @@ export class Orchestrator {
 
   /**
    * The message goes to a chat run: the ticket's own agent, conversation and work tools, with its
-   * status unchanged. The message is also posted as a summary, where the agent's answer follows.
+   * status unchanged. A logged message (sendMessage's `log`) gets the agent's answer in Activity too.
    * A blocked ticket that never got a worktree (or lost it) gets one first, so the agent can work.
    */
-  private async chat(ticket: Ticket, text: string) {
+  private async chat(ticket: Ticket, text: string, log = false) {
     if (ticket.status === "blocked" && (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir)))) {
       const error = await this.prepareWorkdir(ticket);
       if (error) {
-        this.addSummary(ticket.sessionId, ticket.id, "system", error);
+        this.addActivity(ticket, "failed", "system", error);
         this.store.tickets.update(ticket.id, { blockedReason: error });
         this.touchSession(ticket.sessionId);
         return;
       }
     }
-    this.addSummary(ticket.sessionId, ticket.id, "human", text.trim());
-    await this.steerOrEnqueue(ticket.sessionId, "chat", text);
+    await this.steerOrEnqueue(ticket.sessionId, "chat", text, log);
+  }
+
+  /** The run's final answer goes into Activity (its message was logged). */
+  private markLogged(run: Run, log: boolean) {
+    if (log) this.logAnswerRuns.add(run.id);
+  }
+
+  /** markLogged for the session's newest run (the one begin() or reopen() just queued). */
+  private markLoggedLatest(sessionId: string) {
+    const run = this.store.runs.listBySession(sessionId).at(-1);
+    if (!run || (run.status !== "queued" && run.status !== "running")) return;
+    const active = this.active.get(run.id);
+    if (active) active.logAnswer = true;
+    else this.logAnswerRuns.add(run.id);
   }
 
   /**
@@ -1435,10 +1546,10 @@ export class Orchestrator {
    * step. Otherwise it waits for a run of its own, queued behind the active one, with a
    * transcript note when there was a running agent it couldn't reach.
    */
-  private async steerOrEnqueue(sessionId: string, kind: RunKind, text: string): Promise<void> {
+  private async steerOrEnqueue(sessionId: string, kind: RunKind, text: string, log = false): Promise<void> {
     const active = [...this.active.values()].find((a) => a.run.sessionId === sessionId && !a.cancelled);
     if (!active) {
-      this.enqueueRun(sessionId, kind, text);
+      this.markLogged(this.enqueueRun(sessionId, kind, text), log);
       return;
     }
     const input = active.input;
@@ -1448,13 +1559,18 @@ export class Orchestrator {
       const withFiles = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
       const ticketId = this.store.sessions.get(sessionId)?.ticketId;
       const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null);
-      if (input.push(prompt, text)) return;
+      if (input.push(prompt, text)) {
+        if (log) active.logAnswer = true;
+        return;
+      }
       // The run stopped taking input while the mentions were read.
       const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true });
+      this.markLogged(run, log);
       this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
       return;
     }
     const run = this.enqueueRun(sessionId, kind, text);
+    this.markLogged(run, log);
     this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
   }
 
@@ -1465,7 +1581,7 @@ export class Orchestrator {
     if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
-    this.addSummary(ticket.sessionId, ticket.id, "human", `Re-opened: ${notes}`);
+    this.addActivity(ticket, "reopened", "human", notes);
     return this.reopen(ticket, this.prompts().reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch), "Re-opened by human");
   }
 
@@ -1557,7 +1673,7 @@ export class Orchestrator {
       prompt = `The human denied ${what}.${note ? ` ${note}.` : ""} Find another way or call block if you can't proceed.`;
     }
     if (note && decision !== "deny") prompt += ` Note from the human: ${note}.`;
-    this.addSummary(ticket.sessionId, ticket.id, "human", `${decision === "deny" ? "Denied" : decision === "allow_tool" ? "Always allowed" : "Allowed once"}: ${what}`);
+    this.addActivity(ticket, "permission", "human", `${decision === "deny" ? "Denied" : decision === "allow_tool" ? "Always allowed" : "Allowed once"}: ${what}`);
     const asked = this.store.runs.get(pa.runId)?.kind;
     if (asked === "chat") {
       // The chat carries on where the ticket is; its question (if it's blocked) stays open.
@@ -1592,7 +1708,7 @@ export class Orchestrator {
       const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
       this.touchSession(t.sessionId);
       this.appendStatus(t.sessionId, null, by === "human" ? "Human review: approved" : "Conductor review: approved");
-      if (notes.trim()) this.addSummary(t.sessionId, t.id, by === "human" ? "human" : "agent", `Approved: ${notes.trim()}`);
+      this.addActivity(t, "approved", by === "human" ? "human" : "agent", notes.trim() || "Approved.", { by });
       this.noteReady(t);
       return t;
     }
@@ -2008,21 +2124,120 @@ export class Orchestrator {
     return this.active.get(ctx.runId);
   }
 
-  async postSummary(ctx: ToolContext, body: string, attachments?: string[]): Promise<void> {
-    if (!body?.trim()) throw new Error("summary is empty");
-    const prepared = prepareAttachments(attachments, ctx.cwd);
-    this.addSummary(ctx.session.id, ctx.ticket?.id ?? null, "agent", body.trim(), storeAttachments(this.paths.attachmentsDir, prepared));
+  async postNote(ctx: ToolContext, note: string): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (typeof note !== "string" || !note.trim()) throw new Error("note is empty");
+    this.addActivity(t, "note", "agent", note.trim());
   }
 
-  async updatePlan(ctx: ToolContext, plan: string, title?: string): Promise<void> {
+  async readSpec(ctx: ToolContext, revision?: number): Promise<string> {
     const t = this.ctxTicket(ctx);
-    if (!plan?.trim()) throw new Error("plan is empty");
-    const patch: TicketPatch = { description: plan };
-    if (title?.trim()) patch.title = title.trim();
-    const u = this.store.tickets.update(t.id, patch)!;
-    if (patch.title) this.store.sessions.update(u.sessionId, { title: patch.title });
-    this.touchSession(u.sessionId);
-    this.appendStatus(u.sessionId, ctx.runId, "Plan updated");
+    const current = t.specRevision ?? 1;
+    const rev = revision ?? current;
+    const r = this.store.specs.get(t.id, rev);
+    if (!r) throw new Error(`${t.key}'s spec has no revision ${rev}; it's at revision ${current}.`);
+    const head =
+      rev === current
+        ? `Revision ${rev} (current)${t.specBaselineRevision ? `; approved baseline: revision ${t.specBaselineRevision}` : ""}. Pass base_revision ${rev} to edit_spec or update_spec.`
+        : `Revision ${rev} of ${current}: an earlier revision, for reference. Edits apply to the current one.`;
+    return `${head}
+${numberLines(r.body)}`;
+  }
+
+  /** The spec tools are for the run's own ticket, in the run kinds toolsForRun gives them to. */
+  private specWriter(ctx: ToolContext, tool: string): Ticket {
+    if (ctx.runKind === "review" || ctx.runKind === "triage") throw new Error(`${tool} isn't available in ${ctx.runKind} runs: they don't change the spec`);
+    return this.ctxTicket(ctx);
+  }
+
+  async editSpec(ctx: ToolContext, input: { baseRevision: number; note: string; edits: unknown }): Promise<string> {
+    const t = this.specWriter(ctx, "edit_spec");
+    const current = t.specRevision ?? 1;
+    if (input.baseRevision !== current) throw new Error(this.staleSpecMessage(t, input.baseRevision));
+    let body: string;
+    try {
+      body = applySpecEdits(t.spec, input.edits, current);
+    } catch (err) {
+      if (err instanceof SpecEditError) throw new Error(`${err.message}. No edit was applied; the spec is still at revision ${current}.`);
+      throw err;
+    }
+    return this.agentSpecWrite(ctx, t, { body, baseRevision: current, note: input.note });
+  }
+
+  async updateSpec(ctx: ToolContext, input: { spec: string; note: string; baseRevision: number; title?: string }): Promise<string> {
+    const t = this.specWriter(ctx, "update_spec");
+    if (typeof input.spec !== "string" || !input.spec.trim()) throw new Error("spec is empty");
+    const current = t.specRevision ?? 1;
+    if (input.baseRevision !== current) throw new Error(this.staleSpecMessage(t, input.baseRevision));
+    const out = await this.agentSpecWrite(ctx, t, { body: input.spec, baseRevision: current, note: input.note });
+    const title = input.title?.trim();
+    if (title && title !== t.title) {
+      const u = this.store.tickets.update(t.id, { title })!;
+      this.store.sessions.update(u.sessionId, { title });
+      this.touchSession(u.sessionId);
+      return `${out} Retitled to "${title}".`;
+    }
+    return out;
+  }
+
+  /** A spec write based on a revision that isn't current anymore; `reread` is the tool that shows it. */
+  private staleSpecMessage(t: Ticket, base: number, reread = "read_spec"): string {
+    const current = t.specRevision ?? 1;
+    return `The spec${reread === "read_spec" ? "" : ` of ${t.key}`} is at revision ${current}, not ${base}: it changed since you read it${current > base ? " (a human may have edited it)" : ""}. Call ${reread}, then redo your change against revision ${current}. Nothing was changed.`;
+  }
+
+  /**
+   * An agent's spec write: local images in `body` are validated and stored as the ticket's
+   * attachments (their src becomes attachment:<id>), then the revision is added. Nothing is kept
+   * when any of it fails.
+   */
+  private async agentSpecWrite(ctx: ToolContext, t: Ticket, w: { body: string; baseRevision: number; note: string }): Promise<string> {
+    if (typeof w.note !== "string" || !w.note.trim()) throw new Error("note is empty: say in a few words what changed");
+    const sources = localImageSources(w.body);
+    const prepared = prepareAttachments(sources, ctx.cwd);
+    const stored = storeAttachments(this.paths.attachmentsDir, prepared);
+    const body = rewriteImageSources(w.body, new Map(sources.map((src, i) => [src, stored[i]!.id])));
+    let rev: SpecRevisionInfo | null;
+    try {
+      rev = this.store.transaction(() => {
+        this.store.attachments.add(t.id, stored);
+        return this.reviseSpec(t, { body, baseRevision: w.baseRevision, note: w.note.trim(), author: "agent", runId: ctx.runId, runKind: ctx.runKind });
+      });
+    } catch (err) {
+      removeAttachmentFiles(stored.map((a) => attachmentPath(this.paths.attachmentsDir, a)));
+      if (err instanceof HarnessError && err.status === 409) throw new Error(this.staleSpecMessage(this.store.tickets.get(t.id) ?? t, w.baseRevision));
+      throw err;
+    }
+    const images = stored.length ? ` Stored ${stored.length} attachment${stored.length === 1 ? "" : "s"} (${stored.map((a) => `${a.name} → attachment:${a.id}`).join(", ")}).` : "";
+    if (!rev) return `The spec already reads that way; it stays at revision ${w.baseRevision}.${images}`;
+    return `Spec updated to revision ${rev.rev}.${images}`;
+  }
+
+  /**
+   * Every spec write goes through here (DESIGN.md "Spec revisions and attachments"): PATCH,
+   * update_spec, edit_spec, update_ticket. Adds the next revision (none when the body didn't
+   * change), broadcasts spec.revised and the ticket. A stale `baseRevision` throws 409 carrying
+   * SpecConflict. Ticket creation (create_ticket, dispatch_ticket, triage, POST /tickets) writes
+   * revision 1 with the ticket itself.
+   */
+  reviseSpec(ticket: Ticket, w: { body: string; baseRevision?: number; note: string } & SpecAuthorship): SpecRevisionInfo | null {
+    let rev: SpecRevisionInfo | null;
+    try {
+      rev = this.store.specs.revise(ticket.id, { body: w.body, baseRevision: w.baseRevision, note: w.note, author: w.author, runId: w.runId ?? null, runKind: w.runKind ?? null });
+    } catch (err) {
+      if (err instanceof SpecConflictError) {
+        throw new HarnessError(409, `${ticket.key}'s spec is at revision ${err.currentRevision}, not ${err.baseRevision}: it changed since this edit started. Reload it, or send it again with baseRevision ${err.currentRevision} to overwrite.`, {
+          currentRevision: err.currentRevision,
+          spec: err.currentBody,
+        } satisfies SpecConflict);
+      }
+      throw err;
+    }
+    if (!rev) return null;
+    this.bus.emit({ kind: "spec.revised", ticketId: ticket.id, rev: rev.rev, author: rev.author, note: rev.note, runId: rev.runId, runKind: rev.runKind, createdAt: rev.createdAt });
+    this.appendStatus(ticket.sessionId, w.runId ?? null, `Spec revision ${rev.rev}: ${rev.note}`);
+    this.touchTicket(ticket.id);
+    return rev;
   }
 
   /**
@@ -2038,7 +2253,7 @@ export class Orchestrator {
       await this.cancelReviewRuns(t.sessionId);
       Object.assign(patch, { agentReview: "pending", humanReview: "pending" });
     }
-    this.addSummary(t.sessionId, t.id, "agent", `Blocked: ${question.trim()}`);
+    this.addActivity(t, "blocked", "agent", question.trim(), { question: question.trim() });
     this.transition(t, "blocked", patch, `Blocked: ${question.trim()}`, question.trim());
     const a = this.ctxActive(ctx);
     if (a) a.blocked = true;
@@ -2050,6 +2265,7 @@ export class Orchestrator {
     if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can unblock it.`);
     if (t.status !== "blocked") throw new Error(`${t.key} is ${t.status}, not blocked: there's nothing to unblock.`);
     const why = typeof note === "string" ? note.trim() : "";
+    this.addActivity(t, "unblocked", "agent", why || "Unblocked: picking the work back up.", why ? { note: why } : {});
     this.transition(t, "in_progress", { blockedReason: null }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
   }
 
@@ -2076,10 +2292,12 @@ export class Orchestrator {
     if (t.status === "done") throw new Error(`${t.key} is done: the human re-opens it (the composer's "Re-open and move to in progress" switch) to change it again.`);
   }
 
-  async submitForReview(ctx: ToolContext, summary: string, attachments?: string[], skips: ReviewSkips = {}): Promise<void> {
+  async submitForReview(ctx: ToolContext, note: string, specIsUpToDate: unknown, skips: ReviewSkips = {}): Promise<void> {
     const { skipAgentReview, skipHumanReview } = skips;
     let t = this.ctxTicket(ctx);
     this.lifecycleFrom(t, "submit_for_review");
+    // The spec is updated in its own, earlier call; the submit only confirms it.
+    if (specIsUpToDate !== true) throw new Error(SPEC_NOT_UP_TO_DATE_MESSAGE);
     // A parent in review (or done) would strand its children: their reviews and merges are its job.
     const open = this.store.tickets.list({ parentId: t.id }).filter((c) => c.status !== "done");
     if (open.length) {
@@ -2087,7 +2305,6 @@ export class Orchestrator {
         `${t.key} still has child tickets that aren't done (${open.map((c) => `${c.key}: ${c.status}`).join(", ")}). You review and complete them with review_ticket and complete_ticket; end the run now and you'll be re-invoked when they change. Submit once every child is done.`,
       );
     }
-    const prepared = prepareAttachments(attachments, ctx.cwd);
     // Submitted again from review (a chat changed the work): the reviews start over.
     if (t.status === "review") await this.cancelReviewRuns(t.sessionId);
     if (skipAgentReview !== undefined && skipAgentReview !== !!t.skipAgentReview) {
@@ -2098,7 +2315,7 @@ export class Orchestrator {
       t = this.store.tickets.update(t.id, { skipHumanReview })!;
       this.appendStatus(t.sessionId, ctx.runId, skipHumanReview ? "The agent turned off the human review for this ticket" : "The agent turned the human review back on");
     }
-    this.submit(t, summary?.trim() || "Work submitted for review.", "agent", storeAttachments(this.paths.attachmentsDir, prepared));
+    this.submit(t, (typeof note === "string" && note.trim()) || "Work submitted for review.", "agent");
     const a = this.ctxActive(ctx);
     if (a) a.submitted = true;
     else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
@@ -2109,35 +2326,37 @@ export class Orchestrator {
     if (ctx.runKind !== "review") throw new Error("review_decision is only available in review runs");
     if (t.status !== "review") throw new Error(`${t.key} is no longer in review`);
     if (t.agentReview === "skipped") throw new Error(`The agent review of ${t.key} was skipped; there is nothing to decide`);
+    if (decision !== "approve" && decision !== "request_changes") throw new Error(`Invalid decision: ${decision}`);
     const a = this.ctxActive(ctx);
     if (a?.decided) throw new Error("A review decision was already recorded for this run");
     if (a) a.decided = true;
+    // The round and the commit it judged, so the next review can look at just what changed since.
+    const meta: ActivityMeta = { by: "agent", round: this.reviewRounds(t).length + 1, commit: t.workdir ? await headCommit(t.workdir) : null };
+    const text = notes?.trim() ?? "";
     if (decision === "approve") {
       const u = this.store.tickets.update(t.id, { agentReview: "approved" })!;
       this.touchSession(u.sessionId);
       this.appendStatus(u.sessionId, ctx.runId, "Agent review: approved");
-      if (notes?.trim()) this.addSummary(u.sessionId, u.id, "agent", `Review approved: ${notes.trim()}`);
-      if (u.parentId) this.notifyConductor(u.parentId, { key: u.key, title: u.title, from: "review", to: "review", summary: `Agent review approved. ${notes ?? ""}`.trim() });
+      this.addActivity(u, "review_approved", "agent", text || "Approved.", meta);
+      if (u.parentId) this.notifyConductor(u.parentId, { key: u.key, title: u.title, from: "review", to: "review", note: `Agent review approved. ${text}`.trim(), specRevision: u.specRevision });
       this.noteReady(u);
-    } else if (decision === "request_changes") {
-      const n = this.store.tickets.reviewRejections(t.id) + 1;
-      if (n >= MAX_AGENT_REJECTIONS) {
-        const reason = `Agent review requested changes ${n} times — needs a human decision`;
-        this.addSummary(t.sessionId, t.id, "agent", `Changes requested (agent): ${notes?.trim() || "no notes"}`);
-        this.transition(
-          t,
-          "blocked",
-          { reviewRejections: n, agentReview: "changes_requested", blockedReason: reason },
-          reason,
-          notes,
-        );
-      } else {
-        this.store.tickets.update(t.id, { reviewRejections: n });
-        this.requestChanges(t, notes ?? "", "agent");
-      }
-    } else {
-      throw new Error(`Invalid decision: ${decision}`);
+      return;
     }
+    const n = this.store.tickets.reviewRejections(t.id) + 1;
+    if (n >= MAX_AGENT_REJECTIONS) {
+      const reason = `Agent review requested changes ${n} times — needs a human decision`;
+      this.addActivity(t, "changes_requested", "agent", text || "No notes.", meta);
+      this.addActivity(t, "blocked", "system", reason, { question: reason });
+      this.transition(t, "blocked", { reviewRejections: n, agentReview: "changes_requested", blockedReason: reason }, reason, notes);
+    } else {
+      this.store.tickets.update(t.id, { reviewRejections: n });
+      this.requestChanges(t, text, "agent", meta);
+    }
+  }
+
+  /** The ticket's earlier agent review decisions, oldest first (their Activity entries). */
+  private reviewRounds(t: Ticket): ActivityEntry[] {
+    return this.store.activity.listBySession(t.sessionId).filter((e) => (e.kind === "review_approved" || e.kind === "changes_requested") && e.meta.by === "agent");
   }
 
   // --- board (read): every run kind; never changes state ---
@@ -2215,12 +2434,10 @@ export class Orchestrator {
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
       children: this.store.tickets.list({ parentId: t.id, drafts: false }).map((c) => c.key),
       base: await this.refreshBaseBranch(t),
-      summaries: this.store.summaries.listBySession(t.sessionId).map((s) => ({
-        author: s.author,
-        body: s.body,
-        createdAt: s.createdAt,
-        attachments: s.attachments.map((a) => ({ name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
-      })),
+      specRevision: t.specRevision ?? 1,
+      specBaselineRevision: t.specBaselineRevision ?? null,
+      activity: this.store.activity.listBySession(t.sessionId).map((e) => ({ kind: e.kind, author: e.author, body: e.body, meta: e.meta, createdAt: e.createdAt })),
+      attachments: this.store.attachments.listByTicket(t.id).map((a) => ({ id: a.id, name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
     if (n > 0) {
@@ -2244,8 +2461,8 @@ export class Orchestrator {
     }
     return {
       hits: page.tickets.map((t) => {
-        const latest = this.store.summaries.listBySession(t.sessionId).at(-1)?.body;
-        return { ticket: this.boardTicket(t), snippet: searchSnippet([t.title, t.description, latest], input.query) };
+        const latest = this.latestNote(t)?.body;
+        return { ticket: this.boardTicket(t), snippet: searchSnippet([t.title, t.spec, latest], input.query) };
       }),
       nextCursor: page.nextCursor,
       total: page.total,
@@ -2368,7 +2585,7 @@ export class Orchestrator {
       return this.asTool(() =>
         this.createTicket({
           projectId: project.id,
-          prompt: input.description || input.title,
+          spec: input.spec || input.title,
           title: input.title,
           kind,
           dependsOn: input.dependsOn,
@@ -2390,7 +2607,7 @@ export class Orchestrator {
     return this.asTool(() =>
       this.createTicket({
         projectId: project.id,
-        prompt: input.description || input.title,
+        spec: input.spec || input.title,
         title: input.title,
         kind,
         dependsOn: input.dependsOn,
@@ -2410,12 +2627,12 @@ export class Orchestrator {
   }
 
   async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
-    // A planning agent sets up its own ticket from the brief (dependencies, branch, reviews, mode...)
+    // A planning agent sets up its own ticket from the spec (dependencies, branch, reviews, mode...)
     // before the human presses Start, which approves the plan and those settings together. It edits
     // nothing else, and has full access to its own card.
     const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : null;
     const { actor, target } = own ? { actor: own, target: own } : this.boardTarget(ctx, key, "update_ticket");
-    // Editing a looser ticket (its brief, dependencies, driver...) would get it to act for the caller
+    // Editing a looser ticket (its spec, dependencies, driver...) would get it to act for the caller
     // under looser permissions. The one edit allowed on it is tightening its mode, alone.
     const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
     if (!own && !(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
@@ -2424,7 +2641,18 @@ export class Orchestrator {
       if (!String(input.title).trim()) throw new Error("title can't be empty");
       body.title = String(input.title).trim();
     }
-    if (input.description !== undefined) body.description = input.description;
+    if (input.spec !== undefined) {
+      if (!String(input.spec).trim()) throw new Error("spec can't be empty");
+      // Like edit_spec: the write names the revision it replaces, so a human's edit in between isn't overwritten.
+      if (input.baseRevision === undefined) {
+        throw new Error(`base_revision is required with spec: the specRevision get_ticket showed for ${target.key} (it's at ${target.specRevision ?? 1} now).`);
+      }
+      if (input.baseRevision !== (target.specRevision ?? 1)) throw new Error(this.staleSpecMessage(target, input.baseRevision, `get_ticket { key: "${target.key}" }`));
+      body.spec = String(input.spec);
+      body.baseRevision = input.baseRevision;
+    } else if (input.baseRevision !== undefined) {
+      throw new Error("base_revision only goes with spec");
+    }
     if (input.driver !== undefined) body.driver = input.driver;
     if (input.model !== undefined) body.model = input.model;
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
@@ -2453,7 +2681,15 @@ export class Orchestrator {
       body.permissionMode = mode;
     }
     if (!Object.keys(body).length) throw new Error("Nothing to update: pass at least one field");
-    return this.asTool(() => this.updateTicket(target.key, body));
+    try {
+      return await this.updateTicket(target.key, body, { author: "agent", runId: ctx.runId, runKind: ctx.runKind });
+    } catch (err) {
+      // The spec moved on between the check above and the write.
+      if (err instanceof HarnessError && err.status === 409 && body.baseRevision !== undefined && (err.data as SpecConflict | undefined)?.currentRevision !== undefined) {
+        throw new Error(this.staleSpecMessage(this.store.tickets.get(target.id) ?? target, body.baseRevision, `get_ticket { key: "${target.key}" }`));
+      }
+      throw new Error(errMsg(err));
+    }
   }
 
   /**
@@ -2633,7 +2869,7 @@ export class Orchestrator {
         this.store.tickets.setExternalRef(existing.id, { ...existing.externalRef!, url });
         this.touchTicket(existing.id);
       }
-      const body = input.description?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
+      const body = input.spec?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
       // Triage only dispatches work, and a done ticket's chat can't do any: its worktree may be
       // gone and nothing reviews or lands the result. The update re-opens it instead.
       const reopened = existing.status === "done";
@@ -2650,14 +2886,14 @@ export class Orchestrator {
     const t = await this.createTicket({
       projectId: project.id,
       title: input.title,
-      prompt: input.description || input.title,
+      spec: input.spec || input.title,
       kind: input.conductor ? "conductor" : "task",
       start: input.start ?? false,
       driver: project.defaultDriver ?? session.driver,
       // Work on an existing branch (a pull request's head) sets both to it: nothing to merge later.
       branch: input.branch || null,
       baseBranch: input.baseBranch || null,
-      // Only a remote ID links the ticket; otherwise the description carries the context.
+      // Only a remote ID links the ticket; otherwise the spec carries the context.
       externalRef: key ? { source: meta.source, key, url, raw: meta.text ?? null } : null,
     });
     // The local key comes first: the Inbox links the first key in the outcome (dispatchedKey).
@@ -2878,7 +3114,7 @@ export class Orchestrator {
     if (meta.summary) pending.summary = meta.summary;
     if (meta.onceOnly) pending.onceOnly = true;
     const reason = `Permission needed: ${toolName} — ${meta.summary ?? summarizeToolInput(input)}`;
-    this.addSummary(t.sessionId, t.id, "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
+    this.addActivity(t, "permission", "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
     if (t.status === "blocked" || this.store.runs.get(runId)?.kind === "chat") {
       this.store.tickets.update(t.id, { pendingApproval: pending });
       this.touchSession(t.sessionId);
@@ -2910,8 +3146,8 @@ export class Orchestrator {
    * After a succeeded work/complete/conductor run: the driver's own permission system denied a
    * call without asking (Claude Code's auto-mode classifier, or a deferred soft_deny of the
    * PermissionGate) and the call never went through. The agent is told to find another way
-   * first, so a run that submitted is reviewed as usual, with the denied calls noted in a
-   * summary. Otherwise the run's last denial becomes a pending approval: attached to the
+   * first, so a run that submitted is reviewed as usual, with the denied calls noted in
+   * Activity. Otherwise the run's last denial becomes a pending approval: attached to the
    * agent's block if it blocked, or blocking the ticket if the run just ended.
    * A denial of a tool the human already allows on the ticket is retried with the exact call
    * pre-approved instead (bounded by MAX_AUTO_RETRIES). Returns true when it handled the run.
@@ -2926,7 +3162,7 @@ export class Orchestrator {
       // are on record for the reviewer and the human.
       const calls = [...new Map(active.denials.map((d) => [grantKey(d.toolName, d.input), d])).values()];
       const lines = calls.map((d) => `- ${d.toolName} (${summarizeToolInput(d.input)}): ${d.reason}`);
-      this.addSummary(t.sessionId, t.id, "system", `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}:\n${lines.join("\n")}`);
+      this.addActivity(t, "permission", "system", `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}:\n${lines.join("\n")}`);
       return false;
     }
     // A chat's denial surfaces wherever the ticket is (its card leaves the column alone).
@@ -3143,7 +3379,7 @@ export class Orchestrator {
           : undefined,
       log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
       context: () => ({
-        ticket: ticket ? { key: ticket.key, title: ticket.title, brief: ticket.description } : null,
+        ticket: ticket ? { key: ticket.key, title: ticket.title, spec: ticket.spec } : null,
         transcript: this.recentTranscript(ctx.session.id),
       }),
     };
@@ -3220,12 +3456,18 @@ export class Orchestrator {
     try {
       const dir = await this.workdirFor(ticket);
       if (typeof dir === "string") {
-        this.addSummary(ticket.sessionId, ticket.id, "system", dir);
+        this.addActivity(ticket, "failed", "system", dir);
         this.transition(ticket, "blocked", { blockedReason: dir }, "Could not create worktree");
         return;
       }
-      const fresh = this.store.tickets.get(ticket.id);
+      let fresh = this.store.tickets.get(ticket.id);
       if (!fresh) return;
+      if (fresh.status === "planning") {
+        // Start: the spec as it is now is what the human approved; the agent review diffs against it.
+        const rev = this.store.specs.markBaseline(fresh.id);
+        this.appendStatus(fresh.sessionId, null, `Spec revision ${rev} approved as the baseline`);
+        fresh = this.store.tickets.get(fresh.id)!;
+      }
       this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
       this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note);
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt);
@@ -3273,14 +3515,14 @@ export class Orchestrator {
    * Change a ticket's status (plus optional fields), record a status line, and fire
    * status-change hooks: parent conductor notification and dependency scheduling.
    */
-  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, note?: string, summary?: string): Ticket {
+  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string): Ticket {
     const from = ticket.status;
     const t = this.store.tickets.update(ticket.id, { ...patch, status: to })!;
     this.touchSession(t.sessionId);
-    if (note) this.appendStatus(t.sessionId, null, note);
+    if (status) this.appendStatus(t.sessionId, null, status);
     if (from !== to) {
       if (t.parentId && !(from === "planning" && to === "in_progress")) {
-        this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, summary });
+        this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
       }
       if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
       if (to === "review") this.track(this.refreshHasChanges(t));
@@ -3320,20 +3562,20 @@ export class Orchestrator {
     this.transition(t, "review", { humanReview: "pending" }, `Completion ${why}: approve again to land it`);
   }
 
-  private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
+  private submit(ticket: Ticket, note: string, author: ActivityAuthor) {
     const humanSkipped = !!ticket.skipHumanReview;
     const humanReview = humanSkipped ? "approved" : "pending";
     const agentReview = ticket.skipAgentReview ? "skipped" : "pending";
-    this.addSummary(ticket.sessionId, ticket.id, author, summary, attachments);
-    const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", summary);
+    this.addActivity(ticket, "submitted", author, note, { specRevision: ticket.specRevision ?? 1 });
+    const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", note);
     if (agentReview === "skipped") this.appendStatus(t.sessionId, null, "Agent review: skipped");
     if (humanSkipped) this.appendStatus(t.sessionId, null, "Human review: skipped");
     if (agentReview === "skipped") this.noteReady(t);
   }
 
-  private requestChanges(ticket: Ticket, notes: string, by: "agent" | "human" | "conductor"): Ticket {
-    const author: SummaryAuthor = by === "human" ? "human" : "agent";
-    this.addSummary(ticket.sessionId, ticket.id, author, `Changes requested (${by}): ${notes.trim() || "no notes"}`);
+  private requestChanges(ticket: Ticket, notes: string, by: "agent" | "human" | "conductor", meta: ActivityMeta = { by }): Ticket {
+    const author: ActivityAuthor = by === "human" ? "human" : "agent";
+    this.addActivity(ticket, "changes_requested", author, notes.trim() || "No notes.", meta);
     const t = this.transition(
       ticket,
       "in_progress",
@@ -3341,7 +3583,7 @@ export class Orchestrator {
       `Changes requested by ${by}`,
       notes,
     );
-    this.enqueueRun(t.sessionId, this.workKind(t), this.prompts().changesRequestedPrompt(notes, by));
+    this.enqueueRun(t.sessionId, this.workKind(t), this.prompts().changesRequestedPrompt(notes, by, t.specRevision ?? 1));
     return this.store.tickets.get(t.id)!;
   }
 
@@ -3381,7 +3623,28 @@ export class Orchestrator {
   /** Start the agent review, unless the ticket skips it (submit already marked it "skipped"). */
   private enqueueReview(t: Ticket) {
     if (t.agentReview === "skipped") return;
-    this.enqueueRun(t.sessionId, "review", this.prompts().reviewPrompt(t));
+    this.enqueueRun(t.sessionId, "review", this.prompts().reviewPrompt(t, this.reviewContext(t)));
+  }
+
+  /**
+   * What a review run reads (DESIGN.md "Agent review"): the round, the earlier rounds' notes and
+   * reviewed commits, the spec's diff from the approved baseline, and the Activity since the last
+   * review (all of it on the first).
+   */
+  reviewContext(t: Ticket): prompts.ReviewContext {
+    const activity = this.store.activity.listBySession(t.sessionId);
+    const rounds = activity.filter((e) => (e.kind === "review_approved" || e.kind === "changes_requested") && e.meta.by === "agent");
+    const last = rounds.at(-1);
+    const since = last ? activity.slice(activity.indexOf(last) + 1) : activity;
+    const baseline = t.specBaselineRevision ? this.store.specs.get(t.id, t.specBaselineRevision) : null;
+    const current = t.specRevision ?? 1;
+    return {
+      round: rounds.length + 1,
+      earlier: rounds.map((e) => ({ round: e.meta.round ?? 0, decision: e.kind === "review_approved" ? "approve" : "request_changes", notes: e.body, commit: e.meta.commit ?? null })),
+      baselineRevision: baseline?.rev ?? null,
+      baselineDiff: baseline ? unifiedDiff(baseline.body, t.spec, `spec rev ${baseline.rev} (approved baseline)`, `spec rev ${current} (current)`) : "",
+      activity: since.slice(-30),
+    };
   }
 
   private allChildrenDone(t: Ticket): boolean {
@@ -3502,6 +3765,7 @@ export class Orchestrator {
       calls: new Map(),
       appliedGrants: new Set(),
       offeredGrants: [],
+      logAnswer: this.logAnswerRuns.delete(run.id),
       // From the start, so a message sent while the run gets going is waiting when the driver starts.
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
       cwd: null,
@@ -3616,6 +3880,8 @@ export class Orchestrator {
             children,
             builtinTools: driver.hasBuiltinTools,
             branches: ticket ? this.branchContext(ticket, project) : undefined,
+            activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
+            logged: active.logAnswer,
           }),
           cwd,
           model,
@@ -3776,36 +4042,40 @@ export class Orchestrator {
     if (run.status === "failed") {
       // A done ticket stays done: a run queued before it completed can only fail on the removed worktree.
       if (ticket.status === "done" && run.kind !== "complete") {
-        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
+        this.addActivity(ticket, "failed", "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
         return;
       }
       // A chat that unblocked the ticket was doing its work: it fails like a work run. Any other
       // failed chat leaves the ticket where it is.
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete" || (run.kind === "chat" && ticket.status === "in_progress")) {
-        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
+        this.addActivity(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
       } else if (run.kind === "chat") {
-        this.addSummary(ticket.sessionId, ticket.id, "system", `Run failed: ${error ?? "no error reported"}`);
+        this.addActivity(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
       }
       return;
     }
+    // A logged message's answer (sendMessage's `log`): the agent's last words, unless the run
+    // ended with a submit or a question, which say it themselves.
+    const answer = active.logAnswer && !active.submitted && !active.blocked ? active.lastText?.trim() || null : null;
     switch (run.kind) {
       case "work":
       case "conductor":
-        this.finishWork(ticket, run, active);
+        if (!this.finishWork(ticket, run, active) && answer) this.addActivity(ticket, "answer", "agent", answer);
         break;
       case "chat":
         // A chat that moved the ticket (submit_for_review, block, unblock, resume_work) ends like a work run;
-        // one that left it where it was posts its answer next to the human's message.
-        if (active.submitted || active.blocked || ticket.status === "in_progress") this.finishWork(ticket, run, active);
-        else if (active.lastText?.trim()) this.addSummary(ticket.sessionId, ticket.id, "agent", active.lastText.trim());
+        // one that left it where it was answers the human's message.
+        if (active.submitted || active.blocked || ticket.status === "in_progress") {
+          if (!this.finishWork(ticket, run, active) && answer) this.addActivity(ticket, "answer", "agent", answer);
+        } else if (answer) this.addActivity(ticket, "answer", "agent", answer);
         break;
       case "complete":
         if (ticket.status === "done") break;
         if (ticket.completionAction === "pr" && !active.pullRequest) {
           // The PR completion's whole result is the pull request: without one, the work hasn't landed.
-          const reason = "Completion ended without opening a pull request. Check the last summary for what went wrong (gh login, push access), then message the agent; once it's back in review, approve it again.";
-          this.addSummary(ticket.sessionId, ticket.id, "system", reason);
+          const reason = "Completion ended without opening a pull request. Check the last Activity note for what went wrong (gh login, push access), then message the agent; once it's back in review, approve it again.";
+          this.addActivity(ticket, "blocked", "system", reason, { question: reason });
           this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: no pull request");
           break;
         }
@@ -3813,8 +4083,8 @@ export class Orchestrator {
           // The cleanup's whole result is the worktree and branch gone: what's left holds work that hasn't landed.
           const left = await this.cleanupLeftovers(ticket);
           if (left.length) {
-            const reason = `Cleanup didn't finish: ${left.join(" and ")} still ${left.length === 1 ? "exists" : "exist"}, which usually means unpushed or unmerged work. Check the last summary, then move the ticket back to In progress to deal with those commits.`;
-            this.addSummary(ticket.sessionId, ticket.id, "system", reason);
+            const reason = `Cleanup didn't finish: ${left.join(" and ")} still ${left.length === 1 ? "exists" : "exist"}, which usually means unpushed or unmerged work. Check the last Activity note, then move the ticket back to In progress to deal with those commits.`;
+            this.addActivity(ticket, "blocked", "system", reason, { question: reason });
             this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: cleanup didn't finish");
             break;
           }
@@ -3825,6 +4095,7 @@ export class Orchestrator {
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
         break;
       case "plan":
+        if (answer) this.addActivity(ticket, "answer", "agent", answer);
         break;
     }
   }
@@ -3832,9 +4103,11 @@ export class Orchestrator {
   /**
    * The end of a run that did the ticket's work: a submit gets its review; a ticket still in
    * progress with nothing more queued blocks on the agent's trailing question, or is submitted
-   * with its last text once its children are done.
+   * with its last text once its children are done. Returns true when that used the last text
+   * (a question or the submit note), so it isn't posted again as an answer.
    */
-  private finishWork(ticket: Ticket, run: Run, active: ActiveRun) {
+  private finishWork(ticket: Ticket, run: Run, active: ActiveRun): boolean {
+    let usedText = false;
     if (active.submitted) {
       if (ticket.status === "review") this.enqueueReview(ticket);
     } else if (ticket.status === "in_progress") {
@@ -3842,14 +4115,17 @@ export class Orchestrator {
       if (!moreWork && run.kind !== "conductor" && endsWithQuestion(active.lastText)) {
         // The agent is asking the human something: block with its question instead of submitting.
         const question = active.lastText!.trim();
-        this.addSummary(ticket.sessionId, ticket.id, "system", `Question: ${question}`);
+        this.addActivity(ticket, "blocked", "agent", question, { question });
         this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
+        usedText = true;
       } else if (!moreWork && this.allChildrenDone(ticket)) {
         this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
         this.enqueueReview(this.store.tickets.get(ticket.id)!);
+        usedText = true;
       }
     }
     this.flushConductor(ticket.id);
+    return usedText;
   }
 
   /** HarnessOps facade handed to tools (maps conductor/triage op names onto internals). */
@@ -3860,12 +4136,14 @@ export class Orchestrator {
 
   private buildOps(): HarnessOps {
     return {
-      postSummary: (c, b, a) => this.postSummary(c, b, a),
-      updatePlan: (c, p, t) => this.updatePlan(c, p, t),
+      postNote: (c, n) => this.postNote(c, n),
+      readSpec: (c, r) => this.readSpec(c, r),
+      editSpec: (c, i) => this.editSpec(c, i),
+      updateSpec: (c, i) => this.updateSpec(c, i),
       block: (c, q) => this.block(c, q),
       unblock: (c, n) => this.unblock(c, n),
       resumeWork: (c, n) => this.resumeWork(c, n),
-      submitForReview: (c, s, a, skips) => this.submitForReview(c, s, a, skips),
+      submitForReview: (c, n, up, skips) => this.submitForReview(c, n, up, skips),
       updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
       // --- board (read) ---
@@ -3927,16 +4205,16 @@ export class Orchestrator {
     return this.append(sessionId, runId, "system", { type: "status", text });
   }
 
-  private addSummary(sessionId: string, ticketId: string | null, author: SummaryAuthor, body: string, attachments: SummaryAttachment[] = []) {
-    let summary: Summary;
-    try {
-      summary = this.store.summaries.add({ sessionId, ticketId, author, body, attachments });
-    } catch (err) {
-      removeAttachmentFiles(attachments.map((a) => attachmentPath(this.paths.attachmentsDir, a)));
-      throw err;
-    }
-    this.bus.emit({ kind: "summary.added", summary });
-    return summary;
+  /** Add an entry to the ticket's Activity (DESIGN.md "Activity") and broadcast it. */
+  private addActivity(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}): ActivityEntry {
+    const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta });
+    this.bus.emit({ kind: "activity.added", entry });
+    return entry;
+  }
+
+  /** The ticket's newest agent note or submit note (what search snippets and the conductor show). */
+  private latestNote(t: Ticket): ActivityEntry | undefined {
+    return this.store.activity.listBySession(t.sessionId).findLast((e) => e.kind === "note" || e.kind === "submitted");
   }
 
   private touchSession(sessionId: string) {

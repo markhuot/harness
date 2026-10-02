@@ -320,13 +320,15 @@
     "doneColumn",
     "doneCount",
     "hasCustomDriver",
-    "latestSummary",
+    "latestActivity",
     "liveDelta",
     "matchesQuery",
     "needsFirstDonePage",
     "searchColumns",
     "searchStatusText",
     "sortedProjects",
+    "specBody",
+    "specRevisions",
     "subagentById",
     "subagentPath",
     "subagentTranscript",
@@ -423,7 +425,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -610,7 +614,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -721,7 +727,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -833,7 +841,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -970,7 +980,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1117,7 +1129,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -1201,7 +1215,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1365,7 +1381,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1479,7 +1497,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1624,7 +1644,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1715,7 +1737,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1806,7 +1830,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -1945,7 +1971,9 @@
                 "endedAt": null
               }
             },
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2135,7 +2163,9 @@
                 "endedAt": null
               }
             },
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2159,29 +2189,30 @@
       ]
     },
     {
-      "name": "summaries ordered by createdAt and deduped when detail backfill overlaps live events",
+      "name": "activity ordered by createdAt and deduped when detail backfill overlaps live events",
       "steps": [
         {
           "actions": [
             {
               "type": "event",
               "event": {
-                "kind": "summary.added",
-                "summary": {
+                "kind": "activity.added",
+                "entry": {
                   "id": "b",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "b",
-                  "createdAt": 20,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 20
                 }
               }
             }
           ],
           "probes": [
             {
-              "fn": "latestSummary",
+              "fn": "latestActivity",
               "args": [
                 "s1"
               ],
@@ -2200,7 +2231,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t1",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s1",
                   "driver": "dummy",
@@ -2236,24 +2267,26 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [
+                "activity": [
                   {
                     "id": "a",
                     "sessionId": "s1",
                     "ticketId": "t1",
+                    "kind": "note",
                     "author": "agent",
                     "body": "a",
-                    "createdAt": 10,
-                    "attachments": []
+                    "meta": {},
+                    "createdAt": 10
                   },
                   {
                     "id": "b",
                     "sessionId": "s1",
                     "ticketId": "t1",
+                    "kind": "note",
                     "author": "agent",
                     "body": "b",
-                    "createdAt": 20,
-                    "attachments": []
+                    "meta": {},
+                    "createdAt": 20
                   }
                 ],
                 "runs": [],
@@ -2264,7 +2297,7 @@
           ],
           "probes": [
             {
-              "fn": "latestSummary",
+              "fn": "latestActivity",
               "args": [
                 "s1"
               ],
@@ -2277,29 +2310,30 @@
             {
               "type": "event",
               "event": {
-                "kind": "summary.added",
-                "summary": {
+                "kind": "activity.added",
+                "entry": {
                   "id": "c",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "c",
-                  "createdAt": 30,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 30
                 }
               }
             }
           ],
           "probes": [
             {
-              "fn": "latestSummary",
+              "fn": "latestActivity",
               "args": [
                 "s1"
               ],
               "output": "c"
             },
             {
-              "fn": "latestSummary",
+              "fn": "latestActivity",
               "args": [
                 "nope"
               ],
@@ -2317,7 +2351,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s1",
                 "driver": "dummy",
@@ -2357,37 +2391,42 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s1": [
                 {
                   "id": "a",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "a",
-                  "createdAt": 10,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 10
                 },
                 {
                   "id": "b",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "b",
-                  "createdAt": 20,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 20
                 },
                 {
                   "id": "c",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "c",
-                  "createdAt": 30,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 30
                 }
               ]
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2409,46 +2448,49 @@
       ]
     },
     {
-      "name": "summaries backfill action merges by id",
+      "name": "activity backfill action merges by id",
       "steps": [
         {
           "actions": [
             {
-              "type": "summaries",
+              "type": "activity",
               "sessionId": "s1",
-              "summaries": [
+              "activity": [
                 {
                   "id": "z",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "z",
-                  "createdAt": 5,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 5
                 },
                 {
                   "id": "y",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "y",
-                  "createdAt": 1,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 1
                 }
               ]
             },
             {
-              "type": "summaries",
+              "type": "activity",
               "sessionId": "s1",
-              "summaries": [
+              "activity": [
                 {
                   "id": "z",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "edited",
-                  "createdAt": 5,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 5
                 }
               ]
             }
@@ -2461,27 +2503,1489 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {
+            "activity": {
               "s1": [
                 {
                   "id": "y",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "y",
-                  "createdAt": 1,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 1
                 },
                 {
                   "id": "z",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "edited",
-                  "createdAt": 5,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 5
                 }
               ]
+            },
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "activity.added replaces an entry in place and sorts a late one by createdAt",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "activity",
+              "sessionId": "s1",
+              "activity": [
+                {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "a",
+                  "meta": {},
+                  "createdAt": 10
+                },
+                {
+                  "id": "c",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "c",
+                  "meta": {},
+                  "createdAt": 30
+                }
+              ]
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "activity.added",
+                "entry": {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "edited",
+                  "meta": {},
+                  "createdAt": 10
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "activity.added",
+                "entry": {
+                  "id": "b",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "submitted",
+                  "author": "agent",
+                  "body": "b",
+                  "meta": {
+                    "specRevision": 2
+                  },
+                  "createdAt": 20
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "activity.added",
+                "entry": {
+                  "id": "x",
+                  "sessionId": "s2",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "x",
+                  "meta": {},
+                  "createdAt": 5
+                }
+              }
+            }
+          ],
+          "probes": [],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {
+              "s1": [
+                {
+                  "id": "a",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "edited",
+                  "meta": {},
+                  "createdAt": 10
+                },
+                {
+                  "id": "b",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "submitted",
+                  "author": "agent",
+                  "body": "b",
+                  "meta": {
+                    "specRevision": 2
+                  },
+                  "createdAt": 20
+                },
+                {
+                  "id": "c",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "c",
+                  "meta": {},
+                  "createdAt": 30
+                }
+              ],
+              "s2": [
+                {
+                  "id": "x",
+                  "sessionId": "s2",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "x",
+                  "meta": {},
+                  "createdAt": 5
+                }
+              ]
+            },
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "latestActivity filtered by kind",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "activity",
+              "sessionId": "s1",
+              "activity": [
+                {
+                  "id": "n1",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "n1",
+                  "meta": {},
+                  "createdAt": 10
+                },
+                {
+                  "id": "sub",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "submitted",
+                  "author": "agent",
+                  "body": "sub",
+                  "meta": {},
+                  "createdAt": 20
+                },
+                {
+                  "id": "n2",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "n2",
+                  "meta": {},
+                  "createdAt": 30
+                },
+                {
+                  "id": "m",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "message",
+                  "author": "human",
+                  "body": "m",
+                  "meta": {},
+                  "createdAt": 40
+                }
+              ]
+            }
+          ],
+          "probes": [
+            {
+              "fn": "latestActivity",
+              "args": [
+                "s1"
+              ],
+              "output": "m"
+            },
+            {
+              "fn": "latestActivity",
+              "args": [
+                "s1",
+                [
+                  "note"
+                ]
+              ],
+              "output": "n2"
+            },
+            {
+              "fn": "latestActivity",
+              "args": [
+                "s1",
+                [
+                  "submitted",
+                  "blocked"
+                ]
+              ],
+              "output": "sub"
+            },
+            {
+              "fn": "latestActivity",
+              "args": [
+                "s1",
+                [
+                  "failed"
+                ]
+              ],
+              "output": null
+            },
+            {
+              "fn": "latestActivity",
+              "args": [
+                "s1",
+                []
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {
+              "s1": [
+                {
+                  "id": "n1",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "n1",
+                  "meta": {},
+                  "createdAt": 10
+                },
+                {
+                  "id": "sub",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "submitted",
+                  "author": "agent",
+                  "body": "sub",
+                  "meta": {},
+                  "createdAt": 20
+                },
+                {
+                  "id": "n2",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "note",
+                  "author": "agent",
+                  "body": "n2",
+                  "meta": {},
+                  "createdAt": 30
+                },
+                {
+                  "id": "m",
+                  "sessionId": "s1",
+                  "ticketId": "t1",
+                  "kind": "message",
+                  "author": "human",
+                  "body": "m",
+                  "meta": {},
+                  "createdAt": 40
+                }
+              ]
+            },
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "spec.revised appends to a loaded revision list only",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "spec.revised",
+                "ticketId": "t1",
+                "rev": 2,
+                "author": "agent",
+                "note": "unloaded"
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        },
+        {
+          "actions": [
+            {
+              "type": "specRevisions",
+              "ticketId": "t1",
+              "revisions": [
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": false,
+                  "createdAt": 10
+                },
+                {
+                  "rev": 3,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 3",
+                  "approvedBaseline": false,
+                  "createdAt": 30
+                }
+              ]
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "spec.revised",
+                "ticketId": "t1",
+                "rev": 2,
+                "author": "agent",
+                "note": "Plan",
+                "runId": "r1",
+                "runKind": "plan",
+                "createdAt": 15
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "spec.revised",
+                "ticketId": "t1",
+                "rev": 4,
+                "author": "human",
+                "note": "Edited by hand"
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "spec.revised",
+                "ticketId": "t1",
+                "rev": 3,
+                "author": "agent",
+                "note": "again"
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 3,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 4,
+                  "approvedBaseline": false
+                }
+              ]
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {
+              "t1": [
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": false,
+                  "createdAt": 10
+                },
+                {
+                  "rev": 2,
+                  "author": "agent",
+                  "note": "Plan",
+                  "runId": "r1",
+                  "runKind": "plan",
+                  "approvedBaseline": false,
+                  "createdAt": 15
+                },
+                {
+                  "rev": 3,
+                  "author": "agent",
+                  "note": "again",
+                  "runId": null,
+                  "runKind": null,
+                  "approvedBaseline": false,
+                  "createdAt": 0
+                },
+                {
+                  "rev": 4,
+                  "author": "human",
+                  "note": "Edited by hand",
+                  "runId": null,
+                  "runKind": null,
+                  "approvedBaseline": false,
+                  "createdAt": 0
+                }
+              ]
+            },
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "the ticket's specBaselineRevision decides which revision is approved",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "specRevisions",
+              "ticketId": "t1",
+              "revisions": [
+                {
+                  "rev": 2,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 2",
+                  "approvedBaseline": false,
+                  "createdAt": 20
+                },
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": true,
+                  "createdAt": 10
+                }
+              ]
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": true
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t1",
+                  "key": "T1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t1",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-t1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0,
+                  "specRevision": 3,
+                  "specBaselineRevision": 2
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "specRevisions",
+              "ticketId": "t1",
+              "revisions": [
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": true,
+                  "createdAt": 10
+                },
+                {
+                  "rev": 2,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 2",
+                  "approvedBaseline": false,
+                  "createdAt": 20
+                },
+                {
+                  "rev": 3,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 3",
+                  "approvedBaseline": false,
+                  "createdAt": 30
+                }
+              ]
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": true
+                },
+                {
+                  "rev": 3,
+                  "approvedBaseline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t1",
+                  "key": "T1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t1",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-t1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0,
+                  "specRevision": 3,
+                  "specBaselineRevision": null
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 3,
+                  "approvedBaseline": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t1",
+                  "key": "T1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t1",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-t1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0,
+                  "specRevision": 3,
+                  "specBaselineRevision": 3
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t1",
+                  "key": "T1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t1",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-t1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0,
+                  "specRevision": 3
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 3,
+                  "approvedBaseline": true
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t2",
+                  "key": "T2",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t2",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-t2",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0,
+                  "specBaselineRevision": 1
+                }
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t2"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {
+              "t1": {
+                "id": "t1",
+                "key": "T1",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t1",
+                "spec": "",
+                "status": "planning",
+                "sessionId": "s-t1",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "specRevision": 3
+              },
+              "t2": {
+                "id": "t2",
+                "key": "T2",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t2",
+                "spec": "",
+                "status": "planning",
+                "sessionId": "s-t2",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "specBaselineRevision": 1
+              }
+            },
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {
+              "t1": [
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": false,
+                  "createdAt": 10
+                },
+                {
+                  "rev": 2,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 2",
+                  "approvedBaseline": false,
+                  "createdAt": 20
+                },
+                {
+                  "rev": 3,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 3",
+                  "approvedBaseline": true,
+                  "createdAt": 30
+                }
+              ]
+            },
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "specRevision stores bodies; specBody reads the current one from the ticket",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t1",
+                  "key": "T1",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t1",
+                  "spec": "current body",
+                  "status": "planning",
+                  "sessionId": "s-t1",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0,
+                  "specRevision": 3
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "ticket.upserted",
+                "ticket": {
+                  "id": "t2",
+                  "key": "T2",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t2",
+                  "spec": "rev one",
+                  "status": "planning",
+                  "sessionId": "s-t2",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              }
+            },
+            {
+              "type": "specRevision",
+              "ticketId": "t1",
+              "revision": {
+                "rev": 1,
+                "author": "agent",
+                "runId": null,
+                "runKind": null,
+                "note": "rev 1",
+                "approvedBaseline": false,
+                "createdAt": 10,
+                "body": "first body"
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specBody",
+              "args": [
+                "t1",
+                1
+              ],
+              "output": "first body"
+            },
+            {
+              "fn": "specBody",
+              "args": [
+                "t1",
+                2
+              ],
+              "output": null
+            },
+            {
+              "fn": "specBody",
+              "args": [
+                "t1",
+                3
+              ],
+              "output": "current body"
+            },
+            {
+              "fn": "specBody",
+              "args": [
+                "t2",
+                1
+              ],
+              "output": "rev one"
+            },
+            {
+              "fn": "specBody",
+              "args": [
+                "t2",
+                2
+              ],
+              "output": null
+            },
+            {
+              "fn": "specBody",
+              "args": [
+                "nope",
+                1
+              ],
+              "output": null
+            },
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {
+              "t1": {
+                "id": "t1",
+                "key": "T1",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t1",
+                "spec": "current body",
+                "status": "planning",
+                "sessionId": "s-t1",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "specRevision": 3
+              },
+              "t2": {
+                "id": "t2",
+                "key": "T2",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t2",
+                "spec": "rev one",
+                "status": "planning",
+                "sessionId": "s-t2",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {
+              "t1#1": "first body"
+            },
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        },
+        {
+          "actions": [
+            {
+              "type": "specRevisions",
+              "ticketId": "t1",
+              "revisions": [
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": false,
+                  "createdAt": 10
+                }
+              ]
+            },
+            {
+              "type": "specRevision",
+              "ticketId": "t1",
+              "revision": {
+                "rev": 2,
+                "author": "agent",
+                "runId": null,
+                "runKind": null,
+                "note": "from GET",
+                "approvedBaseline": false,
+                "createdAt": 20,
+                "body": "second body"
+              }
+            },
+            {
+              "type": "specRevision",
+              "ticketId": "t1",
+              "revision": {
+                "rev": 3,
+                "author": "agent",
+                "runId": null,
+                "runKind": null,
+                "note": "rev 3",
+                "approvedBaseline": false,
+                "createdAt": 30,
+                "body": "stale"
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "specBody",
+              "args": [
+                "t1",
+                2
+              ],
+              "output": "second body"
+            },
+            {
+              "fn": "specBody",
+              "args": [
+                "t1",
+                3
+              ],
+              "output": "current body"
+            },
+            {
+              "fn": "specRevisions",
+              "args": [
+                "t1"
+              ],
+              "output": [
+                {
+                  "rev": 1,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 2,
+                  "approvedBaseline": false
+                },
+                {
+                  "rev": 3,
+                  "approvedBaseline": false
+                }
+              ]
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {
+              "t1": {
+                "id": "t1",
+                "key": "T1",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t1",
+                "spec": "current body",
+                "status": "planning",
+                "sessionId": "s-t1",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0,
+                "specRevision": 3
+              },
+              "t2": {
+                "id": "t2",
+                "key": "T2",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t2",
+                "spec": "rev one",
+                "status": "planning",
+                "sessionId": "s-t2",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {
+              "t1": [
+                {
+                  "rev": 1,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 1",
+                  "approvedBaseline": false,
+                  "createdAt": 10
+                },
+                {
+                  "rev": 2,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "from GET",
+                  "approvedBaseline": false,
+                  "createdAt": 20
+                },
+                {
+                  "rev": 3,
+                  "author": "agent",
+                  "runId": null,
+                  "runKind": null,
+                  "note": "rev 3",
+                  "approvedBaseline": false,
+                  "createdAt": 30
+                }
+              ]
+            },
+            "specBodies": {
+              "t1#1": "first body",
+              "t1#2": "second body",
+              "t1#3": "stale"
             },
             "transcripts": {},
             "subagents": {},
@@ -2516,7 +4020,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t1",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -2550,7 +4054,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t1",
-                  "description": "",
+                  "spec": "",
                   "status": "review",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -2587,7 +4091,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "review",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -2612,7 +4116,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2651,7 +4157,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "review",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -2676,7 +4182,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2711,7 +4219,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2789,7 +4299,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t1",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -2823,7 +4333,7 @@
                   "projectId": "p2",
                   "kind": "task",
                   "title": "t2",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-t2",
                   "driver": "dummy",
@@ -2884,7 +4394,7 @@
                 "projectId": "p2",
                 "kind": "task",
                 "title": "t2",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-t2",
                 "driver": "dummy",
@@ -2909,7 +4419,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -2965,7 +4477,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3025,7 +4539,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3126,7 +4642,9 @@
               }
             },
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3195,7 +4713,9 @@
               }
             },
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3286,7 +4806,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3320,7 +4842,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "gone",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-gone",
                   "driver": "dummy",
@@ -3360,7 +4882,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "t1",
-                    "description": "",
+                    "spec": "",
                     "status": "planning",
                     "sessionId": "s-t1",
                     "driver": "dummy",
@@ -3402,7 +4924,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -3427,7 +4949,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3461,7 +4985,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t1",
-                  "description": "",
+                  "spec": "",
                   "status": "review",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -3501,7 +5025,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "t1",
-                    "description": "",
+                    "spec": "",
                     "status": "in_progress",
                     "sessionId": "s-t1",
                     "driver": "dummy",
@@ -3543,7 +5067,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "review",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -3568,7 +5092,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3598,7 +5124,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "t1",
-                    "description": "",
+                    "spec": "",
                     "status": "done",
                     "sessionId": "s-t1",
                     "driver": "dummy",
@@ -3640,7 +5166,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "done",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -3665,7 +5191,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -3685,7 +5213,7 @@
       ]
     },
     {
-      "name": "snapshot keeps transcripts, summaries, runs and deltas; prefers newer projects and sessions",
+      "name": "snapshot keeps transcripts, activity, runs and deltas; prefers newer projects and sessions",
       "steps": [
         {
           "actions": [
@@ -3710,15 +5238,16 @@
             {
               "type": "event",
               "event": {
-                "kind": "summary.added",
-                "summary": {
+                "kind": "activity.added",
+                "entry": {
                   "id": "x",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "x",
-                  "createdAt": 1,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 1
                 }
               }
             },
@@ -3851,7 +5380,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "t1",
-                    "description": "",
+                    "spec": "",
                     "status": "planning",
                     "sessionId": "s-t1",
                     "driver": "dummy",
@@ -3879,7 +5408,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "t2",
-                    "description": "",
+                    "spec": "",
                     "status": "planning",
                     "sessionId": "s-t2",
                     "driver": "dummy",
@@ -3995,7 +5524,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -4023,7 +5552,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t2",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-t2",
                 "driver": "dummy",
@@ -4063,19 +5592,22 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s1": [
                 {
                   "id": "x",
                   "sessionId": "s1",
                   "ticketId": "t1",
+                  "kind": "note",
                   "author": "agent",
                   "body": "x",
-                  "createdAt": 1,
-                  "attachments": []
+                  "meta": {},
+                  "createdAt": 1
                 }
               ]
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1": {
                 "entries": [
@@ -4158,7 +5690,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "kid",
-                    "description": "",
+                    "spec": "",
                     "status": "in_progress",
                     "sessionId": "s-kid",
                     "driver": "dummy",
@@ -4201,7 +5733,7 @@
                   "projectId": "p1",
                   "kind": "conductor",
                   "title": "cond",
-                  "description": "",
+                  "spec": "",
                   "status": "in_progress",
                   "sessionId": "s-cond",
                   "driver": "dummy",
@@ -4237,7 +5769,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [
                   {
                     "id": "r1",
@@ -4262,7 +5794,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "kid",
-                    "description": "",
+                    "spec": "",
                     "status": "in_progress",
                     "sessionId": "s-kid",
                     "driver": "dummy",
@@ -4290,7 +5822,7 @@
                     "projectId": "p1",
                     "kind": "task",
                     "title": "k2",
-                    "description": "",
+                    "spec": "",
                     "status": "done",
                     "sessionId": "s-k2",
                     "driver": "dummy",
@@ -4369,7 +5901,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "kid",
-                "description": "",
+                "spec": "",
                 "status": "in_progress",
                 "sessionId": "s-kid",
                 "driver": "dummy",
@@ -4397,7 +5929,7 @@
                 "projectId": "p1",
                 "kind": "conductor",
                 "title": "cond",
-                "description": "",
+                "spec": "",
                 "status": "in_progress",
                 "sessionId": "s-cond",
                 "driver": "dummy",
@@ -4425,7 +5957,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "k2",
-                "description": "",
+                "spec": "",
                 "status": "done",
                 "sessionId": "s-k2",
                 "driver": "dummy",
@@ -4478,9 +6010,11 @@
                 "endedAt": null
               }
             },
-            "summaries": {
+            "activity": {
               "s-cond": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {
               "s-cond": [
@@ -4543,7 +6077,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -4574,7 +6110,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "r",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-r",
                   "driver": "dummy",
@@ -4610,7 +6146,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": []
@@ -4652,7 +6188,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "r",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-r",
                 "driver": "dummy",
@@ -4692,9 +6228,11 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s-r": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -4728,7 +6266,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "q",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-q",
                   "driver": "dummy",
@@ -4764,7 +6302,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": []
@@ -4784,7 +6322,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "r",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-r",
                 "driver": "dummy",
@@ -4812,7 +6350,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "q",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-q",
                 "driver": "dummy",
@@ -4866,10 +6404,12 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s-r": [],
               "s-q": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -4909,7 +6449,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "r",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-r",
                   "driver": "dummy",
@@ -4945,7 +6485,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": [],
@@ -4981,7 +6521,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "r",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-r",
                 "driver": "dummy",
@@ -5021,9 +6561,11 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s-r": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -5061,7 +6603,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "live",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -5094,7 +6636,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "stale",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -5130,7 +6672,7 @@
                   "createdAt": 0,
                   "updatedAt": 0
                 },
-                "summaries": [],
+                "activity": [],
                 "runs": [],
                 "dependents": [],
                 "children": []
@@ -5149,7 +6691,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "live",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -5189,9 +6731,11 @@
               }
             },
             "runs": {},
-            "summaries": {
+            "activity": {
               "s-t1": []
             },
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -5227,7 +6771,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "live",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "dummy",
@@ -5260,7 +6804,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "fetched",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "dummy",
@@ -5288,7 +6832,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "b",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-b",
                   "driver": "dummy",
@@ -5326,7 +6870,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "same time",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "dummy",
@@ -5367,7 +6911,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "same time",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-a",
                 "driver": "dummy",
@@ -5395,7 +6939,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "b",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-b",
                 "driver": "dummy",
@@ -5420,7 +6964,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -5479,7 +7025,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {
               "s1/a": {
                 "entries": [
@@ -5536,7 +7084,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "dummy",
@@ -5570,7 +7118,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "b",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-b",
                   "driver": "dummy",
@@ -5604,7 +7152,7 @@
                   "projectId": "p2",
                   "kind": "task",
                   "title": "c",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-c",
                   "driver": "dummy",
@@ -5638,7 +7186,7 @@
                   "projectId": "p2",
                   "kind": "task",
                   "title": "d",
-                  "description": "",
+                  "spec": "",
                   "status": "done",
                   "sessionId": "s-d",
                   "driver": "dummy",
@@ -5672,7 +7220,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "e",
-                  "description": "",
+                  "spec": "",
                   "status": "done",
                   "sessionId": "s-e",
                   "driver": "dummy",
@@ -5802,7 +7350,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "a",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-a",
                 "driver": "dummy",
@@ -5830,7 +7378,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "b",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-b",
                 "driver": "dummy",
@@ -5858,7 +7406,7 @@
                 "projectId": "p2",
                 "kind": "task",
                 "title": "c",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-c",
                 "driver": "dummy",
@@ -5886,7 +7434,7 @@
                 "projectId": "p2",
                 "kind": "task",
                 "title": "d",
-                "description": "",
+                "spec": "",
                 "status": "done",
                 "sessionId": "s-d",
                 "driver": "dummy",
@@ -5914,7 +7462,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "e",
-                "description": "",
+                "spec": "",
                 "status": "done",
                 "sessionId": "s-e",
                 "driver": "dummy",
@@ -5939,7 +7487,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -5973,7 +7523,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "dummy",
@@ -6007,7 +7557,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "b",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-b",
                   "driver": "dummy",
@@ -6041,7 +7591,7 @@
                   "projectId": "p2",
                   "kind": "task",
                   "title": "c",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-c",
                   "driver": "dummy",
@@ -6075,7 +7625,7 @@
                   "projectId": "p2",
                   "kind": "task",
                   "title": "d",
-                  "description": "",
+                  "spec": "",
                   "status": "done",
                   "sessionId": "s-d",
                   "driver": "dummy",
@@ -6109,7 +7659,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "e",
-                  "description": "",
+                  "spec": "",
                   "status": "done",
                   "sessionId": "s-e",
                   "driver": "dummy",
@@ -6143,7 +7693,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "f",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-f",
                   "driver": "dummy",
@@ -6214,7 +7764,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "a",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-a",
                 "driver": "dummy",
@@ -6242,7 +7792,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "b",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-b",
                 "driver": "dummy",
@@ -6270,7 +7820,7 @@
                 "projectId": "p2",
                 "kind": "task",
                 "title": "c",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-c",
                 "driver": "dummy",
@@ -6298,7 +7848,7 @@
                 "projectId": "p2",
                 "kind": "task",
                 "title": "d",
-                "description": "",
+                "spec": "",
                 "status": "done",
                 "sessionId": "s-d",
                 "driver": "dummy",
@@ -6326,7 +7876,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "e",
-                "description": "",
+                "spec": "",
                 "status": "done",
                 "sessionId": "s-e",
                 "driver": "dummy",
@@ -6354,7 +7904,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "f",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-f",
                 "driver": "dummy",
@@ -6383,7 +7933,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -6428,7 +7980,9 @@
         "tickets": {},
         "sessions": {},
         "runs": {},
-        "summaries": {},
+        "activity": {},
+        "specRevisions": {},
+        "specBodies": {},
         "transcripts": {},
         "subagents": {},
         "taskOutputs": {},
@@ -6465,7 +8019,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "claude-code",
@@ -6499,7 +8053,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "codex",
@@ -6563,7 +8117,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -6616,7 +8172,9 @@
         "tickets": {},
         "sessions": {},
         "runs": {},
-        "summaries": {},
+        "activity": {},
+        "specRevisions": {},
+        "specBodies": {},
         "transcripts": {},
         "subagents": {},
         "taskOutputs": {},
@@ -6653,7 +8211,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "codex",
@@ -6687,7 +8245,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "claude-code",
@@ -6744,7 +8302,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -6786,7 +8346,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "a",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-a",
                   "driver": "codex",
@@ -6826,7 +8386,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -6870,7 +8432,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -6931,7 +8495,9 @@
         "tickets": {},
         "sessions": {},
         "runs": {},
-        "summaries": {},
+        "activity": {},
+        "specRevisions": {},
+        "specBodies": {},
         "transcripts": {},
         "subagents": {},
         "taskOutputs": {},
@@ -7055,7 +8621,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -7164,7 +8732,9 @@
         "tickets": {},
         "sessions": {},
         "runs": {},
-        "summaries": {},
+        "activity": {},
+        "specRevisions": {},
+        "specBodies": {},
         "transcripts": {},
         "subagents": {},
         "taskOutputs": {},
@@ -7284,7 +8854,9 @@
             "tickets": {},
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -7340,7 +8912,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "t1",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-t1",
                   "driver": "dummy",
@@ -7450,7 +9022,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "t1",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-t1",
                 "driver": "dummy",
@@ -7475,7 +9047,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -7622,7 +9196,9 @@
               }
             },
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},
@@ -7656,7 +9232,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "k2",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-k2",
                   "driver": "dummy",
@@ -7690,7 +9266,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "k1",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-k1",
                   "driver": "dummy",
@@ -7724,7 +9300,7 @@
                   "projectId": "p1",
                   "kind": "task",
                   "title": "x",
-                  "description": "",
+                  "spec": "",
                   "status": "planning",
                   "sessionId": "s-x",
                   "driver": "dummy",
@@ -7779,7 +9355,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "k2",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-k2",
                 "driver": "dummy",
@@ -7807,7 +9383,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "k1",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-k1",
                 "driver": "dummy",
@@ -7835,7 +9411,7 @@
                 "projectId": "p1",
                 "kind": "task",
                 "title": "x",
-                "description": "",
+                "spec": "",
                 "status": "planning",
                 "sessionId": "s-x",
                 "driver": "dummy",
@@ -7860,7 +9436,9 @@
             },
             "sessions": {},
             "runs": {},
-            "summaries": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
             "transcripts": {},
             "subagents": {},
             "taskOutputs": {},

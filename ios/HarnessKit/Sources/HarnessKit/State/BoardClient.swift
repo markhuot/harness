@@ -22,7 +22,7 @@ public protocol BoardClient: LoaderClient, DetailClient {
     func listWatchers() async throws -> [Watcher]
     func getSettings() async throws -> PublicSettings
     func listDrivers() async throws -> [DriverInfo]
-    func listSummaries(_ key: String) async throws -> [Summary]
+    func listActivity(_ key: String) async throws -> [ActivityEntry]
 }
 
 extension HarnessClient: BoardClient {}

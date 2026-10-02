@@ -72,7 +72,7 @@ describe("generic watcher, end to end", () => {
     ];
     const t = await h.orch.createTicket({
       projectId: h.shop.id,
-      prompt: `Add a watcher that runs this curl loop and dispatches my actionable events to SHOP /tools ${JSON.stringify(calls)}`,
+      spec: `Add a watcher that runs this curl loop and dispatches my actionable events to SHOP /tools ${JSON.stringify(calls)}`,
     });
     await h.orch.idle();
 

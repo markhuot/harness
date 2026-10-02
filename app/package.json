@@ -17,6 +17,7 @@
     "shoot": "bun run build && bun scripts/shoot.ts",
     "real": "bun run build && bun scripts/real-service.ts",
     "changes": "bun run build && bun scripts/changes.ts",
+    "spec-activity": "bun run build && bun scripts/spec-activity.ts",
     "browser-tabs": "bun run build && bun scripts/browser-tabs.ts",
     "icon": "bun scripts/icon.ts",
     "typecheck": "tsc --noEmit -p .",

@@ -27,7 +27,11 @@ import type {
   ServerMessage,
   Session,
   Settings,
-  Summary,
+  ActivityEntry,
+  SpecConflict,
+  SpecDiff,
+  SpecRevision,
+  SpecRevisionInfo,
   Ticket,
   TicketDetail,
   TicketPage,
@@ -60,6 +64,13 @@ export class HarnessApiError extends Error {
   ) {
     super(message);
   }
+}
+
+/** The SpecConflict of a PATCH refused because the spec moved on (409), else null. */
+export function specConflict(err: unknown): SpecConflict | null {
+  if (!(err instanceof HarnessApiError) || err.status !== 409) return null;
+  const d = err.data as Partial<SpecConflict> | undefined;
+  return d && typeof d.currentRevision === "number" && typeof d.spec === "string" ? { currentRevision: d.currentRevision, spec: d.spec } : null;
 }
 
 export interface HarnessClientOptions {
@@ -166,8 +177,8 @@ export class HarnessClient {
     );
   }
   /**
-   * Search every status: key (current or pre-rename, exact/prefix), title, description and the
-   * latest summary. Key matches rank first, then title, then the rest; newest first within a rank.
+   * Search every status: key (current or pre-rename, exact/prefix), title, spec and the
+   * latest Activity note. Key matches rank first, then title, then the rest; newest first within a rank.
    * An empty/whitespace `q` is a 400.
    */
   searchTickets(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null }) {
@@ -179,6 +190,10 @@ export class HarnessClient {
   getTicket(key: string) {
     return this.request<TicketDetail>("GET", `/tickets/${key}`);
   }
+  /**
+   * A PATCH with `spec` needs `baseRevision` (outside drafts). When the spec moved on since,
+   * it rejects with a HarnessApiError of status 409 whose `data` is a SpecConflict; see specConflict().
+   */
   updateTicket(key: string, body: UpdateTicketBody) {
     return this.request<Ticket>("PATCH", `/tickets/${key}`, body);
   }
@@ -192,8 +207,9 @@ export class HarnessClient {
   submitTicket(key: string, body: SubmitTicketBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
-  sendMessage(key: string, text: string, opts: { move?: boolean } = {}) {
-    const body: MessageBody = opts.move ? { text, move: true } : { text };
+  /** `log`: the message (and the agent's answer) also go into Activity: send true from the Spec and Activity tabs. */
+  sendMessage(key: string, text: string, opts: { move?: boolean; log?: boolean } = {}) {
+    const body: MessageBody = { text, ...(opts.move ? { move: true } : {}), ...(opts.log ? { log: true } : {}) };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
@@ -230,10 +246,22 @@ export class HarnessClient {
   ticketFileDiff(key: string, path: string) {
     return this.request<FileDiff>("GET", `/tickets/${key}/file/diff${query({ path })}`);
   }
-  listSummaries(key: string) {
-    return this.request<Summary[]>("GET", `/tickets/${key}/summaries`);
+  listActivity(key: string) {
+    return this.request<ActivityEntry[]>("GET", `/tickets/${key}/activity`);
   }
-  /** Absolute URL of a summary attachment, token in the query so <img>/<video> can load it. */
+  /** Every spec revision's metadata, oldest first (no bodies). */
+  specRevisions(key: string) {
+    return this.request<SpecRevisionInfo[]>("GET", `/tickets/${key}/spec/revisions`);
+  }
+  /** One spec revision with its body. */
+  specRevision(key: string, rev: number) {
+    return this.request<SpecRevision>("GET", `/tickets/${key}/spec/revisions/${rev}`);
+  }
+  /** The unified diff from revision `from` to `to` (parseDiff reads it); "" when they're equal. */
+  specDiff(key: string, from: number, to: number) {
+    return this.request<SpecDiff>("GET", `/tickets/${key}/spec/revisions/${to}${query({ diff: from })}`);
+  }
+  /** Absolute URL of a ticket attachment (attachment:<id> in a spec), token in the query so <img>/<video> can load it. */
   attachmentUrl(id: string): string {
     return `${this.baseUrl}/attachments/${encodeURIComponent(id)}?token=${encodeURIComponent(this.opts.token)}`;
   }

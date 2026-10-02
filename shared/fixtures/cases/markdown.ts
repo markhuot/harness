@@ -1,5 +1,5 @@
 // Markdown parsing (shared/src/state/markdown.ts) for HarnessKit's Markdown.swift.
-import { inlineTokens, parseBlocks, plainText } from "../../src/state/markdown";
+import { inlineTokens, mediaIn, parseBlocks, plainText } from "../../src/state/markdown";
 import { cases } from "../case";
 
 /** Inputs every function sees: the shared corpus of tricky markdown. */
@@ -29,6 +29,40 @@ const corpus: Record<string, string> = {
   "list item with tab": "-\ttab item",
   "empty list item text": "- \n-  x",
   "list then paragraph": "- a\nafter",
+  "nested three levels": "- one\n  - two\n    - three\n  - two b\n- one b",
+  "ul inside ol": "1. first\n   - bullet\n   - bullet b\n2. second",
+  "ol inside ul": "- top\n  1. one\n  2. two\n- next",
+  "nested kinds switch under one item": "- a\n  - b\n  1. c",
+  "nested continuation lines": "- a\n  more a\n  - b\n    more b\n  back on a",
+  "tab-indented child": "- parent\n\t- child\n\t\t- grandchild",
+  "one-space indent stays a sibling": "- a\n - b",
+  "dedent past the parent": "- a\n    - b\n  - c\n- d",
+  "nested list then paragraph": "- a\n  - b\nafter",
+  "list, blank line, paragraph": "- a\n  - b\n\nafter",
+  "ordered start number": "3. three\n4. four",
+  "ordered start zero": "0. zero",
+  "huge ordered start": "12345678901. big",
+  "nested ordered start": "- a\n  5. five\n  6. six",
+  "image on its own line": "Before\n![shot](attachment:abc123)\nAfter",
+  "indented image line": "  ![shot](attachment:abc)  ",
+  "inline image": "See ![shot](attachment:abc) here",
+  "attachment video": "![demo](attachment:v1.mp4)",
+  "video by alt name": "![flow.MOV](attachment:v2)",
+  "remote image on its own line": "![pixel](https://tracker.example/p.gif)",
+  "remote image without alt": "![](https://x.test/a.png)",
+  "file image on its own line": "![after](harness://file/shots/after.png)",
+  "relative path image": "![after](shots/after.png)",
+  "javascript image": "![x](javascript:alert(1))",
+  "data image": "![x](data:image/png;base64,AAAA)",
+  "bad attachment id": "![x](attachment:a/b)",
+  "empty attachment id": "![x](attachment:)",
+  "dot-dot attachment id": "![x](attachment:..)",
+  "dot-led attachment id": "![x](attachment:.x)",
+  "dash-led attachment id": "![x](attachment:-x)",
+  "image in a list item": "- ![shot](attachment:abc)",
+  "two images on one line": "![a](attachment:a) ![b](attachment:b)",
+  "image with empty alt": "![](attachment:abc)",
+  "link next to image": "[docs](https://x.y) ![i](attachment:i)",
   "hr dashes": "---",
   "hr stars": "***",
   "hr with spaces": "  -----  ",
@@ -166,6 +200,12 @@ const inlineCorpus: Record<string, string> = {
 
 export const parseBlocksCases = cases(parseBlocks, corpus);
 export const inlineTokensCases = cases(inlineTokens, { ...inlineCorpus, ...corpus });
+export const mediaInCases = cases((s: string) => mediaIn(parseBlocks(s)), {
+  ...corpus,
+  "media everywhere": "# ![h](attachment:h)\n![a](attachment:a)\npara ![b](attachment:b)\n> ![q](attachment:q.mov)\n- ![l](attachment:l)\n  - ![n](attachment:n)\n\n| ![t](attachment:t) |\n|---|\n| ![a again](attachment:a) |",
+  "same id twice keeps the first": "![first](attachment:x)\n![second.mp4](attachment:x)",
+  "remote images are not media": "![r](https://x.test/r.png) ![f](shots/f.png)",
+});
 export const plainTextCases = cases(plainText, {
   ...corpus,
   ...inlineCorpus,

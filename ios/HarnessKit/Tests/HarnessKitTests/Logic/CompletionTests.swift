@@ -107,8 +107,8 @@ struct CompletionTests {
     /// and Patch fields on Ticket/Project.
     @Test func entityOverload() {
         let project = Project(id: "p", key: "P", name: "p", path: "/p", nextSeq: 1, useWorktrees: true, isGit: true, completionAction: .pr, pullRequestHost: .value("github.com"), createdAt: 0, updatedAt: 0)
-        let parent = Ticket(id: "a", key: "P-1", projectId: "p", title: "a", description: "", status: .inProgress, sessionId: "s", driver: "d", branch: "harness/p-1", createdAt: 0, updatedAt: 0)
-        let child = Ticket(id: "b", key: "P-2", projectId: "p", title: "b", description: "", status: .review, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
+        let parent = Ticket(id: "a", key: "P-1", projectId: "p", title: "a", spec: "", status: .inProgress, sessionId: "s", driver: "d", branch: "harness/p-1", createdAt: 0, updatedAt: 0)
+        let child = Ticket(id: "b", key: "P-2", projectId: "p", title: "b", spec: "", status: .review, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
         #expect(Completion.completionOptions(ticket: child, project: project, parent: parent) == Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "harness/p-1"))
         var opened = child
         opened.branch = "harness/p-2"

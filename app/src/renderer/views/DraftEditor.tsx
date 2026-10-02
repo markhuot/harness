@@ -4,7 +4,7 @@
 // keeping creates the draft and turns the New session pane into the draft's pane in place; the
 // editing session (state/draftSession.ts) outlives that swap, so nothing typed meanwhile is lost.
 //
-// Top to bottom: the project and Task | Conductor, the prompt (it fills the pane), Options (the
+// Top to bottom: the project and Task | Conductor, the spec (it fills the pane), Options (the
 // same TicketSettings rows as a ticket's Details, collapsed to a one-line summary), then Plan first
 // (⇧⌘↩) and Start session (⌘↩).
 
@@ -205,11 +205,11 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   };
   const confirmDiscard = () => {
     if (!session) return;
-    if (session.local.description.trim() && !confirm(`Discard this draft? ${session.key ?? "It"} is deleted with its prompt and settings.`)) return;
+    if (session.local.spec.trim() && !confirm(`Discard this draft? ${session.key ?? "It"} is deleted with its spec and settings.`)) return;
     void discard();
   };
 
-  const canSubmit = !!view && !!project && !!view.description.trim() && hint?.tone !== "error" && !session?.busy;
+  const canSubmit = !!view && !!project && !!view.spec.trim() && hint?.tone !== "error" && !session?.busy;
   const submit = async (start: boolean) => {
     if (!session || !canSubmit) return;
     const t = await session.submit(start);
@@ -218,7 +218,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
       localStorage.setItem(LAST_PROJECT, t.projectId);
     } catch {}
     dropDraftSession(paneId, session);
-    updatePanes(scope, (s) => setTab(s, paneId, start ? "transcript" : "summaries"));
+    updatePanes(scope, (s) => setTab(s, paneId, start ? "transcript" : "spec"));
   };
 
   const addProject = async () => {
@@ -259,7 +259,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   return (
     <aside className="detail draft-pane" data-testid="draft-pane" data-draft-key={key ?? undefined} {...keysArea("ticket", owner)} onKeyDown={keys}>
       <div className="view-header detail-titlebar draft-titlebar">
-        <PaneGrip paneId={paneId} chip={key ?? "New session"} title={view?.title || view?.description.split("\n")[0] || "Draft"} />
+        <PaneGrip paneId={paneId} chip={key ?? "New session"} title={view?.title || view?.spec.split("\n")[0] || "Draft"} />
         <Icon name="edit" size={13} className="draft-icon" />
         <span className="detail-key draft-title selectable" data-testid="draft-title">
           {key ?? "New session"}
@@ -352,11 +352,11 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           autoFocus={!!compose}
           data-pane-autofocus
           className="draft-prompt"
-          aria-label="Prompt"
+          aria-label="Spec"
           placeholder={newSessionPlaceholder(view?.kind ?? "task")}
-          value={view?.description ?? ""}
+          value={view?.spec ?? ""}
           disabled={!session}
-          onValueChange={(v) => session?.edit({ description: v })}
+          onValueChange={(v) => session?.edit({ spec: v })}
           search={searchFiles}
           searchCommands={searchCommands}
         />

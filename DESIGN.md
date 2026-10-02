@@ -2,7 +2,7 @@
 
 An AI coding harness: a background **service** runs agent sessions against local project
 directories; a desktop **app** and an iPhone and iPad app show a live kanban board, transcripts,
-summaries and an agent-driven browser. Every session is a Jira-style ticket (`NYTIMES-3`).
+each ticket's spec and Activity, and an agent-driven browser. Every session is a Jira-style ticket (`NYTIMES-3`).
 
 ```
 ┌──────────────┐  REST + WS (127.0.0.1:7717, bearer token)  ┌─────────────────────────────┐
@@ -60,7 +60,7 @@ nothing changes. Clients get `project.upserted`, `ticket.upserted` (renamed tick
 dependency holders) and `session.upserted` events, and each renamed ticket's transcript gets a
 `Renamed OLD-n → NEW-n` status line. Existing branches (`harness/old-n`) and worktree
 directories (`worktrees/OLD-n`) keep their names: they're stored on the ticket, so work in
-progress isn't disturbed. Transcript and summary text isn't rewritten.
+progress isn't disturbed. Transcript, spec and Activity text isn't rewritten.
 
 Old keys keep working. Each rename records `OLD-n → ticket id` in `ticket_key_aliases`
 (migration 5), so bookmarks (`#/…/ticket/OLD-2`), agents calling `get_ticket`, conductors calling
@@ -138,7 +138,7 @@ place of the key.
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
   `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`),
-  `attachments/<id>.<ext>` (summary attachments, see "Summary attachments"), `tmp/<sessionId>/`
+  `attachments/<id>.<ext>` (ticket attachments, see "Spec revisions and attachments"), `tmp/<sessionId>/`
   (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
@@ -188,49 +188,72 @@ Columns: **planning → in_progress → blocked → review → done**.
 Humans own planning and blocked, agents own in_progress, review is shared.
 
 **Messages.** A human message never moves the ticket unless asked to (`POST /messages {text,
-move?}`, `Orchestrator.sendMessage`). Code moves a ticket only before a run starts: `move: true`
+move?, log?}`, `Orchestrator.sendMessage`). `log: true` also records it in Activity (see
+"Activity"). Code moves a ticket only before a run starts: `move: true`
 sends a review ticket back to in progress and re-opens a done one (the composer's switch, off by
 default and after every send); planning starts with Start. Otherwise the ticket's own agent gets
 the message where the ticket is, with its work tools, and moves the ticket itself: `unblock` once
 the message resolves its block, `resume_work` before it changes work that's in review (its call:
 an answer or an investigation leaves the ticket in review), then `submit_for_review` or `block`. A planning ticket's message
 goes to its plan run, so a planning agent is always in Claude Code's plan mode (`--permission-mode
-plan`; the `mcp__harness` allow rule keeps `update_plan`, `update_ticket` and `post_summary` running there).
+plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_ticket` and `post_note` running there).
 
 | Trigger | Effect |
 | --- | --- |
-| Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the brief |
-| Create with `start: false` | status `planning`; enqueue **plan** run (agent drafts a plan, may call `update_plan`) |
+| Create (any) | the ticket with spec revision 1 (author `system`, note "Created"; see "Spec revisions and attachments") |
+| Create with `start: true` | status `in_progress`; enqueue **work** run, prompt = the spec |
+| Create with `start: false` | status `planning`; enqueue **plan** run (the agent writes the spec's Plan with `update_spec`) |
 | Create with `draft: true` | status `planning`, `draft` set, no run (see "Drafts") |
 | `POST /submit {start}` on a draft | `draft` cleared, then exactly what a create with that `start` does |
 | Human message in planning | a plan run that's going takes it in (see "Steering"); otherwise enqueue plan run with the message |
-| `POST /start` (or a move to in_progress) | status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run: "The plan is approved. Begin work." + plan |
+| `POST /start` (or a move to in_progress) | from planning, the current spec revision becomes the **approved baseline** (`specBaselineRevision`, status "Spec revision N approved as the baseline"); status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run (`run.work_start`): "The spec is approved." + the spec |
 | Human message in in_progress | a work/conductor run that's going takes it in (see "Steering"); otherwise enqueue work run with the message |
-| Agent calls `block(question)` (in_progress, blocked or review) | status `blocked`, `blockedReason` set, summary posted. From blocked it replaces the question; from review both reviews reset to pending (queued agent reviews are dropped). Refused in planning and done |
+| Agent calls `block(question)` (in_progress, blocked or review) | status `blocked`, `blockedReason` set, a `blocked` Activity entry (`meta.question`). From blocked it replaces the question; from review both reviews reset to pending (queued agent reviews are dropped). Refused in planning and done |
 | Human message while blocked | status and `blockedReason` unchanged; a **chat** run that's going takes it in (see "Steering"), otherwise enqueue one with the message. The agent's prompt (not the transcript) ends with a harness note naming the question and saying to call `unblock` when the message resolves it, else to answer and leave the ticket blocked. A blocked ticket without a workdir (or whose worktree is gone) gets one first, its status unchanged |
-| Agent calls `unblock(note?)` | blocked → `in_progress`, `blockedReason` cleared, status "Unblocked by the agent"; the run carries on. Refused unless blocked, and while a tool approval is pending |
+| Agent calls `unblock(note?)` | blocked → `in_progress`, `blockedReason` cleared, status "Unblocked by the agent", an `unblocked` entry (`meta.note`); the run carries on. Refused unless blocked, and while a tool approval is pending |
 | Agent calls `resume_work(note?)` | review → `in_progress`, both reviews pending, a queued or running agent review cancelled, status "Moved back to in progress by the agent"; the run carries on and ends like a work run. Refused unless in review, and while a tool approval is pending |
-| Human message in review or done | status and reviews unchanged; human summary with the message; a **chat** run that's going takes it in, otherwise enqueue one. When the chat leaves the ticket where it is, its last text is posted as an agent summary |
+| Human message in review or done | status and reviews unchanged; a **chat** run that's going takes it in, otherwise enqueue one. With `log: true` the message is a `message` entry, and when the chat leaves the ticket where it is, its last text follows as an `answer` entry |
 | Human message with `move: true` in review | status `in_progress`, both reviews reset to pending, enqueue work run with the message |
-| Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is posts its answer and neither auto-submits nor blocks. A failed chat adds a "Run failed" summary and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
-| Agent calls `submit_for_review(summary)` (in_progress, blocked or review; refused in planning and done) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the ticket has `skipHumanReview`, see "Skipping the human review"), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
-| Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author). A trailing question blocks with it instead |
-| Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
-| Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
-| Agent `review_decision(approve)` | `agentReview=approved` |
-| Agent / human `request_changes` | status `in_progress`, both reviews reset to pending, enqueue work run with the notes |
-| Human `POST /review {approve, action?, instructions?}` | the choice (`completionAction`, `completionInstructions`) is stored on the ticket first, 400 for an action the ticket doesn't offer (see "Completion"); `humanReview=approved` |
+| Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is neither auto-submits nor blocks (its last text is an `answer` entry when the message was logged). A failed chat adds a `failed` entry and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
+| Agent calls `submit_for_review(note, spec_is_up_to_date: true)` (in_progress, blocked or review; refused in planning and done, and without `spec_is_up_to_date: true`) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the ticket has `skipHumanReview`, see "Skipping the human review"), a `submitted` entry with the note (`meta.specRevision`); after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
+| Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; the `submitted` note = last assistant text (system author). A trailing question blocks with it instead (a `blocked` entry) |
+| Work run fails | a `failed` entry; status `blocked`, `blockedReason` = error. A ticket already `done` stays done (only the `failed` entry): a run queued before it completed can only fail on the removed worktree |
+| Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls listed in a system `permission` entry. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
+| Agent `review_decision(approve)` | `agentReview=approved`; a `review_approved` entry with `meta { by, round, commit }` (see "Agent review") |
+| Agent / human `request_changes` | a `changes_requested` entry (the agent's with `meta { by, round, commit }`); status `in_progress`, both reviews reset to pending, enqueue work run with the notes (`run.changes_requested`) |
+| Human `POST /review {approve, action?, instructions?}` | the choice (`completionAction`, `completionInstructions`) is stored on the ticket first, 400 for an action the ticket doesn't offer (see "Completion"); `humanReview=approved`, an `approved` entry (`meta.by`) |
 | Both approved (an agent review counts as approved when it was `skipped`, `reviewPassed`) | not a conductor-managed child (`managingConductor`: its parent isn't done): enqueue the **complete** run right away with the action chosen at approval, else the project default (status "Both reviews approved: completing automatically"). A managed child is **ready** instead (still in review, status "Ready to complete") until its conductor's `complete_ticket`. There's no per-project switch and no Complete button: the approval option decides what happens, and "Approve and take no action" is the way to approve without landing anything (the project setting `autoComplete` was dropped in migration 21). Nothing else starts a completion for an approved ticket, so a ticket is never left approved with nothing landing it: see the next two rows |
 | Complete run cancelled (`POST /cancel`, queued or running) or interrupted (a restart, `recoverStaleRuns` / `reconcileRuns`) on a ticket still in review | `humanReview` back to `pending`, status "Completion cancelled: approve again to land it" (or "interrupted"); the stored choice stays preselected on Approve. Migration 21 does the same for tickets that were left ready before it (top-level, or under a done conductor) |
 | Conductor → done with children in review it approved but didn't complete | each child's `humanReview` back to `pending` ("<conductor> is done: approve to land this ticket"): the human has the child back (`managingConductor` is null) and approving lands it |
 | `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; summary posted; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket or a move back to in_progress re-opens it the same way (with the message / the plan). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; a `reopened` entry with the notes; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket or a move back to in_progress re-opens it the same way (with the message / the spec). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged (a cancelled complete run reopens the human review, above) |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
 Review runs start from a **fresh** driver conversation (independent reviewer) and never
 write driver state back to the session. All other ticket runs resume the session's state.
+
+### Agent review
+
+`run.review` gives the reviewer what it needs inline (`Orchestrator.reviewContext`):
+
+- the spec at its current revision;
+- the unified diff from the approved baseline (`specBaselineRevision`) to the current spec, or a
+  note that there is none (the ticket started without planning);
+- from round 2 on, the earlier rounds: each decision, its notes and the commit it reviewed. The
+  re-review is told to focus on `git diff <lastCommit>..HEAD`, confirm each earlier point was
+  addressed, and check the rest only for regressions;
+- the Activity since the last round (all of it on round 1), at most the last 30 entries.
+
+A round is an agent `review_approved` or `changes_requested` entry. `review_decision` stores
+`meta { by: "agent", round, commit }` on it, `commit` being `git rev-parse HEAD` in the workdir
+(null without one), which is how the next round finds the last reviewed commit. The instructions
+(`system.review`) judge the work against the Goal and acceptance criteria as approved and treat
+Status and notes as claims to verify. Two spec problems are grounds for `request_changes`: Goal or
+acceptance-criteria changes since the baseline that the human's messages didn't ask for (moved
+goalposts), and a Status that doesn't match the work. Notes cover one round. Review runs get
+`read_spec` but no spec writes; `get_ticket` has the full Activity and each attachment's path.
 
 ### Skipping the agent review
 
@@ -262,7 +285,7 @@ Who sets it:
   agents").
 
 - **The ticket's own planning agent**, with `update_ticket { key: <its own key>, skip_agent_review }`
-  when the brief asks for it (see "Board changes by agents").
+  when the spec asks for it (see "Board changes by agents").
 
 Agents may turn it on even when the ticket skips its human review too, which leaves the work
 landing as soon as it's submitted. The prompts and tool descriptions say to do that only when the
@@ -322,7 +345,7 @@ them onto `skipHumanReview` (`skipHumanReview` wins when both come); nothing els
 ### Drafts
 
 A New session is saved as a **draft** while it's written: a real ticket with `Ticket.draft` set,
-in planning, created with `CreateTicketBody.draft` (the prompt may still be empty). It takes a key
+in planning, created with `CreateTicketBody.draft` (the spec may still be empty). It takes a key
 like any ticket (a discarded draft leaves a gap in the numbers). Because it's an ordinary ticket,
 the board, its order, search, keyboard focus and the WebSocket sync need nothing special: the
 apps draw its card dashed and dimmed, and opening it shows the draft editor instead of the
@@ -337,14 +360,15 @@ While `draft` is set:
 - `UpdateTicketBody` also takes `kind`, `useWorktree` and `projectId` (a 409 on any other
   ticket, since they're fixed once it launches). A `projectId` change moves the draft into that
   project under its next key and keeps the old key as an alias, the same way a project rename
-  does, so open panes follow it. A `description` change re-derives the title.
+  does, so open panes follow it. A `spec` change needs no `baseRevision`, rewrites revision 1 in
+  place (a draft has only the one revision until it launches) and re-derives the title.
 
 `POST /tickets/:key/submit {start}` launches it: the flag is cleared, and the ticket then goes
 exactly where a create with that `start` would have sent it (a work run, a plan run, or waiting
 on its dependencies), keeping its place in the column. Discarding is `DELETE /tickets/:key`.
 
 The editors save lazily. Nothing is sent until the draft stops being empty (`draftIsEmpty`: no
-prompt and every setting inherited); then one `POST /tickets`, and after that a debounced PATCH
+spec and every setting inherited); then one `POST /tickets`, and after that a debounced PATCH
 of the changed fields (`draftPatch`). Incoming updates apply only when the editor has no unsent
 edits, so two devices editing one draft is last write wins. The draft helpers
 (`shared/src/state/drafts.ts`) are the desktop's, and the iOS app's ports are fixture-checked
@@ -598,7 +622,7 @@ output that qualifies) or `decline_work`. `dispatch_ticket`'s `key` is the item'
   to the remote ID (`externalRef`). It never picks an existing ticket by key: a local ticket whose
   key happens to equal the remote ID isn't the same work. The outcome is
   `Dispatched to MH-124 (MH-62) in MH`.
-- `ticket_key` (the current key or an alias; drafts don't count) posts the description to that
+- `ticket_key` (the current key or an alias; drafts don't count) posts the `spec` text to that
   ticket as a message (`Sent update to existing MH-123`). A done ticket is re-opened with it
   instead, as a human message with `move: true` would (`Re-opened MH-123 with the update`): triage
   only dispatches work, and a done ticket's chat run can't do any, since the complete run may
@@ -631,19 +655,21 @@ Harness tools (always exposed, via MCP for claude-code):
 
 | Tool | Run kinds | Input |
 | --- | --- | --- |
-| `post_summary` | all ticket kinds | `{ summary, attachments?: string[] }` (image/video paths, see "Summary attachments") |
-| `update_plan` | plan | `{ plan, title? }` |
+| `post_note` | all ticket kinds | `{ note }`: a `note` Activity entry. No attachments and no length cap; the prompt asks for at most three short lines |
+| `read_spec` | plan, work, review, complete, conductor, chat | `{ revision? }` → `Revision N (current)…` (with the approved baseline when there is one), then the text with line numbers like Read; an earlier `revision` is for reference only |
+| `edit_spec` | plan, work, complete, conductor, chat | `{ base_revision, note, edits: [{ old_string, new_string, replace_all? } \| { start_line, end_line, new_text, expected? }] }`: atomic (one bad edit applies none), line numbers are the base revision's (an earlier edit in the call doesn't shift them; overlapping one is refused), `end_line = start_line - 1` inserts. A `base_revision` that isn't current, or a failed edit, errors with the current revision. Local images become attachments (see "Spec revisions and attachments") |
+| `update_spec` | ″ | `{ spec, note, base_revision, title? }`: replaces the whole spec as a new revision (planning writes the first full spec this way); same revision check and images as `edit_spec`; `title` retitles the ticket |
 | `block` | work, chat (not a conductor ticket's) | `{ question }` |
 | `unblock` | work, conductor, chat | `{ note? }`: blocked → in progress once the human's message resolves the block |
 | `resume_work` | work, conductor, chat | `{ note? }`: review → in progress before a chat changes the work again (both reviews start over) |
-| `submit_for_review` | work, conductor, chat | `{ summary, attachments?: string[], skip_agent_review?, skip_human_review? }`: `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
+| `submit_for_review` | work, conductor, chat | `{ note, spec_is_up_to_date, skip_agent_review?, skip_human_review? }`: `spec_is_up_to_date` is advertised as required and must be `true` (anything else is refused with a message saying to update the spec first); `note` covers this round only. `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
-| `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
+| `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -654,7 +680,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
 | `record_pull_request` | complete | `{ url }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`); refused in any other completion |
-| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, description, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
+| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, spec, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
 | `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
@@ -674,7 +700,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `browser_click` | ″ | `{ selector, tab? }` |
 | `browser_type` | ″ | `{ selector, text, submit?, tab? }` |
 | `browser_eval` | ″ | `{ expression, tab? }` |
-| `browser_screenshot` | ″ | `{ save_to?, tab? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Summary attachments" |
+| `browser_screenshot` | ″ | `{ save_to?, tab? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
 The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
@@ -703,7 +729,7 @@ hits them too:
 - **A plan run edits only its own ticket, with full access.** `update_ticket` from a plan run
   (`ownPlanTarget`) refuses any other key ("In a planning run, update_ticket only edits your own
   ticket"). On its own ticket every field works, a looser `permission_mode` included: the
-  `system.plan` prompt has the agent apply the settings the brief asks for (`/depends: A-1`,
+  `system.plan` prompt has the agent apply the settings the spec asks for (`/depends: A-1`,
   `/branch: main`, `/skip-human-review`, or plain words), and the human sees them with the plan
   before pressing Start. Dependency and branch validation still run (`Orchestrator.updateTicket`).
 - **Reviews stay with reviewers.** No move goes into review (only the ticket's own agent submits)
@@ -732,7 +758,7 @@ hits them too:
   effective mode is looser than its own: `message_ticket`, `start_ticket`, `reopen_ticket` and
   `move_ticket` to in_progress or planning are refused ("<KEY> runs in auto, looser than your
   read_only; ask a human"). Nor can it edit one with `update_ticket`, whatever the field: the
-  description is the brief its next run follows and `depends_on` lets the scheduler start it.
+  spec is what its next run follows and `depends_on` lets the scheduler start it.
   The one exception is a call that only changes `permission_mode` to a stricter one, which can
   only make the ticket safer. Equal modes are fine, so a conductor steers and edits children
   created under its own mode.
@@ -799,9 +825,9 @@ client state, not service state.
 
 | Area | In the apps | Agent tool | Left out, and why |
 | --- | --- | --- | --- |
-| Board | search, list, page Done, open a ticket, summaries, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`) | |
+| Board | search, list, page Done, open a ticket, its spec (and revisions), Activity, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`); `read_spec` (`revision`) for the run's own ticket | other tickets' earlier revisions and spec diffs have no tool |
 | Board | create a ticket (task or conductor, driver, model, permission mode, start or plan, branch picked from the project's branches, base branch) | `create_ticket` (`branch`, `base_branch`; `remote_id`, `remote_url` link it as the Remote ID field does) | the branch list itself (`GET /projects/:id/branches`) has no tool: agents run `git branch` |
-| Board | edit title, brief, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree), remote ID and its link | `update_ticket` (`remote_id`, `remote_url`; a plan run's on its own ticket) | permission modes only tighten on another ticket |
+| Board | edit title, spec, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree), remote ID and its link | `update_ticket` (`remote_id`, `remote_url`; a plan run's on its own ticket) | permission modes only tighten on another ticket |
 | Board | move a ticket's work to another branch after it started | `update_branch` (the ticket's own agent; ask it with a message) | the apps don't re-point a running ticket themselves: the agent has to move its commits |
 | Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
@@ -821,7 +847,7 @@ client state, not service state.
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
 | Browser | watch or drive a session's browser tabs, open and close tabs | `browser_*` on the run's own session's tabs | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
-| Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's summaries and transcript |
+| Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's Activity and transcript |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
 `service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
@@ -919,7 +945,7 @@ settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`
 `auto`). Null at a level means "inherit". Plan and triage runs are always read-only; chat
 runs follow the ticket's mode, grants and approvals like work runs. A plan run's `ExitPlanMode`
 (Claude Code's plan mode asking to leave it) is denied with `PLAN_APPROVAL_MESSAGE`: the human
-approves the plan with Start.
+approves the spec with Start.
 
 | Mode | Meaning | claude-code (`--permission-mode`) | Native-tool drivers (PermissionGate) |
 | --- | --- | --- | --- |
@@ -959,7 +985,8 @@ orchestrator collects a work/complete/conductor/chat run's `permission_denied` e
 PermissionGate's deferred soft denials, dropping any whose exact call (`grantKey`) later
 succeeded in the same run. When the run succeeds and a denial is left:
 - the agent submitted (a work or conductor run): it got there another way, so the review goes
-  ahead; a system summary lists the denied calls and their reasons for the reviewer and human;
+  ahead; a system `permission` Activity entry lists the denied calls and their reasons for the
+  reviewer and human;
 - otherwise the last denial becomes a `pendingApproval` (`source: "classifier"`, `reason` = the
   classifier's reason, tool + input of the denied tool_use). If the agent called `block`, the
   approval is attached to that block and its question stays `blockedReason`; if not,
@@ -1041,7 +1068,7 @@ mode); `anthropic-api` calls the Messages API with the stored key and a forced `
 auto-mode config` (environment, allow, soft_deny, hard_deny; cached in
 `$HARNESS_HOME/auto-mode-rules.json`, refreshed daily or when `~/.claude/settings.json`
 changes; a built-in summary when the CLI is missing). The user turn has the tool call, cwd,
-run kind, ticket title + brief and the last 16 transcript lines. Measured: 4–9 s per call
+run kind, ticket title + spec and the last 16 transcript lines. Measured: 4–9 s per call
 (`--effort low` is ~4 s but judged more harshly, so it isn't used).
 
 Migration 4 maps the old `claudePermissionMode` setting: `acceptEdits`/`bypassPermissions` →
@@ -1116,7 +1143,7 @@ emit `subagent.upserted` when something changed. Tagged entries are stored with
 `transcript.subagent_id`. They share the session's seq, so `after` paging works in either view.
 When a run ends (or a stale run is recovered on boot), its sub-agents that are still running
 become `stopped`. A sub-agent's text never becomes the run's `lastText`, so it isn't the
-auto-submit summary. Its classifier denials are logged in its own transcript but never become the
+auto-submit note. Its classifier denials are logged in its own transcript but never become the
 ticket's pending approval, because the sub-agent reports the denial to its agent.
 
 **Reading them.** `TicketDetail.subagents` (oldest first), `GET /sessions/:id/subagents`, and
@@ -1145,7 +1172,7 @@ it runs, and is dropped. Output from a sub-agent the parser didn't see start cre
 and each sub-agent's transcript under `transcriptKey(sessionId, subagentId)` (`<session>/<id>`).
 The Agents & tasks tab (route id `agents`) exists only once the session has a sub-agent or a
 background task: until then (and on a session without any) the tab is hidden, and `agents` or
-`agent:<id>` fall back to Summaries, while the requested tab is kept so a deep link opens when
+`agent:<id>` fall back to the Spec, while the requested tab is kept so a deep link opens when
 they arrive. It lists sub-agents and tasks in one list, the latest updated first
 (`sortSubagents`: `updatedAt` desc, then `startedAt` desc). A row opens the tab `agent:<id>`: a
 sub-agent's transcript, with its task above it and a breadcrumb back through its parents, or a
@@ -1209,14 +1236,17 @@ shows the command, the output (following the end until the user scrolls up), and
 
 Every agent prompt is a template in `service/src/orchestrator/prompt-templates.ts` under a stable
 id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's system prompt (intro,
-context, lifecycle, the per-run-kind instructions, children, branches, files, summaries, file links, board,
+context, lifecycle, the per-run-kind instructions, children, branches, files, spec, file links, board,
 board changes, config, approvals, browser) and `run.*` for the message that starts a run (work
 and conductor start, review, the three completions, conductor update, changes requested, reopen,
 triage). `system.complete` and `run.complete` were renamed `system.complete_merge` and
 `run.complete_merge` when the pull request and custom completions arrived (`RENAMED_PROMPT_IDS`):
 migration 18 moves stored overrides to the new ids, and settings read or sent under an old id apply
-to the new one.
-`prompts.ts` works out each template's variables from the run (child lists, the summaries log,
+to the new one. `system.summaries` became `system.spec` ("Spec and Activity") with different
+instructions, so migration 26 drops a saved `system.summaries` override instead of moving it, and
+at startup the service logs a warning for each saved override that still names `update_plan` or
+`post_summary`.
+`prompts.ts` works out each template's variables from the run (child lists, the recent Activity lines,
 tool names and the fenced triage output are computed there), decides which sections a run gets,
 and joins them in order; none of that is overridable.
 
@@ -1248,11 +1278,11 @@ Directives are read from the run prompt:
 
 | Kind | Behaviour |
 | --- | --- |
-| plan | text `Here's a plan for: <first line>` + numbered steps; calls `update_plan` |
-| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/bgtask [n]` → a background `Bash` call (`run_in_background`) with its "Command running in background" result and a `bash` task report whose output file (under `/tmp/claude-<uid>/harness-dummy/<run>/`) gets `line 1`…`line n` (default 20, at most 500), one every 20× the word delay, every fifth in color, then the task's `succeeded` report and `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_summary` + `submit_for_review` |
-| review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]` |
+| plan | text `Here's a plan for: <first line>` + numbered steps; calls `read_spec`, then `update_spec` with the plan (note "Plan drafted") at the revision it read |
+| work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/bgtask [n]` → a background `Bash` call (`run_in_background`) with its "Command running in background" result and a `bash` task report whose output file (under `/tmp/claude-<uid>/harness-dummy/<run>/`) gets `line 1`…`line n` (default 20, at most 500), one every 20× the word delay, every fifth in color, then the task's `succeeded` report and `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_note` + submit. Every submit here first calls `read_spec` and `edit_spec`, replacing the body of `## Status` (up to the next heading, with `expected` set to it) with one `* <note>` line, or adding the section when the spec has none; a run started by requested changes notes "addressed the review notes", then `submit_for_review` with `spec_is_up_to_date: true` |
+| review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]`, or `[dummy:reject-once]` on round 1 only (a prompt without "Earlier review rounds") |
 | chat | text `(dummy chat) You said: "<message>"` (without the blocked note); `[dummy:unblock]` → `unblock`, `[dummy:resume]` → `resume_work`, then `[dummy:block]` → `block` or `[dummy:submit]` → `submit_for_review` |
-| complete | text + `post_summary("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
+| complete | text + `post_note("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
 | triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key (remote ID) is the first `KEY-123` in the fenced output, and a `[dummy:ticket KEY]` in the prompt section passes `ticket_key`. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
@@ -1274,12 +1304,15 @@ GET    /projects/:id/commands?q=&driver=&limit=50   GET /tickets/:key/commands?q
 GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (see "File viewer")
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
-GET    /tickets?projectId=&status=planning,review   POST /tickets     (no status = every ticket)
+GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
-POST   /tickets/:key/start | /messages {text, move?} | /review | /reopen | /complete | /cancel | /agent-review
-GET    /tickets/:key/summaries   → Summary[] (each with attachments)
+PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
+POST   /tickets/:key/start | /messages {text, move?, log?} | /review | /reopen | /complete | /cancel | /agent-review
+GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
+GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
+GET    /tickets/:key/spec/revisions/:rev?diff=<other>   → SpecRevision, or SpecDiff with diff
 GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
@@ -1299,7 +1332,10 @@ GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 ```
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
-`browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+`browser.frame`/`browser.state`, which go only to clients subscribed to that session. A new
+Activity entry is `activity.added { entry }`; a new spec revision is `spec.revised { ticketId, rev,
+author, note, runId, runKind, createdAt }`, followed by the `ticket.upserted` that carries the new
+body.
 
 ### Browser tabs
 
@@ -1328,13 +1364,120 @@ target in its own headless window (so every tab paints and can screencast). Numb
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 
-### Summary attachments
+### Activity
 
-Agents show their work by attaching images and videos to `post_summary` and
-`submit_for_review` (`attachments: string[]`, file paths, absolute or relative to the run's
-cwd). The prompts' Summaries section asks for a screenshot or short recording whenever the work
-has a visible result, and `browser_screenshot { save_to }` writes one to a file for that.
+Activity is a ticket's short, typed timeline next to the spec, and replaced summaries (migration
+26 turned each summary into a `note` entry). An `ActivityEntry` is `{ id, sessionId, ticketId,
+kind, author (agent/human/system), body (short markdown), meta, createdAt }`, stored in `activity`
+(`meta` as JSON) and listed oldest first by `ActivityRepo.listBySession`. The kinds
+(`ACTIVITY_KINDS`) and their `ActivityMeta`:
 
+| Kind | Recorded when | meta |
+| --- | --- | --- |
+| `note` | an agent calls `post_note` | |
+| `submitted` | the work goes to review (`submit_for_review`'s note, or the auto-submit's last text, author `system`) | `specRevision` |
+| `blocked` | the agent blocks (`block`, or a run ending on a question), or the service does (too many rejections, a PR completion without a pull request, a cleanup that didn't finish) | `question` |
+| `unblocked` | the agent calls `unblock` | `note` when it gave one |
+| `review_approved` | the agent review approves | `by`, `round`, `commit` (see "Agent review") |
+| `changes_requested` | the agent review, a conductor or a human requests changes | `by`; the agent review adds `round` and `commit` |
+| `approved` | a human (or a conductor) approves | `by` |
+| `message` | a human message sent with `log: true` | |
+| `answer` | the agent's final text after a logged message, unless the run ended with a submit or a question | |
+| `reopened` | a done ticket goes back to work | |
+| `failed` | a run fails, or a worktree can't be made | |
+| `permission` | a tool approval is asked for or answered, or the classifier denied calls in a run that still submitted | |
+| `system` | anything else the service records | |
+
+Blocked stays a column: the `blocked` entry records the question next to `blockedReason`.
+Every entry is broadcast as `activity.added { entry }`; `GET /tickets/:key/activity` and
+`TicketDetail.activity` return the list, and the reducer keeps `activity[sessionId]`.
+
+**The log flag.** `POST /tickets/:key/messages { log: true }` stores the human's text as a
+`message` entry before the run gets it, and marks the run so that its final answer is stored as
+an `answer` entry. Without it a message goes only to the agent and the transcript. Clients send
+`true` from the Spec and Activity tabs (`logsMessages(tab)` in `shared/src/state/tabs.ts`), where
+the human is reading the ticket's record rather than the transcript.
+
+**Tabs.** A ticket opens on the Spec tab (`openingTab()`), followed by Activity (`TICKET_TABS`).
+Old links and saved routes with `summaries` open the Spec, the default view that replaced the Summaries tab (`RENAMED_TABS`, `ticketTabFrom`).
+
+On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
+- The Spec tab's history bar shows one revision ("Rev 7 of 7 · Agent · 3m ago · *note*"), with ←/→
+  and a slider. It follows the newest revision until the user steps back, and pins there until
+  they return to the newest (`state/specHistory.ts`). Bodies and diffs load lazily from
+  `/spec/revisions/:rev[?diff=]`; **Show changes** draws the diff from the previous revision in
+  the same `@pierre/diffs` viewer as chat diffs. The baseline revision is tagged "Approved plan".
+- The Activity tab is a timeline styled per kind (`state/activity.ts`): `blocked` is an attention
+  card, review decisions show their round and short commit, messages and answers are bubbles.
+- The composer sends `log` from `composerLog(tab)` and says where the message goes.
+- The Details spec editor sends `baseRevision`; a 409 offers Reload (take the current spec) or
+  Overwrite (resend against the new revision).
+- `bun run spec-activity` (in `app/`) drives all of this against the real service and the dummy
+  driver and saves screenshots to `app/out/screenshots/spec-activity`.
+
+### Spec revisions and attachments
+
+A ticket's **spec** is its living markdown document, what a human reads to know where the work
+stands: Goal (the request and its acceptance criteria, changed only when the human asks), Plan,
+Status (what's done and left, decisions, how each piece was verified, screenshots inline) and
+Open questions. It replaced the ticket description and the plan (migration 26 renamed
+`tickets.description` to `tickets.spec`). Agents keep it current rather than appending to it,
+since its history lives in its revisions.
+
+- **Revisions.** Every write is a row in `spec_revisions` (`ticket_id`, `rev` from 1, `body`,
+  `author` `agent`/`human`/`system`, `run_id`, `run_kind`, `note`, `approved_baseline`,
+  `created_at`; unique on ticket + rev, ON DELETE CASCADE). `tickets.spec` and
+  `tickets.spec_revision` cache the current one, and the wire has `Ticket.spec`, `specRevision`
+  and `specBaselineRevision`. Creating a ticket (`POST /tickets`, `create_ticket`,
+  `dispatch_ticket`, triage) writes revision 1 (`system`, "Created") with it, in
+  `TicketRepo.create`. Every revision after creation goes through `Orchestrator.reviseSpec`:
+  `PATCH /tickets/:key { spec, baseRevision }`, `update_spec`, `edit_spec` and
+  `update_ticket { spec, base_revision }`, each naming the revision it replaces, so no write
+  overwrites a concurrent one. It checks the base revision, adds the next revision
+  (none when the body didn't change), appends a `Spec revision N: <note>` status line and emits
+  `spec.revised`. A draft's spec has no history: its PATCH rewrites revision 1 in place
+  (`SpecRepo.replaceDraft`).
+- **Conflicts.** A spec write names the revision it started from. `PATCH` needs `baseRevision`
+  with `spec` outside drafts (400 without it); `specNote` is the revision's note (default "Edited
+  by hand"). A stale one gets a 409 whose `data` is `SpecConflict { currentRevision, spec }`
+  (`specConflict(err)` in the client reads it), and nothing in the PATCH is applied. The agent
+  tools take `base_revision` and fail with the current revision in the message, so the agent
+  reads it again and redoes the change. `update_ticket` writes over the current revision.
+- **Approved baseline.** Pressing Start (planning → work in `begin()`) marks the current revision
+  `approved_baseline` and sets `specBaselineRevision`. The agent review diffs the spec against it
+  (see "Agent review"); a ticket started without planning has none. Migration 26 gave every
+  existing ticket revision 1, marked as the baseline once it had left planning.
+- **Reading.** `GET /tickets/:key/spec/revisions` lists `SpecRevisionInfo` (no bodies),
+  `GET …/spec/revisions/:rev` returns a `SpecRevision` with its body, and `?diff=<other>` returns
+  `SpecDiff { from, to, diff }` instead: a unified diff from `other` to `rev` (`unifiedDiff` in
+  `service/src/spec.ts`, `""` when equal) that `parseDiff` in `shared/src/diff.ts` and HarnessKit
+  read. `HarnessClient.specRevisions` / `specRevision` / `specDiff` wrap them, and the reducer
+  keeps `specRevisions[ticketId]` (grown by `spec.revised`, `approvedBaseline` following the
+  ticket) and fetched bodies in `specBodies` (`specBodyKey(ticketId, rev)`).
+- **Agent tools.** `read_spec { revision? }` shows the revision number and the text with line
+  numbers. `edit_spec` applies `old_string`/`new_string` or line-range edits atomically against
+  the base revision's line numbers (`applySpecEdits`); `update_spec` replaces the whole text and
+  can retitle the ticket. Plan, work, chat, conductor and complete runs get all three; review runs
+  get `read_spec` only (the ops refuse writes from review and triage); triage gets none.
+  `submit_for_review` takes `spec_is_up_to_date`, which must be `true`, so a submit is a
+  confirmation that the spec already describes the finished work. See "Tools".
+- **Prompts.** `system.spec` ("Spec and Activity", every ticket run) names the current revision
+  and the baseline, asks to change only what changed, lists the sections, explains images, keeps
+  Activity notes to at most three short lines without repeating the spec, and ends with the last
+  five Activity entries. `run.work_start`, `run.changes_requested` and `run.reopen` name the
+  revision, and the latter two ask for edits to the parts this round changed.
+
+**Attachments.** Agents show their work with images and videos in the spec: markdown images that
+point at local files (`![After](shots/after.png)`, absolute or relative to the run's cwd) in
+`update_spec` / `edit_spec`. `browser_screenshot { save_to }` writes a screenshot to a file for
+that.
+
+- **Rewriting.** `localImageSources` finds each local src once; `attachment:`, `http(s):`,
+  `data:` and `mailto:` srcs are left as written. The files are validated and copied
+  (`prepareAttachments`, `storeAttachments`), each src becomes `attachment:<id>`
+  (`rewriteImageSources`), and the attachment rows and the revision are stored in one
+  transaction. A failure removes the copied files, and the tool result lists each stored
+  `name → attachment:<id>`.
 - **Where `save_to` may write** (`resolveSaveTo` in `service/src/tools/browser.ts`, scope from
   `HarnessOps.fileOutputScope`). The permission gate never sees this write, so the tool confines
   it itself. The target, with its deepest existing ancestor resolved through `realpath` (a
@@ -1346,46 +1489,35 @@ has a visible result, and `browser_screenshot { save_to }` writes one to a file 
   only when it already starts with the PNG signature. A refused path fails the call before the
   screenshot is taken, and nothing is written. The result says where the file went, noting the
   scratch folder when it landed there.
-
-- **Validation** (`service/src/attachments.ts`) runs over every path before anything is stored,
-  so a bad list fails the tool call and posts nothing (for `submit_for_review`, the ticket stays
-  in progress). The limits are 10 files per summary and 100 MB per file. Allowed types are png,
+- **Validation** (`prepareAttachments` in `service/src/attachments.ts`) runs over every path
+  before anything is stored, so a bad image fails the tool call and the spec stays at its
+  revision. The limits are 10 new files per spec write and 100 MB per file. Allowed types are png,
   jpg/jpeg, gif and webp (kind `image`) and mp4, webm and mov (kind `video`). The extension picks
   the type, and the first bytes have to match it (PNG signature, JPEG SOI, `GIF8`, `RIFF…WEBP`,
   an ISO-BMFF `ftyp` box, EBML, QuickTime atoms). Width and height come from the PNG, GIF, JPEG
   or WebP header, when it has them.
-- **Storage.** Each file is copied to `$HARNESS_HOME/attachments/<id>.<ext>` at post time,
-  because worktrees are deleted after the merge. The original path is never referenced again.
-  Metadata lives in `summary_attachments` (migration 14: `summary_id` → `summaries` ON DELETE
-  CASCADE, `ord` for the order given, `kind`, `mime_type`, `name`, `size`, `width`, `height`,
-  `created_at`). `SummaryRepo` loads a session's attachments in one query next to its
-  summaries.
-- **Wire.** `Summary.attachments: SummaryAttachment[]` (`{ id, kind, mimeType, name, size,
-  width?, height? }`, `[]` when there are none) is in `summary.added`,
-  `GET /tickets/:key/summaries` and `TicketDetail.summaries`. `HarnessClient.attachmentUrl(id)`
-  builds `…/attachments/<id>?token=<token>` for `<img>`, `<video>` and AVPlayer.
+- **Storage.** Each file is copied to `$HARNESS_HOME/attachments/<id>.<ext>` when the spec is
+  written, because worktrees are deleted after the merge. The original path is never referenced
+  again. Metadata lives in `ticket_attachments` (`ticket_id` ON DELETE CASCADE, `kind`,
+  `mime_type`, `name`, `size`, `width`, `height`, `created_at`), keyed by ticket rather than by
+  revision, so an attachment lives until its ticket is deleted, whichever revisions still show
+  it. Migration 26 moved the old summary attachments into it (files unchanged) and linked them
+  from the migrated note as `![name](attachment:<id>)`.
+- **Wire.** `Attachment { id, kind, mimeType, name, size, width?, height? }`.
+  `HarnessClient.attachmentUrl(id)` builds `…/attachments/<id>?token=<token>` for `<img>`,
+  `<video>` and AVPlayer, which is how clients resolve `attachment:<id>` srcs.
 - **Serving.** `GET /attachments/:id` streams the file with its `Content-Type`,
   `Content-Length`, `Cache-Control: private, max-age=31536000, immutable` and
   `Accept-Ranges: bytes`. A single `Range: bytes=a-b` / `a-` / `-n` gets a 206 with
   `Content-Range` (416 past the end), so players can seek. Unknown ids, and ids whose file is
   missing, get a 404.
-- **Agents.** `get_ticket` lists each summary's attachments with name, kind and the stored
-  absolute path, so reviewer and conductor agents can open them with a file tool. The review
-  prompt doesn't inline the brief or summaries: it names the ticket's local key and has the
-  reviewer call `get_ticket`, so it stays short however many review rounds a ticket goes through.
+- **Agents.** `get_ticket` lists the ticket's attachments with id, name, kind and the stored
+  absolute path, so reviewer and conductor agents can open them with a file tool.
 - **Deletion.** Deleting a ticket (so also a project) collects its attachment files, deletes the
-  rows with the session, then removes the files.
-- **Mac app** (`app/src/renderer/components/Attachments.tsx`). The Summaries tab shows a strip
-  of thumbnails under each summary's text, sized from `width`/`height` by `thumbnailBox`
-  (`shared/src/state/attachments.ts`) so nothing shifts when they load: images lazy-load with
-  `object-fit: cover`, videos show a `preload="metadata"` frame with a play badge, and one that
-  fails to load (a 404) shows a placeholder with its name. Clicking one opens a lightbox (a
-  `Modal`, so app key commands pause): the image fit to the window or the video playing with
-  controls, ← → and the side buttons step through the summary's attachments with wraparound
-  (`stepAttachment`), Esc or the backdrop closes it. URLs are built from the current client on
-  each render, so a rotated token swaps them. A conductor's Tickets tab notes a child's latest
-  summary attachments ("2 images, 1 video"). The renderer's CSP allows `img-src`/`media-src` from
-  the local service origins, like `connect-src`.
+  rows with the ticket, then removes the files.
+- **Apps.** The Mac and iPhone/iPad apps render spec images inline from `attachmentUrl` and show
+  the Activity tab next to the Spec tab (the children of HARNESS-194 implement them).
+  `shared/src/state/attachments.ts` keeps the lightbox stepping helper.
 
 **Paging and search.** Big projects make the Done column long, so boards load
 `GET /tickets?status=` with every status except done and page done separately. `TicketPage` is
@@ -1400,12 +1532,13 @@ completed, moved or deleted between fetches never duplicate or skip a row.
   triggers maintain it (migration 6 backfilled existing done tickets from `updatedAt`), so every
   write path gets it right.
 - `/tickets/search` spans every status. It matches the ticket key, exact or prefix and
-  case-insensitive, including old keys from `ticket_key_aliases`. It also matches title,
-  description and the latest summary. Every term has to match, as a prefix. Ranking puts an exact
+  case-insensitive, including old keys from `ticket_key_aliases`. It also matches title, spec
+  and the latest note (the newest `note` or `submitted` Activity entry). Every term has to match, as a prefix. Ranking puts an exact
   key first, then a key prefix, then hits with every term in the title, then the rest, and
   newest-created first within each rank. An empty or whitespace `q` is a 400.
-- The index is `ticket_search` (one row per ticket, kept current by triggers on tickets, aliases
-  and summaries) plus an external-content FTS5 table `ticket_fts` over it. User input never
+- The index is `ticket_search` (one row per ticket with `key`, `aliases`, `title`, `spec`,
+  `latest_note` and `external_key`, kept current by triggers on tickets, aliases and Activity;
+  migration 26 renamed `description` and `summary` and rebuilt the triggers) plus an external-content FTS5 table `ticket_fts` over it. User input never
   reaches FTS syntax: each term becomes a quoted string with `"` doubled and a trailing `*`, and
   punctuation-only terms are dropped. `ticket_fts` is derived data, created and rebuilt on open
   when missing. Without FTS5, search falls back to LIKE over `ticket_search` with the same
@@ -1440,8 +1573,8 @@ file typed in full (`.env`) stays in the list, first.
   typing doesn't re-run git on each key.
 - **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts
   through `attachMentions` with the run's cwd before the driver sees them; review, complete and
-  triage prompts are left alone (review and complete prompts quote the brief, whose files the
-  earlier runs already had, and triage prompts are watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
+  triage prompts are left alone (review and complete runs work from the spec and the branch,
+  whose files the earlier runs already had, and triage prompts are watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
   `<mentioned-files>` block: `<file path="…">` with the contents, or `<directory path="…/">` with
   a one-level listing. Mentions that aren't paths (`@someone`) are ignored. Paths that resolve
   outside the cwd, symlinks included, are refused; binary files (a NUL in the first 8 KB) are
@@ -1695,9 +1828,9 @@ When a tab's `when` doesn't hold and its plugin defines `showTab({ id, ticket, p
 tab is offered if that returns `true` (a throw is logged and counts as `false`). The git plugin uses
 it to keep Changes on a ticket whose worktree was removed.
 
-The app lists plugin tabs after Summaries, Transcript, Browser and Details. Their route is
+The app lists plugin tabs after Spec, Activity, Transcript, Browser and Details. Their route is
 `#/board/<project>/ticket/<KEY>/plugin:<pluginId>:<tabId>`; a plugin tab that no longer applies
-falls back to Summaries.
+falls back to the Spec.
 
 **UI hosting.** The tab body is `<iframe src="<baseUrl>/plugins/<id>/ui/index.html?tab=<tabId>"
 sandbox="allow-scripts allow-same-origin allow-forms allow-downloads">`. The iframe's origin is the
@@ -2185,13 +2318,10 @@ the conventions, and ios/README.md the build and test commands.
   text inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
   only on real changes. A + button opens a tab (`newTab`); with more than one tab a strip of chips
   switches (resubscribing with its `tabId`) and closes them. See "Browser tabs".
-- **Summary attachments.** `AttachmentRow` puts a summary's attachments in a horizontal row under
-  its body, loading each from `client.attachmentUrl(id)` (the query token, since the image loader
-  and AVPlayer fetch on their own). Thumbnails are 120 pt tall and as wide as the stored
-  width/height allows, clamped (HarnessKit `Attachments`), so nothing jumps as they load. A tap
-  opens `AttachmentViewer`, a full-screen pager: images pinch-zoom or double-tap to 2.5×, videos
-  play with the system controls while their page shows (only that page holds a player), and
-  pulling a page down closes it. A load or decode error shows a placeholder.
+- **Spec and Activity.** The app renders spec images inline, loading each `attachment:<id>` from
+  `client.attachmentUrl(id)` (the query token, since the image loader and AVPlayer fetch on their
+  own), and shows the Activity tab next to the Spec tab; the children of HARNESS-194 implement
+  them. See "Spec revisions and attachments" and "Activity".
 - **File viewer.** A link tapped in markdown goes through HarnessKit's `LinkRouting`: http(s),
   mailto and other schemes open outside the app, and a file link (`harness://file/…`, or a bare
   relative or absolute path) pushes the file viewer with `path`, `ticket` or `project`, `start`

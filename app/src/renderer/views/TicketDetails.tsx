@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { RelatedTicket, Ticket, TicketStatus } from "@harness/shared";
+import { specConflict, type RelatedTicket, type SpecConflict, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { dependentsOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -16,20 +16,29 @@ export function TicketDetails({
   /** The detail's relatedTickets: other tickets linked to this one's key or remote ID */
   related?: RelatedTicket[];
 }) {
-  const { state, client } = useStore();
+  const { state, client, toast } = useStore();
   const openTicket = useOpenTicket();
   const act = useAction();
   const now = useNow();
   const [title, setTitle] = useState(ticket.title);
-  const [description, setDescription] = useState(ticket.description);
+  // The spec revision the edit started from, and its text: a save sends it as baseRevision.
+  const [base, setBase] = useState({ rev: ticket.specRevision ?? 1, body: ticket.spec });
+  const [spec, setSpec] = useState(ticket.spec);
+  /** The save was refused because the spec moved on (409): what it is now */
+  const [conflict, setConflict] = useState<SpecConflict | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // Follow server-side changes unless the user is mid-edit.
   useEffect(() => {
     setTitle(ticket.title);
   }, [ticket.title]);
+  const specDirty = spec !== base.body;
   useEffect(() => {
-    setDescription(ticket.description);
-  }, [ticket.description]);
+    if (specDirty) return; // a save from here answers 409 and asks what to do
+    setBase({ rev: ticket.specRevision ?? 1, body: ticket.spec });
+    setSpec(ticket.spec);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket.spec, ticket.specRevision]);
 
   // The detail's dependents (done ones may not be loaded) merged with live ones.
   const dependents = useMemo(() => dependentsOf(state, ticket), [state.tickets, state.dependents, state.keyAliases, ticket]);
@@ -63,8 +72,35 @@ export function TicketDetails({
   const saveTitle = () => {
     if (title.trim() && title !== ticket.title) void act(() => client.updateTicket(ticket.key, { title: title.trim() }));
   };
-  const descDirty = description !== ticket.description;
-  const saveDescription = () => void act(() => client.updateTicket(ticket.key, { description }), "Saved");
+  // A save from an older revision than the current one is refused (409) and asks: reload or overwrite.
+  const saveSpec = async (baseRevision = base.rev) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const t = await client.updateTicket(ticket.key, { spec, baseRevision });
+      setConflict(null);
+      setBase({ rev: t.specRevision ?? baseRevision + 1, body: t.spec });
+      setSpec(t.spec);
+      toast("Saved", "info");
+    } catch (e) {
+      const c = specConflict(e);
+      if (c) setConflict(c);
+      else toast((e as Error).message || String(e), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const reloadSpec = () => {
+    if (!conflict) return;
+    setBase({ rev: conflict.currentRevision, body: conflict.spec });
+    setSpec(conflict.spec);
+    setConflict(null);
+  };
+  const overwriteSpec = () => conflict && void saveSpec(conflict.currentRevision);
+  const revertSpec = () => {
+    setSpec(base.body);
+    setConflict(null);
+  };
 
   return (
     <div className="details">
@@ -80,25 +116,40 @@ export function TicketDetails({
         />
       </div>
       <div className="field">
-        <label>{ticket.status === "planning" ? "Plan / brief" : "Brief"}</label>
+        <label>Spec</label>
         <textarea
           className="textarea mono-ish"
-          rows={Math.min(18, Math.max(5, description.split("\n").length + 1))}
-          value={description}
+          rows={Math.min(18, Math.max(5, spec.split("\n").length + 1))}
+          value={spec}
           disabled={!editable}
-          onChange={(e) => setDescription(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && descDirty && saveDescription()}
+          onChange={(e) => setSpec(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && specDirty && !conflict && void saveSpec()}
         />
-        {descDirty && (
-          <div className="row">
-            <span className="field-hint grow">Unsaved changes</span>
-            <button className="btn btn-sm btn-ghost" onClick={() => setDescription(ticket.description)}>
-              Revert
+        {conflict ? (
+          <div className="spec-conflict" role="alert" data-testid="spec-conflict">
+            <Icon name="alert" size={12} />
+            <span className="grow">
+              The spec changed while you were editing (now rev {conflict.currentRevision}). <strong>Reload</strong> drops your text; <strong>Overwrite</strong> saves yours over it.
+            </span>
+            <button className="btn btn-sm btn-ghost" onClick={reloadSpec}>
+              Reload
             </button>
-            <button className="btn btn-sm btn-primary" onClick={saveDescription}>
-              Save
+            <button className="btn btn-sm btn-danger" onClick={overwriteSpec} disabled={saving}>
+              Overwrite
             </button>
           </div>
+        ) : (
+          specDirty && (
+            <div className="row">
+              <span className="field-hint grow">Unsaved changes to rev {base.rev}</span>
+              <button className="btn btn-sm btn-ghost" onClick={revertSpec}>
+                Revert
+              </button>
+              <button className="btn btn-sm btn-primary" onClick={() => void saveSpec()} disabled={saving}>
+                Save
+              </button>
+            </div>
+          )
         )}
       </div>
 

@@ -48,7 +48,7 @@ export function SubagentStatusMark({ status }: { status: SubagentStatus }) {
   );
 }
 
-/** Only shown once the session has sub-agents or tasks (effectiveTab falls back to Summaries until then). */
+/** Only shown once the session has sub-agents or tasks (effectiveTab falls back to Spec until then). */
 export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (subagentId: string) => void }) {
   const { state } = useStore();
   const list = subagentsOf(state, ticket.sessionId);

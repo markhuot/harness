@@ -1,6 +1,6 @@
 import Foundation
 
-// A port of shared/src/state/stickToBottom.ts (nextPinned: whether a transcript or summaries list
+// A port of shared/src/state/stickToBottom.ts (nextPinned: whether a transcript or Activity list
 // should keep following new content), plus stickStep: which scroll events may unpin or re-pin, and
 // when to jump to the end.
 //

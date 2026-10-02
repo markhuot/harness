@@ -490,6 +490,120 @@ export const MIGRATIONS: string[] = [
   UPDATE tickets SET skip_human_review = 1 WHERE project_id IN (SELECT id FROM projects WHERE require_human_review = 0);
   ALTER TABLE projects DROP COLUMN require_human_review;
   `,
+  // 26: the spec and Activity (DESIGN.md "Spec revisions and attachments", "Activity"). The ticket
+  //     description becomes its spec: tickets.spec is the current body, spec_revisions every
+  //     revision (each existing ticket gets rev 1, the approved baseline once it has left
+  //     planning). Summaries become Activity entries of kind 'note'; their attachments become the
+  //     ticket's (ticket_attachments, files unchanged), linked from the note as attachment:<id>
+  //     images so they still show. ticket_search follows the renames (description → spec, the
+  //     latest summary → latest_note), so its triggers are rebuilt and the FTS index is dropped
+  //     for ensureSearchIndex to recreate. Saved overrides of the system.summaries prompt are
+  //     dropped: system.spec replaces it with different instructions.
+  `
+  DROP TRIGGER IF EXISTS ticket_fts_insert;
+  DROP TRIGGER IF EXISTS ticket_fts_delete;
+  DROP TRIGGER IF EXISTS ticket_fts_update;
+  DROP TABLE IF EXISTS ticket_fts;
+  DROP TRIGGER ticket_search_ticket_insert;
+  DROP TRIGGER ticket_search_ticket_update;
+  DROP TRIGGER ticket_search_summary_insert;
+  DROP TRIGGER ticket_search_summary_delete;
+  DROP TRIGGER ticket_search_summary_update;
+
+  ALTER TABLE tickets RENAME COLUMN description TO spec;
+  ALTER TABLE tickets ADD COLUMN spec_revision INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE tickets ADD COLUMN spec_baseline_revision INTEGER;
+  UPDATE tickets SET spec_baseline_revision = 1 WHERE status <> 'planning' AND draft = 0;
+
+  CREATE TABLE spec_revisions (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    rev INTEGER NOT NULL,
+    body TEXT NOT NULL,
+    author TEXT NOT NULL,
+    run_id TEXT,
+    run_kind TEXT,
+    note TEXT NOT NULL DEFAULT '',
+    approved_baseline INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    UNIQUE (ticket_id, rev)
+  );
+  INSERT INTO spec_revisions (id, ticket_id, rev, body, author, run_id, run_kind, note, approved_baseline, created_at)
+  SELECT lower(hex(randomblob(16))), id, 1, spec, 'system', NULL, NULL, 'Created', spec_baseline_revision IS NOT NULL, created_at FROM tickets;
+
+  CREATE TABLE ticket_attachments (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX ticket_attachments_ticket ON ticket_attachments(ticket_id, created_at);
+  INSERT INTO ticket_attachments (id, ticket_id, kind, mime_type, name, size, width, height, created_at)
+  SELECT a.id, s.ticket_id, a.kind, a.mime_type, a.name, a.size, a.width, a.height, a.created_at
+  FROM summary_attachments a JOIN summaries s ON s.id = a.summary_id
+  WHERE s.ticket_id IN (SELECT id FROM tickets)
+  ORDER BY s.created_at, a.ord;
+
+  CREATE TABLE activity (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    ticket_id TEXT,
+    kind TEXT NOT NULL,
+    author TEXT NOT NULL,
+    body TEXT NOT NULL,
+    meta TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX activity_session ON activity(session_id, created_at);
+  INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, created_at)
+  SELECT s.id, s.session_id, s.ticket_id, 'note', s.author,
+    s.body || COALESCE((
+      SELECT char(10) || char(10) || group_concat('![' || replace(replace(x.name, '[', ''), ']', '') || '](attachment:' || x.id || ')', char(10))
+      FROM (SELECT a.* FROM summary_attachments a JOIN tickets t ON t.id = s.ticket_id WHERE a.summary_id = s.id ORDER BY a.ord) x
+    ), ''),
+    '{}', s.created_at
+  FROM summaries s ORDER BY s.created_at, s.rowid;
+
+  DROP TABLE summary_attachments;
+  DROP TABLE summaries;
+
+  ALTER TABLE ticket_search RENAME COLUMN description TO spec;
+  ALTER TABLE ticket_search RENAME COLUMN summary TO latest_note;
+  UPDATE ticket_search SET spec = COALESCE((SELECT t.spec FROM tickets t WHERE t.id = ticket_search.ticket_id), ''),
+    latest_note = COALESCE((SELECT a.body FROM activity a JOIN tickets t ON t.session_id = a.session_id WHERE t.id = ticket_search.ticket_id
+      AND a.kind IN ('note', 'submitted') ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1), '');
+
+  CREATE TRIGGER ticket_search_ticket_insert AFTER INSERT ON tickets BEGIN
+    INSERT INTO ticket_search (ticket_id, key, aliases, title, spec, latest_note, external_key) VALUES (
+      NEW.id, NEW.key,
+      COALESCE((SELECT group_concat(a.key, ' ') FROM ticket_key_aliases a WHERE a.ticket_id = NEW.id), ''),
+      NEW.title, NEW.spec,
+      COALESCE((SELECT a.body FROM activity a WHERE a.session_id = NEW.session_id AND a.kind IN ('note', 'submitted') ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1), ''),
+      COALESCE(NEW.external_key, ''));
+  END;
+  CREATE TRIGGER ticket_search_ticket_update AFTER UPDATE OF key, title, spec, session_id, external_key ON tickets BEGIN
+    UPDATE ticket_search SET key = NEW.key, title = NEW.title, spec = NEW.spec,
+      latest_note = COALESCE((SELECT a.body FROM activity a WHERE a.session_id = NEW.session_id AND a.kind IN ('note', 'submitted') ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1), ''),
+      external_key = COALESCE(NEW.external_key, '')
+    WHERE ticket_id = NEW.id;
+  END;
+  CREATE TRIGGER ticket_search_activity_insert AFTER INSERT ON activity WHEN NEW.kind IN ('note', 'submitted') BEGIN
+    UPDATE ticket_search SET latest_note = COALESCE((SELECT a.body FROM activity a WHERE a.session_id = NEW.session_id AND a.kind IN ('note', 'submitted') ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1), '')
+    WHERE ticket_id IN (SELECT id FROM tickets WHERE session_id = NEW.session_id);
+  END;
+  CREATE TRIGGER ticket_search_activity_delete AFTER DELETE ON activity WHEN OLD.kind IN ('note', 'submitted') BEGIN
+    UPDATE ticket_search SET latest_note = COALESCE((SELECT a.body FROM activity a WHERE a.session_id = OLD.session_id AND a.kind IN ('note', 'submitted') ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1), '')
+    WHERE ticket_id IN (SELECT id FROM tickets WHERE session_id = OLD.session_id);
+  END;
+
+  UPDATE settings SET value = json_remove(value, '$."system.summaries"')
+    WHERE key = 'prompts' AND json_valid(value) AND json_type(value, '$."system.summaries"') IS NOT NULL;
+  `,
 ];
 
 /**
@@ -505,22 +619,22 @@ export function ensureSearchIndex(db: Database): boolean {
     db.transaction(() => {
       db.exec(`
         CREATE VIRTUAL TABLE ticket_fts USING fts5(
-          key, aliases, title, description, summary, external_key,
+          key, aliases, title, spec, latest_note, external_key,
           content = 'ticket_search', content_rowid = 'rowid', tokenize = 'unicode61 remove_diacritics 2'
         );
         CREATE TRIGGER ticket_fts_insert AFTER INSERT ON ticket_search BEGIN
-          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary, external_key)
-          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary, NEW.external_key);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, spec, latest_note, external_key)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.spec, NEW.latest_note, NEW.external_key);
         END;
         CREATE TRIGGER ticket_fts_delete AFTER DELETE ON ticket_search BEGIN
-          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary, external_key)
-          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary, OLD.external_key);
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, spec, latest_note, external_key)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.spec, OLD.latest_note, OLD.external_key);
         END;
         CREATE TRIGGER ticket_fts_update AFTER UPDATE ON ticket_search BEGIN
-          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, description, summary, external_key)
-          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.description, OLD.summary, OLD.external_key);
-          INSERT INTO ticket_fts (rowid, key, aliases, title, description, summary, external_key)
-          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.description, NEW.summary, NEW.external_key);
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, spec, latest_note, external_key)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.spec, OLD.latest_note, OLD.external_key);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, spec, latest_note, external_key)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.spec, NEW.latest_note, NEW.external_key);
         END;
         INSERT INTO ticket_fts (ticket_fts) VALUES ('rebuild');
       `);

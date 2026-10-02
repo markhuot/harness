@@ -14,7 +14,7 @@ export function fakeTicket(overrides: Partial<Ticket> = {}): Ticket {
     projectId: "p_1",
     kind: "task",
     title: "A ticket",
-    description: "Do the thing",
+    spec: "Do the thing",
     status: "in_progress",
     sessionId: "s_1",
     driver: "dummy",
@@ -79,21 +79,23 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
     return t;
   };
   const defaults: Required<OpsImpl> = {
-    postSummary: async () => {},
-    updatePlan: async () => {},
+    postNote: async () => {},
+    readSpec: async () => "Revision 1\n   1\t",
+    editSpec: async () => "Spec updated to revision 2.",
+    updateSpec: async () => "Spec updated to revision 2.",
     block: async () => {},
     unblock: async () => {},
     resumeWork: async () => {},
     submitForReview: async () => {},
     updateBranch: async () => "Branch updated.",
     reviewDecision: async () => {},
-    createTicket: async (_ctx: ToolContext, input: { title: string; description: string; dependsOn?: string[]; autoStart?: boolean }) => {
+    createTicket: async (_ctx: ToolContext, input: { title: string; spec: string; dependsOn?: string[]; autoStart?: boolean }) => {
       seq++;
       const t = fakeTicket({
         id: `t_${seq}`,
         key: `TEST-${seq}`,
         title: input.title,
-        description: input.description,
+        spec: input.spec,
         dependsOn: input.dependsOn ?? [],
         autoStart: input.autoStart ?? true,
         status: "planning",
@@ -114,7 +116,10 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       parent: "TEST-1",
       children: [],
       base: { branch: "main", source: "settings" },
-      summaries: [{ author: "agent", body: "did it", createdAt: 1 }],
+      specRevision: 1,
+      specBaselineRevision: 1,
+      activity: [{ kind: "note", author: "agent", body: "did it", meta: {}, createdAt: 1 }],
+      attachments: [],
     }),
     searchTickets: async () => ({ hits: [], nextCursor: null, total: 0 }),
     updateTicket: async (_ctx: ToolContext, key: string, patch: Record<string, unknown>) =>

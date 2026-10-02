@@ -5,7 +5,7 @@
 //   bun scripts/acceptance.ts [driver=dummy] [projectDir=~/Sites/hello-harness]
 //
 // Drives the UI: New session pane → "hello world" → watches the card go In progress → Review →
-// Approve → the complete run → Done, then prints the agent's summaries.
+// Approve → the complete run → Done, then prints the ticket's Activity.
 
 import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -115,7 +115,7 @@ try {
   console.log(`✓ moved to review (agent review: ${reviewed.agentReview})`);
   await until("card in Review", () => column("Review", ticket.key));
   await js(`location.hash = ${JSON.stringify(`#/board/${project.id}/ticket/${ticket.key}`)}`);
-  await until("summaries", () => exists(".summary"));
+  await until("spec", () => exists("[data-testid=spec-doc]"));
   await shot("2-review");
 
   await until("Approve", () => clickText(".actions button", "Approve"));
@@ -126,7 +126,7 @@ try {
   await shot("3-done");
 
   const d = await api<TicketDetail>("GET", `/tickets/${ticket.key}`);
-  console.log("\nSummaries:\n" + d.summaries.map((s) => `  [${s.author}] ${s.body.replace(/\n/g, "\n    ")}`).join("\n"));
+  console.log("\nActivity:\n" + d.activity.map((a) => `  [${a.author} ${a.kind}] ${a.body.replace(/\n/g, "\n    ")}`).join("\n"));
   const firstReply = (await api<any[]>("GET", `/sessions/${d.session.id}/transcript`)).find((e) => e.role === "assistant" && e.content.type === "text");
   console.log(`\nAgent response: ${firstReply?.content.text}`);
 } catch (err) {

@@ -56,8 +56,8 @@ import { definePlugin, PluginHttpError } from "@harness/plugin-sdk/server";
 
 export default definePlugin({
   routes(router, ctx) {
-    // GET /plugins/notes/api/summary?ticket=KEY  (bearer auth, like every service route)
-    router.get("/summary", async ({ query }) => {
+    // GET /plugins/notes/api/overview?ticket=KEY  (bearer auth, like every service route)
+    router.get("/overview", async ({ query }) => {
       const key = query.get("ticket") ?? "";
       const found = ctx.getTicket(key);
       if (!found) throw new PluginHttpError(404, `No ticket ${key}`);
@@ -101,7 +101,7 @@ const h = await connect();
 // h.baseUrl, h.token, h.ticketKey, h.tabId, h.theme ("light" | "dark")
 // h.themeId ("catppuccin-mocha"), h.themeName, h.syntaxTheme (a Shiki theme name or null), h.tokens
 
-const summary = await h.api(`summary?ticket=${h.ticketKey}`); // → /plugins/<id>/api/summary
+const overview = await h.api(`overview?ticket=${h.ticketKey}`); // → /plugins/<id>/api/overview
 const detail = await h.api(`/tickets/${h.ticketKey}`);        // leading slash: any service route
 
 h.onTheme((theme, info) => repaint(info)); // any theme change, including dark → another dark theme

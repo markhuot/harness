@@ -36,13 +36,13 @@ public enum DraftSyncError: Error, Equatable, Sendable, LocalizedError {
     /// Closed, discarded, submitted or on its way to one of those.
     case closed
     /// Submitted before anything was saved (an empty draft).
-    case noPrompt
+    case noSpec
 
     public var message: String {
         switch self {
         case .notSaved: "The draft couldn't be saved."
         case .closed: "This draft is closed."
-        case .noPrompt: "Write a prompt first."
+        case .noSpec: "Write a spec first."
         }
     }
 
@@ -244,15 +244,15 @@ public final class DraftSync {
     /// Save what's left, then launch it: start work now, or plan first.
     public func submit(start: Bool) async throws -> Ticket {
         if isClosed { throw DraftSyncError.closed }
-        // The brief launches trimmed (a picked @mention leaves a trailing space).
-        let brief = JSCompat.trim(local.description)
-        if !Branches.jsEqual(brief, local.description) {
+        // The spec launches trimmed (a picked @mention leaves a trailing space).
+        let spec = JSCompat.trim(local.spec)
+        if !Branches.jsEqual(spec, local.spec) {
             var next = local
-            next.description = brief
+            next.spec = spec
             edit(next)
         }
         try await settle()
-        guard let saved else { throw DraftSyncError.noPrompt }
+        guard let saved else { throw DraftSyncError.noSpec }
         let t = try await api.submit(saved.key, start: start)
         closed = true
         return t

@@ -83,13 +83,27 @@ public enum TicketDetailLogic {
 
     // MARK: Tabs
 
-    /// A summary's author as the list names it.
-    public static func authorLabel(_ a: SummaryAuthor) -> String {
+    /// An Activity entry's author as the list names it.
+    public static func authorLabel(_ a: ActivityAuthor) -> String {
         switch a {
         case .agent: "Agent"
         case .human: "You"
         default: "Harness"
         }
+    }
+
+    // MARK: Composer
+
+    /// Whether a message sent while `tab` is on screen also goes into Activity (MessageBody.log):
+    /// from the Spec and Activity tabs only (Tabs.logsMessages).
+    public static func composerLogs(_ tab: TicketTab) -> Bool { Tabs.logsMessages(tab) }
+
+    /// The composer's placeholder: where the message shows, first so a narrow field never cuts it
+    /// off, then what a message does in the ticket's state ("In Activity · Answer the agent…",
+    /// "Transcript only · Send a follow-up…").
+    public static func composerPlaceholder(_ t: Ticket, tab: TicketTab) -> String {
+        let base = Format.composerPlaceholder[t.status] ?? "Message the agent…"
+        return "\(composerLogs(tab) ? "In Activity" : "Transcript only") · \(base)"
     }
 
     /// "1 ticket waiting on you" / "3 tickets waiting on you".

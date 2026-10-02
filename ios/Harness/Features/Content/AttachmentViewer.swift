@@ -3,12 +3,12 @@ import AVKit
 import HarnessKit
 import SwiftUI
 
-/// Full-screen pager over one summary's attachments: ✕,
+/// Full-screen pager over the attachments in a piece of markdown: ✕,
 /// the file name and "2 of 4 · 1.2 MB" on top; pages swipe sideways (a select haptic each),
 /// images pinch-zoom 1–4× or double-tap to 2.5× (paging stops while zoomed), videos play with the
 /// system controls while their page shows, and pulling a page down (or ✕) closes it.
 struct AttachmentViewer: View {
-    let attachments: [SummaryAttachment]
+    let attachments: [Attachment]
     let onClose: () -> Void
 
     @State private var position: Int?
@@ -22,7 +22,7 @@ struct AttachmentViewer: View {
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.palette) private var c
 
-    init(attachments: [SummaryAttachment], start: Int, onClose: @escaping () -> Void) {
+    init(attachments: [Attachment], start: Int, onClose: @escaping () -> Void) {
         self.attachments = attachments
         self.onClose = onClose
         _position = State(initialValue: Attachments.clampPage(Double(start), count: attachments.count))
@@ -73,7 +73,7 @@ struct AttachmentViewer: View {
     }
 
     @ViewBuilder
-    private func page(_ a: SummaryAttachment, current: Bool, insets: UIEdgeInsets, height: CGFloat) -> some View {
+    private func page(_ a: Attachment, current: Bool, insets: UIEdgeInsets, height: CGFloat) -> some View {
         let events = AttachmentPageEvents(
             onPull: { dy in if !closing { pull.value = dy } },
             onRelease: { dismiss in if dismiss { swipeClose(height: height) } },
@@ -134,7 +134,7 @@ private struct AttachmentViewerBackdrop: View {
 }
 
 private struct AttachmentViewerHeader: View {
-    let attachments: [SummaryAttachment]
+    let attachments: [Attachment]
     let index: Int
     let pull: AttachmentViewerPull
     let close: () -> Void
@@ -156,7 +156,8 @@ private struct AttachmentViewerHeader: View {
                     Text(current.name)
                         .font(.scaled(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
-                    Text((attachments.count > 1 ? "\(index + 1) of \(attachments.count) · " : "") + Attachments.formatSize(Double(current.size)))
+                    // Markdown attachments come without a size (0): only the position, then.
+                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", current.size > 0 ? Attachments.formatSize(Double(current.size)) : ""].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.scaled(size: 12.5))
                         .foregroundStyle(.white.opacity(0.6))
                 }
@@ -174,7 +175,7 @@ private struct AttachmentViewerHeader: View {
 
 /// One image fitted to the page; it zooms in its page's scroll view.
 private struct AttachmentImagePage: View {
-    let attachment: SummaryAttachment
+    let attachment: Attachment
     let insets: UIEdgeInsets
     let events: AttachmentPageEvents
 
@@ -213,7 +214,7 @@ private struct AttachmentImagePage: View {
 /// A video with the system's controls; only the showing page holds a player, so paging away
 /// stops it, and it starts playing when its page comes into view. No picture in picture.
 private struct AttachmentVideoPage: View {
-    let attachment: SummaryAttachment
+    let attachment: Attachment
     let current: Bool
     let insets: UIEdgeInsets
     let events: AttachmentPageEvents
@@ -311,4 +312,15 @@ private struct AttachmentHostedPage<Content: View>: View {
             host = h
         }
     }
+}
+
+/// Which attachment the viewer opens on.
+struct AttachmentViewerStart: Identifiable {
+    let index: Int
+    var id: Int { index }
+}
+
+extension Attachment {
+    /// "Image phone.png" / "Video flow.mp4": the page's accessibility label.
+    var accessibilityName: String { "\(kind == .video ? "Video" : "Image") \(name)" }
 }

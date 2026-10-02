@@ -1,6 +1,6 @@
 // Turning a file link (shared/src/fileLinks.ts) into a file pane's content. A link can name its
 // own context (`?ticket=KEY`, `?project=<id>`); otherwise it's resolved where it was clicked: the
-// ticket whose transcript or summary shows it, else the project (the Inbox's triage sessions, the
+// ticket whose transcript or spec shows it, else the project (the Inbox's triage sessions, the
 // palette on a project board).
 
 import type { FileLink } from "@harness/shared";

@@ -5,7 +5,7 @@ import SwiftUI
 /// background tasks (Bash commands, Monitors) it left running, in one list, the latest updated
 /// first. A row opens its `agent:<id>` tab on the hosting ticket screen: a sub-agent's transcript
 /// (SubagentView) or a task's output (TaskOutputView). Only shown once the session has any
-/// (Tabs.effectiveTab falls back to Summaries until then).
+/// (Tabs.effectiveTab falls back to the Spec until then).
 struct AgentsTabView: View {
     let ticket: Ticket
 

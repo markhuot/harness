@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Project, RunKind, Session, Ticket } from "@harness/shared";
+import type { ActivityEntry, Project, RunKind, Session, Ticket } from "@harness/shared";
 import { parseFileLink } from "@harness/shared";
 import {
   changesRequestedPrompt,
@@ -11,6 +11,7 @@ import {
   triagePrompt,
   workStartPrompt,
 } from "./prompts";
+import type { ReviewContext } from "./prompts";
 import { nativeTools, readOnlyNativeTools } from "../tools";
 
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
@@ -31,15 +32,16 @@ const CONFIG_WRITE = [
   "update_settings",
   "delete_ticket",
 ];
+const SPEC = ["read_spec", "edit_spec", "update_spec"];
 const TOOLS: Record<RunKind, string[]> = {
-  plan: ["post_summary", "update_plan", "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
-  work: ["post_summary", "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
-  review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
-  complete: ["post_summary", ...BOARD, ...CONFIG_READ],
-  conductor: ["post_summary", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  work: ["post_note", ...SPEC, "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  review: ["post_note", "read_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  complete: ["post_note", ...SPEC, ...BOARD, ...CONFIG_READ],
+  conductor: ["post_note", ...SPEC, "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
   // A chat about a blocked ticket (the fixture's worktree ticket is blocked below) has the work tools.
-  chat: ["post_summary", "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+  chat: ["post_note", ...SPEC, "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
 };
 const ALL_TOOLS = [...new Set(Object.values(TOOLS).flat())];
 
@@ -75,7 +77,9 @@ function ticket(patch: Partial<Ticket> = {}): Ticket {
     projectId: "p1",
     kind: "task",
     title: "Add dark mode",
-    description: "Add a dark theme toggle to the header.",
+    spec: "Add a dark theme toggle to the header.",
+    specRevision: 1,
+    specBaselineRevision: null,
     status: "in_progress",
     sessionId: "s1",
     driver: "dummy",
@@ -133,26 +137,30 @@ describe("systemPrompt tool references", () => {
     });
   }
 
-  test("the Summaries section offers attachments in every ticket run, with capture tools the run has", () => {
-    const summariesOf = (text: string) => /## Summaries\n([\s\S]*?)(?=\n## |$)/.exec(text)?.[1] ?? null;
+  test("the Spec and Activity section lets every ticket run but review edit the spec, with capture tools the run has", () => {
+    const specOf = (text: string) => /## Spec and Activity\n([\s\S]*?)(?=\n## |$)/.exec(text)?.[1] ?? null;
     for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as RunKind[]) {
-      const s = summariesOf(sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree)));
+      const s = specOf(sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree)));
       expect(s).not.toBeNull();
-      expect(s).toContain("`attachments`");
-      // submit_for_review is named (and preferred) only where the run can call it
-      expect(s!.includes("`submit_for_review`")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
-      expect(s!.includes("submit summary")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
-      // complete runs have no browser, so no save_to hint
-      expect(s!.includes("`save_to`")).toBe(kind !== "complete");
+      expect(s).toContain("`read_spec`");
+      // review runs read the spec but get no edit tools or image guidance
+      expect(s!.includes("`edit_spec`")).toBe(kind !== "review");
+      expect(s!.includes("This run reads the spec but doesn't change it.")).toBe(kind === "review");
+      // only plan runs are pointed at update_spec for the first full spec
+      expect(s!.includes("use it to write the first full spec")).toBe(kind === "plan");
+      // the submit note is named only where the run can call submit_for_review
+      expect(s!.includes("and the note you submit with")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
+      // complete runs have no browser, so no save_to hint (and review has no image guidance at all)
+      expect(s!.includes("`save_to`")).toBe(kind !== "complete" && kind !== "review");
       // read-only run kinds are told their save_to goes to the scratch folder
-      expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan" || kind === "review");
+      expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan");
     }
-    expect(summariesOf(sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } }))).toBeNull();
+    expect(specOf(sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } }))).toBeNull();
   });
 
   test("work runs never mention triage, review or plan tools", () => {
     const text = sys("work");
-    for (const name of ["dispatch_ticket", "review_decision", "update_plan"]) {
+    for (const name of ["dispatch_ticket", "review_decision"]) {
       expect(text).not.toContain(`\`${name}\``);
     }
   });
@@ -200,7 +208,7 @@ describe("systemPrompt context and kind-specific rules", () => {
 
   test("a chat about a review ticket submits again only when the work changed; a done one stays done", () => {
     const review = sys("chat", ticket({ status: "review" }));
-    expect(review).toContain("call `submit_for_review` { summary } again, which starts both reviews over");
+    expect(review).toContain("call `submit_for_review` { note, spec_is_up_to_date: true } again, which starts both reviews over");
     expect(review).not.toContain("`unblock` { note? } before");
     const done = sys("chat", ticket({ status: "done" }));
     expect(done).toContain('"Re-open and move to in progress" switch');
@@ -220,7 +228,7 @@ describe("systemPrompt context and kind-specific rules", () => {
   });
 
   test("plan runs are told the human approves with Start, never ExitPlanMode", () => {
-    expect(sys("plan")).toContain("the human approves the plan on the board by pressing Start");
+    expect(sys("plan")).toContain("the human approves the spec on the board by pressing Start");
     expect(sys("plan")).toContain("Don't call ExitPlanMode");
   });
 
@@ -526,7 +534,7 @@ describe("work-run conduct rules", () => {
   test("trivial or conversational requests are answered and submitted, not scaffolded", () => {
     const text = sys("work");
     expect(text).toMatch(/conversational or trivially answerable/);
-    expect(text).toMatch(/answer it in text and call `submit_for_review` with your answer as the summary/);
+    expect(text).toMatch(/answer it in text and call `submit_for_review` with your answer as the note and `spec_is_up_to_date` true/);
     expect(text).toMatch(/Don't scaffold a project/);
   });
 
@@ -560,42 +568,75 @@ describe("work-run conduct rules", () => {
 });
 
 describe("run prompts", () => {
-  test("workStartPrompt carries the approved plan", () => {
-    const text = workStartPrompt(ticket({ description: "1. Do X\n2. Do Y" }));
-    expect(text).toContain("The plan is approved. Begin work");
-    expect(text).toContain("1. Do X\n2. Do Y");
+  const firstReview: ReviewContext = { round: 1, earlier: [], baselineRevision: null, baselineDiff: "", activity: [] };
+
+  test("workStartPrompt carries the approved spec and its revision", () => {
+    const text = workStartPrompt(ticket({ spec: "1. Do X\n2. Do Y", specRevision: 4 }));
+    expect(text).toContain("The spec is approved. Begin work");
+    expect(text).toContain("## Spec (revision 4)\n1. Do X\n2. Do Y");
+    // A ticket without a stored revision is at revision 1.
+    expect(workStartPrompt(ticket({ specRevision: undefined }))).toContain("## Spec (revision 1)");
   });
 
   test("workStartPrompt for a conductor adds no bullets beyond the goal's own", () => {
-    const text = workStartPrompt(ticket({ kind: "conductor", description: "- Build schema\n- Build API" }));
+    const text = workStartPrompt(ticket({ kind: "conductor", spec: "- Build schema\n- Build API" }));
     expect(text).toContain("child tickets");
     expect(text.match(/^- /gm)).toHaveLength(2);
   });
 
   test("a ticket linked to a remote ID is named by it, with its local key alongside", () => {
     const linked = ticket({ key: "NYT-124", title: "Fix it", externalRef: { source: "jira", key: "NYT-62", url: null, raw: null } });
-    expect(reviewPrompt(linked)).toContain('NYT-62 (local NYT-124) "Fix it"');
+    expect(reviewPrompt(linked, firstReview)).toContain('NYT-62 (local NYT-124) "Fix it"');
     // A legacy mirror's key is its remote ID, and an unlinked ticket has only its key.
     const legacy = ticket({ key: "FOO-9", title: "Old", externalRef: { source: "jira", key: "FOO-9", url: null, raw: null } });
-    expect(reviewPrompt(legacy)).toContain('FOO-9 "Old"');
-    expect(reviewPrompt(legacy)).not.toContain("(local");
-    expect(reviewPrompt(ticket({ title: "Plain" }))).toContain('NYT-3 "Plain"');
+    expect(reviewPrompt(legacy, firstReview)).toContain('FOO-9 "Old"');
+    expect(reviewPrompt(legacy, firstReview)).not.toContain("(local");
+    expect(reviewPrompt(ticket({ title: "Plain" }), firstReview)).toContain('NYT-3 "Plain"');
   });
 
-  test("workStartPrompt handles an empty description", () => {
-    expect(workStartPrompt(ticket({ description: "  " }))).toContain("the title is the whole brief");
+  test("workStartPrompt handles an empty spec", () => {
+    expect(workStartPrompt(ticket({ spec: "  " }))).toContain("the title is the whole spec");
   });
 
-  test("reviewPrompt has the reviewer fetch the ticket instead of inlining it", () => {
-    const text = reviewPrompt(ticket());
+  test("a first reviewPrompt inlines the spec, its baseline state and the Activity, and points at get_ticket for the rest", () => {
+    const text = reviewPrompt(ticket({ specRevision: 3 }), {
+      ...firstReview,
+      activity: [{ id: "a1", sessionId: "s1", ticketId: "t1", kind: "submitted", author: "agent", body: "Added the toggle", meta: {}, createdAt: 0 } satisfies ActivityEntry],
+    });
+    expect(text).toContain("## Spec (revision 3)\nAdd a dark theme toggle to the header.");
+    expect(text).toContain("There is no approved baseline");
+    expect(text).toContain("## Activity so far\n* submitted, agent: Added the toggle");
+    expect(text).not.toContain("## Earlier review rounds");
     expect(text).toContain('`get_ticket` { key: "NYT-3" }');
     expect(text).toContain("`review_decision` exactly once");
     expect(toolsMentioned(text).filter((n) => !TOOLS.review.includes(n))).toEqual([]);
-    expect(text).not.toContain("Add a dark theme toggle to the header.");
-    expect(text).not.toMatch(/^- /m);
+    expect(reviewPrompt(ticket(), firstReview)).toContain("## Activity so far\n(none)");
     // A ticket linked to a remote ID is fetched by its local key: get_ticket doesn't take remote IDs.
     const linked = ticket({ key: "NYT-124", externalRef: { source: "jira", key: "NYT-62", url: null, raw: null } });
-    expect(reviewPrompt(linked)).toContain('`get_ticket` { key: "NYT-124" }');
+    expect(reviewPrompt(linked, firstReview)).toContain('`get_ticket` { key: "NYT-124" }');
+  });
+
+  test("reviewPrompt shows the diff from the approved baseline, or says the spec is unchanged", () => {
+    const changed = reviewPrompt(ticket({ specRevision: 3 }), { ...firstReview, baselineRevision: 2, baselineDiff: "-old\n+new" });
+    expect(changed).toContain("Revision 2 is what the human approved by pressing Start:\n```diff\n-old\n+new\n```");
+    const same = reviewPrompt(ticket({ specRevision: 2 }), { ...firstReview, baselineRevision: 2 });
+    expect(same).toContain("None: the spec is still revision 2, as the human approved it.");
+    expect(same).not.toContain("```diff");
+  });
+
+  test("a re-review lists earlier rounds and diffs from the last reviewed commit", () => {
+    const text = reviewPrompt(ticket(), {
+      ...firstReview,
+      round: 2,
+      earlier: [{ round: 1, decision: "request_changes", notes: "Toggle doesn't persist", commit: "abc123" }],
+    });
+    expect(text).toContain("round 2, a re-review");
+    expect(text).toContain("## Earlier review rounds\nRound 1: changes requested at commit abc123.\nToggle doesn't persist");
+    expect(text).toContain("`git diff abc123..HEAD`");
+    expect(text).toContain("## Activity since the last review");
+    const noCommit = reviewPrompt(ticket(), { ...firstReview, round: 2, earlier: [{ round: 1, decision: "approve", notes: "ok", commit: null }] });
+    expect(noCommit).toContain("Round 1: approved (no commit recorded).");
+    expect(noCommit).not.toContain("git diff");
   });
 
   test("completePrompt is branch-dependent and includes instructions", () => {
@@ -606,17 +647,18 @@ describe("run prompts", () => {
     const without = completePrompt(ticket());
     expect(without).toContain("no ticket branch or worktree");
     expect(without).not.toContain("Instructions from the human");
-    expect(without).toContain("`post_summary`");
+    expect(without).toContain("`post_note`");
   });
 
-  test("conductorUpdatePrompt lists each change with its summary", () => {
+  test("conductorUpdatePrompt lists each change with its note and spec revision", () => {
     const text = conductorUpdatePrompt([
-      { key: "NYT-4", title: "Schema", from: "in_progress", to: "review", summary: "Added tables\nMigrations run" },
+      { key: "NYT-4", title: "Schema", from: "in_progress", to: "review", note: "Added tables\nMigrations run", specRevision: 5 },
       { key: "NYT-5", title: "API", from: "in_progress", to: "blocked" },
     ]);
-    expect(text).toContain('NYT-4 "Schema": in_progress → review');
-    expect(text).toContain("Summary: Added tables\n   Migrations run");
-    expect(text).toContain('NYT-5 "API": in_progress → blocked');
+    expect(text).toContain('NYT-4 "Schema": in_progress → review (spec revision 5)');
+    expect(text).toContain("Note: Added tables\n   Migrations run");
+    expect(text).toContain('NYT-5 "API": in_progress → blocked\n');
+    expect(text).not.toContain('NYT-5 "API": in_progress → blocked (spec revision');
     expect(text).not.toMatch(/^- /m);
     // A task ticket with children gets the same update prompt in a work run.
     expect(toolsMentioned(text).every((n) => TOOLS.conductor.includes(n) && TOOLS.work.includes(n))).toBe(true);
@@ -624,7 +666,8 @@ describe("run prompts", () => {
   });
 
   test("changesRequestedPrompt names who asked and uses only work/conductor tools", () => {
-    const text = changesRequestedPrompt("Toggle doesn't persist", "conductor");
+    const text = changesRequestedPrompt("Toggle doesn't persist", "conductor", 7);
+    expect(text).toContain("The spec is at revision 7");
     expect(text).toContain("your parent conductor");
     expect(text).toContain("Toggle doesn't persist");
     expect(changesRequestedPrompt("x", "agent")).toContain("the reviewer agent");
@@ -636,7 +679,7 @@ describe("run prompts", () => {
   test("run prompts contain no slash directives of their own", () => {
     const texts = [
       workStartPrompt(ticket()),
-      reviewPrompt(ticket()),
+      reviewPrompt(ticket(), firstReview),
       completePrompt(ticket(worktree)),
       changesRequestedPrompt("fix", "agent"),
       conductorUpdatePrompt([{ key: "A-1", title: "t", from: "review", to: "done" }]),

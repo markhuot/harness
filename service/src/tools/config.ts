@@ -504,9 +504,9 @@ export const updateSettings = defineGatedTool<SettingsInput>({
 export const deleteTicket = defineGatedTool<{ key: string }>({
   name: "delete_ticket",
   description:
-    "Delete a ticket with its transcript and summaries (a running agent on it is stopped; its children become top-level tickets). You can't delete your own ticket or one of its ancestors. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
+    "Delete a ticket with its transcript, spec history and Activity (a running agent on it is stopped; its children become top-level tickets). You can't delete your own ticket or one of its ancestors. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
   inputSchema: schema({ key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." } }, ["key"]),
-  describe: (i) => ({ summary: `Delete ticket ${i.key}`, reason: "Deletes the ticket, its transcript and its summaries. This can't be undone." }),
+  describe: (i) => ({ summary: `Delete ticket ${i.key}`, reason: "Deletes the ticket, its transcript, its spec history and its Activity. This can't be undone." }),
   check: (i, ctx) => ctx.ops.deleteTicket(ctx, i.key, true),
   async run(i, ctx) {
     const t = await ctx.ops.deleteTicket(ctx, i.key);

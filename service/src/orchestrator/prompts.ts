@@ -12,7 +12,7 @@
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { CompletionAction, Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
+import type { ActivityEntry, CompletionAction, Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
 import { displayKey, harnessBranch, plannedBranch, resolveBaseBranch, secondaryKey } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 import { type PromptOverrides, renderPrompt } from "./prompt-templates";
@@ -53,6 +53,24 @@ export interface PromptInfo {
   branches?: BranchContext;
   /** The user's prompt overrides (settings.prompts). Omitted: the built-in prompts. */
   overrides?: PromptOverrides | null;
+  /** The ticket's last few Activity entries, oldest first (system.spec shows them) */
+  activity?: ActivityEntry[];
+  /** A human message logged to Activity started this run, so its answer is logged too (chat runs) */
+  logged?: boolean;
+}
+
+/** What a review run reads (Orchestrator.reviewContext). */
+export interface ReviewContext {
+  /** 1 for the first agent review of the ticket */
+  round: number;
+  /** Earlier agent review rounds, oldest first */
+  earlier: { round: number; decision: "approve" | "request_changes"; notes: string; commit: string | null }[];
+  /** The approved baseline revision (null: the ticket never went through Start) */
+  baselineRevision: number | null;
+  /** Unified diff from the baseline to the current spec; "" when unchanged or there's no baseline */
+  baselineDiff: string;
+  /** Activity since the last agent review (all of it on the first), oldest first */
+  activity: ActivityEntry[];
 }
 
 function branchesOf(ticket: Ticket | null, project: Project | null, branches?: BranchContext): BranchContext {
@@ -102,8 +120,19 @@ function fenceFor(text: string): string {
   return "`".repeat(Math.max(3, longest + 1));
 }
 
-function briefOf(ticket: Ticket): string {
-  return ticket.description.trim() || "(no description; the title is the whole brief)";
+function specOf(ticket: Ticket): string {
+  return ticket.spec.trim() || "(the spec is empty; the title is the whole spec)";
+}
+
+/** Activity entries as `* ` lines: kind, author and the body on one line (clipped). */
+export function activityLines(entries: readonly ActivityEntry[], max = 400): string {
+  return entries
+    .map((e) => {
+      const text = oneLine(e.body);
+      const extra = e.kind === "review_approved" || e.kind === "changes_requested" ? ` (round ${e.meta.round ?? "?"}${e.meta.commit ? `, commit ${e.meta.commit.slice(0, 12)}` : ""})` : "";
+      return `* ${e.kind}${extra}, ${e.author}: ${text.length > max ? text.slice(0, max - 1) + "…" : text}`;
+    })
+    .join("\n");
 }
 
 /** Variables every template about a ticket's branch shares. */
@@ -291,7 +320,14 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       const status = ticket?.status;
       return renderPrompt(
         "system.chat",
-        { status: status ?? "", blocked: status === "blocked", blockedReason: ticket?.blockedReason ?? "", review: status === "review", done: status === "done" },
+        {
+          status: status ?? "",
+          blocked: status === "blocked",
+          blockedReason: ticket?.blockedReason ?? "",
+          review: status === "review",
+          done: status === "done",
+          logged: !!info.logged,
+        },
         o,
       );
     }
@@ -311,17 +347,24 @@ function filesSection(kind: RunKind, builtinTools: boolean, o: PromptOverrides |
 }
 
 /**
- * Summaries, with attachments for showing the work. Only work, conductor and chat runs have
- * submit_for_review; complete runs have no browser.
+ * The spec and Activity: how to keep the spec current and how short notes are. Only work,
+ * conductor and chat runs have submit_for_review; review runs only read the spec (toolsForRun);
+ * complete runs have no browser.
  */
-function summariesSection(kind: RunKind, browser: boolean, o: PromptOverrides | null | undefined): string {
+function specSection(info: PromptInfo, browser: boolean, o: PromptOverrides | null | undefined): string {
+  const { kind, ticket } = info;
   return renderPrompt(
-    "system.summaries",
+    "system.spec",
     {
+      specRevision: String(ticket?.specRevision ?? 1),
+      baselineRevision: ticket?.specBaselineRevision ? String(ticket.specBaselineRevision) : "",
+      canEdit: kind !== "review",
+      plan: kind === "plan",
       submits: kind === "work" || kind === "conductor" || kind === "chat",
       // Mirrors fileOutputScope: these run kinds may only save into their scratch folder.
       readOnly: kind === "plan" || kind === "review",
       browser,
+      activity: activityLines(info.activity ?? [], 200),
     },
     o,
   );
@@ -350,8 +393,8 @@ export function systemPrompt(info: PromptInfo): string {
       !!ticket?.branch &&
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
     ticketRun && filesSection(kind, info.builtinTools ?? true, o),
-    ticketRun && summariesSection(kind, browser, o),
-    // harness://file links (shared/src/fileLinks.ts) open the file pane from any message or summary.
+    ticketRun && specSection(info, browser, o),
+    // harness://file links (shared/src/fileLinks.ts) open the file pane from any message, note or spec.
     ticketRun && renderPrompt("system.file_links", {}, o),
     // Read-only board tools, given to every run kind (tools/board.ts).
     renderPrompt("system.board", {}, o),
@@ -371,12 +414,36 @@ export function systemPrompt(info: PromptInfo): string {
 /** First work (or conductor) run after the plan is approved. */
 export function workStartPrompt(ticket: Ticket, overrides?: PromptOverrides | null): string {
   const id = ticket.kind === "conductor" ? "run.conductor_start" : "run.work_start";
-  return renderPrompt(id, { ticket: ticketLabel(ticket), brief: briefOf(ticket) }, overrides);
+  return renderPrompt(id, { ticket: ticketLabel(ticket), spec: specOf(ticket), specRevision: String(ticket.specRevision ?? 1) }, overrides);
 }
 
-/** Names the ticket; the reviewer reads the brief and summaries itself with get_ticket. */
-export function reviewPrompt(ticket: Ticket, overrides?: PromptOverrides | null): string {
-  return renderPrompt("run.review", { ticket: ticketLabel(ticket), key: ticket.key }, overrides);
+/**
+ * The review run's message: the spec, its changes since the approved baseline, the earlier review
+ * rounds and the Activity since the last one. A re-review (round 2 on) is told to look at what
+ * changed since the commit the last round reviewed.
+ */
+export function reviewPrompt(ticket: Ticket, ctx: ReviewContext, overrides?: PromptOverrides | null): string {
+  const last = ctx.earlier.at(-1);
+  const diffFence = fenceFor(ctx.baselineDiff);
+  return renderPrompt(
+    "run.review",
+    {
+      ticket: ticketLabel(ticket),
+      key: ticket.key,
+      spec: specOf(ticket),
+      specRevision: String(ticket.specRevision ?? 1),
+      baselineRevision: ctx.baselineRevision ? String(ctx.baselineRevision) : "",
+      baselineDiff: ctx.baselineDiff ? `${diffFence}diff\n${ctx.baselineDiff}\n${diffFence}` : "",
+      round: String(ctx.round),
+      rereview: ctx.earlier.length > 0,
+      earlierRounds: ctx.earlier
+        .map((r) => `Round ${r.round}: ${r.decision === "approve" ? "approved" : "changes requested"}${r.commit ? ` at commit ${r.commit}` : " (no commit recorded)"}.\n${r.notes.trim()}`)
+        .join("\n\n"),
+      lastCommit: last?.commit ?? "",
+      activity: activityLines(ctx.activity),
+    },
+    overrides,
+  );
 }
 
 export function completePrompt(
@@ -419,20 +486,21 @@ export function completePrompt(
 }
 
 export function conductorUpdatePrompt(
-  changes: { key: string; title: string; from: TicketStatus; to: TicketStatus; summary?: string }[],
+  changes: { key: string; title: string; from: TicketStatus; to: TicketStatus; note?: string; specRevision?: number }[],
   overrides?: PromptOverrides | null,
 ): string {
   const lines = changes.map((c, i) => {
-    const head = `${i + 1}. ${c.key} ${quote(c.title)}: ${c.from} → ${c.to}`;
-    return c.summary?.trim() ? `${head}\n   Summary: ${c.summary.trim().replace(/\n/g, "\n   ")}` : head;
+    const rev = c.specRevision ? ` (spec revision ${c.specRevision})` : "";
+    const head = `${i + 1}. ${c.key} ${quote(c.title)}: ${c.from} → ${c.to}${rev}`;
+    return c.note?.trim() ? `${head}\n   Note: ${c.note.trim().replace(/\n/g, "\n   ")}` : head;
   });
   return renderPrompt("run.conductor_update", { changes: lines.join("\n") }, overrides);
 }
 
-export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "conductor", overrides?: PromptOverrides | null): string {
+export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "conductor", specRevision = 1, overrides?: PromptOverrides | null): string {
   return renderPrompt(
     "run.changes_requested",
-    { notes: notes.trim(), byAgent: by === "agent", byHuman: by === "human", byConductor: by === "conductor" },
+    { notes: notes.trim(), byAgent: by === "agent", byHuman: by === "human", byConductor: by === "conductor", specRevision: String(specRevision) },
     overrides,
   );
 }
@@ -444,6 +512,7 @@ export function reopenPrompt(ticket: Ticket, notes: string, base?: string, overr
     {
       ticket: ticketLabel(ticket),
       notes: notes.trim(),
+      specRevision: String(ticket.specRevision ?? 1),
       branch: ticket.branch ?? "",
       baseBranch: base ?? "",
       isHarnessBranch: !!ticket.branch && ticket.branch === harnessBranch(ticket.key),
@@ -490,11 +559,11 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
   return {
     systemPrompt: (info: Omit<PromptInfo, "overrides">) => systemPrompt({ ...info, overrides }),
     workStartPrompt: (ticket: Ticket) => workStartPrompt(ticket, overrides),
-    reviewPrompt: (ticket: Ticket) => reviewPrompt(ticket, overrides),
+    reviewPrompt: (ticket: Ticket, ctx: ReviewContext) => reviewPrompt(ticket, ctx, overrides),
     completePrompt: (ticket: Ticket, instructions?: string, branches?: BranchContext, project: Project | null = null) =>
       completePrompt(ticket, instructions, branches, project, overrides),
     conductorUpdatePrompt: (changes: Parameters<typeof conductorUpdatePrompt>[0]) => conductorUpdatePrompt(changes, overrides),
-    changesRequestedPrompt: (notes: string, by: "agent" | "human" | "conductor") => changesRequestedPrompt(notes, by, overrides),
+    changesRequestedPrompt: (notes: string, by: "agent" | "human" | "conductor", specRevision?: number) => changesRequestedPrompt(notes, by, specRevision, overrides),
     reopenPrompt: (ticket: Ticket, notes: string, base?: string) => reopenPrompt(ticket, notes, base, overrides),
     triagePrompt: (input: Parameters<typeof triagePrompt>[0]) => triagePrompt(input, overrides),
   };

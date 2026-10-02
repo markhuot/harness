@@ -30,7 +30,7 @@ const tk = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   projectId: "p1",
   kind: "task",
   title: id,
-  description: "",
+  spec: "",
   status: "planning",
   sessionId: `s-${id}`,
   driver: "dummy",
@@ -204,8 +204,8 @@ describe("search", () => {
     expect(keys(local.columns.review)).toEqual(["W2"]);
     expect(keys(local.columns.in_progress)).toEqual(["C1"]); // children included
     expect(searchStatusText(s.search!)).toBe("Searching…");
-    // The server also matches a done ticket that isn't loaded (description hit) — and not C1.
-    const hit = done("far", 10, { title: "Old", description: "widget cache" });
+    // The server also matches a done ticket that isn't loaded (spec hit) — and not C1.
+    const hit = done("far", 10, { title: "Old", spec: "widget cache" });
     s = run(s, { type: "search.results", q: "widget", scope: "p1", page: page([hit, s.tickets.w2!], "n", 3), append: false });
     const server = searchColumns(s, "p1");
     expect(server.pending).toBe(false);
@@ -269,7 +269,7 @@ describe("search", () => {
 
 function detail(ticket: Ticket, over: Partial<TicketDetail> = {}): TicketDetail {
   const session = { id: ticket.sessionId } as Session;
-  return { ticket, session, summaries: [], runs: [], dependents: [], children: [], ...over };
+  return { ticket, session, activity: [], runs: [], dependents: [], children: [], ...over };
 }
 
 describe("tickets that aren't loaded", () => {

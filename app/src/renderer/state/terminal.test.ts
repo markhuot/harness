@@ -20,8 +20,8 @@ describe("terminalCwd", () => {
 
 describe("terminalScope", () => {
   test("the board on screen", () => {
-    expect(terminalScope({ view: "board", projectId: "p1", ticketKey: "A-1", tab: "summaries" }, "p9")).toBe("p1");
-    expect(terminalScope({ view: "board", projectId: null, ticketKey: null, tab: "summaries" }, "p9")).toBe(ALL_SCOPE);
+    expect(terminalScope({ view: "board", projectId: "p1", ticketKey: "A-1", tab: "spec" }, "p9")).toBe("p1");
+    expect(terminalScope({ view: "board", projectId: null, ticketKey: null, tab: "spec" }, "p9")).toBe(ALL_SCOPE);
   });
 
   test("a project's settings page opens on that project's board", () => {

@@ -1,47 +1,81 @@
 // Ticket-lifecycle tools used by plan / work / review / complete / conductor / chat runs.
 
-import { ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../attachments";
+import { ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES } from "../attachments";
 import { defineTool, schema } from "./util";
 
-const attachmentsProp = {
-  type: "array",
-  items: { type: "string" },
-  description: `Image or video files that show the result, e.g. ["shots/after.png"]: absolute paths or paths relative to your working directory. At most ${MAX_ATTACHMENTS}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB; ${ALLOWED_EXTENSIONS.join(", ")}. They are copied when the summary is posted.`,
-};
+/** What the spec tools say about images: the same files the attachments accept. */
+const IMAGES = `Images and videos: write them as markdown images pointing at local files, e.g. ![After](shots/after.png) (absolute, or relative to your working directory; ${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are.`;
 
-const attached = (n: number) => (n === 0 ? "" : n === 1 ? " with 1 attachment" : ` with ${n} attachments`);
-
-export const postSummary = defineTool<{ summary: string; attachments?: string[] }>({
-  name: "post_summary",
+export const postNote = defineTool<{ note: string }>({
+  name: "post_note",
   description:
-    "Post a short progress or result summary on the current ticket. Humans read these on the board instead of the full transcript, so keep it to a few lines of markdown: what changed, what state things are in, what is next. Attach screenshots or a short screen recording when the work has a visible result. Does not change the ticket status.",
-  inputSchema: schema(
-    {
-      summary: { type: "string", minLength: 1, description: "Markdown summary, e.g. \"Implemented X; tests pass; next: Y\"." },
-      attachments: attachmentsProp,
-    },
-    ["summary"],
-  ),
-  async run({ summary, attachments }, ctx) {
-    await ctx.ops.postSummary(ctx, summary, attachments);
-    return `Summary posted${attached(attachments?.length ?? 0)}.`;
+    "Add a short note to the ticket's Activity: at most three short lines on what changed since your last note or submit, without repeating the spec or earlier activity. The spec holds the full current state; keep it current with edit_spec. Does not change the ticket status.",
+  inputSchema: schema({ note: { type: "string", minLength: 1, description: 'Markdown, at most three short lines, e.g. "Fixed the retry backoff; `bun test` passes."' } }, ["note"]),
+  async run({ note }, ctx) {
+    await ctx.ops.postNote(ctx, note);
+    return "Note added to Activity.";
   },
 });
 
-export const updatePlan = defineTool<{ plan: string; title?: string }>({
-  name: "update_plan",
+export const readSpec = defineTool<{ revision?: number }>({
+  name: "read_spec",
   description:
-    "Replace the ticket's plan (its brief/description) with a new plan in markdown. Include the full plan every time, not a diff: goal, approach, numbered steps, and open questions. Optionally set a clearer ticket title. The human reviews this plan before work starts.",
+    "Read the ticket's spec: its revision number, then the text with line numbers (like Read). edit_spec takes that revision as base_revision and those line numbers. Pass revision to read an earlier one.",
+  inputSchema: schema({ revision: { type: "integer", minimum: 1, description: "An earlier revision to read; omit for the current one." } }),
+  async run({ revision }, ctx) {
+    return ctx.ops.readSpec(ctx, revision);
+  },
+});
+
+export const editSpec = defineTool<{ base_revision: number; note: string; edits: unknown[] }>({
+  name: "edit_spec",
+  description: `Change parts of the ticket's spec, like Edit: every edit applies or none does, and the result is a new revision. base_revision is the revision you read (read_spec); if the spec has moved on since (a human edited it), the call fails with the current revision, so read it again and redo the edits. Two edit forms:
+* { old_string, new_string, replace_all? }: old_string must match the spec exactly and be unique unless replace_all is true.
+* { start_line, end_line, new_text, expected? }: replace lines start_line-end_line (inclusive, numbered as in base_revision, even after earlier edits in the same call) with new_text; end_line = start_line - 1 inserts before start_line, and new_text "" deletes the lines. expected, when given, must equal those lines' current text.
+Change only what changed: the spec's history keeps the earlier revisions. ${IMAGES}`,
   inputSchema: schema(
     {
-      plan: { type: "string", minLength: 1, description: "The complete plan in markdown. Replaces the current description." },
+      base_revision: { type: "integer", minimum: 1, description: "The revision your edits are based on (from read_spec)." },
+      note: { type: "string", minLength: 1, description: 'A few words on what changed, kept with the revision, e.g. "Status: retry fixed, tests pass".' },
+      edits: {
+        type: "array",
+        minItems: 1,
+        description: "The edits, applied in order.",
+        items: {
+          type: "object",
+          properties: {
+            old_string: { type: "string", description: "Exact text to replace." },
+            new_string: { type: "string", description: "Its replacement." },
+            replace_all: { type: "boolean", description: "Replace every occurrence of old_string." },
+            start_line: { type: "integer", minimum: 1, description: "First line to replace (base_revision numbering)." },
+            end_line: { type: "integer", minimum: 0, description: "Last line to replace, inclusive; start_line - 1 to insert." },
+            new_text: { type: "string", description: "The lines that replace them." },
+            expected: { type: "string", description: "The current text of those lines, as a check." },
+          },
+        },
+      },
+    },
+    ["base_revision", "note", "edits"],
+  ),
+  async run({ base_revision, note, edits }, ctx) {
+    return ctx.ops.editSpec(ctx, { baseRevision: base_revision, note, edits });
+  },
+});
+
+export const updateSpec = defineTool<{ spec: string; note: string; base_revision: number; title?: string }>({
+  name: "update_spec",
+  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${IMAGES}`,
+  inputSchema: schema(
+    {
+      spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions." },
+      note: { type: "string", minLength: 1, description: 'A few words on what changed, kept with the revision, e.g. "Plan drafted".' },
+      base_revision: { type: "integer", minimum: 1, description: "The revision you're replacing (from read_spec or the run's context)." },
       title: { type: "string", minLength: 1, description: "Optional new short ticket title (under ~80 characters)." },
     },
-    ["plan"],
+    ["spec", "note", "base_revision"],
   ),
-  async run({ plan, title }, ctx) {
-    await ctx.ops.updatePlan(ctx, plan, title);
-    return title ? `Plan updated and ticket retitled to "${title}".` : "Plan updated.";
+  async run({ spec, note, base_revision, title }, ctx) {
+    return ctx.ops.updateSpec(ctx, { spec, note, baseRevision: base_revision, title });
   },
 });
 
@@ -81,14 +115,17 @@ export const resumeWork = defineTool<{ note?: string }>({
   },
 });
 
-export const submitForReview = defineTool<{ summary: string; attachments?: string[]; skip_agent_review?: boolean; skip_human_review?: boolean }>({
+const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:
-    "Call this when the work is complete. Moves the ticket to Review and posts your summary. The summary should say what you changed, how you verified it (tests, commands run), and anything the reviewer should look at closely. When the work has a visible result (a UI change, rendered output, a browser flow), attach screenshots or a short screen recording that show it. Make no further changes after calling it.",
+    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, verification, screenshots). Moves the ticket to Review with a short note on this round only: what changed since the last submit, not a recap of the spec. Make no further changes after calling it.",
   inputSchema: schema(
     {
-      summary: { type: "string", minLength: 1, description: "Markdown summary of the finished work and how it was verified." },
-      attachments: attachmentsProp,
+      note: { type: "string", minLength: 1, description: "This round only, at most three short lines: what changed and how you verified it." },
+      spec_is_up_to_date: {
+        type: "boolean",
+        description: "Required, and must be true: the spec already describes the finished work (its Status, decisions, verification and screenshots). Bring it up to date with edit_spec or update_spec first.",
+      },
       skip_agent_review: {
         type: "boolean",
         description:
@@ -100,13 +137,20 @@ export const submitForReview = defineTool<{ summary: string; attachments?: strin
           "Skip the human review, so the work lands as soon as the agent review approves it. Pass true only when the human asked for that (for example \"merge it once the review passes\" or \"no need for me to look\"). When the ticket skips its agent review too, the work lands as soon as you submit. Omit it to keep the ticket's setting.",
       },
     },
-    ["summary"],
+    ["note"],
   ),
-  async run({ summary, attachments, skip_agent_review, skip_human_review }, ctx) {
-    await ctx.ops.submitForReview(ctx, summary, attachments, { skipAgentReview: skip_agent_review, skipHumanReview: skip_human_review });
+  async run({ note, spec_is_up_to_date, skip_agent_review, skip_human_review }, ctx) {
+    await ctx.ops.submitForReview(ctx, note, spec_is_up_to_date, { skipAgentReview: skip_agent_review, skipHumanReview: skip_human_review });
     return "Ticket moved to review. Stop here.";
   },
 });
+
+/**
+ * spec_is_up_to_date is advertised as required, so models always pass it, but validated by
+ * submitForReview rather than the schema check: a missing or false value gets the message that
+ * says what to do (bring the spec up to date first), not a generic "is required".
+ */
+export const submitForReview = { ...submitTool, inputSchema: { ...submitTool.inputSchema, required: ["note", "spec_is_up_to_date"] } };
 
 export const updateBranch = defineTool<{ branch?: string; base_branch?: string }>({
   name: "update_branch",

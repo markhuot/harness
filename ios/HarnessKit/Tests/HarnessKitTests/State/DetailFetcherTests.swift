@@ -24,7 +24,7 @@ struct DetailFetcherTests {
     nonisolated(unsafe) static var n = 0
     static func tk(_ key: String, status: TicketStatus = .planning, kind: TicketKind = .task, parentId: String? = nil, dependsOn: [String] = [], completedAt: Patch<Timestamp> = .null) -> Ticket {
         n += 1
-        return Ticket(id: "id-\(key)", key: key, projectId: "p", kind: kind, title: key, description: "", status: status, sessionId: "s-\(key)", driver: "dummy",
+        return Ticket(id: "id-\(key)", key: key, projectId: "p", kind: kind, title: key, spec: "", status: status, sessionId: "s-\(key)", driver: "dummy",
                       parentId: parentId, dependsOn: dependsOn, completedAt: completedAt, createdAt: Double(n), updatedAt: Double(n))
     }
 

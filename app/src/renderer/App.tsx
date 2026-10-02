@@ -217,7 +217,7 @@ function Shell() {
     "new-session": () => openCompose(),
     // A terminal needs the desktop app's PTYs.
     "new-terminal": !!window.harness && (() => openTerminal()),
-    board: () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" }),
+    board: () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" }),
     inbox: () => navigate({ view: "inbox", sessionId: null }),
     settings: () => navigate({ view: "settings", section: null }),
     "toggle-sidebar": toggleSidebar,

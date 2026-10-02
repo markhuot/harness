@@ -62,7 +62,7 @@ const ROUTE_SUMMARY = 'Update watcher "jira-once": prompt: "Dispatch SITE ticket
 describe("config tools behind human approval", () => {
   test("a work run creates a watcher and then re-routes it, each call after its own allow-once", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: `set it up /tools ${JSON.stringify([watcherCall, routeCall])}` });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: `set it up /tools ${JSON.stringify([watcherCall, routeCall])}` });
     await h.orch.idle();
 
     let cur = h.orch.ticketDetail(t.key).ticket;
@@ -96,7 +96,7 @@ describe("config tools behind human approval", () => {
     expect(h.orch.listWatchers().map((w) => w.prompt)).toEqual([routeCall.input.prompt]);
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(h.orch.listWatchers()).toHaveLength(1); // the approved call ran exactly once
-    expect(h.orch.summaries(t.key).filter((s) => s.author === "human").map((s) => s.body)).toEqual([
+    expect(h.orch.activity(t.key).filter((s) => s.kind === "permission" && s.author === "human").map((s) => s.body)).toEqual([
       `Allowed once: create_watcher (Create watcher "jira-once" (every 600s): watch-jira --project=SITE --assigned=unassigned --once; prompt: "If a ticket is assigned to me and has next steps, dispatch it to an agent in PROJ.")`,
       `Allowed once: update_watcher (${ROUTE_SUMMARY})`,
     ]);
@@ -108,7 +108,7 @@ describe("config tools behind human approval", () => {
       if (req.kind !== "work") return;
       await call("create_watcher", { name: "w", command: n === 0 ? "/bin/echo" : "/bin/sh" });
     });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
@@ -120,7 +120,7 @@ describe("config tools behind human approval", () => {
     const h = scripted(async (req, call) => {
       if (req.kind === "work") await call("delete_watcher", { watcher: "nope" });
     });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     // Unknown watcher: rejected before any human is asked
     expect(text(h.results[0]!.result)).toBe("Unknown watcher: nope. Use list_watchers.");
@@ -145,7 +145,7 @@ describe("config tools behind human approval", () => {
 
   test("read-only tickets are denied outright: no approval card, nothing changes", async () => {
     const h = setup({ mode: "read_only" });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: `x /tools ${JSON.stringify([watcherCall])}` });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: `x /tools ${JSON.stringify([watcherCall])}` });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.pendingApproval).toBeNull();
@@ -165,7 +165,7 @@ describe("config tools behind human approval", () => {
       await call("update_settings", { listen: { mode: "custom" } });
       await call("update_watcher", { watcher: "ghost", enabled: false });
     });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     expect(h.results.map((r) => [r.name, r.result.isError, text(r.result)])).toEqual([
       ["create_watcher", true, "Unknown driver: nope"],
@@ -188,7 +188,7 @@ describe("config tools behind human approval", () => {
       );
     });
     h.orch.updateSettings({ anthropicApiKey: "sk-secret-123" });
-    await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     const [get, update] = h.results;
     expect(text(get!.result)).not.toContain("sk-secret");
@@ -206,7 +206,7 @@ describe("config tools behind human approval", () => {
       await call("update_settings", { prompts: { "system.work": null } });
     });
     h.orch.updateSettings({ prompts: { "system.plan": "## This run: planning\nPlan briefly." } });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     const [plain, full, bad] = h.results;
     const view = JSON.parse(text(plain!.result));
@@ -228,7 +228,7 @@ describe("config tools behind human approval", () => {
     const h = scripted(async (req, call) => {
       if (req.kind === "work") await call("update_settings", { permission_mode: "ask", max_concurrent_runs: 2 });
     });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     expect(h.orch.settings().permissionMode).toBe("auto");
     expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe("Change settings: maxConcurrentRuns=2, permissionMode=ask");
@@ -245,7 +245,7 @@ describe("config tools behind human approval", () => {
       await call("list_projects", {});
       await call("update_settings", { base_branch: "develop" });
     });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     const [badSettings, badProject, list] = h.results;
     expect([badSettings!.result.isError, text(badSettings!.result)]).toEqual([true, 'baseBranch "not a branch" isn\'t a valid branch name: a branch name can\'t contain spaces, control characters or any of ~ ^ : ? * [ \\']);
@@ -271,7 +271,7 @@ describe("config tools behind human approval", () => {
         await op().catch((e: Error) => errors.push(e.message));
       }
     });
-    await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     expect(errors).toEqual(Array(3).fill("Configuration can't be changed during a plan run."));
     expect(h.orch.listWatchers()).toEqual([]);
@@ -286,9 +286,9 @@ describe("config tools behind human approval", () => {
       await call("delete_project", { project_key: "PROJ" });
       await call("delete_ticket", { key: "PROJ-3" }); // an unrelated ticket
     });
-    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "parent", start: false });
-    const child = await h.orch.createTicket({ projectId: h.project.id, prompt: "child", start: false });
-    const other = await h.orch.createTicket({ projectId: h.project.id, prompt: "other", start: false });
+    const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "parent", start: false });
+    const child = await h.orch.createTicket({ projectId: h.project.id, spec: "child", start: false });
+    const other = await h.orch.createTicket({ projectId: h.project.id, spec: "other", start: false });
     expect([parent.key, child.key, other.key]).toEqual(["PROJ-1", "PROJ-2", "PROJ-3"]);
     h.store.db.query("UPDATE tickets SET parent_id = $p WHERE id = $id").run({ p: parent.id, id: child.id });
     await h.orch.startTicket(child.key);
@@ -310,7 +310,7 @@ describe("config tools behind human approval", () => {
       await call("update_watcher", { watcher: "jira", env: { EXTRA: "1", JIRA_TOKEN: "" } });
     });
     const w = h.orch.createWatcher({ name: "jira", command: "/bin/echo", env: { JIRA_TOKEN: "tok-secret", SITE: "acme" } });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     const listed = text(h.results[0]!.result);
     expect(listed).not.toContain("tok-secret");
@@ -331,7 +331,7 @@ describe("config tools behind human approval", () => {
     const update = h.orch.updateWatcher.bind(h.orch);
     h.orch.createWatcher = (body) => (bodies.push({ op: "create", body }), create(body));
     h.orch.updateWatcher = (id, body) => (bodies.push({ op: "update", body }), update(id, body));
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
@@ -342,7 +342,7 @@ describe("config tools behind human approval", () => {
       { op: "update", body: { prompt: "Only dispatch major outages." } },
     ]);
     // The card spells out a prompt change
-    expect(h.orch.summaries(t.key).filter((s) => s.author === "human").map((s) => s.body)).toEqual([
+    expect(h.orch.activity(t.key).filter((s) => s.kind === "permission" && s.author === "human").map((s) => s.body)).toEqual([
       'Allowed once: create_watcher (Create watcher "status" (loop): curl -s https://status.test/api; prompt: "Dispatch outages to PROJ.")',
       'Allowed once: update_watcher (Update watcher "status": prompt: "Only dispatch major outages.")',
     ]);
@@ -370,7 +370,7 @@ describe("config tools behind human approval", () => {
       if (req.kind !== "work") return yield* worker(req);
       if (!done) done = !(await executeTool(req.tools, "create_watcher", input, req.toolContext)).isError;
     };
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "add the fake watcher" });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "add the fake watcher" });
     await h.orch.idle();
     expect(h.orch.listWatchers()).toEqual([]);
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
@@ -403,7 +403,7 @@ describe("config tools behind human approval", () => {
       }
     });
     const prompt = () => h.orch.listWatchers()[0]!.prompt;
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
@@ -431,7 +431,7 @@ describe("config tools behind human approval", () => {
         if (r.isError) return;
       }
     });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "go" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe('Create watcher "status" (loop): true; models: {"fake":"opus"}');
     await h.orch.answerApproval(t.key, { decision: "allow_once" });

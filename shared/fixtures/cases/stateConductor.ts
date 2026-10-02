@@ -33,7 +33,7 @@ function tk(o: Partial<Ticket> & { key: string }): Ticket {
     projectId: "p1",
     kind: "task",
     title: o.key,
-    description: "",
+    spec: "",
     status: "planning",
     sessionId: `s-${o.key}`,
     driver: "claude-code",

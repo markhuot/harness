@@ -23,7 +23,7 @@ async function setup() {
   const make = async (title: string, extra: { key?: string; remote?: string; draft?: boolean } = {}) => {
     const t = await h.orch.createTicket({
       projectId: project.id,
-      prompt: title,
+      spec: title,
       title,
       start: false,
       key: extra.key,
@@ -54,7 +54,7 @@ async function setup() {
   return { ...h, project, make, ctx, triage, byId };
 }
 
-const dispatch = (extra: { key?: string; ticketKey?: string; url?: string }) => ({ projectKey: "MH", title: "Jira update", description: "Handle the update", ...extra });
+const dispatch = (extra: { key?: string; ticketKey?: string; url?: string }) => ({ projectKey: "MH", title: "Jira update", spec: "Handle the update", ...extra });
 
 describe("triage with remote IDs", () => {
   test("key alone creates a new native-keyed ticket linked to the remote ID, even when a local ticket has that key", async () => {

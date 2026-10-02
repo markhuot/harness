@@ -39,7 +39,7 @@ struct NewSessionEditorTests {
             let p = NewSessionEditorTests.projects[body.projectId]!
             var t = Drafts.blankDraftTicket(project: p, settings: DraftSettings(NewSessionEditorTests.settings), key: "\(p.key)-\(p.nextSeq)")
             t.id = "t1"
-            t.description = body.prompt
+            t.spec = body.spec
             t.updatedAt = stamp()
             server = t
             return t
@@ -102,10 +102,10 @@ struct NewSessionEditorTests {
         }
     }
 
-    static func draft(key: String = "WEB-2", projectId: String = "p1", description: String = "Saved", updatedAt: Double = 5) -> Ticket {
+    static func draft(key: String = "WEB-2", projectId: String = "p1", spec: String = "Saved", updatedAt: Double = 5) -> Ticket {
         var t = Drafts.blankDraftTicket(project: projects[projectId]!, settings: DraftSettings(settings), key: key, now: updatedAt)
         t.id = "d1"
-        t.description = description
+        t.spec = spec
         return t
     }
 
@@ -135,7 +135,7 @@ struct NewSessionEditorTests {
         r.store.state.tickets["x"] = Self.draft(key: "WEB-4")
         r.editor.begin(projectId: "p1", candidates: [])
         #expect(r.editor.view(r.store.state)?.key == "WEB-5")
-        r.editor.setPrompt("Fix it")
+        r.editor.setSpec("Fix it")
         await Self.drain()
         #expect(r.api.ops == ["create"])
         // The service named it WEB-4 (the fake doesn't skip); that's the key shown now.
@@ -197,30 +197,30 @@ struct NewSessionEditorTests {
         let r = Rig(reopen: "WEB-2")
         r.store.state.tickets["d1"] = Self.draft()
         r.editor.begin(projectId: nil, candidates: [])
-        r.editor.setPrompt("Mine")
-        r.store.state.tickets["d1"] = Self.draft(description: "Theirs", updatedAt: 6)
+        r.editor.setSpec("Mine")
+        r.store.state.tickets["d1"] = Self.draft(spec: "Theirs", updatedAt: 6)
         #expect(r.editor.storeChanged(r.store.state) == .none)
-        #expect(r.editor.local?.description == "Mine")
+        #expect(r.editor.local?.spec == "Mine")
 
         let clean = Rig(reopen: "WEB-2")
         clean.store.state.tickets["d1"] = Self.draft()
         clean.editor.begin(projectId: nil, candidates: [])
-        clean.store.state.tickets["d1"] = Self.draft(description: "Theirs", updatedAt: 6)
+        clean.store.state.tickets["d1"] = Self.draft(spec: "Theirs", updatedAt: 6)
         #expect(clean.editor.storeChanged(clean.store.state) == .adopted)
-        #expect(clean.editor.local?.description == "Theirs")
+        #expect(clean.editor.local?.spec == "Theirs")
         // An older copy (a stale snapshot) doesn't win.
-        clean.store.state.tickets["d1"] = Self.draft(description: "Older", updatedAt: 4)
+        clean.store.state.tickets["d1"] = Self.draft(spec: "Older", updatedAt: 4)
         #expect(clean.editor.storeChanged(clean.store.state) == .none)
-        #expect(clean.editor.local?.description == "Theirs")
+        #expect(clean.editor.local?.spec == "Theirs")
     }
 
     @Test func ourOwnSaveComingBackThroughTheStoreChangesNothing() async {
         let r = Rig()
         r.editor.begin(projectId: "p1", candidates: [])
-        r.editor.setPrompt("Fix it")
+        r.editor.setSpec("Fix it")
         await Self.drain()
         #expect(r.editor.storeChanged(r.store.state) == .none)
-        #expect(r.editor.local?.description == "Fix it")
+        #expect(r.editor.local?.spec == "Fix it")
     }
 
     // MARK: Editing
@@ -258,9 +258,9 @@ struct NewSessionEditorTests {
         let r = Rig()
         #expect(!r.editor.canSubmit(r.store.state, hint: nil))
         r.editor.begin(projectId: "p1", candidates: [])
-        r.editor.setPrompt(" \n ")
+        r.editor.setSpec(" \n ")
         #expect(!r.editor.canSubmit(r.store.state, hint: nil))
-        r.editor.setPrompt("Go")
+        r.editor.setSpec("Go")
         #expect(r.editor.canSubmit(r.store.state, hint: nil))
         #expect(r.editor.canSubmit(r.store.state, hint: BranchHint(text: "Checked out elsewhere", tone: .warn)))
         #expect(!r.editor.canSubmit(r.store.state, hint: BranchHint(text: "Invalid", tone: .error)))
@@ -288,12 +288,12 @@ struct NewSessionEditorTests {
     @Test func aSubmitTrimsTheBriefAndOwnsTheLaunchTheStoreThenShows() async throws {
         let r = Rig()
         r.editor.begin(projectId: "p1", candidates: [])
-        r.editor.setPrompt("Summarize @README.md ")
+        r.editor.setSpec("Summarize @README.md ")
         await Self.drain()
         let t = try await r.editor.submit(start: false)
         #expect(t.draft == false)
         #expect(r.api.ops == ["create", "update WEB-4", "plan WEB-4"])
-        #expect(r.api.server?.description == "Summarize @README.md")
+        #expect(r.api.server?.spec == "Summarize @README.md")
         r.store.state.tickets["t1"] = t
         #expect(r.editor.storeChanged(r.store.state) == .none)
     }
@@ -320,16 +320,16 @@ struct NewSessionEditorTests {
         r.store.state.tickets["d1"] = Self.draft()
         r.api.server = Self.draft()
         r.editor.begin(projectId: nil, candidates: [])
-        r.editor.setPrompt("Edited")
+        r.editor.setSpec("Edited")
         r.editor.screenGone()
         await Self.drain()
         #expect(r.api.ops == ["update WEB-2"])
-        #expect(r.api.server?.description == "Edited")
+        #expect(r.api.server?.spec == "Edited")
 
         let gone = Rig(reopen: "WEB-2")
         gone.store.state.tickets["d1"] = Self.draft()
         gone.editor.begin(projectId: nil, candidates: [])
-        gone.editor.setPrompt("Edited")
+        gone.editor.setSpec("Edited")
         try? await gone.editor.discard().value
         gone.editor.screenGone()
         await Self.drain()
@@ -343,7 +343,7 @@ struct NewSessionEditorTests {
         r.store.state.tickets["d1"] = Self.draft()
         r.api.server = Self.draft()
         r.editor.begin(projectId: nil, candidates: [])
-        r.editor.setPrompt("Edited")
+        r.editor.setSpec("Edited")
         let discarding = r.editor.discard()
         // Closed before the discard's task has run a step.
         #expect(r.editor.sync?.isClosed == true)
@@ -357,7 +357,7 @@ struct NewSessionEditorTests {
         let r = Rig()
         r.api.fail = true
         r.editor.begin(projectId: "p1", candidates: [])
-        r.editor.setPrompt("Fix it")
+        r.editor.setSpec("Fix it")
         await Self.drain()
         #expect(r.store.errors.count == 1)
         #expect(r.editor.savedId == nil)

@@ -35,10 +35,10 @@ describe("blank drafts", () => {
     expect(draftIsEmpty(t, project(), settings)).toBe(true);
   });
 
-  test("any prompt text, kind or override makes a draft worth keeping", () => {
+  test("any spec text, kind or override makes a draft worth keeping", () => {
     const p = project();
-    expect(draftIsEmpty({ ...blank(), description: "  " }, p, settings)).toBe(true);
-    expect(draftIsEmpty({ ...blank(), description: "Fix it" }, p, settings)).toBe(false);
+    expect(draftIsEmpty({ ...blank(), spec: "  " }, p, settings)).toBe(true);
+    expect(draftIsEmpty({ ...blank(), spec: "Fix it" }, p, settings)).toBe(false);
     expect(draftIsEmpty({ ...blank(), kind: "conductor" }, p, settings)).toBe(false);
     expect(draftIsEmpty({ ...blank(), driver: "codex" }, p, settings)).toBe(false);
     expect(draftIsEmpty({ ...blank(), model: "sonnet" }, p, settings)).toBe(false);
@@ -63,8 +63,8 @@ describe("applyTicketPatch", () => {
 
 describe("draftCreateBody", () => {
   test("a worktree draft sends its branch and base", () => {
-    const body = draftCreateBody({ ...blank(), description: "Go", requestedBranch: "feat", baseBranch: "develop" }, project());
-    expect(body).toMatchObject({ draft: true, start: false, prompt: "Go", branch: "feat", baseBranch: "develop", useWorktree: null });
+    const body = draftCreateBody({ ...blank(), spec: "Go", requestedBranch: "feat", baseBranch: "develop" }, project());
+    expect(body).toMatchObject({ draft: true, start: false, spec: "Go", branch: "feat", baseBranch: "develop", useWorktree: null });
   });
 
   test("no worktree drops branch and base (the service refuses a branch without one)", () => {
@@ -127,8 +127,8 @@ describe("draftPatch", () => {
   });
 
   test("only the changed fields, with branch names mapped to the PATCH's", () => {
-    const prev = { ...blank(), description: "a" };
-    expect(draftPatch(prev, { ...prev, description: "ab", requestedBranch: "feat" })).toEqual({ description: "ab", branch: "feat" });
+    const prev = { ...blank(), spec: "a" };
+    expect(draftPatch(prev, { ...prev, spec: "ab", requestedBranch: "feat" })).toEqual({ spec: "ab", branch: "feat" });
     expect(draftPatch(prev, { ...prev, dependsOn: ["WEB-1"] })).toEqual({ dependsOn: ["WEB-1"] });
     expect(draftPatch({ ...prev, dependsOn: ["WEB-1"] }, { ...prev, dependsOn: ["WEB-1"] })).toBeNull();
   });

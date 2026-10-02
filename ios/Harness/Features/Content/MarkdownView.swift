@@ -4,7 +4,10 @@ import SwiftUI
 /// Agent markdown: blocks and inline tokens come from HarnessKit's port of the
 /// shared parser; web links open in Safari, file links in the file viewer (ContentLinks), ticket
 /// keys open the ticket, and wide tables scroll sideways. Fenced code is syntax highlighted
-/// (CodeBlockView). Nothing is ever interpreted as markup.
+/// (CodeBlockView). Nothing is ever interpreted as markup. Lists nest, with bullets that change by
+/// depth (• ◦ ▪). `![alt](attachment:<id>)` shows the attachment fitted to the width (a video as its
+/// first frame) and opens the full-screen viewer on a tap, paging through every attachment in the
+/// text; the parser turns remote and file images into links, so nothing an agent wrote gets fetched.
 ///
 /// `size` is the body text size; `color` overrides the text color (nil = palette text). File links
 /// resolve against `linkContext` when it names a ticket or project, else the nearest
@@ -18,6 +21,9 @@ struct MarkdownView: View {
 
     @Environment(\.palette) private var c
     @Environment(BoardStore.self) private var store: BoardStore?
+    @State private var open: AttachmentViewerStart?
+    /// Attachments that failed to load as an image and turned out to be videos.
+    @State private var learned: [String: AttachmentKind] = [:]
 
     /// Whether `text` has a block that scrolls sideways (a table or fenced code). Such markdown needs
     /// a container with a definite width rather than a shrink-to-fit bubble.
@@ -27,7 +33,8 @@ struct MarkdownView: View {
 
     var body: some View {
         let blocks = MarkdownCache.shared.blocks(text)
-        let style = MarkdownStyle(size: size, color: color ?? c.text, palette: c, linkable: linkable)
+        let media = MarkdownCache.shared.media(text)
+        let style = MarkdownStyle(size: size, color: color ?? c.text, palette: c, linkable: linkable, media: mediaScope(media))
         VStack(alignment: .leading, spacing: 8) {
             ForEach(blocks.indices, id: \.self) { i in
                 MarkdownBlockView(block: blocks[i], style: style)
@@ -36,6 +43,36 @@ struct MarkdownView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .tint(c.accentText)
         .modifier(ContentLinkHandling(override: linkContext))
+        .fullScreenCover(item: $open) { start in
+            AttachmentViewer(attachments: media.map(attachment), start: start.index) {
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { open = nil }
+            }
+        }
+    }
+
+    private func kind(_ m: Markdown.Media) -> AttachmentKind {
+        learned[m.id] ?? (m.video ? .video : .image)
+    }
+
+    /// What the viewer pages through. Markdown knows only the id and alt text; the header shows the alt text.
+    private func attachment(_ m: Markdown.Media) -> Attachment {
+        Attachment(id: m.id, kind: kind(m), mimeType: "", name: m.alt.isEmpty ? m.id : m.alt, size: 0)
+    }
+
+    private func mediaScope(_ media: [Markdown.Media]) -> MarkdownMediaScope {
+        MarkdownMediaScope(
+            kind: kind,
+            learn: { id, k in learned[id] = k },
+            open: { id in
+                guard let i = media.firstIndex(where: { $0.id == id }) else { return }
+                // The viewer fades itself in over a clear cover.
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { open = AttachmentViewerStart(index: i) }
+            }
+        )
     }
 
     /// A ticket key links when the store can resolve it (or it's in a project's key space);
@@ -53,46 +90,86 @@ struct MarkdownStyle {
     let color: Color
     let palette: Palette
     let linkable: (String) -> Bool
+    let media: MarkdownMediaScope
+
+    /// Bullets by nesting depth (repeating past the third level).
+    static let bullets = ["•", "◦", "▪"]
 
     var font: Font { .scaled(size: size) }
     /// A line height of round(size × 1.45), as extra spacing over the font's own line height.
     var lineSpacing: CGFloat { (size * 1.45).rounded() - size * 1.2 }
 
     /// Inline tokens as one AttributedString: code spans in mono on bgActive, bold, italic, links
-    /// and linkable ticket keys (both in the tint, accentText).
+    /// and linkable ticket keys (both in the tint, accentText). An attachment can't sit inside a
+    /// Text, so it's its alt text here (headings and table cells); `runs` lays it out instead.
     func inline(_ text: String, size: CGFloat? = nil, bold: Bool = false) -> AttributedString {
+        var out = AttributedString()
+        for token in MarkdownCache.shared.inline(text) { out.append(run(token, size: size, bold: bold)) }
+        return out
+    }
+
+    /// `text` split at its attachments: the text between them as AttributedStrings, and each
+    /// attachment on its own. Whitespace-only text between attachments is dropped.
+    func runs(_ text: String) -> [MarkdownRun] {
+        var out: [MarkdownRun] = []
+        var cur = AttributedString()
+        func flush() {
+            if !String(cur.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out.append(.text(cur)) }
+            cur = AttributedString()
+        }
+        for token in MarkdownCache.shared.inline(text) {
+            if case let .img(m) = token {
+                flush()
+                out.append(.media(m))
+            } else {
+                cur.append(run(token))
+            }
+        }
+        flush()
+        return out.isEmpty ? [.text(cur)] : out
+    }
+
+    /// Body text: wraps, selectable.
+    func paragraph(_ s: AttributedString, color: Color? = nil) -> some View {
+        Text(s)
+            .foregroundStyle(color ?? self.color)
+            .lineSpacing(lineSpacing)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+
+    private func run(_ token: Markdown.InlineToken, size: CGFloat? = nil, bold: Bool = false) -> AttributedString {
         let size = size ?? self.size
         let base = Font.scaled(size: size, weight: bold ? .bold : .regular)
-        var out = AttributedString()
-        for token in MarkdownCache.shared.inline(text) {
-            var run: AttributedString
-            switch token {
-            case let .text(s):
-                run = AttributedString(s)
-                run.font = base
-            case let .code(s):
-                run = AttributedString(" \(s) ")
-                run.font = .mono(13)
-                run.backgroundColor = palette.bgActive
-                run.foregroundColor = palette.text
-            case let .strong(s):
-                run = AttributedString(s)
-                run.font = .scaled(size: size, weight: .bold)
-            case let .em(s):
-                run = AttributedString(s)
-                run.font = base.italic()
-            case let .link(text, url):
-                run = AttributedString(text)
-                run.font = base
-                run.link = ContentLinkURL.link(url)
-            case let .ticket(key, text):
-                run = AttributedString(text ?? key)
-                run.font = base
-                if linkable(key) { run.link = ContentLinkURL.ticket(key) }
-            }
-            out.append(run)
+        var run: AttributedString
+        switch token {
+        case let .text(s):
+            run = AttributedString(s)
+            run.font = base
+        case let .code(s):
+            run = AttributedString(" \(s) ")
+            run.font = .mono(13)
+            run.backgroundColor = palette.bgActive
+            run.foregroundColor = palette.text
+        case let .strong(s):
+            run = AttributedString(s)
+            run.font = .scaled(size: size, weight: .bold)
+        case let .em(s):
+            run = AttributedString(s)
+            run.font = base.italic()
+        case let .link(text, url):
+            run = AttributedString(text)
+            run.font = base
+            run.link = ContentLinkURL.link(url)
+        case let .ticket(key, text):
+            run = AttributedString(text ?? key)
+            run.font = base
+            if linkable(key) { run.link = ContentLinkURL.ticket(key) }
+        case let .img(m):
+            run = AttributedString(m.alt)
+            run.font = base
         }
-        return out
+        return run
     }
 }
 
@@ -104,9 +181,15 @@ final class MarkdownCache {
 
     private var blocks = Bounded<[Markdown.Block]>(capacity: 400)
     private var inlines = Bounded<[Markdown.InlineToken]>(capacity: 2000)
+    private var media = Bounded<[Markdown.Media]>(capacity: 400)
 
     func blocks(_ text: String) -> [Markdown.Block] {
         blocks.value(text) { Markdown.parseBlocks($0) }
+    }
+
+    /// The attachments in `text`, in the order the viewer pages through them.
+    func media(_ text: String) -> [Markdown.Media] {
+        media.value(text) { [self] in Markdown.mediaIn(blocks($0)) }
     }
 
     func inline(_ text: String) -> [Markdown.InlineToken] {
@@ -133,27 +216,46 @@ final class MarkdownCache {
     }
 }
 
+/// How attachments in one piece of markdown behave: their kind (a guess from the name, corrected
+/// when an image fails to load and plays as a video), and opening the viewer on one.
+@MainActor
+struct MarkdownMediaScope {
+    let kind: (Markdown.Media) -> AttachmentKind
+    let learn: (String, AttachmentKind) -> Void
+    let open: (String) -> Void
+}
+
+/// Inline text cut at its attachments (MarkdownStyle.runs).
+enum MarkdownRun {
+    case text(AttributedString)
+    case media(Markdown.Media)
+}
+
 private struct MarkdownBlockView: View {
     let block: Markdown.Block
     let style: MarkdownStyle
+    /// How deep in nested lists this block sits.
+    var depth = 0
 
     private var c: Palette { style.palette }
 
     var body: some View {
         switch block {
         case let .p(text):
-            paragraph(style.inline(text))
+            MarkdownRichText(text: text, style: style)
         case let .h(level, text):
-            paragraph(style.inline(text, size: level <= 2 ? style.size + 2 : style.size + 0.5, bold: true))
+            style.paragraph(style.inline(text, size: level <= 2 ? style.size + 2 : style.size + 0.5, bold: true))
                 .padding(.top, 2)
         case let .ul(items):
-            list(items, ordered: false)
-        case let .ol(items):
-            list(items, ordered: true)
+            MarkdownListView(items: items, ordered: false, start: 1, depth: depth, style: style)
+        case let .ol(start, items):
+            MarkdownListView(items: items, ordered: true, start: start, depth: depth, style: style)
+        case let .img(media):
+            MarkdownMediaView(media: media, style: style)
         case let .code(lang, text):
             CodeBlockView(code: text, language: lang)
         case let .quote(text):
-            paragraph(style.inline(text), color: c.text2)
+            MarkdownRichText(text: text, style: style, color: c.text2)
                 .padding(.leading, 10)
                 .overlay(alignment: .leading) {
                     Rectangle().fill(c.borderStrong).frame(width: 3)
@@ -164,28 +266,135 @@ private struct MarkdownBlockView: View {
             HairlineRule(color: c.border).padding(.vertical, 4)
         }
     }
+}
 
-    private func paragraph(_ s: AttributedString, color: Color? = nil) -> some View {
-        Text(s)
-            .foregroundStyle(color ?? style.color)
-            .lineSpacing(style.lineSpacing)
-            .fixedSize(horizontal: false, vertical: true)
-            .textSelection(.enabled)
+/// Paragraph text, with any attachments in it laid out between its lines of text.
+private struct MarkdownRichText: View {
+    let text: String
+    let style: MarkdownStyle
+    var color: Color?
+
+    var body: some View {
+        let runs = style.runs(text)
+        if runs.count == 1, case let .text(s) = runs[0] {
+            style.paragraph(s, color: color)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(runs.indices, id: \.self) { i in
+                    switch runs[i] {
+                    case let .text(s): style.paragraph(s, color: color)
+                    case let .media(m): MarkdownMediaView(media: m, style: style)
+                    }
+                }
+            }
+        }
     }
+}
 
-    private func list(_ items: [String], ordered: Bool) -> some View {
+/// A list: its marker (a bullet by depth, or the item's number from the list's start) beside each
+/// item's text, with the item's nested lists under the text, indented to it.
+private struct MarkdownListView: View {
+    let items: [Markdown.ListItem]
+    let ordered: Bool
+    let start: Int
+    let depth: Int
+    let style: MarkdownStyle
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(items.indices, id: \.self) { j in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(ordered ? "\(j + 1)." : "•")
+                    Text(ordered ? "\(start + j)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
                         .font(style.font)
-                        .foregroundStyle(c.text3)
+                        .foregroundStyle(style.palette.text3)
                         .frame(minWidth: ordered ? 18 : 10, alignment: .trailing)
                         .accessibilityHidden(!ordered)
-                    paragraph(style.inline(items[j]))
+                    VStack(alignment: .leading, spacing: 4) {
+                        MarkdownRichText(text: items[j].text, style: style)
+                        ForEach(items[j].children.indices, id: \.self) { k in
+                            MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
+                        }
+                    }
                 }
                 .padding(.trailing, 4)
             }
+        }
+    }
+}
+
+/// An attachment in the text: the image fitted to the width (never past its own size), or a
+/// video's first frame with a play badge; a tap opens the viewer. An image that won't decode is
+/// tried as a video before it shows "Couldn't load". Without a service to load from, the alt text.
+private struct MarkdownMediaView: View {
+    let media: Markdown.Media
+    let style: MarkdownStyle
+
+    @Environment(BoardStore.self) private var store: BoardStore?
+    @Environment(\.displayScale) private var scale
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    private var c: Palette { style.palette }
+
+    var body: some View {
+        let kind = style.media.kind(media)
+        if let url = AttachmentMedia.url(store, media.id) {
+            Button {
+                haptic(.tap)
+                style.media.open(media.id)
+            } label: {
+                content(url: url, kind: kind)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(kind == .video ? "Video" : "Image") \(media.alt)")
+            .accessibilityHint("Opens full screen")
+            .accessibilityAddTraits([.isButton, .isImage])
+            .task(id: "\(kind)|\(url)") { await load(url: url, kind: kind) }
+        } else {
+            style.paragraph(AttributedString(media.alt))
+        }
+    }
+
+    private func content(url: String, kind: AttachmentKind) -> some View {
+        ZStack {
+            if failed {
+                AttachmentFailed(name: media.alt, compact: true)
+                    .frame(width: 160, height: 100)
+                    .background(c.bgActive)
+            } else if let shown = image ?? AttachmentMedia.shared.cached(url, poster: kind == .video) {
+                // Never wider than its own pixels, nor than keeps it 480 pt tall, so the frame
+                // (and its border) hugs the image instead of letterboxing it.
+                Image(uiImage: shown)
+                    .resizable()
+                    .aspectRatio(shown.size, contentMode: .fit)
+                    .frame(maxWidth: shown.size.height > 0 ? min(shown.size.width, 480 * shown.size.width / shown.size.height) : nil)
+            } else {
+                c.bgActive.frame(width: 200, height: 150)
+            }
+            if kind == .video && !failed {
+                Image(systemName: "play.fill")
+                    .font(.scaled(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .offset(x: 1)
+                    .frame(width: 34, height: 34)
+                    .background(.black.opacity(0.55), in: .circle)
+            }
+        }
+        .clipShape(.rect(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c.border, lineWidth: 1 / scale))
+        .contentShape(.rect(cornerRadius: 8))
+    }
+
+    private func load(url: String, kind: AttachmentKind) async {
+        image = nil
+        failed = false
+        do {
+            image = kind == .video ? try await AttachmentMedia.shared.poster(url) : try await AttachmentMedia.shared.image(url)
+        } catch {
+            guard !Task.isCancelled else { return }
+            // The parser guesses the kind from a name; an id without one may still be a video.
+            if kind == .image && !media.video { style.media.learn(media.id, .video) } else { failed = true }
         }
     }
 }

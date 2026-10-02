@@ -1,15 +1,27 @@
 {
   "effectiveTabCases": [
     {
-      "name": "summaries stays",
+      "name": "spec stays",
       "input": {
-        "requested": "summaries",
+        "requested": "spec",
         "opts": {
           "conductor": false,
           "pluginTabs": null
         }
       },
-      "output": "summaries"
+      "output": "spec"
+    },
+    {
+      "name": "activity stays",
+      "input": {
+        "requested": "activity",
+        "opts": {
+          "conductor": false,
+          "pluginTabs": [],
+          "subagents": []
+        }
+      },
+      "output": "activity"
     },
     {
       "name": "children on a plain ticket",
@@ -20,7 +32,7 @@
           "pluginTabs": null
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "children on a conductor",
@@ -42,7 +54,7 @@
           "pluginTabs": null
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "agents before sub-agents are known",
@@ -54,7 +66,7 @@
           "subagents": null
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "agents with empty sub-agents",
@@ -66,7 +78,7 @@
           "subagents": []
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "agents with sub-agents",
@@ -126,7 +138,7 @@
           "subagents": []
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "plugin tab before plugin tabs are known",
@@ -169,7 +181,7 @@
           ]
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "plugin tab with no plugin tabs",
@@ -180,7 +192,7 @@
           "pluginTabs": []
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "plugin id must match too",
@@ -196,7 +208,7 @@
           ]
         }
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "malformed plugin tab is kept",
@@ -229,9 +241,19 @@
   ],
   "isTicketTabCases": [
     {
-      "name": "summaries",
-      "input": "summaries",
+      "name": "spec",
+      "input": "spec",
       "output": true
+    },
+    {
+      "name": "activity",
+      "input": "activity",
+      "output": true
+    },
+    {
+      "name": "renamed summaries",
+      "input": "summaries",
+      "output": false
     },
     {
       "name": "children",
@@ -260,6 +282,11 @@
     },
     {
       "name": "capitalized built-in",
+      "input": "Spec",
+      "output": false
+    },
+    {
+      "name": "capitalized renamed",
       "input": "Summaries",
       "output": false
     },
@@ -389,12 +416,60 @@
       "output": false
     }
   ],
+  "logsMessagesCases": [
+    {
+      "name": "spec",
+      "input": "spec",
+      "output": true
+    },
+    {
+      "name": "activity",
+      "input": "activity",
+      "output": true
+    },
+    {
+      "name": "children",
+      "input": "children",
+      "output": false
+    },
+    {
+      "name": "transcript",
+      "input": "transcript",
+      "output": false
+    },
+    {
+      "name": "agents",
+      "input": "agents",
+      "output": false
+    },
+    {
+      "name": "browser",
+      "input": "browser",
+      "output": false
+    },
+    {
+      "name": "details",
+      "input": "details",
+      "output": false
+    },
+    {
+      "name": "plugin",
+      "input": "plugin:git:changes",
+      "output": false
+    },
+    {
+      "name": "agent",
+      "input": "agent:toolu_1",
+      "output": false
+    }
+  ],
   "nextTabCases": [
     {
       "name": "forward",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -408,7 +483,8 @@
       "name": "back",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -416,13 +492,14 @@
         "current": "transcript",
         "delta": -1
       },
-      "output": "summaries"
+      "output": "activity"
     },
     {
       "name": "wraps forward",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -430,18 +507,19 @@
         "current": "plugin:git:changes",
         "delta": 1
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "wraps back",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
         ],
-        "current": "summaries",
+        "current": "spec",
         "delta": -1
       },
       "output": "plugin:git:changes"
@@ -450,7 +528,7 @@
       "name": "sub-agent steps forward from Agents",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
           "agents",
           "details"
         ],
@@ -463,20 +541,21 @@
       "name": "sub-agent steps back from Agents",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
           "agents",
           "details"
         ],
         "current": "agent:toolu_1",
         "delta": -1
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "not in strip forward",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -484,13 +563,14 @@
         "current": "children",
         "delta": 1
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "not in strip back",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -504,7 +584,8 @@
       "name": "not in strip two forward",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -512,13 +593,14 @@
         "current": "children",
         "delta": 2
       },
-      "output": "transcript"
+      "output": "activity"
     },
     {
       "name": "not in strip two back",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -532,7 +614,7 @@
       "name": "no tabs",
       "input": {
         "tabs": [],
-        "current": "summaries",
+        "current": "spec",
         "delta": 1
       },
       "output": null
@@ -541,7 +623,8 @@
       "name": "zero delta",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -555,7 +638,8 @@
       "name": "zero delta not in strip",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
@@ -563,35 +647,37 @@
         "current": "children",
         "delta": 0
       },
-      "output": "summaries"
+      "output": "spec"
     },
     {
       "name": "big forward wraps around",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
         ],
-        "current": "summaries",
+        "current": "spec",
         "delta": 9
       },
-      "output": "transcript"
+      "output": "plugin:git:changes"
     },
     {
       "name": "big back wraps around",
       "input": {
         "tabs": [
-          "summaries",
+          "spec",
+          "activity",
           "transcript",
           "details",
           "plugin:git:changes"
         ],
-        "current": "summaries",
+        "current": "spec",
         "delta": -9
       },
-      "output": "plugin:git:changes"
+      "output": "activity"
     },
     {
       "name": "one tab",
@@ -621,28 +707,24 @@
   ],
   "openingTabCases": [
     {
-      "name": "not loaded",
+      "name": "every ticket",
       "input": null,
-      "output": null
-    },
-    {
-      "name": "no summaries",
-      "input": [],
-      "output": "transcript"
-    },
-    {
-      "name": "some summaries",
-      "input": [
-        {
-          "id": "s1"
-        }
-      ],
-      "output": "summaries"
+      "output": "spec"
     }
   ],
   "parsePluginTabCases": [
     {
-      "name": "summaries",
+      "name": "spec",
+      "input": "spec",
+      "output": null
+    },
+    {
+      "name": "activity",
+      "input": "activity",
+      "output": null
+    },
+    {
+      "name": "renamed summaries",
       "input": "summaries",
       "output": null
     },
@@ -673,6 +755,11 @@
     },
     {
       "name": "capitalized built-in",
+      "input": "Spec",
+      "output": null
+    },
+    {
+      "name": "capitalized renamed",
       "input": "Summaries",
       "output": null
     },
@@ -808,7 +895,17 @@
   ],
   "parseSubagentTabCases": [
     {
-      "name": "summaries",
+      "name": "spec",
+      "input": "spec",
+      "output": null
+    },
+    {
+      "name": "activity",
+      "input": "activity",
+      "output": null
+    },
+    {
+      "name": "renamed summaries",
       "input": "summaries",
       "output": null
     },
@@ -839,6 +936,11 @@
     },
     {
       "name": "capitalized built-in",
+      "input": "Spec",
+      "output": null
+    },
+    {
+      "name": "capitalized renamed",
       "input": "Summaries",
       "output": null
     },
@@ -981,6 +1083,9 @@
       "output": "plugin:A B::"
     }
   ],
+  "renamedTabs": {
+    "summaries": "spec"
+  },
   "showsAgentsTabCases": [
     {
       "name": "null",
@@ -1015,7 +1120,8 @@
     }
   ],
   "tabLabel": {
-    "summaries": "Summaries",
+    "spec": "Spec",
+    "activity": "Activity",
     "children": "Tickets",
     "transcript": "Transcript",
     "agents": "Agents & tasks",
@@ -1024,7 +1130,17 @@
   },
   "tabStripTabCases": [
     {
-      "name": "summaries",
+      "name": "spec",
+      "input": "spec",
+      "output": "spec"
+    },
+    {
+      "name": "activity",
+      "input": "activity",
+      "output": "activity"
+    },
+    {
+      "name": "renamed summaries",
       "input": "summaries",
       "output": "summaries"
     },
@@ -1055,6 +1171,11 @@
     },
     {
       "name": "capitalized built-in",
+      "input": "Spec",
+      "output": "Spec"
+    },
+    {
+      "name": "capitalized renamed",
       "input": "Summaries",
       "output": "Summaries"
     },
@@ -1179,8 +1300,191 @@
       "output": "files"
     }
   ],
+  "ticketTabFromCases": [
+    {
+      "name": "spec",
+      "input": "spec",
+      "output": "spec"
+    },
+    {
+      "name": "activity",
+      "input": "activity",
+      "output": "activity"
+    },
+    {
+      "name": "renamed summaries",
+      "input": "summaries",
+      "output": "spec"
+    },
+    {
+      "name": "children",
+      "input": "children",
+      "output": "children"
+    },
+    {
+      "name": "transcript",
+      "input": "transcript",
+      "output": "transcript"
+    },
+    {
+      "name": "agents",
+      "input": "agents",
+      "output": "agents"
+    },
+    {
+      "name": "browser",
+      "input": "browser",
+      "output": "browser"
+    },
+    {
+      "name": "details",
+      "input": "details",
+      "output": "details"
+    },
+    {
+      "name": "capitalized built-in",
+      "input": "Spec",
+      "output": null
+    },
+    {
+      "name": "capitalized renamed",
+      "input": "Summaries",
+      "output": null
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": null
+    },
+    {
+      "name": "plugin",
+      "input": "plugin:git:changes",
+      "output": "plugin:git:changes"
+    },
+    {
+      "name": "plugin with digits, dash and underscore",
+      "input": "plugin:a1_b-c:t_2-x",
+      "output": "plugin:a1_b-c:t_2-x"
+    },
+    {
+      "name": "plugin digit-led ids",
+      "input": "plugin:1:2",
+      "output": "plugin:1:2"
+    },
+    {
+      "name": "plugin upper-case id",
+      "input": "plugin:Git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin dash-led id",
+      "input": "plugin:-git:changes",
+      "output": null
+    },
+    {
+      "name": "plugin underscore-led tab",
+      "input": "plugin:git:_x",
+      "output": null
+    },
+    {
+      "name": "plugin empty tab",
+      "input": "plugin:git:",
+      "output": null
+    },
+    {
+      "name": "plugin empty plugin",
+      "input": "plugin::changes",
+      "output": null
+    },
+    {
+      "name": "plugin three parts",
+      "input": "plugin:a:b:c",
+      "output": null
+    },
+    {
+      "name": "plugin trailing newline",
+      "input": "plugin:git:changes\n",
+      "output": null
+    },
+    {
+      "name": "plugin non-ASCII",
+      "input": "plugin:gït:changes",
+      "output": null
+    },
+    {
+      "name": "plugin only prefix",
+      "input": "plugin:",
+      "output": null
+    },
+    {
+      "name": "agent",
+      "input": "agent:toolu_01ABC",
+      "output": "agent:toolu_01ABC"
+    },
+    {
+      "name": "agent with dash",
+      "input": "agent:a-b",
+      "output": "agent:a-b"
+    },
+    {
+      "name": "agent empty id",
+      "input": "agent:",
+      "output": null
+    },
+    {
+      "name": "agent with colon",
+      "input": "agent:a:b",
+      "output": null
+    },
+    {
+      "name": "agent with dot",
+      "input": "agent:a.b",
+      "output": null
+    },
+    {
+      "name": "agent 128 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "agent 129 characters",
+      "input": "agent:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "output": null
+    },
+    {
+      "name": "agent trailing newline",
+      "input": "agent:x\n",
+      "output": null
+    },
+    {
+      "name": "agent upper-case prefix",
+      "input": "Agent:x",
+      "output": null
+    },
+    {
+      "name": "agent non-ASCII",
+      "input": "agent:é",
+      "output": null
+    },
+    {
+      "name": "unknown tab",
+      "input": "files",
+      "output": null
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": null
+    },
+    {
+      "name": "renamed with trailing space",
+      "input": "summaries ",
+      "output": null
+    }
+  ],
   "ticketTabs": [
-    "summaries",
+    "spec",
+    "activity",
     "children",
     "transcript",
     "agents",
@@ -1194,7 +1498,8 @@
         "conductor": false
       },
       "output": [
-        "summaries",
+        "spec",
+        "activity",
         "transcript",
         "browser",
         "details"
@@ -1221,7 +1526,8 @@
         ]
       },
       "output": [
-        "summaries",
+        "spec",
+        "activity",
         "children",
         "transcript",
         "agents",
@@ -1238,7 +1544,8 @@
         "subagents": []
       },
       "output": [
-        "summaries",
+        "spec",
+        "activity",
         "transcript",
         "browser",
         "details"
@@ -1252,7 +1559,8 @@
         "pluginTabs": null
       },
       "output": [
-        "summaries",
+        "spec",
+        "activity",
         "transcript",
         "browser",
         "details"
@@ -1264,7 +1572,8 @@
         "conductor": true
       },
       "output": [
-        "summaries",
+        "spec",
+        "activity",
         "children",
         "transcript",
         "browser",
@@ -1283,7 +1592,8 @@
         ]
       },
       "output": [
-        "summaries",
+        "spec",
+        "activity",
         "transcript",
         "browser",
         "details",

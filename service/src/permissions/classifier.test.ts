@@ -20,7 +20,7 @@ const req = (over: Partial<ClassifierRequest> = {}): ClassifierRequest => ({
   input: { command: "git init" },
   cwd: "/work/proj",
   runKind: "work",
-  ticket: { key: "WEB-7", title: "Set up the repo", brief: "Initialise git and add a README." },
+  ticket: { key: "WEB-7", title: "Set up the repo", spec: "Initialise git and add a README." },
   transcript: ["[human] set this project up", "[tool_call bash] ls"],
   ...over,
 });
@@ -39,8 +39,8 @@ describe("buildClassifierPrompt", () => {
     expect(user).toMatch(/tool: bash\ninput:\n\{\n {2}"command": "git init"\n\}$/);
   });
 
-  test("clips a huge brief and tool input so one call can't blow up the prompt", () => {
-    const { user } = buildClassifierPrompt(rules, req({ ticket: { key: "A-1", title: "t", brief: "b".repeat(50_000) }, input: { content: "c".repeat(50_000) } }));
+  test("clips a huge spec and tool input so one call can't blow up the prompt", () => {
+    const { user } = buildClassifierPrompt(rules, req({ ticket: { key: "A-1", title: "t", spec: "b".repeat(50_000) }, input: { content: "c".repeat(50_000) } }));
     expect(user.length).toBeLessThan(15_000);
     expect(user).toContain("more chars]");
   });

@@ -32,6 +32,13 @@ export async function branchExists(repo: string, branch: string): Promise<boolea
 }
 
 /** The branch checked out at `dir`, or null (detached HEAD, not a repo). */
+/** The commit checked out in `dir` (git rev-parse HEAD), or null outside git / with no commits. */
+export async function headCommit(dir: string): Promise<string | null> {
+  if (!existsSync(dir)) return null;
+  const r = await git(["rev-parse", "HEAD"], dir).catch(() => null);
+  return r && r.code === 0 ? r.stdout.trim() || null : null;
+}
+
 export async function currentBranch(dir: string): Promise<string | null> {
   const r = await git(["symbolic-ref", "--quiet", "--short", "HEAD"], dir);
   return r.code === 0 && r.stdout ? r.stdout : null;

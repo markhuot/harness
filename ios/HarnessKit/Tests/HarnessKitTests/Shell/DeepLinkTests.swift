@@ -34,7 +34,11 @@ struct DeepLinkTests {
 
     @Test(arguments: [
         ("harness://ticket/GREET-1", Route.ticket(key: "GREET-1", tab: nil)),
-        ("harness://ticket/GREET-1?tab=summaries", .ticket(key: "GREET-1", tab: .summaries)),
+        ("harness://ticket/GREET-1?tab=spec", .ticket(key: "GREET-1", tab: .spec)),
+        ("harness://ticket/GREET-1?tab=activity", .ticket(key: "GREET-1", tab: .activity)),
+        // The Summaries tab became the Spec: old links open it.
+        ("harness://ticket/GREET-1?tab=summaries", .ticket(key: "GREET-1", tab: .spec)),
+        ("harness://ticket/GREET-1?tab=Summaries", .ticket(key: "GREET-1", tab: nil)),
         ("harness://ticket/GREET-1?tab=transcript", .ticket(key: "GREET-1", tab: .transcript)),
         ("harness://ticket/GREET-1?tab=details", .ticket(key: "GREET-1", tab: .details)),
         ("harness://ticket/GREET-1?tab=children", .ticket(key: "GREET-1", tab: .children)),

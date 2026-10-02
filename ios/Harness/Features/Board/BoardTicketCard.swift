@@ -52,7 +52,7 @@ struct BoardTicketCard: View {
         let dim = Conductor.dimOnBoard(t)
         let deps = state.dependencyStates(t)
         let progress = t.isConductor ? Conductor.progressOf(state.childrenOf(t.id)) : nil
-        let summary = state.latestSummary(t.sessionId)
+        let news = state.latestActivity(t.sessionId, kinds: ActivityRows.newsKinds)
         let customDriver = !dim && state.hasCustomDriver(t)
         let project = state.projects[t.projectId]
 
@@ -101,8 +101,8 @@ struct BoardTicketCard: View {
                 note(icon: "alert", tone: .red) { Text(reason).lineLimit(3) }
             }
 
-            if let summary, t.status != .blocked, t.pendingApproval == nil {
-                Text(Markdown.plainText(summary.body))
+            if let news, t.status != .blocked, t.pendingApproval == nil {
+                Text(Markdown.plainText(news.body))
                     .font(.scaled(size: 13.5))
                     .foregroundStyle(dim ? c.text3 : c.text2)
                     .lineLimit(dim ? 1 : 2)

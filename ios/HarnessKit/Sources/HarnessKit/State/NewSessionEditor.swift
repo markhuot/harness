@@ -167,10 +167,10 @@ public final class NewSessionEditor {
         local = sync.local
     }
 
-    /// The prompt changed.
-    public func setPrompt(_ text: String) {
-        guard let local, local.description != text else { return }
-        edit(UpdateTicketBody(description: text))
+    /// The spec changed.
+    public func setSpec(_ text: String) {
+        guard let local, local.spec != text else { return }
+        edit(UpdateTicketBody(spec: text))
     }
 
     /// Move the draft to another project: its branch picks start over, and a Default model and the
@@ -199,17 +199,17 @@ public final class NewSessionEditor {
         return Models.ticketChoice(local, ModelProject(p), s.settings.map(ModelSettings.init)).driver
     }
 
-    /// Start session / Plan first (and the toolbar's Start) are enabled: a prompt, a project,
+    /// Start session / Plan first (and the toolbar's Start) are enabled: a spec, a project,
     /// nothing in flight, and a branch pick that isn't an error.
     public func canSubmit(_ s: BoardState, hint: BranchHint?) -> Bool {
         guard let local, project(s) != nil, busy == nil else { return false }
-        return !JSCompat.trim(local.description).isEmpty && hint?.tone != .error
+        return !JSCompat.trim(local.spec).isEmpty && hint?.tone != .error
     }
 
     /// Launch the draft: start work now, or plan first. Throws what the save or the submit threw
     /// (the editor stays open and usable then).
     public func submit(start: Bool) async throws -> Ticket {
-        guard let sync else { throw DraftSyncError.noPrompt }
+        guard let sync else { throw DraftSyncError.noSpec }
         busy = start ? .start : .plan
         submitting = true
         defer { busy = nil }

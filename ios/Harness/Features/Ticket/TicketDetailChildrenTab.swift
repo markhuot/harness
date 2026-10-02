@@ -2,13 +2,13 @@ import HarnessKit
 import SwiftUI
 
 /// A conductor's Tickets tab: its children grouped by status, each with what it's waiting on or
-/// its latest summary. Their progress is in the hero (ConductorProgressCard), which opens this tab.
+/// its latest Activity note. Their progress is in the hero (ConductorProgressCard), which opens this tab.
 struct TicketDetailChildrenTab: View {
     let ticket: Ticket
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
-    /// Children whose summaries were asked for already (cleared on reconnect).
+    /// Children whose Activity was asked for already (cleared on reconnect).
     @State private var fetched = Set<String>()
 
     var body: some View {
@@ -28,7 +28,7 @@ struct TicketDetailChildrenTab: View {
         }
         // Keyed on the epoch too, so a fetch that failed while the connection was down runs again
         // once it's back (the reconnect clears `fetched` first).
-        .task(id: ChildSummariesFetch(ids: children.map(\.id), epoch: store.epoch)) { fetchSummaries(children) }
+        .task(id: ChildActivityFetch(ids: children.map(\.id), epoch: store.epoch)) { fetchActivity(children) }
         .onChange(of: store.epoch) { fetched = [] }
     }
 
@@ -60,27 +60,27 @@ struct TicketDetailChildrenTab: View {
         .ticketHeroScroll()
     }
 
-    private func fetchSummaries(_ children: [Ticket]) {
+    private func fetchActivity(_ children: [Ticket]) {
         guard let api = store.api else { return }
-        for child in children where store.state.summaries[child.sessionId] == nil && !fetched.contains(child.id) {
+        for child in children where store.state.activity[child.sessionId] == nil && !fetched.contains(child.id) {
             fetched.insert(child.id)
             let key = child.key
             let sessionId = child.sessionId
             Task {
-                guard let summaries = try? await api.listSummaries(key) else { return }
-                store.dispatch(.summaries(sessionId: sessionId, summaries: summaries))
+                guard let activity = try? await api.listActivity(key) else { return }
+                store.dispatch(.activity(sessionId: sessionId, activity: activity))
             }
         }
     }
 }
 
-/// What the child-summaries fetch is keyed on.
-private struct ChildSummariesFetch: Equatable {
+/// What the children's Activity fetch is keyed on.
+private struct ChildActivityFetch: Equatable {
     let ids: [String]
     let epoch: Int
 }
 
-/// One child: key, title, its state, then why it needs you (or its latest summary), what it waits
+/// One child: key, title, its state, then why it needs you (or its latest Activity note), what it waits
 /// on and its driver and model. Tapping it opens it. The row isn't a Button: a Button's label
 /// swallows the taps of the dependency chips' own buttons, so the row takes a tap gesture (the
 /// chips, being buttons, win their own taps) and tells VoiceOver it's a button.
@@ -120,8 +120,8 @@ private struct TicketDetailChildRow: View {
             } else if child.status == .blocked {
                 Text(child.blockedReason.flatMap { $0.isEmpty ? nil : $0 } ?? "Blocked")
                     .font(.scaled(size: 13)).foregroundStyle(c.red).lineLimit(3)
-            } else if let summary = state.latestSummary(child.sessionId) {
-                Text(Markdown.plainText(summary.body)).font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(2)
+            } else if let news = state.latestActivity(child.sessionId, kinds: ActivityRows.newsKinds) {
+                Text(Markdown.plainText(news.body)).font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(2)
             }
             if !deps.isEmpty || showDriver || child.model != nil {
                 HStack(alignment: .center, spacing: 5) {

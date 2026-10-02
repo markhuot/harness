@@ -4,16 +4,19 @@
 // its hash route; the phone keeps them in navigation params.
 
 /**
- * "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" (Agents &
- * tasks) lists the session's sub-agents and background tasks; it exists only once there are any.
+ * "spec" is the ticket's living document and the tab a ticket opens on; "activity" its typed
+ * timeline. "children" is the conductor-only Tickets tab (listed right after Activity). "agents"
+ * (Agents & tasks) lists the session's sub-agents and background tasks; it exists only once there
+ * are any.
  */
-export type BuiltinTicketTab = "summaries" | "children" | "transcript" | "agents" | "browser" | "details";
+export type BuiltinTicketTab = "spec" | "activity" | "children" | "transcript" | "agents" | "browser" | "details";
 /** Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>". */
 export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}` | `agent:${string}`;
-export const TICKET_TABS: BuiltinTicketTab[] = ["summaries", "children", "transcript", "agents", "browser", "details"];
+export const TICKET_TABS: BuiltinTicketTab[] = ["spec", "activity", "children", "transcript", "agents", "browser", "details"];
 
 export const TAB_LABEL: Record<BuiltinTicketTab, string> = {
-  summaries: "Summaries",
+  spec: "Spec",
+  activity: "Activity",
   children: "Tickets",
   transcript: "Transcript",
   agents: "Agents & tasks",
@@ -55,6 +58,26 @@ export function isTicketTab(t: string | undefined | null): t is TicketTab {
   return !!t && ((TICKET_TABS as string[]).includes(t) || PLUGIN_TAB.test(t) || AGENT_TAB.test(t));
 }
 
+/** Tab ids older links and saved routes may still carry, and the tab each one became. */
+export const RENAMED_TABS: Readonly<Record<string, BuiltinTicketTab>> = { summaries: "spec" };
+
+/** A tab id from a link or saved route, with renamed ids mapped to their new tab; null when it isn't one. */
+export function ticketTabFrom(t: string | undefined | null): TicketTab | null {
+  if (!t) return null;
+  const renamed = Object.hasOwn(RENAMED_TABS, t) ? RENAMED_TABS[t] : undefined;
+  if (renamed) return renamed;
+  return isTicketTab(t) ? t : null;
+}
+
+/**
+ * Whether a message sent from this tab also goes into Activity (MessageBody.log): only from the
+ * Spec and Activity tabs, where the human is reading the ticket's record rather than the agent's
+ * transcript.
+ */
+export function logsMessages(tab: TicketTab): boolean {
+  return tab === "spec" || tab === "activity";
+}
+
 /** The live dot's tooltip on the Agents & tasks tab. */
 export const AGENTS_LIVE_LABEL = "A sub-agent or task is running";
 
@@ -65,34 +88,32 @@ export function showsAgentsTab(subagents: { id: string }[] | null | undefined): 
 
 /**
  * The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
- * tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to Summaries.
+ * tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to the Spec.
  * The Agents tab and a sub-agent's view need sub-agents: without any (or before they're known)
- * they fall back to Summaries, and a sub-agent that isn't among them falls back to the list.
+ * they fall back to the Spec, and a sub-agent that isn't among them falls back to the list.
  * The requested tab is kept by the caller, so a deep link opens once the sub-agents arrive.
  */
 export function effectiveTab(
   requested: TicketTab,
   opts: { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null; subagents?: { id: string }[] | null },
 ): TicketTab {
-  if (requested === "children" && !opts.conductor) return "summaries";
+  if (requested === "children" && !opts.conductor) return "spec";
   if (tabStripTab(requested) === "agents") {
-    if (!showsAgentsTab(opts.subagents)) return "summaries";
+    if (!showsAgentsTab(opts.subagents)) return "spec";
     const agent = parseSubagentTab(requested);
     if (agent && !opts.subagents!.some((s) => s.id === agent)) return "agents";
   }
   const p = parsePluginTab(requested);
-  if (p && opts.pluginTabs && !opts.pluginTabs.some((t) => t.pluginId === p.pluginId && t.id === p.tabId)) return "summaries";
+  if (p && opts.pluginTabs && !opts.pluginTabs.some((t) => t.pluginId === p.pluginId && t.id === p.tabId)) return "spec";
   return requested;
 }
 
 /**
- * The tab a ticket opens on when nothing asked for a particular one: Summaries once it has any,
- * otherwise the Transcript (a fresh ticket's Summaries tab is just an empty state). Null while the
- * summaries aren't loaded yet, so the caller waits instead of guessing.
+ * The tab a ticket opens on when nothing asked for a particular one: the Spec, which every ticket
+ * has from the start.
  */
-export function openingTab(summaries: readonly unknown[] | undefined): TicketTab | null {
-  if (!summaries) return null;
-  return summaries.length ? "summaries" : "transcript";
+export function openingTab(): TicketTab {
+  return "spec";
 }
 
 /**

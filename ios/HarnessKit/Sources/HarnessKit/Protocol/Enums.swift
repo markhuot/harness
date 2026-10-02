@@ -246,7 +246,64 @@ public enum SubagentKind: OpenEnum {
     }
 }
 
-public enum SummaryAuthor: OpenEnum {
+public enum ActivityAuthor: OpenEnum {
+    case agent, human, system
+    case unknown(String)
+    public static let allKnown: [Self] = [.agent, .human, .system]
+    public var rawValue: String {
+        switch self {
+        case .agent: "agent"
+        case .human: "human"
+        case .system: "system"
+        case let .unknown(r): r
+        }
+    }
+}
+
+/// What an Activity entry records (DESIGN.md "Activity"), ACTIVITY_KINDS in protocol.ts:
+/// - note: an agent's short progress note (post_note)
+/// - submitted: the work went to review (the submit note)
+/// - blocked: the agent (or a failure) asked the human something; meta.question
+/// - unblocked: the agent picked a blocked ticket back up; meta.note when it gave one
+/// - reviewApproved / changesRequested: an agent or conductor review decision; meta.round,
+///   meta.commit (the HEAD it reviewed), meta.by
+/// - approved: a human (or conductor) approved the ticket
+/// - message: a human's message sent from the Spec or Activity tab (POST /messages log: true)
+/// - answer: the agent's final answer to such a message
+/// - reopened: a done ticket went back to work; the notes
+/// - failed: a run failed
+/// - permission: a tool approval was asked for or answered
+/// - system: anything else the service records
+public enum ActivityKind: OpenEnum {
+    case note, submitted, blocked, unblocked, reviewApproved, changesRequested, approved
+    case message, answer, reopened, failed, permission, system
+    case unknown(String)
+    public static let allKnown: [Self] = [
+        .note, .submitted, .blocked, .unblocked, .reviewApproved, .changesRequested, .approved,
+        .message, .answer, .reopened, .failed, .permission, .system,
+    ]
+    public var rawValue: String {
+        switch self {
+        case .note: "note"
+        case .submitted: "submitted"
+        case .blocked: "blocked"
+        case .unblocked: "unblocked"
+        case .reviewApproved: "review_approved"
+        case .changesRequested: "changes_requested"
+        case .approved: "approved"
+        case .message: "message"
+        case .answer: "answer"
+        case .reopened: "reopened"
+        case .failed: "failed"
+        case .permission: "permission"
+        case .system: "system"
+        case let .unknown(r): r
+        }
+    }
+}
+
+/// Who wrote a spec revision.
+public enum SpecRevisionAuthor: OpenEnum {
     case agent, human, system
     case unknown(String)
     public static let allKnown: [Self] = [.agent, .human, .system]
@@ -309,7 +366,7 @@ public enum WatcherLiveState: OpenEnum {
 public enum PromptId: OpenEnum {
     case systemIntro, systemContext, systemLifecycle, systemPlan, systemWork, systemReview
     case systemCompleteMerge, systemCompletePr, systemCompleteCleanup, systemCompleteCustom, systemConductor, systemChat
-    case systemTriage, systemChildren, systemBranches, systemFiles, systemSummaries, systemFileLinks
+    case systemTriage, systemChildren, systemBranches, systemFiles, systemSpec, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
     case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
     case runConductorUpdate, runChangesRequested, runReopen, runTriage
@@ -318,7 +375,7 @@ public enum PromptId: OpenEnum {
     public static let allKnown: [Self] = [
         .systemIntro, .systemContext, .systemLifecycle, .systemPlan, .systemWork, .systemReview,
         .systemCompleteMerge, .systemCompletePr, .systemCompleteCleanup, .systemCompleteCustom, .systemConductor, .systemChat,
-        .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemSummaries, .systemFileLinks,
+        .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemSpec, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
         .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
         .runConductorUpdate, .runChangesRequested, .runReopen, .runTriage,
@@ -341,7 +398,7 @@ public enum PromptId: OpenEnum {
         case .systemChildren: "system.children"
         case .systemBranches: "system.branches"
         case .systemFiles: "system.files"
-        case .systemSummaries: "system.summaries"
+        case .systemSpec: "system.spec"
         case .systemFileLinks: "system.file_links"
         case .systemBoard: "system.board"
         case .systemBoardChanges: "system.board_changes"

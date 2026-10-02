@@ -5,8 +5,8 @@ import Testing
 @Suite("Board screen rules (board, ticket cards, projects)")
 struct BoardScreenRulesTests {
     static func t(_ id: String, _ status: TicketStatus = .planning, position: Double = 0, project: String = "p1", parentId: String? = nil,
-                  draft: Bool? = nil, title: String = "Title", description: String = "", completedAt: Patch<Timestamp> = .absent) -> Ticket {
-        Ticket(id: id, key: "K-\(id)", projectId: project, title: title, description: description, status: status, sessionId: "s\(id)", driver: "dummy",
+                  draft: Bool? = nil, title: String = "Title", spec: String = "", completedAt: Patch<Timestamp> = .absent) -> Ticket {
+        Ticket(id: id, key: "K-\(id)", projectId: project, title: title, spec: spec, status: status, sessionId: "s\(id)", driver: "dummy",
                parentId: parentId, draft: draft, position: position, completedAt: completedAt, createdAt: 1, updatedAt: 1)
     }
 
@@ -121,10 +121,10 @@ struct BoardScreenRulesTests {
     }
 
     @Test func draftTitleFallsBackToTheFirstLine() {
-        #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", description: "Fix it\nmore")) == "Fix it")
-        #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", description: "\nsecond")) == "Empty draft")
-        #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", description: "a\r\nb")) == "a\r")
-        #expect(BoardScreenRules.cardTitle(Self.t("1", title: "", description: "words")) == "Untitled")
+        #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", spec: "Fix it\nmore")) == "Fix it")
+        #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", spec: "\nsecond")) == "Empty draft")
+        #expect(BoardScreenRules.cardTitle(Self.t("1", draft: true, title: "", spec: "a\r\nb")) == "a\r")
+        #expect(BoardScreenRules.cardTitle(Self.t("1", title: "", spec: "words")) == "Untitled")
     }
 
     // MARK: projects

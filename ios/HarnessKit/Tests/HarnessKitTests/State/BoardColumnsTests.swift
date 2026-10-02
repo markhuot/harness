@@ -53,7 +53,7 @@ struct BoardColumnsTests {
     }
 
     @Test func appliedMoveIsTheOptimisticCopy() throws {
-        let t = Ticket(id: "a", key: "A-1", projectId: "p1", title: "a", description: "", status: .done, sessionId: "s", driver: "d",
+        let t = Ticket(id: "a", key: "A-1", projectId: "p1", title: "a", spec: "", status: .done, sessionId: "s", driver: "d",
                        position: 4, completedAt: .value(50), createdAt: 1, updatedAt: 1)
         let move = try #require(BoardColumns.moveBody(t, to: .planning, .top, cols: Columns(), now: 99))
         let next = move.applied(to: t)

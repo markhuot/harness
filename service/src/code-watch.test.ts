@@ -208,7 +208,7 @@ describe("service self-update over the API", () => {
     await ready;
 
     const p = await client.createProject({ path: dir, useWorktrees: false });
-    await client.createTicket({ projectId: p.id, prompt: "work /hold", driver: "fake", start: true });
+    await client.createTicket({ projectId: p.id, spec: "work /hold", driver: "fake", start: true });
     const deadline = Date.now() + 5000;
     while (fake.holding === 0 && Date.now() < deadline) await Bun.sleep(5);
     expect(h.orchestrator.isIdle()).toBe(false);

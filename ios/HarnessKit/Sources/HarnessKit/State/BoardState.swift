@@ -101,8 +101,14 @@ public struct BoardState: Codable, Sendable, Equatable {
     public var tickets: [String: Ticket]
     public var sessions: [String: Session]
     public var runs: [String: Run]
-    /// Keyed by sessionId, sorted by createdAt, unique by id
-    public var summaries: [String: [Summary]]
+    /// Activity per sessionId, sorted by createdAt, unique by id
+    public var activity: [String: [ActivityEntry]]
+    /// Spec revision metadata per ticket id, oldest first: from GET …/spec/revisions
+    /// (`.specRevisions`) plus spec.revised events. approvedBaseline follows the ticket's
+    /// specBaselineRevision.
+    public var specRevisions: [String: [SpecRevisionInfo]]
+    /// Revision bodies fetched so far, keyed by `specBodyKey(ticketId, rev)`; revisions never change
+    public var specBodies: [String: String]
     /// Keyed by `transcriptKey(sessionId, subagentId)`: the session agent's transcript under the
     /// session id, each sub-agent's under "<sessionId>/<subagentId>". Sorted by seq, unique by id.
     public var transcripts: [String: TranscriptState]
@@ -132,7 +138,8 @@ public struct BoardState: Codable, Sendable, Equatable {
 
     public init(
         connected: Bool = false, ready: Bool = false, projects: [String: Project] = [:], tickets: [String: Ticket] = [:],
-        sessions: [String: Session] = [:], runs: [String: Run] = [:], summaries: [String: [Summary]] = [:],
+        sessions: [String: Session] = [:], runs: [String: Run] = [:], activity: [String: [ActivityEntry]] = [:],
+        specRevisions: [String: [SpecRevisionInfo]] = [:], specBodies: [String: String] = [:],
         transcripts: [String: TranscriptState] = [:], subagents: [String: [Subagent]] = [:],
         taskOutputs: [String: TaskOutputState] = [:],
         deltas: [String: [String: String]] = [:], watchers: [String: Watcher] = [:], settings: PublicSettings? = nil,
@@ -146,7 +153,9 @@ public struct BoardState: Codable, Sendable, Equatable {
         self.tickets = tickets
         self.sessions = sessions
         self.runs = runs
-        self.summaries = summaries
+        self.activity = activity
+        self.specRevisions = specRevisions
+        self.specBodies = specBodies
         self.transcripts = transcripts
         self.subagents = subagents
         self.taskOutputs = taskOutputs
@@ -218,7 +227,11 @@ public enum BoardAction: Codable, Sendable, Equatable {
     case subagents(sessionId: String, subagents: [Subagent])
     /// A slice of a background task's output (GET …/output), appended to what's loaded
     case taskOutput(sessionId: String, subagentId: String, output: TaskOutput)
-    case summaries(sessionId: String, summaries: [Summary])
+    case activity(sessionId: String, activity: [ActivityEntry])
+    /// GET /tickets/:key/spec/revisions: the ticket's whole list
+    case specRevisions(ticketId: String, revisions: [SpecRevisionInfo])
+    /// GET /tickets/:key/spec/revisions/:rev: one revision's body
+    case specRevision(ticketId: String, revision: SpecRevision)
     case drivers([DriverInfo])
     /// A done page request for `scope` went out
     case donePageRequest(scope: String)
@@ -247,7 +260,9 @@ public enum BoardAction: Codable, Sendable, Equatable {
         case .transcript: "transcript"
         case .subagents: "subagents"
         case .taskOutput: "taskOutput"
-        case .summaries: "summaries"
+        case .activity: "activity"
+        case .specRevisions: "specRevisions"
+        case .specRevision: "specRevision"
         case .drivers: "drivers"
         case .donePageRequest: "donePage.request"
         case .donePage: "donePage"
@@ -261,7 +276,7 @@ public enum BoardAction: Codable, Sendable, Equatable {
 
     private enum Key: String, CodingKey {
         case type, event, snapshot, connected, detail, requestedKey, tickets, keys, sessionId, subagentId, entries
-        case subagents, summaries, drivers, scope, page, append, cursor, error, q, output
+        case subagents, activity, ticketId, revisions, revision, drivers, scope, page, append, cursor, error, q, output
     }
 
     public init(from decoder: any Decoder) throws {
@@ -286,8 +301,12 @@ public enum BoardAction: Codable, Sendable, Equatable {
             self = .taskOutput(
                 sessionId: try c.decode(String.self, forKey: .sessionId), subagentId: try c.decode(String.self, forKey: .subagentId),
                 output: try c.decode(TaskOutput.self, forKey: .output))
-        case "summaries":
-            self = .summaries(sessionId: try c.decode(String.self, forKey: .sessionId), summaries: try c.decode([Summary].self, forKey: .summaries))
+        case "activity":
+            self = .activity(sessionId: try c.decode(String.self, forKey: .sessionId), activity: try c.decode([ActivityEntry].self, forKey: .activity))
+        case "specRevisions":
+            self = .specRevisions(ticketId: try c.decode(String.self, forKey: .ticketId), revisions: try c.decode([SpecRevisionInfo].self, forKey: .revisions))
+        case "specRevision":
+            self = .specRevision(ticketId: try c.decode(String.self, forKey: .ticketId), revision: try c.decode(SpecRevision.self, forKey: .revision))
         case "drivers": self = .drivers(try c.decode([DriverInfo].self, forKey: .drivers))
         case "donePage.request": self = .donePageRequest(scope: try c.decode(String.self, forKey: .scope))
         case "donePage":
@@ -332,9 +351,15 @@ public enum BoardAction: Codable, Sendable, Equatable {
             try c.encode(sessionId, forKey: .sessionId)
             try c.encode(subagentId, forKey: .subagentId)
             try c.encode(output, forKey: .output)
-        case let .summaries(sessionId, summaries):
+        case let .activity(sessionId, activity):
             try c.encode(sessionId, forKey: .sessionId)
-            try c.encode(summaries, forKey: .summaries)
+            try c.encode(activity, forKey: .activity)
+        case let .specRevisions(ticketId, revisions):
+            try c.encode(ticketId, forKey: .ticketId)
+            try c.encode(revisions, forKey: .revisions)
+        case let .specRevision(ticketId, revision):
+            try c.encode(ticketId, forKey: .ticketId)
+            try c.encode(revision, forKey: .revision)
         case let .drivers(d): try c.encode(d, forKey: .drivers)
         case let .donePageRequest(scope): try c.encode(scope, forKey: .scope)
         case let .donePage(scope, page, append, cursor):

@@ -225,7 +225,7 @@ export class FakeDriver implements Driver {
         }
         yield { type: "text_delta", text: "Here's " };
         yield { type: "text", text: `Here's a plan for: ${p.split("\n")[0]}` };
-        await ops.updatePlan(ctx, `1. Do ${p.split("\n")[0]}`);
+        await ops.updateSpec(ctx, { spec: `1. Do ${p.split("\n")[0]}`, note: "Plan drafted", baseRevision: ctx.ticket?.specRevision ?? 1 });
         yield { type: "state", state: { turns } };
         return;
       }
@@ -264,17 +264,17 @@ export class FakeDriver implements Driver {
         if (thrown) throw new Error(thrown[1]!);
         if (p.includes("/nosubmit")) return;
         if (this.commitsWork) await commitWork(req.cwd, req.runId);
-        await ops.postSummary(ctx, "Did the work.");
+        await ops.postNote(ctx, "Did the work.");
         const skips = { ...(p.includes("/skipreview") && { skipAgentReview: true }), ...(p.includes("/skiphuman") && { skipHumanReview: true }) };
         if (Object.keys(skips).length) {
           try {
-            await ops.submitForReview(ctx, "All done.", undefined, skips);
+            await ops.submitForReview(ctx, "All done.", true, skips);
           } catch (err) {
             yield { type: "text", text: `Refused: ${(err as Error).message}` };
           }
           return;
         }
-        await ops.submitForReview(ctx, "All done.");
+        await ops.submitForReview(ctx, "All done.", true);
         return;
       }
       case "review": {
@@ -335,7 +335,7 @@ export class FakeDriver implements Driver {
           const refused = await attempt(() => ops.block(ctx, block[1]!));
           if (refused) yield { type: "text", text: `Refused: ${refused}` };
         } else if (said.includes("/submit")) {
-          const refused = await attempt(() => ops.submitForReview(ctx, "Done from chat."));
+          const refused = await attempt(() => ops.submitForReview(ctx, "Done from chat.", true));
           if (refused) yield { type: "text", text: `Refused: ${refused}` };
         } else if (said.includes("/ask")) {
           yield { type: "text", text: "Which color should it be?" };
@@ -348,7 +348,7 @@ export class FakeDriver implements Driver {
         if (ctx.ticket?.completionAction === "pr" && !p.includes("[no-pr]")) {
           await ops.recordPullRequest(ctx, `https://github.com/acme/web/pull/${ctx.ticket.key.split("-").pop()}`);
         }
-        await ops.postSummary(ctx, "Completed.");
+        await ops.postNote(ctx, "Completed.");
         return;
       }
       case "conductor": {
@@ -366,7 +366,7 @@ export class FakeDriver implements Driver {
           for (const s of specs) {
             const skipAgentReview = s.title.includes("[skip-review]") || undefined;
             const skipHumanReview = s.title.includes("[skip-human]") || undefined;
-            const t = await ops.createTicket(ctx, { title: s.title, description: s.title, dependsOn: s.deps.map((i) => keys[i]!), skipAgentReview, skipHumanReview });
+            const t = await ops.createTicket(ctx, { title: s.title, spec: s.title, dependsOn: s.deps.map((i) => keys[i]!), skipAgentReview, skipHumanReview });
             keys.push(t.key);
           }
           yield { type: "state", state: { turns, created: true } };
@@ -385,7 +385,7 @@ export class FakeDriver implements Driver {
           }
         }
         const after = (await ops.listTickets(ctx, { scope: "children", limit: 200 })).tickets;
-        if (after.length && after.every((c) => c.status === "done")) await ops.submitForReview(ctx, "All children done.");
+        if (after.length && after.every((c) => c.status === "done")) await ops.submitForReview(ctx, "All children done.", true);
         return;
       }
       case "triage": {
@@ -401,7 +401,7 @@ export class FakeDriver implements Driver {
           ticketKey: watcherTicket(p) ?? undefined,
           url: /https?:\/\/[^\s"`]+/.exec(p)?.[0],
           title: `Work for ${key}`,
-          description: `Handle ${key}`,
+          spec: `Handle ${key}`,
           start: true,
           conductor: p.includes("[big]"),
         });

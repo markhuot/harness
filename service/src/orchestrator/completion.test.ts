@@ -62,7 +62,7 @@ async function setup(opts: { remote?: string | null; git?: boolean; commits?: bo
   const get = (t: Ticket) => h.store.tickets.get(t.id)!;
   /** A ticket worked, agent-reviewed and waiting on the human. */
   const inReview = async (prompt = "x") => {
-    const t = await h.orch.createTicket({ projectId: project.id, prompt });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: prompt });
     await h.orch.idle();
     expect(get(t).status).toBe("review");
     return get(t);
@@ -130,7 +130,7 @@ describe("choosing at approval", () => {
   test("the choice made before the agent review finishes is kept and runs once the ticket is ready", async () => {
     const h = await setup();
     // Hold the agent review so the human approves first.
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     await h.orch.idle().catch(() => {});
     await Bun.sleep(50);
     expect(h.get(t).agentReview).toBe("pending");
@@ -169,7 +169,7 @@ describe("choosing at approval", () => {
   test("a new action without instructions drops the earlier action's instructions", async () => {
     const h = await setup();
     // Hold the agent review so the approval waits, then Complete with another action.
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     while (h.driver.holding === 0) await Bun.sleep(1);
     h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "Tag it" });
     await h.orch.completeTicket(t.key, { action: "merge" });
@@ -204,7 +204,7 @@ describe("pull request completions", () => {
         }
       }
     };
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     // The script also stands in for work and review: commit, submit and approve by hand.
     const u = h.get(t);
@@ -266,7 +266,7 @@ describe("tickets with nothing to land (Ticket.hasChanges)", () => {
 
   test("a ticket without a worktree of its own (it ran in the project checkout) can't merge or open a pr", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", useWorktree: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", useWorktree: false });
     await h.orch.idle();
     const u = h.get(t);
     expect(u).toMatchObject({ status: "review", branch: null, hasChanges: null });
@@ -283,14 +283,14 @@ describe("cleanup completions", () => {
       const t = req.toolContext.ticket!;
       await h.git("worktree", "remove", t.workdir!);
       if (deleteBranch) await h.git("branch", "-D", deleteBranch);
-      await req.toolContext.ops.postSummary(req.toolContext, "Cleaned up.");
+      await req.toolContext.ops.postNote(req.toolContext, "Cleaned up.");
     };
   };
 
   test("a ticket working on its base branch (an existing PR head) can't merge or open a PR, and cleans up by default", async () => {
     const h = await setup();
     await h.git("branch", "feature/pr-head");
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Fix the PR", branch: "feature/pr-head", baseBranch: "feature/pr-head" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Fix the PR", branch: "feature/pr-head", baseBranch: "feature/pr-head" });
     await h.orch.idle();
     expect(h.get(t)).toMatchObject({ status: "review", branch: "feature/pr-head" });
     expect(h.driver.calls.find((c) => c.kind === "work")!.systemPrompt).toContain("which is also its base branch");
@@ -352,7 +352,7 @@ describe("Approve and take no action", () => {
   test("in review: done and approved with no completion run, the worktree and branch left alone", async () => {
     const h = await setup();
     // The agent review is still running when the human takes no action.
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
     for (let i = 0; i < 100 && h.driver.holding === 0; i++) await Bun.sleep(20);
     expect(h.get(t)).toMatchObject({ status: "review", agentReview: "pending" });
     await h.orch.completeTicket(t.key, { skipAgent: true });
@@ -372,7 +372,7 @@ describe("Approve and take no action", () => {
 
   test("outside review it is plain Mark done", async () => {
     const h = await setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.completeTicket(t.key, { skipAgent: true });
     expect(h.get(t)).toMatchObject({ status: "done", humanReview: "pending" });
   });
@@ -382,7 +382,7 @@ describe("children land on their parent's branch", () => {
   test("a conductor's children branch from its branch, only merge, and merge into it", async () => {
     const h = await setup();
     h.orch.updateProject(h.project.id, { completionAction: "pr" });
-    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "Big goal", kind: "conductor", start: false });
+    const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Big goal", kind: "conductor", start: false });
     // Work on the conductor's branch before the children exist.
     await h.orch.startTicket(parent.key);
     await h.orch.idle();
@@ -402,9 +402,9 @@ describe("children land on their parent's branch", () => {
 
   test("a child on its parent's branch refuses pr and custom", async () => {
     const h = await setup();
-    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "goal", start: false });
+    const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "goal", start: false });
     h.store.tickets.update(parent.id, { branch: "harness/web-1", workdir: h.repo, status: "in_progress" });
-    const child = await h.orch.createTicket({ projectId: h.project.id, prompt: "part", start: false });
+    const child = await h.orch.createTicket({ projectId: h.project.id, spec: "part", start: false });
     h.store.db.query("UPDATE tickets SET parent_id = $p WHERE id = $id").run({ p: parent.id, id: child.id });
     h.store.tickets.update(child.id, { status: "review", agentReview: "approved" });
     expectStatus(() => h.orch.humanReview(child.key, { decision: "approve", action: "pr" }), 400, /merges into its parent's branch harness\/web-1/);
@@ -414,10 +414,10 @@ describe("children land on their parent's branch", () => {
 
   test("a child with its own base branch, or under a finished parent, gets the project's choices again", async () => {
     const h = await setup();
-    const parent = await h.orch.createTicket({ projectId: h.project.id, prompt: "goal", start: false });
+    const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "goal", start: false });
     h.store.tickets.update(parent.id, { branch: "harness/web-1", workdir: h.repo, status: "in_progress" });
     const mk = async () => {
-      const child = await h.orch.createTicket({ projectId: h.project.id, prompt: "part", start: false });
+      const child = await h.orch.createTicket({ projectId: h.project.id, spec: "part", start: false });
       h.store.db.query("UPDATE tickets SET parent_id = $p WHERE id = $id").run({ p: parent.id, id: child.id });
       return h.store.tickets.update(child.id, { status: "review", agentReview: "approved", branch: `harness/${child.key.toLowerCase()}` })!;
     };

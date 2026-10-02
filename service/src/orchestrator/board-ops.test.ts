@@ -21,8 +21,8 @@ async function setup() {
   };
   const web = project("WEB");
   const api = project("API");
-  const make = async (projectId: string, title: string, extra: { status?: TicketStatus; parentId?: string; kind?: "conductor"; description?: string } = {}) => {
-    const t = await h.orch.createTicket({ projectId, prompt: extra.description ?? title, title, start: false, parentId: extra.parentId, kind: extra.kind });
+  const make = async (projectId: string, title: string, extra: { status?: TicketStatus; parentId?: string; kind?: "conductor"; spec?: string } = {}) => {
+    const t = await h.orch.createTicket({ projectId, spec: extra.spec ?? title, title, start: false, parentId: extra.parentId, kind: extra.kind });
     if (extra.status && extra.status !== "planning") h.store.tickets.update(t.id, { status: extra.status });
     return h.store.tickets.get(t.id)!;
   };
@@ -110,12 +110,12 @@ describe("listTickets (board)", () => {
 });
 
 describe("getTicket (board)", () => {
-  test("reads a ticket in another project with parent, children, driver and summaries — from a triage run too", async () => {
+  test("reads a ticket in another project with parent, children, driver and activity — from a triage run too", async () => {
     const h = await setup();
     const conductor = await h.make(h.api.id, "conduct", { kind: "conductor" });
     const child = await h.make(h.api.id, "child", { parentId: conductor.id, status: "blocked" });
     h.store.tickets.update(child.id, { blockedReason: "Which DB?" });
-    h.store.summaries.add({ sessionId: child.sessionId, ticketId: child.id, author: "agent", body: "tried sqlite" });
+    h.store.activity.add({ sessionId: child.sessionId, ticketId: child.id, kind: "note", author: "agent", body: "tried sqlite" });
     const me = await h.make(h.web.id, "me");
 
     const d = await h.orch.ops.getTicket(h.ctx("work", me), child.key.toLowerCase());
@@ -123,7 +123,7 @@ describe("getTicket (board)", () => {
     expect(d.ticket.projectKey).toBe("API");
     expect(d.ticket.blockedReason).toBe("Which DB?");
     expect(d.parent).toBe(conductor.key);
-    expect(d.summaries.map((s) => s.body)).toEqual(["tried sqlite"]);
+    expect(d.activity.map((a) => [a.kind, a.body])).toEqual([["note", "tried sqlite"]]);
     expect(d.transcript).toBeUndefined();
     expect(d.resolvedFrom).toBeNull();
 
@@ -171,17 +171,17 @@ describe("searchTickets (board)", () => {
   test("pages with nextCursor, scopes to project_key, and snippets the matching text", async () => {
     const h = await setup();
     for (let i = 0; i < 3; i++) {
-      await h.make(h.web.id, `Checkout ${i}`, { description: `Intro text. The payment widget number ${i} needs work.` });
+      await h.make(h.web.id, `Checkout ${i}`, { spec: `Intro text. The payment widget number ${i} needs work.` });
       await Bun.sleep(2);
     }
-    const api = await h.make(h.api.id, "Payment API", { description: "server side" });
+    const api = await h.make(h.api.id, "Payment API", { spec: "server side" });
     const ctx = h.ctx("work", null);
 
     const p1 = await h.orch.ops.searchTickets(ctx, { query: "payment", limit: 2 });
     expect(p1.total).toBe(4);
     expect(p1.hits).toHaveLength(2);
     expect(p1.nextCursor).not.toBeNull();
-    expect(p1.hits[0]!.ticket.key).toBe(api.key); // title hit ranks above description hits
+    expect(p1.hits[0]!.ticket.key).toBe(api.key); // title hit ranks above spec hits
     const p2 = await h.orch.ops.searchTickets(ctx, { query: "payment", limit: 2, cursor: p1.nextCursor! });
     expect(p2.nextCursor).toBeNull();
     const seen = [...p1.hits, ...p2.hits].map((x) => x.ticket.key);
@@ -219,13 +219,13 @@ describe("board tools over the real orchestrator", () => {
     expect(text(await tool("search_tickets").execute({ query: "zebra" }, ctx))).toBe('No tickets match "zebra".');
   });
 
-  test("get_ticket exposes description, driver and transcript only when asked", async () => {
+  test("get_ticket exposes the spec and its revision, driver and transcript only when asked", async () => {
     const h = await setup();
-    const t = await h.make(h.web.id, "t", { description: "the brief" });
+    const t = await h.make(h.web.id, "t", { spec: "the brief" });
     h.store.transcript.append(t.sessionId, null, "assistant", { type: "text", text: "all done" });
     const ctx = h.ctx("complete", t);
     const plain = JSON.parse(text(await tool("get_ticket").execute({ key: t.key }, ctx)));
-    expect(plain).toMatchObject({ key: t.key, project: "WEB", description: "the brief", driver: "fake", parent: null, children: [] });
+    expect(plain).toMatchObject({ key: t.key, project: "WEB", spec: "the brief", specRevision: 1, specBaselineRevision: null, driver: "fake", parent: null, children: [] });
     expect(plain.transcript).toBeUndefined();
     const withTail = JSON.parse(text(await tool("get_ticket").execute({ key: t.key, include_transcript: 1 }, ctx)));
     expect(withTail.transcript).toEqual([expect.objectContaining({ role: "assistant", type: "text", text: "all done" })]);

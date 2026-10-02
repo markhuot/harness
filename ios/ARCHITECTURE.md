@@ -359,7 +359,7 @@ feature needs something new here, add to it without changing what's there.
   | Link | Opens |
   | --- | --- |
   | `harness://board` (`/search` is an alias), `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
-  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
+  | `harness://ticket/<key>[?tab=spec\|activity\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped, and an old `summaries` opens spec; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
   | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen |
@@ -516,7 +516,6 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | FileViewerScreen | Files/FileViewerScreen.swift | File viewer | `FileViewerScreen(params: FileRouteParams)` |
 | MarkdownView | Content/MarkdownView.swift | Markdown | `MarkdownView(text:, size: = 15, color: = nil, linkContext: = FileLinkContext())` |
 | CodeBlockView | Content/CodeBlockView.swift | Markdown / File viewer | `CodeBlockView(code:, language: = nil, showLineNumbers: = false, highlightLines: ClosedRange<Int>? = nil)` |
-| AttachmentRow | Content/AttachmentRow.swift | Summaries & attachments | `AttachmentRow(attachments: [SummaryAttachment])` |
 | DriverModelPicker | Pickers/DriverModelPicker.swift | Pickers | `DriverModelPicker(value:, resolved:, title:, defaultLabel:, onlyDriver:, disabled:, inheritedModel:, onChange:)` (Watchers.TriageChoice) |
 | ModelPicker | Pickers/ModelPicker.swift | Pickers | `ModelPicker(driver:, value:, inherited:, defaultLabel:, plainDefault:, title:, disabled:, onChange: (String?) -> Void)` |
 | PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
@@ -547,7 +546,7 @@ from it (Ticket/TicketDetailSupport.swift):
   and bring it back (HarnessKit `HeroCollapse`, checked against frozen fixtures).
   TranscriptView and AgentsTabView should attach it, since sim-check `--stick` checks the hero on
   the Transcript. Outside a ticket screen it does nothing.
-- **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Summaries, and the
+- **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Activity, and the
   Transcript): it opens at the bottom, follows new content while pinned, stays put once the user
   scrolls up and re-pins at the bottom (StickToBottom.stickStep, fed by scroll phases).
 - **`@Environment(\.ticketDetailOpenTab)`** opens a tab on the hosting screen, which is how the
@@ -624,17 +623,17 @@ What screens that show agent text use (HARNESS-136):
   links that aren't files go through the Router, file links push `.file`, and a file link with no
   root toasts. `ContentLinkOpener` is the same opener for links outside markdown.
 - **CodeBlockView** takes a fence tag or a Shiki id; long-press → Copy copies the whole block.
-- **AttachmentRow** presents `AttachmentViewer` itself (a clear fullScreenCover that fades in).
-  `AttachmentMedia` caches images and video posters for the row and the viewer. The pager is
+- **MarkdownView** presents `AttachmentViewer` for `attachment:` images (a clear fullScreenCover that fades in).
+  `AttachmentMedia` caches images and video posters for the inline images and the viewer. The pager is
   `AttachmentPager`, a UIKit paging UIScrollView whose pages
   are UIHostingControllers of the SwiftUI page views, given the store and palette explicitly. A
   page-style TabView lost sideways swipes that started over AVPlayerViewController's view, so the
   viewer often couldn't page off a video; inside the scroll view, its pan sees them first. Paging is
   off while an image is zoomed. A page keeps one view for its whole life, so video pages keep one
   AVPlayerViewController and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
-  "Video x.mp4" thumbnails, "Close", "2 of 4 · 1.2 MB".
+  "Video x.mp4" inline images (the alt text), "Close", "2 of 4 · 1.2 MB".
 - **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
-  shows sample markdown and that ticket's summaries with their attachments.
+  shows sample markdown and that ticket's spec with its inline attachments.
 
 ## Pickers and form controls (Features/Pickers)
 
@@ -793,11 +792,12 @@ native-pattern difference, not a missing feature.
 | Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |
 | Hero collapse on scroll, back on tab change, news or a status-bar tap | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, HarnessKit HeroCollapse | done |
 | Tab strip: order, counts, live dots, plugin icons, sub-agent highlights Agents | screens/TicketDetail, shared/state/tabs | TicketDetailTabStrip, HarnessKit Tabs/ChangesTab | done |
-| Summaries: brief/plan, depends-on chips, empty state, attachments, stick to bottom | screens/TicketTabs | TicketDetailSummariesTab | done |
-| Tickets (children) tab: groups, rows with chips | screens/TicketTabs | TicketDetailChildrenTab | done |
-| Details: title, brief (Unsaved/Revert/Save), ticket settings, links, runs, related | screens/TicketTabs, ui/TicketSettings | TicketDetailDetailsTab, Pickers/TicketSettingsForm | done |
+| Spec: the living spec, history bar (step, scrub, follow the newest, approved-plan tag), Show changes with the Changes rows, depends-on chips | (HARNESS-199) | TicketDetailSpecTab, HarnessKit SpecHistory/SpecScrubber | done |
+| Activity: typed timeline, blocked card, review round and commit, message/answer bubbles, stick to bottom | (HARNESS-199) | TicketDetailActivityTab, HarnessKit ActivityRows | done |
+| Tickets (children) tab: groups, rows with chips (progress is in the hero's ConductorProgressCard) | screens/TicketTabs | TicketDetailChildrenTab | done |
+| Details: title, spec (Unsaved/Revert/Save, base revision, Reload/Overwrite on a conflict), ticket settings, links, runs, related | screens/TicketTabs, ui/TicketSettings | TicketDetailDetailsTab, Pickers/TicketSettingsForm | done |
 | Approval card: Allow once, Deny…, Always allow; announced to VoiceOver | screens/Approval | TicketDetailApprovalCard | done |
-| Composer: placeholder by status, move switch while writing, @files, /commands, Send | screens/TicketDetail, ui/mentions, lib/mentionCaret | TicketDetailComposer, Pickers/MentionTextEditor | done |
+| Composer: placeholder by status and where it shows (`log` from Spec/Activity), move switch while writing, @files, /commands, Send | screens/TicketDetail, ui/mentions, lib/mentionCaret | TicketDetailComposer, Pickers/MentionTextEditor | done |
 | Transcript: rows, deltas, Working…, thinking, tools (images, sub-agent links), permissions, errors, stick to bottom | screens/Transcript | TranscriptView, TranscriptRows, TranscriptToolRow, HarnessKit TranscriptLogic | done (windowed, "Show earlier messages (N)": native only) |
 | Agents & tasks tab: sub-agents and background tasks (Bash, Monitor) in one list, latest update first, with type chips; sub-agent view (Back to Agents & tasks, breadcrumbs, task, transcript); task output view (command, output polled every second and following the bottom, notes, result); tool rows link with "Open transcript" / "Open output" | — (native only) | AgentsTabView, SubagentView, TaskOutputView, HarnessKit AgentsLogic/Subagents (`taskOutputs`) | done |
 | Browser tab: toolbar, frames, touch/wheel/drag input, keyboard, resize gate, tab strip and New tab | screens/BrowserTab, lib/browserInput | BrowserTabView, BrowserTabModel, BrowserInputViews | done |

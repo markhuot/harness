@@ -152,7 +152,7 @@ struct TranscriptLogicTests {
         let s = Self.session(triage: .dispatched, outcome: "Dispatched to GREET-4")
         #expect(InboxLogic.linkContext(state, s) == FileLinkContext(ticketKey: "GREET-4"))
         #expect(InboxLogic.dispatchedTicket(state, s) == nil)
-        state.tickets["t4"] = Ticket(id: "t4", key: "GREET-4", projectId: "p9", title: "", description: "", status: .review, sessionId: "s4",
+        state.tickets["t4"] = Ticket(id: "t4", key: "GREET-4", projectId: "p9", title: "", spec: "", status: .review, sessionId: "s4",
                                      driver: "dummy", createdAt: 0, updatedAt: 0)
         #expect(InboxLogic.linkContext(state, s) == FileLinkContext(projectId: "p9"))
         #expect(InboxLogic.dispatchedTicket(state, s)?.id == "t4")

@@ -2,11 +2,16 @@ import HarnessKit
 import SwiftUI
 
 /// The message composer under every tab: @file mentions and /commands,
-/// a placeholder for the ticket's state (red while it's blocked on the human), the switch that moves
+/// a placeholder for the ticket's state and where the message shows (red while it's blocked on the
+/// human), the switch that moves
 /// the ticket first and the hint about what a message does. The switch and hint show only while
-/// writing: once the field is focused, and after a blur only while it holds a message.
+/// writing: once the field is focused, and after a blur only while it holds a message. A message
+/// sent from the Spec or Activity tab also goes into Activity (`log`); from any other tab it goes
+/// to the agent and the Transcript only.
 struct TicketDetailComposer: View {
     let ticket: Ticket
+    /// The tab on screen, which decides whether the message is logged
+    let tab: TicketTab
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
@@ -50,7 +55,7 @@ struct TicketDetailComposer: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 MentionTextEditor(text: $text,
-                                  placeholder: Format.composerPlaceholder[ticket.status] ?? "",
+                                  placeholder: TicketDetailLogic.composerPlaceholder(ticket, tab: tab),
                                   ticketKey: ticket.key,
                                   minHeight: 0,
                                   maxLines: 6,
@@ -88,10 +93,11 @@ struct TicketDetailComposer: View {
         let body = TicketDetailLogic.trim(text)
         guard !body.isEmpty, !sending else { return }
         let key = ticket.key
+        let log = TicketDetailLogic.composerLogs(tab)
         sending = true
         Task {
             // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
-            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move) }
+            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move, log: log) }
             sending = false
             if ok != nil {
                 haptic(.success)

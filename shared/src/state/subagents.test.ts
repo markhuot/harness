@@ -68,13 +68,13 @@ describe("sub-agent state", () => {
     let s = run([upserted(sub("b", { startedAt: 20 })), upserted(sub("a", { startedAt: 5 }))]);
     expect(subagentsOf(s, "s1")!.map((x) => x.id)).toEqual(["a", "b"]);
     s = run([upserted(sub("a", { status: "succeeded", updatedAt: 30 }))], s);
-    const detail = { ticket: {}, session: { id: "s1" } as Session, summaries: [], runs: [], dependents: [], children: [], subagents: [sub("a", { updatedAt: 15 })] } as unknown as TicketDetail;
+    const detail = { ticket: {}, session: { id: "s1" } as Session, activity: [], runs: [], dependents: [], children: [], subagents: [sub("a", { updatedAt: 15 })] } as unknown as TicketDetail;
     s = run([{ type: "detail", detail }], s);
     expect(subagentById(s, "s1", "a")!.status).toBe("succeeded");
   });
 
   test("the list is unknown until a detail says; a detail without sub-agents (older service) leaves it unknown", () => {
-    const base = { ticket: { id: "t", key: "T-1", kind: "task" }, session: { id: "s1" } as Session, summaries: [], runs: [], dependents: [], children: [] };
+    const base = { ticket: { id: "t", key: "T-1", kind: "task" }, session: { id: "s1" } as Session, activity: [], runs: [], dependents: [], children: [] };
     expect(subagentsOf(initialState, "s1")).toBeNull();
     expect(subagentsOf(run([{ type: "detail", detail: base as unknown as TicketDetail }]), "s1")).toBeNull();
     expect(subagentsOf(run([{ type: "detail", detail: { ...base, subagents: [] } as unknown as TicketDetail }]), "s1")).toEqual([]);
@@ -96,8 +96,8 @@ describe("sub-agent tabs", () => {
   test("Agents and a sub-agent's view need sub-agents; an unknown one falls back to the list", () => {
     const opts = { conductor: false, pluginTabs: null };
     for (const subagents of [null, undefined, []]) {
-      expect(effectiveTab("agents", { ...opts, subagents })).toBe("summaries");
-      expect(effectiveTab("agent:x", { ...opts, subagents })).toBe("summaries");
+      expect(effectiveTab("agents", { ...opts, subagents })).toBe("spec");
+      expect(effectiveTab("agent:x", { ...opts, subagents })).toBe("spec");
     }
     expect(effectiveTab("agents", { ...opts, subagents: [{ id: "y" }] })).toBe("agents");
     expect(effectiveTab("agent:x", { ...opts, subagents: [{ id: "y" }] })).toBe("agents");

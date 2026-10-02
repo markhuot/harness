@@ -101,8 +101,32 @@ extension BoardState {
         return next
     }
 
-    mutating func mergeSummaries(_ sessionId: String, _ incoming: [Summary]) {
-        summaries[sessionId] = Self.mergeById(summaries[sessionId] ?? [], incoming, order: { $0.createdAt })
+    mutating func mergeActivity(_ sessionId: String, _ incoming: [ActivityEntry]) {
+        activity[sessionId] = Self.mergeById(activity[sessionId] ?? [], incoming, order: { $0.createdAt })
+    }
+
+    /// Where a revision's body lives in `specBodies`.
+    public static func specBodyKey(_ ticketId: String, _ rev: Int) -> String { "\(ticketId)#\(rev)" }
+
+    /// A ticket's revision list with approvedBaseline set on `baseline` only (`.null`: none,
+    /// `.absent`: leave the list alone).
+    static func withBaseline(_ list: [SpecRevisionInfo], _ baseline: Patch<Int>) -> [SpecRevisionInfo] {
+        if case .absent = baseline { return list }
+        let b = baseline.optional
+        guard list.contains(where: { $0.approvedBaseline != ($0.rev == b) }) else { return list }
+        return list.map { r in
+            var r = r
+            r.approvedBaseline = r.rev == b
+            return r
+        }
+    }
+
+    /// Revisions merged by rev, oldest first.
+    static func mergeRevisions(_ prev: [SpecRevisionInfo], _ next: [SpecRevisionInfo]) -> [SpecRevisionInfo] {
+        var byRev: [Int: SpecRevisionInfo] = [:]
+        for r in prev { byRev[r.rev] = r }
+        for r in next { byRev[r.rev] = r }
+        return byRev.values.sorted { $0.rev < $1.rev }
     }
 
     /// Drop a run's streamed text (`runId` nil: every run of the session).
@@ -132,6 +156,10 @@ extension BoardState {
         case let .ticketUpserted(ticket):
             donePaging = Paging.adjustDoneTotals(self, prev: tickets[ticket.id], next: ticket)
             tickets[ticket.id] = ticket
+            if let list = specRevisions[ticket.id] {
+                let marked = Self.withBaseline(list, ticket.specBaselineRevision)
+                if marked != list { specRevisions[ticket.id] = marked }
+            }
         case let .ticketDeleted(id):
             donePaging = Paging.adjustDoneTotals(self, prev: tickets[id], next: nil)
             tickets[id] = nil
@@ -154,8 +182,15 @@ extension BoardState {
             deltas[sessionId] = forSession
         case let .subagentUpserted(subagent):
             mergeSubagents(subagent.sessionId, [subagent])
-        case let .summaryAdded(summary):
-            mergeSummaries(summary.sessionId, [summary])
+        case let .activityAdded(entry):
+            mergeActivity(entry.sessionId, [entry])
+        case let .specRevised(ticketId, rev, author, note, runId, runKind, createdAt):
+            // Only a list that was loaded grows: an unknown one is fetched whole when it's shown.
+            guard let list = specRevisions[ticketId] else { break }
+            let info = SpecRevisionInfo(
+                rev: rev, author: author, runId: runId.optional, runKind: runKind.optional, note: note, approvedBaseline: false,
+                createdAt: createdAt ?? 0)
+            specRevisions[ticketId] = Self.mergeRevisions(list, [info])
         case let .watcherUpserted(watcher):
             watchers[watcher.id] = watcher
         case let .watcherDeleted(id):
@@ -178,7 +213,7 @@ extension BoardState {
         case let .connected(value):
             connected = value
         case let .snapshot(s):
-            // A snapshot is authoritative for entity lists; transcripts/summaries are kept (they
+            // A snapshot is authoritative for entity lists; transcripts/activity are kept (they
             // are merged by id, and views refetch them on reconnect). Paging restarts from its
             // first page; an active search is re-armed (ids → null) for the client to re-run.
             let all = s.donePage.map { s.tickets + $0.page.tickets } ?? s.tickets
@@ -217,7 +252,7 @@ extension BoardState {
             sessions[d.session.id] = d.session
             // Older services don't send sub-agents: leave the session's list unknown then.
             if let subs = d.subagents { mergeSubagents(d.session.id, subs) }
-            mergeSummaries(d.session.id, d.summaries)
+            mergeActivity(d.session.id, d.activity)
         case let .transcript(sessionId, subagentId, entries):
             mergeTranscript(Self.transcriptKey(sessionId, subagentId.optional), entries, loaded: true)
         case let .subagents(sessionId, list):
@@ -226,8 +261,14 @@ extension BoardState {
             let key = Self.transcriptKey(sessionId, subagentId)
             let next = Self.mergeTaskOutput(taskOutputs[key], output)
             if next != taskOutputs[key] { taskOutputs[key] = next }
-        case let .summaries(sessionId, list):
-            mergeSummaries(sessionId, list)
+        case let .activity(sessionId, list):
+            mergeActivity(sessionId, list)
+        case let .specRevisions(ticketId, revisions):
+            let baseline = tickets[ticketId]?.specBaselineRevision ?? .absent
+            specRevisions[ticketId] = Self.withBaseline(Self.mergeRevisions(specRevisions[ticketId] ?? [], revisions), baseline)
+        case let .specRevision(ticketId, r):
+            specBodies[Self.specBodyKey(ticketId, r.rev)] = r.body
+            if let prev = specRevisions[ticketId] { specRevisions[ticketId] = Self.mergeRevisions(prev, [r.info]) }
         case let .drivers(list):
             drivers = list
         case let .tickets(list):

@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { MIGRATIONS, migrate, openDb, SCHEMA_VERSION } from "../db";
-import type { ExternalRef, SummaryAttachment } from "@harness/shared";
+import type { Attachment, ExternalRef } from "@harness/shared";
 import { Store } from "./index";
 import { insideGitCheckout } from "./projects";
 import { tempDir } from "@harness/shared/testing";
@@ -17,7 +17,7 @@ function ticketFor(store: Store, projectId: string, key: string, deps: string[] 
     projectId,
     kind: "task",
     title: key,
-    description: "",
+    spec: "",
     status: "planning",
     sessionId: session.id,
     driver: "dummy",
@@ -395,7 +395,7 @@ describe("tickets", () => {
     const p = s.projects.create({ path: "/a/foo", name: "foo" });
     const make = (key: string, useWorktree: boolean | null | undefined) => {
       const session = s.sessions.create({ key, kind: "ticket", ticketId: null, driver: "dummy", cwd: "/tmp", title: key });
-      const base = { projectId: p.id, kind: "task", title: key, description: "", status: "planning", sessionId: session.id, driver: "dummy", parentId: null, autoStart: false, externalRef: null, workdir: null } as const;
+      const base = { projectId: p.id, kind: "task", title: key, spec: "", status: "planning", sessionId: session.id, driver: "dummy", parentId: null, autoStart: false, externalRef: null, workdir: null } as const;
       return s.tickets.create({ ...base, dependsOn: [], key, useWorktree }).id;
     };
     const ids = [make("FOO-1", undefined), make("FOO-2", null), make("FOO-3", false), make("FOO-4", true)];
@@ -486,56 +486,110 @@ describe("misc", () => {
   });
 });
 
-describe("summary attachments", () => {
-  const shot = (id: string, patch: Partial<SummaryAttachment> = {}): SummaryAttachment => ({ id, kind: "image", mimeType: "image/png", name: `${id}.png`, size: 10, width: 4, height: 3, ...patch });
+describe("activity and ticket attachments", () => {
+  const shot = (id: string, patch: Partial<Attachment> = {}): Attachment => ({ id, kind: "image", mimeType: "image/png", name: `${id}.png`, size: 10, width: 4, height: 3, ...patch });
 
-  test("migration 14 adds the table to a database with existing summaries, which get no attachments", () => {
+  test("migration 26: the description becomes revision 1 of the spec, summaries become notes, and their attachments move to the ticket", () => {
     const db = new Database(":memory:", { strict: true });
     db.exec("PRAGMA foreign_keys = ON;");
-    for (const [v, sql] of MIGRATIONS.slice(0, 13).entries()) {
+    for (const [v, sql] of MIGRATIONS.slice(0, 25).entries()) {
       db.exec(sql);
       db.exec(`PRAGMA user_version = ${v + 1}`);
     }
-    db.exec(`INSERT INTO summaries (id, session_id, ticket_id, author, body, created_at) VALUES ('old', 's1', NULL, 'agent', 'before', 1)`);
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 3, 0, 0)`);
+    const ticket = db.query(
+      `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, created_at, updated_at)
+       VALUES ($id, $id, 'p1', 'task', $id, $description, $status, $session, 'dummy', 0, 0)`,
+    );
+    ticket.run({ id: "OLD-1", description: "the started brief", status: "in_progress", session: "s1" });
+    ticket.run({ id: "OLD-2", description: "the planned brief", status: "planning", session: "s2" });
+    db.exec(`INSERT INTO summaries (id, session_id, ticket_id, author, body, created_at) VALUES
+      ('first', 's1', 'OLD-1', 'agent', 'first pass', 1),
+      ('second', 's1', 'OLD-1', 'agent', 'reworked the throttle', 2),
+      ('triage', 'tri', NULL, 'agent', 'dispatched', 3)`);
+    const shotRow = db.query(
+      `INSERT INTO summary_attachments (id, summary_id, ord, kind, mime_type, name, size, width, height, created_at)
+       VALUES ($id, $summary, $ord, 'image', 'image/png', $name, 10, 4, 3, 0)`,
+    );
+    // ord, not the id or insertion order, is the order the agent gave them in
+    shotRow.run({ id: "a1", summary: "second", ord: 1, name: "after.png" });
+    shotRow.run({ id: "a2", summary: "second", ord: 0, name: "[before].png" });
+    shotRow.run({ id: "orphan", summary: "triage", ord: 0, name: "loose.png" });
+    db.query("INSERT INTO settings (key, value) VALUES ('prompts', $v)").run({ v: JSON.stringify({ "system.summaries": "old", "system.work": "kept" }) });
+
     migrate(db);
     const s = new Store(db);
-    expect(s.summaries.listBySession("s1")).toEqual([{ id: "old", sessionId: "s1", ticketId: null, author: "agent", body: "before", createdAt: 1, attachments: [] }]);
-    const added = s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "after", attachments: [shot("a1")] });
-    expect(added.attachments).toEqual([shot("a1")]);
+    const started = s.tickets.get("OLD-1")!;
+    const planned = s.tickets.get("OLD-2")!;
+    expect([started.spec, started.specRevision, started.specBaselineRevision]).toEqual(["the started brief", 1, 1]);
+    expect([planned.spec, planned.specRevision, planned.specBaselineRevision]).toEqual(["the planned brief", 1, null]);
+    expect(s.specs.list("OLD-1").map((r) => [r.rev, r.author, r.approvedBaseline])).toEqual([[1, "system", true]]);
+    expect(s.specs.get("OLD-2", 1)).toMatchObject({ body: "the planned brief", approvedBaseline: false });
+
+    expect(s.activity.listBySession("s1").map((e) => [e.id, e.kind, e.body])).toEqual([
+      ["first", "note", "first pass"],
+      ["second", "note", "reworked the throttle\n\n![before.png](attachment:a2)\n![after.png](attachment:a1)"],
+    ]);
+    expect(s.attachments.listByTicket("OLD-1").map((a) => a.id)).toEqual(["a2", "a1"]);
+    expect(s.attachments.get("a1")).toEqual({ id: "a1", kind: "image", mimeType: "image/png", name: "after.png", size: 10, width: 4, height: 3 });
+    // A triage session's summary has no ticket to hold its attachment: the note keeps only its text.
+    expect(s.activity.listBySession("tri").map((e) => [e.kind, e.body])).toEqual([["note", "dispatched"]]);
+    expect(s.attachments.get("orphan")).toBeNull();
+
+    // Search reads the spec and the latest note now.
+    expect(s.tickets.search({ q: "throttle" }).tickets.map((t) => t.id)).toEqual(["OLD-1"]);
+    expect(s.tickets.search({ q: "first" }).total).toBe(0);
+    expect(s.tickets.search({ q: "planned" }).tickets.map((t) => t.id)).toEqual(["OLD-2"]);
+    expect(s.settings.all().prompts).toEqual({ "system.work": "kept" });
   });
 
-  test("round-trip keeps each summary's attachments in the given order, apart from other summaries and sessions", () => {
+  test("activity entries round-trip their kind and meta per session, oldest first", () => {
     const s = mk();
+    const blocked = s.activity.add({ sessionId: "s1", ticketId: null, kind: "blocked", author: "agent", body: "Which color?", meta: { question: "Which color?" } });
+    const note = s.activity.add({ sessionId: "s1", ticketId: null, kind: "note", author: "agent", body: "done" });
+    s.activity.add({ sessionId: "s2", ticketId: null, kind: "note", author: "agent", body: "elsewhere" });
+    expect(s.activity.listBySession("s1")).toEqual([blocked, note]);
+    expect([blocked.meta, note.meta]).toEqual([{ question: "Which color?" }, {}]);
+  });
+
+  test("ticket attachments keep the order given, apart from other tickets, and video has no size", () => {
+    const s = mk();
+    const p = s.projects.create({ path: "/a/foo", name: "foo" });
+    const t = ticketFor(s, p.id, "FOO-1");
+    const other = ticketFor(s, p.id, "FOO-2");
     // ids sort the opposite way from the order given, so ordering can't come from the id
-    const first = s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "one", attachments: [shot("z"), shot("m", { kind: "video", mimeType: "video/mp4", name: "flow.mp4", width: undefined, height: undefined }), shot("a")] });
-    const plain = s.summaries.add({ sessionId: "s1", ticketId: null, author: "human", body: "two" });
-    s.summaries.add({ sessionId: "s2", ticketId: null, author: "agent", body: "elsewhere", attachments: [shot("other")] });
-    const list = s.summaries.listBySession("s1");
-    expect(list.map((x) => x.id)).toEqual([first.id, plain.id]);
-    expect(list[0]!.attachments.map((a) => a.id)).toEqual(["z", "m", "a"]);
-    expect(list[0]!.attachments[1]).toEqual({ id: "m", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 10 });
-    expect(list[1]!.attachments).toEqual([]);
-    expect(s.summaries.attachment("m")).toEqual(list[0]!.attachments[1]!);
-    expect(s.summaries.attachment("nope")).toBeNull();
-    expect(s.summaries.attachmentsBySession("s1").map((a) => a.id).sort()).toEqual(["a", "m", "z"]);
+    s.attachments.add(t.id, [shot("z"), shot("m", { kind: "video", mimeType: "video/mp4", name: "flow.mp4", width: undefined, height: undefined }), shot("a")]);
+    s.attachments.add(other.id, [shot("other")]);
+    expect(s.attachments.listByTicket(t.id).map((a) => a.id)).toEqual(["z", "m", "a"]);
+    expect(s.attachments.get("m")).toEqual({ id: "m", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 10 });
+    expect(s.attachments.get("nope")).toBeNull();
   });
 
-  test("a duplicate attachment id rolls back the whole summary", () => {
+  test("a duplicate attachment id rolls back the spec revision written with it", () => {
     const s = mk();
-    s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "one", attachments: [shot("dup")] });
-    expect(() => s.summaries.add({ sessionId: "s1", ticketId: null, author: "agent", body: "two", attachments: [shot("fresh"), shot("dup")] })).toThrow();
-    expect(s.summaries.listBySession("s1").map((x) => x.body)).toEqual(["one"]);
-    expect(s.summaries.attachment("fresh")).toBeNull();
+    const p = s.projects.create({ path: "/a/foo", name: "foo" });
+    const t = ticketFor(s, p.id, "FOO-1");
+    s.attachments.add(t.id, [shot("dup")]);
+    expect(() =>
+      s.transaction(() => {
+        s.attachments.add(t.id, [shot("fresh"), shot("dup")]);
+        s.specs.revise(t.id, { body: "with images", author: "agent", note: "shots" });
+      }),
+    ).toThrow();
+    expect(s.attachments.get("fresh")).toBeNull();
+    expect(s.specs.current(t.id)).toEqual({ rev: 1, body: "" });
   });
 
-  test("deleting the session deletes its attachment rows", () => {
+  test("deleting the ticket deletes its attachment rows", () => {
     const s = mk();
-    const session = s.sessions.create({ key: "X-1", kind: "ticket", ticketId: null, driver: "dummy", cwd: "/tmp", title: "x" });
-    s.summaries.add({ sessionId: session.id, ticketId: null, author: "agent", body: "b", attachments: [shot("gone")] });
-    s.summaries.add({ sessionId: "keep", ticketId: null, author: "agent", body: "b", attachments: [shot("kept")] });
-    s.sessions.delete(session.id);
-    expect(s.summaries.attachment("gone")).toBeNull();
-    expect(s.summaries.attachment("kept")).not.toBeNull();
+    const p = s.projects.create({ path: "/a/foo", name: "foo" });
+    const gone = ticketFor(s, p.id, "FOO-1");
+    const kept = ticketFor(s, p.id, "FOO-2");
+    s.attachments.add(gone.id, [shot("gone")]);
+    s.attachments.add(kept.id, [shot("kept")]);
+    s.tickets.delete(gone.id);
+    expect(s.attachments.get("gone")).toBeNull();
+    expect(s.attachments.get("kept")).not.toBeNull();
   });
 });
 
@@ -599,7 +653,7 @@ describe("migration 19: drafts", () => {
       projectId: "p1",
       kind: "task",
       title: "d",
-      description: "",
+      spec: "",
       status: "planning",
       sessionId: session.id,
       driver: "dummy",

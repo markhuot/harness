@@ -6,10 +6,12 @@ import Foundation
 // "Sub-agents", "Background tasks"). The desktop
 // puts these in its hash route; the phone keeps them in navigation params.
 
-/// "children" is the conductor-only Tickets tab (listed right after Summaries). "agents" (Agents &
-/// tasks) lists the session's sub-agents and background tasks; it exists only once there are any.
+/// "spec" is the ticket's living document and the tab a ticket opens on; "activity" its typed
+/// timeline. "children" is the conductor-only Tickets tab (listed right after Activity). "agents"
+/// (Agents & tasks) lists the session's sub-agents and background tasks; it exists only once there
+/// are any.
 public enum BuiltinTicketTab: String, Codable, Sendable, CaseIterable {
-    case summaries, children, transcript, agents, browser, details
+    case spec, activity, children, transcript, agents, browser, details
 }
 
 /// Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>".
@@ -38,7 +40,8 @@ public struct TicketTab: RawRepresentable, Codable, Sendable, Hashable, Expressi
     /// The built-in tab this is, if it is one.
     public var builtin: BuiltinTicketTab? { Tabs.ticketTabs.first { $0.rawValue.unicodeScalars.elementsEqual(rawValue.unicodeScalars) } }
 
-    public static let summaries = TicketTab(.summaries)
+    public static let spec = TicketTab(.spec)
+    public static let activity = TicketTab(.activity)
     public static let children = TicketTab(.children)
     public static let transcript = TicketTab(.transcript)
     public static let agents = TicketTab(.agents)
@@ -71,7 +74,8 @@ public enum Tabs {
     public static let ticketTabs: [BuiltinTicketTab] = BuiltinTicketTab.allCases
 
     public static let tabLabel: [BuiltinTicketTab: String] = [
-        .summaries: "Summaries",
+        .spec: "Spec",
+        .activity: "Activity",
         .children: "Tickets",
         .transcript: "Transcript",
         .agents: "Agents & tasks",
@@ -124,6 +128,23 @@ public enum Tabs {
         return TicketTab(t).builtin != nil || parsePluginTab(t) != nil || parseSubagentTab(t) != nil
     }
 
+    /// Tab ids older links and saved routes may still carry, and the tab each one became.
+    public static let renamedTabs: [String: BuiltinTicketTab] = ["summaries": .spec]
+
+    /// A tab id from a link or saved route, with renamed ids mapped to their new tab; nil when it isn't one.
+    public static func ticketTabFrom(_ t: String?) -> TicketTab? {
+        guard let t, !t.isEmpty else { return nil }
+        if let renamed = renamedTabs.first(where: { same($0.key, t) })?.value { return TicketTab(renamed) }
+        return isTicketTab(t) ? TicketTab(t) : nil
+    }
+
+    /// Whether a message sent from this tab also goes into Activity (MessageBody.log): only from the
+    /// Spec and Activity tabs, where the human is reading the ticket's record rather than the
+    /// agent's transcript.
+    public static func logsMessages(_ tab: TicketTab) -> Bool {
+        tab == .spec || tab == .activity
+    }
+
     /// The live dot's label on the Agents & tasks tab.
     public static let agentsLiveLabel = "A sub-agent or task is running"
 
@@ -137,19 +158,19 @@ public enum Tabs {
     }
 
     /// The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
-    /// tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to Summaries.
+    /// tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to the Spec.
     /// The Agents & tasks tab and a sub-agent's view need sub-agents: without any (or before they're known)
-    /// they fall back to Summaries, and a sub-agent that isn't among them falls back to the list.
+    /// they fall back to the Spec, and a sub-agent that isn't among them falls back to the list.
     /// The requested tab is kept by the caller, so a deep link opens once the sub-agents arrive.
     public static func effectiveTab(_ requested: TicketTab, conductor: Bool, pluginTabs: [PluginTabID]?, subagentIds: [String]? = nil) -> TicketTab {
-        if requested == .children && !conductor { return .summaries }
+        if requested == .children && !conductor { return .spec }
         if tabStripTab(requested) == .agents {
-            guard let subagentIds, showsAgentsTab(subagentIds: subagentIds) else { return .summaries }
+            guard let subagentIds, showsAgentsTab(subagentIds: subagentIds) else { return .spec }
             if let agent = parseSubagentTab(requested), !subagentIds.contains(where: { same($0, agent) }) { return .agents }
         }
         if let p = parsePluginTab(requested), let pluginTabs,
            !pluginTabs.contains(where: { same($0.pluginId, p.pluginId) && same($0.id, p.tabId) }) {
-            return .summaries
+            return .spec
         }
         return requested
     }
@@ -158,13 +179,9 @@ public enum Tabs {
         effectiveTab(requested, conductor: conductor, pluginTabs: pluginTabs?.map(PluginTabID.init), subagentIds: subagents?.map(\.id))
     }
 
-    /// The tab a ticket opens on when nothing asked for a particular one: Summaries once it has any,
-    /// otherwise the Transcript (a fresh ticket's Summaries tab is just an empty state). Nil while the
-    /// summaries aren't loaded yet (`summaryCount` nil), so the caller waits instead of guessing.
-    public static func openingTab(summaryCount: Int?) -> TicketTab? {
-        guard let summaryCount else { return nil }
-        return summaryCount > 0 ? .summaries : .transcript
-    }
+    /// The tab a ticket opens on when nothing asked for a particular one: the Spec, which every
+    /// ticket has from the start.
+    public static func openingTab() -> TicketTab { .spec }
 
     /// The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents &
     /// tasks only once there are sub-agents or tasks), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.

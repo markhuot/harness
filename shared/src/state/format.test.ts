@@ -8,8 +8,40 @@ test("fenced code keeps list- and heading-looking lines verbatim", () => {
   expect(blocks).toEqual([
     { t: "p", text: "Intro" },
     { t: "code", lang: "ts", text: "- not a list\n# not a heading" },
-    { t: "ul", items: ["real item"] },
+    { t: "ul", items: [{ text: "real item", children: [] }] },
   ]);
+});
+
+test("indented items nest under the item above, and a dedent returns to the parent list", () => {
+  const item = (text: string, ...children: ReturnType<typeof parseBlocks>) => ({ text, children });
+  expect(parseBlocks("2. a\n   - b\n\t\t1. c\n   - d\n3. e")).toEqual([
+    {
+      t: "ol",
+      start: 2,
+      items: [item("a", { t: "ul", items: [item("b", { t: "ol", start: 1, items: [item("c")] }), item("d")] }), item("e")],
+    },
+  ]);
+});
+
+test("a nested list ends at an unindented line, which becomes a paragraph", () => {
+  expect(parseBlocks("- a\n  - b\nafter").map((b) => b.t)).toEqual(["ul", "p"]);
+});
+
+test("images: attachments become media, remote and file sources only ever become links", () => {
+  expect(parseBlocks("![shot](attachment:abc)")).toEqual([{ t: "img", alt: "shot", id: "abc", video: false }]);
+  expect(parseBlocks("![demo.webm](attachment:x)")).toEqual([{ t: "img", alt: "demo.webm", id: "x", video: true }]);
+  expect(parseBlocks("![p](https://t.example/p.gif)").map((b) => b.t)).toEqual(["p"]);
+  expect(inlineTokens("![p](https://t.example/p.gif)")).toEqual([{ t: "link", text: "p", url: "https://t.example/p.gif" }]);
+  expect(inlineTokens("![a](harness://file/a.png)")).toEqual([{ t: "link", text: "a", url: "harness://file/a.png" }]);
+  expect(inlineTokens("x ![s](attachment:s) y")).toEqual([
+    { t: "text", text: "x " },
+    { t: "img", alt: "s", id: "s", video: false },
+    { t: "text", text: " y" },
+  ]);
+  expect(inlineTokens("![x](javascript:alert(1))")[0]).toEqual({ t: "text", text: "x" });
+  // `/attachments/..` would resolve to the service root, with the token attached.
+  expect(inlineTokens("![x](attachment:..)")).toEqual([{ t: "text", text: "x" }]);
+  expect(inlineTokens("![x](attachment:.x)")).toEqual([{ t: "text", text: "x" }]);
 });
 
 test("switching between bullets and numbers starts a new list; blank lines split paragraphs", () => {
@@ -195,11 +227,11 @@ test("tabs: plugin tab ids; the Tickets tab only on conductors; plugin tabs that
   expect(parsePluginTab("details")).toBeNull();
   expect(parsePluginTab("plugin:Git:changes")).toBeNull();
   const tabs = [{ pluginId: "git", id: "changes" }];
-  expect(effectiveTab("children", { conductor: false, pluginTabs: tabs })).toBe("summaries");
+  expect(effectiveTab("children", { conductor: false, pluginTabs: tabs })).toBe("spec");
   expect(effectiveTab("children", { conductor: true, pluginTabs: tabs })).toBe("children");
   expect(effectiveTab("plugin:git:changes", { conductor: false, pluginTabs: tabs })).toBe("plugin:git:changes");
-  expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: tabs })).toBe("summaries");
-  // Tabs still loading: keep the plugin tab so the UI can show a spinner rather than flash Summaries.
+  expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: tabs })).toBe("spec");
+  // Tabs still loading: keep the plugin tab so the UI can show a spinner rather than flash the Spec.
   expect(effectiveTab("plugin:git:log", { conductor: false, pluginTabs: null })).toBe("plugin:git:log");
 });
 

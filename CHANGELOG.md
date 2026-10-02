@@ -17,12 +17,56 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The Browser tab on the Mac, iPhone and iPad has a new-tab button, and once more than one tab is
   open, a row of tabs above the page. Tap or click a tab to watch it, or close it with its ×.
   Each app keeps its own place, so you can watch one tab while the agent works in another.
+- Images and videos attached to a ticket can appear inside its text, fitted to the width. Click or
+  tap one to open it full size, then step through every image in that text. Images from other
+  websites aren't loaded. They show as a link instead.
+- Every change to a ticket's spec is kept as a revision, with who made it and a short note on
+  what changed. The revision that's current when you press Start is marked as the one you
+  approved.
+- Agents can show screenshots and recordings right in the spec. The images are kept with the
+  ticket until you delete it.
+- On the Mac, iPhone and iPad, the Spec tab has a history bar above the spec, reading "Rev 7 of 7 ·
+  Agent · 3m ago" with the note for that revision. Step back and forward with the arrows or drag
+  the slider to see any earlier revision. The revision you approved by pressing Start is tagged
+  **Approved plan**. The bar follows new revisions as they arrive, unless you've stepped back to an
+  older one (on iPhone and iPad, **Latest** takes you back to the newest).
+- **Show changes** on the Spec tab shows what the revision on screen changed from the one before
+  it, in the same diff view as code changes.
+- A new Activity tab on the Mac, iPhone and iPad lists the ticket's notes, submits, review rounds
+  (with the round and the commit that was reviewed), approvals and failures. A question from the
+  agent stands out as a card, and your messages and the agent's answers read as a conversation.
 
 ### Changed
 
+- A ticket's description is now its **spec**: one living document with the goal, the plan, the
+  current status (what's done, how it was checked, screenshots) and open questions. Agents keep it
+  up to date as they work, changing only the parts that changed, instead of posting a new summary
+  each round. They have to bring it up to date before they submit for review.
+- **Summaries are now Activity**: a short timeline of typed entries, such as notes, submits,
+  questions, review decisions, approvals, re-opens and failures. Agent notes are kept to a few
+  lines about what changed since the last one, so a second review round no longer repeats the
+  first.
+- Agent reviews know which round they are. A re-review sees the earlier rounds' notes and the
+  commit they looked at, checks what changed since then, and keeps its notes to that round. The
+  reviewer also sees how the spec changed since you approved it, and asks for changes if the goal
+  moved without you asking.
+- A message to a ticket's agent goes into Activity, with the agent's answer, only when you send
+  it from the Spec or Activity tab. From any other tab it goes to the agent and the transcript
+  only. The Mac says which under the message box ("Shows in Activity" or "Transcript only"), and
+  iPhone and iPad say it at the start of the message box's placeholder ("In Activity" or
+  "Transcript only").
+- On the Mac, iPhone and iPad, the Summaries tab is replaced by **Spec** and **Activity**, and
+  tickets open on the Spec. Links and saved panes that pointed at Summaries open the Spec. "Brief"
+  and "Plan" labels, including the text box in the new session editor, now say Spec.
+- Editing the spec in a ticket's Details tab no longer overwrites an agent's newer revision, on the
+  Mac, iPhone or iPad. If the spec changed while you were editing, you're asked whether to
+  **Reload** it (your text is dropped) or **Overwrite** it with yours.
+- Saved changes to the Summaries prompt in Settings → Prompts are dropped, since the new Spec and
+  Activity prompt replaces it. If another saved prompt still mentions `update_plan` or
+  `post_summary`, the service log says so at startup.
 - When a new ticket's text asks for ticket settings, such as dependencies, a branch or skipping
   a review (`/depends: HARNESS-12`, `/branch: main`, `/skip-human-review`, or in plain words), the
-  planning agent now applies them to the ticket itself. They're already set when you read the plan
+  planning agent now applies them to the ticket itself. They're already set when you read the spec
   and press Start.
 - Agents can now turn off both of a ticket's reviews when you ask them to. The ticket then lands as
   soon as it's submitted. Before, an agent could turn off only one of them.
@@ -32,12 +76,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   ticket shrinks to its title.) It lists how many children are
   done, in progress, blocked or in review, and how many are waiting on you. Click or tap it to
   open the Tickets tab and see each child.
-
-- An agent review now opens with a short message naming the ticket, and the reviewer reads the
-  brief and summaries itself with `get_ticket`. Its transcript no longer starts with a copy of
-  every summary, which grew with each round of review. The Agent review prompt in Settings has a
-  new `{{key}}` variable and no longer offers `{{brief}}` or `{{summaries}}`. A customized version
-  that uses them is flagged as invalid, and reviews use the built-in prompt until you update it.
 - Project settings now have **Skip agent review** and **Skip human review** switches (on Mac and
   iPhone/iPad), in place of **Require human review**. They set where a new ticket's two review
   switches start, so one project can skip your review by default while another skips the agent's,
@@ -62,12 +100,19 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for
   a capital letter or a symbol like `+`), ⌘, ⌥, Escape or a function key used to set off a loop that
   kept Chrome busy until it was quit.
+- Nested lists in ticket text now show their nesting. Indented items sit under the item above them
+  on the Mac, iPhone and iPad, with bullets that change by level (• ◦ ▪), and a numbered list keeps
+  the number it starts at.
 
 ### Removed
 
 - Cards linked to a remote ID no longer carry a badge naming where the link came from ("manual",
   "jira" or a watcher's name). The remote ID still shows in place of the ticket's key. The ticket's
   details and settings no longer mention the source either.
+- Agents no longer attach screenshots to individual summaries. They put them in the spec instead,
+  and screenshots from older summaries show in those entries in Activity.
+- The row of attachment thumbnails under each summary is gone on the Mac, iPhone and iPad. Images
+  show inline in the spec and in Activity, and still open full screen when you click or tap them.
 
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 

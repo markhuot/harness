@@ -41,7 +41,7 @@ struct BoardLoaderTests {
     nonisolated(unsafe) static var seq = 0
     static func tk(_ id: String, status: TicketStatus = .done, projectId: String = "p1", title: String? = nil, completedAt: Patch<Timestamp>? = nil) -> Ticket {
         seq += 1
-        return Ticket(id: id, key: "T-\(id)", projectId: projectId, title: title ?? id, description: "", status: status, sessionId: "s-\(id)", driver: "dummy",
+        return Ticket(id: id, key: "T-\(id)", projectId: projectId, title: title ?? id, spec: "", status: status, sessionId: "s-\(id)", driver: "dummy",
                       completedAt: completedAt ?? .value(Double(1000 - seq)), createdAt: Double(seq), updatedAt: Double(seq))
     }
 

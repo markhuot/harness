@@ -31,7 +31,7 @@ struct IntegrationTests {
         #expect(project.key == "SWIFT")
         #expect(try await client.listProjects().map(\.id) == [project.id])
 
-        let first = try await client.createTicket(CreateTicketBody(projectId: project.id, prompt: "First ticket", title: "First", driver: "dummy", start: false))
+        let first = try await client.createTicket(CreateTicketBody(projectId: project.id, spec: "First ticket", title: "First", driver: "dummy", start: false))
         #expect(first.key == "SWIFT-1")
         #expect(try await client.getTicket(first.key).ticket.title == "First")
 
@@ -46,7 +46,7 @@ struct IntegrationTests {
         let events = Recorder(socket.events)
         await eventually("socket open", timeout: .seconds(10)) { status.items.contains(true) }
 
-        let second = try await client.createTicket(CreateTicketBody(projectId: project.id, prompt: "Second ticket", title: "Second", driver: "dummy", start: false))
+        let second = try await client.createTicket(CreateTicketBody(projectId: project.id, spec: "Second ticket", title: "Second", driver: "dummy", start: false))
         let secondKey = second.key
         await eventually("ticket.upserted for \(secondKey)", timeout: .seconds(5)) {
             events.items.contains { if case let .ticketUpserted(t) = $0 { t.key == secondKey } else { false } }

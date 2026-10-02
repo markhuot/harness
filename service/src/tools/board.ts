@@ -14,7 +14,7 @@ const relatedView = (r: BoardRelatedTicket) => ({ key: r.key, title: r.title, st
 export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string; status?: TicketStatus[]; limit?: number }>({
   name: "list_tickets",
   description:
-    "List tickets with their status and review state (no descriptions; use get_ticket for one ticket's detail). scope \"children\" lists this conductor's child tickets, \"project\" one project's tickets, \"all\" every project's. The default is \"children\" for conductor runs, otherwise \"project\" (the current ticket's project, or project_key), or \"all\" when the run has no ticket. Filter with status, e.g. [\"blocked\", \"review\"]. Results are in board order (done newest first) and capped by limit.",
+    "List tickets with their status and review state (no specs; use get_ticket for one ticket's detail). scope \"children\" lists this conductor's child tickets, \"project\" one project's tickets, \"all\" every project's. The default is \"children\" for conductor runs, otherwise \"project\" (the current ticket's project, or project_key), or \"all\" when the run has no ticket. Filter with status, e.g. [\"blocked\", \"review\"]. Results are in board order (done newest first) and capped by limit.",
   inputSchema: schema({
     scope: { type: "string", enum: ["children", "project", "all"], description: "Which tickets to list." },
     project_key: { type: "string", minLength: 1, description: "Project key prefix (see list_projects). Defaults to the current ticket's project." },
@@ -42,7 +42,7 @@ export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string
 export const getTicket = defineTool<{ key: string; include_transcript?: number }>({
   name: "get_ticket",
   description:
-    "Get one ticket's full detail from any project: description, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), and the summaries its agent and humans have posted (with each attachment's name, kind and stored file path, which you can open with a file tool). Old keys from before a project rename work too. Only local keys find a ticket: a remote ID (the external item's key a ticket is linked to, shown as externalKey) doesn't. relatedTickets lists the other tickets linked to the same remote ID, or to the key you asked for. When no local ticket has the key but tickets carry it as their remote ID, the result is { ticket: null, requested, relatedTickets }: call get_ticket again with one of those local keys. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
+    "Get one ticket's full detail from any project: its spec (the living document with the goal, plan, status and open questions) with its revision and the approved baseline revision, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), its Activity (notes, submits, blocks, review decisions with their round and reviewed commit, and messages, oldest first), and its attachments (the images and videos its spec shows as attachment:<id>, with each one's stored file path, which you can open with a file tool). Old keys from before a project rename work too. Only local keys find a ticket: a remote ID (the external item's key a ticket is linked to, shown as externalKey) doesn't. relatedTickets lists the other tickets linked to the same remote ID, or to the key you asked for. When no local ticket has the key but tickets carry it as their remote ID, the result is { ticket: null, requested, relatedTickets }: call get_ticket again with one of those local keys. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
@@ -64,7 +64,9 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
       ...boardView(t),
       ...(d.resolvedFrom ? { resolvedFrom: d.resolvedFrom } : {}),
       relatedTickets: d.relatedTickets.map(relatedView),
-      description: t.description,
+      spec: t.spec,
+      specRevision: d.specRevision,
+      specBaselineRevision: d.specBaselineRevision,
       parent: d.parent,
       children: d.children,
       driver: t.driver,
@@ -72,7 +74,8 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
       // baseBranch is the ticket's own override (null inherits); this is what it merges into.
       effectiveBaseBranch: d.base.branch,
       baseBranchSource: d.base.source,
-      summaries: d.summaries,
+      activity: d.activity,
+      attachments: d.attachments,
       ...(d.transcript ? { transcript: d.transcript } : {}),
     });
   },
@@ -81,7 +84,7 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
 export const searchTickets = defineTool<{ query: string; project_key?: string; limit?: number; cursor?: string }>({
   name: "search_tickets",
   description:
-    "Full-text search over every ticket in every status: key (exact or prefix, including old keys), remote ID (the external item's key a ticket is linked to), title, description and latest summary. Every word must match, as a prefix. Best matches come first (exact key, key prefix, exact remote ID, remote ID prefix, title hits, then the rest; newest first within each). Returns key, externalKey (its remote ID, when it has one), title, status, project and a snippet per hit; when there are more, pass the returned nextCursor back as cursor.",
+    "Full-text search over every ticket in every status: key (exact or prefix, including old keys), remote ID (the external item's key a ticket is linked to), title, spec and latest Activity note. Every word must match, as a prefix. Best matches come first (exact key, key prefix, exact remote ID, remote ID prefix, title hits, then the rest; newest first within each). Returns key, externalKey (its remote ID, when it has one), title, status, project and a snippet per hit; when there are more, pass the returned nextCursor back as cursor.",
   inputSchema: schema(
     {
       query: { type: "string", minLength: 1, description: "Words or a ticket key to search for." },

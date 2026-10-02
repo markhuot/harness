@@ -15,7 +15,7 @@ struct SettingsRulesTests {
     }
 
     static func ticket(_ id: String, _ status: TicketStatus, project: String = "p1") -> Ticket {
-        Ticket(id: id, key: "K-\(id)", projectId: project, title: "T", description: "", status: status, sessionId: "s\(id)", driver: "dummy",
+        Ticket(id: id, key: "K-\(id)", projectId: project, title: "T", spec: "", status: status, sessionId: "s\(id)", driver: "dummy",
                position: 0, createdAt: 1, updatedAt: 1)
     }
 
