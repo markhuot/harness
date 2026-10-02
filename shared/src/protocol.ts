@@ -787,7 +787,8 @@ export type HarnessEvent =
   | { kind: "watcher.upserted"; watcher: Watcher }
   | { kind: "watcher.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
-  | { kind: "browser.frame"; sessionId: string; data: string; width: number; height: number }
+  /** `tabId`: the tab the frame is from (services before browser tabs omit it) */
+  | { kind: "browser.frame"; sessionId: string; tabId?: number; data: string; width: number; height: number }
   | { kind: "browser.state"; sessionId: string; state: BrowserState }
   /** The service's code on disk changed since it started (or changed back) */
   | { kind: "service.status"; status: ServiceStatus };
@@ -811,8 +812,23 @@ export interface Health extends Partial<ServiceStatus> {
 
 export type PublicSettings = Omit<Settings, "anthropicApiKey"> & { anthropicApiKeySet: boolean };
 
+/**
+ * A session's browser as one viewer (or tool call) sees it: the tab it is on (`tabId`, with that
+ * tab's url, title and loading) and every open tab. Services from before browser tabs omit
+ * `tabId` and `tabs`.
+ */
 export interface BrowserState {
   sessionId: string;
+  tabId?: number;
+  url: string;
+  title: string;
+  loading: boolean;
+  tabs?: BrowserTab[];
+}
+
+/** One tab of a session's browser. Ids count up from 1 per session and are never reused. */
+export interface BrowserTab {
+  id: number;
   url: string;
   title: string;
   loading: boolean;
@@ -825,9 +841,14 @@ export interface BrowserState {
 /** Client → service */
 export type ClientMessage =
   | { type: "hello"; client: string }
-  | { type: "browser.subscribe"; sessionId: string }
+  /**
+   * Watch a session's browser. `tabId` picks the tab (omitted, or a tab that has closed: the
+   * lowest open one); subscribing again with another `tabId` switches this socket to that tab.
+   */
+  | { type: "browser.subscribe"; sessionId: string; tabId?: number }
   | { type: "browser.unsubscribe"; sessionId: string }
-  | { type: "browser.input"; sessionId: string; input: BrowserInput }
+  /** `tabId`: the tab the input is for (omitted: the tab this socket watches). */
+  | { type: "browser.input"; sessionId: string; tabId?: number; input: BrowserInput }
   | { type: "ping" };
 
 export type BrowserInput =
@@ -838,7 +859,12 @@ export type BrowserInput =
   | { type: "back" }
   | { type: "forward" }
   | { type: "reload" }
-  | { type: "resize"; width: number; height: number };
+  /** The size of every tab in the session */
+  | { type: "resize"; width: number; height: number }
+  /** Open a tab (at `url`, else about:blank) and switch this socket to it */
+  | { type: "newTab"; url?: string }
+  /** Close the input's tab; closing the last one leaves a blank tab in its place */
+  | { type: "closeTab" };
 
 /** Service → client */
 export type ServerMessage =
