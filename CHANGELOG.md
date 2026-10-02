@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Tickets have a **Skip human review** switch next to Skip agent review, in New session's Options
+  and on a ticket's Details tab (Mac, iPhone and iPad). With it on, the ticket lands as soon as the
+  agent review approves it. With both switches on, it lands as soon as the agent submits it. You
+  can still send a ticket back while it's in Review. Agents can turn it on when you ask them to
+  (for example "merge it once the review passes"), but they can never skip both reviews.
+
 ### Changed
 
 - On iPhone, Search sits on its own in the tab bar. One tap turns it into the search field right

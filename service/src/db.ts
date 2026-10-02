@@ -456,7 +456,7 @@ export const MIGRATIONS: string[] = [
   `,
   // 22: tickets.skip_human_review: submitting counts the human review as approved, so the ticket
   //     lands as soon as its agent review passes, or right away when that's skipped too (DESIGN.md
-  //     "Skipping a review").
+  //     "Skipping the human review").
   `
   ALTER TABLE tickets ADD COLUMN skip_human_review INTEGER NOT NULL DEFAULT 0;
   `,
