@@ -200,7 +200,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
   const openTicketKey = (key: string) => {
     const scope = route.view === "board" ? paneScopeOf(route) : null;
     if (scope) focusPaneBy(scope, (s) => openTicket(s, key));
-    else navigate({ view: "board", projectId: null, ticketKey: key, tab: "summaries" });
+    else navigate({ view: "board", projectId: null, ticketKey: key, tab: "spec" });
   };
 
   const openPath = (path: string) => {
@@ -230,8 +230,8 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
       }
       const nav = (id: string, label: string, run: () => void, keywords?: string[]) => out.push({ id: `nav:${id}`, kind: "nav", label, group: "Go to", keywords, run });
       // Commands for the same places come first; these fill in what they don't cover.
-      if (!have.has("board")) nav("board", "Board: All Projects", () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "summaries" }));
-      for (const p of sortedProjects(state)) nav(`project:${p.id}`, `Board: ${p.name}`, () => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "summaries" }), [p.key]);
+      if (!have.has("board")) nav("board", "Board: All Projects", () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" }));
+      for (const p of sortedProjects(state)) nav(`project:${p.id}`, `Board: ${p.name}`, () => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "spec" }), [p.key]);
       if (!have.has("inbox")) nav("inbox", "Inbox", () => navigate({ view: "inbox", sessionId: null }));
       if (!have.has("settings")) nav("settings", "Settings", () => navigate({ view: "settings", section: null }));
       for (const [id, label] of SETTINGS_SECTIONS) nav(`settings:${id}`, `Settings: ${label}`, () => navigate({ view: "settings", section: id }));

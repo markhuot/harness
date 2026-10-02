@@ -17,7 +17,7 @@
 //   • focusedId/zoomedId name an existing leaf, or are null.
 
 import { useSyncExternalStore } from "react";
-import { ALL_SCOPE, isTicketTab, type TicketTab } from "@harness/shared/state";
+import { ALL_SCOPE, ticketTabFrom, type TicketTab } from "@harness/shared/state";
 
 /**
  * A shell in the main process (window.harness.terminal), started in `cwd` (`~` = home). `sessionId`
@@ -468,7 +468,7 @@ export function openTicket(state: PaneState, key: string, tab?: TicketTab): Pane
     const root = tab && existing.content.kind === "ticket" && existing.content.tab !== tab ? setLeafContent(state.root, existing.id, { ...existing.content, tab }) : state.root;
     return normalize({ root, focusedId: existing.id, zoomedId: zoomFor(state, existing.id) });
   }
-  const content: PaneContent = { kind: "ticket", ticketKey: key, tab: tab ?? "summaries" };
+  const content: PaneContent = { kind: "ticket", ticketKey: key, tab: tab ?? "spec" };
   const target = ticketPaneBesideBoard(state.root);
   if (target) return normalize({ root: setLeafContent(state.root, target.id, content), focusedId: target.id, zoomedId: zoomFor(state, target.id) });
   const board = boardLeaf(state.root)!;
@@ -499,7 +499,7 @@ function ticketPaneBesideBoard(root: PaneNode): PaneLeaf | null {
 export function openTicketInNewSplit(state: PaneState, key: string): PaneState {
   const target = ticketLeafByKey(state.root, key) ? null : ticketPaneBesideBoard(state.root);
   if (!target) return openTicket(state, key);
-  return dock(state, null, target.id, "right", { kind: "ticket", ticketKey: key, tab: "summaries" });
+  return dock(state, null, target.id, "right", { kind: "ticket", ticketKey: key, tab: "spec" });
 }
 
 /**
@@ -606,7 +606,7 @@ export function setFileView(state: PaneState, leafId: string, view: { tab?: File
  * place (same leaf id, same size, same focus). If that ticket is already open in another pane,
  * the New session pane closes and the focus goes there instead.
  */
-export function composeToTicket(state: PaneState, composeId: string, ticketKey: string, tab: TicketTab = "summaries"): PaneState {
+export function composeToTicket(state: PaneState, composeId: string, ticketKey: string, tab: TicketTab = "spec"): PaneState {
   const leaf = composeLeafById(state.root, composeId);
   if (!leaf) return state;
   const other = ticketLeafByKey(state.root, ticketKey);
@@ -960,14 +960,14 @@ export function dropTargetAt(layout: PaneLayout, x: number, y: number): { leafId
 
 /**
  * Drop `source` on the `zone` half of the pane `targetLeafId`. A ticket that's already open moves
- * with its pane (keeping its tab) instead of opening twice; a new one opens on Summaries. Returns
+ * with its pane (keeping its tab) instead of opening twice; a new one opens on the Spec. Returns
  * `state` itself when the drop would do nothing (a pane dropped on itself, a missing pane), which
  * is also how the drag preview knows not to show.
  */
 export function applyDrop(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone): PaneState {
   if (source.kind === "pane") return movePane(state, source.leafId, targetLeafId, zone);
   const open = ticketLeafByKey(state.root, source.ticketKey);
-  return dropContent(state, targetLeafId, zone, open?.content ?? { kind: "ticket", ticketKey: source.ticketKey, tab: "summaries" });
+  return dropContent(state, targetLeafId, zone, open?.content ?? { kind: "ticket", ticketKey: source.ticketKey, tab: "spec" });
 }
 
 /**
@@ -1114,7 +1114,8 @@ function parseContent(v: unknown): PaneContent | null {
   if (!isObject(v)) return null;
   if (v.kind === "board") return { kind: "board" };
   if (v.kind === "ticket" && typeof v.ticketKey === "string" && v.ticketKey) {
-    return { kind: "ticket", ticketKey: v.ticketKey, tab: typeof v.tab === "string" && isTicketTab(v.tab) ? v.tab : "summaries" };
+    // Saved before a tab was renamed ("summaries" is now the Spec): ticketTabFrom maps it.
+    return { kind: "ticket", ticketKey: v.ticketKey, tab: (typeof v.tab === "string" && ticketTabFrom(v.tab)) || "spec" };
   }
   if (v.kind === "terminal" && typeof v.sessionId === "string" && SESSION_ID.test(v.sessionId) && typeof v.cwd === "string" && v.cwd) {
     const t: TerminalContent = { kind: "terminal", sessionId: v.sessionId, cwd: v.cwd };

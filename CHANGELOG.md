@@ -26,15 +26,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   approved.
 - Agents can show screenshots and recordings right in the spec. The images are kept with the
   ticket until you delete it.
-- On iPhone and iPad, a ticket opens on its **Spec** tab, with a history bar above the spec that
-  reads "Rev 7 of 7 · Agent · 3m ago" and the revision's note. Step back and forward with ‹ and ›
-  or drag the slider to see how the spec read at any revision, and turn on **Show changes** to see
-  what that revision changed. The revision you approved is tagged "Approved plan". While you're on
-  the newest revision, new ones show as they land, and stepping back holds your place until you
-  tap **Latest**.
-- iPhone and iPad have an **Activity** tab, a timeline of the ticket's notes, submits, review
-  decisions (with the round and the commit reviewed), approvals and failures. A question from the
-  agent is its own card, and your messages and the agent's answers read as a conversation.
+- On the Mac, iPhone and iPad, the Spec tab has a history bar above the spec, reading "Rev 7 of 7 ·
+  Agent · 3m ago" with the note for that revision. Step back and forward with the arrows or drag
+  the slider to see any earlier revision. The revision you approved by pressing Start is tagged
+  **Approved plan**. The bar follows new revisions as they arrive, unless you've stepped back to an
+  older one (on iPhone and iPad, **Latest** takes you back to the newest).
+- **Show changes** on the Spec tab shows what the revision on screen changed from the one before
+  it, in the same diff view as code changes.
+- A new Activity tab on the Mac, iPhone and iPad lists the ticket's notes, submits, review rounds
+  (with the round and the commit that was reviewed), approvals and failures. A question from the
+  agent stands out as a card, and your messages and the agent's answers read as a conversation.
 
 ### Changed
 
@@ -52,13 +53,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   moved without you asking.
 - A message to a ticket's agent goes into Activity, with the agent's answer, only when you send
   it from the Spec or Activity tab. From any other tab it goes to the agent and the transcript
-  only.
-- On iPhone and iPad, the message box says where your message will show: "In Activity" on the
-  Spec and Activity tabs, "Transcript only" everywhere else.
-- On iPhone and iPad, the Details tab edits the ticket's **Spec** (it used to say Brief, or Plan /
-  brief). If the agent changes the spec while you're editing, saving asks whether to reload the
-  new spec or overwrite it with yours, so neither edit is lost without you knowing. Old links to
-  a ticket's Summaries tab open its Spec.
+  only. The Mac says which under the message box ("Shows in Activity" or "Transcript only"), and
+  iPhone and iPad say it at the start of the message box's placeholder ("In Activity" or
+  "Transcript only").
+- On the Mac, iPhone and iPad, the Summaries tab is replaced by **Spec** and **Activity**, and
+  tickets open on the Spec. Links and saved panes that pointed at Summaries open the Spec. "Brief"
+  and "Plan" labels, including the text box in the new session editor, now say Spec.
+- Editing the spec in a ticket's Details tab no longer overwrites an agent's newer revision, on the
+  Mac, iPhone or iPad. If the spec changed while you were editing, you're asked whether to
+  **Reload** it (your text is dropped) or **Overwrite** it with yours.
 - Saved changes to the Summaries prompt in Settings → Prompts are dropped, since the new Spec and
   Activity prompt replaces it. If another saved prompt still mentions `update_plan` or
   `post_summary`, the service log says so at startup.

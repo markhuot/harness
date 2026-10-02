@@ -74,7 +74,7 @@ export async function checkChangesTab(opts: { api: Api; app: App; check: Check; 
   const { api, app, check, shot } = opts;
   const repo = await seedRepo();
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true });
-  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Add a greet helper\n/tools ${JSON.stringify([{ name: "bash", input: { command: AGENT_SCRIPT } }])}`, driver: "dummy", start: true });
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: `Add a greet helper\n/tools ${JSON.stringify([{ name: "bash", input: { command: AGENT_SCRIPT } }])}`, driver: "dummy", start: true });
   // The default permission mode asks a human before the dummy agent's bash call: approve it (for
   // the tool) the way a person would, then wait for the run to finish. `/tools` (unlike `/bash`)
   // repeats the call when the answered approval resumes the run.

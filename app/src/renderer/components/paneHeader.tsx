@@ -37,7 +37,7 @@ export function popOutToWindow(scope: string, paneId: string): boolean {
 export function popBackIn({ id, fromScope }: PopoutInfo, projects: Readonly<Record<string, Project>>) {
   const to = fromScope === ALL_SCOPE || projects[fromScope] ? fromScope : ALL_SCOPE;
   popInPane(id, to);
-  void window.harness?.popout.showMain(formatRoute({ view: "board", projectId: scopeProject(to) ?? null, ticketKey: null, tab: "summaries" }));
+  void window.harness?.popout.showMain(formatRoute({ view: "board", projectId: scopeProject(to) ?? null, ticketKey: null, tab: "spec" }));
 }
 
 const keyHint = (id: string) => {

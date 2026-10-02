@@ -44,7 +44,7 @@ export function useOpenTicket(): (key: string, tab?: TicketTab) => void {
   const navigate = store?.navigate;
   const projectId = store?.route.view === "board" ? store.route.projectId : null;
   return useCallback(
-    (key: string, tab: TicketTab = "summaries") => {
+    (key: string, tab: TicketTab = "spec") => {
       if (paneId) updatePanes(scope, (s) => replaceContent(s, paneId, { kind: "ticket", ticketKey: key, tab }));
       else navigate?.({ view: "board", projectId, ticketKey: key, tab });
     },

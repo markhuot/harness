@@ -77,7 +77,7 @@ import {
 
 // Builders: leaf ids are the ticket key (or "B" for the board) so shapes and focus read naturally.
 const B: PaneLeaf = { type: "leaf", id: "B", content: { kind: "board" } };
-const T = (key: string, tab: "summaries" | "transcript" = "summaries"): PaneLeaf => ({ type: "leaf", id: key, content: { kind: "ticket", ticketKey: key, tab } });
+const T = (key: string, tab: "spec" | "transcript" = "spec"): PaneLeaf => ({ type: "leaf", id: key, content: { kind: "ticket", ticketKey: key, tab } });
 const split = (dir: "row" | "column", id: string, children: PaneNode[], sizes?: number[]): PaneSplit => ({
   type: "split",
   id,
@@ -89,7 +89,7 @@ const row = (id: string, children: PaneNode[], sizes?: number[]) => split("row",
 const col = (id: string, children: PaneNode[], sizes?: number[]) => split("column", id, children, sizes);
 const st = (root: PaneNode, focusedId: string | null = null, zoomedId: string | null = null): PaneState => ({ root, focusedId, zoomedId });
 
-const ticketContent = (key: string, tab: "summaries" | "transcript" = "summaries"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
+const ticketContent = (key: string, tab: "spec" | "transcript" = "spec"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
 const label = (l: PaneLeaf) =>
   l.content.kind === "board"
     ? "board"
@@ -196,7 +196,7 @@ describe("openTicket (the click-a-card rule)", () => {
     const s = valid(openTicket(defaultPanes(), "A-1"));
     expect(shape(s.root)).toBe("row[board 0.6, A-1 0.4]");
     expect(focusedLabel(s)).toBe("A-1");
-    expect((ticketLeafByKey(s.root, "A-1")!.content as { tab: string }).tab).toBe("summaries");
+    expect((ticketLeafByKey(s.root, "A-1")!.content as { tab: string }).tab).toBe("spec");
   });
 
   test("replaces the ticket pane on the board's right, keeping the pane and its size", () => {
@@ -436,7 +436,7 @@ describe("setTab / replaceContent / focusPane / toggleZoom", () => {
     const s = start();
     expect(setTab(s, "B", "transcript")).toBe(s);
     expect(setTab(s, "nope", "transcript")).toBe(s);
-    expect(setTab(s, "A-1", "summaries")).toBe(s);
+    expect(setTab(s, "A-1", "spec")).toBe(s);
   });
 
   test("replaceContent navigates a pane in place and focuses it", () => {
@@ -670,9 +670,33 @@ describe("parsePanes / serializePanes", () => {
     });
     const s = valid(parsePanes(raw));
     expect(shape(s.root)).toBe(`row[board ${r(0.5 / 0.6)}, A-1 ${r(0.1 / 0.6)}]`);
-    expect(findLeaf(s.root, "A")!.content).toEqual(ticketContent("A-1")); // bad tab → summaries
+    expect(findLeaf(s.root, "A")!.content).toEqual(ticketContent("A-1")); // bad tab → spec
     expect(s.focusedId).toBeNull();
     expect(s.zoomedId).toBeNull();
+  });
+
+  test("a pane saved on the old Summaries tab opens on the Spec; other tabs are kept", () => {
+    const raw = JSON.stringify({
+      root: {
+        type: "split",
+        id: "r",
+        dir: "row",
+        sizes: [0.4, 0.3, 0.3],
+        children: [
+          B,
+          { type: "leaf", id: "A", content: { kind: "ticket", ticketKey: "A-1", tab: "summaries" } },
+          { type: "leaf", id: "C", content: { kind: "ticket", ticketKey: "A-2", tab: "activity" } },
+        ],
+      },
+      focusedId: "A",
+      zoomedId: null,
+    });
+    const s = valid(parsePanes(raw));
+    expect(findLeaf(s.root, "A")!.content).toEqual({ kind: "ticket", ticketKey: "A-1", tab: "spec" });
+    expect(findLeaf(s.root, "C")!.content).toEqual({ kind: "ticket", ticketKey: "A-2", tab: "activity" });
+    expect(s.focusedId).toBe("A");
+    // Saved again, it no longer says "summaries".
+    expect(serializePanes(s)).not.toContain("summaries");
   });
 
   test("repairs trees that break invariants: two boards, duplicate keys, bad sizes, nesting", () => {
@@ -1414,7 +1438,7 @@ describe("New session panes (compose)", () => {
     const start = valid(normalize(st(row("r", [B, T("A-1"), C("x")], [0.5, 0.2, 0.3]), "c-x")));
     const s = valid(composeToTicket(start, "x", "A-7"));
     const leaf = findLeaf(s.root, "c-x")!;
-    expect(leaf.content).toEqual({ kind: "ticket", ticketKey: "A-7", tab: "summaries" });
+    expect(leaf.content).toEqual({ kind: "ticket", ticketKey: "A-7", tab: "spec" });
     expect(shape(s.root)).toBe("row[board 0.5, A-1 0.2, A-7 0.3]");
     expect(s.focusedId).toBe("c-x");
     expect(composeToTicket(start, "nope", "A-7")).toBe(start);

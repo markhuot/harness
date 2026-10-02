@@ -32,7 +32,7 @@ import {
 import { formatRoute, parseRoute } from "./route";
 
 const B: PaneLeaf = { type: "leaf", id: "B", content: { kind: "board" } };
-const T = (key: string): PaneLeaf => ({ type: "leaf", id: key, content: { kind: "ticket", ticketKey: key, tab: "summaries" } });
+const T = (key: string): PaneLeaf => ({ type: "leaf", id: key, content: { kind: "ticket", ticketKey: key, tab: "spec" } });
 const Term = (id: string, sessionId = `t:${id}`): PaneLeaf => ({ type: "leaf", id, content: { kind: "terminal", sessionId, cwd: "~" } });
 const C = (id: string): PaneLeaf => ({ type: "leaf", id, content: { kind: "compose", id } });
 const row = (id: string, children: PaneNode[]): PaneNode => ({ type: "split", id, dir: "row", children, sizes: children.map(() => 1 / children.length) });
@@ -85,7 +85,7 @@ describe("popIn", () => {
   });
 
   test("a ticket the board already has open is focused there, not opened twice", () => {
-    const reopened: PaneStore = { scopes: { ...out.scopes, a: replaceContent(out.scopes.a!, "A-2", { kind: "ticket", ticketKey: "A-1", tab: "summaries" }) } };
+    const reopened: PaneStore = { scopes: { ...out.scopes, a: replaceContent(out.scopes.a!, "A-2", { kind: "ticket", ticketKey: "A-1", tab: "spec" }) } };
     const next = popIn(reopened, "w1", "a");
     expect(labels(next.scopes.a)).toEqual(["board", "A-1"]);
     expect(next.scopes[popoutScope("w1")]).toBeUndefined();
@@ -162,7 +162,7 @@ describe("pop-outs in the pane store (localStorage)", () => {
 
   test("navigating inside a pop-out keeps it one pane, with no board", () => {
     popOutPane("a", "A-1", "w1");
-    updatePanes(popoutScope("w1"), (s) => replaceContent(s, "A-1", { kind: "ticket", ticketKey: "A-7", tab: "summaries" }));
+    updatePanes(popoutScope("w1"), (s) => replaceContent(s, "A-1", { kind: "ticket", ticketKey: "A-7", tab: "spec" }));
     expect(labels(getPopoutPanes("w1"))).toEqual(["A-7"]);
   });
 

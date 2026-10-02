@@ -35,7 +35,7 @@ const alive = (pid: number) => {
 };
 
 const project = (await api<{ id: string; key: string }[]>("GET", "/projects"))[0]!;
-const ticket = await api<{ key: string }>("POST", "/tickets", { projectId: project.id, prompt: "Pop this ticket out into its own window", start: false });
+const ticket = await api<{ key: string }>("POST", "/tickets", { projectId: project.id, spec: "Pop this ticket out into its own window", start: false });
 const app = await launchApp({ baseUrl: base, token });
 const { js, cdp, go, screenshot, frame, targets } = app;
 

@@ -1,4 +1,4 @@
-// Markdown-ish rendering for agent summaries and transcript text: paragraphs, headings,
+// Markdown-ish rendering for specs, Activity and transcript text: paragraphs, headings,
 // nested bullet/numbered lists, fenced code (syntax highlighted, Code.tsx), tables, attachment images
 // and videos, inline code, bold/italic, links, ticket keys. Parsing is shared with the
 // iOS app (@harness/shared/state "markdown"); this builds React DOM nodes directly (no innerHTML),
@@ -13,7 +13,7 @@
 // links, so nothing here loads a URL an agent wrote.
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { parseFileLink, type AttachmentKind, type SummaryAttachment } from "@harness/shared";
+import { parseFileLink, type AttachmentKind, type Attachment } from "@harness/shared";
 import { inlineTokens, mediaIn, parseBlocks, ticketByKey, ticketLinkable, type Block, type Media } from "@harness/shared/state";
 import type { FileLinkContext } from "../state/fileOpen";
 import { useOptionalStore } from "../state/store";
@@ -297,7 +297,7 @@ export function Markdown({ text, className }: { text: string; className?: string
     }),
     [kind, media],
   );
-  const list = useMemo<SummaryAttachment[]>(
+  const list = useMemo<Attachment[]>(
     () => media.map((m) => ({ id: m.id, kind: kind(m), mimeType: "", name: m.alt || m.id, size: 0 })),
     [media, kind],
   );

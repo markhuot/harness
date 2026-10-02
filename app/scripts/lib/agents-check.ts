@@ -13,16 +13,16 @@ type Check = (name: string, ok: boolean, detail?: string) => void;
 export async function checkAgentsTab({ api, app, check, shot, project }: { api: Api; app: App; check: Check; shot: (name: string) => Promise<void>; project: Project }) {
   const { js, exists, go } = app;
   // A session without sub-agents has no Agents tab, even when a link asks for it.
-  const plain = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "No helpers needed", driver: "dummy", start: true });
+  const plain = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "No helpers needed", driver: "dummy", start: true });
   await until("plain ticket settles", async () => !(await api<TicketDetail>("GET", `/tickets/${plain.key}`)).ticket.busy, 20000);
   await go(`#/board/${project.id}/ticket/${plain.key}/agents`);
-  await until("plain ticket pane", () => exists('.tab[data-tab="summaries"]'));
+  await until("plain ticket pane", () => exists('.tab[data-tab="spec"]'));
   await Bun.sleep(500);
   check("no Agents tab on a session without sub-agents", !(await exists('.tab[data-tab="agents"]')));
-  check("a link to its Agents tab shows Summaries instead", (await exists('.tab.on[data-tab="summaries"]')) && !(await exists(".agents-tab")));
+  check("a link to its Agents tab shows the Spec instead", (await exists('.tab.on[data-tab="spec"]')) && !(await exists(".agents-tab")));
 
-  const t = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: "Split this up /agents 3", driver: "dummy", start: true });
-  await go(`#/board/${project.id}/ticket/${t.key}/summaries`);
+  const t = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Split this up /agents 3", driver: "dummy", start: true });
+  await go(`#/board/${project.id}/ticket/${t.key}/spec`);
 
   // The tab appears once the session has a sub-agent, with a live dot while one runs.
   const live = await until("Agents tab with a running sub-agent", () => js<boolean>(`!!document.querySelector('.tab[data-tab="agents"] .live-dot')`), 20000);
@@ -102,8 +102,8 @@ export async function checkAgentsTab({ api, app, check, shot, project }: { api: 
 async function checkBackgroundTask({ api, app, check, shot, project }: { api: Api; app: App; check: Check; shot: (name: string) => Promise<void>; project: Project }) {
   const { js, exists, go } = app;
   const lines = 8;
-  const t = await api<Ticket>("POST", "/tickets", { projectId: project.id, prompt: `Count in the background /bgtask ${lines}`, driver: "dummy", start: true });
-  await go(`#/board/${project.id}/ticket/${t.key}/summaries`);
+  const t = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: `Count in the background /bgtask ${lines}`, driver: "dummy", start: true });
+  await go(`#/board/${project.id}/ticket/${t.key}/spec`);
 
   const live = await until("Agents & tasks tab with a running task", () => js<boolean>(`!!document.querySelector('.tab[data-tab="agents"] .live-dot')`), 20000);
   check("the tab appears (live) while a background task runs", live);
