@@ -1,10 +1,12 @@
 # Native iOS app: architecture and conventions
 
-The native app is a SwiftUI rewrite of the React Native app in `mobile/`. It talks to the same
-service over the same HTTP API and WebSocket (DESIGN.md § HTTP API, § Network). Until it reaches
-parity, both apps are maintained. `mobile/` and `shared/` are the spec: when this app and the RN app
-disagree about behavior, the RN app wins unless a ticket says otherwise. It doesn't have to look
-the same. Use native SwiftUI patterns (NavigationStack, `.sheet`, `Menu`, `.searchable`,
+The iPhone and iPad app is SwiftUI. Version 2.0 replaced the 1.x React Native app, at feature
+parity with it (§ Parity table). It talks to the service over the same HTTP API and WebSocket as
+the desktop (DESIGN.md § HTTP API, § Network). `shared/` is the spec for everything the app shares
+with the desktop, through generated fixtures. For logic only the phone has, which used to live in
+the React Native app's TypeScript, the frozen fixtures (§ Fixture pipeline) are the spec, and
+`swift test` owns them. The app follows the desktop's behavior, not its look. Use native SwiftUI
+patterns (NavigationStack, `.sheet`, `Menu`, `.searchable`,
 swipe actions, drag and drop). iPhone is the primary target. The build is universal, so iPad must
 keep working, but iPad-specific layouts are separate work.
 
@@ -24,17 +26,18 @@ ios/
     Sources/HarnessKit/
       Protocol/          Codable ports of shared/src/protocol.ts
       Client/            HarnessClient (REST), HarnessSocket (WebSocket), HTTPTransport seam
-      Logic/             pure helpers ported from shared/ and mobile/src/lib
+      Logic/             pure helpers: ports of shared/ and the phone-only rules around them
       State/             board state: BoardState + reducer, paging, selectors, the shared/src/state
-                         and mobile/src/lib ports around it, and the @MainActor stores (BoardStore,
+                         ports and phone-only logic around them, and the @MainActor stores (BoardStore,
                          BoardLoader, DetailFetcher, DraftSync, ModelListCache)
       Shell/             DeepLink (harness:// → Route), Router, AppModel (servers, pairing, prefs)
       Resources/         generated JSON bundled with the package (themes.json)
     Tests/HarnessKitTests/
-      Fixtures/          generated JSON from shared/fixtures (committed)
+      Fixtures/          JSON from shared/fixtures, generated or frozen (committed)
       Support/           Fixture loader, jsonEqual
     Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
-  Tools/                 build.ts, dev-sim.ts + axe.ts (README § Dev loop), build-highlighter.ts, bun tests
+  Tools/                 build.ts, sim.ts, sim-check.ts, dev-sim.ts + axe.ts (README § Dev loop),
+                         build-highlighter.ts + highlighter/ (§ Syntax highlighting), bun tests
 ```
 
 Generated and ignored: `ios/Harness.xcodeproj`, `ios/Harness/Info.plist` (XcodeGen writes both
@@ -123,8 +126,9 @@ so adding a file never means editing project.yml or Package.swift.
 
 ## Fixture pipeline (TS ↔ Swift parity)
 
-Logic ported from `shared/` or `mobile/src/lib` must not drift from TypeScript. It's checked with
-fixtures whose expected outputs come from the real TS functions:
+Logic ported from `shared/` must not drift from TypeScript. It's checked with fixtures whose
+expected outputs come from the real TS functions. Logic that only the phone has (it lived in the
+1.x React Native app's TypeScript, which is gone) is pinned by frozen fixtures instead (step 6):
 
 1. **Case files:** `shared/fixtures/cases/<module>.ts`. Each named export is a JSON-able value,
    usually a case list built with `cases(fn, inputs)` or `asyncCases` from
@@ -148,17 +152,24 @@ fixtures whose expected outputs come from the real TS functions:
    `@Test(arguments:)`. `Fixture.value` and `Fixture.exports` read arbitrary exports.
    `jsonEqual` compares JSON key-order-insensitively. Worked example:
    `shared/fixtures/cases/pairing.ts` → `Logic/Pairing.swift` → `Tests/.../Logic/PairingTests.swift`.
+6. **Frozen fixtures:** JSON whose values came from the React Native app's TypeScript and is never
+   regenerated. The committed JSON is the spec. A whole frozen module is listed in `FROZEN` in
+   `shared/scripts/export-fixtures.ts` and has no case file; a case file that mixes computed and
+   frozen exports reads the frozen ones back with `frozen(module, key)` (`shared/fixtures/case.ts`).
+   `fixtures.test.ts` checks each frozen file exists and parses. To change the behavior, edit the
+   JSON and the Swift together.
 
 The protocol drift guard works the same way: `cases/protocol.ts` has a typed sample for every
 entity and event, and `ProtocolRoundTripTests` decodes and re-encodes every sample, failing on any
 export it has no Swift type for. When you add a field to protocol.ts, add it to a sample, and the
 Swift side has to follow.
 
-When porting a module: write the case file from the TS source and its `*.test.ts` (plus extra edge
-cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
+When porting a `shared/` module: write the case file from the TS source and its `*.test.ts` (plus
+extra edge cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
 fixtures can't express (request sequences, timing). Stateful machines (TouchGesture, ResizeGate,
 PluginHostBridge, MentionCaret, stickStep) get both: direct ports of their TS tests, and fixture
-sequences (`{ events[], outputs[] }`) that the case file computes by driving the TS implementation.
+sequences (`{ events[], outputs[] }`), computed by driving the TS implementation (now frozen for
+the ones whose TS was in the React Native app).
 Timers become explicit timestamps or a `deadline` + `tick(now:)` API, so tests never wait.
 
 `Fixture.value` decodes through `JSONValue`/JSONDecoder. Don't switch it back to
@@ -176,7 +187,7 @@ here and in a doc comment:
 - `Related.remoteMatchesOf` decodes the 404 body as `[RelatedTicket]` and returns nil when it
   doesn't fit (TS returns it unchecked).
 - `ResizeGate.take` rejects NaN, Infinity and sizes that overflow Int. `WheelCoalescer` disarms
-  its deadline on flush (the RN screen's stale `setTimeout` can fire the next batch early).
+  its deadline on flush (the React Native screen's stale `setTimeout` could fire the next batch early).
 - `PluginBridge.origin(of:)` stands in for `new URL().origin` without a full WHATWG parser (no
   IPv4 shorthand, IDNA, or IPv6 re-compression).
 - `patchRows` drops one scalar where JS `slice(1)` drops one code unit; line numbers past
@@ -202,7 +213,7 @@ places until someone dedupes them:
   `Ticket`/`Project` directly. `Ticket` and `RelatedTicket` conform to `TicketKeyed` (Keys.swift).
 - `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
   promotes at 1024) behave differently in TS too.
-- RN's `e instanceof Error ? e.message : String(e)` has two ports in Client/ErrorMessage.swift.
+- TS's `e instanceof Error ? e.message : String(e)` has two ports in Client/ErrorMessage.swift.
   `errorMessage` falls back to `String(describing:)` (the board loaders and model lists, whose
   tests fake errors with CustomStringConvertible), and `localizedErrorMessage` falls back to
   `localizedDescription` (screens and pickers, so a URLError reads as a sentence). Use one of
@@ -210,15 +221,15 @@ places until someone dedupes them:
 
 ## Syntax highlighting (HarnessHighlight)
 
-Code is colored by the RN app's own `mobile/src/lib/highlight.ts` (Shiki core, its JavaScript regex
-engine, the same 34 languages and 19 themes) running in JavaScriptCore, so colors match the desktop
+Code is colored by `ios/Tools/highlighter/highlight.ts` (the 1.x React Native app's Shiki setup:
+Shiki core, its JavaScript regex engine, 34 languages and 19 themes) running in JavaScriptCore, so colors match the desktop
 and the Git tab exactly. The pieces:
 
 - **Bundle:** `bun ios/Tools/build-highlighter.ts` bundles `ios/Tools/highlighter/entry.ts`, which
   imports highlight.ts, into one classic script (about 3.1 MB minified, 0.43 MB gzipped) that defines
   the `HarnessHighlighter` global. Without code splitting, Bun keeps every grammar and theme as a
   lazily evaluated module, so loading the script only parses it. The language and theme lists come
-  from highlight.ts (`LANGUAGE_IDS`, `SYNTAX_THEME_IDS`), so the two apps can't drift.
+  from highlight.ts (`LANGUAGE_IDS`, `SYNTAX_THEME_IDS`), so the bundle and the fixtures can't drift.
 - **Generated, not committed.** The app target's "Bundle highlighter" pre-build phase (project.yml)
   runs the script on every build and writes `highlighter.js` into Harness.app. It needs `bun` and a
   `bun install` at the repo root, and it rewrites the file only when its content changes. The phase
@@ -287,18 +298,17 @@ lists match). Keep scenario data small: the 120-ticket paging tests are scaled d
 The pieces every screen uses. They're in place, so feature tickets shouldn't change them; when a
 feature needs something new here, add to it without changing what's there.
 
-- **AppModel** (HarnessKit/Shell, port of state/app.tsx): `loaded`, `prefs` + `setPref(\.key, v)`,
+- **AppModel** (HarnessKit/Shell): `loaded`, `prefs` + `setPref(\.key, v)`,
   `servers`, `active` (server + token), `pair(address, skipProbe:)`, `activate`, `forget`, `rename`,
   `connectionNonce`, and `store`: the one `BoardStore` for the active server, rebuilt whenever the
-  server, its token or the nonce changes (RN's `<StoreProvider key={id:nonce}>`). Storage is the
-  Keychain (`KeychainStorage`, readable after first unlock) under the RN keys `harness.servers`,
-  `harness.prefs`, `harness.token.<id>`, in its own service. Updating from the RN app keeps saved
-  Macs, tokens and prefs through a one-way migration: when the native service has no item for a
-  key, `get` reads expo-secure-store's (service `app:no-auth`, then the legacy `app`; the key's
-  bytes as account and generic), copies it into the native service and returns it. It never
-  changes or deletes the RN item. The Release app shares the RN app's bundle id and so its access
-  group; the Debug "Harness Dev" build (`com.markhuot.harness.dev`) has its own and can't see RN
-  items. `MemoryStorage` stands in for tests. `load()` runs in `HarnessApp.init`, before the first frame.
+  server, its token or the nonce changes. Storage is the Keychain (`KeychainStorage`, readable
+  after first unlock) under the 1.x app's keys `harness.servers`, `harness.prefs`,
+  `harness.token.<id>`, in its own service. Updating from the 1.x React Native app keeps saved
+  Macs, tokens and prefs through a one-way migration: when the service has no item for a key,
+  `get` reads expo-secure-store's (service `app:no-auth`, then the legacy `app`; the key's bytes as
+  account and generic), copies it into this service and returns it. It never changes or deletes
+  the 1.x item. Every configuration (Debug included) uses the 1.x app's bundle id,
+  `com.markhuot.harness`, and so its access group. `MemoryStorage` stands in for tests. `load()` runs in `HarnessApp.init`, before the first frame.
 - **Environment.** Views read `@Environment(AppModel.self)`, `@Environment(Router.self)`,
   `@Environment(BoardStore.self)` (inside the tabs and RequireStore only), `@Environment(ToastCenter.self)`,
   `@Environment(Actions.self)` and `@Environment(\.palette)`.
@@ -344,7 +354,7 @@ feature needs something new here, add to it without changing what's there.
 
 - **Route guard.** Without an active server the root is ConnectScreen. Sheets that need the store
   wrap their slot in `RequireStore` (spinner until loaded, Connect without a server).
-- **UI kit** (Harness/UI, ports of ui/kit.tsx and friends): `Badge(tone:outline:icon:)`,
+- **UI kit** (Harness/UI, in the desktop's design language): `Badge(tone:outline:icon:)`,
   `StatusDot`, `StatusPill`, `ProjectKeyBadge`, `ReviewMark`, `DriverBadge`, `KindBadge`,
   `ModelBadge`, `DepChip`, `HButton` / `.buttonStyle(.harness(.primary))` (primary, secondary,
   ghost, danger, dangerSolid; small; loading; haptic), `Card`, `Callout`, `EmptyState`
@@ -424,7 +434,7 @@ TicketDetailScreen (HARNESS-139) hosts the other Ticket slots as tab bodies. Wha
 from it (Ticket/TicketDetailSupport.swift):
 
 - **`.ticketHeroScroll()`** on a tab body's ScrollView or List: its drags and flings hide the hero
-  and bring it back (HarnessKit `HeroCollapse`, a fixture-checked port of lib/heroCollapse).
+  and bring it back (HarnessKit `HeroCollapse`, checked against frozen fixtures).
   TranscriptView and AgentsTabView should attach it, since sim-check `--stick` checks the hero on
   the Transcript. Outside a ticket screen it does nothing.
 - **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Summaries, and the
@@ -521,7 +531,7 @@ What screens that show agent text use (HARNESS-136):
 
 What the hosting screens (Ticket detail, New session, Settings, Project settings, Watchers) get:
 
-- **Selects.** `SelectMenu` is ui/selects.tsx's `Select`: a `Menu` of checkmark Toggles (subtitles,
+- **Selects.** `SelectMenu` is the app's select: a `Menu` of checkmark Toggles (subtitles,
   disabled rows, an actions section headed by the problem line) whose trigger, `SelectTrigger`,
   shows the value in the accent color with a spinner, a warning or the ⌃⌄ glyph. ModelPicker and
   PermissionPicker are built on it. DriverModelPicker and BranchPicker use the same trigger, but
@@ -616,11 +626,10 @@ for this app they come down to:
 ## Accessibility labels and sim-check (read this before porting a screen)
 
 **sim-check finds everything by AXLabel**: the visible text of an element, or its
-`accessibilityLabel`. `mobile/scripts/sim-check.ts` drives the app through the accessibility tree
-(AXe) and deep links, and `bun mobile/scripts/sim-check.ts --native` runs it against this app. The
-rule for every screen:
+`accessibilityLabel`. `ios/Tools/sim-check.ts` drives the app through the accessibility tree
+(AXe) and deep links. The rule for every screen:
 
-- Wherever sim-check looks for a label, the native UI exposes **exactly** the RN app's label. Grep
+- Wherever sim-check looks for a label, the UI exposes **exactly** that label. Grep
   sim-check.ts for the screen's strings before you port it and keep every one: column chips
   "Planning, 3" (`"<Status>, <count>"`), card labels starting "GREET-1 <title>", "Options" /
   "Options, …", "Cancel", "Allow once", "Start work", "Message the agent…", "Reset to built-in",
@@ -632,19 +641,18 @@ rule for every screen:
   accessibility focus above the window.
 - Don't label a container whose children sim-check taps (`.accessibilityElement(children:
   .contain)` plus `.accessibilityLabel`): AXe then lists the container as one element and drops
-  its rows. That's why the mention list and the project color swatches have no group label,
-  where RN labels them "Files"/"Commands" and "Project color" for VoiceOver.
-- Every route in § App shell is reachable by the same `harness://` link as in RN, with the same
-  semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
+  its rows. That's why the mention list and the project color swatches have no group label.
+- Every route in § App shell is reachable by a `harness://` link (the same links the 1.x app
+  took, so old links keep working), with the same semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
 
-`bun mobile/scripts/sim-check.ts --native --only=<screen>` checks one screen on the shared
-simulator. `--only=connect` passes as of HARNESS-135; each feature ticket should make
-its own screens' `--only=` entries pass.
+`bun ios/Tools/sim-check.ts --only=<screen>` checks one screen on the shared simulator. A change
+to a screen should keep that screen's `--only=` entries passing.
 
 ## Parity table
 
-HARNESS-145 audited every file in `mobile/app`, `mobile/src/screens`, `mobile/src/ui`,
-`mobile/src/lib` and `mobile/src/state` against `main` as of the HARNESS-155/157/160 merges: each
+This is the historical parity audit against the 1.x React Native app, which has since been deleted;
+the "RN file" column names files from that app. HARNESS-145 audited every file in its routes,
+screens, UI kit, lib and state against `main` as of the HARNESS-155/157/160 merges: each
 user-visible feature, action, state, empty state, error, haptic, deep link and persistence key,
 read on both sides and checked in the simulator where sim-check reaches it. Logic rows are also
 pinned by fixtures (§ Fixture pipeline). Every row is done. "Differs" notes a deliberate,
@@ -706,15 +714,12 @@ Release builds carry no placeholders or debug routes: every `-debugScreen` galle
 viewer bench, the plugin probe and HighlightPreviewView are inside `#if DEBUG`, and Release
 defines no DEBUG condition.
 
-Still ahead (transition, not parity): switching `release:publish` to `--ios-app=native` and
-deleting `mobile/`.
-
 ## Manual checks (HARNESS-145 results)
 
 Checked on the shared simulator (iOS 27.0) unless marked **device**:
 
 - **Board card push → Back:** passes in every full interaction run. Back is tapped by label when
-  AXe sees it, else at RN's header point (sim-check `tapHeader`).
+  AXe sees it, else at the header point sim-check's `tapHeader` uses.
 - **Robustness (a scripted pass with real daemons):**
   - Daemon restart: the "Reconnecting to …" banner shows, then clears, and a ticket made after
     the restart arrives live (4 of 5 runs; once the live event didn't arrive within 20 s,
@@ -724,8 +729,8 @@ Checked on the shared simulator (iOS 27.0) unless marked **device**:
   - Cold launch from `harness://ticket/<key>?tab=details`.
   - Backgrounding to Settings.app: a ticket made meanwhile shows on return.
   - Dynamic Type at AX5 on the board, ticket, Settings and New session.
-- **Keychain migration:** the native Release build installed over a paired RN app comes up with
-  the RN app's saved Mac.
+- **Keychain migration:** the Release build installed over a paired 1.x React Native app comes up
+  with that app's saved Mac.
 - **Transcript rows the dummy driver can't produce** (seeded straight into the service's
   database):
   - A thinking row expands and collapses.
