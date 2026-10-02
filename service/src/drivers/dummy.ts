@@ -450,7 +450,7 @@ export class DummyDriver implements Driver {
         yield* call(
           "review_decision",
           reject
-            ? { decision: "request_changes", notes: "The dummy reviewer was asked to reject this ([dummy:reject])." }
+            ? { decision: "request_changes", notes: "The dummy reviewer was asked to reject this round." }
             : { decision: "approve", notes: "The dummy reviewer approves." },
         );
         break;
