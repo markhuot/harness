@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPad, the sidebar stays on screen beside the board, Inbox or Settings, like it does on the
+  Mac: Inbox, All projects, each project with its settings gear, and Settings with the connection
+  at the bottom. Tap the sidebar button in the top corner to hide it or bring it back, and the app
+  remembers your choice. The board's search field, Filter menu and New session button sit in the
+  top bar instead of along the bottom. With a keyboard, ⌘F jumps to search and ⌘N starts a new
+  session. In a narrow Split View window the iPad uses the iPhone layout.
+
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 
 ### Added
