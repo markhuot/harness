@@ -1,16 +1,15 @@
 import HarnessKit
 import SwiftUI
 
-/// The app shell: holds the launch UI
+/// The main window's shell: holds the launch UI
 /// until the Keychain has loaded, shows Connect without an active server and the sections with
-/// one, presents the Router's sheet and cover, routes harness:// links, applies the theme (bar
-/// titles included, through BarAppearance), and forwards scene phases to the store.
+/// one, and (through SceneChrome) presents the Router's sheet and cover, routes harness:// links
+/// and applies the theme. The app forwards scene phases to the store (HarnessApp).
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var scene: UIWindowScene?
 
     #if DEBUG
     /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly
@@ -19,38 +18,17 @@ struct RootView: View {
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
-    /// What the bar colors depend on: both appearances' text (BarAppearance).
-    private var barColorKey: String {
-        [false, true].map { dark in
-            "\(Palette(app.resolvedTheme(systemDark: dark)).tokens[.text])"
-        }.joined(separator: " | ")
-    }
-
     var body: some View {
-        let palette = Palette(app.resolvedTheme(systemDark: scheme == .dark))
         content
-            .sheet(item: sheetBinding) { sheet in
-                SheetHost(sheet: sheet)
-                    .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
-            }
-            .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
-            .environment(\.palette, palette)
-            .tint(palette.accent)
-            .toastOverlay()
-            .background(palette.bg.ignoresSafeArea())
-            // Alerts, action sheets, sheets and the keyboard follow Settings → Appearance.
-            .preferredColorScheme(app.prefs.theme == .system ? nil : app.prefs.theme == .dark ? .dark : .light)
-            .onOpenURL { url in router.open(url: url, applyThemes: app.applyThemes) }
-            // Navigation titles in the theme's text color (BarAppearance).
-            .onChange(of: barColorKey, initial: true) {
-                BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
-            }
+            .sceneChrome(router)
+            // Links from outside the app land in a main window rather than a ticket window.
+            .handlesExternalEvents(preferring: ["\(DeepLink.scheme)://"], allowing: ["\(DeepLink.scheme)://"])
+            .background(SceneReader { s in
+                scene = s
+                WindowDirectory.shared.mainActive(router, scene: s)
+            })
             .onChange(of: scenePhase) { _, phase in
-                switch phase {
-                case .active: app.sceneBecameActive()
-                case .background: app.sceneDidEnterBackground()
-                default: break
-                }
+                if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
             }
     }
 
@@ -90,6 +68,49 @@ struct RootView: View {
             LoadingScreen()
         }
     }
+}
+
+extension View {
+    /// A window's chrome, for `router`'s window: its sheet and cover, harness:// links from outside,
+    /// the palette, tint, toasts and color scheme, and the bar titles' color (BarAppearance).
+    func sceneChrome(_ router: Router) -> some View { modifier(SceneChrome(router: router)) }
+}
+
+private struct SceneChrome: ViewModifier {
+    let router: Router
+
+    @Environment(AppModel.self) private var app
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    /// What the bar colors depend on: both appearances' text (BarAppearance).
+    private var barColorKey: String {
+        [false, true].map { dark in
+            "\(Palette(app.resolvedTheme(systemDark: dark)).tokens[.text])"
+        }.joined(separator: " | ")
+    }
+
+    func body(content: Content) -> some View {
+        let palette = Palette(app.resolvedTheme(systemDark: scheme == .dark))
+        content
+            .sheet(item: sheetBinding) { sheet in
+                SheetHost(sheet: sheet)
+                    .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
+            }
+            .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
+            .environment(\.palette, palette)
+            .tint(palette.accent)
+            .toastOverlay()
+            .background(palette.bg.ignoresSafeArea())
+            // Alerts, action sheets, sheets and the keyboard follow Settings → Appearance.
+            .preferredColorScheme(app.prefs.theme == .system ? nil : app.prefs.theme == .dark ? .dark : .light)
+            .onOpenURL { url in router.open(url: url, applyThemes: app.applyThemes) }
+            // Navigation titles in the theme's text color (BarAppearance).
+            .onChange(of: barColorKey, initial: true) {
+                BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
+            }
+            .environment(router)
+    }
 
     /// At regular width the Projects sheet is the split view's sidebar column (MainTabs shows it
     /// and clears the route), so it never comes up as a sheet there.
@@ -109,15 +130,23 @@ struct RootView: View {
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
 /// section's sidebar button, switches between them, and the board's bottom bar holds its filter,
-/// search field and New session. At regular width (iPad) it's DesktopShell.
+/// search field and New session. At regular width (iPad) it's DesktopShell, where tickets open in
+/// the slide-over panel (the Router's panel mode); narrowing the window moves an open panel onto
+/// the section's stack.
 struct MainTabs: View {
+    @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        if sizeClass == .regular {
-            DesktopShell()
-        } else {
-            SectionStack()
+        Group {
+            if sizeClass == .regular {
+                DesktopShell()
+            } else {
+                SectionStack()
+            }
+        }
+        .onChange(of: sizeClass == .regular, initial: true) { _, regular in
+            router.setOpensTicketsInPanel(regular)
         }
     }
 }
@@ -138,7 +167,8 @@ private struct SectionStack: View {
 /// The iPad's desktop layout: the Projects sidebar as a split view's sidebar column next to the
 /// selected section, hidden and shown by the system toggle and remembered in prefs
 /// (`sidebarHidden`). The sections put search and their actions in the top bar
-/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet.
+/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet. An open ticket is
+/// the slide-over panel over the trailing side.
 private struct DesktopShell: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -155,6 +185,8 @@ private struct DesktopShell: View {
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
         .navigationSplitViewStyle(.balanced)
+        // A ticket slides over the trailing side (TicketPanel).
+        .overlay { TicketPanelOverlay() }
         .onChange(of: router.sheet, initial: true) { _, sheet in
             guard case .projects? = sheet else { return }
             router.sheet = nil

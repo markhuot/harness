@@ -73,10 +73,15 @@ targets:
           UIColorName: LaunchBackground
           UIImageName: SplashIcon
           UIImageRespectsSafeAreaInsets: true
-        # One scene: the app has a single Router and AppModel, so a second window would share and
-        # fight over them.
+        # Several windows on iPad: main windows and ticket windows (HarnessApp's two WindowGroups).
+        # Each window has its own Router; AppModel, the store, toasts and Actions are shared
+        # (ARCHITECTURE.md § App shell, Windows). iPhone keeps one window regardless.
         UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: false
+          UIApplicationSupportsMultipleScenes: true
+        # The activity a slide-over ticket carries when it's dragged out into its own window
+        # (TicketWindowValue.activityType); iPadOS opens only listed types as new windows.
+        NSUserActivityTypes:
+          - com.markhuot.harness.ticket
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationPortraitUpsideDown

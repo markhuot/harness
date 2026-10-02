@@ -15,6 +15,8 @@ struct BoardTicketCard: View {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.supportsMultipleWindows) private var multipleWindows
 
     var body: some View {
         let t = ticket
@@ -156,6 +158,12 @@ struct BoardTicketCard: View {
         let t = ticket
         // The ticket's key and title, as the menu's header.
         Section(BoardScreenRules.menuTitle(t)) { menuItems(t, parent: parent) }
+        // iPad: the ticket in a window of its own (Windows.swift).
+        if multipleWindows && t.draft != true {
+            Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                openWindow(id: SceneID.ticket, value: TicketWindowValue(key: t.key, tab: nil))
+            }
+        }
     }
 
     @ViewBuilder private func menuItems(_ t: Ticket, parent: Ticket?) -> some View {

@@ -42,8 +42,14 @@ test("every orientation on iPhone and iPad, and no full-screen lock (Stage Manag
   expect(String(spec.settings.base.TARGETED_DEVICE_FAMILY)).toBe("1,2");
 });
 
-test("one window (a single Router and AppModel)", () => {
-  expect(plist.UIApplicationSceneManifest.UIApplicationSupportsMultipleScenes).toBe(false);
+// iPad windows: each has its own Router. A slide-over ticket dragged out carries an NSUserActivity,
+// and iPadOS opens a new window only for a type listed here, so it must match the Swift constant.
+test("several windows, and the dragged-out ticket's activity type is listed", () => {
+  expect(plist.UIApplicationSceneManifest.UIApplicationSupportsMultipleScenes).toBe(true);
+  const swift = readFileSync(join(import.meta.dir, "../HarnessKit/Sources/HarnessKit/Shell/TicketWindow.swift"), "utf8");
+  const activityType = swift.match(/static let activityType = "([^"]+)"/)?.[1];
+  expect(activityType).toBeTruthy();
+  expect(plist.NSUserActivityTypes).toEqual([activityType]);
 });
 
 // TestFlight and the install page's manifest know the app as com.markhuot.harness on team
