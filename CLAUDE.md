@@ -32,6 +32,13 @@ one simulator and one runtime.
   lock itself.
 - Before a heavy build (xcodebuild, sim-check, `release:publish`), run `bun run sim disk`. It exits
   1 when less than 5 GiB is free. Then block and ask rather than build.
+- sim-check shuts down the `sim-check *` simulators it drove when it ends (normally, by error, or
+  on Ctrl-C/SIGTERM), unless `--keep`. A run killed outright (SIGKILL, a tool timeout) can't, and
+  leaves booted simulators and an orphaned daemon behind. The next sim-check or `with-lock` cleans
+  those up first. If the Mac is slow or a run was killed, run `bun run sim reap` yourself. It only
+  touches what no live run owns: `sim-check *` simulators nobody holds the lock on, daemons whose
+  sim-check is gone, and their temp dirs. Never kill sim-check daemons or shut down `sim-check *`
+  simulators by hand.
 - When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`)
   and leave the shared simulator alone. `bun run sim shutdown` shuts it down once nobody holds the
   lock, if it needs to stop.

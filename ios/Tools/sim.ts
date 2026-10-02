@@ -6,6 +6,8 @@
 //   bun ios/Tools/sim.ts with-lock [--device=name] [--ipad] [--timeout=minutes] -- <command…>
 //                                                                 wait for the device, run the command with SIM_UDID set, let go
 //   bun ios/Tools/sim.ts shutdown [--device=name]             shut the device down once nobody holds it
+//   bun ios/Tools/sim.ts reap                                 clean up after dead sim-check runs: shut down unheld
+//                                                                 "sim-check *" devices, stop orphaned daemons, remove temp dirs
 //   bun ios/Tools/sim.ts status                               the device and who holds its lock
 //   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5)
 //
@@ -14,8 +16,8 @@
 // and process start time, so a lock whose holder died (crashed, killed) is taken over. with-lock
 // sets HARNESS_SIM_LOCKED for its command, so a script under it that takes the same lock itself
 // (sim-check, say) goes ahead instead of waiting on its parent.
-import { linkSync, mkdirSync, readFileSync, rmSync, statSync, statfsSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, statfsSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export const SHARED_DEVICE = "harness-shared";
@@ -268,6 +270,186 @@ async function findDevice(name: string, run: Simctl = simctl): Promise<Device | 
   return (devices[runtime.identifier] ?? []).find((d) => d.isAvailable && d.name === name) ?? null;
 }
 
+// ---------------------------------------------------------------- reaping
+// A sim-check run that ends normally shuts down the extra simulators it booted, stops its daemon and
+// removes its temp dirs. One killed outright (SIGKILL, a crash, a tool timeout) leaves all three
+// behind: booted iOS devices and orphaned daemons that keep loading the Mac. `reap` finds what such
+// runs left and cleans it up; sim-check and with-lock run it before they start.
+
+/** sim-check's own devices ("sim-check 2", "sim-check iPad 1", …). harness-shared is never reaped. */
+export const SIM_CHECK_DEVICE = /^sim-check /;
+export const HOME_PREFIX = "harness-sim-home-";
+export const PROJECTS_PREFIX = "harness-sim-projects-";
+/** Written into a sim-check home: the run that owns it and its projects dir. */
+export const RUN_OWNER_FILE = "owner.json";
+/** Written into a sim-check home by --keep: its daemon is meant to outlive the run. */
+export const KEEP_FILE = "keep";
+/** Homes from before owner.json (and their daemons) count as left behind only once this old. */
+export const LEGACY_HOME_AGE_SEC = 60 * 60;
+/** Projects dirs no home claims count as left behind once this old (a sim-check run takes minutes). */
+export const STRAY_PROJECTS_AGE_SEC = 6 * 60 * 60;
+
+export interface RunOwner { pid: number; start: string; scratch: string }
+/** A harness daemon a sim-check run started (its HARNESS_HOME is a sim-check home). */
+export interface SimDaemon { pid: number; ppid: number; ageSec: number; home: string }
+export interface SimTempDir { path: string; kind: "home" | "projects"; ageSec: number; owner: RunOwner | null; ownerAlive: boolean; keep: boolean }
+export interface ReapInput { devices: Device[]; held: (name: string) => boolean; daemons: SimDaemon[]; dirs: SimTempDir[]; except?: string[] }
+export interface ReapPlan { shutdown: Device[]; kill: SimDaemon[]; remove: string[] }
+
+/** Records the run that owns `home`, so a reaper can tell a live run's dirs from a dead one's. */
+export function writeRunOwner(home: string, scratch: string): void {
+  const owner: RunOwner = { pid: process.pid, start: ownStart(), scratch };
+  writeFileSync(join(home, RUN_OWNER_FILE), JSON.stringify(owner));
+}
+
+export function markKept(home: string): void {
+  writeFileSync(join(home, KEEP_FILE), "");
+}
+
+const base = (p: string) => p.replace(/\/+$/, "").split("/").pop() ?? p;
+
+/**
+ * What runs that died left behind. A device is shut down when it's a booted sim-check device that
+ * nobody holds and this caller doesn't want. A daemon is stopped when its parent is gone (it was
+ * reparented to launchd) and its home isn't kept; a legacy home (no owner.json) also has to be an
+ * hour old, since a --keep from before the keep file looks the same. A home goes when its run is
+ * dead and no daemon that stays still runs in it; its projects dir goes with it. A projects dir no
+ * home claims goes once it's six hours old.
+ */
+export function planReap(input: ReapInput): ReapPlan {
+  const except = new Set(input.except ?? []);
+  const shutdown = input.devices.filter((d) => d.isAvailable && d.state === "Booted" && SIM_CHECK_DEVICE.test(d.name) && !except.has(d.name) && !input.held(d.name));
+  const homes = new Map(input.dirs.filter((d) => d.kind === "home").map((d) => [base(d.path), d]));
+  const kill = input.daemons.filter((p) => {
+    if (p.ppid !== 1) return false;
+    const h = homes.get(base(p.home));
+    if (h?.keep) return false;
+    return h?.owner ? !h.ownerAlive : p.ageSec > LEGACY_HOME_AGE_SEC;
+  });
+  const killed = new Set(kill.map((p) => p.pid));
+  const inUse = new Set(input.daemons.filter((p) => !killed.has(p.pid)).map((p) => base(p.home)));
+  const remove: string[] = [];
+  const claimed = new Set<string>();
+  for (const h of homes.values()) {
+    const live = h.keep || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= LEGACY_HOME_AGE_SEC);
+    if (h.owner) claimed.add(base(h.owner.scratch));
+    if (live) continue;
+    remove.push(h.path);
+    if (h.owner) remove.push(h.owner.scratch);
+  }
+  for (const d of input.dirs) {
+    if (d.kind === "projects" && !claimed.has(base(d.path)) && d.ageSec > STRAY_PROJECTS_AGE_SEC) remove.push(d.path);
+  }
+  return { shutdown, kill, remove };
+}
+
+/** `ps` elapsed time ([[dd-]hh:]mm:ss) in seconds. */
+export function etimeSeconds(etime: string): number {
+  const [days, rest] = etime.includes("-") ? etime.split("-") : ["0", etime];
+  const parts = rest!.split(":").map(Number);
+  while (parts.length < 3) parts.unshift(0);
+  const [h, m, s] = parts as [number, number, number];
+  return Number(days) * 86400 + h * 3600 + m * 60 + s;
+}
+
+/** The harness daemons sim-check runs started, from `ps -Eww -x -o pid=,ppid=,etime=,command=` (command plus environment). */
+export function parseSimDaemons(ps: string): SimDaemon[] {
+  const out: SimDaemon[] = [];
+  for (const line of ps.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
+    if (!m || !/\bservice\/src\/daemon\.ts\b/.test(m[4]!)) continue;
+    const home = new RegExp(`\\bHARNESS_HOME=(\\S*/${HOME_PREFIX}[\\w-]+)`).exec(m[4]!)?.[1];
+    if (home) out.push({ pid: Number(m[1]), ppid: Number(m[2]), ageSec: etimeSeconds(m[3]!), home });
+  }
+  return out;
+}
+
+function readRunOwner(home: string): RunOwner | null {
+  try {
+    const o = JSON.parse(readFileSync(join(home, RUN_OWNER_FILE), "utf8")) as RunOwner;
+    return typeof o.pid === "number" && typeof o.start === "string" && typeof o.scratch === "string" ? o : null;
+  } catch {
+    return null;
+  }
+}
+
+function listSimTempDirs(tmp: string): SimTempDir[] {
+  const now = Date.now();
+  const dirs: SimTempDir[] = [];
+  for (const name of readdirSync(tmp)) {
+    const kind = name.startsWith(HOME_PREFIX) ? "home" : name.startsWith(PROJECTS_PREFIX) ? "projects" : null;
+    if (!kind) continue;
+    const path = join(tmp, name);
+    let ageSec: number;
+    try {
+      ageSec = (now - statSync(path).mtimeMs) / 1000;
+    } catch {
+      continue;
+    }
+    const owner = kind === "home" ? readRunOwner(path) : null;
+    dirs.push({ path, kind, ageSec, owner, ownerAlive: !!owner && processStart(owner.pid) === owner.start, keep: kind === "home" && existsSync(join(path, KEEP_FILE)) });
+  }
+  return dirs;
+}
+
+export interface ReapOptions { except?: string[]; tmp?: string; lockDir?: string; log?: (line: string) => void; simctl?: Simctl; ps?: () => string }
+
+const psDaemons = () => Bun.spawnSync(["ps", "-Eww", "-x", "-o", "pid=,ppid=,etime=,command="], { stdout: "pipe", stderr: "ignore" }).stdout.toString();
+
+/** Cleans up what dead sim-check runs left: see planReap. Returns what it did. */
+export async function reap(opts: ReapOptions = {}): Promise<ReapPlan> {
+  const log = opts.log ?? ((l: string) => console.error(l));
+  const dir = opts.lockDir ?? lockDir();
+  const run = opts.simctl ?? simctl;
+  const listed = (JSON.parse(await run("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices;
+  const ps = (opts.ps ?? psDaemons)();
+  const plan = planReap({
+    devices: Object.values(listed).flat(),
+    held: (name) => lockHolder(name, dir) !== null,
+    daemons: parseSimDaemons(ps),
+    dirs: listSimTempDirs(opts.tmp ?? tmpdir()),
+    except: opts.except,
+  });
+  const shutdown: Device[] = [];
+  await Promise.all(
+    plan.shutdown.map(async (d) => {
+      // Take the lock first: a run that grabs the device between the listing and now keeps it.
+      if (!tryLock(d.name, dir)) return;
+      try {
+        await run("shutdown", d.udid).catch((e: Error) => {
+          if (!/current state: Shutdown/.test(e.message)) throw e;
+        });
+        shutdown.push(d);
+        log(`reap: shut down "${d.name}" (${d.udid}), booted with no run holding it`);
+      } finally {
+        releaseLock(d.name, dir);
+      }
+    }),
+  );
+  await Promise.all(
+    plan.kill.map(async (p) => {
+      log(`reap: stopping orphaned sim-check daemon pid ${p.pid} (HARNESS_HOME=${p.home})`);
+      const start = processStart(p.pid);
+      try {
+        process.kill(p.pid, "SIGTERM");
+      } catch {}
+      // The daemon closes its Chrome on SIGTERM; give it the time sim-check gives it.
+      for (let i = 0; i < 200 && start && processStart(p.pid) === start; i++) await Bun.sleep(100);
+      if (start && processStart(p.pid) === start) {
+        try {
+          process.kill(p.pid, "SIGKILL");
+        } catch {}
+      }
+      Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(p.home, "chrome-profile")}`]);
+    }),
+  );
+  for (const path of plan.remove) {
+    rmSync(path, { recursive: true, force: true });
+    log(`reap: removed ${path}`);
+  }
+  return { ...plan, shutdown };
+}
+
 // ---------------------------------------------------------------- CLI
 
 if (import.meta.main) {
@@ -284,6 +466,7 @@ if (import.meta.main) {
       console.log(await ensureDevice(name, { kind }));
     } else if (cmd === "with-lock") {
       if (!command.length) throw new Error("with-lock needs a command after --");
+      await reap({ except: [name] }).catch((e: Error) => console.error(`reap: ${e.message}`));
       const release = await acquire(name, { timeoutMs: Number(opt("timeout") ?? 30) * 60_000, onWait: waiting });
       const udid = await ensureDevice(name, { kind });
       const locked = [...inherited().add(name)].join(",");
@@ -298,6 +481,9 @@ if (import.meta.main) {
         if (d?.state === "Booted") await simctl("shutdown", d.udid);
         console.log(d ? `${name} (${d.udid}) is shut down` : `no simulator named ${name}`);
       }, { onWait: waiting });
+    } else if (cmd === "reap") {
+      const done = await reap({ log: console.log });
+      if (!done.shutdown.length && !done.kill.length && !done.remove.length) console.log("nothing left behind");
     } else if (cmd === "status") {
       const d = await findDevice(name);
       const holder = lockHolder(name);
@@ -309,7 +495,7 @@ if (import.meta.main) {
       console.log(`${freeGiB().toFixed(1)} GiB free`);
       checkDisk(min);
     } else {
-      throw new Error("usage: sim.ts ensure | with-lock [--timeout=minutes] -- <command…> | shutdown | status | disk [--min=GiB]  (each takes --device=name; ensure and with-lock take --ipad)");
+      throw new Error("usage: sim.ts ensure | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB]  (each takes --device=name; ensure and with-lock take --ipad)");
     }
   } catch (e) {
     console.error((e as Error).message);
