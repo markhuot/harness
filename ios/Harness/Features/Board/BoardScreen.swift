@@ -22,6 +22,9 @@ struct BoardScreen: View {
     @State private var dropChip: TicketStatus?
     @State private var query = ""
 
+    /// New session's icon: the pencil on a square, like Mail and Notes' compose button.
+    static let newSessionSymbol = "square.and.pencil"
+
     var body: some View {
         let ctx = BoardContext(store.state, app.prefs)
         VStack(spacing: 0) {
@@ -127,7 +130,7 @@ struct BoardScreen: View {
         ToolbarSpacer(.fixed, placement: .bottomBar)
         DefaultToolbarItem(kind: .search, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) {
-            Button("New session", systemImage: "plus") { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
+            Button("New session", systemImage: Self.newSessionSymbol) { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
                 .primaryToolbarItem(c)
         }
     }

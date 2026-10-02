@@ -64,18 +64,27 @@ extension Callout where Trailing == EmptyView {
     }
 }
 
-/// An empty state: `ContentUnavailableView` with a shared icon, in the theme's muted colors.
+/// An empty state: `ContentUnavailableView` with a shared icon (or an SF Symbol), in the theme's
+/// muted colors.
 struct EmptyState<Actions: View>: View {
     var icon: String?
     var title: String
     var message: String?
+    /// An SF Symbol to draw instead of a shared icon.
+    var systemImage: String? = nil
     @ViewBuilder var actions: Actions
 
     @Environment(\.palette) private var c
 
     var body: some View {
         ContentUnavailableView {
-            if let icon { Label(title, icon: icon) } else { Text(title) }
+            if let systemImage {
+                Label(title, systemImage: systemImage)
+            } else if let icon {
+                Label(title, icon: icon)
+            } else {
+                Text(title)
+            }
         } description: {
             if let message { Text(message) }
         } actions: {
@@ -86,8 +95,8 @@ struct EmptyState<Actions: View>: View {
 }
 
 extension EmptyState where Actions == EmptyView {
-    init(icon: String? = nil, title: String, message: String? = nil) {
-        self.init(icon: icon, title: title, message: message) { EmptyView() }
+    init(icon: String? = nil, title: String, message: String? = nil, systemImage: String? = nil) {
+        self.init(icon: icon, title: title, message: message, systemImage: systemImage) { EmptyView() }
     }
 }
 

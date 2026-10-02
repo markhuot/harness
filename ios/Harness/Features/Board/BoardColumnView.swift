@@ -120,7 +120,8 @@ struct BoardColumnView: View {
         let p = ctx.paging
         Group {
             if ctx.total == 0 && status == .planning && !ctx.searching {
-                EmptyState(icon: "plus", title: "No sessions yet", message: "Start one with + in the bottom right.")
+                EmptyState(title: "No sessions yet", message: "Start one with the pencil button in the bottom right.",
+                           systemImage: BoardScreen.newSessionSymbol)
             } else if ctx.searching && ctx.pending {
                 emptyText("Searching…")
             } else if !ctx.searching && status == .done && !store.loader.legacy && (p == nil || p!.loading || store.loader.canLoadMoreDone(ctx.projectId)) && p?.error == nil {
