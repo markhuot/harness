@@ -1,7 +1,7 @@
 # Harness for iPhone and iPad (native)
 
 A SwiftUI re-implementation of the React Native app in `mobile/`. The two live side by side
-until the native app reaches parity (see [ARCHITECTURE.md](ARCHITECTURE.md) § Parity checklist).
+until releases switch to it. Feature parity with the RN app on `main` is checked in [ARCHITECTURE.md](ARCHITECTURE.md) § Parity table.
 The RN app and `shared/` are the spec.
 
 Disk is tight and several tickets build at once. Follow [ARCHITECTURE.md § Disk budget](ARCHITECTURE.md#disk-budget-parallel-agents) (one simulator, `-derivedDataPath ios/build/dd`, clean up when done).

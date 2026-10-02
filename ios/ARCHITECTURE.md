@@ -318,7 +318,8 @@ feature needs something new here, add to it without changing what's there.
   listeners. A socket rebuilt on foregrounding has no subscriptions and its first connect doesn't
   bump `epoch`, so it bumps `socketGeneration`: resubscribe on either (BrowserTabView keys its
   `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
-  (browserState, browserNavigate, ticketTabs) use `store.client as? HarnessClient`.
+  (browserState, browserNavigate, ticketTabs, settings, prompts, watchers) use `store.api`, the
+  store's client as a `HarnessClient` (UI/StoreAPI.swift). Never cast `store.client` inline.
 - **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab`, a path per tab, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
@@ -334,7 +335,7 @@ feature needs something new here, add to it without changing what's there.
   | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
-  | `harness://project/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, PromptsScreen, PromptDetailScreen |
+  | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen |
   | `harness://projects[?from=search]` | Projects sheet (0.6 / large detents) |
   | `harness://new[?projectId=\|key=]`, `/watcher[?id=]`, `/connect` | New session, Watcher, Connect sheets |
   | `harness://pair?url=&token=` | Pair sheet: waits for the Keychain, pairs, goes to the Board |
@@ -352,7 +353,9 @@ feature needs something new here, add to it without changing what's there.
   in a tab root's `.safeAreaInset(edge: .top)`), `Icon("name")` (every shared icon name maps to an
   SF Symbol, Icons.symbols in HarnessKit, checked by a test), `haptic(.success)`,
   `.confirmation($item)` / `.choiceSheet($item)` (RN confirm / pick), `DraftField` (commits on
-  return or blur). Settings-style screens are plain `Form` + `LabeledContent`.
+  return or blur). Also `FlowLayout` (RN `flexWrap: "wrap"`; leading or trailing rows),
+  `.primaryToolbarItem(c)` (RN `primaryItemStyle`: prominent only when the theme's onAccent is
+  white), `PickerLatest`, `String.nilIfEmpty` and `deviceName`. Settings-style screens are plain `Form` + `LabeledContent`.
 
 ## Feature slots
 
@@ -383,6 +386,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | InboxScreen | Inbox/InboxScreen.swift | Inbox | `InboxScreen()` |
 | TriageScreen | Inbox/TriageScreen.swift | Inbox | `TriageScreen(sessionId: String)` |
 | SettingsScreen | Settings/SettingsScreen.swift | Settings | `SettingsScreen()` (placeholder already has Macs + appearance; keep both) |
+| DriverSettingsScreen | Settings/DriverSettingsScreen.swift | Settings | `DriverSettingsScreen(driverId: String)` (HARNESS-145, port of main's HARNESS-157) |
 | ProjectSettingsScreen | Settings/ProjectSettingsScreen.swift | Projects | `ProjectSettingsScreen(projectId: String)` |
 | PromptsScreen | Prompts/PromptsScreen.swift | Prompts | `PromptsScreen()` |
 | PromptDetailScreen | Prompts/PromptDetailScreen.swift | Prompts | `PromptDetailScreen(id: String)` |
@@ -629,65 +633,73 @@ rule for every screen:
 simulator. `--only=connect` passes as of HARNESS-135; each feature ticket should make
 its own screens' `--only=` entries pass.
 
-## Parity checklist
+## Parity table
 
-Tick these off as later tickets land them. The RN source for each is in parentheses.
+HARNESS-145 audited every file in `mobile/app`, `mobile/src/screens`, `mobile/src/ui`,
+`mobile/src/lib` and `mobile/src/state` against `main` as of the HARNESS-155/157/160 merges: each
+user-visible feature, action, state, empty state, error, haptic, deep link and persistence key,
+read on both sides and checked in the simulator where sim-check reaches it. Logic rows are also
+pinned by fixtures (§ Fixture pipeline). Every row is done. "Differs" notes a deliberate,
+native-pattern difference, not a missing feature.
 
-- [x] Project skeleton, Info.plist parity, icon and launch screen (app.json)
-- [x] Protocol types + round-trip drift guard (shared/src/protocol.ts)
-- [x] HarnessClient REST + HarnessSocket WebSocket (shared/src/client.ts)
-- [x] Pairing link (shared/src/pairing.ts)
-- [x] Keys, file links, branches, permissions, watchers, command line, project colors (shared/src/*.ts)
-- [x] Pair/manual entry parsing, saved servers, connection probe (mobile/src/lib/pair, servers, connection)
-- [x] Themes registry, color math, project key colors (shared/src/themes)
-- [x] State: reducer, paging, selectors, sub-agents, conductor, watcher status, format, models, drafts, branch rows (shared/src/state)
-- [x] Board state I/O: BoardStore connection policy, BoardLoader, DetailFetcher, DraftSync, ModelListCache (state/store.tsx, lib/boardLoader, details, draftSync)
-- [x] Board/form helpers: boardColumns, modelSheet, selectOptions, watcherDraft, newSession (mobile/src/lib)
-- [x] Content helpers (HarnessKit/Logic, fixture parity), RN source in parentheses:
-  - Markdown blocks/inline/plainText (state/markdown), code fences + normalizePatch (state/code),
-    diff parsing (diff)
-  - Mentions, slash commands, mention caret (mentions, commands, lib/mentionCaret)
-  - Templates and prompts (templates, prompts)
-  - Completion and approve menus/requests (completion, lib/approve)
-  - Ticket tabs (state/tabs), project key rename preview (state/projectKey)
-  - Attachments (state/attachments, lib/attachments), stick to bottom (state + lib/stickToBottom,
-    plus a SwiftUI ScrollPhase → event mapping)
-  - Plugin host bridge + injection (state/pluginBridge, lib/pluginHost), browser touch/keyboard
-    input (lib/browserInput)
-  - Related tickets (lib/related), file viewer routes/windows/patch rows (lib/fileViewer)
-  - Prefs + v2 migration (lib/prefs), theme picker (lib/themePicker)
-  - Already covered elsewhere: icons (state/icons → Themes/Icons.swift), syntax highlighting
-    (lib/highlight, HARNESS-133). RN-only, not ported: lib/keyboard (works around
-    KeyboardAvoidingView's parent-relative frame; SwiftUI's keyboard avoidance doesn't need it),
-    lib/device and lib/storage (platform glue for the app target).
-- [x] Connect / Pair / Scan QR (app/connect, app/pair, app/scan; screens/Connect, Scan)
-- [x] Saved servers + Keychain token storage (lib/storage, lib/servers)
-- [x] Connection banner + reconnect (screens/ConnectionBanner)
-- [x] Board: columns, cards, child dimming/rollups, moves (context menu, VoiceOver actions, drag and drop), paging (screens/Board, TicketCard, lib/boardColumns, boardLoader)
-- [x] Search tab (app/(tabs)/search)
-- [x] Pickers and form controls: selects, model/permission/driver+model/branch/color pickers, @-mention and /command editor, ticket settings rows (ui/selects, DriverModelPicker, BranchPicker, ProjectColor, mentions, TicketSettings; lib/modelSheet, mentionCaret)
-- [x] Ticket detail: header, details, related tickets, settings (screens/TicketDetail, ui/TicketSettings, RelatedTickets)
-- [x] Transcript + composer + mentions + slash commands (screens/Transcript, ui/mentions, lib/mentionCaret)
-- [x] Content components: MarkdownView, CodeBlockView, file links + scope, AttachmentRow + full-screen
-  viewer (ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments)
-- [x] Summaries tab (screens/Summaries; renders MarkdownView + AttachmentRow)
-- [x] Approvals, human review, reopen, complete (screens/Approval, lib/approve)
-- [x] Agents tab / sub-agents (screens/AgentsTab)
-- [x] Browser tab (screens/BrowserTab, lib/browserInput)
-- [x] Plugin tabs in WKWebView (screens/PluginTab, lib/pluginHost)
-- [x] Changes tab, built in and native (plugins/git/ui)
-- [x] Syntax highlighting engine: Shiki in JavaScriptCore, cache, plain/reuse lines, git tints (lib/highlight)
-- [x] File viewer + diffs (screens/FileViewer, lib/fileViewer, ui/CodeBlock)
-- [x] New session: project, driver/model, branch picker, drafts (screens/NewSession, ui/BranchPicker, DriverModelPicker, lib/newSession, draftSync)
-- [x] Inbox + triage item detail (screens/Inbox, app/inbox/[id])
-- [x] Watchers form (screens/WatcherForm, lib/watcherDraft)
-- [x] Projects sheet (screens/Projects)
-- [x] Project settings (screens/ProjectSettings)
-- [x] Prompts list + editor (screens/Prompts, app/prompt/[id])
-- [x] Settings: appearance, themes, network, drivers, permissions (screens/Settings, lib/themePicker, prefs)
-- [x] Deep links (app/+native-intent) and the app shell: tabs, Router, AppModel, UI kit
-- [ ] sim-check passes against the native build
-- [ ] Release pipeline switched to ios/ (publish-install.sh, testflight.ts), mobile/ deleted
+| Feature | RN file | Swift file | Status |
+| --- | --- | --- | --- |
+| Keychain load before the first frame; one store per server + nonce | app/_layout, state/app, state/store | HarnessApp, Shell/AppModel, State/BoardStore | done |
+| Storage keys `harness.servers`, `harness.prefs`, `harness.token.<id>` (after first unlock) | lib/storage, lib/servers, lib/prefs | App/KeychainStorage, Shell/AppModel, Logic/Prefs | done (one-way migration of the RN app's items) |
+| Tabs Board / Inbox (badge: triaging or busy) / Settings / Search | app/(tabs)/_layout | App/RootView | done |
+| Theme: color scheme, accent tint, bg, nav title colors, tab badge red | state/app, app/_layout | App/RootView, App/BarAppearance, Theme/Palette | done |
+| Actions + toasts (3 max, 6 s / 2.6 s) + haptics + pick/confirm | state/store useAction, ui/Toasts, ui/haptics, ui/pick | App/Actions, UI/Toasts, UI/Haptics, UI/Confirm | done (menus are native `Menu`s; differs) |
+| UI kit: badges, buttons, cards, callouts, empty states, conductor rollups, parent crumb, related rows | ui/kit, ui/Conductor, ui/RelatedTickets | UI/* | done |
+| Connect: Scan, saved Macs, manual entry, Keychain footer, "Token rejected", pairing sheet | screens/Connect, app/connect, app/pair | Features/Connect/ConnectScreen | done |
+| Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
+| Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
+| Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done |
+| Board header: title, Projects, Board options (Show child tickets, Project settings, Refresh), + New session | screens/Board, ui/header | BoardScreen | done |
+| Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
+| Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
+| Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done (plus drag and drop, native only) |
+| Search tab: field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen(mode: .search) | done |
+| Projects sheet: Inbox row, All projects, rows, settings gear, Add project | screens/Projects | Features/Board/ProjectsSheet, ProjectsAdd | done |
+| Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
+| Header menu: Copy key, Open external, Cancel run, Open PR, Mark done, Delete | screens/TicketDetail | TicketDetailScreen | done |
+| Hero: crumb, title (compact on Browser/plugin/sub-agent), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |
+| Start work, Approve (+ menu incl. clean up), Request changes, Complete (+ menu), agent review, Re-open, Cancel run | screens/TicketDetail, lib/approve, shared/completion | TicketDetailHero, TicketDetailSheets, HarnessKit Approve/Completion/TicketDetailLogic | done |
+| Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |
+| Hero collapse on scroll, back on tab change, news or a status-bar tap | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, HarnessKit HeroCollapse | done |
+| Tab strip: order, counts, live dots, plugin icons, sub-agent highlights Agents | screens/TicketDetail, shared/state/tabs | TicketDetailTabStrip, HarnessKit Tabs/ChangesTab | done |
+| Summaries: brief/plan, depends-on chips, empty state, attachments, stick to bottom | screens/TicketTabs | TicketDetailSummariesTab | done |
+| Tickets (children) tab: progress, waiting count, groups, rows with chips | screens/TicketTabs | TicketDetailChildrenTab | done |
+| Details: title, brief (Unsaved/Revert/Save), ticket settings, links, runs, related | screens/TicketTabs, ui/TicketSettings | TicketDetailDetailsTab, Pickers/TicketSettingsForm | done |
+| Approval card: Allow once, Deny…, Always allow; announced to VoiceOver | screens/Approval | TicketDetailApprovalCard | done |
+| Composer: placeholder by status, move switch while writing, @files, /commands, Send | screens/TicketDetail, ui/mentions, lib/mentionCaret | TicketDetailComposer, Pickers/MentionTextEditor | done |
+| Transcript: rows, deltas, Working…, thinking, tools (images, sub-agent links), permissions, errors, stick to bottom | screens/Transcript | TranscriptView, TranscriptRows, TranscriptToolRow, HarnessKit TranscriptLogic | done (windowed, "Show earlier messages (N)": native only) |
+| Agents tab and sub-agent view (Back to Agents, breadcrumbs, task) | screens/AgentsTab | AgentsTabView, SubagentView, HarnessKit AgentsLogic | done |
+| Browser tab: toolbar, frames, touch/wheel/drag input, keyboard, resize gate | screens/BrowserTab, lib/browserInput | BrowserTabView, BrowserTabModel, BrowserInputViews | done |
+| Plugin tabs in a web view with the host bridge and theme | screens/PluginTab, lib/pluginHost | PluginTabView, PluginWebHost, PluginTabsLoader | done |
+| Changes tab (the git plugin's page) | plugins/git/ui | ChangesTabView, ChangesRowViews, HarnessKit ChangesStore/ChangesRows/ChangesPatch | done (native; file paths open the file viewer: native only) |
+| Inbox: watcher strip, Retry now, error expand, sessions, Inbox zero | screens/Inbox | Features/Inbox/InboxScreen, HarnessKit InboxLogic | done |
+| Triage item: outcome, Open KEY, transcript, file-link scope | screens/Inbox, app/inbox/[id] | TriageScreen | done |
+| New session: project, kind, prompt (@, /), Options, Start/Plan first, drafts, Cancel choices | screens/NewSession, lib/newSession, lib/draftSync | Features/NewSession/NewSessionScreen, HarnessKit NewSessionEditor/DraftSync | done (Cancel asks with an alert; differs) |
+| Pickers: selects, model, permission, driver+model sheet, branch sheet, project color | ui/selects, ui/DriverModelPicker, ui/BranchPicker, ui/ProjectColor, lib/modelSheet | Features/Pickers/* | done |
+| File viewer: header, menu, File/Diff, ranges, windowed colors, errors, pull to refresh | screens/FileViewer, lib/fileViewer | Features/Files/*, HarnessKit FileViewerRules/FileViewerLoader | done |
+| Markdown, code blocks, file links + scope, attachments row and viewer | ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments | Features/Content/* | done (code copies by long-press; differs) |
+| Syntax highlighting | lib/highlight | HarnessHighlight, Highlight/HighlightedText | done |
+| Settings: Macs (Connect, Rename, Forget, Rotate token), network, appearance + themes | screens/Settings, lib/themePicker | Features/Settings/SettingsScreen, SettingsAppearance | done |
+| Settings: drivers (each opens its screen) + default model, general, permissions, triage | screens/Settings (HARNESS-157) | SettingsServiceSections | done |
+| Driver screen: status, Log in, review model, Anthropic API key | screens/DriverSettings, app/driver/[id] | Features/Settings/DriverSettingsScreen | done |
+| Settings: prompts summary, watchers (menu, enable), projects | screens/Settings | SettingsListSections | done |
+| Project settings: identifier rename preview, color, folder, agents, completion, Remove | screens/ProjectSettings | ProjectSettingsScreen | done |
+| Prompts list and editor (Customize, Reset, Compare, variables) | screens/Prompts, app/prompt/[id] | Features/Prompts/* | done |
+| Watcher form | screens/WatcherForm, lib/watcherDraft | Features/Watchers/WatcherFormScreen | done |
+| Deep links (every `harness://` route above) | app/+native-intent, expo-router routes | Shell/DeepLink, Router, App/Destinations | done |
+| Not ported (RN-only platform glue) | lib/keyboard, lib/device, ui/KeyboardAvoider | SwiftUI keyboard avoidance, UIDevice | n/a |
+
+Release builds carry no placeholders or debug routes: every `-debugScreen` gallery, the file
+viewer bench, the plugin probe and HighlightPreviewView are inside `#if DEBUG`, and Release
+defines no DEBUG condition.
+
+Still ahead (transition, not parity): switching `release:publish` to `--ios-app=native` and
+deleting `mobile/`.
 
 ## Manual checks for HARNESS-145
 

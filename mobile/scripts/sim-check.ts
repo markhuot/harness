@@ -1753,8 +1753,15 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       };
       await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
         await openModels();
+        // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy (Claude
+        // Code's models) can leave its rows unrealized and out of AXe's tree.
+        await tapWhere(udid, "Search models");
+        await axe("type", "slow", "--udid", udid);
         await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
-        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000);
+        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000).catch(async (e) => {
+          await shot(udid, "model-pick-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
         await openModels();
         await tapWhere(udid, (l) => l.startsWith("Default"));
         const cleared = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === null, 8000);

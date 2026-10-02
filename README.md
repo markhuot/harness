@@ -83,13 +83,13 @@ plugin tabs), approvals, Inbox and settings. It shares its state logic with the 
 
 ### Native iOS app (ios/)
 
-`ios/` is a SwiftUI rewrite of the iPhone app, in progress. It lives beside `mobile/` until it
-reaches parity. It's an XcodeGen project (`cd ios && xcodegen`) plus the `HarnessKit` Swift
+`ios/` is a SwiftUI rewrite of the iPhone app, at feature parity with `mobile/` (see the parity
+table in ios/ARCHITECTURE.md). It lives beside `mobile/` until releases switch over. It's an XcodeGen project (`cd ios && xcodegen`) plus the `HarnessKit` Swift
 package (`cd ios/HarnessKit && swift test`), which holds the protocol types, client and logic,
 checked against `shared/` through generated fixtures. See [ios/README.md](ios/README.md) and
 [ios/ARCHITECTURE.md](ios/ARCHITECTURE.md).
 
-`bun ios/Tools/build.ts` builds it: `sim` (an unsigned Release build for the simulator),
+`bun ios/Tools/build.ts` builds it: `sim` (an ad-hoc signed Release build for the simulator),
 `device --device <name>` (the Debug build, "Harness Dev", installed beside the RN app),
 `archive --build-number N` and `export --method dev|testflight`. Releases still ship the RN app.
 `release:publish --ios-app=native` builds the native app instead, with the same bundle id, checks
