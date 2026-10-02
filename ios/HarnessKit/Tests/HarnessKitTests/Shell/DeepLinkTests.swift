@@ -16,6 +16,8 @@ struct DeepLinkTests {
         ("harness://connect", .sheet(.connect)),
         ("harness://scan", .cover(.scan)),
         ("harness://prompts", .push(.prompts)),
+        ("harness://driver/claude-code", .push(.driver(id: "claude-code"))),
+        ("harness://driver/anthropic%2Dapi", .push(.driver(id: "anthropic-api"))),
         ("harness://prompt/run.review", .push(.prompt(id: "run.review"))),
         ("harness://project/p-123", .push(.project(id: "p-123"))),
         ("harness://inbox/s%2F1", .push(.triage(sessionId: "s/1"))),
@@ -87,7 +89,7 @@ struct DeepLinkTests {
 
     @Test(arguments: [
         "https://board", "harness:board", "harness://", "harness://nope", "harness://ticket", "harness://ticket/",
-        "harness://project", "harness://prompt/", "",
+        "harness://project", "harness://prompt/", "harness://driver", "harness://driver/", "",
     ])
     func ignores(_ url: String) {
         #expect(DeepLink.parse(url) == nil)

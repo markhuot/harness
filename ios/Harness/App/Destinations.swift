@@ -16,6 +16,7 @@ struct RouteScreen: View {
             case let .triage(id): TriageScreen(sessionId: id)
             case let .file(params): FileViewerScreen(params: params)
             case let .project(id): ProjectSettingsScreen(projectId: id)
+            case let .driver(id): DriverSettingsScreen(driverId: id)
             case .prompts: PromptsScreen()
             case let .prompt(id): PromptDetailScreen(id: id)
             }

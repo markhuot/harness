@@ -97,12 +97,10 @@ struct SettingsRulesTests {
         #expect(SettingsRules.driverStatus(Self.driver("a")) == .ready)
     }
 
-    @Test func driverLoginAndSubtitle() {
+    @Test func driverLogin() {
         #expect(SettingsRules.loginLabel(Self.driver("a")) == nil)
         #expect(SettingsRules.loginLabel(Self.driver("a", authenticated: false, login: true)) == "Log in")
         #expect(SettingsRules.loginLabel(Self.driver("a", login: true)) == "Log in again")
-        #expect(SettingsRules.driverSubtitle(Self.driver("a", description: "Runs Claude", detail: "")) == "Runs Claude")
-        #expect(SettingsRules.driverSubtitle(Self.driver("a", description: "Runs Claude", detail: "v2")) == "Runs Claude\nv2")
     }
 
     // MARK: connection

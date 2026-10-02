@@ -112,11 +112,6 @@ public enum SettingsRules {
         return .ready
     }
 
-    /// The row's subtitle: description and detail, the empty ones left out.
-    public static func driverSubtitle(_ d: DriverInfo) -> String {
-        [d.description, d.detail].filter { !$0.isEmpty }.joined(separator: "\n")
-    }
-
     /// "Log in" / "Log in again", or nil for a driver without a login flow.
     public static func loginLabel(_ d: DriverInfo) -> String? {
         guard d.supportsLogin else { return nil }

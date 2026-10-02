@@ -2,8 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// The Settings tab (screens/Settings.tsx): connection (saved Macs, token rotation), network,
-/// appearance and themes, drivers and login, general, models, permissions, triage, prompts,
-/// watchers and projects. Pull to refresh reloads the board snapshot. A settings deep link's theme
+/// appearance and themes, drivers (each opens DriverSettingsScreen) with the default model,
+/// general, permissions, triage, prompts, watchers and projects. Pull to refresh reloads the board snapshot. A settings deep link's theme
 /// picks (`harness://settings?lightTheme=…`) are applied by the shell before this screen shows.
 ///
 /// A modifier on a Form `Section` lands on every row of it, so the sections don't present or load
@@ -26,7 +26,6 @@ struct SettingsScreen: View {
             SettingsDriversSection()
             if let settings = store.state.settings {
                 SettingsGeneralSection(settings: settings)
-                SettingsModelsSection(settings: settings)
                 SettingsPermissionsSection(settings: settings)
                 SettingsTriageSection(settings: settings)
             }
