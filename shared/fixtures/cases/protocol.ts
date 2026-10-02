@@ -29,7 +29,9 @@ const project: P.Project = {
   defaultModels: { "claude-code": "opus", "anthropic-api": "claude-sonnet-4-5" },
   useWorktrees: true,
   isGit: true,
-  requireHumanReview: true,
+  skipAgentReview: false,
+  skipHumanReview: true,
+  requireHumanReview: false,
   permissionMode: "ask",
   baseBranch: "develop",
   completionAction: "pr",
@@ -722,7 +724,8 @@ export const CreateProjectBody: P.CreateProjectBody[] = [
     key: "NYT",
     defaultDriver: "claude-code",
     useWorktrees: true,
-    requireHumanReview: false,
+    skipAgentReview: true,
+    skipHumanReview: false,
     color: "#336699",
     permissionMode: "auto",
     defaultModels: { "claude-code": "opus", "anthropic-api": null },
@@ -730,13 +733,16 @@ export const CreateProjectBody: P.CreateProjectBody[] = [
     completionAction: "merge",
   },
   { path: "/tmp/x", defaultDriver: null, color: null, permissionMode: null, baseBranch: null },
+  // An older app: the inverse of skipHumanReview.
+  { path: "/tmp/y", requireHumanReview: false },
 ];
 
 /** PATCH /projects/:id (`Partial<CreateProjectBody>`). */
 export const UpdateProjectBody: Partial<P.CreateProjectBody>[] = [
   { name: "NYT", color: null, baseBranch: null },
   { defaultModels: { "claude-code": null }, permissionMode: null, defaultDriver: null },
-  { path: "/Users/mark/Sites/nyt", key: "NYT2", completionAction: "pr", permissionMode: "ask", defaultDriver: "anthropic-api", useWorktrees: false, requireHumanReview: true, baseBranch: "main", color: "teal" },
+  { path: "/Users/mark/Sites/nyt", key: "NYT2", completionAction: "pr", permissionMode: "ask", defaultDriver: "anthropic-api", useWorktrees: false, skipHumanReview: true, baseBranch: "main", color: "teal" },
+  { skipAgentReview: false, skipHumanReview: false },
   {},
 ];
 

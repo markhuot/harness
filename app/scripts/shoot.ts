@@ -188,6 +188,8 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   // New session: an empty New session pane beside the board, and one on a project that isn't git.
   { name: "compose", route: "#/compose", setup: inDraft(`await pickProject("NYTIMES");`) },
   { name: "compose-nogit", route: "#/compose", setup: inDraft(`await pickProject("SITE"); await options();`) },
+  // HARNESS skips the human review by default: the switch starts on, and the summary stays empty.
+  { name: "compose-review-defaults", route: "#/compose", setup: inDraft(`await pickProject("HARNESS"); await options();`) },
   { name: "permissions", route: "#/settings/permissions" },
   // Settings → Drivers: the driver list with the Default model under it, a driver opened into its
   // own settings (Anthropic API carries the API key), and the Default model combobox open.

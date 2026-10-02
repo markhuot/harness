@@ -11,7 +11,7 @@ function setup(opts: Parameters<typeof makeOrchestrator>[0] = {}) {
   const h = makeOrchestrator(opts);
   const dir = join(h.home, "proj", "acme");
   mkdirSync(dir, { recursive: true });
-  const project = h.orch.createProject({ path: dir, requireHumanReview: true });
+  const project = h.orch.createProject({ path: dir });
   const events: HarnessEvent[] = [];
   h.bus.on((e) => events.push(e));
   return { ...h, project, events };

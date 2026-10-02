@@ -58,11 +58,34 @@ describe("db", () => {
     expect(cols).not.toContain("auto_complete");
     const store = new Store(db);
     const p = store.projects.get("p1")!;
-    expect([p.nextSeq, p.requireHumanReview, p.completionAction]).toEqual([3, false, "cleanup"]);
+    expect([p.nextSeq, p.skipHumanReview, p.completionAction]).toEqual([3, true, "cleanup"]);
     expect(p).not.toHaveProperty("autoComplete");
     // Inserts and updates no longer name the column.
     expect(store.projects.update("p1", { name: "renamed" })!.name).toBe("renamed");
     expect(store.projects.create({ path: "/new", name: "new" }).key).toBe("NEW");
+  });
+
+  test("migration 25 turns require_human_review into the review defaults, and the tickets it skipped keep skipping", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 24).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, require_human_review, created_at, updated_at) VALUES ('off', 'OFF', 'off', '/off', 1, 0, 0, 0)`);
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, require_human_review, created_at, updated_at) VALUES ('on', 'ON', 'on', '/on', 1, 1, 0, 0)`);
+    for (const [key, project] of [["OFF-1", "off"], ["ON-1", "on"]] as const) {
+      db.query(
+        `INSERT INTO tickets (id, key, project_id, kind, title, description, status, session_id, driver, auto_start, agent_review, human_review, position, created_at, updated_at)
+         VALUES ($key, $key, $project, 'task', $key, '', 'in_progress', $key, 'dummy', 0, 'pending', 'pending', 0, 0, 0)`,
+      ).run({ key, project });
+    }
+    migrate(db);
+    const cols = (db.query("PRAGMA table_info(projects)").all() as { name: string }[]).map((c) => c.name);
+    expect(cols).not.toContain("require_human_review");
+    const store = new Store(db);
+    expect(store.projects.get("off")).toMatchObject({ skipAgentReview: false, skipHumanReview: true });
+    expect(store.projects.get("on")).toMatchObject({ skipAgentReview: false, skipHumanReview: false });
+    expect([store.tickets.get("OFF-1")!.skipHumanReview, store.tickets.get("ON-1")!.skipHumanReview]).toEqual([true, false]);
   });
 
   test("migration 21 sends tickets left ready back to waiting on their approval; a running conductor's children keep theirs", () => {

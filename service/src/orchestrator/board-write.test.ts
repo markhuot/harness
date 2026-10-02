@@ -112,13 +112,22 @@ describe("guard rails", () => {
     expect(created.skipAgentReview).toBe(true);
     expect(text(r)).toContain('"skipAgentReview": true');
 
-    h.orch.updateProject(h.api.id, { requireHumanReview: false });
+    // A project whose new tickets skip the human review: the agent review is all they get, unless
+    // the same call turns the human review back on.
+    h.orch.updateProject(h.api.id, { skipHumanReview: true });
     await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true })).rejects.toThrow(
-      "API doesn't require a human review, so the agent review is the only review its tickets get",
+      "The new ticket skips its human review (its project's default), so the agent review is the only review it gets",
     );
+    const reviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true, skipHumanReview: false });
+    expect([reviewed.skipAgentReview, reviewed.skipHumanReview]).toEqual([true, false]);
     const apiTicket = await h.make("api work", { projectId: h.api.id });
-    await expect(h.orch.ops.updateTicket(c, apiTicket.key, { skipAgentReview: true })).rejects.toThrow("doesn't require a human review");
+    expect(apiTicket.skipHumanReview).toBe(true);
+    await expect(h.orch.ops.updateTicket(c, apiTicket.key, { skipAgentReview: true })).rejects.toThrow(`${apiTicket.key} skips its human review`);
     expect(h.get(apiTicket).skipAgentReview).toBe(false);
+    // Both skipped is the human's call on the project, and an agent's ticket there just follows it.
+    h.orch.updateProject(h.api.id, { skipAgentReview: true });
+    const unreviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API" });
+    expect([unreviewed.skipAgentReview, unreviewed.skipHumanReview]).toEqual([true, true]);
 
     const inReview = await h.make("in review", { status: "review" });
     await expect(h.orch.ops.updateTicket(c, inReview.key, { skipAgentReview: true })).rejects.toThrow(`${inReview.key} is in review; its reviewers decide`);

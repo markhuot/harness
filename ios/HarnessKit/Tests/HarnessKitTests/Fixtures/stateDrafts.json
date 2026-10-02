@@ -1144,7 +1144,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1206,7 +1207,8 @@
           "defaultDriver": "codex",
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1268,7 +1270,8 @@
           "defaultDriver": "",
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1330,7 +1333,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1348,6 +1352,130 @@
         "status": "planning",
         "sessionId": "",
         "driver": "",
+        "parentId": null,
+        "childCount": 0,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "requestedBranch": null,
+        "baseBranch": null,
+        "useWorktree": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false,
+        "draft": true,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": null,
+        "position": 0,
+        "createdAt": 5,
+        "updatedAt": 5
+      }
+    },
+    {
+      "name": "the project's review defaults",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        },
+        "key": "WEB-4",
+        "now": 5
+      },
+      "output": {
+        "id": "",
+        "key": "WEB-4",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "",
+        "description": "",
+        "status": "planning",
+        "sessionId": "",
+        "driver": "claude-code",
+        "parentId": null,
+        "childCount": 0,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "requestedBranch": null,
+        "baseBranch": null,
+        "useWorktree": null,
+        "skipAgentReview": true,
+        "skipHumanReview": true,
+        "draft": true,
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": null,
+        "position": 0,
+        "createdAt": 5,
+        "updatedAt": 5
+      }
+    },
+    {
+      "name": "an older service's project: no review skipped",
+      "input": {
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        },
+        "key": "WEB-4",
+        "now": 5
+      },
+      "output": {
+        "id": "",
+        "key": "WEB-4",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "",
+        "description": "",
+        "status": "planning",
+        "sessionId": "",
+        "driver": "claude-code",
         "parentId": null,
         "childCount": 0,
         "dependsOn": [],
@@ -1393,7 +1521,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -1420,7 +1549,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -1447,7 +1577,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -1475,7 +1606,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -1503,7 +1635,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -1650,7 +1783,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1711,7 +1845,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1768,7 +1903,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1829,7 +1965,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1890,7 +2027,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -1950,7 +2088,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2013,7 +2152,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2029,7 +2169,9 @@
         "permissionMode": null,
         "useWorktree": null,
         "branch": "feat",
-        "baseBranch": "develop"
+        "baseBranch": "develop",
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2081,7 +2223,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2097,7 +2240,9 @@
         "permissionMode": null,
         "useWorktree": null,
         "branch": null,
-        "baseBranch": null
+        "baseBranch": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2149,7 +2294,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2163,7 +2309,9 @@
         "driver": "claude-code",
         "model": null,
         "permissionMode": null,
-        "useWorktree": false
+        "useWorktree": false,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2215,7 +2363,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2229,7 +2378,9 @@
         "driver": "claude-code",
         "model": null,
         "permissionMode": null,
-        "useWorktree": null
+        "useWorktree": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2281,7 +2432,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2295,7 +2447,9 @@
         "driver": "claude-code",
         "model": null,
         "permissionMode": null,
-        "useWorktree": null
+        "useWorktree": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2347,7 +2501,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2363,11 +2518,13 @@
         "permissionMode": null,
         "useWorktree": true,
         "branch": "feat",
-        "baseBranch": null
+        "baseBranch": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
-      "name": "skip review and dependencies only when set",
+      "name": "skip review always, dependencies only when set",
       "input": {
         "ticket": {
           "id": "",
@@ -2417,7 +2574,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2435,13 +2593,14 @@
         "branch": null,
         "baseBranch": null,
         "skipAgentReview": true,
+        "skipHumanReview": false,
         "dependsOn": [
           "WEB-1"
         ]
       }
     },
     {
-      "name": "skip human review only when set",
+      "name": "skip human review",
       "input": {
         "ticket": {
           "id": "",
@@ -2489,7 +2648,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2506,7 +2666,148 @@
         "useWorktree": null,
         "branch": null,
         "baseBranch": null,
+        "skipAgentReview": false,
         "skipHumanReview": true
+      }
+    },
+    {
+      "name": "a skipping project's review turned back on is sent as false",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": true,
+          "skipHumanReview": false,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "projectId": "p1",
+        "prompt": "",
+        "draft": true,
+        "start": false,
+        "kind": "task",
+        "driver": "claude-code",
+        "model": null,
+        "permissionMode": null,
+        "useWorktree": null,
+        "branch": null,
+        "baseBranch": null,
+        "skipAgentReview": true,
+        "skipHumanReview": false
+      }
+    },
+    {
+      "name": "skip flags missing are sent as false",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "projectId": "p1",
+        "prompt": "",
+        "draft": true,
+        "start": false,
+        "kind": "task",
+        "driver": "claude-code",
+        "model": null,
+        "permissionMode": null,
+        "useWorktree": null,
+        "branch": null,
+        "baseBranch": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2558,7 +2859,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2573,7 +2875,9 @@
         "permissionMode": null,
         "useWorktree": null,
         "branch": null,
-        "baseBranch": null
+        "baseBranch": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     },
     {
@@ -2625,7 +2929,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -2641,7 +2946,9 @@
         "permissionMode": "read_only",
         "useWorktree": null,
         "branch": null,
-        "baseBranch": null
+        "baseBranch": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false
       }
     }
   ],
@@ -2661,7 +2968,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2688,7 +2996,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2711,7 +3020,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2774,7 +3084,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2835,7 +3146,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2896,7 +3208,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -2957,7 +3270,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3018,7 +3332,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3079,7 +3394,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3140,7 +3456,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3201,7 +3518,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3262,7 +3580,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3323,7 +3642,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3384,7 +3704,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3445,7 +3766,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3506,7 +3828,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3567,7 +3890,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3628,7 +3952,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3689,7 +4014,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3750,10 +4076,182 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "on a skipping project's defaults",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "a skipping project's review turned back on",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "no project: a skip is an override",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": null,
         "settings": {
           "defaultDriver": "claude-code",
           "defaultModels": {},
@@ -3813,7 +4311,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -3964,7 +4463,8 @@
           "defaultDriver": "codex",
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -5696,6 +6196,505 @@
       }
     }
   ],
+  "draftReviewSkipsPatchCases": [
+    {
+      "name": "on the old defaults: follows the new project's",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "to": {
+          "id": "p2",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "skipAgentReview": false,
+        "skipHumanReview": false
+      }
+    },
+    {
+      "name": "into a skipping project",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "to": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "skipAgentReview": true,
+        "skipHumanReview": true
+      }
+    },
+    {
+      "name": "a flipped switch stays",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "to": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "skipAgentReview": true
+      }
+    },
+    {
+      "name": "the same defaults: nothing",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "to": {
+          "id": "p2",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {}
+    },
+    {
+      "name": "one default differs",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "to": {
+          "id": "p2",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": false,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "skipHumanReview": true
+      }
+    },
+    {
+      "name": "no old project counts as skipping nothing",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": null,
+        "to": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        }
+      },
+      "output": {
+        "skipAgentReview": true,
+        "skipHumanReview": true
+      }
+    },
+    {
+      "name": "no new project counts as skipping nothing",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "from": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "to": null
+      },
+      "output": {
+        "skipAgentReview": false,
+        "skipHumanReview": false
+      }
+    }
+  ],
   "draftUsesWorktreeCases": [
     {
       "name": "inherits the project's worktrees",
@@ -5746,7 +6745,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -5802,7 +6802,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -5858,7 +6859,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -5914,7 +6916,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -6014,7 +7017,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6081,7 +7085,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6103,6 +7108,141 @@
         "Skip agent review",
         "Skip human review",
         "After WEB-1"
+      ]
+    },
+    {
+      "name": "a skipping project's defaults show nothing",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        },
+        "models": {
+          "claude-code:sonnet": "Sonnet 5"
+        },
+        "checkoutName": "main"
+      },
+      "output": []
+    },
+    {
+      "name": "reviews turned back on in a skipping project",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "description": "",
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "project": {
+          "id": "p1",
+          "key": "WEB",
+          "name": "web",
+          "path": "/Users/me/web",
+          "nextSeq": 4,
+          "isGit": true,
+          "useWorktrees": true,
+          "defaultDriver": null,
+          "defaultModels": {},
+          "baseBranch": null,
+          "skipAgentReview": true,
+          "skipHumanReview": true,
+          "createdAt": 0,
+          "updatedAt": 0
+        },
+        "settings": {
+          "defaultDriver": "claude-code",
+          "defaultModels": {},
+          "baseBranch": "main"
+        },
+        "models": {
+          "claude-code:sonnet": "Sonnet 5"
+        },
+        "checkoutName": "main"
+      },
+      "output": [
+        "With agent review",
+        "With human review"
       ]
     },
     {
@@ -6154,7 +7294,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6221,7 +7362,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6284,7 +7426,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6348,7 +7491,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6415,7 +7559,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6480,7 +7625,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6547,7 +7693,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6613,7 +7760,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6679,7 +7827,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6742,7 +7891,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6811,7 +7961,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6874,7 +8025,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -6942,7 +8094,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7005,7 +8158,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7068,7 +8222,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7155,7 +8310,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7227,7 +8383,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7289,7 +8446,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7351,7 +8509,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7423,7 +8582,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7495,7 +8655,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7566,7 +8727,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7637,7 +8799,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7699,7 +8862,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": "staging",
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7760,7 +8924,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": "staging",
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7823,7 +8988,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7899,7 +9065,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -7965,7 +9132,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8031,7 +9199,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8107,7 +9276,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8183,7 +9353,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8259,7 +9430,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8335,7 +9507,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8401,7 +9574,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": "staging",
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8467,7 +9641,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": "staging",
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8533,7 +9708,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         },
@@ -8607,7 +9783,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -8675,7 +9852,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -8743,7 +9921,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -8865,7 +10044,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -8933,7 +10113,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -9001,7 +10182,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -9069,7 +10251,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -9138,7 +10321,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -9206,7 +10390,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }
@@ -9273,7 +10458,8 @@
           "defaultDriver": null,
           "defaultModels": {},
           "baseBranch": null,
-          "requireHumanReview": true,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
           "createdAt": 0,
           "updatedAt": 0
         }

@@ -11,14 +11,16 @@ import {
   draftDefaultBranchLabel,
   draftIsEmpty,
   draftPatch,
+  draftReviewSkipsPatch,
   newSessionOptionsSummary,
   optionsNeedAttention,
+  projectReviewSkips,
   ticketBranchHint,
   ticketSettingsRows,
 } from "./drafts";
 
 const project = (over: Partial<Project> = {}): Project =>
-  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, requireHumanReview: true, createdAt: 0, updatedAt: 0, ...over }) as Project;
+  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, skipAgentReview: false, skipHumanReview: false, createdAt: 0, updatedAt: 0, ...over }) as Project;
 const settings = { defaultDriver: "claude-code", defaultModels: {}, baseBranch: "main" };
 const blank = (p = project()) => blankDraftTicket(p, settings, "WEB-4", 1);
 const b = (name: string, checkedOutAt: string | null = null): BranchInfo => ({ name, lastCommitAt: 1, checkedOutAt });
@@ -75,15 +77,47 @@ describe("draftCreateBody", () => {
     expect(draftCreateBody({ ...blank(), useWorktree: true }, project({ isGit: false })).useWorktree).toBeNull();
   });
 
-  test("skip review and dependencies go only when set", () => {
-    expect("skipAgentReview" in draftCreateBody(blank(), project()) || "skipHumanReview" in draftCreateBody(blank(), project())).toBe(false);
+  test("both review switches always go (the service would fill in the project's otherwise); dependencies only when set", () => {
+    expect(draftCreateBody(blank(), project())).toMatchObject({ skipAgentReview: false, skipHumanReview: false });
+    expect("dependsOn" in draftCreateBody(blank(), project())).toBe(false);
     expect(draftCreateBody({ ...blank(), skipAgentReview: true, dependsOn: ["WEB-1"] }, project())).toMatchObject({ skipAgentReview: true, dependsOn: ["WEB-1"] });
-    expect(draftCreateBody({ ...blank(), skipHumanReview: true }, project())).toMatchObject({ skipHumanReview: true });
+    // Turned back on in a project that skips it by default: the false has to reach the service.
+    const skipping = project({ skipHumanReview: true });
+    expect(draftCreateBody({ ...blank(skipping), skipHumanReview: false }, skipping)).toMatchObject({ skipHumanReview: false });
   });
 
   test("skipping the human review alone makes a draft worth saving", () => {
     expect(draftIsEmpty({ ...blank(), skipHumanReview: true }, project(), settings)).toBe(false);
     expect(draftPatch(blank(), { ...blank(), skipHumanReview: true })).toEqual({ skipHumanReview: true });
+  });
+});
+
+describe("the project's review defaults", () => {
+  const skipping = project({ skipAgentReview: true, skipHumanReview: true });
+
+  test("a blank draft starts on them and is still empty there; flipping one back makes it worth saving", () => {
+    const t = blank(skipping);
+    expect([t.skipAgentReview, t.skipHumanReview]).toEqual([true, true]);
+    expect(draftIsEmpty(t, skipping, settings)).toBe(true);
+    expect(draftIsEmpty({ ...t, skipAgentReview: false }, skipping, settings)).toBe(false);
+    // An older service sends no defaults: nothing skipped.
+    expect(projectReviewSkips({})).toEqual({ skipAgentReview: false, skipHumanReview: false });
+  });
+
+  test("the summary names a switch only where it differs from the project's", () => {
+    expect(newSessionOptionsSummary(blank(skipping), skipping, settings)).toEqual([]);
+    expect(newSessionOptionsSummary({ ...blank(skipping), skipAgentReview: false, skipHumanReview: false }, skipping, settings)).toEqual(["With agent review", "With human review"]);
+  });
+
+  test("moving projects, a switch on the old project's default follows the new one; a flipped one stays", () => {
+    const plain = project({ id: "p2" });
+    expect(draftReviewSkipsPatch(blank(skipping), skipping, plain)).toEqual({ skipAgentReview: false, skipHumanReview: false });
+    expect(draftReviewSkipsPatch(blank(plain), plain, skipping)).toEqual({ skipAgentReview: true, skipHumanReview: true });
+    // Flipped away from the old default: kept.
+    expect(draftReviewSkipsPatch({ ...blank(plain), skipHumanReview: true }, plain, skipping)).toEqual({ skipAgentReview: true });
+    expect(draftReviewSkipsPatch({ ...blank(skipping), skipAgentReview: false }, skipping, plain)).toEqual({ skipHumanReview: false });
+    // Same defaults on both: nothing to send.
+    expect(draftReviewSkipsPatch(blank(plain), plain, project({ id: "p3" }))).toEqual({});
   });
 });
 

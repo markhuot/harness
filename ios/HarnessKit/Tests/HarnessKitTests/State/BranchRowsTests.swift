@@ -57,7 +57,7 @@ struct BranchRowsTests {
     }
 
     @Test func predictedTicketKeyForAProject() {
-        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, useWorktrees: true, requireHumanReview: true, createdAt: 0, updatedAt: 0)
+        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, useWorktrees: true, createdAt: 0, updatedAt: 0)
         #expect(Branches.predictedTicketKey(project) == "WEB-4")
         #expect(Branches.predictedTicketKey(project) { $0 == "WEB-4" } == "WEB-5")
     }

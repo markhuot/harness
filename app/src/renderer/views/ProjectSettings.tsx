@@ -1,5 +1,6 @@
 // Project settings (#/project/<id>/settings): everything that belongs to one project — name,
-// identifier (ticket key prefix), color, folder, default driver + model, worktrees, human review, delete.
+// identifier (ticket key prefix), color, folder, default driver + model, worktrees, the review
+// defaults for new tickets, delete.
 
 import { useEffect, useMemo, useState } from "react";
 import type { CompletionAction, Project } from "@harness/shared";
@@ -137,8 +138,18 @@ function ProjectSettings({ project }: { project: Project }) {
                   />
                 </Row>
               )}
-              <Row title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
-                <Switch ariaLabel="Require human review" checked={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
+              <Row title="Skip agent review" sub="New tickets go straight to your review when they're submitted. Each ticket can change it.">
+                <Switch ariaLabel="Skip agent review" checked={!!project.skipAgentReview} onChange={(v) => void save({ skipAgentReview: v })} />
+              </Row>
+              <Row
+                title="Skip human review"
+                sub={
+                  project.skipAgentReview && project.skipHumanReview
+                    ? "New tickets land as soon as they're submitted, with no review at all. Each ticket can change it."
+                    : "New tickets land as soon as the agent review approves them. Each ticket can change it."
+                }
+              >
+                <Switch ariaLabel="Skip human review" checked={!!project.skipHumanReview} onChange={(v) => void save({ skipHumanReview: v })} />
               </Row>
               {project.isGit && <CompletionActionRow project={project} onChange={(completionAction) => void save({ completionAction })} />}
             </div>

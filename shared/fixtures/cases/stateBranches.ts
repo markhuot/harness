@@ -135,7 +135,7 @@ export const branchChoiceHintCases = cases(hint, {
 });
 
 const proj = (over: Partial<Project> = {}): Project =>
-  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, requireHumanReview: true, createdAt: 0, updatedAt: 0, ...over }) as Project;
+  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, skipAgentReview: false, skipHumanReview: false, createdAt: 0, updatedAt: 0, ...over }) as Project;
 const ticket = (over: Partial<Ticket> = {}): Ticket => ({ ...blankDraftTicket(proj(), null, "WEB-4", 1), draft: false, ...over });
 const git = proj();
 const noGit = proj({ isGit: false });

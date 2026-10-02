@@ -173,13 +173,16 @@ public final class NewSessionEditor {
         edit(UpdateTicketBody(description: text))
     }
 
-    /// Move the draft to another project: its branch picks start over, and a Default model keeps
-    /// following the project it's in.
+    /// Move the draft to another project: its branch picks start over, and a Default model and the
+    /// review switches still on the old project's defaults keep following the project it's in.
     public func changeProject(_ id: String) {
         guard let sync else { return }
         let s = state()
         guard let next = s.projects[id], id != sync.local.projectId else { return }
         var patch = UpdateTicketBody(baseBranch: .null, branch: .null, useWorktree: .null, projectId: id)
+        let skips = Drafts.draftReviewSkipsPatch(sync.local, from: s.projects[sync.local.projectId], to: next)
+        patch.skipAgentReview = skips.skipAgentReview
+        patch.skipHumanReview = skips.skipHumanReview
         let settings = s.settings.map(ModelSettings.init)
         let current = s.projects[sync.local.projectId].map(ModelProject.init)
         if Models.ticketChoice(sync.local, current, settings).driver == nil {

@@ -335,6 +335,17 @@ function validBoolean(name: string, value: unknown): boolean | undefined {
   return value;
 }
 
+/**
+ * A project body's review defaults (Project.skipAgentReview / skipHumanReview), only the ones it
+ * sets. Apps from before them send requireHumanReview instead, its inverse.
+ */
+function projectReviewDefaults(body: Partial<CreateProjectBody>): { skipAgentReview?: boolean; skipHumanReview?: boolean } {
+  const skipAgentReview = validBoolean("skipAgentReview", body.skipAgentReview);
+  const legacy = validBoolean("requireHumanReview", body.requireHumanReview);
+  const skipHumanReview = validBoolean("skipHumanReview", body.skipHumanReview) ?? (legacy === undefined ? undefined : !legacy);
+  return { ...(skipAgentReview !== undefined && { skipAgentReview }), ...(skipHumanReview !== undefined && { skipHumanReview }) };
+}
+
 /** Validate a completion action from a request body (omitted / null → undefined). */
 function validCompletionAction(name: string, value: unknown): CompletionAction | undefined {
   if (value === undefined || value === null) return undefined;
@@ -682,7 +693,7 @@ export class Orchestrator {
       key,
       defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
-      requireHumanReview: body.requireHumanReview,
+      ...projectReviewDefaults(body),
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
       completionAction: this.validProjectCompletion(path, body.completionAction),
@@ -778,13 +789,24 @@ export class Orchestrator {
       }
     }
     const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
-    const { key: _key, defaultModels: modelPatch, permissionMode: _mode, color: rawColor, baseBranch: rawBase, completionAction: rawAction, ...rest } = body;
+    const {
+      key: _key,
+      defaultModels: modelPatch,
+      permissionMode: _mode,
+      color: rawColor,
+      baseBranch: rawBase,
+      completionAction: rawAction,
+      skipAgentReview: _skipAgent,
+      skipHumanReview: _skipHuman,
+      requireHumanReview: _require,
+      ...rest
+    } = body;
     const color = rawColor !== undefined ? validProjectColor(rawColor) : undefined;
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
     const defaultModels =
       modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
-    return { newKey, permissionMode, rest: { ...rest, color, baseBranch, completionAction }, path, defaultModels };
+    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, baseBranch, completionAction }, path, defaultModels };
   }
 
   async deleteProject(id: string) {
@@ -1021,8 +1043,9 @@ export class Orchestrator {
     const useWorktree = validUseWorktree(body.useWorktree);
     const baseBranch = validateBranchName("baseBranch", body.baseBranch);
     const requestedBranch = validateBranchName("branch", body.branch);
-    const skipAgentReview = validBoolean("skipAgentReview", body.skipAgentReview) ?? false;
-    const skipHumanReview = validBoolean("skipHumanReview", body.skipHumanReview) ?? false;
+    // Left out, each review follows the project's default for new tickets.
+    const skipAgentReview = validBoolean("skipAgentReview", body.skipAgentReview) ?? !!project.skipAgentReview;
+    const skipHumanReview = validBoolean("skipHumanReview", body.skipHumanReview) ?? !!project.skipHumanReview;
     if (requestedBranch && !(useWorktree ?? project.useWorktrees)) {
       throw badRequest(`branch ${requestedBranch} needs a worktree, but this ticket would run in the project checkout (useWorktree is off)`);
     }
@@ -1677,8 +1700,6 @@ export class Orchestrator {
    */
   private applySkipHumanReview(ticket: Ticket): Ticket {
     if (ticket.status !== "review") return ticket;
-    const project = this.store.projects.get(ticket.projectId);
-    if (project && !project.requireHumanReview) return ticket;
     if (ticket.skipHumanReview && ticket.humanReview === "pending") {
       const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
       this.touchSession(t.sessionId);
@@ -2087,32 +2108,26 @@ export class Orchestrator {
   /**
    * An agent may skip one of a ticket's reviews (its own ticket's, or one it creates or edits) only
    * while the other still happens, so nothing lands on an agent's say-so with nobody checking. The
-   * agent review needs a human (or conductor) review behind it: the project requires one and the
-   * ticket doesn't skip it. The human review needs the agent review. `next` is what the call sets;
-   * only turning a skip on is checked. Humans can set both anywhere.
+   * agent review needs a human (or conductor) review behind it, and the human review needs the
+   * agent review. `t` is the ticket as it is (a new ticket: its project's defaults, with no key);
+   * `next` is what the call sets, and only turning a skip on is checked. Humans can set both
+   * anywhere, the project defaults included, so a ticket that already skips both is the human's
+   * choice and stands.
    */
-  private assertAgentMaySkipReview(t: Pick<Ticket, "projectId" | "skipAgentReview" | "skipHumanReview"> & { key?: string }, next: ReviewSkips) {
+  private assertAgentMaySkipReview(t: Pick<Ticket, "skipAgentReview" | "skipHumanReview"> & { key?: string }, next: ReviewSkips) {
     if (!next.skipAgentReview && !next.skipHumanReview) return;
-    const project = this.store.projects.get(t.projectId);
-    const who = t.key ? `${t.key}` : "The new ticket";
     const agentSkipped = next.skipAgentReview ?? !!t.skipAgentReview;
     const humanSkipped = next.skipHumanReview ?? !!t.skipHumanReview;
-    if (next.skipAgentReview && project && !project.requireHumanReview) {
-      throw new Error(
-        t.key
-          ? `${t.key}'s project (${project.key}) doesn't require a human review, so the agent review is the only review it gets and an agent can't skip it. A human can turn it off on the ticket.`
-          : `${project.key} doesn't require a human review, so the agent review is the only review its tickets get and an agent can't skip it.`,
-      );
-    }
-    if (agentSkipped && humanSkipped) {
-      throw new Error(
-        next.skipAgentReview && next.skipHumanReview
-          ? `An agent can't skip both of a ticket's reviews: one of them has to check the work before it lands. A human can turn both off on the ticket.`
-          : next.skipAgentReview
-            ? `${who} skips its human review, so the agent review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`
-            : `${who} skips its agent review, so the human review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`,
-      );
-    }
+    if (!agentSkipped || !humanSkipped) return;
+    const who = t.key ?? "The new ticket";
+    const why = t.key ? "" : " (its project's default)";
+    throw new Error(
+      next.skipAgentReview && next.skipHumanReview
+        ? `An agent can't skip both of a ticket's reviews: one of them has to check the work before it lands. A human can turn both off on the ticket.`
+        : next.skipAgentReview
+          ? `${who} skips its human review${why}, so the agent review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`
+          : `${who} skips its agent review${why}, so the human review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`,
+    );
   }
 
   async reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void> {
@@ -2354,7 +2369,10 @@ export class Orchestrator {
     if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
-    this.assertAgentMaySkipReview({ projectId: project.id }, { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview });
+    this.assertAgentMaySkipReview(
+      { skipAgentReview: project.skipAgentReview, skipHumanReview: project.skipHumanReview },
+      { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview },
+    );
     if (input.remoteUrl && !input.remoteId) throw new Error("remote_url needs remote_id: the external item's key, e.g. FOO-123");
     const externalRef = input.remoteId ? this.asToolSync(() => this.manualExternalRef(null, { key: input.remoteId!, url: input.remoteUrl })) : null;
     if (input.child ?? own.kind === "conductor") {
@@ -2667,7 +2685,8 @@ export class Orchestrator {
       defaultDriver: p.defaultDriver,
       defaultModels: p.defaultModels,
       useWorktrees: p.useWorktrees,
-      requireHumanReview: p.requireHumanReview,
+      skipAgentReview: !!p.skipAgentReview,
+      skipHumanReview: !!p.skipHumanReview,
       permissionMode: p.permissionMode,
       color: p.color,
       baseBranch: p.baseBranch ?? null,
@@ -3302,9 +3321,8 @@ export class Orchestrator {
   }
 
   private submit(ticket: Ticket, summary: string, author: SummaryAuthor, attachments: SummaryAttachment[] = []) {
-    const project = this.store.projects.get(ticket.projectId);
-    const humanSkipped = !!ticket.skipHumanReview && !!project?.requireHumanReview;
-    const humanReview = (project && !project.requireHumanReview) || ticket.skipHumanReview ? "approved" : "pending";
+    const humanSkipped = !!ticket.skipHumanReview;
+    const humanReview = humanSkipped ? "approved" : "pending";
     const agentReview = ticket.skipAgentReview ? "skipped" : "pending";
     this.addSummary(ticket.sessionId, ticket.id, author, summary, attachments);
     const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", summary);

@@ -12,6 +12,7 @@ import {
   draftDefaultBranchLabel,
   draftIsEmpty,
   draftPatch,
+  draftReviewSkipsPatch,
   draftUsesWorktree,
   newSessionOptionsSummary,
   optionsNeedAttention,
@@ -25,7 +26,7 @@ import { cases } from "../case";
 type Settings = { defaultDriver: string; defaultModels: Record<string, string | null>; baseBranch?: string };
 
 const project = (over: Partial<Project> = {}): Project =>
-  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, requireHumanReview: true, createdAt: 0, updatedAt: 0, ...over }) as Project;
+  ({ id: "p1", key: "WEB", name: "web", path: "/Users/me/web", nextSeq: 4, isGit: true, useWorktrees: true, defaultDriver: null, defaultModels: {}, baseBranch: null, skipAgentReview: false, skipHumanReview: false, createdAt: 0, updatedAt: 0, ...over }) as Project;
 const settings: Settings = { defaultDriver: "claude-code", defaultModels: {}, baseBranch: "main" };
 const blank = (p = project()) => blankDraftTicket(p, settings, "WEB-4", 1);
 const launched = (over: Partial<Ticket> = {}): Ticket => ({ ...blank(), key: "WEB-4", draft: false, ...over });
@@ -41,8 +42,22 @@ export const blankDraftTicketCases = cases(
     "the project's own driver": { project: project({ id: "p2", defaultDriver: "codex" }), settings, key: "API-9", now: 1_700_000_000_000 },
     "an empty project driver falls back to settings": { project: project({ defaultDriver: "" }), settings, key: "WEB-4", now: 5 },
     "no settings and no project driver: empty": { project: project(), settings: null, key: "WEB-4", now: 5 },
+    "the project's review defaults": { project: project({ skipAgentReview: true, skipHumanReview: true }), settings, key: "WEB-4", now: 5 },
+    "an older service's project: no review skipped": { project: (({ skipAgentReview: _a, skipHumanReview: _h, ...rest }) => rest)(project()) as Project, settings, key: "WEB-4", now: 5 },
   },
 );
+
+const skipping = project({ skipAgentReview: true, skipHumanReview: true });
+type SkipsInput = { ticket: Ticket; from: Project | null; to: Project | null };
+export const draftReviewSkipsPatchCases = cases(({ ticket, from, to }: SkipsInput) => draftReviewSkipsPatch(ticket, from, to), {
+  "on the old defaults: follows the new project's": { ticket: blank(skipping), from: skipping, to: project({ id: "p2" }) },
+  "into a skipping project": { ticket: blank(), from: project(), to: skipping },
+  "a flipped switch stays": { ticket: { ...blank(), skipHumanReview: true }, from: project(), to: skipping },
+  "the same defaults: nothing": { ticket: blank(), from: project(), to: project({ id: "p2" }) },
+  "one default differs": { ticket: blank(), from: project(), to: project({ id: "p2", skipHumanReview: true }) },
+  "no old project counts as skipping nothing": { ticket: blank(), from: null, to: skipping },
+  "no new project counts as skipping nothing": { ticket: blank(skipping), from: skipping, to: null },
+});
 
 type PatchInput = { ticket: Ticket; patch: UpdateTicketBody };
 const withModel = { ...blank(), model: "opus" };
@@ -92,6 +107,9 @@ export const draftIsEmptyCases = cases(({ ticket, project, settings }: EmptyInpu
   "base branch": emptyCase({ baseBranch: "develop" }),
   "skip review": emptyCase({ skipAgentReview: true }),
   "skip human review": emptyCase({ skipHumanReview: true }),
+  "on a skipping project's defaults": { ticket: blank(skipping), project: skipping, settings },
+  "a skipping project's review turned back on": { ticket: { ...blank(skipping), skipAgentReview: false }, project: skipping, settings },
+  "no project: a skip is an override": emptyCase({ skipHumanReview: true }, null),
   dependencies: emptyCase({ dependsOn: ["WEB-1"] }),
   "no project: the settings' driver": emptyCase({}, null),
   "no project or settings: any driver is an override": emptyCase({}, null, null),
@@ -106,8 +124,10 @@ export const draftCreateBodyCases = cases(({ ticket, project }: CreateInput) => 
   "a non-git project sends no worktree choice": { ticket: { ...blank(), useWorktree: true }, project: project({ isGit: false }) },
   "a project without worktrees: no branch keys": { ticket: { ...blank(), requestedBranch: "feat" }, project: project({ useWorktrees: false }) },
   "opting into a worktree sends the branch": { ticket: { ...blank(), useWorktree: true, requestedBranch: "feat" }, project: project({ useWorktrees: false }) },
-  "skip review and dependencies only when set": { ticket: { ...blank(), skipAgentReview: true, dependsOn: ["WEB-1"] }, project: project() },
-  "skip human review only when set": { ticket: { ...blank(), skipHumanReview: true }, project: project() },
+  "skip review always, dependencies only when set": { ticket: { ...blank(), skipAgentReview: true, dependsOn: ["WEB-1"] }, project: project() },
+  "skip human review": { ticket: { ...blank(), skipHumanReview: true }, project: project() },
+  "a skipping project's review turned back on is sent as false": { ticket: { ...blank(skipping), skipHumanReview: false }, project: skipping },
+  "skip flags missing are sent as false": { ticket: (({ skipAgentReview: _a, skipHumanReview: _h, ...rest }) => rest)(blank()) as Ticket, project: project() },
   "an empty driver is left out": { ticket: { ...blank(), driver: "" }, project: project() },
   "model, permission mode and kind": { ticket: { ...blank(), model: "sonnet", permissionMode: "read_only" as PermissionMode, kind: "conductor" as TicketKind }, project: project() },
 });
@@ -246,6 +266,8 @@ export const newSessionOptionsSummaryCases = cases(summary, {
     settings,
     ...labels,
   },
+  "a skipping project's defaults show nothing": { ticket: blank(skipping), project: skipping, settings, ...labels },
+  "reviews turned back on in a skipping project": { ticket: { ...blank(skipping), skipAgentReview: false, skipHumanReview: false }, project: skipping, settings, ...labels },
   "the checkout pick reads as no worktree and hides the base": { ticket: { ...blank(), useWorktree: false, baseBranch: "develop" }, project: project(), settings, ...labels },
   "no checkout name: Project directory": { ticket: { ...blank(), useWorktree: false }, project: project(), settings },
   "a null checkout name: Project directory": { ticket: { ...blank(), useWorktree: false }, project: project(), settings, checkoutName: null },

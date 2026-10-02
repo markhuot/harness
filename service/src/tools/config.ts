@@ -302,7 +302,14 @@ const projectProps = {
   name: { type: "string", minLength: 1, description: "Display name (default: the directory name)." },
   default_driver: { type: "string", description: "Driver for new tickets (see list_drivers); empty for the settings default." },
   use_worktrees: { type: "boolean", description: "Give each ticket its own git worktree and branch (git repos only). Default true." },
-  require_human_review: { type: "boolean", description: "Tickets wait for a human review after the agent review. Default true." },
+  skip_agent_review: {
+    type: "boolean",
+    description: "New tickets skip their agent review unless they're created otherwise (a default; existing tickets keep their own). Default false.",
+  },
+  skip_human_review: {
+    type: "boolean",
+    description: "New tickets skip their human review, landing once the agent review approves them, unless they're created otherwise (a default; existing tickets keep their own). Default false.",
+  },
   completion_action: {
     type: "string",
     enum: [...COMPLETION_ACTIONS],
@@ -325,7 +332,8 @@ type ProjectToolInput = {
   name?: string;
   default_driver?: string;
   use_worktrees?: boolean;
-  require_human_review?: boolean;
+  skip_agent_review?: boolean;
+  skip_human_review?: boolean;
   completion_action?: string;
   permission_mode?: string;
   default_models?: Record<string, string | null>;
@@ -340,7 +348,8 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.key !== undefined) body.key = i.key;
   if (i.default_driver !== undefined) body.defaultDriver = i.default_driver || null;
   if (i.use_worktrees !== undefined) body.useWorktrees = i.use_worktrees;
-  if (i.require_human_review !== undefined) body.requireHumanReview = i.require_human_review;
+  if (i.skip_agent_review !== undefined) body.skipAgentReview = i.skip_agent_review;
+  if (i.skip_human_review !== undefined) body.skipHumanReview = i.skip_human_review;
   if (i.completion_action !== undefined) body.completionAction = i.completion_action;
   if (i.permission_mode !== undefined) body.permissionMode = i.permission_mode === "inherit" ? null : i.permission_mode;
   if (i.default_models !== undefined) body.defaultModels = i.default_models;

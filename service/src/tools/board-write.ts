@@ -23,13 +23,14 @@ const branchProp = {
 
 const skipAgentReviewProp = {
   type: "boolean",
-  description: "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). Only for a project that requires a human review, and not with skip_human_review.",
+  description:
+    "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). Not while it skips the human review: one review has to check the work. Omitted on create: the project's default.",
 };
 
 const skipHumanReviewProp = {
   type: "boolean",
   description:
-    "Skip the human review (yours, for a child), so the work lands as soon as its agent review approves it. Only when the human asked for it, and not with skip_agent_review: one review has to check the work.",
+    "Skip the human review (yours, for a child), so the work lands as soon as its agent review approves it. Only when the human asked for it, and not while it skips the agent review: one review has to check the work. Omitted on create: the project's default.",
 };
 
 const remoteIdProp = {

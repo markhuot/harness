@@ -1,5 +1,5 @@
 // The ticket settings' "Skip agent review" and "Skip human review" hints (components/TicketSettings.tsx).
-import { reviewPassed, type Project, type Ticket } from "@harness/shared";
+import { reviewPassed, type Ticket } from "@harness/shared";
 
 /** What flipping the ticket's "Skip agent review" switch does now (UpdateTicketBody.skipAgentReview). */
 export function skipReviewHint(t: Pick<Ticket, "status" | "agentReview" | "skipAgentReview">): string {
@@ -9,11 +9,7 @@ export function skipReviewHint(t: Pick<Ticket, "status" | "agentReview" | "skipA
 }
 
 /** What flipping the ticket's "Skip human review" switch does now (UpdateTicketBody.skipHumanReview). */
-export function skipHumanReviewHint(
-  t: Pick<Ticket, "status" | "agentReview" | "humanReview" | "skipAgentReview" | "skipHumanReview">,
-  project: Pick<Project, "requireHumanReview"> | null | undefined,
-): string {
-  if (project?.requireHumanReview === false) return "This project doesn't ask for a human review";
+export function skipHumanReviewHint(t: Pick<Ticket, "status" | "agentReview" | "humanReview" | "skipAgentReview" | "skipHumanReview">): string {
   if (t.status === "review" && !t.skipHumanReview && t.humanReview === "pending") {
     return reviewPassed(t.agentReview) ? "Turning it on lands the ticket now" : "Turning it on lands the ticket once its agent review passes";
   }

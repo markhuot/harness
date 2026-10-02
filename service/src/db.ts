@@ -479,6 +479,17 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN has_changes INTEGER;
   `,
+  // 25: projects.skip_agent_review / projects.skip_human_review: the defaults a new ticket's two
+  //     review switches start from, replacing require_human_review, which skipped the human review
+  //     of every ticket in the project whatever the ticket said. Those projects default to skipping
+  //     it, and their tickets keep skipping it, now on their own flag.
+  `
+  ALTER TABLE projects ADD COLUMN skip_agent_review INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE projects ADD COLUMN skip_human_review INTEGER NOT NULL DEFAULT 0;
+  UPDATE projects SET skip_human_review = 1 WHERE require_human_review = 0;
+  UPDATE tickets SET skip_human_review = 1 WHERE project_id IN (SELECT id FROM projects WHERE require_human_review = 0);
+  ALTER TABLE projects DROP COLUMN require_human_review;
+  `,
 ];
 
 /**

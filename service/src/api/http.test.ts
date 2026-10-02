@@ -471,7 +471,7 @@ describe("http api", () => {
 
   test("conductor with the real dummy driver + tools drives its children to done", async () => {
     const { client, dir, h } = await boot();
-    const p = await client.createProject({ path: dir, requireHumanReview: true });
+    const p = await client.createProject({ path: dir });
     const c = await client.createTicket({ projectId: p.id, prompt: "Ship it\n- Build the API\n- Build the UI", kind: "conductor" });
     await h.orchestrator.idle(30_000);
     const d = await client.getTicket(c.key);
@@ -485,7 +485,7 @@ describe("http api", () => {
 
   test("a plain task ticket that makes a child with the real dummy driver conducts it to done", async () => {
     const { client, dir, h } = await boot();
-    const p = await client.createProject({ path: dir, requireHumanReview: true });
+    const p = await client.createProject({ path: dir });
     const t = await client.createTicket({ projectId: p.id, prompt: "Audit the PRs /child Rebase the PR" });
     await h.orchestrator.idle(30_000);
     const d = await client.getTicket(t.key);

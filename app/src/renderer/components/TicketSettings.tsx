@@ -135,7 +135,7 @@ export function TicketSettings({
         <Switch checked={!!ticket.skipAgentReview} disabled={!editable} onChange={(v) => onPatch({ skipAgentReview: v })} label="Skip agent review" />
       </dd>
       <dt>Human review</dt>
-      <dd title={editable ? skipHumanReviewHint(ticket, project) : undefined}>
+      <dd title={editable ? skipHumanReviewHint(ticket) : undefined}>
         <Switch checked={!!ticket.skipHumanReview} disabled={!editable} onChange={(v) => onPatch({ skipHumanReview: v })} label="Skip human review" />
       </dd>
       {rows.branch.show && project && (

@@ -11,7 +11,7 @@ const project = (over: Partial<Project> = {}): Project =>
   nextSeq: 4,
   defaultDriver: null,
   useWorktrees: true,
-  requireHumanReview: true,
+  skipAgentReview: false, skipHumanReview: false,
   createdAt: 0,
   updatedAt: 0,
   ...over,
