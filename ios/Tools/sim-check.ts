@@ -1338,9 +1338,11 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
   await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=spec`, (l) => l.includes("Image phone.png"));
   await Bun.sleep(1200); // let the images and the video's first frame load
   await check("every attachment shows inline in the spec", async () => {
-    const want = ["Image phone.png", "Image wide.png", "Video flow.mp4", "Image broken.png"];
+    // An image that won't load is tried as a video before it shows "Couldn't load", so the missing
+    // one may be labelled either way.
+    const want = ["Image phone.png", "Image wide.png", "Video flow.mp4", "Image broken.png|Video broken.png"];
     const l = await labels(udid);
-    const missing = want.filter((w) => !l.includes(w));
+    const missing = want.filter((w) => !w.split("|").some((x) => l.includes(x)));
     if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     return want.join(", ");
   });
