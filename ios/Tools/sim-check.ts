@@ -23,9 +23,9 @@
 //   The modes below replace the default walk-through and use one simulator:
 //
 //   --paging: seeds 125+ done tickets (one old "haystack" ticket deep in the history) and a conductor
-//      with done children; checks child tickets are hidden by default (and the header menu shows
-//      them), the Done column scrolls into older pages, and the Search tab finds the unloaded done
-//      ticket; paging-*.png
+//      with done children; checks child tickets are hidden by default (and the Filter menu shows
+//      them), the Done column scrolls into older pages, and the board's search field finds the
+//      unloaded done ticket; paging-*.png
 //
 //   --stick: a ticket with a long brief and a long transcript; swipes the Transcript tab and checks it
 //      follows new content at the bottom, stays put once scrolled up, and follows again after
@@ -788,7 +788,8 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     throw new Error("couldn't open the Done column");
   };
   const boardMenu = async () => {
-    await tapHeader(udid, "Board options", { x: 308, y: 84 });
+    // The filter sits at the bottom bar's leading edge.
+    await tapHeader(udid, "Filter", { x: 40, y: 830 });
     await tapWhere(udid, "Show child tickets");
   };
   const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
@@ -803,7 +804,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     return `newest non-child ${p.top.key} on top`;
   });
   await shootBoth(udid, "paging-done");
-  await check("Show child tickets (header menu) shows them; toggling back hides them", async () => {
+  await check("Show child tickets (Filter menu) shows them; toggling back hides them", async () => {
     await boardMenu();
     await until("children visible", () => has(`${p.kids[2]!.key} `), 6000);
     await boardMenu();
@@ -825,11 +826,10 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   });
   await shootBoth(udid, "paging-done-scrolled");
   await check("search finds a done ticket that isn't loaded", async () => {
-    // Search is its own tab, linked like the others. AXe doesn't descend into the header holding
-    // the native field, so tap where it sits.
-    await goto(udid, "harness://search");
+    // The search field is always in the board's bottom bar, between the filter and New session.
+    await goto(udid, BOARD);
     await Bun.sleep(500);
-    await axe("tap", "-x", "200", "-y", "139", "--udid", udid);
+    await tapHeader(udid, "Search tickets", { x: 190, y: 830 });
     await Bun.sleep(500);
     await axe("type", "haystack", "--udid", udid);
     await until(`${p.needle.key} in the results`, () => has(`${p.needle.key} `), 10000);

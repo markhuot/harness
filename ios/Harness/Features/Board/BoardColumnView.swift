@@ -119,8 +119,8 @@ struct BoardColumnView: View {
     @ViewBuilder private var empty: some View {
         let p = ctx.paging
         Group {
-            if ctx.total == 0 && status == .planning && !ctx.searchTab {
-                EmptyState(icon: "plus", title: "No sessions yet", message: "Start one with + in the top right.")
+            if ctx.total == 0 && status == .planning && !ctx.searching {
+                EmptyState(icon: "plus", title: "No sessions yet", message: "Start one with + in the bottom right.")
             } else if ctx.searching && ctx.pending {
                 emptyText("Searching…")
             } else if !ctx.searching && status == .done && !store.loader.legacy && (p == nil || p!.loading || store.loader.canLoadMoreDone(ctx.projectId)) && p?.error == nil {

@@ -23,8 +23,6 @@ struct RouteScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(c.bg)
-        // These cover the tabs, so the tab bar isn't there.
-        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -67,7 +65,7 @@ struct SheetHost: View {
 
     @ViewBuilder private var content: some View {
         switch sheet {
-        case let .projects(fromSearch): RequireStore { ProjectsSheet(fromSearch: fromSearch) }
+        case .projects: RequireStore { ProjectsSheet() }
         case let .newSession(projectId, key): RequireStore { NewSessionScreen(projectId: projectId, key: key) }
         case let .watcher(id): RequireStore { WatcherFormScreen(id: id) }
         case .connect: ConnectScreen()

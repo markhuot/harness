@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Settings tab: connection (saved Macs, token rotation), network,
+/// The Settings section (from the bottom of the sidebar): connection (saved Macs, token rotation), network,
 /// appearance and themes, drivers (each opens DriverSettingsScreen) with the default model,
 /// general, permissions, triage, prompts, watchers and projects. Pull to refresh reloads the board snapshot. A settings deep link's theme
 /// picks (`harness://settings?lightTheme=…`) are applied by the shell before this screen shows.
@@ -38,6 +38,7 @@ struct SettingsScreen: View {
         .safeAreaInset(edge: .top, spacing: 0) { ConnectionBanner() }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar { SidebarToolbarItem() }
         .environment(model)
         .task(id: "\(store.epoch)#\(store.state.settings?.listen?.mode.rawValue ?? "")#\(model.networkReloads)") {
             guard let api = store.api else { return }

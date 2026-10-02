@@ -17,7 +17,7 @@ ios/
   project.yml            XcodeGen spec (source of truth for the app target and Info.plist)
   Harness/               the app target: SwiftUI only (views, navigation, SwiftUI bridges)
     HarnessApp.swift     @main App: creates AppModel, Router, ToastCenter, Actions (§ App shell)
-    App/                 RootView + MainTabs, Destinations (Route → screen), KeychainStorage, Actions
+    App/                 RootView + MainTabs (the sections), Destinations (Route → screen), KeychainStorage, Actions
     Features/<Area>/     one file per feature slot (§ Feature slots), plus Connect/Pair/Scan
     UI/                  the kit: badges, buttons, callouts, toasts, haptics, icons, banners
     Resources/           Assets.xcassets (AppIcon, LaunchBackground, SplashIcon)
@@ -330,19 +330,18 @@ feature needs something new here, add to it without changing what's there.
   `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
   (browserState, browserNavigate, ticketTabs, settings, prompts, watchers) use `store.api`, the
   store's client as a `HarnessClient` (UI/StoreAPI.swift). Never cast `store.client` inline.
-- **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab`, a path per tab, one `sheet` and
+- **Navigation.** `Router` (HarnessKit/Shell) holds `selectedTab` (the section: Board, Inbox or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
   to the Board. Never keep your own `NavigationStack` inside a pushed screen. Sheets are wrapped in
   a NavigationStack with a Cancel (✕) toolbar button by `SheetHost` (Projects excepted), so a sheet
-  slot sets only its title and its own toolbar items. Pushed screens go on the selected tab's stack, and RouteScreen hides the tab bar under them, so
-  they cover the tabs.
+  slot sets only its title and its own toolbar items. Pushed screens go on the selected section's stack.
   `RouteScreen`/`SheetHost`/`CoverHost` (App/Destinations.swift) are the only Route → view mapping.
 - **Deep links** (HarnessKit/Shell/DeepLink.swift, tested in DeepLinkTests):
 
   | Link | Opens |
   | --- | --- |
-  | `harness://board`, `/search`, `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that tab, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
+  | `harness://board` (`/search` is an alias), `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
   | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
@@ -386,8 +385,8 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 
 | Slot | File (ios/Harness/Features/…) | Area | Signature |
 | --- | --- | --- | --- |
-| BoardScreen | Board/BoardScreen.swift | Board + Search | `BoardScreen(mode: BoardMode)` (`.board`, `.search`) |
-| ProjectsSheet | Board/ProjectsSheet.swift | Projects | `ProjectsSheet(fromSearch: Bool)` |
+| BoardScreen | Board/BoardScreen.swift | Board + search | `BoardScreen()` |
+| ProjectsSheet | Board/ProjectsSheet.swift | Projects | `ProjectsSheet()` |
 | TicketDetailScreen | Ticket/TicketDetailScreen.swift | Ticket detail | `TicketDetailScreen(key: String, initialTab: TicketTab?)` |
 | TranscriptView | Ticket/TranscriptView.swift | Transcript | `TranscriptView(sessionId: String, subagentId: String? = nil, emptyHint: String? = nil) { header }` (header optional) |
 | AgentsTabView | Ticket/AgentsTabView.swift | Agents | `AgentsTabView(ticket: Ticket)` |
@@ -661,20 +660,20 @@ native-pattern difference, not a missing feature.
 | --- | --- | --- | --- |
 | Keychain load before the first frame; one store per server + nonce | app/_layout, state/app, state/store | HarnessApp, Shell/AppModel, State/BoardStore | done |
 | Storage keys `harness.servers`, `harness.prefs`, `harness.token.<id>` (after first unlock) | lib/storage, lib/servers, lib/prefs | App/KeychainStorage, Shell/AppModel, Logic/Prefs | done (one-way migration of the RN app's items) |
-| Tabs Board / Inbox (badge: triaging or busy) / Settings / Search | app/(tabs)/_layout | App/RootView | done |
-| Theme: color scheme, accent tint, bg, nav title colors, tab badge red | state/app, app/_layout | App/RootView, App/BarAppearance, Theme/Palette | done |
+| Sections Board / Inbox / Settings, switched from the Projects sidebar (no tab bar) | app/(tabs)/_layout | App/RootView | done (differs: RN has a tab bar) |
+| Theme: color scheme, accent tint, bg, nav title colors | state/app, app/_layout | App/RootView, App/BarAppearance, Theme/Palette | done |
 | Actions + toasts (3 max, 6 s / 2.6 s) + haptics + pick/confirm | state/store useAction, ui/Toasts, ui/haptics, ui/pick | App/Actions, UI/Toasts, UI/Haptics, UI/Confirm | done (menus are native `Menu`s; differs) |
 | UI kit: badges, buttons, cards, callouts, empty states, conductor rollups, parent crumb, related rows | ui/kit, ui/Conductor, ui/RelatedTickets | UI/* | done |
 | Connect: Scan, saved Macs, manual entry, Keychain footer, "Token rejected", pairing sheet | screens/Connect, app/connect, app/pair | Features/Connect/ConnectScreen | done |
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
 | Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done |
-| Board header: title, Projects, Board options (Show child tickets, Project settings, Refresh), + New session | screens/Board, ui/header | BoardScreen | done |
+| Board header: title, sidebar (Projects); bottom bar: Filter (Show child tickets), search field, + New session | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done (plus drag and drop, native only) |
-| Search tab: field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen(mode: .search) | done |
-| Projects sheet: Inbox row, All projects, rows, settings gear, Add project | screens/Projects | Features/Board/ProjectsSheet, ProjectsAdd | done |
+| Search: the board's always-visible field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen | done |
+| Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, rows, settings gear, Add project, Settings at the bottom | screens/Projects | Features/Board/ProjectsSheet, ProjectsAdd | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
 | Header menu: Copy key, Open external, Cancel run, Open PR, Mark done, Delete | screens/TicketDetail | TicketDetailScreen | done |
 | Hero: crumb, title (compact on Browser/plugin/sub-agent), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |

@@ -2107,7 +2107,7 @@ the conventions, and ios/README.md the build and test commands.
   `plugin:git:changes` links open it, and its files open in the file viewer.
 - **Themes.** The phone uses the shared theme registry, generated into HarnessKit as a bundled
   resource; `Palette` holds the active theme's tokens as SwiftUI colors, and the status bar,
-  navigation and tab bar follow it. Appearance plus the Light / Dark theme picks are stored in the
+  navigation and toolbars follow it. Appearance plus the Light / Dark theme picks are stored in the
   Keychain prefs blob and normalized on load.
   `harness://settings?lightTheme=<id>&darkTheme=<id>&theme=<system|light|dark>` applies a setup.
 - **Checks.** `ios/Tools/sim-check.ts` runs a simulator walk-through against a real daemon on a

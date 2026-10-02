@@ -27,10 +27,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   in one list, with the most recently updated first.
 - On the Mac, a ticket's tabs scroll sideways when they don't fit instead of wrapping onto a
   second line.
+- On iPhone and iPad, the tab bar is gone. The sidebar button at the top left of the board, the
+  Inbox and Settings opens the Projects sidebar, where you switch between the Inbox, your projects
+  and Settings (now at the bottom). The sidebar button shows how many Inbox items are being
+  triaged, as the Inbox tab's badge used to. Along the bottom of the board are a Filter button with Show
+  child tickets, a search field that's always there, and New session, which moved down from the
+  top right.
 
-- On iPhone, Search sits on its own in the tab bar. One tap turns it into the search field right
-  there at the bottom of the screen, ready to type, instead of opening a screen with the field at
-  the top.
+### Removed
+
+- On iPhone and iPad, the board's ⋯ menu. Pull down on the board to refresh, and open a
+  project's settings from the gear next to it in the sidebar.
 
 ## [app-20261002.0906](https://github.com/markhuot/harness/releases/tag/app-20261002.0906) - 2026-10-02
 

@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Inbox tab: every watcher and what its process is doing, then the triage
+/// The Inbox section (the sidebar button switches back): every watcher and what its process is doing, then the triage
 /// sessions their output started, newest first. A watcher opens its form; a session pushes
 /// `.triage(sessionId:)`.
 struct InboxScreen: View {
@@ -44,6 +44,7 @@ struct InboxScreen: View {
         .refreshable { await store.refresh() }
         .navigationTitle("Inbox")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar { SidebarToolbarItem() }
         .safeAreaInset(edge: .top) { ConnectionBanner() }
     }
 }

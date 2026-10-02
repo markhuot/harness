@@ -1,22 +1,12 @@
 import HarnessKit
 import SwiftUI
 
-/// Which tab the board screen is: the Board, or the Search tab's searchable board.
-enum BoardMode: Hashable, Sendable {
-    case board, search
-}
-
 /// The board: five columns as horizontally paged lists with a status strip
-/// (counts) on top, the project filter behind the Projects button, "Show child tickets" in the
-/// options menu (off by default), pull to refresh. Done is paged: it scrolls into older pages
-/// (footer spinner) and its count is the server's total. The Search tab is this same board with
-/// server-side search in the search field; results page the same way, across every column. The
-/// Board tab never shows search results.
+/// (counts) on top, the project filter behind the sidebar button, pull to refresh. Done is paged:
+/// it scrolls into older pages (footer spinner) and its count is the server's total. The bottom
+/// bar reads filter ("Show child tickets", off by default), the search field (always on screen)
+/// and New session. Typing searches on the server; results page the same way, across every column.
 struct BoardScreen: View {
-    let mode: BoardMode
-    /// The Search tab's query. The field is on the Search tab's stack (MainTabs), so it sits in the tab bar.
-    var query = ""
-
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -30,11 +20,10 @@ struct BoardScreen: View {
     @State private var jumping = false
     /// The chip a dragged card hovers over.
     @State private var dropChip: TicketStatus?
-
-    private var searchTab: Bool { mode == .search }
+    @State private var query = ""
 
     var body: some View {
-        let ctx = BoardContext(store.state, app.prefs, searchTab: searchTab)
+        let ctx = BoardContext(store.state, app.prefs)
         VStack(spacing: 0) {
             BoardStatusStrip(
                 page: page ?? .planning, count: { ctx.count($0) }, dropChip: dropChip,
@@ -46,8 +35,11 @@ struct BoardScreen: View {
         }
         .background(c.bg)
         .safeAreaInset(edge: .top, spacing: 0) { ConnectionBanner() }
-        .navigationTitle(searchTab ? "Search" : ctx.project?.name ?? "All projects")
+        .navigationTitle(ctx.project?.name ?? "All projects")
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets")
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
         .toolbar { toolbar(ctx) }
         // Paging follows the project filter; a refetch drops the paging, so ask again when it's gone.
         .onChange(of: ctx.projectId, initial: true) { _, id in store.setBoardScope(id) }
@@ -56,7 +48,7 @@ struct BoardScreen: View {
         }
         // Every keystroke: local matches at once, the server's after a pause (BoardLoader).
         .onChange(of: SearchKey(query: query, projectId: ctx.projectId), initial: true) { _, k in
-            if searchTab { store.loader.setQuery(k.query, projectId: k.projectId) }
+            store.loader.setQuery(k.query, projectId: k.projectId)
         }
         // Hidden children can leave the loaded Done run nearly empty: while Done is on screen, top it up.
         .onChange(of: AutofillKey(searching: ctx.searching, onDone: page == .done, count: ctx.shown.done.count, paging: ctx.paging), initial: true) { _, k in
@@ -118,29 +110,25 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
+    /// Sidebar in the header; filter, search field and New session along the bottom.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button("Projects", systemImage: "sidebar.left") { router.present(.projects(fromSearch: searchTab)) }
+        SidebarToolbarItem()
+        ToolbarItem(placement: .bottomBar) {
+            Menu {
+                Toggle("Show child tickets", systemImage: "arrow.turn.down.right", isOn: Binding(
+                    get: { !app.prefs.hideChildren }, set: { app.setPref(\.hideChildren, !$0) }))
+            } label: {
+                // Filled while the board shows more than its default (child tickets).
+                Label("Filter", systemImage: app.prefs.hideChildren
+                    ? "line.3.horizontal.decrease" : "line.3.horizontal.decrease.circle.fill")
+            }
         }
-        // The Search tab keeps the project scope and leaves board chores to the Board tab.
-        if !searchTab {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Toggle("Show child tickets", systemImage: "arrow.turn.down.right", isOn: Binding(
-                        get: { !app.prefs.hideChildren }, set: { app.setPref(\.hideChildren, !$0) }))
-                    if let project = ctx.project {
-                        Button("Project settings", systemImage: "gearshape") { router.push(.project(id: project.id)) }
-                    }
-                    Button("Refresh", systemImage: "arrow.clockwise") { Task { await store.refresh() } }
-                } label: {
-                    Label("Board options", systemImage: "ellipsis")
-                }
-            }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("New session", systemImage: "plus") { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
-                    .primaryToolbarItem(c)
-            }
+        // Its own glass, not tucked into the search field's.
+        ToolbarSpacer(.fixed, placement: .bottomBar)
+        DefaultToolbarItem(kind: .search, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) {
+            Button("New session", systemImage: "plus") { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
+                .primaryToolbarItem(c)
         }
     }
 
@@ -213,8 +201,7 @@ struct BoardContext {
     /// The project filter, when that project still exists.
     let projectId: String?
     let project: Project?
-    let searchTab: Bool
-    /// The Search tab's search (nil on the Board tab, and before anything is typed).
+    /// The search in the bottom bar's field (nil while it's empty).
     let search: SearchState?
     let board: Columns
     let pending: Bool
@@ -227,13 +214,12 @@ struct BoardContext {
 
     var searching: Bool { search != nil }
 
-    init(_ state: BoardState, _ prefs: Prefs, searchTab: Bool) {
+    init(_ state: BoardState, _ prefs: Prefs) {
         self.state = state
         let id = prefs.boardProject.flatMap { state.projects[$0] != nil ? $0 : nil }
         projectId = id
         project = id.flatMap { state.projects[$0] }
-        self.searchTab = searchTab
-        search = searchTab ? state.search : nil
+        search = state.search
         board = state.boardColumns(id)
         if search != nil {
             let results = Paging.searchColumns(state, id)

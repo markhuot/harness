@@ -39,7 +39,7 @@ struct RouterTests {
 
     @Test func aPushDismissesModals() {
         let r = Router()
-        r.open(.sheet(.projects(fromSearch: false)))
+        r.open(.sheet(.projects))
         r.open(.push(.ticket(key: "A-1", tab: nil)))
         #expect(r.sheet == nil)
         #expect(r.path(.board) == [.ticket(key: "A-1", tab: nil)])
