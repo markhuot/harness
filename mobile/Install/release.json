@@ -16,5 +16,11 @@
     "bytes": 158928818,
     "notarized": true
   },
-  "iosBeta": null
+  "iosBeta": {
+    "url": "https://harness-install.vercel.app/HarnessBeta.ipa",
+    "version": "1.0.0",
+    "build": "202610020742",
+    "bytes": 4270814,
+    "builtAt": "2026-10-02"
+  }
 }

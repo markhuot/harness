@@ -216,4 +216,9 @@ test("checkServed reports the status, content type and length it got", async () 
   expect(await checkServed("u", /^application\/octet-stream/, 42, ok)).toEqual([]);
   expect(await checkServed("u", /^application\/octet-stream/, 43, ok)).toEqual(["u is 42 bytes, expected 43"]);
   expect(await checkServed("u", /^(text|application)\/xml/, undefined, served(404, { "content-type": "text/html" }))).toEqual(["u returned 404", "u is served as 'text/html'"]);
+  // A HEAD without Content-Length: the GET body's length counts instead.
+  const body = (n: number) => (async (_: string, init?: RequestInit) =>
+    init?.method === "HEAD" ? new Response(null, { headers: { "content-type": "application/octet-stream" } }) : new Response(new Uint8Array(n))) as unknown as typeof fetch;
+  expect(await checkServed("u", /^application\/octet-stream/, 42, body(42))).toEqual([]);
+  expect(await checkServed("u", /^application\/octet-stream/, 42, body(41))).toEqual(["u is 41 bytes, expected 42"]);
 });

@@ -327,8 +327,11 @@ export async function checkServed(url: string, contentType: RegExp, bytes?: numb
   if (r.status !== 200) errors.push(`${url} returned ${r.status}`);
   const type = r.headers.get("content-type") ?? "";
   if (!contentType.test(type)) errors.push(`${url} is served as '${type}'`);
-  const length = r.headers.get("content-length");
-  if (bytes !== undefined && length !== String(bytes)) errors.push(`${url} is ${length ?? "?"} bytes, expected ${bytes}`);
+  if (bytes !== undefined) {
+    // Vercel answers a HEAD that misses its cache without a Content-Length; then count the body.
+    const length = r.headers.get("content-length") ?? String((await (await fetcher(url)).arrayBuffer()).byteLength);
+    if (length !== String(bytes)) errors.push(`${url} is ${length} bytes, expected ${bytes}`);
+  }
   return errors;
 }
 

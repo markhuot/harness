@@ -80,7 +80,9 @@ bun shared/scripts/export-fixtures.ts
 ## Run on a device
 
 Debug builds are `com.markhuot.harness.dev` ("Harness Dev"), so they install beside the RN
-app. Release builds are `com.markhuot.harness` ("Harness") and replace it. Signing is automatic
+app. Release builds are `com.markhuot.harness` ("Harness") and replace it. The `Beta`
+configuration (the install page's beta) shares the Debug id, so Harness Beta and Harness Dev
+replace each other on a device. Signing is automatic
 with team `47P4ZSALX4`, and the device must be registered to the team (plug it in once with
 Xcode open). Plug the device in, open `Harness.xcodeproj`, pick the device and press Run, or:
 
@@ -112,6 +114,30 @@ pairing token anywhere in the app. The TestFlight upload, GitHub release and ins
 the same as for the RN app. The bundle id is the same too, so the native build replaces the RN app
 on TestFlight and on devices. `--no-publish`, `--skip-ios`, `--skip-mac` and `--skip-testflight`
 work with either app. See CLAUDE.md → Releases for the whole process.
+
+### Beta install page build
+
+Until it replaces the RN app, this app is also on https://harness-install.vercel.app as a beta
+card under the main iPhone card. It isn't on TestFlight or a GitHub release. One command rebuilds
+and redeploys it:
+
+```sh
+bun ios/Tools/build.ts publish-beta            # --no-deploy builds and writes the page only
+```
+
+It archives the `Beta` configuration (a Release build named "Harness Beta" with the bundle id
+`com.markhuot.harness.dev`, so it installs beside the main app). The build number comes from the
+clock, as for an untagged build. It exports a development-signed IPA and runs `verify --kind
+native --beta` plus the token check. Then it copies the IPA to `mobile/Install/HarnessBeta.ipa`
+(gitignored), adds an `iosBeta` block to `mobile/Install/release.json` and regenerates the page
+and `manifest-beta.plist`. Last, it runs `vercel deploy --prod` from `mobile/Install` and checks
+that both files are served with the right type and length. Commit the changed `mobile/Install/`
+files afterwards.
+
+The beta registers `harness://` too, so a QR pair link may open either app. Enter manually always
+works. A tagged release keeps the beta card only if `mobile/Install/HarnessBeta.ipa` is still in
+the checkout that publishes, since the deploy uploads it from there. Otherwise the card is dropped,
+so rerun `publish-beta` afterwards.
 
 ## Dev loop (the shared simulator)
 
