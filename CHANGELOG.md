@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261002.1508](https://github.com/markhuot/harness/releases/tag/app-20261002.1508) - 2026-10-02
+
 ### Added
 
 - Agents can now set a ticket's Remote ID and its link when they create or edit a ticket, not
