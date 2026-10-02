@@ -62,6 +62,57 @@ struct BoardStatusStrip: View {
     }
 }
 
+/// One of the iPad's side-by-side columns, as on the Mac: a rounded panel with a header (dot,
+/// label, count) over its cards. The header reads "Planning, 3" like a phone chip (sim-check and
+/// dev-sim look for it), a tap scrolls the column into view, and a card dropped on the header or
+/// the panel's empty space goes to the bottom of the column.
+struct BoardColumnFrame<Content: View>: View {
+    let status: TicketStatus
+    let count: Int
+    let targeted: Bool
+    let onTap: () -> Void
+    let onDrop: (String) -> Bool
+    let onTarget: (Bool) -> Void
+    @ViewBuilder let content: Content
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: onTap) {
+                HStack(spacing: 8) {
+                    StatusDot(status: status)
+                    Text(statusLabel(status))
+                        .font(.scaled(size: 14, weight: .semibold))
+                        .foregroundStyle(c.text)
+                    Text("\(count)")
+                        .font(.scaled(size: 13, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(c.text3)
+                    Spacer(minLength: 0)
+                }
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(statusLabel(status)), \(count)")
+            .accessibilityAddTraits([.isButton, .isHeader])
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            content
+        }
+        .background(targeted ? c.accentSoft : c.bgColumn, in: .rect(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(targeted ? c.accent : .clear, lineWidth: 1.5))
+        .dropDestination(for: String.self) { keys, _ in
+            guard let key = keys.first else { return false }
+            return onDrop(key)
+        } isTargeted: { onTarget($0) }
+    }
+}
+
 /// One column's page: its cards with pull to refresh, Done's older pages (and search results') as
 /// it nears the end, and the empty and footer states.
 struct BoardColumnView: View {
@@ -71,6 +122,8 @@ struct BoardColumnView: View {
     /// A card (by key) dropped above `before` (nil: at the end).
     let onDrop: (String, String?) -> Bool
     let onDiscard: (Ticket) -> Void
+    /// Around the cards: the pager's page, or tighter inside a side-by-side column's frame.
+    var inset = EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
@@ -103,7 +156,7 @@ struct BoardColumnView: View {
                     }
                     .accessibilityHidden(true)
             }
-            .padding(14)
+            .padding(inset)
         }
         .refreshable { await store.refresh() }
     }

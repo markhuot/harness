@@ -1,8 +1,9 @@
 import HarnessKit
 import SwiftUI
 
-/// The board: five columns as horizontally paged lists with a status strip
-/// (counts) on top, the project filter behind the sidebar button, pull to refresh. Done is paged:
+/// The board: five columns as horizontally paged lists with a status strip (counts) on top, or
+/// on iPad at regular width all five side by side like the Mac (each with its own header, no
+/// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
 /// it scrolls into older pages (footer spinner) and its count is the server's total. The bottom
 /// bar reads filter ("Show child tickets", off by default), the search field (always on screen)
 /// and New session. Typing searches on the server; results page the same way, across every column.
@@ -12,6 +13,7 @@ struct BoardScreen: View {
     @Environment(Router.self) private var router
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     /// The column on screen (the pager's scroll position).
     @State private var page: TicketStatus? = .planning
@@ -20,18 +22,30 @@ struct BoardScreen: View {
     @State private var jumping = false
     /// The chip a dragged card hovers over.
     @State private var dropChip: TicketStatus?
+    /// The side-by-side column whose cards (or the space under them) a dragged card hovers over.
+    @State private var dropColumn: TicketStatus?
     @State private var query = ""
+    /// The side-by-side columns at least partly on screen (all of them when they fit).
+    @State private var visible: Set<TicketStatus> = []
+    /// The side-by-side column at the leading edge (their scroll position, when they overflow).
+    @State private var leading: TicketStatus?
+
+    private var layout: BoardScreenRules.Layout { sizeClass == .regular ? .columns : .pager }
 
     var body: some View {
         let ctx = BoardContext(store.state, app.prefs)
+        let layout = layout
         VStack(spacing: 0) {
-            BoardStatusStrip(
-                page: page ?? .planning, count: { ctx.count($0) }, dropChip: dropChip,
-                onTap: goTo, onDrop: { key, s in dropOnChip(key, s, ctx) }, onTarget: { s, on in
-                    if on { dropChip = s } else if dropChip == s { dropChip = nil }
-                })
-            if let search = ctx.search { BoardSearchNote(search: search) { store.loader.retrySearch() } }
-            pager(ctx)
+            if layout == .pager {
+                BoardStatusStrip(
+                    page: page ?? .planning, count: { ctx.count($0) }, dropChip: dropChip,
+                    onTap: goTo, onDrop: { key, s in dropOnChip(key, s, ctx) }, onTarget: target)
+            }
+            if let search = ctx.search {
+                BoardSearchNote(search: search) { store.loader.retrySearch() }
+                    .padding(.top, layout == .columns ? 8 : 0)
+            }
+            if layout == .pager { pager(ctx) } else { columns(ctx) }
         }
         .background(c.bg)
         .safeAreaInset(edge: .top, spacing: 0) { ConnectionBanner() }
@@ -51,21 +65,26 @@ struct BoardScreen: View {
             store.loader.setQuery(k.query, projectId: k.projectId)
         }
         // Hidden children can leave the loaded Done run nearly empty: while Done is on screen, top it up.
-        .onChange(of: AutofillKey(searching: ctx.searching, onDone: page == .done, count: ctx.shown.done.count, paging: ctx.paging), initial: true) { _, k in
-            if !k.searching && k.onDone && BoardLoader.shouldAutoFill(visibleCount: k.count, canLoad: store.loader.canLoadMoreDone(ctx.projectId)) {
+        .onChange(of: AutofillKey(layout: layout, page: page, visible: visible, searching: ctx.searching, count: ctx.shown.done.count, paging: ctx.paging), initial: true) { _, k in
+            if BoardScreenRules.shouldAutofillDone(k.layout, page: k.page, visible: k.visible, searching: k.searching, visibleCount: k.count, canLoad: store.loader.canLoadMoreDone(ctx.projectId)) {
                 store.loader.loadMoreDone(ctx.projectId)
             }
         }
         // The first visit lands on the most useful column: what needs you, else what's moving.
+        // Side by side, the board starts at Planning like the Mac's.
         .onChange(of: store.state.ready, initial: true) { _, ready in
             guard ready, !landed else { return }
             landed = true
-            if let first = BoardScreenRules.landingColumn(ctx.shown) { jump(to: first, animated: false) }
+            if layout == .pager, let first = BoardScreenRules.landingColumn(ctx.shown) { jump(to: first, animated: false) }
         }
-        // When search results land and the column on screen has none, show the first one that does.
+        // When search results land and the columns on screen have none, show the first one that does.
         .onChange(of: ctx.search?.ids) { _, ids in
-            guard ids != nil, let s = BoardScreenRules.columnWithResults(ctx.shown, current: page ?? .planning) else { return }
-            goTo(s)
+            guard ids != nil else { return }
+            let s = layout == .pager
+                ? BoardScreenRules.columnWithResults(ctx.shown, current: page ?? .planning)
+                : BoardScreenRules.columnWithResults(ctx.shown, visible: visible)
+            guard let s else { return }
+            if layout == .pager { goTo(s) } else { reveal(s) }
         }
         .onChange(of: page) { _, _ in
             if jumping { jumping = false } else { haptic(.select) }
@@ -92,6 +111,72 @@ struct BoardScreen: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $page)
         .scrollIndicators(.hidden)
+    }
+
+    // MARK: Side by side
+
+    private static let columnSpacing: Double = 10
+    private static let columnInset: Double = 14
+
+    /// Every column at once, sharing the width; too narrow for five at the minimum, they keep it and
+    /// the board scrolls sideways (freely, no paging). Each column scrolls and refreshes on its own.
+    private func columns(_ ctx: BoardContext) -> some View {
+        GeometryReader { geo in
+            let sizing = BoardScreenRules.columnSizing(available: geo.size.width, spacing: Self.columnSpacing, inset: Self.columnInset)
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: Self.columnSpacing) {
+                    ForEach(TicketStatus.allKnown, id: \.self) { status in
+                        BoardColumnFrame(
+                            status: status, count: ctx.count(status), targeted: dropChip == status || dropColumn == status,
+                            onTap: { reveal(status) },
+                            onDrop: { dropAtEnd($0, status, ctx) }, onTarget: { target(status, $0) }
+                        ) {
+                            BoardColumnView(
+                                status: status, ctx: ctx,
+                                onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
+                                onDrop: { key, before in dropOnCard(key, status, before: before, ctx) },
+                                onDiscard: discard,
+                                inset: EdgeInsets(top: 6, leading: 8, bottom: 10, trailing: 8))
+                            // The column's own scroll view would keep drops off the panel's empty
+                            // space under the cards; cards still take drops above themselves.
+                            .dropDestination(for: String.self) { keys, _ in
+                                guard let key = keys.first else { return false }
+                                return dropAtEnd(key, status, ctx)
+                            } isTargeted: { on in
+                                if on { dropColumn = status } else if dropColumn == status { dropColumn = nil }
+                            }
+                        }
+                        .frame(width: sizing.width)
+                        .id(status)
+                        .onScrollVisibilityChange(threshold: 0.1) { on in
+                            if on { visible.insert(status) } else { visible.remove(status) }
+                        }
+                    }
+                }
+                .scrollTargetLayout()
+                .padding(.horizontal, Self.columnInset)
+                .padding(.top, ctx.searching ? 6 : 10)
+                .padding(.bottom, 10)
+                .frame(height: geo.size.height, alignment: .top)
+            }
+            .scrollPosition(id: $leading, anchor: .leading)
+            // When they all fit, every column is on screen without waiting on scroll callbacks.
+            .onChange(of: sizing.scrolls, initial: true) { _, scrolls in
+                if !scrolls { visible = Set(TicketStatus.allKnown) }
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .scrollIndicators(sizing.scrolls ? .automatic : .hidden)
+        }
+    }
+
+    /// Scrolls a side-by-side column to the leading edge (as far as the board scrolls; a no-op when
+    /// they all fit).
+    private func reveal(_ s: TicketStatus) {
+        withAnimation(.snappy) { leading = s }
+    }
+
+    private func target(_ s: TicketStatus, _ on: Bool) {
+        if on { dropChip = s } else if dropChip == s { dropChip = nil }
     }
 
     private func goTo(_ s: TicketStatus) {
@@ -154,10 +239,19 @@ struct BoardScreen: View {
 
     /// A card dropped on another card sits just above it.
     private func dropOnCard(_ key: String, _ status: TicketStatus, before: String?, _ ctx: BoardContext) -> Bool {
+        dropColumn = nil
         guard let t = dropped(key), let m = BoardScreenRules.dropMove(t, to: status, before: before, cols: ctx.board) else { return false }
         haptic(.success)
         move(t, m, to: status)
         return true
+    }
+
+    /// A card dropped on a side-by-side column's header or the space under its cards goes to the
+    /// end of that column, its own included (Done: newest).
+    private func dropAtEnd(_ key: String, _ status: TicketStatus, _ ctx: BoardContext) -> Bool {
+        dropChip = nil
+        dropColumn = nil
+        return dropOnCard(key, status, before: nil, ctx)
     }
 
     /// A card dropped on a status chip goes to the bottom of that column (Done: newest).
@@ -188,8 +282,10 @@ struct BoardScreen: View {
     }
 
     private struct AutofillKey: Equatable {
+        let layout: BoardScreenRules.Layout
+        let page: TicketStatus?
+        let visible: Set<TicketStatus>
         let searching: Bool
-        let onDone: Bool
         let count: Int
         let paging: DonePaging?
     }
