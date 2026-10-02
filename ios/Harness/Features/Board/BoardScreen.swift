@@ -204,9 +204,11 @@ struct BoardScreen: View {
         } else {
             SidebarToolbarItem()
             ToolbarItem(placement: .bottomBar) { filterMenu }
-            // Its own glass, not tucked into the search field's.
+            // Filter, search and New session each get their own glass; without the spacers the
+            // bar merges the search field with its neighbors.
             ToolbarSpacer(.fixed, placement: .bottomBar)
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
+            ToolbarSpacer(.fixed, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
     }
