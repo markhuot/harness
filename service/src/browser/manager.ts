@@ -1,10 +1,10 @@
-// BrowserService implementation: one Chrome, one tab (page target) per harness session.
+// BrowserService implementation: one Chrome, numbered tabs (page targets) per harness session.
 
-import type { BrowserInput, BrowserState } from "@harness/shared";
+import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
 import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
-import type { BrowserFrame, BrowserService } from "./types.ts";
+import type { BrowserFrame, BrowserService, TabOption } from "./types.ts";
 
 export interface BrowserManagerOptions {
   profileDir: string;
@@ -25,16 +25,27 @@ export interface BrowserManagerOptions {
 interface Subscriber {
   onFrame: (f: BrowserFrame) => void;
   onState: (s: BrowserState) => void;
+  /** The tab it asked for; null (or a tab that has closed) means the lowest open one. */
+  want: number | null;
+  /** The tab it was last sent state for, so a switch can hand it that tab's last frame. */
+  watching?: number;
+  lastStateKey?: string;
 }
 
 interface Entry {
   sessionId: string;
   subscribers: Map<string, Subscriber>;
-  tab?: Tab;
-  tabPromise?: Promise<Tab>;
+  /** Open tabs by id. */
+  tabs: Map<number, Tab>;
+  nextTabId: number;
+  /** Tab 1 (or the next default tab) while it is being created, so concurrent calls share it. */
+  creating?: Promise<Tab>;
+  /** Every tab's viewport: viewers resize the whole session, and new tabs start at it. */
+  viewport: { width: number; height: number };
 }
 
 interface Tab {
+  id: number;
   entry: Entry;
   targetId: string;
   session: CdpSession;
@@ -52,7 +63,6 @@ interface Tab {
   /** Serializes screencast start/stop (see syncScreencast). */
   castChain: Promise<void>;
   lastFrame?: BrowserFrame;
-  lastStateKey?: string;
   /** Mouse buttons currently held (CDP `buttons` bitmask). */
   buttons: number;
   closed: boolean;
@@ -100,6 +110,39 @@ function truncate(text: string, maxChars?: number): string {
   return `${text.slice(0, maxChars)}\n\n[truncated: showing ${maxChars} of ${text.length} characters]`;
 }
 
+/** A session's open tabs, lowest id first. */
+function openTabs(entry: Entry): Tab[] {
+  return [...entry.tabs.values()].filter((t) => !t.closed).sort((a, b) => a.id - b.id);
+}
+
+/** The tab a call without `tab` acts on: the lowest open one. */
+function defaultTab(entry: Entry): Tab | undefined {
+  return openTabs(entry)[0];
+}
+
+/** The tab a subscriber sees: the one it asked for while that is open, else the lowest open one. */
+function watchedTab(entry: Entry, sub: Subscriber): Tab | undefined {
+  const wanted = sub.want === null ? undefined : entry.tabs.get(sub.want);
+  return wanted && !wanted.closed ? wanted : defaultTab(entry);
+}
+
+function watchersOf(tab: Tab): Subscriber[] {
+  return [...tab.entry.subscribers.values()].filter((sub) => watchedTab(tab.entry, sub) === tab);
+}
+
+function tabList(entry: Entry): BrowserTab[] {
+  return openTabs(entry).map((t) => ({ id: t.id, url: t.url, title: t.title, loading: t.loading }));
+}
+
+function stateOf(tab: Tab): BrowserState {
+  return { sessionId: tab.entry.sessionId, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading, tabs: tabList(tab.entry) };
+}
+
+function noTabMessage(entry: Entry | undefined, id: number): string {
+  const open = entry ? openTabs(entry).map((t) => t.id) : [];
+  return `No browser tab ${id}. ${open.length ? `Open tabs: ${open.join(", ")}.` : "This session has no open tabs."}`;
+}
+
 function exceptionMessage(details: CdpResult): string {
   return String(details?.exception?.description ?? details?.exception?.value ?? details?.text ?? "Unknown error");
 }
@@ -132,20 +175,28 @@ export class BrowserManager implements BrowserService {
   // BrowserService
   // -------------------------------------------------------------------------
 
-  async open(sessionId: string, url: string): Promise<BrowserState> {
-    const tab = await this.tab(sessionId);
+  async open(sessionId: string, url: string, opts: TabOption & { newTab?: boolean } = {}): Promise<BrowserState> {
+    const tab = opts.newTab ? await this.createTab(this.entry(sessionId)) : await this.tab(sessionId, opts.tab);
     await this.navigateAndWait(tab, normalizeUrl(url), this.navigationTimeoutMs);
     return this.currentState(tab);
   }
 
-  async state(sessionId: string): Promise<BrowserState | null> {
-    const tab = this.entries.get(sessionId)?.tab;
+  async state(sessionId: string, opts: TabOption = {}): Promise<BrowserState | null> {
+    const entry = this.entries.get(sessionId);
+    const tab = entry && (opts.tab === undefined ? defaultTab(entry) : entry.tabs.get(opts.tab));
     if (!tab || tab.closed) return null;
     return this.currentState(tab);
   }
 
-  async content(sessionId: string, opts: { selector?: string; format?: "text" | "html"; maxChars?: number } = {}): Promise<string> {
-    const tab = await this.tab(sessionId);
+  async tabs(sessionId: string): Promise<BrowserTab[]> {
+    const entry = this.entries.get(sessionId);
+    if (!entry) return [];
+    await Promise.all(openTabs(entry).map((t) => this.refreshTarget(t)));
+    return tabList(entry);
+  }
+
+  async content(sessionId: string, opts: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number } = {}): Promise<string> {
+    const tab = await this.tab(sessionId, opts.tab);
     const format = opts.format ?? "text";
     const selector = opts.selector ?? null;
     const result = (await this.evalValue(
@@ -165,8 +216,8 @@ export class BrowserManager implements BrowserService {
     return truncate(result.parts.join("\n\n"), opts.maxChars);
   }
 
-  async click(sessionId: string, selector: string): Promise<void> {
-    const tab = await this.tab(sessionId);
+  async click(sessionId: string, selector: string, opts: TabOption = {}): Promise<void> {
+    const tab = await this.tab(sessionId, opts.tab);
     await this.settle(tab, async () => {
       const box = (await this.evalValue(
         tab,
@@ -194,8 +245,8 @@ export class BrowserManager implements BrowserService {
     });
   }
 
-  async type(sessionId: string, selector: string, text: string, opts: { submit?: boolean } = {}): Promise<void> {
-    const tab = await this.tab(sessionId);
+  async type(sessionId: string, selector: string, text: string, opts: TabOption & { submit?: boolean } = {}): Promise<void> {
+    const tab = await this.tab(sessionId, opts.tab);
     const r = (await this.evalValue(
       tab,
       `(() => {
@@ -229,8 +280,8 @@ export class BrowserManager implements BrowserService {
     }
   }
 
-  async evaluate(sessionId: string, expression: string): Promise<string> {
-    const tab = await this.tab(sessionId);
+  async evaluate(sessionId: string, expression: string, opts: TabOption = {}): Promise<string> {
+    const tab = await this.tab(sessionId, opts.tab);
     const res = await tab.session.send("Runtime.evaluate", {
       expression,
       awaitPromise: true,
@@ -241,14 +292,48 @@ export class BrowserManager implements BrowserService {
     return this.serializeRemote(tab, res.result);
   }
 
-  async screenshot(sessionId: string): Promise<string> {
-    const tab = await this.tab(sessionId);
+  async screenshot(sessionId: string, opts: TabOption = {}): Promise<string> {
+    const tab = await this.tab(sessionId, opts.tab);
     const res = await tab.session.send("Page.captureScreenshot", { format: "png" });
     return res.data as string;
   }
 
-  async input(sessionId: string, input: BrowserInput): Promise<void> {
-    const tab = await this.tab(sessionId);
+  async closeTab(sessionId: string, id: number): Promise<void> {
+    const entry = this.entries.get(sessionId);
+    const tab = entry?.tabs.get(id);
+    if (!entry || !tab || tab.closed) throw new Error(noTabMessage(entry, id));
+    this.dropTab(tab);
+    await this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {});
+    // Someone is watching: don't leave them on nothing.
+    if (entry.subscribers.size > 0 && !defaultTab(entry)) await this.tab(sessionId);
+  }
+
+  async input(sessionId: string, input: BrowserInput, opts: TabOption & { subscriberId?: string } = {}): Promise<void> {
+    const entry = this.entry(sessionId);
+    const sub = opts.subscriberId === undefined ? undefined : entry.subscribers.get(opts.subscriberId);
+    if (input.type === "newTab") {
+      const tab = await this.createTab(entry);
+      if (sub && entry.subscribers.get(opts.subscriberId!) === sub) {
+        sub.want = tab.id;
+        await this.refresh(entry);
+      }
+      if (input.url) {
+        const res = await tab.session.send("Page.navigate", { url: normalizeUrl(input.url) });
+        if (res.errorText) throw new Error(`Navigation failed: ${res.errorText}`);
+      }
+      return;
+    }
+    if (input.type === "resize") {
+      const width = Math.max(100, Math.min(4096, Math.round(input.width)));
+      const height = Math.max(100, Math.min(4096, Math.round(input.height)));
+      entry.viewport = { width, height };
+      if (!defaultTab(entry)) await this.tab(sessionId);
+      await Promise.all(openTabs(entry).map((t) => this.resizeTab(t)));
+      return;
+    }
+    const watched = opts.tab === undefined && sub ? watchedTab(entry, sub) : undefined;
+    const tab = watched ?? (await this.tab(sessionId, opts.tab));
+    if (input.type === "closeTab") return this.closeTab(sessionId, tab.id);
     const s = tab.session;
     switch (input.type) {
       case "mouse": {
@@ -319,16 +404,6 @@ export class BrowserManager implements BrowserService {
       case "reload":
         await s.send("Page.reload", {});
         return;
-      case "resize": {
-        const width = Math.max(100, Math.min(4096, Math.round(input.width)));
-        const height = Math.max(100, Math.min(4096, Math.round(input.height)));
-        // Viewers send resize on every layout pass; an unchanged size must not restart anything.
-        if (tab.viewport.width === width && tab.viewport.height === height) return;
-        tab.viewport = { width, height };
-        await this.applyViewport(tab);
-        await this.syncScreencast(tab);
-        return;
-      }
     }
   }
 
@@ -337,33 +412,28 @@ export class BrowserManager implements BrowserService {
     subscriberId: string,
     onFrame: (f: BrowserFrame) => void,
     onState: (s: BrowserState) => void,
+    opts: TabOption = {},
   ): Promise<void> {
     const entry = this.entry(sessionId);
-    entry.subscribers.set(subscriberId, { onFrame, onState });
-    const tab = await this.tab(sessionId);
-    if (!entry.subscribers.has(subscriberId)) return; // unsubscribed while the tab was starting
-    await this.syncScreencast(tab);
-    // Give the newcomer something to render straight away.
-    const state = await this.currentState(tab);
-    safeCall(() => onState(state));
-    if (tab.lastFrame) {
-      const frame = tab.lastFrame;
-      safeCall(() => onFrame(frame));
-    }
+    // A fresh record (no lastStateKey or watching), so the subscriber gets state and a frame at once.
+    const sub: Subscriber = { onFrame, onState, want: opts.tab ?? null };
+    entry.subscribers.set(subscriberId, sub);
+    const tab = watchedTab(entry, sub) ?? (await this.tab(sessionId));
+    if (entry.subscribers.get(subscriberId) !== sub) return; // unsubscribed (or resubscribed) while the tab was starting
+    await this.refresh(entry);
+    await this.currentState(tab);
   }
 
   async unsubscribe(sessionId: string, subscriberId: string): Promise<void> {
     const entry = this.entries.get(sessionId);
-    if (!entry) return;
-    entry.subscribers.delete(subscriberId);
-    if (entry.subscribers.size > 0) return;
-    const tab = entry.tab;
-    if (tab && !tab.closed) await this.syncScreencast(tab);
+    if (!entry || !entry.subscribers.delete(subscriberId)) return;
+    await this.refresh(entry);
   }
 
-  /** Diagnostics: the session's screencast status, or null without a tab. */
-  screencastInfo(sessionId: string): { active: boolean; starts: number; width: number; height: number } | null {
-    const tab = this.entries.get(sessionId)?.tab;
+  /** Diagnostics: a tab's screencast status (default: the lowest open tab), or null without one. */
+  screencastInfo(sessionId: string, opts: TabOption = {}): { active: boolean; starts: number; width: number; height: number } | null {
+    const entry = this.entries.get(sessionId);
+    const tab = entry && (opts.tab === undefined ? defaultTab(entry) : entry.tabs.get(opts.tab));
     if (!tab || tab.closed) return null;
     return { active: tab.castSize !== null, starts: tab.castStarts, ...(tab.castSize ?? { width: 0, height: 0 }) };
   }
@@ -371,18 +441,19 @@ export class BrowserManager implements BrowserService {
   async close(sessionId: string): Promise<void> {
     const entry = this.entries.get(sessionId);
     if (!entry) return;
-    const tab = entry.tab ?? (await entry.tabPromise?.catch(() => undefined));
-    if (tab && !tab.closed) {
-      this.dropTab(tab);
-      await this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {});
-    }
+    await entry.creating?.catch(() => undefined);
+    const tabs = openTabs(entry);
+    this.dropTabs(tabs);
+    await Promise.all(
+      tabs.map((tab) => this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {})),
+    );
     if (entry.subscribers.size === 0) this.entries.delete(sessionId);
   }
 
   async shutdown(): Promise<void> {
     const browser = this.browser ?? (await this.launching?.catch(() => undefined));
     this.browser = undefined;
-    for (const entry of this.entries.values()) if (entry.tab) this.dropTab(entry.tab);
+    for (const entry of this.entries.values()) this.dropTabs(openTabs(entry));
     this.entries.clear();
     if (!browser) return;
     // Graceful: Browser.close and wait for exit, so Chrome removes its code-sign clone.
@@ -438,7 +509,7 @@ export class BrowserManager implements BrowserService {
 
     cdp.onClose(() => {
       // Chrome died or the socket dropped: forget every tab; the next call relaunches.
-      for (const entry of this.entries.values()) if (entry.tab) this.dropTab(entry.tab);
+      for (const entry of this.entries.values()) this.dropTabs(openTabs(entry));
       if (this.browser === browser) this.browser = undefined;
       if (!chrome.exited) void chrome.close();
     });
@@ -450,7 +521,16 @@ export class BrowserManager implements BrowserService {
       if (!tab) return;
       tab.title = info.title ?? tab.title;
       tab.url = info.url ?? tab.url;
-      this.emitState(tab);
+      this.emitStates(tab.entry);
+    });
+    // A tab opened a page (target=_blank, window.open): it becomes the session's next tab.
+    cdp.on("Target.targetCreated", (p) => {
+      const info = p.targetInfo;
+      if (info?.type !== "page" || !info.openerId || this.tabByTarget(info.targetId)) return;
+      const opener = this.tabByTarget(info.openerId);
+      if (!opener) return;
+      const entry = opener.entry;
+      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser).catch(() => {});
     });
     cdp.on("Target.targetDestroyed", (p) => {
       const tab = this.tabByTarget(p.targetId);
@@ -458,7 +538,7 @@ export class BrowserManager implements BrowserService {
     });
     cdp.on("Target.detachedFromTarget", (p) => {
       for (const entry of this.entries.values()) {
-        if (entry.tab && entry.tab.session.id === p.sessionId) this.dropTab(entry.tab);
+        for (const tab of openTabs(entry)) if (tab.session.id === p.sessionId) this.dropTab(tab);
       }
     });
 
@@ -473,33 +553,46 @@ export class BrowserManager implements BrowserService {
 
   private entry(sessionId: string): Entry {
     let e = this.entries.get(sessionId);
-    if (!e) this.entries.set(sessionId, (e = { sessionId, subscribers: new Map() }));
+    if (!e) this.entries.set(sessionId, (e = { sessionId, subscribers: new Map(), tabs: new Map(), nextTabId: 1, viewport: { ...this.viewport } }));
     return e;
   }
 
   private tabByTarget(targetId: string | undefined): Tab | undefined {
     if (!targetId) return undefined;
-    for (const e of this.entries.values()) if (e.tab?.targetId === targetId) return e.tab;
+    for (const e of this.entries.values()) for (const t of e.tabs.values()) if (t.targetId === targetId) return t;
     return undefined;
   }
 
-  private async tab(sessionId: string): Promise<Tab> {
+  /** The tab a call acts on: `id` (which must be open), else the lowest open tab, created when there is none. */
+  private async tab(sessionId: string, id?: number): Promise<Tab> {
     const entry = this.entry(sessionId);
-    if (entry.tab && !entry.tab.closed) return entry.tab;
-    if (!entry.tabPromise) {
-      entry.tabPromise = this.createTab(entry).finally(() => {
-        entry.tabPromise = undefined;
+    if (id !== undefined) {
+      const tab = entry.tabs.get(id);
+      if (!tab || tab.closed) throw new Error(noTabMessage(entry, id));
+      return tab;
+    }
+    const open = defaultTab(entry);
+    if (open) return open;
+    if (!entry.creating) {
+      entry.creating = this.createTab(entry).finally(() => {
+        entry.creating = undefined;
       });
     }
-    return entry.tabPromise;
+    return entry.creating;
   }
 
   private async createTab(entry: Entry): Promise<Tab> {
+    const id = entry.nextTabId++;
     const browser = await this.ensureBrowser();
+    // newWindow: every tab gets its own (headless) window so it stays "visible";
+    // background tabs don't paint, which would starve the screencast.
+    const { targetId } = await browser.cdp.send("Target.createTarget", { url: "about:blank", newWindow: true });
+    return this.attachTab(entry, id, targetId, browser);
+  }
+
+  /** Attach to a page target (one we created, or a popup a tab opened) and make it tab `id`. */
+  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser): Promise<Tab> {
     const { cdp } = browser;
-    // newWindow: each session gets its own (headless) window so every tab stays
-    // "visible" — background tabs don't paint, which would starve the screencast.
-    const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank", newWindow: true });
     let sessionId: string;
     try {
       ({ sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true }));
@@ -511,6 +604,7 @@ export class BrowserManager implements BrowserService {
     let markGone!: () => void;
     const gone = new Promise<void>((r) => (markGone = r));
     const tab: Tab = {
+      id,
       entry,
       targetId,
       session,
@@ -518,7 +612,7 @@ export class BrowserManager implements BrowserService {
       url: "about:blank",
       title: "",
       loading: false,
-      viewport: { ...this.viewport },
+      viewport: { ...entry.viewport },
       screencasting: false,
       screencastEpoch: 0,
       castSize: null,
@@ -546,13 +640,16 @@ export class BrowserManager implements BrowserService {
       ]);
       const { frameTree } = await session.send("Page.getFrameTree");
       tab.frameId = frameTree.frame.id;
+      tab.url = frameTree.frame.url || tab.url; // a popup may already be on its page
     } catch (e) {
       this.dropTab(tab);
       await cdp.send("Target.closeTarget", { targetId }).catch(() => {});
       throw e;
     }
-    entry.tab = tab;
-    if (entry.subscribers.size > 0) await this.syncScreencast(tab);
+    // Resized while this tab was starting: catch up.
+    if (tab.viewport.width !== entry.viewport.width || tab.viewport.height !== entry.viewport.height) await this.resizeTab(tab);
+    entry.tabs.set(id, tab);
+    await this.refresh(entry);
     return tab;
   }
 
@@ -601,6 +698,7 @@ export class BrowserManager implements BrowserService {
         if (!tab.screencasting) return;
         const frame: BrowserFrame = {
           sessionId: tab.entry.sessionId,
+          tabId: tab.id,
           data: p.data,
           width: Math.round(p.metadata?.deviceWidth ?? tab.viewport.width),
           height: Math.round(p.metadata?.deviceHeight ?? tab.viewport.height),
@@ -620,14 +718,42 @@ export class BrowserManager implements BrowserService {
   }
 
   private dropTab(tab: Tab): void {
-    if (tab.closed) return;
-    tab.closed = true;
-    tab.screencasting = false;
-    tab.castSize = null;
-    for (const off of tab.offs) off();
-    tab.offs = [];
-    tab.markGone();
-    if (tab.entry.tab === tab) tab.entry.tab = undefined;
+    this.dropTabs([tab]);
+  }
+
+  /** Forget tabs (closed, crashed, or Chrome gone), then move their viewers on once per session. */
+  private dropTabs(tabs: Tab[]): void {
+    const entries = new Set<Entry>();
+    for (const tab of tabs) {
+      if (tab.closed) continue;
+      tab.closed = true;
+      tab.screencasting = false;
+      tab.castSize = null;
+      for (const off of tab.offs) off();
+      tab.offs = [];
+      tab.markGone();
+      if (tab.entry.tabs.get(tab.id) === tab) tab.entry.tabs.delete(tab.id);
+      entries.add(tab.entry);
+    }
+    for (const entry of entries) void this.refresh(entry).catch(() => {});
+  }
+
+  /**
+   * After tabs open or close, or a subscriber switches: run each tab's screencast only while
+   * someone watches it, and send every subscriber its state (the tab list changed for all of them).
+   */
+  private async refresh(entry: Entry): Promise<void> {
+    this.emitStates(entry);
+    await Promise.all(openTabs(entry).map((t) => this.syncScreencast(t)));
+  }
+
+  /** Apply the session's viewport to a tab; an unchanged size restarts nothing (viewers resize on every layout pass). */
+  private async resizeTab(tab: Tab): Promise<void> {
+    const { width, height } = tab.entry.viewport;
+    if (tab.viewport.width === width && tab.viewport.height === height) return;
+    tab.viewport = { width, height };
+    await this.applyViewport(tab);
+    await this.syncScreencast(tab);
   }
 
   private applyViewport(tab: Tab): Promise<unknown> {
@@ -641,7 +767,7 @@ export class BrowserManager implements BrowserService {
 
   /**
    * Bring the tab's screencast in line with what it should be: running at the current
-   * viewport while anyone is subscribed, stopped otherwise. Every start/stop goes through
+   * viewport while anyone watches it, stopped otherwise. Every start/stop goes through
    * this per-tab chain, so overlapping subscribe/unsubscribe/resize calls can't interleave
    * their CDP commands (Chrome rejects a second start with "Screencast is already active").
    */
@@ -653,7 +779,7 @@ export class BrowserManager implements BrowserService {
 
   private async reconcileScreencast(tab: Tab): Promise<void> {
     if (tab.closed) return;
-    const want = tab.entry.subscribers.size > 0;
+    const want = watchersOf(tab).length > 0;
     const size = tab.castSize;
     if (want && size && size.width === tab.viewport.width && size.height === tab.viewport.height) return;
     if (size) {
@@ -701,33 +827,56 @@ export class BrowserManager implements BrowserService {
         quality: this.opts.screencastQuality ?? 60,
       });
       if (tab.closed || !tab.screencasting || tab.screencastEpoch !== epoch || tab.lastFrame) return;
-      this.deliverFrame(tab, { sessionId: tab.entry.sessionId, data, width: tab.viewport.width, height: tab.viewport.height });
+      this.deliverFrame(tab, { sessionId: tab.entry.sessionId, tabId: tab.id, data, width: tab.viewport.width, height: tab.viewport.height });
     } catch {}
   }
 
   private deliverFrame(tab: Tab, frame: BrowserFrame): void {
     tab.lastFrame = frame;
-    for (const sub of tab.entry.subscribers.values()) safeCall(() => sub.onFrame(frame));
+    // Only subscribers already told they're on this tab (state before frames).
+    for (const sub of watchersOf(tab)) if (sub.watching === tab.id) safeCall(() => sub.onFrame(frame));
+  }
+
+  /** Re-read a tab's url and title from Chrome (targetInfoChanged sometimes carries an interim title). */
+  private async refreshTarget(tab: Tab): Promise<void> {
+    if (tab.closed || !this.browser) return;
+    try {
+      const { targetInfo } = await this.browser.cdp.send("Target.getTargetInfo", { targetId: tab.targetId });
+      tab.url = targetInfo.url;
+      tab.title = targetInfo.title;
+    } catch {}
   }
 
   private async currentState(tab: Tab): Promise<BrowserState> {
-    if (!tab.closed && this.browser) {
-      try {
-        const { targetInfo } = await this.browser.cdp.send("Target.getTargetInfo", { targetId: tab.targetId });
-        tab.url = targetInfo.url;
-        tab.title = targetInfo.title;
-        this.emitState(tab);
-      } catch {}
-    }
-    return { sessionId: tab.entry.sessionId, url: tab.url, title: tab.title, loading: tab.loading };
+    await this.refreshTarget(tab);
+    this.emitStates(tab.entry);
+    return stateOf(tab);
   }
 
   private emitState(tab: Tab): void {
-    const state: BrowserState = { sessionId: tab.entry.sessionId, url: tab.url, title: tab.title, loading: tab.loading };
-    const key = JSON.stringify(state);
-    if (key === tab.lastStateKey) return;
-    tab.lastStateKey = key;
-    for (const sub of tab.entry.subscribers.values()) safeCall(() => sub.onState(state));
+    this.emitStates(tab.entry);
+  }
+
+  /**
+   * Send each subscriber its tab's state when it changed. One that has just moved to a tab
+   * (subscribe, a switch, its tab closed) also gets that tab's last frame straight away.
+   */
+  private emitStates(entry: Entry): void {
+    for (const sub of entry.subscribers.values()) {
+      const tab = watchedTab(entry, sub);
+      if (!tab) continue;
+      const state = stateOf(tab);
+      const key = JSON.stringify(state);
+      if (key !== sub.lastStateKey) {
+        sub.lastStateKey = key;
+        safeCall(() => sub.onState(state));
+      }
+      if (sub.watching !== tab.id) {
+        sub.watching = tab.id;
+        const frame = tab.lastFrame;
+        if (frame) safeCall(() => sub.onFrame(frame));
+      }
+    }
   }
 
   // -------------------------------------------------------------------------

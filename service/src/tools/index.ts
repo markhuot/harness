@@ -3,7 +3,7 @@
 import type { RunKind, Ticket } from "@harness/shared";
 import type { Driver } from "../drivers/types";
 import { getTicket, listInbox, listProjects, listTickets, searchTickets } from "./board";
-import { browserClick, browserContent, browserEval, browserOpen, browserScreenshot, browserType } from "./browser";
+import { browserClick, browserCloseTab, browserContent, browserEval, browserOpen, browserScreenshot, browserTabs, browserType } from "./browser";
 import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
 import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
@@ -24,7 +24,7 @@ export * from "./ticket";
 export * from "./triage";
 export { defineGatedTool, defineTool, validateInput } from "./util";
 
-export const browserTools: ToolDefinition[] = [browserOpen, browserContent, browserClick, browserType, browserEval, browserScreenshot];
+export const browserTools: ToolDefinition[] = [browserOpen, browserTabs, browserCloseTab, browserContent, browserClick, browserType, browserEval, browserScreenshot];
 /** Read-only board tools: every run kind gets these (DESIGN.md "Tools"). */
 export const boardTools: ToolDefinition[] = [listTickets, getTicket, searchTickets, listProjects, listInbox];
 /** Board tools that change other tickets: work and conductor runs only (DESIGN.md "Board changes by agents"). */

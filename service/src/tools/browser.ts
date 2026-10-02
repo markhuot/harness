@@ -1,25 +1,66 @@
-// Browser tools: drive this session's tab in the harness's headless Chrome.
-// The human can watch (and take over) the same tab from the app.
+// Browser tools: drive this session's tabs in the harness's headless Chrome.
+// The human can watch (and take over) the same tabs from the app.
 
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ToolResultContent } from "@harness/shared";
-import { defineTool, schema } from "./util";
+import { defineTool, errorResult, schema } from "./util";
 
 const DEFAULT_MAX_CHARS = 20_000;
 
-export const browserOpen = defineTool<{ url: string }>({
+/** The optional `tab` every browser tool takes. */
+const TAB = {
+  tab: {
+    type: "integer",
+    minimum: 1,
+    description: "Tab number (from browser_open or browser_tabs). Omitted: the lowest open tab, which is tab 1 unless it was closed.",
+  },
+} as const;
+
+const tabLine = (tabs: { id: number; url: string; title: string; loading: boolean }[]) =>
+  tabs.map((t) => `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}${t.loading ? " (loading)" : ""}`).join("\n");
+
+export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean }>({
   name: "browser_open",
   description:
-    "Open a URL in this session's browser tab and wait for it to load. The human can watch this tab live. Returns the final URL and page title; use browser_content to read the page.",
-  inputSchema: schema({ url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." } }, ["url"]),
-  async run({ url }, ctx) {
-    const state = await ctx.browser.open(ctx.session.id, url);
-    return `Opened ${state.url}\nTitle: ${state.title || "(untitled)"}`;
+    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Returns the tab, final URL and page title; use browser_content to read the page.",
+  inputSchema: schema(
+    {
+      url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." },
+      ...TAB,
+      new_tab: { type: "boolean", description: "Open a new tab for this URL instead of navigating an existing one." },
+    },
+    ["url"],
+  ),
+  async run({ url, tab, new_tab }, ctx) {
+    if (new_tab && tab !== undefined) return errorResult("Pass tab or new_tab, not both.");
+    const state = await ctx.browser.open(ctx.session.id, url, { tab, newTab: new_tab ?? false });
+    return `Opened ${state.url} in tab ${state.tabId}\nTitle: ${state.title || "(untitled)"}`;
   },
 });
 
-export const browserContent = defineTool<{ selector?: string; format?: "text" | "html"; max_chars?: number }>({
+export const browserTabs = defineTool<Record<string, never>>({
+  name: "browser_tabs",
+  description: "List this session's open browser tabs: number, title and URL of each.",
+  inputSchema: schema({}),
+  async run(_input, ctx) {
+    const tabs = await ctx.browser.tabs(ctx.session.id);
+    return tabs.length ? tabLine(tabs) : "No tabs are open. browser_open opens tab 1.";
+  },
+});
+
+export const browserCloseTab = defineTool<{ tab: number }>({
+  name: "browser_close_tab",
+  description: "Close a browser tab you opened and no longer need. Tab numbers aren't reused.",
+  inputSchema: schema({ tab: { ...TAB.tab, description: "Number of the tab to close." } }, ["tab"]),
+  async run({ tab }, ctx) {
+    await ctx.browser.closeTab(ctx.session.id, tab);
+    const left = await ctx.browser.tabs(ctx.session.id);
+    return `Closed tab ${tab}.${left.length ? `\nOpen tabs:\n${tabLine(left)}` : " No tabs are open."}`;
+  },
+});
+
+export const browserContent = defineTool<{ selector?: string; format?: "text" | "html"; max_chars?: number; tab?: number }>({
   name: "browser_content",
   description:
     "Read the current page. format \"text\" (default) returns visible text; \"html\" returns markup. With a CSS selector, returns the content of every matching element. Output is capped at max_chars.",
@@ -27,29 +68,31 @@ export const browserContent = defineTool<{ selector?: string; format?: "text" | 
     selector: { type: "string", description: "CSS selector to scope the content, e.g. \"main\" or \"#results li\"." },
     format: { type: "string", enum: ["text", "html"], description: "\"text\" (default) or \"html\"." },
     max_chars: { type: "integer", minimum: 1, description: `Maximum characters to return (default ${DEFAULT_MAX_CHARS}).` },
+    ...TAB,
   }),
-  async run({ selector, format, max_chars }, ctx) {
+  async run({ selector, format, max_chars, tab }, ctx) {
     const content = await ctx.browser.content(ctx.session.id, {
       selector,
       format: format ?? "text",
       maxChars: max_chars ?? DEFAULT_MAX_CHARS,
+      tab,
     });
     return content === "" ? "(the page has no content)" : content;
   },
 });
 
-export const browserClick = defineTool<{ selector: string }>({
+export const browserClick = defineTool<{ selector: string; tab?: number }>({
   name: "browser_click",
   description: "Click the first element matching a CSS selector.",
-  inputSchema: schema({ selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." } }, ["selector"]),
-  async run({ selector }, ctx) {
-    await ctx.browser.click(ctx.session.id, selector);
-    const state = await ctx.browser.state(ctx.session.id);
+  inputSchema: schema({ selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." }, ...TAB }, ["selector"]),
+  async run({ selector, tab }, ctx) {
+    await ctx.browser.click(ctx.session.id, selector, { tab });
+    const state = await ctx.browser.state(ctx.session.id, { tab });
     return state ? `Clicked ${selector}. Now at ${state.url}` : `Clicked ${selector}.`;
   },
 });
 
-export const browserType = defineTool<{ selector: string; text: string; submit?: boolean }>({
+export const browserType = defineTool<{ selector: string; text: string; submit?: boolean; tab?: number }>({
   name: "browser_type",
   description: "Focus the element matching a CSS selector and type text into it. Set submit to press Enter afterwards (e.g. to submit a form).",
   inputSchema: schema(
@@ -57,21 +100,25 @@ export const browserType = defineTool<{ selector: string; text: string; submit?:
       selector: { type: "string", minLength: 1, description: "CSS selector of an input, textarea or contenteditable element." },
       text: { type: "string", description: "Text to type." },
       submit: { type: "boolean", description: "Press Enter after typing." },
+      ...TAB,
     },
     ["selector", "text"],
   ),
-  async run({ selector, text, submit }, ctx) {
-    await ctx.browser.type(ctx.session.id, selector, text, { submit: submit ?? false });
+  async run({ selector, text, submit, tab }, ctx) {
+    await ctx.browser.type(ctx.session.id, selector, text, { submit: submit ?? false, tab });
     return submit ? `Typed into ${selector} and pressed Enter.` : `Typed into ${selector}.`;
   },
 });
 
-export const browserEval = defineTool<{ expression: string }>({
+export const browserEval = defineTool<{ expression: string; tab?: number }>({
   name: "browser_eval",
   description: "Evaluate a JavaScript expression in the page and return its JSON-serialized result. Promises are awaited.",
-  inputSchema: schema({ expression: { type: "string", minLength: 1, description: "JavaScript expression, e.g. \"document.querySelectorAll('a').length\"." } }, ["expression"]),
-  async run({ expression }, ctx) {
-    return await ctx.browser.evaluate(ctx.session.id, expression);
+  inputSchema: schema(
+    { expression: { type: "string", minLength: 1, description: "JavaScript expression, e.g. \"document.querySelectorAll('a').length\"." }, ...TAB },
+    ["expression"],
+  ),
+  async run({ expression, tab }, ctx) {
+    return await ctx.browser.evaluate(ctx.session.id, expression, { tab });
   },
 });
 
@@ -143,7 +190,7 @@ export function resolveSaveTo(saveTo: string, scope: { cwd: string; scratchDir: 
   return target;
 }
 
-export const browserScreenshot = defineTool<{ save_to?: string }>({
+export const browserScreenshot = defineTool<{ save_to?: string; tab?: number }>({
   name: "browser_screenshot",
   description:
     "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can attach it to post_summary or submit_for_review.",
@@ -154,12 +201,13 @@ export const browserScreenshot = defineTool<{ save_to?: string }>({
       description:
         "Also save the PNG here, e.g. \"screenshots/after.png\". It must be inside your working directory or this run's scratch folder, and a relative path resolves against the working directory. In read-only runs (plan, review, or a read-only ticket) only the scratch folder is allowed and relative paths resolve there. Parent folders are created; an existing file is replaced only if it is a PNG.",
     },
+    ...TAB,
   }),
-  async run({ save_to }, ctx) {
+  async run({ save_to, tab }, ctx) {
     // Check the path before taking the shot, so a refused save_to costs nothing.
     const scope = save_to ? await ctx.ops.fileOutputScope(ctx) : null;
     const path = save_to && scope ? resolveSaveTo(save_to, { cwd: ctx.cwd, ...scope }) : null;
-    const data = await ctx.browser.screenshot(ctx.session.id);
+    const data = await ctx.browser.screenshot(ctx.session.id, { tab });
     const content: ToolResultContent[] = [{ type: "image", data, mimeType: "image/png" }];
     if (path && scope) {
       mkdirSync(dirname(path), { recursive: true });

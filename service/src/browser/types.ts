@@ -1,38 +1,64 @@
-// Browser contract. The service owns one headless Chrome; each session gets its own tab.
-// Clients see the tab through a CDP screencast relayed over the WebSocket, and can drive it.
+// Browser contract. The service owns one headless Chrome; each session gets its own tabs.
+// Clients see a tab through a CDP screencast relayed over the WebSocket, and can drive it.
+//
+// Tabs are numbered per session from 1 and never reuse a number. A call without `tab` uses the
+// session's lowest open tab, creating tab 1 when the session has none.
 
-import type { BrowserInput, BrowserState } from "@harness/shared";
+import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
   sessionId: string;
+  tabId: number;
   /** base64 JPEG */
   data: string;
   width: number;
   height: number;
 }
 
+/** Which tab a call acts on. An explicit tab that isn't open throws. */
+export interface TabOption {
+  tab?: number;
+}
+
 export interface BrowserService {
-  /** Navigate the session's tab (creating it if needed) and wait for load. */
-  open(sessionId: string, url: string): Promise<BrowserState>;
-  /** Current state, or null if the session has no tab yet. */
-  state(sessionId: string): Promise<BrowserState | null>;
+  /** Navigate a tab (`newTab`: a new one) and wait for load. */
+  open(sessionId: string, url: string, opts?: TabOption & { newTab?: boolean }): Promise<BrowserState>;
+  /** A tab's state, or null if the session has no tab yet (or no such tab). */
+  state(sessionId: string, opts?: TabOption): Promise<BrowserState | null>;
+  /** The session's open tabs, by id. */
+  tabs(sessionId: string): Promise<BrowserTab[]>;
   /**
    * Page content. With a selector, returns content of all matches (joined by blank lines).
    * format "text" = innerText, "html" = outerHTML. Throws if nothing matches the selector.
    */
-  content(sessionId: string, opts?: { selector?: string; format?: "text" | "html"; maxChars?: number }): Promise<string>;
-  click(sessionId: string, selector: string): Promise<void>;
-  type(sessionId: string, selector: string, text: string, opts?: { submit?: boolean }): Promise<void>;
+  content(sessionId: string, opts?: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number }): Promise<string>;
+  click(sessionId: string, selector: string, opts?: TabOption): Promise<void>;
+  type(sessionId: string, selector: string, text: string, opts?: TabOption & { submit?: boolean }): Promise<void>;
   /** Evaluate a JS expression in the page; returns JSON-serialized result. */
-  evaluate(sessionId: string, expression: string): Promise<string>;
+  evaluate(sessionId: string, expression: string, opts?: TabOption): Promise<string>;
   /** PNG screenshot as base64 */
-  screenshot(sessionId: string): Promise<string>;
-  /** Apply user input coming from a client viewer. */
-  input(sessionId: string, input: BrowserInput): Promise<void>;
-  /** Start/stop relaying frames for the session. Ref-counted by caller identity. */
-  subscribe(sessionId: string, subscriberId: string, onFrame: (f: BrowserFrame) => void, onState: (s: BrowserState) => void): Promise<void>;
+  screenshot(sessionId: string, opts?: TabOption): Promise<string>;
+  /** Close one tab. Viewers on it move to the lowest open tab; when it was the last one and someone is watching, a blank tab replaces it. */
+  closeTab(sessionId: string, tab: number): Promise<void>;
+  /**
+   * Apply user input coming from a client viewer. Without `tab` it goes to the tab `subscriberId`
+   * watches. `newTab` moves that subscriber to the tab it opens.
+   */
+  input(sessionId: string, input: BrowserInput, opts?: TabOption & { subscriberId?: string }): Promise<void>;
+  /**
+   * Start relaying one tab's frames and the session's state to a subscriber (`tab` omitted, or not
+   * open: the lowest open tab). Subscribing again with the same id switches its tab. Screencasts
+   * run only for tabs someone watches.
+   */
+  subscribe(
+    sessionId: string,
+    subscriberId: string,
+    onFrame: (f: BrowserFrame) => void,
+    onState: (s: BrowserState) => void,
+    opts?: TabOption,
+  ): Promise<void>;
   unsubscribe(sessionId: string, subscriberId: string): Promise<void>;
-  /** Close the session's tab. */
+  /** Close all of the session's tabs. */
   close(sessionId: string): Promise<void>;
   /** Shut down Chrome. */
   shutdown(): Promise<void>;

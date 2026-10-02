@@ -41,6 +41,12 @@ function fixtures(req: Request): Response {
       );
     case "/page2":
       return html(`<h1>Second page</h1>`, "Page Two");
+    case "/popup":
+      return html(
+        `<a id="blank" href="/page2" target="_blank" style="display:block;width:200px;height:40px">new tab</a>
+         <button id="open" onclick="window.open('/form')">window.open</button>`,
+        "Popup",
+      );
     case "/form":
       return html(
         `<form action="/result" method="get">
@@ -133,7 +139,14 @@ withChrome("BrowserManager (real Chrome)", () => {
   test("state is null before a session has a tab; open returns title and url", async () => {
     expect(await browser.state("s-open")).toBeNull();
     const state = await browser.open("s-open", `${base}/`);
-    expect(state).toEqual({ sessionId: "s-open", url: `${base}/`, title: "Home Page", loading: false });
+    expect(state).toEqual({
+      sessionId: "s-open",
+      tabId: 1,
+      url: `${base}/`,
+      title: "Home Page",
+      loading: false,
+      tabs: [{ id: 1, url: `${base}/`, title: "Home Page", loading: false }],
+    });
     expect(await browser.state("s-open")).toEqual(state);
   }, 30_000);
 
@@ -264,6 +277,156 @@ withChrome("BrowserManager (real Chrome)", () => {
     expect(await browser.state("iso-a")).toBeNull();
     expect((await browser.state("iso-b"))?.title).toBe("Page Two");
   }, 30_000);
+
+  describe("tabs", () => {
+    test("new tabs count up; calls without a tab use the lowest open one; each tab keeps its own page", async () => {
+      await browser.open("t-many", `${base}/`);
+      const two = await browser.open("t-many", `${base}/page2`, { newTab: true });
+      const three = await browser.open("t-many", `${base}/form`, { newTab: true });
+      expect([two.tabId, three.tabId]).toEqual([2, 3]);
+      expect(three.tabs?.map((t) => [t.id, t.title])).toEqual([[1, "Home Page"], [2, "Page Two"], [3, "Form"]]);
+
+      // Each tab is its own page: JS state, content and navigation don't leak between them.
+      await browser.evaluate("t-many", "window.mine = 'two'", { tab: 2 });
+      expect(await browser.evaluate("t-many", "window.mine")).toBe("undefined");
+      expect(await browser.evaluate("t-many", "window.mine", { tab: 2 })).toBe('"two"');
+      expect(await browser.content("t-many", { selector: "h1", tab: 2 })).toBe("Second page");
+      await browser.type("t-many", "#q", "tabs", { submit: true, tab: 3 });
+      expect(await browser.content("t-many", { selector: "#echo", tab: 3 })).toBe("You searched: tabs");
+      expect((await browser.state("t-many"))?.title).toBe("Home Page");
+      await browser.click("t-many", "#btn");
+      expect(await browser.content("t-many", { selector: "#out" })).toBe("Clicked!");
+
+      // Navigating a given tab leaves the others where they were.
+      await browser.open("t-many", `${base}/`, { tab: 2 });
+      expect((await browser.tabs("t-many")).map((t) => t.title)).toEqual(["Home Page", "Home Page", "Result"]);
+
+      // Closing tab 1 makes tab 2 the default; numbers aren't reused.
+      await browser.closeTab("t-many", 1);
+      expect((await browser.state("t-many"))?.tabId).toBe(2);
+      expect((await browser.open("t-many", `${base}/page2`, { newTab: true })).tabId).toBe(4);
+      expect((await browser.tabs("t-many")).map((t) => t.id)).toEqual([2, 3, 4]);
+      await browser.close("t-many");
+      expect(await browser.tabs("t-many")).toEqual([]);
+    }, 30_000);
+
+    test("an unknown tab is an error naming the open ones, and never opens a tab", async () => {
+      await browser.open("t-bad", `${base}/`);
+      await expect(browser.content("t-bad", { tab: 7 })).rejects.toThrow("No browser tab 7. Open tabs: 1.");
+      await expect(browser.closeTab("t-bad", 7)).rejects.toThrow("No browser tab 7");
+      await expect(browser.open("t-bad", `${base}/`, { tab: 2 })).rejects.toThrow("No browser tab 2");
+      await expect(browser.evaluate("t-none", "1", { tab: 1 })).rejects.toThrow("This session has no open tabs.");
+      expect(await browser.state("t-bad", { tab: 7 })).toBeNull();
+      expect((await browser.tabs("t-bad")).map((t) => t.id)).toEqual([1]);
+      expect(await browser.tabs("t-none")).toEqual([]);
+    }, 30_000);
+
+    test("parallel callers each get their own new tab", async () => {
+      const opened = await Promise.all([1, 2, 3].map(() => browser.open("t-par", `${base}/page2`, { newTab: true })));
+      expect(opened.map((s) => s.tabId).sort()).toEqual([1, 2, 3]);
+      await browser.close("t-par");
+    }, 30_000);
+
+    test("each subscriber watches one tab; only watched tabs screencast; switching sends that tab's state and frames", async () => {
+      await browser.open("t-cast", `${base}/anim`);
+      await browser.open("t-cast", `${base}/page2`, { newTab: true });
+      const frames: BrowserFrame[] = [];
+      const states: BrowserState[] = [];
+      await browser.subscribe("t-cast", "v", (f) => frames.push(f), (s) => states.push(s));
+      expect(states.at(-1)).toMatchObject({ tabId: 1, title: "Anim", tabs: [{ id: 1 }, { id: 2 }] });
+      await until(() => frames.length >= 2, "frames from tab 1");
+      expect(frames.every((f) => f.tabId === 1)).toBe(true);
+      expect(browser.screencastInfo("t-cast", { tab: 2 })!.active).toBe(false);
+
+      // Subscribing again with a tab switches: tab 1 stops casting, tab 2 starts.
+      frames.length = 0;
+      await browser.subscribe("t-cast", "v", (f) => frames.push(f), (s) => states.push(s), { tab: 2 });
+      expect(states.at(-1)).toMatchObject({ tabId: 2, title: "Page Two" });
+      expect(browser.screencastInfo("t-cast", { tab: 1 })!.active).toBe(false);
+      expect(browser.screencastInfo("t-cast", { tab: 2 })!.active).toBe(true);
+      await until(() => frames.some((f) => f.tabId === 2), "a frame from tab 2", 3000);
+      expect(frames.every((f) => f.tabId === 2)).toBe(true);
+
+      // A second viewer on tab 1 casts it again without moving the first.
+      const other: BrowserFrame[] = [];
+      await browser.subscribe("t-cast", "w", (f) => other.push(f), () => {}, { tab: 1 });
+      await until(() => other.length >= 2, "frames for the second viewer");
+      expect(other.every((f) => f.tabId === 1)).toBe(true);
+      expect(browser.screencastInfo("t-cast", { tab: 2 })!.active).toBe(true);
+
+      // Every viewer hears about tabs opening, whichever tab it's on.
+      const before = states.length;
+      await browser.open("t-cast", `${base}/`, { newTab: true });
+      await until(() => states.slice(before).some((s) => s.tabId === 2 && s.tabs?.length === 3), "the tab list to grow");
+
+      await browser.unsubscribe("t-cast", "v");
+      await browser.unsubscribe("t-cast", "w");
+      expect(browser.screencastInfo("t-cast", { tab: 1 })!.active).toBe(false);
+      expect(browser.screencastInfo("t-cast", { tab: 2 })!.active).toBe(false);
+      await browser.close("t-cast");
+    }, 30_000);
+
+    test("viewer input: newTab moves that viewer to the new tab, closeTab moves it back, closing the last leaves a blank tab", async () => {
+      await browser.open("t-input", `${base}/`);
+      const states: BrowserState[] = [];
+      await browser.subscribe("t-input", "v", () => {}, (s) => states.push(s));
+      await browser.subscribe("t-input", "bystander", () => {}, () => {});
+
+      await browser.input("t-input", { type: "newTab", url: `${base}/page2` }, { subscriberId: "v" });
+      await until(() => states.find((s) => s.tabId === 2 && s.title === "Page Two"), "the viewer on tab 2");
+      // Input without a tab goes to the tab the viewer watches, not the default.
+      await browser.input("t-input", { type: "navigate", url: `${base}/form` }, { subscriberId: "v" });
+      await until(async () => (await browser.state("t-input", { tab: 2 }))?.title === "Form", "tab 2 navigated");
+      expect((await browser.state("t-input"))?.title).toBe("Home Page");
+      // The bystander stayed on tab 1.
+      await browser.input("t-input", { type: "navigate", url: `${base}/page2` }, { subscriberId: "bystander" });
+      await until(async () => (await browser.state("t-input", { tab: 1 }))?.title === "Page Two", "tab 1 navigated");
+
+      // Closing the watched tab moves the viewer to the lowest open tab.
+      await browser.input("t-input", { type: "closeTab" }, { subscriberId: "v" });
+      await until(() => states.at(-1)?.tabId === 1 && states.at(-1)?.tabs?.length === 1, "the viewer back on tab 1");
+
+      // Closing the last tab (an explicit tab this time) leaves a fresh blank one for the viewers.
+      await browser.input("t-input", { type: "closeTab" }, { tab: 1, subscriberId: "v" });
+      await until(() => states.at(-1)?.tabId === 3, "a blank tab 3");
+      expect(states.at(-1)).toMatchObject({ url: "about:blank", tabs: [{ id: 3 }] });
+
+      await browser.unsubscribe("t-input", "v");
+      await browser.unsubscribe("t-input", "bystander");
+      await browser.close("t-input");
+    }, 30_000);
+
+    test("pages a tab opens (target=_blank, window.open) become the session's next tabs, and still paint", async () => {
+      await browser.open("t-pop", `${base}/popup`);
+      await browser.click("t-pop", "#blank");
+      await until(async () => (await browser.tabs("t-pop")).find((t) => t.id === 2 && t.title === "Page Two"), "the link's tab");
+      await browser.click("t-pop", "#open");
+      await until(async () => (await browser.tabs("t-pop")).find((t) => t.id === 3 && t.title === "Form"), "the window.open tab");
+      expect(await browser.content("t-pop", { selector: "h1", tab: 2 })).toBe("Second page");
+      // Both the opener and its popup still screencast.
+      for (const tab of [1, 2]) {
+        const frames: BrowserFrame[] = [];
+        await browser.subscribe("t-pop", "v", (f) => frames.push(f), () => {}, { tab });
+        await until(() => frames.some((f) => f.tabId === tab), `a frame from tab ${tab}`, 3000);
+      }
+      await browser.unsubscribe("t-pop", "v");
+      // A page closing itself drops its tab.
+      await browser.evaluate("t-pop", "window.close()", { tab: 3 });
+      await until(async () => (await browser.tabs("t-pop")).length === 2, "the closed popup's tab to go");
+      await browser.close("t-pop");
+    }, 30_000);
+
+    test("resize applies to every tab, and to tabs opened later", async () => {
+      await browser.open("t-size", `${base}/`);
+      await browser.open("t-size", `${base}/`, { newTab: true });
+      await browser.input("t-size", { type: "resize", width: 800, height: 600 });
+      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 1 })).toBe("[800,600]");
+      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 2 })).toBe("[800,600]");
+      await browser.open("t-size", `${base}/`, { newTab: true });
+      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 3 })).toBe("[800,600]");
+      await browser.close("t-size");
+    }, 30_000);
+  });
 
   describe("screencast", () => {
     test("subscribe yields frames with dimensions; unsubscribe stops them", async () => {
