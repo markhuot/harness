@@ -11,10 +11,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPad, each ticket you tap opens in a window of its own again, instead of replacing the ticket
+  in the window you opened last. Tapping a ticket that already has a window brings that window
+  forward.
 - When you message a ticket in Review and the agent starts changing the work (rather than just
   answering), it now moves the ticket back to In progress first. The board shows it being worked
   on, an agent review that was waiting is stopped, and both reviews start over once the agent
   submits again. A message the agent only answers still leaves the ticket in Review.
+
+### Fixed
+
+- On iPad, closing a ticket window (with its close button or the window controls) no longer stops
+  tickets from opening. Tapping a ticket after closing its window opens a new one.
 
 ## [app-20261002.1543](https://github.com/markhuot/harness/releases/tag/app-20261002.1543) - 2026-10-02
 

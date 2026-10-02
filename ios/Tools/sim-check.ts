@@ -1614,6 +1614,23 @@ function screens(s: Seeded): Screen[] {
               if (restored instanceof Error) throw restored;
               await simctl("openurl", udid, BOARD);
               await until("main window back", async () => onBoard(await labels(udid)), 10000);
+              // A closed window doesn't stop tickets opening: open a ticket's window, close it
+              // (More → Delete ticket destroys the window's scene, as its close control does), then
+              // the next ticket still gets a window. Throwaway tickets, so other screens keep theirs.
+              const [gone, next] = await Promise.all(["Close this window", "Open after a close"].map((prompt) => api<Ticket>("POST", "/tickets", { projectId: s.project.id, prompt, driver: "dummy", start: false })));
+              await simctl("openurl", udid, `harness://ticket/${k(gone!)}`);
+              await until(`${gone!.key}'s window up`, async () => ticketShown(await labels(udid), gone!.key), 10000);
+              await tapWhere(udid, "More");
+              await tapWhere(udid, "Delete ticket");
+              await tapWhere(udid, "Delete");
+              await until(`${gone!.key}'s window closed`, async () => !(await labels(udid)).includes(gone!.key), 10000);
+              await simctl("openurl", udid, `harness://ticket/${k(next!)}`);
+              const reopened = await until(`${next!.key}'s window up after a close`, async () => ticketShown(await labels(udid), next!.key), 10000).catch((e) => e as Error);
+              await Bun.sleep(800);
+              await shot(udid, "ticket-window-after-close");
+              if (reopened instanceof Error) throw reopened;
+              await simctl("openurl", udid, BOARD);
+              await until("main window back", async () => onBoard(await labels(udid)), 10000);
             },
           } satisfies Screen,
         ]
