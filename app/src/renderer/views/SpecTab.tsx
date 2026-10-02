@@ -23,6 +23,7 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
   const [showChanges, setShowChanges] = useState(false);
   /** Diffs fetched so far, by the revision they lead to (rev - 1 → rev); revisions never change */
   const [diffs, setDiffs] = useState<Record<number, string | Error>>({});
+  const [bodyErrors, setBodyErrors] = useState<Record<number, Error>>({});
   const shown = shownRevision(history, latest);
   const body = specBody(state, ticket.id, shown);
   const info = revisions?.find((r) => r.rev === shown);
@@ -40,14 +41,14 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
 
   // An earlier revision's body, fetched when it's first shown.
   useEffect(() => {
-    if (body !== undefined) return;
+    if (body !== undefined || bodyErrors[shown]) return;
     let live = true;
     client.specRevision(ticket.key, shown).then(
       (revision) => live && dispatch({ type: "specRevision", ticketId: ticket.id, revision }),
-      () => {},
+      (e) => live && setBodyErrors((m) => ({ ...m, [shown]: e instanceof Error ? e : new Error(String(e)) })),
     );
     return () => void (live = false);
-  }, [client, dispatch, ticket.key, ticket.id, shown, body]);
+  }, [client, dispatch, ticket.key, ticket.id, shown, body, bodyErrors]);
 
   const diff = diffs[shown];
   useEffect(() => {
@@ -135,9 +136,13 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
         {showChanges && latest > 1 ? (
           <SpecChanges rev={shown} diff={diff} />
         ) : body === undefined ? (
-          <div className="empty">
-            <div className="spinner" />
-          </div>
+          bodyErrors[shown] ? (
+            <div className="empty">Couldn't load this revision: {bodyErrors[shown].message}</div>
+          ) : (
+            <div className="empty">
+              <div className="spinner" />
+            </div>
+          )
         ) : body.trim() ? (
           <section className="spec-doc" data-testid="spec-doc">
             <Markdown text={body} />

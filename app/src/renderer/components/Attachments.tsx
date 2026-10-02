@@ -67,7 +67,7 @@ export function Missing({ name }: { name: string }) {
   );
 }
 
-/** One attachment at a time over the app. ← and → (or the side buttons) step through the list (a summary's attachments, or the images in a piece of markdown); Esc or the backdrop closes. */
+/** One attachment at a time over the app. ← and → (or the side buttons) step through the list (the images in a piece of markdown); Esc or the backdrop closes. */
 export function Lightbox({ list, index, onIndex, onClose }: { list: Attachment[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
   const { client } = useStore();
   // Attachments renders this only with a non-empty list.

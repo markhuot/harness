@@ -17,6 +17,8 @@ struct TicketDetailSpecTab: View {
     /// Diffs fetched so far, by "from-to"; revisions never change, so neither do these
     @State private var diffs: [String: String] = [:]
     @State private var failed: String?
+    /// Why the diff shown under Show changes couldn't load, by "from-to"
+    @State private var diffFailed: [String: String] = [:]
 
     var body: some View {
         let state = store.state
@@ -45,6 +47,8 @@ struct TicketDetailSpecTab: View {
                     if showChanges, let previous {
                         if let diff = diffs["\(previous)-\(rev)"] {
                             SpecDiffView(diff: diff, text: body ?? "", from: previous, to: rev)
+                        } else if let error = diffFailed["\(previous)-\(rev)"] {
+                            Callout(tone: .red, icon: "alert", title: "Couldn't load the changes", message: error)
                         } else {
                             Spinner().frame(maxWidth: .infinity).padding(30)
                         }
@@ -88,12 +92,14 @@ struct TicketDetailSpecTab: View {
         }
         .task(id: showChanges ? previous.map { "\(ticket.id)#\($0)-\(rev)" } : nil) {
             guard showChanges, let previous, diffs["\(previous)-\(rev)"] == nil, let api = store.api else { return }
+            let key = "\(previous)-\(rev)"
+            diffFailed[key] = nil
             do {
                 let d = try await api.specDiff(ticket.key, from: previous, to: rev)
-                diffs["\(previous)-\(rev)"] = d.diff
+                diffs[key] = d.diff
             } catch is CancellationError {
             } catch {
-                if !Task.isCancelled { failed = errorMessage(error) }
+                if !Task.isCancelled { diffFailed[key] = errorMessage(error) }
             }
         }
     }

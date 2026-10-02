@@ -20,7 +20,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Images and videos attached to a ticket can appear inside its text, fitted to the width. Click or
   tap one to open it full size, then step through every image in that text. Images from other
   websites aren't loaded. They show as a link instead.
-
 - Every change to a ticket's spec is kept as a revision, with who made it and a short note on
   what changed. The revision that's current when you press Start is marked as the one you
   approved.
