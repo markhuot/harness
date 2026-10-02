@@ -260,6 +260,34 @@ export function inlineTokens(text: string): InlineToken[] {
   return out;
 }
 
+/**
+ * Every attachment in `blocks`, first appearance first, once per id: what a viewer steps through.
+ * Paragraph and quote text goes line by line, as the renderers split it.
+ */
+export function mediaIn(blocks: Block[]): Media[] {
+  const out = new Map<string, Media>();
+  const add = (m: Media) => {
+    if (!out.has(m.id)) out.set(m.id, { alt: m.alt, id: m.id, video: m.video });
+  };
+  const text = (s: string) => {
+    for (const line of s.split("\n")) for (const tok of inlineTokens(line)) if (tok.t === "img") add(tok);
+  };
+  const walk = (list: Block[]) => {
+    for (const b of list) {
+      if (b.t === "img") add(b);
+      else if (b.t === "p" || b.t === "h" || b.t === "quote") text(b.text);
+      else if (b.t === "ul" || b.t === "ol")
+        for (const it of b.items) {
+          text(it.text);
+          walk(it.children);
+        }
+      else if (b.t === "table") for (const row of [b.header, ...b.rows]) row.forEach(text);
+    }
+  };
+  walk(blocks);
+  return [...out.values()];
+}
+
 /** Plain-text preview of markdown for card snippets. */
 export function plainText(md: string): string {
   return md

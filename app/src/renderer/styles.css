@@ -682,14 +682,8 @@ ul.md-list.depth-1 {
 ul.md-list.depth-2 {
   list-style-type: square;
 }
-ol.md-list.depth-0 {
+ol.md-list {
   list-style-type: decimal;
-}
-ol.md-list.depth-1 {
-  list-style-type: lower-alpha;
-}
-ol.md-list.depth-2 {
-  list-style-type: lower-roman;
 }
 /* An attachment in the text: fitted to the width, opening the lightbox. */
 .md-media {

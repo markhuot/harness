@@ -14,7 +14,7 @@
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { parseFileLink, type AttachmentKind, type SummaryAttachment } from "@harness/shared";
-import { inlineTokens, parseBlocks, ticketByKey, ticketLinkable, type Block, type Media } from "@harness/shared/state";
+import { inlineTokens, mediaIn, parseBlocks, ticketByKey, ticketLinkable, type Block, type Media } from "@harness/shared/state";
 import type { FileLinkContext } from "../state/fileOpen";
 import { useOptionalStore } from "../state/store";
 import { Lightbox, Missing } from "./Attachments";
@@ -159,25 +159,6 @@ interface MediaScope {
 
 const MediaScopeContext = createContext<MediaScope | null>(null);
 
-/** Every attachment in `blocks`, first appearance first, once each. Paragraph and quote text goes line by line, as it renders. */
-function collectMedia(blocks: Block[], out = new Map<string, Media>()): Map<string, Media> {
-  const add = (text: string) => {
-    for (const line of text.split("\n")) for (const tok of inlineTokens(line)) if (tok.t === "img" && !out.has(tok.id)) out.set(tok.id, tok);
-  };
-  for (const b of blocks) {
-    if (b.t === "img") {
-      if (!out.has(b.id)) out.set(b.id, b);
-    } else if (b.t === "p" || b.t === "h" || b.t === "quote") add(b.text);
-    else if (b.t === "ul" || b.t === "ol")
-      for (const it of b.items) {
-        add(it.text);
-        collectMedia(it.children, out);
-      }
-    else if (b.t === "table") [b.header, ...b.rows].forEach((row) => row.forEach(add));
-  }
-  return out;
-}
-
 const defaultKind = (m: Media): AttachmentKind => (m.video ? "video" : "image");
 
 /**
@@ -225,7 +206,7 @@ function MdMedia({ media, block }: { media: Media; block?: boolean }) {
   );
 }
 
-/** A list and the lists nested in its items. Markers change with depth (• ◦ ▪, 1. a. i.), see .md-list in styles.css. */
+/** A list and the lists nested in its items. Bullets change with depth (• ◦ ▪), see .md-list in styles.css. */
 function MdList({ block, depth, tickets }: { block: Extract<Block, { t: "ul" | "ol" }>; depth: number; tickets?: TicketLinks }) {
   const items = block.items.map((it, j) => (
     <li key={j}>
@@ -300,7 +281,7 @@ function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: numbe
 
 export function Markdown({ text, className }: { text: string; className?: string }) {
   const blocks = useMemo(() => parseBlocks(text), [text]);
-  const media = useMemo(() => [...collectMedia(blocks).values()], [blocks]);
+  const media = useMemo(() => mediaIn(blocks), [blocks]);
   const tickets = useTicketLinks();
   const [learned, setLearned] = useState<Record<string, AttachmentKind>>({});
   const [open, setOpen] = useState<number | null>(null);

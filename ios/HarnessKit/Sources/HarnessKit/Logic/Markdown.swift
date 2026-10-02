@@ -31,7 +31,7 @@ public enum Markdown {
 
     /// An attachment shown inline. `video` comes from a .mp4/.webm/.mov id or alt text; renderers
     /// that know the attachment's kind may use that instead.
-    public struct Media: Equatable, Sendable {
+    public struct Media: Codable, Equatable, Sendable {
         public var alt: String
         public var id: String
         public var video: Bool
@@ -373,6 +373,42 @@ public enum Markdown {
             last = idx + len
         }
         if last < ns.length { out.append(.text(ns.substring(from: last))) }
+        return out
+    }
+
+    // MARK: Media
+
+    /// Every attachment in `blocks`, first appearance first, once per id: what a viewer steps through.
+    /// Paragraph and quote text goes line by line, as the renderers split it.
+    public static func mediaIn(_ blocks: [Block]) -> [Media] {
+        var out: [Media] = []
+        var seen = Set<String>()
+        func add(_ m: Media) {
+            if seen.insert(m.id).inserted { out.append(m) }
+        }
+        func text(_ s: String) {
+            // `s.split("\n")`: on scalars, keeping empty lines.
+            for line in s.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false) {
+                for case let .img(m) in inlineTokens(String(String.UnicodeScalarView(line))) { add(m) }
+            }
+        }
+        func walk(_ list: [Block]) {
+            for b in list {
+                switch b {
+                case let .img(m): add(m)
+                case let .p(s), let .h(_, s), let .quote(s): text(s)
+                case let .ul(items), let .ol(_, items):
+                    for it in items {
+                        text(it.text)
+                        walk(it.children)
+                    }
+                case let .table(_, header, rows):
+                    for row in [header] + rows { row.forEach(text) }
+                case .code, .hr: break
+                }
+            }
+        }
+        walk(blocks)
         return out
     }
 

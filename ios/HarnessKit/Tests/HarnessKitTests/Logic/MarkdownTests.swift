@@ -29,6 +29,11 @@ struct MarkdownTests {
         #expect(try json(decoded) == json(got))
     }
 
+    @Test(arguments: Fixture.cases("markdown", "mediaInCases", input: String.self, output: JSONValue.self))
+    func mediaIn(_ c: Fixture.Case<String, JSONValue>) throws {
+        #expect(try jsonEqual(json(Markdown.mediaIn(Markdown.parseBlocks(c.input))), json(c.output)))
+    }
+
     @Test(arguments: Fixture.cases("markdown", "plainTextCases", input: String.self, output: String.self))
     func plainText(_ c: Fixture.Case<String, String>) {
         let got = Markdown.plainText(c.input)

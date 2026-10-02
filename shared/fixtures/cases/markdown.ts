@@ -1,5 +1,5 @@
 // Markdown parsing (shared/src/state/markdown.ts) for HarnessKit's Markdown.swift.
-import { inlineTokens, parseBlocks, plainText } from "../../src/state/markdown";
+import { inlineTokens, mediaIn, parseBlocks, plainText } from "../../src/state/markdown";
 import { cases } from "../case";
 
 /** Inputs every function sees: the shared corpus of tricky markdown. */
@@ -197,6 +197,12 @@ const inlineCorpus: Record<string, string> = {
 
 export const parseBlocksCases = cases(parseBlocks, corpus);
 export const inlineTokensCases = cases(inlineTokens, { ...inlineCorpus, ...corpus });
+export const mediaInCases = cases((s: string) => mediaIn(parseBlocks(s)), {
+  ...corpus,
+  "media everywhere": "# ![h](attachment:h)\n![a](attachment:a)\npara ![b](attachment:b)\n> ![q](attachment:q.mov)\n- ![l](attachment:l)\n  - ![n](attachment:n)\n\n| ![t](attachment:t) |\n|---|\n| ![a again](attachment:a) |",
+  "same id twice keeps the first": "![first](attachment:x)\n![second.mp4](attachment:x)",
+  "remote images are not media": "![r](https://x.test/r.png) ![f](shots/f.png)",
+});
 export const plainTextCases = cases(plainText, {
   ...corpus,
   ...inlineCorpus,
