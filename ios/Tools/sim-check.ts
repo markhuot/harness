@@ -3,18 +3,19 @@
 //   2. seeds a project with a hello-world ticket, a conductor with children, a /browse ticket,
 //      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes and
 //      a draft (a New session saved before launch),
-//      while it builds the Release app for the simulator (skip with --no-build)
-//   3. on the shared simulator ("harness-shared", see Tools/sim.ts and CLAUDE.md → Simulators),
+//      while it builds the Release app for the simulator with `bun ios/Tools/build.ts sim` (XcodeGen,
+//      then a Release simulator build into ios/build/dd; skip with --no-build, override with --app=)
+//   3. on the shared simulator ("harness-shared", see ios/Tools/sim.ts and CLAUDE.md → Simulators),
 //      held under its lock for the whole run so other agents wait rather than install over it,
 //      installs the app and pairs it via `simctl openurl harness://pair?…`. --shards=N adds
 //      "sim-check 2" … "sim-check N" (created on iOS 27.0 on first use, each under its own lock)
 //   4. splits the screens between the simulators: each deep-links the running app to its screens
 //      and saves each one in light and in dark (flipping `simctl ui appearance` in place) to
-//      mobile/build/screens/, then the real-tap checks, also split between them
+//      ios/build/screens/, then the real-tap checks, also split between them
 //
 //   Only what needs a simulator lives here (native scrolling, the keyboard, gestures, media, crashes,
-//   the screenshots); the logic behind each check is in bun test (lib/boardColumns, lib/mentionCaret,
-//   lib/stickToBottom, shared/state paging and details, the service's http tests).
+//   the screenshots); the logic behind each check is in swift test (HarnessKit's BoardColumns,
+//   MentionCaret, StickToBottom) and bun test (shared/state paging and details, the service's http tests).
 //
 //   --themes=catppuccin-mocha,rose-pine-dawn: per theme, applies it with the settings deep link
 //      (harness://settings?darkTheme=…) and saves board-<id>.png + settings-<id>.png
@@ -47,24 +48,19 @@
 //      pages, Close and swipe-down close it; attachments-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
-//      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to mobile/build/screens-ipad/ in whatever orientation each
+//      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
 //      checks and the modes above tap at iPhone coordinates, so they don't run here.
 //
-//   --native: drives the native SwiftUI app (ios/) instead of the React Native one. It builds with
-//      `bun ios/Tools/build.ts sim` (XcodeGen, then a Release simulator build into ios/build/dd; no
-//      expo prebuild or pods), installs ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app
-//      (--app= still overrides) and saves to mobile/build/screens-native/ (screens-ipad-native/ with
-//      --ipad), so the RN app's shots stay put. Same bundle id, links and checks. It runs on the shared
-//      harness-shared simulator under its lock like any other run, e.g. `--native --only=connect`;
-//      --udid still names a specific existing device.
+//   It runs on the shared harness-shared simulator under its lock, e.g. `--only=connect`; --udid
+//      still names a specific existing device.
 //
 //   It stops before starting when the disk has less than 5 GiB free, and removes its temp dirs
 //   ($TMPDIR/harness-sim-home-*, harness-sim-projects-*) however it ends, unless --keep.
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun scripts/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad] [--native]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -72,8 +68,9 @@ import { buildPairUrl, reviewPassed, type Project, type PromptEntry, type Ticket
 import { findTheme } from "@harness/shared/themes";
 import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
-import { acquire, checkDisk, ensureDevice, SHARED_DEVICE } from "../Tools/sim";
+import { acquire, checkDisk, ensureDevice, SHARED_DEVICE } from "./sim";
 
+/** ios/: screenshots go to its build/ folder. */
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
 const args = process.argv.slice(2);
@@ -82,10 +79,8 @@ const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.spli
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
 const ipad = args.includes("--ipad");
-/** --native: the SwiftUI app in ios/ instead of the React Native one here. */
-const native = flag("native");
-const shots = join(here, "build", `screens${ipad ? "-ipad" : ""}${native ? "-native" : ""}`);
-const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? (native ? join(repoRoot, "ios", "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app") : join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app"));
+const shots = join(here, "build", `screens${ipad ? "-ipad" : ""}`);
+const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const only = opt("only")?.split(",");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
 const pagingOnly = flag("paging");
@@ -148,9 +143,8 @@ async function check(name: string, fn: () => Promise<string | boolean>) {
 // AXe (brew install cameroncooke/axe/axe) drives taps. It looks for SimulatorKit under
 // Developer/Library/PrivateFrameworks, which Xcode 27 moved to Contents/SharedFrameworks, so give
 // it a symlinked Xcode bundle with the framework where it expects it. It lives outside the repo:
-// inside mobile/, bun test walks its thousands of links and runs out of file descriptors.
+// inside it, bun test walks its thousands of links and runs out of file descriptors.
 function xcodeShim(): string {
-  rmSync(join(here, "build", "xcode-shim"), { recursive: true, force: true }); // where it used to live
   const real = resolve(DEVELOPER_DIR, "..");
   const root = join(homedir(), "Library", "Caches", "harness-sim-check", "xcode-shim");
   const contents = join(root, "Xcode.app", "Contents");
@@ -224,8 +218,8 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
 }
 /**
- * Taps a header item by its label when AXe can see it (the native app's toolbar items), else at the
- * point where it sits in RN's header (RN's glass header buttons aren't in AXe's tree).
+ * Taps a header item by its label when AXe can see it (toolbar items usually are), else at the
+ * point where it sits in the header.
  */
 async function tapHeader(udid: string, label: string | ((l: string) => boolean), at: { x: number; y: number }) {
   const match = typeof label === "string" ? (l: string) => l === label : label;
@@ -235,8 +229,8 @@ async function tapHeader(udid: string, label: string | ((l: string) => boolean),
   await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--udid", udid);
 }
 /**
- * Closes an open menu without choosing anything: RN's action sheet by its Cancel, a native Menu by
- * its "Dismiss context menu" backdrop. The backdrop covers the whole screen, so its center can sit
+ * Closes an open menu without choosing anything: an action sheet by its Cancel, a Menu by its
+ * "Dismiss context menu" backdrop. The backdrop covers the whole screen, so its center can sit
  * under one of the menu's rows; tap near its bottom edge, below any menu that opens from the top.
  */
 async function dismissMenu(udid: string) {
@@ -420,8 +414,8 @@ async function shootBoth(udid: string, name: string, redrawn: () => Promise<unkn
 async function install(udid: string) {
   await simctl("terminate", udid, BUNDLE).catch(() => {});
   await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
-  // The native Debug build (Harness Dev) registers harness:// too, and iOS may hand it the pair link
-  // and every deep link after it. The shared simulator can have one left from a dev loop.
+  // Builds from before 2.0 had a separate Debug id (com.markhuot.harness.dev) that registers
+  // harness:// too, and iOS may hand it the pair link. The shared simulator can still have one.
   await sh(["xcrun", "simctl", "uninstall", udid, `${BUNDLE}.dev`], { allowFail: true });
   await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
   await simctl("install", udid, appPath);
@@ -814,7 +808,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   });
   await check("the Done column scrolls into older pages", async () => {
     // Reading the tree (every loaded card) costs more than a swipe, so look after every few. A lazy
-    // list (the native app) only has the cards on screen in the tree, and a few flicks can carry it
+    // list only has the cards on screen in the tree, and a few flicks can carry it
     // past `deep`, so any card at least as old (past the first page) counts.
     const older = [...p.history.slice(0, -59), p.needle].map((t) => `${t.key} `);
     for (let i = 0; i < 45; i += 3) {
@@ -1361,7 +1355,7 @@ function screens(s: Seeded): Screen[] {
     // The brief's fenced code: plain at first, colored once its grammar has loaded.
     { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=summaries`, wait: 1500 },
     { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=summaries`, wait: 1500 },
-    // The file viewer, from an OS-level harness://file link (app/+native-intent): opened at a range
+    // The file viewer, from an OS-level harness://file link : opened at a range
     // below the first screenful, then its Diff tab.
     { name: "file", url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 },
     {
@@ -1466,7 +1460,7 @@ function screens(s: Seeded): Screen[] {
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
-      // RN's action sheet has Cancel; the native app's menu closes with a tap outside it.
+      // The menu closes with a tap outside it.
       after: (udid) => dismissMenu(udid).then(() => Bun.sleep(400)),
     },
     {
@@ -1725,7 +1719,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         // Typing left the editor scrolled to the end of the long work prompt, above the button.
         await scrollTo(udid, (l) => l === "Reset to built-in");
         await tapWhere(udid, "Reset to built-in");
-        // The confirm alert: its buttons are in the AX tree before it takes taps (the native app's
+        // The confirm alert: its buttons are in the AX tree before it takes taps (the
         // alert drops a tap that lands during its presentation), so let it settle first.
         await until("confirm alert", () => findElement(udid, (l) => l === "Reset"), 5000);
         await Bun.sleep(600);
@@ -1876,22 +1870,9 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
 // ---------------------------------------------------------------- build
 async function buildApp() {
   if (flag("no-build") && existsSync(appPath)) return;
-  if (native) {
-    // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
-    console.log("building the native app, Release (simulator)…");
-    await sh(["bun", join(repoRoot, "ios", "Tools", "build.ts"), "sim"], { cwd: repoRoot });
-    return;
-  }
-  // A stale or missing ios/ builds an app that aborts on its first use of an unlinked native
-  // module, so regenerate it whenever it doesn't link every native dependency.
-  if (Bun.spawnSync(["bun", "Tools/nativeDeps.ts", "check"], { cwd: here, env, stderr: "ignore" }).exitCode !== 0) {
-    console.log("syncing ios/ (expo prebuild, pod install)…");
-    await sh(["bunx", "expo", "prebuild", "--platform", "ios", "--no-install"], { env: { EXPO_NO_GIT_STATUS: "1" } });
-    await sh([join(here, "Tools", "pod.sh"), "install"], { cwd: join(here, "ios") });
-    await sh(["bun", "Tools/nativeDeps.ts", "check"]);
-  }
-  console.log("building Release (simulator)…");
-  await sh(["xcodebuild", "-workspace", "ios/Harness.xcworkspace", "-scheme", "Harness", "-configuration", "Release", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "-derivedDataPath", "build/dd", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build"]);
+  // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
+  console.log("building the app, Release (simulator)…");
+  await sh(["bun", join(here, "Tools", "build.ts"), "sim"], { cwd: repoRoot });
 }
 
 // ---------------------------------------------------------------- main
