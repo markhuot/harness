@@ -67,11 +67,12 @@ export const allTools: ToolDefinition[] = [
  *    shouldn't edit the tree: plan runs are read-only in claude-code's plan mode too,
  *    and a conductor's children work in the same checkout)
  *  - "none": triage only routes work
+ * A plan run's update_ticket edits only its own ticket (the orchestrator checks).
  * A chat (a human's message to a blocked, review or done ticket) gets its ticket's work tools:
  * see toolsForRun.
  */
 const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
-  plan: { harness: [postSummary, updatePlan, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  plan: { harness: [postSummary, updatePlan, updateTicket, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
     harness: [postSummary, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "full",

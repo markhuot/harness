@@ -2087,7 +2087,6 @@ export class Orchestrator {
         `${t.key} still has child tickets that aren't done (${open.map((c) => `${c.key}: ${c.status}`).join(", ")}). You review and complete them with review_ticket and complete_ticket; end the run now and you'll be re-invoked when they change. Submit once every child is done.`,
       );
     }
-    this.assertAgentMaySkipReview(t, skips);
     const prepared = prepareAttachments(attachments, ctx.cwd);
     // Submitted again from review (a chat changed the work): the reviews start over.
     if (t.status === "review") await this.cancelReviewRuns(t.sessionId);
@@ -2103,31 +2102,6 @@ export class Orchestrator {
     const a = this.ctxActive(ctx);
     if (a) a.submitted = true;
     else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
-  }
-
-  /**
-   * An agent may skip one of a ticket's reviews (its own ticket's, or one it creates or edits) only
-   * while the other still happens, so nothing lands on an agent's say-so with nobody checking. The
-   * agent review needs a human (or conductor) review behind it, and the human review needs the
-   * agent review. `t` is the ticket as it is (a new ticket: its project's defaults, with no key);
-   * `next` is what the call sets, and only turning a skip on is checked. Humans can set both
-   * anywhere, the project defaults included, so a ticket that already skips both is the human's
-   * choice and stands.
-   */
-  private assertAgentMaySkipReview(t: Pick<Ticket, "skipAgentReview" | "skipHumanReview"> & { key?: string }, next: ReviewSkips) {
-    if (!next.skipAgentReview && !next.skipHumanReview) return;
-    const agentSkipped = next.skipAgentReview ?? !!t.skipAgentReview;
-    const humanSkipped = next.skipHumanReview ?? !!t.skipHumanReview;
-    if (!agentSkipped || !humanSkipped) return;
-    const who = t.key ?? "The new ticket";
-    const why = t.key ? "" : " (its project's default)";
-    throw new Error(
-      next.skipAgentReview && next.skipHumanReview
-        ? `An agent can't skip both of a ticket's reviews: one of them has to check the work before it lands. A human can turn both off on the ticket.`
-        : next.skipAgentReview
-          ? `${who} skips its human review${why}, so the agent review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`
-          : `${who} skips its agent review${why}, so the human review is the only review it gets and an agent can't skip it too. A human can turn both off on the ticket.`,
-    );
   }
 
   async reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void> {
@@ -2316,6 +2290,14 @@ export class Orchestrator {
     return this.ctxTicket(ctx);
   }
 
+  /** A plan run's update_ticket target: its own ticket, and no other. */
+  private ownPlanTarget(ctx: ToolContext, key: string): Ticket {
+    const own = this.ctxTicket(ctx);
+    const target = this.agentLookup(String(key ?? "").trim())?.ticket;
+    if (target?.id !== own.id) throw new Error(`In a planning run, update_ticket only edits your own ticket (${own.key}).`);
+    return own;
+  }
+
   /** Another ticket the caller may act on: never its own (block / submit_for_review cover that). */
   private boardTarget(ctx: ToolContext, key: string, tool: string): { actor: Ticket; target: Ticket } {
     const actor = this.boardActor(ctx, tool);
@@ -2378,10 +2360,6 @@ export class Orchestrator {
     if (input.dependsOn?.length && PERMISSION_STRICTNESS[effective] < PERMISSION_STRICTNESS[mine]) {
       throw new Error(`The new ticket would run in ${effective}, looser than your ${mine}; ask a human.`);
     }
-    this.assertAgentMaySkipReview(
-      { skipAgentReview: project.skipAgentReview, skipHumanReview: project.skipHumanReview },
-      { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview },
-    );
     if (input.remoteUrl && !input.remoteId) throw new Error("remote_url needs remote_id: the external item's key, e.g. FOO-123");
     const externalRef = input.remoteId ? this.asToolSync(() => this.manualExternalRef(null, { key: input.remoteId!, url: input.remoteUrl })) : null;
     if (input.child ?? own.kind === "conductor") {
@@ -2432,11 +2410,15 @@ export class Orchestrator {
   }
 
   async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
-    const { actor, target } = this.boardTarget(ctx, key, "update_ticket");
+    // A planning agent sets up its own ticket from the brief (dependencies, branch, reviews, mode...)
+    // before the human presses Start, which approves the plan and those settings together. It edits
+    // nothing else, and has full access to its own card.
+    const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : null;
+    const { actor, target } = own ? { actor: own, target: own } : this.boardTarget(ctx, key, "update_ticket");
     // Editing a looser ticket (its brief, dependencies, driver...) would get it to act for the caller
     // under looser permissions. The one edit allowed on it is tightening its mode, alone.
     const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
-    if (!(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
+    if (!own && !(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
     const body: UpdateTicketBody = {};
     if (input.title !== undefined) {
       if (!String(input.title).trim()) throw new Error("title can't be empty");
@@ -2454,18 +2436,18 @@ export class Orchestrator {
       if (target.status === "review" && target.parentId !== actor.id) {
         throw new Error(`${target.key} is in review; its reviewers decide whether its reviews run.`);
       }
-      this.assertAgentMaySkipReview(target, { skipAgentReview: input.skipAgentReview, skipHumanReview: input.skipHumanReview });
       if (input.skipAgentReview !== undefined) body.skipAgentReview = input.skipAgentReview;
       if (input.skipHumanReview !== undefined) body.skipHumanReview = input.skipHumanReview;
     }
     if (input.permissionMode !== undefined) {
       // Agents may tighten another ticket's permission mode, never loosen it: that would be a way
-      // around the approvals a human set up.
+      // around the approvals a human set up. A planning agent's own ticket is the exception: the
+      // mode is for the work run the human starts after reading the plan.
       const mode = this.asToolSync(() => validPermissionMode(input.permissionMode));
       const project = this.store.projects.get(target.projectId);
       const from = resolvePermissionMode(target, project, this.settings()).mode;
       const to = resolvePermissionMode({ permissionMode: mode }, project, this.settings()).mode;
-      if (PERMISSION_STRICTNESS[to] < PERMISSION_STRICTNESS[from]) {
+      if (!own && PERMISSION_STRICTNESS[to] < PERMISSION_STRICTNESS[from]) {
         throw new Error(`Agents can't loosen a ticket's permission mode (${target.key} runs in ${from}; ${mode ?? "inherit"} would be ${to}). Ask a human.`);
       }
       body.permissionMode = mode;

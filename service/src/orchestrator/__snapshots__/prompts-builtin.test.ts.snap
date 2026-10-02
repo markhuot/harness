@@ -22,8 +22,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -71,8 +72,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through bash.
@@ -120,8 +122,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -169,8 +172,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -218,8 +222,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -267,8 +272,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through bash.
@@ -7432,8 +7438,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -7540,8 +7547,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -7648,8 +7656,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -7756,8 +7765,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
@@ -7864,8 +7874,9 @@ Tickets move planning → in_progress → blocked → review → done.
 The ticket is in planning. Turn the brief into a plan a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the plan in markdown: the goal, the approach, the files or areas to change, risks and open questions, and how the result will be verified (tests, builds, manual or browser checks).
-3. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise and call \`update_plan\` again. Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
+3. When the brief asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the plan what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
+4. Call \`update_plan\` with the complete plan. It replaces the ticket description, so include everything worth keeping from the brief. Pass \`title\` only when a clearer title helps.
+When the human replies with feedback, revise and call \`update_plan\` again (and \`update_ticket\` when they change a setting). Put unresolved questions in the plan instead of guessing. Do not start the work: the human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the plan is saved.
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through Bash.
