@@ -1379,15 +1379,18 @@ function screens(s: Seeded): Screen[] {
     },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
-    // Settings → Models: the Default model picker above a review model per driver.
+    // Settings → Drivers: a row per driver that opens its settings, with the Default model picker under them.
     { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Default model, ")).then(() => Bun.sleep(500)) },
+    // A driver's own settings: status, sign-in and review model; Anthropic API adds its API key.
+    { name: "driver-claude-code", url: "harness://driver/claude-code", ready: hasLabel("Review model") },
+    { name: "driver-anthropic-api", url: "harness://driver/anthropic-api", ready: hasLabel("Anthropic API key") },
     { name: "watcher-new", url: "harness://watcher" },
     { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
     { name: "project-settings", url: `harness://project/${s.project.id}` },
     // The git project's "When approved" default (Merge; no gh remote, so no Open PR).
     // The row sits near the end, so the scroll bottoms out before it reaches scrollTo's band.
     { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved", 3).catch(() => {}).then(() => Bun.sleep(500)) },
-    // A git ticket in review: the Approve button's menu (merge, Approve and…, take no action), then
+    // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action), then
     // the "Approve and…" sheet for instructions. Both are closed again before the next screen.
     {
       name: "approve-menu",

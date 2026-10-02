@@ -12,10 +12,12 @@ export const dispatchTicket = defineTool<{
   description: string;
   start?: boolean;
   conductor?: boolean;
+  branch?: string;
+  base_branch?: string;
 }>({
   name: "dispatch_ticket",
   description:
-    "Create a local ticket for the watcher output in the chosen project, or send an update to an existing one. When the output is about an item with a ticket-style key (e.g. \"FOO-123\"), pass it as key: that's the ticket's remote ID, shown on the board in place of its local key. Without ticket_key this always creates a new ticket with the project's next local key, linked to that remote ID, even when other tickets already carry it or a local ticket has the same key. To update an existing ticket instead, pass its local key as ticket_key: the description is posted to it as a message, and with key too, a ticket that has no remote ID yet is linked to it. The title also becomes the Inbox title. The description is the brief the working agent receives: restate the request with its link and any context you gathered. Set start true to begin work immediately, false to leave it in planning. Set conductor true for large jobs that should be split into several child tickets.",
+    "Create a local ticket for the watcher output in the chosen project, or send an update to an existing one. When the output is about an item with a ticket-style key (e.g. \"FOO-123\"), pass it as key: that's the ticket's remote ID, shown on the board in place of its local key. Without ticket_key this always creates a new ticket with the project's next local key, linked to that remote ID, even when other tickets already carry it or a local ticket has the same key. To update an existing ticket instead, pass its local key as ticket_key: the description is posted to it as a message, and with key too, a ticket that has no remote ID yet is linked to it. The title also becomes the Inbox title. The description is the brief the working agent receives: restate the request with its link and any context you gathered. Set start true to begin work immediately, false to leave it in planning. Set conductor true for large jobs that should be split into several child tickets. When the work belongs on a branch that already exists (the head branch of an open pull request, say), set branch and base_branch both to it: the agent commits there directly, and approving only cleans up, with nothing to merge.",
   inputSchema: schema(
     {
       project_key: { type: "string", minLength: 1, description: "Key prefix of the target project, as returned by list_projects." },
@@ -29,6 +31,12 @@ export const dispatchTicket = defineTool<{
       description: { type: "string", minLength: 1, description: "Brief for the agent that will do the work." },
       start: { type: "boolean", description: "Start work immediately (default false: leave in planning)." },
       conductor: { type: "boolean", description: "Create a conductor ticket that splits the work into child tickets." },
+      branch: {
+        type: "string",
+        description:
+          "Branch the new ticket's worktree checks out: an existing branch as is (the ticket blocks if another worktree has it checked out), a new name created from the base branch. Leave it out for a branch of its own (harness/<key>).",
+      },
+      base_branch: { type: "string", description: "Branch the new ticket's work merges into when it completes. Leave it out for the project's base branch." },
     },
     ["project_key", "title", "description"],
   ),
@@ -42,6 +50,8 @@ export const dispatchTicket = defineTool<{
       description: input.description,
       start: input.start,
       conductor: input.conductor,
+      branch: input.branch?.trim() || undefined,
+      baseBranch: input.base_branch?.trim() || undefined,
     });
     const what = input.ticket_key ? `Sent the update to ${ticket.key}` : `Dispatched as ${ticket.key}`;
     const remote = ticket.externalRef?.key && ticket.externalRef.key !== ticket.key ? `, remote ID ${ticket.externalRef.key}` : "";

@@ -1,11 +1,12 @@
 // Electron main process. Owns the window, the menu and the connection to the service.
-// Agents run in the service; quitting the app never stops them.
+// Agents run in the service, which is the app's child unless Settings → Service → Start at login
+// handed it to launchd: then quitting the app leaves them running.
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { nodePtySpawn } from "./pty";
-import { ensureService, reloadToken, restartService } from "./service";
+import { reloadToken, ServiceManager } from "./service";
 import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
 import { commandGoesToMain, parsePopoutOptions, POPOUT_MIN, popoutBounds } from "./popouts";
@@ -37,9 +38,11 @@ const debug = {
 if (process.env.HARNESS_USER_DATA) app.setPath("userData", process.env.HARNESS_USER_DATA);
 else if (debug.capture) app.setPath("userData", join(app.getPath("temp"), "harness-capture-profile"));
 
+// A packaged app keeps the compiled service next to its own executable, in Contents/MacOS.
+const service = new ServiceManager({ appRoot, exeDir: dirname(process.execPath) });
 let connection: Promise<ConnectionResult> | null = null;
 function getConnection(force = false) {
-  if (!connection || force) connection = ensureService(appRoot);
+  if (!connection || force) connection = service.connect();
   return connection;
 }
 
@@ -397,7 +400,13 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:retryService", () => getConnection(true));
-ipcMain.handle("harness:restartService", async () => restartService(appRoot, await getConnection()));
+ipcMain.handle("harness:restartService", async () => service.restart(await getConnection()));
+ipcMain.handle("harness:setServiceMode", async (_e, mode: unknown) => {
+  if (mode !== "app" && mode !== "login") return { connection: await getConnection(), error: { error: `Unknown service mode ${String(mode)}`, output: "" } };
+  const result = service.setMode(mode);
+  connection = result.then((r) => r.connection);
+  return result;
+});
 ipcMain.handle("harness:reloadToken", async (_e, rotated: unknown) => {
   const next = reloadToken(await getConnection(), typeof rotated === "string" ? rotated : undefined);
   // Keep the refreshed token for later getConnection() calls (reloads, new windows).
@@ -508,7 +517,33 @@ app.whenReady().then(() => {
 app.on("will-quit", () => terminalManager?.killAll());
 process.on("exit", () => terminalManager?.killAll());
 
+// The service the app runs as its child stops with it. Agents mid-run would be cancelled, so ask
+// first, and wait for the service to shut down cleanly (it closes Chrome) before exiting.
+let quitting = false;
+app.on("before-quit", (e) => {
+  if (quitting || !service.child.running) return;
+  e.preventDefault();
+  void (async () => {
+    const busy = debug.capture ? 0 : await service.busyAgents(await getConnection());
+    if (busy > 0) {
+      const { response } = await dialog.showMessageBox({
+        type: "warning",
+        message: `Quit Harness and stop ${busy === 1 ? "the running agent" : `${busy} running agents`}?`,
+        detail:
+          "The service runs inside the app, so quitting stops it. The runs are cancelled, and their tickets stay where they are until you message them. To keep agents running after you quit, turn on Settings → Service → Start at login.",
+        buttons: ["Quit", "Cancel"],
+        defaultId: 1,
+        cancelId: 1,
+      });
+      if (response !== 0) return;
+    }
+    quitting = true;
+    await service.child.stop();
+    app.quit();
+  })();
+});
+
 app.on("window-all-closed", () => {
-  // macOS convention: keep the app alive without windows. Agents live in the service anyway.
+  // macOS convention: keep the app alive without windows, and its service with it.
   if (process.platform !== "darwin") app.quit();
 });

@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
-import { approveLabel, approveMenuActions, completionOptions, offeredCompletionActions, projectCompletionDefault, resolveCompletionAction } from "./completion";
+import { approveLabel, completionOptions, managingConductor, offeredCompletionActions, projectCompletionDefault, resolveCompletionAction, worksOnBase } from "./completion";
 
 const git = { isGit: true, pullRequestHost: null } as const;
 const gh = { isGit: true, pullRequestHost: "github.com" } as const;
 const plain = { isGit: false, pullRequestHost: null } as const;
 
-test("offered actions follow the checkout: custom outside git, merge in git, pr with a gh host", () => {
+test("offered actions follow the checkout: custom outside git, merge and cleanup in git, pr with a gh host", () => {
   expect(offeredCompletionActions(plain)).toEqual(["custom"]);
-  expect(offeredCompletionActions(git)).toEqual(["merge", "custom"]);
-  expect(offeredCompletionActions(gh)).toEqual(["merge", "pr", "custom"]);
+  expect(offeredCompletionActions(git)).toEqual(["merge", "cleanup", "custom"]);
+  expect(offeredCompletionActions(gh)).toEqual(["merge", "pr", "cleanup", "custom"]);
   // The service's own list wins over the client's guess.
   expect(offeredCompletionActions({ ...gh, completionActions: ["merge", "custom"] })).toEqual(["merge", "custom"]);
 });
@@ -33,12 +33,12 @@ test("preselection: the ticket's earlier choice, then pr for a ticket with a pul
 test("a child of a parent on a branch only merges, into that branch", () => {
   const opts = completionOptions({ completionAction: "pr" }, { ...gh, completionAction: "pr" }, { branch: "harness/web-1" });
   expect(opts).toEqual({ actions: ["merge"], defaultAction: "merge", parentBranch: "harness/web-1" });
-  expect(approveLabel(opts)).toBe("Approve and merge into harness/web-1");
-  expect(approveMenuActions(opts)).toEqual([]);
+  // The label is merge's own: the branch isn't named, since the conductor lands the child.
+  expect(approveLabel(opts)).toBe("Approve and merge");
   expect(resolveCompletionAction("pr", null, gh, { branch: "harness/web-1" }).error).toContain("harness/web-1");
   expect(resolveCompletionAction("custom", null, gh, { branch: "harness/web-1" }).action).toBeNull();
   // A parent without a branch (it works in the project checkout) changes nothing.
-  expect(completionOptions(null, gh, { branch: null }).actions).toEqual(["merge", "pr", "custom"]);
+  expect(completionOptions(null, gh, { branch: null }).actions).toEqual(["merge", "pr", "cleanup", "custom"]);
 });
 
 test("resolving a requested action: offered ones pass, others are refused with a reason", () => {
@@ -51,12 +51,56 @@ test("resolving a requested action: offered ones pass, others are refused with a
 test("labels: plain Approve when custom is the primary choice, the action's label otherwise", () => {
   expect(approveLabel(completionOptions(null, plain))).toBe("Approve");
   expect(approveLabel(completionOptions(null, { ...gh, completionAction: "pr" }))).toBe("Approve and open PR");
-  expect(approveMenuActions(completionOptions(null, git))).toEqual(["merge", "custom"]);
+});
+
+test("a child is conductor managed while its parent isn't done", () => {
+  const parent = { key: "WEB-1", status: "in_progress" };
+  expect(managingConductor({ parentId: "p1" }, parent)).toBe(parent);
+  // A parent without a branch of its own still reviews and lands its children.
+  expect(managingConductor({ parentId: "p1" }, { key: "WEB-1", status: "review" })).toMatchObject({ key: "WEB-1" });
+  // A done parent runs no more, so the human approves the child again.
+  expect(managingConductor({ parentId: "p1" }, { key: "WEB-1", status: "done" })).toBeNull();
+  expect(managingConductor({ parentId: null }, parent)).toBeNull();
+  // The parent isn't loaded (yet): nothing to name, so nothing is disabled.
+  expect(managingConductor({ parentId: "p1" }, undefined)).toBeNull();
 });
 
 test("a finished parent, or a child with its own base branch, no longer keeps the child on the parent's branch", () => {
   const project = { ...gh, completionAction: "pr" } as const;
-  expect(completionOptions(null, project, { branch: "harness/web-1", status: "done" })).toMatchObject({ parentBranch: null, actions: ["merge", "pr", "custom"], defaultAction: "pr" });
+  expect(completionOptions(null, project, { branch: "harness/web-1", status: "done" })).toMatchObject({ parentBranch: null, actions: ["merge", "pr", "cleanup", "custom"], defaultAction: "pr" });
   expect(completionOptions({ baseBranch: "release" }, project, { branch: "harness/web-1", status: "in_progress" })).toMatchObject({ parentBranch: null, defaultAction: "pr" });
   expect(completionOptions({ baseBranch: null }, project, { branch: "harness/web-1", status: "in_progress" }).parentBranch).toBe("harness/web-1");
+});
+
+test("cleanup is always offered in git, after merge and pr: even a ticket with nothing on its branch can clean up", () => {
+  expect(completionOptions({ branch: null }, gh).actions).toEqual(["merge", "pr", "cleanup", "custom"]);
+  expect(completionOptions({ branch: "harness/web-1" }, gh, null, "main").actions).toEqual(["merge", "pr", "cleanup", "custom"]);
+  expect(completionOptions({ branch: "harness/web-1" }, plain, null, "main").actions).toEqual(["custom"]);
+  expect(completionOptions({ branch: "harness/web-1" }, { ...git, completionAction: "cleanup" }, null, "main").defaultAction).toBe("cleanup");
+});
+
+test("a ticket on its base branch (an existing PR head) has no merge or pr, and preselects cleanup", () => {
+  const ticket = { branch: "feature/pr-head", completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" };
+  const opts = completionOptions(ticket, { ...gh, completionAction: "merge" }, null, "feature/pr-head");
+  expect(opts).toEqual({ actions: ["cleanup", "custom"], defaultAction: "cleanup", parentBranch: null });
+  expect(approveLabel(opts)).toBe("Approve and clean up");
+  // An earlier merge choice no longer applies; custom still does.
+  expect(completionOptions({ ...ticket, completionAction: "merge" }, gh, null, "feature/pr-head").defaultAction).toBe("cleanup");
+  expect(completionOptions({ ...ticket, completionAction: "custom" }, gh, null, "feature/pr-head").defaultAction).toBe("custom");
+  expect(resolveCompletionAction("merge", ticket, gh, null, "feature/pr-head").error).toBe(
+    'this ticket works on its base branch feature/pr-head, so there is nothing to merge: complete it with "cleanup" or "custom"',
+  );
+  expect(resolveCompletionAction("pr", ticket, gh, null, "feature/pr-head").error).toContain("nothing to open a pull request from");
+  // pr the project doesn't offer at all keeps its own reason.
+  expect(resolveCompletionAction("pr", ticket, git, null, "feature/pr-head").error).toContain("gh is logged into");
+  // Without the base (or with another one) nothing is ruled out.
+  expect(completionOptions(ticket, gh).actions).toEqual(["merge", "pr", "cleanup", "custom"]);
+  expect(completionOptions(ticket, gh, null, "main").actions).toEqual(["merge", "pr", "cleanup", "custom"]);
+});
+
+test("worksOnBase needs both a branch and a base, and the two equal", () => {
+  expect(worksOnBase({ branch: "main" }, "main")).toBe(true);
+  expect(worksOnBase({ branch: "harness/web-1" }, "main")).toBe(false);
+  expect(worksOnBase({ branch: null }, null)).toBe(false);
+  expect(worksOnBase({ branch: "main" }, null)).toBe(false);
 });

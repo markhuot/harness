@@ -11,7 +11,7 @@ const actionProp = {
   type: "string",
   enum: [...COMPLETION_ACTIONS],
   description:
-    "How the child's work lands when it completes: \"merge\" into its base branch, \"pr\" (push and open a GitHub pull request; only when its project offers it), or \"custom\" (follow `instructions`). A child of a ticket with its own branch always merges into that branch. Omit for the choice made earlier, else its project's default.",
+    "How the child's work lands when it completes: \"merge\" into its base branch, \"pr\" (push and open a GitHub pull request; only when its project offers it), \"cleanup\" (the work already landed: only remove its worktree and branch), or \"custom\" (follow `instructions`). A ticket working on its base branch can't merge or open a pull request. A child of a ticket with its own branch always merges into that branch. Omit for the choice made earlier, else its project's default.",
 };
 
 export const reviewTicket = defineTool<{ key: string; decision: "approve" | "request_changes"; notes: string; action?: CompletionAction }>({

@@ -126,10 +126,12 @@ The app record and the Test Information (description, privacy policy, feedback e
 contact) are already set up. If they ever need to change, rerun `bun mobile/Tools/testflight.ts
 setup` with `ASC_FEEDBACK_EMAIL` and the `ASC_CONTACT_FIRST`/`_LAST`/`_EMAIL`/`_PHONE` variables.
 
-**The Mac zip only runs on the Mac that built it.** `app/scripts/build.ts` writes that Mac's
-Harness checkout and `bun` paths into the app, so on another Mac the service doesn't start.
-Notarizing doesn't change that. Until the app carries its own service, the install page tells
-people to build the Mac app from the repo (`MAC_SOURCE_NOTE` in `mobile/Tools/install-page.ts`).
+**The Mac zip carries its own service.** `bun run package` compiles the service into
+`Contents/MacOS/harness-service` (`service/scripts/compile.ts`, a `bun build --compile` of the
+daemon and CLI) with the builtin plugins prebuilt in `Contents/Resources/plugins`, so it runs on
+any Mac without bun or a checkout. The publish refuses a zip without them. `bun run install-app`
+is different: it packages with `--checkout`, so the app on this Mac runs the service from this
+checkout and restarts onto new code when a ticket merges.
 
 The four tags up to and including `app-20260927.1854` came from `gh release create` without
 `--verify-tag`, which made the tag at origin's `main` tip at publish time. Those tags can point at

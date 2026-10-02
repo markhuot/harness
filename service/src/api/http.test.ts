@@ -280,13 +280,13 @@ describe("http api", () => {
     const { client } = await boot();
     const before = await client.listPrompts();
     const work = before.find((p) => p.id === "system.work")!;
-    expect(work).toMatchObject({ group: "system", override: null, overrideError: null, variables: [{ name: "branch" }, { name: "skipAgentReview" }, { name: "canSkipReview" }] });
+    expect(work).toMatchObject({ group: "system", override: null, overrideError: null, variables: [{ name: "branch" }, { name: "onBase" }, { name: "skipAgentReview" }, { name: "canSkipReview" }] });
     expect(work.builtin).toContain("{{#if branch}}");
     expect((await client.getSettings()).prompts?.["system.work"]).toBeNull();
 
     await expect(client.updateSettings({ prompts: { "system.work": "On {{brnch}}" } })).rejects.toMatchObject({
       status: 400,
-      message: "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}, {{skipAgentReview}}, {{canSkipReview}}",
+      message: "prompts.system.work: Unknown variable {{brnch}}: the variables are {{branch}}, {{onBase}}, {{skipAgentReview}}, {{canSkipReview}}",
     });
     await expect(client.updateSettings({ prompts: { "system.nope": "x" } as never })).rejects.toMatchObject({ status: 400 });
 

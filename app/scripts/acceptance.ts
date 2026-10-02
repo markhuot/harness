@@ -1,5 +1,6 @@
-// Acceptance run against the INSTALLED app (~/Applications/Harness.app) and the REAL launchd
-// service (~/.harness). The app finds the service itself via `service ensure`; nothing is mocked.
+// Acceptance run against the INSTALLED app (~/Applications/Harness.app) and the REAL service
+// (~/.harness), which has to be running already (a login item, or the app's child from an open
+// app). The app finds the service itself; nothing is mocked.
 //
 //   bun scripts/acceptance.ts [driver=dummy] [projectDir=~/Sites/hello-harness]
 //
@@ -32,7 +33,8 @@ const env = { ...process.env } as Record<string, string>;
 delete env.HARNESS_URL;
 delete env.HARNESS_TOKEN;
 // Installs leave the dummy driver out; with it set, the app's `service ensure` rewrites the
-// launchd plist to add it, and the next launch without it takes it back out.
+// launchd plist to add it (a child service gets it from the app's environment), and the next
+// launch without it takes it back out.
 if (driver === "dummy") env.HARNESS_DUMMY_DRIVER = "1";
 else delete env.HARNESS_DUMMY_DRIVER;
 const proc = Bun.spawn([appBin, `--remote-debugging-port=${cdpPort}`], { env, stdout: "ignore", stderr: "ignore" });

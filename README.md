@@ -8,15 +8,24 @@ The architecture, ticket lifecycle, tool list and HTTP API are in [DESIGN.md](DE
 
 ## Quick start
 
+The published Mac app (the install page) needs nothing else: it carries the service as a compiled
+executable. To build from the repo:
+
 ```sh
 bun install
-bun service/src/cli.ts service ensure     # install + start the launchd service (127.0.0.1:7717)
 cd app && bun run install-app             # build Harness.app into ~/Applications
 open ~/Applications/Harness.app
 ```
 
-The app starts the service itself if it isn't running, so after the first install you only
-need to open the app. Quitting the app leaves the service and its agents running.
+`install-app` builds an app that runs the service from this checkout with bun, so a merge into
+it restarts the service onto the new code. `bun run install-app:bundled` installs the
+self-contained app the release ships instead (`bun run package` builds it).
+
+The app starts the service itself. By default it runs as the app's child process, so quitting
+the app stops it and its agents. **Settings → Service → Start at login** installs a launchd agent
+instead (`~/Library/LaunchAgents/com.markhuot.harness.plist`, the same as
+`bun service/src/cli.ts service ensure`): macOS starts the service at login and it keeps running
+after you quit. The app follows whichever is set up: with the plist installed it uses launchd.
 
 Service management:
 
@@ -133,7 +142,8 @@ you answer.
   Any ticket can become one: ask a ticket's agent for child tickets and it creates them
   under itself, then reviews and completes them the same way. Children branch from the
   conductor's branch and merge back into it, so the goal lands in one piece when you approve the
-  conductor.
+  conductor. A child's Approve and Complete buttons stay off while its conductor runs, because the
+  conductor approves and lands it.
 - **Watchers** are any command that prints text, plus a prompt that says what you want done
   with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
   loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in

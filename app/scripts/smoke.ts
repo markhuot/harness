@@ -263,11 +263,13 @@ try {
   check("blocked composer placeholder", placeholder === "Answer the agent…", placeholder);
   await type(".composer-input", "Use the staging client id.");
   await cmdEnter();
-  const unblocked = await until("message resumes work", async () => (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-3")).ticket.status === "in_progress");
-  check("message to a blocked ticket moves it to in progress", unblocked);
+  // The agent answers and unblocks the ticket itself, so the message alone leaves it blocked.
   const sessionId = (await api<{ session: { id: string } }>("GET", "/tickets/NYTIMES-3")).session.id;
-  const transcript = await api<{ role: string; content: { type: string; text?: string } }[]>("GET", `/sessions/${sessionId}/transcript?after=0`);
-  check("message lands in the transcript", transcript.some((e) => e.role === "user" && e.content.text === "Use the staging client id."));
+  const landed = await until("message lands", async () =>
+    (await api<{ role: string; content: { type: string; text?: string } }[]>("GET", `/sessions/${sessionId}/transcript?after=0`)).some((e) => e.role === "user" && e.content.text === "Use the staging client id."),
+  );
+  check("message lands in the transcript", landed);
+  check("a message alone leaves the blocked ticket blocked", (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-3")).ticket.status === "blocked");
 
   // 4. Human approval from the review column.
   await js(`location.hash = "#/board/all/ticket/NYTIMES-4"`);
@@ -312,7 +314,7 @@ try {
   })();
   check(
     "the Complete button offers the same choices as Approve",
-    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and…|Complete and take no action",
+    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and clean up|Complete and…|Complete and take no action",
     completeItems.join("|"),
   );
   await clickText(".actions button", "Complete");
@@ -332,7 +334,7 @@ try {
     const all = await api<{ id: string; key: string }[]>("GET", "/projects");
     const site = all.find((p) => p.key === "SITE")!;
     const plain = await api<{ id: string; completionActions: string[] }>("POST", "/projects", { path: "/tmp/smoke-plain-git", key: "PLAIN", name: "plain-git" });
-    check("a git project without a PR host offers merge and custom", plain.completionActions?.join(",") === "merge,custom", String(plain.completionActions));
+    check("a git project without a PR host offers merge, cleanup and custom", plain.completionActions?.join(",") === "merge,cleanup,custom", String(plain.completionActions));
     const [ghT, plainT, siteT] = await Promise.all(
       [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, prompt: "Land me" })),
     );
@@ -374,8 +376,8 @@ try {
     check("the More menu has no Mark done while the ticket is in review", !inReviewMore.includes("Mark done") && inReviewMore.includes("Copy key"), inReviewMore.join(","));
     const ghItems = await openMenu();
     check(
-      "gh project: the Approve menu offers merge, open PR, Approve and…, then take no action after a separator",
-      ghItems.join("|") === "Approve and merge|Approve and open PR|Approve and…|Approve and take no action" && (await exists(".land-menu-approve hr")),
+      "gh project: the Approve menu offers merge, open PR, clean up, Approve and…, then take no action after a separator",
+      ghItems.join("|") === "Approve and merge|Approve and open PR|Approve and clean up|Approve and…|Approve and take no action" && (await exists(".land-menu-approve hr")),
       ghItems.join("|"),
     );
     await screenshot("/tmp/harness-86-mac-approve-menu.png");
@@ -398,7 +400,7 @@ try {
     // Plain git: no PR choice; take no action approves and finishes without a run.
     await openApprove(plainT!.key);
     const plainItems = await openMenu();
-    check("plain git: the Approve menu has no open PR", plainItems.join("|") === "Approve and merge|Approve and…|Approve and take no action", plainItems.join("|"));
+    check("plain git: the Approve menu has no open PR", plainItems.join("|") === "Approve and merge|Approve and clean up|Approve and…|Approve and take no action", plainItems.join("|"));
     await clickText(".land-menu-approve button", "Approve and take no action");
     const noAction = await until("take no action done", async () => {
       const x = await getT(plainT!.key);
@@ -435,14 +437,14 @@ try {
       const o = await js<string[] | null>(`${whenApproved} ? [...${whenApproved}.options].map(o => o.textContent) : null`);
       return o && o.length > 0 && o;
     });
-    check("When approved offers Merge, Open PR, Custom for a gh project, Merge selected", ghOpts.join(",") === "Merge,Open PR,Custom" && (await js<string>(`${whenApproved}.value`)) === "merge", ghOpts.join(","));
+    check("When approved offers Merge, Open PR, Clean up, Custom for a gh project, Merge selected", ghOpts.join(",") === "Merge,Open PR,Clean up,Custom" && (await js<string>(`${whenApproved}.value`)) === "merge", ghOpts.join(","));
     await js(`(() => { const el = ${whenApproved}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(el, "pr"); el.dispatchEvent(new Event("change", { bubbles: true })); })()`);
     const savedPr = await until("completionAction saved", async () => (await api<{ id: string; completionAction?: string }[]>("GET", "/projects")).find((p) => p.id === nyProject.id)?.completionAction === "pr");
     check("picking Open PR PATCHes the project's completionAction", savedPr);
     await api("PATCH", `/projects/${nyProject.id}`, { completionAction: "merge" });
     await js(`location.hash = "#/project/${plain.id}/settings"`);
-    await until("plain settings", () => js<boolean>(`!!${whenApproved} && ${whenApproved}.options.length === 2`));
-    check("plain git: When approved offers Merge and Custom, with a gh hint", (await js<string>(`${whenApproved}.closest(".settings-row").textContent`)).includes("gh auth login"));
+    await until("plain settings", () => js<boolean>(`!!${whenApproved} && ${whenApproved}.options.length === 3`));
+    check("plain git: When approved offers Merge, Clean up and Custom, with a gh hint", (await js<string>(`${whenApproved}.closest(".settings-row").textContent`)).includes("gh auth login"));
     await js(`location.hash = "#/project/${site.id}/settings"`);
     await until("site settings", () => exists("#settings-project-agents"));
     check("no git: When approved is hidden (custom is the only choice)", !(await js<boolean>(`!!${whenApproved}`)));
@@ -769,21 +771,25 @@ try {
   check("Details picks another driver + model in one go", !!repicked, JSON.stringify(repicked));
   const cardBadge = await js<string>(`document.querySelector('.card[data-key="NYTIMES-1"] .model-badge')?.textContent ?? ""`);
   check("board card shows a non-default model", cardBadge === "Sonnet 5", cardBadge);
-  await js(`location.hash = "#/settings/models"`);
-  await until("model settings", () => exists("#settings-models [data-testid=driver-model-select]"));
-  await comboRows("#settings-models");
+  await js(`location.hash = "#/settings/drivers"`);
+  await until("model settings", () => exists("#settings-drivers [data-testid=default-model] [data-testid=driver-model-select]"));
+  await comboRows("[data-testid=default-model]");
   await comboPick("Haiku 4.5");
   const savedDefault = await until("settings default model", async () => {
     const st = await api<{ defaultDriver: string; defaultModels: Record<string, string | null> }>("GET", "/settings");
     return st.defaultDriver === "claude-code" && st.defaultModels["claude-code"] === "haiku";
   });
-  check("Settings → Models saves the default driver + model from one combobox", savedDefault);
-  await comboRows("#settings-models");
+  check("Settings → Drivers saves the default driver + model from one combobox", savedDefault);
+  await comboRows("[data-testid=default-model]");
   await comboPick("Driver default");
   await until("settings default cleared", async () => !(await api<{ defaultModels: Record<string, string | null> }>("GET", "/settings")).defaultModels["claude-code"]);
+  check("driver settings stay closed until the driver is opened", !(await exists("[data-testid=model-settings-claude-code]")));
+  await js(`document.querySelector('[data-driver-row="claude-code"]').click()`);
+  await until("claude code settings", () => exists("[data-testid=driver-settings-claude-code] [data-testid=model-settings-claude-code] select"));
+  check("the Anthropic API key only shows in the Anthropic API driver", !(await exists("[data-testid=driver-settings-claude-code] [data-testid=anthropic-api-key]")));
   await pick("[data-testid=model-settings-claude-code] select", "haiku");
   const savedReview = await until("review model", async () => (await api<{ reviewModels: Record<string, string | null> }>("GET", "/settings")).reviewModels["claude-code"] === "haiku");
-  check("Settings → Models still saves a per-driver review model", savedReview);
+  check("a driver's own settings save its review model", savedReview);
   await pick("[data-testid=model-settings-claude-code] select", "");
   await js(`location.hash = "#/settings/permissions"`);
   await until("permission settings", () => exists("#settings-permissions [data-testid=permission-mode]"));
@@ -924,6 +930,10 @@ try {
         card: getComputedStyle(document.querySelector(".card-surface")).backgroundColor,
         accent: btn ? getComputedStyle(btn).backgroundColor : "", dark: window.harness.getTheme().darkTheme };
     })()`);
+  // The accent is read off a primary button: the Anthropic API driver's key Save, once it's open.
+  await until("anthropic api driver", () => exists('[data-driver-row="anthropic-api"]'));
+  await js(`document.querySelector('[data-driver-row="anthropic-api"]').click()`);
+  await until("primary button", () => exists(".btn-primary"));
   const harnessDark = await colors();
   check("Harness Dark is the default dark theme", harnessDark.id === "harness-dark" && harnessDark.body === "rgb(17, 18, 20)", JSON.stringify(harnessDark));
   await until("dark theme grid", () => exists('[data-theme-pick="dark:catppuccin-mocha"]'));
@@ -982,6 +992,30 @@ try {
     );
     check("approval child shows the tool it waits on", notes["HARNESS-8"] === "Needs approval: Bash|waiting onHARNESS-2", notes["HARNESS-8"]);
     check("blocked child shows its question and done dep", notes["HARNESS-7"]!.startsWith("Which Apple Developer team") && notes["HARNESS-7"]!.endsWith("|afterHARNESS-5"), notes["HARNESS-7"]);
+
+    // A child's conductor approves and lands it: Approve (and Complete) read as usual but are off,
+    // the menu too, and the palette doesn't offer them.
+    const landState = (mode: string) =>
+      js<{ label: string; disabled: boolean; menu: boolean; title: string }>(
+        `(() => { const p = document.querySelector("[data-testid=${mode}-primary]"); return p && { label: p.textContent.trim(), disabled: p.disabled, menu: document.querySelector("[data-testid=${mode}-menu]").disabled, title: p.title }; })()`,
+      );
+    await js(`location.hash = "#/board/all/ticket/HARNESS-10"`);
+    const managedApprove = await until("conductor child approve", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-10"`)) && landState("approve"));
+    check(
+      "a conductor child's Approve reads Approve and merge, disabled with its menu, saying the conductor manages it",
+      !!managedApprove && managedApprove.label === "Approve and merge" && managedApprove.disabled && managedApprove.menu && managedApprove.title === "Conductor managed: HARNESS-1 approves and lands this ticket",
+      JSON.stringify(managedApprove),
+    );
+    await screenshot("/tmp/harness-160-conductor-child-approve.png");
+    await js(`location.hash = "#/board/all/ticket/HARNESS-2"`);
+    const managedComplete = await until("conductor child complete", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-2"`)) && landState("complete"));
+    check(
+      "a ready conductor child's Complete is disabled with its menu, saying the conductor manages it",
+      !!managedComplete && managedComplete.disabled && managedComplete.menu && managedComplete.title.startsWith("Conductor managed: HARNESS-1"),
+      JSON.stringify(managedComplete),
+    );
+    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
+    await until("back on the conductor's tickets", async () => (await rowKeys()).length >= 7);
 
     // Live: a new child (ticket.upserted) appears, and a status change regroups an existing one.
     const fresh = await api<CT>("POST", "/tickets", { projectId: hxId, parentId: conductor.id, prompt: "Write the release notes", start: false, dependsOn: ["HARNESS-7"] });
@@ -1792,7 +1826,11 @@ try {
     // Actions come from the focused ticket: "appr" on a ticket in review highlights Approve.
     const reviewKeys = await js<string[]>(`[...[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Review").querySelectorAll(".card[data-key]")].map(c => c.dataset.key)`);
     let reviewKey: string | null = null;
-    for (const k of reviewKeys) if ((await api<{ ticket: { humanReview: string } }>("GET", `/tickets/${k}`)).ticket.humanReview !== "approved") reviewKey ??= k;
+    for (const k of reviewKeys) {
+      const t = (await api<{ ticket: { humanReview: string; parentId: string | null } }>("GET", `/tickets/${k}`)).ticket;
+      // A conductor child offers no Approve: its conductor approves it (checked below).
+      if (t.humanReview !== "approved" && !t.parentId) reviewKey ??= k;
+    }
     if (!reviewKey) fail(), console.log("✗ no unapproved review ticket to test palette actions on");
     else {
       await js(`location.hash = "#/board/all/ticket/${reviewKey}"`);
@@ -1859,6 +1897,22 @@ try {
       const onPane = await js<boolean>(`document.activeElement?.matches(".pane.pane-ticket") ?? false`);
       const fromPane = await paletteRows();
       check("clicking a ticket pane's title (focus on the pane itself) still offers its Approve", onPane && fromPane.includes("cmd:ticket.approve") && fromPane.includes("cmd:tab.next"), `${onPane} ${fromPane.slice(0, 4).join(",")}`);
+
+      // A conductor child in review: the palette offers no way to approve it, as its buttons are off.
+      await js(`location.hash = "#/board/all/ticket/HARNESS-10"`);
+      await until("conductor child open", async () => (await openTickets()).includes("HARNESS-10") && (await js<boolean>(`!!document.querySelector(".pane.active [data-testid=approve-primary]")`)));
+      await js(`document.querySelector(".pane.active [data-pane-autofocus]")?.focus()`);
+      await press.palette();
+      await until("palette", () => exists("[data-testid=palette-input]"));
+      // An empty palette leads with the ticket's actions: Request changes, but nothing that approves.
+      const childIds = await until("child actions", () => js<string[]>(`[...document.querySelectorAll("[data-testid=palette-row][data-kind=command]")].map(r => r.dataset.id)`).then((ids) => ids.includes("cmd:ticket.requestChanges") && ids));
+      check(
+        "the palette offers a conductor child's Request changes but no Approve, land or take-no-action command",
+        !childIds.some((id) => id === "cmd:ticket.approve" || id === "cmd:ticket.approveNoAction" || id.startsWith("cmd:ticket.land.")),
+        childIds.slice(0, 6).join(","),
+      );
+      await press.escape();
+      await until("palette closed", async () => !(await exists("[data-testid=palette]")));
     }
 
     // A done ticket: "reopen ticket" finds Re-open…, and Enter opens its notes modal.

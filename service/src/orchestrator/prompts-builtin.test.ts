@@ -124,6 +124,10 @@ const COMPLETION_VARIANTS: Record<string, Record<string, { t?: Partial<Ticket>; 
     github: { pullRequest: GH },
     "enterprise, existing pull request": { pullRequest: GHE, t: { pullRequestUrl: "https://ghe.acme.com/web/site/pull/7" }, instructions: "Add the design label." },
   },
+  cleanup: {
+    "no instructions": {},
+    instructions: { t: { completionInstructions: "Also prune the remote branch." }, instructions: "Also prune the remote branch." },
+  },
   custom: {
     instructions: { t: { completionInstructions: "Cherry-pick onto release-2.4." }, instructions: "Cherry-pick onto release-2.4." },
     "no instructions": {},
@@ -177,7 +181,7 @@ describe("built-in system prompts", () => {
           const c = TICKETS[name]!;
           const p = c.p === null ? null : { ...project, ...c.p };
           const b = c.b ? { ...c.b, pullRequest: extra.pullRequest } : undefined;
-          const t = ticket({ ...c.t, completionAction: action as "pr" | "custom", ...extra.t });
+          const t = ticket({ ...c.t, completionAction: action as "pr" | "cleanup" | "custom", ...extra.t });
           expect(systemPrompt({ kind: "complete", project: p, ticket: t, session, branches: b })).toMatchSnapshot();
           expect(completePrompt(t, extra.instructions, b, p)).toMatchSnapshot();
         });

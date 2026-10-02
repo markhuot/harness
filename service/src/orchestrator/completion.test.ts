@@ -84,20 +84,20 @@ function expectStatus(fn: () => unknown, status: number, match: RegExp) {
 describe("what a project offers", () => {
   test("a GitHub remote gh is logged into offers pr; other hosts and no remote don't; outside git only custom", async () => {
     const gh = await setup();
-    expect(gh.project.completionActions).toEqual(["merge", "pr", "custom"]);
+    expect(gh.project.completionActions).toEqual(["merge", "pr", "cleanup", "custom"]);
     expect(gh.project.pullRequestHost).toBe("github.com");
     expect(gh.project.completionAction).toBe("merge");
 
     const bitbucket = await setup({ remote: "https://bitbucket.org/acme/web.git" });
-    expect(bitbucket.project.completionActions).toEqual(["merge", "custom"]);
+    expect(bitbucket.project.completionActions).toEqual(["merge", "cleanup", "custom"]);
     expect(bitbucket.project.pullRequestHost).toBeNull();
 
     // An Enterprise host gh has no login for.
     const ghe = await setup({ remote: "https://ghe.acme.com/web/site.git" });
-    expect(ghe.project.completionActions).toEqual(["merge", "custom"]);
+    expect(ghe.project.completionActions).toEqual(["merge", "cleanup", "custom"]);
 
     const local = await setup({ remote: null });
-    expect(local.project.completionActions).toEqual(["merge", "custom"]);
+    expect(local.project.completionActions).toEqual(["merge", "cleanup", "custom"]);
 
     const plain = await setup({ git: false });
     expect(plain.project.completionActions).toEqual(["custom"]);
@@ -106,7 +106,7 @@ describe("what a project offers", () => {
   test("the project default must be offered; a default the project stops offering falls back to merge", async () => {
     const h = await setup();
     expect(h.orch.updateProject(h.project.id, { completionAction: "pr" }).completionAction).toBe("pr");
-    expectStatus(() => h.orch.updateProject(h.project.id, { completionAction: "ship" as never }), 400, /must be one of merge, pr, custom/);
+    expectStatus(() => h.orch.updateProject(h.project.id, { completionAction: "ship" as never }), 400, /must be one of merge, pr, cleanup, custom/);
 
     const local = await setup({ remote: null });
     expectStatus(() => local.orch.updateProject(local.project.id, { completionAction: "pr" }), 400, /gh is logged into/);
@@ -114,7 +114,7 @@ describe("what a project offers", () => {
     // The remote goes away: the stored pr default is kept, but approving merges.
     await h.git("remote", "remove", "origin");
     clearPullRequestTargets();
-    expect(h.orch.listProjects()[0]!.completionActions).toEqual(["merge", "custom"]);
+    expect(h.orch.listProjects()[0]!.completionActions).toEqual(["merge", "cleanup", "custom"]);
     const t = await h.inReview();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.completeTicket(t.key);
@@ -213,6 +213,81 @@ describe("pull request completions", () => {
     expect(refused).toContain("only for completion runs that open a pull request");
     expect(h.get(t).pullRequestUrl).toBeNull();
     expect(h.get(t).status).toBe("done");
+  });
+});
+
+describe("cleanup completions", () => {
+  /** From now on a complete run does the cleanup itself: removes the worktree, and deletes the branch when asked. */
+  const cleansUp = (h: Awaited<ReturnType<typeof setup>>, deleteBranch: string | null) => {
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      const t = req.toolContext.ticket!;
+      await h.git("worktree", "remove", t.workdir!);
+      if (deleteBranch) await h.git("branch", "-D", deleteBranch);
+      await req.toolContext.ops.postSummary(req.toolContext, "Cleaned up.");
+    };
+  };
+
+  test("a ticket working on its base branch (an existing PR head) can't merge or open a PR, and cleans up by default", async () => {
+    const h = await setup();
+    await h.git("branch", "feature/pr-head");
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "Fix the PR", branch: "feature/pr-head", baseBranch: "feature/pr-head" });
+    await h.orch.idle();
+    expect(h.get(t)).toMatchObject({ status: "review", branch: "feature/pr-head" });
+    expect(h.driver.calls.find((c) => c.kind === "work")!.systemPrompt).toContain("which is also its base branch");
+    expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "merge" }), 400, /works on its base branch feature\/pr-head/);
+    expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "pr" }), 400, /nothing to open a pull request from/);
+    cleansUp(h, null);
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.completeTicket(t.key);
+    await h.orch.idle();
+    const run = h.completes()[0]!;
+    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup" });
+    expect(run.systemPrompt).toContain("## This run: completion (clean up)");
+    // On the base branch only remotes count: `--not --remotes feature/pr-head` would hide every commit.
+    expect(run.systemPrompt).toContain("log --oneline feature/pr-head --not --remotes`");
+    expect(run.systemPrompt).toContain("Keep `feature/pr-head`: the harness didn't create it, and it is the base branch.");
+    expect(await h.git("branch", "--list", "feature/pr-head")).toContain("feature/pr-head");
+  });
+
+  test("a cleanup that leaves the harness worktree or branch behind blocks instead of finishing", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    // The fake complete run removes nothing, as an agent that found unpushed commits would.
+    h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
+    await h.orch.completeTicket(t.key);
+    await h.orch.idle();
+    expect(h.completes()[0]!.systemPrompt).toContain("log --oneline harness/web-1 --not --remotes main`");
+    expect(h.get(t).status).toBe("blocked");
+    expect(h.get(t).blockedReason).toContain("Cleanup didn't finish: the worktree at");
+    expect(h.get(t).blockedReason).toContain("and the branch harness/web-1 still exist");
+  });
+
+  test("only the branch left behind still blocks; with both gone the ticket is done", async () => {
+    const h = await setup();
+    const kept = await h.inReview("kept");
+    cleansUp(h, null);
+    await h.orch.completeTicket(kept.key, { action: "cleanup" });
+    await h.orch.idle();
+    expect(h.get(kept).blockedReason).toMatch(/^Cleanup didn't finish: the branch harness\/web-1 still exists/);
+
+    const h2 = await setup();
+    const gone = await h2.inReview("gone");
+    cleansUp(h2, "harness/web-1");
+    await h2.orch.completeTicket(gone.key, { action: "cleanup" });
+    await h2.orch.idle();
+    expect(h2.get(gone).status).toBe("done");
+  });
+
+  test("a ticket whose worktree holds no work (a change made outside git) cleans up to done", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    expect(await h.git("rev-list", "--count", "main..harness/web-1")).toBe("0");
+    cleansUp(h, "harness/web-1");
+    await h.orch.completeTicket(t.key, { action: "cleanup" });
+    await h.orch.idle();
+    expect(h.get(t).status).toBe("done");
+    expect(await h.git("branch", "--list", "harness/web-1")).toBe("");
   });
 });
 

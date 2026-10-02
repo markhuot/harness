@@ -1,10 +1,9 @@
-// Settings: connection (saved servers, token rotation), network, appearance, drivers + login,
-// general, models, permissions, triage, prompts, watchers, projects.
+// Settings: connection (saved servers, token rotation), network, appearance, drivers (each opens
+// DriverSettings) + the default model, general, permissions, triage, prompts, watchers, projects.
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODE_LABELS, promptCounts, promptsSummary, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type DriverInfo, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
+import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, LISTEN_MODES, PERMISSION_MODE_LABELS, promptCounts, promptsSummary, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver, watcherModel, type ClassifierBackend, type ListenMode, type NetworkStatus, type PublicSettings, type Watcher } from "@harness/shared";
 import { CLASSIFIER_LABELS, modelName, settingsChoice, settingsChoicePatch, relativeTime, sortedProjects, tildify } from "@harness/shared/state";
 import { useApp, useColors, useTheme } from "../state/app";
 import { useAction, useStore } from "../state/store";
@@ -12,13 +11,14 @@ import { useDriverModels } from "../state/models";
 import { displayHost } from "../lib/pair";
 import { DEVICE } from "../lib/device";
 import { MONO } from "../theme/tokens";
-import { Badge, Button, ProjectKey, Segmented, Spinner } from "../ui/kit";
+import { Badge, ProjectKey, Segmented, Spinner } from "../ui/kit";
 import { Icon } from "../ui/Icon";
-import { DraftField, Group, SRow, SSwitch, useInputStyle } from "../ui/settings";
-import { ModelPicker, PermissionPicker, Select } from "../ui/selects";
+import { DraftField, Group, SRow, SSwitch } from "../ui/settings";
+import { PermissionPicker, Select } from "../ui/selects";
 import { DriverModelPicker } from "../ui/DriverModelPicker";
 import { confirm, pick } from "../ui/pick";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { driverStatus } from "./DriverSettings";
 import { PROMPTS_INTRO, usePrompts } from "./Prompts";
 import { ThemeSwatch } from "../ui/ThemeSwatch";
 import { pickerCaption, themeLinkPrefs, themeOptions, themePrefKey } from "../lib/themePicker";
@@ -53,7 +53,6 @@ export function SettingsScreen() {
       <AppearanceSection />
       <DriversSection />
       {state.settings && <GeneralSection settings={state.settings} />}
-      {state.settings && <ModelsSection settings={state.settings} />}
       {state.settings && <PermissionsSection settings={state.settings} />}
       {state.settings && <TriageSection settings={state.settings} />}
       <PromptsSection />
@@ -227,21 +226,14 @@ function ThemePicker({ appearance, prefs, systemDark, onPick }: { appearance: "l
   );
 }
 
-function driverStatus(d: DriverInfo) {
-  if (!d.available) return <Badge tone="red">Unavailable</Badge>;
-  if (!d.authenticated) return <Badge tone="amber">Not signed in</Badge>;
-  return (
-    <Badge tone="green" icon="check">
-      Ready
-    </Badge>
-  );
-}
-
+/** Each driver opens its own settings screen; the app's default model sits right under them. */
 function DriversSection() {
-  const { state, client, dispatch, epoch, toast } = useStore();
+  const { state, client, dispatch, epoch } = useStore();
   const act = useAction();
   const c = useColors();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const settings = state.settings;
   const reload = useCallback(async () => {
     setLoading(true);
     const drivers = await act(() => client.listDrivers());
@@ -251,38 +243,44 @@ function DriversSection() {
   useEffect(() => {
     if (epoch > 0) void reload();
   }, [epoch]); // eslint-disable-line react-hooks/exhaustive-deps
-  const login = async (d: DriverInfo) => {
-    const res = await act(() => client.loginDriver(d.id));
-    if (!res) return;
-    if (res.url) await WebBrowser.openBrowserAsync(res.url).catch(() => Linking.openURL(res.url!));
-    if (res.message) toast(res.message, "info");
-  };
   return (
     <Group
       title="Drivers"
+      footer="Open a driver for its sign-in and models. Tickets and projects can pick their own model; the default applies when they don't."
       right={
         <Pressable onPress={() => void reload()} hitSlop={8} accessibilityRole="button" accessibilityLabel="Refresh drivers">
           {loading ? <Spinner /> : <Icon name="refresh" size={15} color={c.accent} />}
         </Pressable>
       }
     >
-      {state.drivers.length === 0 && <SRow title="No drivers reported by the service." last />}
+      {state.drivers.length === 0 && <SRow title="No drivers reported by the service." last={!settings} />}
       {state.drivers.map((d, i) => (
         <SRow
           key={d.id}
-          last={i === state.drivers.length - 1}
+          chevron
+          last={!settings && i === state.drivers.length - 1}
+          onPress={() => router.push({ pathname: "/driver/[id]", params: { id: d.id } })}
           title={
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <Text style={{ color: c.text, fontSize: 16 }}>{d.name}</Text>
               {driverStatus(d)}
-              {state.settings?.defaultDriver === d.id && <Badge tone="accent">Default</Badge>}
+              {settings?.defaultDriver === d.id && <Badge tone="accent">Default</Badge>}
             </View>
           }
-          sub={[d.description, d.detail].filter(Boolean).join("\n")}
-        >
-          {d.supportsLogin && <Button small title={d.authenticated ? "Log in again" : "Log in"} icon="key" onPress={() => void login(d)} />}
-        </SRow>
+          sub={d.description}
+        />
       ))}
+      {settings && (
+        <SRow title="Default model" sub="Used for new sessions unless the project or ticket picks its own." last>
+          <DriverModelPicker
+            value={settingsChoice(settings)}
+            resolved={{ driver: settings.defaultDriver, model: null }}
+            defaultLabel="Driver default"
+            onChange={(choice) => void act(() => client.updateSettings(settingsChoicePatch(choice, settings)))}
+            title="Default model"
+          />
+        </SRow>
+      )}
     </Group>
   );
 }
@@ -290,19 +288,7 @@ function DriversSection() {
 function GeneralSection({ settings }: { settings: PublicSettings }) {
   const { client, toast } = useStore();
   const act = useAction();
-  const c = useColors();
-  const inputStyle = useInputStyle();
-  const [apiKey, setApiKey] = useState("");
-  const [replacing, setReplacing] = useState(false);
   const save = (body: Parameters<typeof client.updateSettings>[0]) => act(() => client.updateSettings(body));
-  const saveKey = async () => {
-    if (!apiKey.trim()) return;
-    const ok = await act(() => client.updateSettings({ anthropicApiKey: apiKey.trim() }), "API key saved");
-    if (ok) {
-      setApiKey("");
-      setReplacing(false);
-    }
-  };
   return (
     <Group title="General">
       <SRow title="Max concurrent runs" sub="Agent runs across all sessions. Extra runs wait in the queue.">
@@ -315,7 +301,7 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
           }}
         />
       </SRow>
-      <SRow title="Base branch" sub="Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.">
+      <SRow title="Base branch" sub="Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it." last>
         <DraftField
           value={settings.baseBranch ?? DEFAULT_BASE_BRANCH}
           mono
@@ -332,45 +318,6 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
           }}
         />
       </SRow>
-      <SRow title="Anthropic API key" sub="Stored by the service; falls back to ANTHROPIC_API_KEY." stacked last>
-        {settings.anthropicApiKeySet && !replacing ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Icon name="checkCircle" size={15} color={c.green} />
-            <Text style={{ color: c.green, flex: 1, fontSize: 15 }}>Key saved</Text>
-            <Button small title="Replace" onPress={() => setReplacing(true)} />
-            <Button small title="Clear" variant="danger" onPress={() => void act(() => client.updateSettings({ anthropicApiKey: null }), "API key cleared")} />
-          </View>
-        ) : (
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <TextInput style={[inputStyle, { flex: 1, fontFamily: MONO, fontSize: 14 }]} secureTextEntry placeholder="sk-ant-…" placeholderTextColor={c.text3} value={apiKey} onChangeText={setApiKey} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => void saveKey()} />
-            <Button title="Save" variant="primary" disabled={!apiKey.trim()} onPress={() => void saveKey()} />
-            {replacing && <Button title="Cancel" variant="ghost" onPress={() => setReplacing(false)} />}
-          </View>
-        )}
-      </SRow>
-    </Group>
-  );
-}
-
-function ModelsSection({ settings }: { settings: PublicSettings }) {
-  const { state, client } = useStore();
-  const act = useAction();
-  return (
-    <Group title="Models" footer="Tickets and projects can pick their own model; these apply when they don't.">
-      <SRow title="Default model" sub="Used for new sessions unless the project or ticket picks its own.">
-        <DriverModelPicker
-          value={settingsChoice(settings)}
-          resolved={{ driver: settings.defaultDriver, model: null }}
-          defaultLabel="Driver default"
-          onChange={(choice) => void act(() => client.updateSettings(settingsChoicePatch(choice, settings)))}
-          title="Default model"
-        />
-      </SRow>
-      {state.drivers.map((d, i) => (
-        <SRow key={d.id} title={d.name} sub="Model for agent review runs" last={i === state.drivers.length - 1}>
-          <ModelPicker driver={d.id} value={settings.reviewModels[d.id] ?? null} defaultLabel="Same as work" plainDefault onChange={(m) => void act(() => client.updateSettings({ reviewModels: { [d.id]: m } }))} title="Review model" />
-        </SRow>
-      ))}
     </Group>
   );
 }

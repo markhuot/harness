@@ -46,6 +46,7 @@ import type {
 import type { BaseBranchSource, BranchInfo, CompletionAction, PromptEntry } from "@harness/shared";
 import {
   checkProjectKey,
+  COMPLETION_ACTIONS,
   completionOptions,
   isCompletionAction,
   isConductor,
@@ -330,7 +331,7 @@ function validBoolean(name: string, value: unknown): boolean | undefined {
 /** Validate a completion action from a request body (omitted / null → undefined). */
 function validCompletionAction(name: string, value: unknown): CompletionAction | undefined {
   if (value === undefined || value === null) return undefined;
-  if (!isCompletionAction(value)) throw badRequest(`${name} must be one of merge, pr, custom`);
+  if (!isCompletionAction(value)) throw badRequest(`${name} must be one of ${COMPLETION_ACTIONS.join(", ")}`);
   return value;
 }
 
@@ -1465,7 +1466,7 @@ export class Orchestrator {
   private requestedCompletion(t: Ticket, value: unknown): CompletionAction | undefined {
     const action = validCompletionAction("action", value);
     if (!action) return undefined;
-    const r = resolveCompletionAction(action, t, this.store.projects.get(t.projectId), this.branchParent(t));
+    const r = resolveCompletionAction(action, t, this.store.projects.get(t.projectId), this.branchParent(t), this.baseBranchFor(t).branch);
     if (r.error !== null) throw badRequest(`${t.key}: ${r.error}`);
     return r.action;
   }
@@ -1599,7 +1600,7 @@ export class Orchestrator {
       // The action this completion runs with: the stored choice while the ticket still offers it,
       // else the default (a project that lost its gh login merges instead of failing). Written
       // back so the run's system prompt picks the same completion prompts.
-      const action = completionOptions(t, this.store.projects.get(t.projectId), this.branchParent(t)).defaultAction;
+      const action = completionOptions(t, this.store.projects.get(t.projectId), this.branchParent(t), this.baseBranchFor(t).branch).defaultAction;
       if (action !== t.completionAction) t = this.store.tickets.update(t.id, { completionAction: action })!;
       this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, t.completionInstructions ?? undefined), this.completeLock(t));
     } finally {
@@ -1612,6 +1613,19 @@ export class Orchestrator {
    * parent's worktree, or tickets merging into the project's base branch. PR and custom
    * completions don't share a checkout with anyone.
    */
+  /**
+   * What a "cleanup" completion should have removed and didn't: the harness worktree (only when
+   * the harness made it) and the harness branch. A branch the harness didn't create is kept.
+   */
+  private async cleanupLeftovers(t: Ticket): Promise<string[]> {
+    const project = this.store.projects.get(t.projectId);
+    const left: string[] = [];
+    if (t.workdir && isInside(t.workdir, this.paths.worktreesDir) && existsSync(t.workdir)) left.push(`the worktree at ${t.workdir}`);
+    const branch = t.branch ?? branchForKey(t.key);
+    if (project && branch === branchForKey(t.key) && (await branchExists(project.path, branch))) left.push(`the branch ${branch}`);
+    return left;
+  }
+
   private completeLock(t: Ticket): string | undefined {
     if (t.completionAction && t.completionAction !== "merge") return undefined;
     const parent = this.branchParent(t);
@@ -2483,6 +2497,9 @@ export class Orchestrator {
       kind: input.conductor ? "conductor" : "task",
       start: input.start ?? false,
       driver: project.defaultDriver ?? session.driver,
+      // Work on an existing branch (a pull request's head) sets both to it: nothing to merge later.
+      branch: input.branch || null,
+      baseBranch: input.baseBranch || null,
       // Only a remote ID links the ticket; otherwise the description carries the context.
       externalRef: key ? { source: meta.source, key, url, raw: meta.text ?? null } : null,
     });
@@ -3579,6 +3596,16 @@ export class Orchestrator {
           this.addSummary(ticket.sessionId, ticket.id, "system", reason);
           this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: no pull request");
           break;
+        }
+        if (ticket.completionAction === "cleanup") {
+          // The cleanup's whole result is the worktree and branch gone: what's left holds work that hasn't landed.
+          const left = await this.cleanupLeftovers(ticket);
+          if (left.length) {
+            const reason = `Cleanup didn't finish: ${left.join(" and ")} still ${left.length === 1 ? "exists" : "exist"}, which usually means unpushed or unmerged work. Check the last summary, then move the ticket back to In progress to deal with those commits.`;
+            this.addSummary(ticket.sessionId, ticket.id, "system", reason);
+            this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: cleanup didn't finish");
+            break;
+          }
         }
         this.transition(ticket, "done", { blockedReason: null }, "Completed");
         break;
