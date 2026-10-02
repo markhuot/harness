@@ -490,7 +490,7 @@ ${betaSection(r)}
 ${macSection(r)}
     </div>
 
-    <p class="foot">Neither build contains a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a> &middot; <a href="privacy.html">Privacy</a></p>
+    <p class="foot">${r.iosBeta ? "None of these builds contains" : "Neither build contains"} a token. Pairing hands the device one, and it's kept in that device's Keychain. <a href="${esc(r.releaseUrl)}">Release notes and files</a> &middot; <a href="privacy.html">Privacy</a></p>
   </div>
 </body>
 </html>

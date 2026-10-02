@@ -166,7 +166,7 @@ test("with a beta: a secondary card after the iPhone card installs it from its o
   expect(html).toContain(".installs section.beta { grid-column: 1; grid-row: 2; }");
   // Everything outside the card and its CSS is the page without a beta.
   const without = page({ ...p, iosBeta: null });
-  expect(html.replace(`\n    ${card}\n`, "").replace(/\n  @media \(min-width: 760px\) \{ \.installs section\.beta[^\n]*\n  h2 \.tag[^\n]*\n/, "")).toBe(without);
+  expect(html.replace(`\n    ${card}\n`, "").replace(/\n  @media \(min-width: 760px\) \{ \.installs section\.beta[^\n]*\n  h2 \.tag[^\n]*\n/, "").replace("None of these builds contains", "Neither build contains")).toBe(without);
   expect(html).not.toMatch(/—/);
 });
 
@@ -184,6 +184,13 @@ test("beta values are escaped", () => {
   expect(card).toContain("Version &lt;i&gt; (9&quot;)");
   expect(card).toContain("a&amp;b");
   expect(card).not.toContain("<i>");
+});
+
+test("the footer's token note covers all three builds only when there's a beta", () => {
+  expect(page(info())).toContain('<p class="foot">Neither build contains a token.');
+  const p = page(withBeta());
+  expect(p).toContain('<p class="foot">None of these builds contains a token.');
+  expect(p).not.toContain("Neither build");
 });
 
 test("carryBeta: a release keeps the previous beta only while that exact IPA is still in Install/", () => {
