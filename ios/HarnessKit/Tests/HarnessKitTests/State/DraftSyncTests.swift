@@ -8,7 +8,7 @@ import Testing
 @MainActor
 private enum DS {
     static func project(_ id: String, key: String, nextSeq: Int) -> Project {
-        Project(id: id, key: key, name: key.lowercased(), path: "/\(key.lowercased())", nextSeq: nextSeq, defaultDriver: nil, defaultModels: [:], useWorktrees: true, isGit: true, requireHumanReview: true, baseBranch: .null, createdAt: 0, updatedAt: 0)
+        Project(id: id, key: key, name: key.lowercased(), path: "/\(key.lowercased())", nextSeq: nextSeq, defaultDriver: nil, defaultModels: [:], useWorktrees: true, isGit: true, baseBranch: .null, createdAt: 0, updatedAt: 0)
     }
 
     static let projects: [String: Project] = [
@@ -430,7 +430,8 @@ struct DraftSyncTests {
         await DS.drain()
         #expect(f.ops == ["create"])
         #expect(f.calls.first?.create?.skipHumanReview == true)
-        #expect(f.calls.first?.create?.skipAgentReview == nil)
+        // Both switches always go, so the service never fills in the project's defaults on its own.
+        #expect(f.calls.first?.create?.skipAgentReview == false)
         h.edit(UpdateTicketBody(skipHumanReview: true))
         await h.wait(40)
         #expect(f.ops == ["create"])

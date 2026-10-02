@@ -60,7 +60,7 @@ export const project = (id: string, key: string, over: Partial<Project> = {}): P
   defaultDriver: null,
   defaultModels: {},
   useWorktrees: false,
-  requireHumanReview: true,
+  skipAgentReview: false, skipHumanReview: false,
   permissionMode: null,
   color: null,
   createdAt: 1,

@@ -9,6 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Project settings now have **Skip agent review** and **Skip human review** switches (on Mac and
+  iPhone/iPad), in place of **Require human review**. They set where a new ticket's two review
+  switches start, so one project can skip your review by default while another skips the agent's,
+  or both. Each ticket can still change its own, and changing a project's switches only affects
+  tickets created afterwards.
+- A ticket in a project that used to have **Require human review** off keeps skipping your review,
+  and you can now turn your review back on for one of those tickets from its Details tab.
+
 ## [app-20261002.1646](https://github.com/markhuot/harness/releases/tag/app-20261002.1646) - 2026-10-02
 
 ### Changed

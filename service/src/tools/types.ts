@@ -134,9 +134,9 @@ export interface CreateTicketInput {
   branch?: string | null;
   /** Base branch override; null → inherit the project's. */
   baseBranch?: string | null;
-  /** Skip the agent review when it's submitted; refused for a project without human review. */
+  /** Skip the agent review when it's submitted; omitted → the project's default. Refused alongside a skipped human review. */
   skipAgentReview?: boolean;
-  /** Skip the human review (it lands once the agent review passes); refused alongside skipAgentReview. */
+  /** Skip the human review (it lands once the agent review passes); omitted → the project's default. Refused alongside a skipped agent review. */
   skipHumanReview?: boolean;
   /** Remote ID to link the new ticket to (e.g. a Jira key), source "manual"; omitted → unlinked. */
   remoteId?: string;
@@ -155,7 +155,7 @@ export interface UpdateTicketInput {
   baseBranch?: string | null;
   /** Branch for its worktree: refused once the ticket has a worktree (its agent uses update_branch). */
   branch?: string | null;
-  /** Ticket.skipAgentReview; true is refused for a project without human review. */
+  /** Ticket.skipAgentReview; true is refused when the ticket skips its human review. */
   skipAgentReview?: boolean;
   /** Ticket.skipHumanReview; true is refused when the ticket skips its agent review. */
   skipHumanReview?: boolean;
@@ -391,7 +391,10 @@ export interface ProjectView {
   defaultDriver: string | null;
   defaultModels: Record<string, string>;
   useWorktrees: boolean;
-  requireHumanReview: boolean;
+  /** New tickets skip their agent review by default */
+  skipAgentReview: boolean;
+  /** New tickets skip their human review by default */
+  skipHumanReview: boolean;
   /** null → the settings default */
   permissionMode: PermissionMode | null;
   /** Key badge color: a preset id or "#rrggbb"; null → the theme's accent */

@@ -14,6 +14,11 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
     public var key: String?
     public var defaultDriver: Patch<String>
     public var useWorktrees: Bool?
+    /// Project.skipAgentReview: new tickets skip their agent review by default. Default false.
+    public var skipAgentReview: Bool?
+    /// Project.skipHumanReview: new tickets skip their human review by default. Default false.
+    public var skipHumanReview: Bool?
+    /// Deprecated, from older apps: false means skipHumanReview true. Ignored with skipHumanReview.
     public var requireHumanReview: Bool?
     /// Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent
     public var color: Patch<String>
@@ -28,7 +33,7 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
 
     public init(
         path: String, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
-        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil,
+        useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
@@ -38,6 +43,8 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
         self.key = key
         self.defaultDriver = defaultDriver
         self.useWorktrees = useWorktrees
+        self.skipAgentReview = skipAgentReview
+        self.skipHumanReview = skipHumanReview
         self.requireHumanReview = requireHumanReview
         self.color = color
         self.permissionMode = permissionMode
@@ -54,6 +61,11 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
     public var key: String?
     public var defaultDriver: Patch<String>
     public var useWorktrees: Bool?
+    /// Project.skipAgentReview: new tickets skip their agent review by default
+    public var skipAgentReview: Bool?
+    /// Project.skipHumanReview: new tickets skip their human review by default
+    public var skipHumanReview: Bool?
+    /// Deprecated, from older apps: false means skipHumanReview true. Ignored with skipHumanReview.
     public var requireHumanReview: Bool?
     /// Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent
     public var color: Patch<String>
@@ -68,7 +80,7 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
 
     public init(
         path: String? = nil, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
-        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil,
+        useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
@@ -78,6 +90,8 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
         self.key = key
         self.defaultDriver = defaultDriver
         self.useWorktrees = useWorktrees
+        self.skipAgentReview = skipAgentReview
+        self.skipHumanReview = skipHumanReview
         self.requireHumanReview = requireHumanReview
         self.color = color
         self.permissionMode = permissionMode
@@ -109,9 +123,9 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     public var branch: Patch<String>
     /// Base branch override (Ticket.baseBranch); null / "" → inherit the project's
     public var baseBranch: Patch<String>
-    /// Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default false.
+    /// Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default: the project's.
     public var skipAgentReview: Bool?
-    /// Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default false.
+    /// Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default: the project's.
     public var skipHumanReview: Bool?
     public var dependsOn: [String]?
     public var autoStart: Bool?

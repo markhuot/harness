@@ -30,8 +30,19 @@ export interface Project {
    * Clients hide worktree choices when it's false. Optional only so older payloads type-check.
    */
   isGit?: boolean;
-  /** When false, the human review step is skipped (agent review alone gates completion) */
-  requireHumanReview: boolean;
+  /**
+   * New tickets skip their agent review (Ticket.skipAgentReview) unless they say otherwise: the
+   * default the New session's switch starts from and a create without the field gets. Existing
+   * tickets keep their own. Optional only so older payloads type-check.
+   */
+  skipAgentReview?: boolean;
+  /** Same, for the human review (Ticket.skipHumanReview). Optional only so older payloads type-check. */
+  skipHumanReview?: boolean;
+  /**
+   * @deprecated `!skipHumanReview`, sent only for apps from before the two defaults (which
+   * require it). Nothing reads it; CreateProjectBody still accepts it from those apps.
+   */
+  requireHumanReview?: boolean;
   /** Permission mode for this project's tickets (null → settings.permissionMode) */
   permissionMode: PermissionMode | null;
   /**
@@ -189,14 +200,14 @@ export interface Ticket {
   useWorktree?: boolean | null;
   /**
    * Submitting skips the agent review: agentReview becomes "skipped" and the ticket waits only on
-   * the human (or its conductor). Set when the ticket is created, from the ticket card, or by the
+   * the human (or its conductor). Set when the ticket is created (default: Project.skipAgentReview), from the ticket card, or by the
    * ticket's own agent (`submit_for_review` skip_agent_review). Optional so older payloads type-check.
    */
   skipAgentReview?: boolean;
   /**
    * Submitting counts the human review as approved: the ticket lands as soon as its agent review
-   * passes, or right away when that's skipped too. Set when the ticket is created, from the ticket
-   * card, or by an agent (`submit_for_review` / `create_ticket` / `update_ticket`
+   * passes, or right away when that's skipped too. Set when the ticket is created (default:
+   * Project.skipHumanReview), from the ticket card, or by an agent (`submit_for_review` / `create_ticket` / `update_ticket`
    * skip_human_review). Optional so older payloads type-check.
    */
   skipHumanReview?: boolean;
@@ -857,6 +868,11 @@ export interface CreateProjectBody {
   key?: string;
   defaultDriver?: string | null;
   useWorktrees?: boolean;
+  /** Project.skipAgentReview: new tickets skip their agent review by default. Default false. */
+  skipAgentReview?: boolean;
+  /** Project.skipHumanReview: new tickets skip their human review by default. Default false. */
+  skipHumanReview?: boolean;
+  /** @deprecated From older apps: false means skipHumanReview true. Ignored with skipHumanReview. */
   requireHumanReview?: boolean;
   /** Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent */
   color?: string | null;
@@ -894,9 +910,9 @@ export interface CreateTicketBody {
   branch?: string | null;
   /** Base branch override (Ticket.baseBranch); null / "" → inherit the project's */
   baseBranch?: string | null;
-  /** Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default false. */
+  /** Skip the agent review when the ticket is submitted (Ticket.skipAgentReview). Default: the project's. */
   skipAgentReview?: boolean;
-  /** Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default false. */
+  /** Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default: the project's. */
   skipHumanReview?: boolean;
   dependsOn?: string[];
   autoStart?: boolean;

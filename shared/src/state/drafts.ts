@@ -11,12 +11,33 @@ import { branchChoice, branchChoiceHint, canChangeBranch, ticketHasBranch, type 
 import { permissionModeLabel } from "./format";
 import { projectDriver, ticketChoice } from "./models";
 
-type DraftProject = Pick<Project, "id" | "path" | "isGit" | "useWorktrees" | "defaultDriver" | "defaultModels" | "baseBranch">;
+type DraftProject = Pick<Project, "id" | "path" | "isGit" | "useWorktrees" | "defaultDriver" | "defaultModels" | "baseBranch" | "skipAgentReview" | "skipHumanReview">;
 type DraftSettings = Pick<PublicSettings, "defaultDriver" | "defaultModels" | "baseBranch">;
+type ReviewDefaults = Pick<Project, "skipAgentReview" | "skipHumanReview">;
+
+/** The review switches a new ticket of `project` starts with (Project.skipAgentReview / skipHumanReview). */
+export function projectReviewSkips(project: ReviewDefaults | null | undefined): { skipAgentReview: boolean; skipHumanReview: boolean } {
+  return { skipAgentReview: !!project?.skipAgentReview, skipHumanReview: !!project?.skipHumanReview };
+}
+
+/**
+ * The review switches for a draft moving from project `from` to `to`: a switch still on its old
+ * project's default follows the new project's, and one the user flipped stays flipped. Only the
+ * switches that change, so it merges into the move's PATCH.
+ */
+export function draftReviewSkipsPatch(t: Pick<Ticket, "skipAgentReview" | "skipHumanReview">, from: ReviewDefaults | null | undefined, to: ReviewDefaults | null | undefined): UpdateTicketBody {
+  const was = projectReviewSkips(from);
+  const next = projectReviewSkips(to);
+  const p: UpdateTicketBody = {};
+  if (!!t.skipAgentReview === was.skipAgentReview && was.skipAgentReview !== next.skipAgentReview) p.skipAgentReview = next.skipAgentReview;
+  if (!!t.skipHumanReview === was.skipHumanReview && was.skipHumanReview !== next.skipHumanReview) p.skipHumanReview = next.skipHumanReview;
+  return p;
+}
 
 /**
  * The ticket a New session edits before anything is saved: a draft in planning with every setting
- * inherited. `key` is the predicted key (predictedTicketKey), used only for the harness/<key> label.
+ * inherited, and the project's review switches. `key` is the predicted key (predictedTicketKey),
+ * used only for the harness/<key> label.
  */
 export function blankDraftTicket(project: DraftProject, settings: DraftSettings | null | undefined, key: string, now = Date.now()): Ticket {
   return {
@@ -41,8 +62,7 @@ export function blankDraftTicket(project: DraftProject, settings: DraftSettings 
     requestedBranch: null,
     baseBranch: null,
     useWorktree: null,
-    skipAgentReview: false,
-    skipHumanReview: false,
+    ...projectReviewSkips(project),
     draft: true,
     blockedReason: null,
     busy: false,
@@ -91,11 +111,13 @@ export function draftUsesWorktree(t: Pick<Ticket, "useWorktree">, project: Pick<
 }
 
 /**
- * Nothing worth keeping: no prompt and every setting still inherited. A New session isn't saved
- * until this turns false, and closing one that's still empty doesn't ask.
+ * Nothing worth keeping: no prompt, every setting still inherited and the review switches on the
+ * project's defaults. A New session isn't saved until this turns false, and closing one that's
+ * still empty doesn't ask.
  */
 export function draftIsEmpty(t: Ticket, project: DraftProject | null | undefined, settings: DraftSettings | null | undefined): boolean {
   const choice = ticketChoice(t, project, settings);
+  const skips = projectReviewSkips(project);
   return (
     !t.description.trim() &&
     t.kind === "task" &&
@@ -104,15 +126,16 @@ export function draftIsEmpty(t: Ticket, project: DraftProject | null | undefined
     (t.useWorktree ?? null) === null &&
     !t.requestedBranch &&
     !t.baseBranch &&
-    !t.skipAgentReview &&
-    !t.skipHumanReview &&
+    !!t.skipAgentReview === skips.skipAgentReview &&
+    !!t.skipHumanReview === skips.skipHumanReview &&
     t.dependsOn.length === 0
   );
 }
 
 /**
  * POST /tickets for a draft's first save. Branch and base go only with a worktree (the service
- * refuses a branch without one), and useWorktree only for a git project.
+ * refuses a branch without one), and useWorktree only for a git project. Both review switches
+ * always go: the service would fill in its own copy of the project's defaults otherwise.
  */
 export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketBody {
   const worktree = draftUsesWorktree(t, project);
@@ -127,8 +150,8 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
     permissionMode: t.permissionMode,
     useWorktree: project.isGit === false ? null : (t.useWorktree ?? null),
     ...(worktree ? { branch: t.requestedBranch ?? null, baseBranch: t.baseBranch ?? null } : {}),
-    ...(t.skipAgentReview ? { skipAgentReview: true } : {}),
-    ...(t.skipHumanReview ? { skipHumanReview: true } : {}),
+    skipAgentReview: !!t.skipAgentReview,
+    skipHumanReview: !!t.skipHumanReview,
     ...(t.dependsOn.length ? { dependsOn: t.dependsOn } : {}),
   };
 }
@@ -279,8 +302,9 @@ export function newSessionOptionsSummary(t: Ticket, project: DraftProject, setti
     else if (worktree && t.useWorktree === true) out.push(harnessBranch(t.key));
     if (worktree && t.baseBranch) out.push(`into ${t.baseBranch}`);
   }
-  if (t.skipAgentReview) out.push("Skip agent review");
-  if (t.skipHumanReview) out.push("Skip human review");
+  const skips = projectReviewSkips(project);
+  if (!!t.skipAgentReview !== skips.skipAgentReview) out.push(t.skipAgentReview ? "Skip agent review" : "With agent review");
+  if (!!t.skipHumanReview !== skips.skipHumanReview) out.push(t.skipHumanReview ? "Skip human review" : "With human review");
   if (t.dependsOn.length) out.push(`After ${t.dependsOn.join(", ")}`);
   return out;
 }

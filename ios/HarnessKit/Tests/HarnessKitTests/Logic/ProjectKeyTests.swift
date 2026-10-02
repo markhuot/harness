@@ -41,7 +41,7 @@ struct ProjectKeyTests {
 
     /// The Project/Ticket overload maps `externalRef.key` through, so a legacy mirror keeps its key.
     @Test func protocolTypesOverload() throws {
-        let project = Project(id: "p1", key: "OLD", name: "Old", path: "/x", nextSeq: 3, useWorktrees: true, requireHumanReview: true, createdAt: 0, updatedAt: 0)
+        let project = Project(id: "p1", key: "OLD", name: "Old", path: "/x", nextSeq: 3, useWorktrees: true, createdAt: 0, updatedAt: 0)
         let samples = try Fixture.value("protocol", "Ticket", as: [Ticket].self)
         var native = try #require(samples.first)
         native.id = "t1"

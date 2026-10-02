@@ -128,8 +128,17 @@ private struct ProjectSettingsForm: View {
                         .accessibilityLabel("Base branch")
                     }
                 }
-                toggleRow("Require human review", hint: "When off, the agent reviewer alone can clear a ticket for completion.", on: project.requireHumanReview) {
-                    save(UpdateProjectBody(requireHumanReview: $0))
+                toggleRow("Skip agent review", hint: "New tickets go straight to your review when they're submitted. Each ticket can change it.", on: project.skipAgentReview == true) {
+                    save(UpdateProjectBody(skipAgentReview: $0))
+                }
+                toggleRow(
+                    "Skip human review",
+                    hint: project.skipAgentReview == true && project.skipHumanReview == true
+                        ? "New tickets land as soon as they're submitted, with no review at all. Each ticket can change it."
+                        : "New tickets land as soon as the agent review approves them. Each ticket can change it.",
+                    on: project.skipHumanReview == true
+                ) {
+                    save(UpdateProjectBody(skipHumanReview: $0))
                 }
                 if isGit {
                     let info = Completion.ProjectInfo(project)

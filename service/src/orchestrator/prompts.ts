@@ -185,7 +185,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
           onBase: v.onBase,
           skipAgentReview: !!ticket?.skipAgentReview,
           skipHumanReview: !!ticket?.skipHumanReview,
-          canSkipReview: project?.requireHumanReview !== false && !ticket?.skipHumanReview,
+          canSkipReview: !ticket?.skipHumanReview,
         },
         o,
       );

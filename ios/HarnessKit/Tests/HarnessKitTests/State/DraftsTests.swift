@@ -35,6 +35,12 @@ struct DRDiffInput: Decodable, Sendable {
     let next: Ticket
 }
 
+struct DRSkipsInput: Decodable, Sendable {
+    let ticket: Ticket
+    let from: Project?
+    let to: Project?
+}
+
 struct DRPickInput: Decodable, Sendable {
     let name: String?
     let checkout: BranchInfo?
@@ -88,10 +94,15 @@ struct DraftsTests {
     }
 
     @Test func blankDraftTicketDefaultsToNow() {
-        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, useWorktrees: true, requireHumanReview: true, createdAt: 0, updatedAt: 0)
+        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, useWorktrees: true, createdAt: 0, updatedAt: 0)
         let before = Date().timeIntervalSince1970 * 1000
         let t = Drafts.blankDraftTicket(project: project, settings: nil, key: "WEB-4")
         #expect(t.createdAt >= before && t.createdAt <= Date().timeIntervalSince1970 * 1000)
+    }
+
+    @Test(arguments: Fixture.cases("stateDrafts", "draftReviewSkipsPatchCases", input: DRSkipsInput.self, output: JSONValue.self))
+    func draftReviewSkipsPatch(_ c: Fixture.Case<DRSkipsInput, JSONValue>) throws {
+        try expectJSONMatchesTS(Drafts.draftReviewSkipsPatch(c.input.ticket, from: c.input.from, to: c.input.to), c.output)
     }
 
     @Test(arguments: Fixture.cases("stateDrafts", "applyTicketPatchCases", input: DRPatchInput.self, output: JSONValue.self))

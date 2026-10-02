@@ -389,7 +389,7 @@ function checkCompletionAction(t: Ticket, requested: unknown): CompletionAction 
   return r.action;
 }
 
-function seedProject(key: string, name: string, path: string, requireHumanReview = true, color: string | null = null, isGit = true, pullRequestHost: string | null = null): Project {
+function seedProject(key: string, name: string, path: string, skipHumanReview = false, color: string | null = null, isGit = true, pullRequestHost: string | null = null): Project {
   const p: Project = {
     id: newId("proj"),
     key,
@@ -400,7 +400,8 @@ function seedProject(key: string, name: string, path: string, requireHumanReview
     defaultModels: {},
     useWorktrees: true,
     isGit,
-    requireHumanReview,
+    skipAgentReview: false,
+    skipHumanReview,
     permissionMode: null,
     color,
     completionAction: "merge",
@@ -486,8 +487,8 @@ function seedTicket(s: SeedTicket): Ticket {
     autoStart: s.autoStart ?? !!s.parentKey,
     agentReview: s.agentReview ?? "pending",
     humanReview: s.humanReview ?? "pending",
-    skipAgentReview: s.skipAgentReview ?? false,
-    skipHumanReview: s.skipHumanReview ?? false,
+    skipAgentReview: s.skipAgentReview ?? !!s.project.skipAgentReview,
+    skipHumanReview: s.skipHumanReview ?? !!s.project.skipHumanReview,
     externalRef: s.externalRef ?? null,
     workdir: worktree ? `/Users/markhuot/.harness/worktrees/${key}` : s.project.path,
     branch: worktree ? `harness/${key.toLowerCase()}` : null,
@@ -562,8 +563,8 @@ function seedTicket(s: SeedTicket): Ticket {
 function seed() {
   // Three kinds of checkout for the Approve menu: a GitHub remote gh is logged into (merge, open
   // PR, custom), plain git (HARNESS, HELLOHARNESS: merge, custom) and no git (SITE: custom only).
-  const ny = seedProject("NYTIMES", "nytimes", "/Users/markhuot/Sites/nytimes", true, "blue", true, "github.com");
-  const hx = seedProject("HARNESS", "harness", "/Users/markhuot/Sites/harness", false);
+  const ny = seedProject("NYTIMES", "nytimes", "/Users/markhuot/Sites/nytimes", false, "blue", true, "github.com");
+  const hx = seedProject("HARNESS", "harness", "/Users/markhuot/Sites/harness", true);
 
   seedTicket({
     project: ny,
@@ -844,7 +845,7 @@ function seed() {
   hx.nextSeq = 11;
 
   // A project whose key was derived from a long folder name (Project settings → Identifier).
-  const hh = seedProject("HELLOHARNESS", "hello-harness", "/Users/markhuot/Sites/hello-harness", true, "#e0569b");
+  const hh = seedProject("HELLOHARNESS", "hello-harness", "/Users/markhuot/Sites/hello-harness", false,"#e0569b");
   for (const [title, status, ageMin] of [
     ["Scaffold the hello world page", "done", 3000],
     ["Add a greeting API route", "done", 2400],
@@ -867,7 +868,7 @@ function seed() {
   // over the last ~65 minutes (so they fill the first Done pages, newest first), renumbered from
   // an old WWW key (WWW-n → SITE-n resolve as aliases).
   // Not a git checkout: the composer hides its Use worktree switch for it.
-  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", true, "orange", false);
+  const site = seedProject("SITE", "marketing-site", "/Users/markhuot/Sites/marketing-site", false,"orange", false);
   const verbs = ["Fix", "Refactor", "Polish", "Document", "Speed up", "Test", "Localize", "Harden"];
   const nouns = ["hero banner", "pricing table", "footer links", "blog index", "contact form", "sitemap", "RSS feed", "404 page", "cookie notice", "search page", "case studies grid", "team page", "careers list"];
   for (let i = 1; i <= 130; i++) {
@@ -893,7 +894,7 @@ function seed() {
   // linked to Jira's MH-62 (a PR review's stages), so the board shows "MH-62 · MH-124" and
   // "MH-62 · MH-130" beside the native MH-62. OPS-41 is a remote ID with no local ticket of that
   // key: opening it (#/board/all/ticket/OPS-41) lists the two tickets linked to it.
-  const mh = seedProject("MH", "markhuot.com", "/Users/markhuot/Sites/markhuot.com", true, "teal", true, "github.com");
+  const mh = seedProject("MH", "markhuot.com", "/Users/markhuot/Sites/markhuot.com", false,"teal", true, "github.com");
   const jira = (key: string, summary: string): Ticket["externalRef"] => ({ source: "jira", key, url: `https://happycog.atlassian.net/browse/${key}`, raw: { key, summary } });
   seedTicket({
     project: mh,
@@ -1187,11 +1188,10 @@ function setStatus(t: Ticket, status: TicketStatus) {
 function submitForReview(t: Ticket) {
   setStatus(t, "review");
   t.agentReview = t.skipAgentReview ? "skipped" : "pending";
-  const project = projects.get(t.projectId);
-  t.humanReview = project?.requireHumanReview === false || t.skipHumanReview ? "approved" : "pending";
+  t.humanReview = t.skipHumanReview ? "approved" : "pending";
   addSummary(t.sessionId, t.id, "agent", `Work finished for **${t.title}**. Ready for review.`);
   upsertTicket(t);
-  if (t.skipHumanReview && project?.requireHumanReview !== false) appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: skipped" });
+  if (t.skipHumanReview) appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: skipped" });
   if (t.skipAgentReview) {
     appendEntry(t.sessionId, null, "system", { type: "status", text: "Agent review: skipped" });
     noteReady(t);
@@ -1225,7 +1225,7 @@ function applySkipAgentReview(t: Ticket) {
 
 /** Mirrors Orchestrator.applySkipHumanReview: in review, the flag approves a pending human review or puts its approval back to pending. */
 function applySkipHumanReview(t: Ticket) {
-  if (t.status !== "review" || projects.get(t.projectId)?.requireHumanReview === false) return;
+  if (t.status !== "review") return;
   if (t.skipHumanReview && t.humanReview === "pending") {
     t.humanReview = "approved";
     appendEntry(t.sessionId, null, "system", { type: "status", text: "Human review: skipped" });
@@ -1294,8 +1294,8 @@ function createTicket(body: Record<string, any>): Ticket {
     autoStart: body.autoStart ?? false,
     agentReview: "pending",
     humanReview: "pending",
-    skipAgentReview: body.skipAgentReview === true,
-    skipHumanReview: body.skipHumanReview === true,
+    skipAgentReview: typeof body.skipAgentReview === "boolean" ? body.skipAgentReview : !!project.skipAgentReview,
+    skipHumanReview: typeof body.skipHumanReview === "boolean" ? body.skipHumanReview : !!project.skipHumanReview,
     externalRef: body.externalRef ?? null,
     workdir: start && worktree ? `/Users/markhuot/.harness/worktrees/${key}` : project.path,
     branch: start && worktree ? body.branch || `harness/${key.toLowerCase()}` : null,
@@ -1397,7 +1397,8 @@ async function route(req: Request, url: URL): Promise<Response> {
         defaultModels: mergeModels({}, body.defaultModels),
         useWorktrees: body.useWorktrees ?? true,
         isGit: true,
-        requireHumanReview: body.requireHumanReview ?? true,
+        skipAgentReview: body.skipAgentReview ?? false,
+        skipHumanReview: body.skipHumanReview ?? false,
         permissionMode: body.permissionMode ?? null,
         color: normalizeProjectColor(body.color ?? null) ?? null,
         completionAction: "merge",

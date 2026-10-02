@@ -6,11 +6,11 @@ import { FakeDriver, makeOrchestrator, tempHome } from "../testing/fakes";
 import { toolsForRun } from "../tools";
 import { HarnessError } from "./errors";
 
-function setup(opts: { requireHumanReview?: boolean; driver?: FakeDriver; realTools?: boolean } = {}) {
+function setup(opts: { skipAgentReview?: boolean; skipHumanReview?: boolean; driver?: FakeDriver; realTools?: boolean } = {}) {
   const h = makeOrchestrator({ driver: opts.driver, ...(opts.realTools ? { tools: toolsForRun } : {}) });
   const dir = join(h.home, "proj", "acme");
   mkdirSync(dir, { recursive: true });
-  const project = h.orch.createProject({ path: dir, requireHumanReview: opts.requireHumanReview ?? true });
+  const project = h.orch.createProject({ path: dir, skipAgentReview: opts.skipAgentReview, skipHumanReview: opts.skipHumanReview });
   const events: HarnessEvent[] = [];
   h.bus.on((e) => events.push(e));
   return { ...h, project, events };
@@ -210,8 +210,8 @@ describe("ticket lifecycle", () => {
     expect(() => h.orch.humanReview("ACME-99", { decision: "approve" })).toThrow(/Unknown ticket/);
   });
 
-  test("projects without human review complete right after the agent approves, with the project's default action", async () => {
-    const h = setup({ requireHumanReview: false });
+  test("tickets of a project that skips the human review complete right after the agent approves, with the project's default action", async () => {
+    const h = setup({ skipHumanReview: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
@@ -255,7 +255,7 @@ describe("ticket lifecycle", () => {
   test("the agent approval completes the ticket when the human review was pre-approved", async () => {
     const driver = new FakeDriver();
     driver.rejectsLeft = 1;
-    const h = setup({ driver, requireHumanReview: false });
+    const h = setup({ driver, skipHumanReview: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
     await h.orch.idle();
     // Human review is pre-approved; the first agent review rejects, the second approves and completes.
@@ -537,8 +537,8 @@ describe("skipping the agent review", () => {
     expect(runKinds(h, t)).toEqual(["work:succeeded", "work:succeeded"]);
   });
 
-  test("with the project's human review off, a skipped agent review completes the ticket at once", async () => {
-    const h = setup({ requireHumanReview: false });
+  test("with the project skipping the human review, a skipped agent review completes the ticket at once", async () => {
+    const h = setup({ skipHumanReview: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipAgentReview: true });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
@@ -558,7 +558,7 @@ describe("skipping the agent review", () => {
   });
 
   test("an agent can't skip the review when nobody else would review the ticket", async () => {
-    const h = setup({ requireHumanReview: false });
+    const h = setup({ skipHumanReview: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "hello /skipreview" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
@@ -567,7 +567,7 @@ describe("skipping the agent review", () => {
     expect([cur.status, cur.agentReview, cur.skipAgentReview]).toEqual(["done", "approved", false]);
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
     const text = h.store.transcript.list(t.sessionId).filter((e) => e.content.type === "text").map((e) => (e.content as { text: string }).text);
-    expect(text.some((x) => x.startsWith("Refused:") && x.includes("doesn't require a human review"))).toBe(true);
+    expect(text.some((x) => x.startsWith("Refused:") && x.includes(`${t.key} skips its human review`))).toBe(true);
   });
 
   test("turning skipAgentReview on while the agent review runs stops it; turning it off starts one", async () => {
@@ -703,12 +703,31 @@ describe("skipping the human review", () => {
     expect(statuses(h, t.sessionId)).toContain("Human review: waiting on a human again");
   });
 
-  test("a project without human review leaves the switch nothing to do", async () => {
-    const h = setup({ requireHumanReview: false });
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x", skipHumanReview: true });
+  test("a create that leaves the review switches out takes the project's defaults, and one that sets them wins", async () => {
+    const h = setup({ skipAgentReview: true, skipHumanReview: true });
+    const defaulted = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    const reviewed = await h.orch.createTicket({ projectId: h.project.id, prompt: "y", skipAgentReview: false, skipHumanReview: false });
+    expect([defaulted.skipAgentReview, defaulted.skipHumanReview, reviewed.skipAgentReview, reviewed.skipHumanReview]).toEqual([true, true, false, false]);
     await h.orch.idle();
-    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
-    expect(statuses(h, t.sessionId)).not.toContain("Human review: skipped");
+    // Skipping both, it lands as soon as it's submitted; the other gets both reviews, like any ticket.
+    expect(runKinds(h, defaulted)).toEqual(["work:succeeded", "complete:succeeded"]);
+    expect(h.orch.ticketDetail(reviewed.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+    expect(statuses(h, reviewed.sessionId)).not.toContain("Human review: skipped");
+
+    // The defaults are only for new tickets: changing them leaves existing ones alone.
+    h.orch.updateProject(h.project.id, { skipAgentReview: false, skipHumanReview: false });
+    expect(h.orch.ticketDetail(defaulted.key).ticket).toMatchObject({ skipAgentReview: true, skipHumanReview: true });
+    const after = await h.orch.createTicket({ projectId: h.project.id, prompt: "z", start: false });
+    expect([after.skipAgentReview, after.skipHumanReview]).toEqual([false, false]);
+  });
+
+  test("project review defaults: older apps' requireHumanReview maps onto skipHumanReview, and a bad value is refused", async () => {
+    const h = setup();
+    expect(h.project).toMatchObject({ skipAgentReview: false, skipHumanReview: false, requireHumanReview: true });
+    expect(h.orch.updateProject(h.project.id, { requireHumanReview: false })).toMatchObject({ skipHumanReview: true, requireHumanReview: false });
+    // The new field wins when both come.
+    expect(h.orch.updateProject(h.project.id, { requireHumanReview: false, skipHumanReview: false }).skipHumanReview).toBe(false);
+    expect(() => h.orch.updateProject(h.project.id, { skipAgentReview: "yes" as never })).toThrow(/skipAgentReview must be true or false/);
   });
 
   test("skipHumanReview must be a boolean", async () => {

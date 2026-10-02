@@ -65,7 +65,7 @@ const project: Project = {
   nextSeq: 1,
   defaultDriver: null,
   useWorktrees: true,
-  requireHumanReview: true,
+  skipAgentReview: false, skipHumanReview: false,
   defaultModels: {},
   permissionMode: null,
   color: null,

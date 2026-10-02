@@ -13,6 +13,7 @@ import type { Project, Ticket, UpdateTicketBody } from "@harness/shared";
 import {
   blankDraftTicket,
   composerProject,
+  draftReviewSkipsPatch,
   modelCacheFor,
   modelName,
   newSessionOptionsSummary,
@@ -229,7 +230,8 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   };
   const changeProject = (next: Project) => {
     if (!session || next.id === session.local.projectId) return;
-    const patch: UpdateTicketBody = { projectId: next.id, branch: null, baseBranch: null, useWorktree: null };
+    // Review switches still on the old project's defaults take the new project's.
+    const patch: UpdateTicketBody = { projectId: next.id, branch: null, baseBranch: null, useWorktree: null, ...draftReviewSkipsPatch(session.local, project, next) };
     // A draft on its project's default model follows the new project's default.
     const nextDriver = projectDriver(next, state.settings);
     if (ticketChoice(session.local, project, state.settings).driver === null && nextDriver) Object.assign(patch, { driver: nextDriver, model: null });

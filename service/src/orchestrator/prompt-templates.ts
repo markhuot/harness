@@ -118,7 +118,7 @@ When the human replies with feedback, revise and call \`update_plan\` again. Put
       onBase: ON_BASE,
       skipAgentReview: "True when the ticket already skips the agent review (the new-session checkbox, the ticket card, or an earlier submit)",
       skipHumanReview: "True when the ticket skips the human review: it lands as soon as its agent review approves it (or once it's submitted, when that's skipped too)",
-      canSkipReview: "True when the agent may skip the agent review: the project requires a human review and the ticket doesn't skip it, so someone still checks the work",
+      canSkipReview: "True when the agent may skip the agent review: the ticket doesn't skip its human review, so someone still checks the work",
     },
     template: `## This run: work
 Do the work the ticket describes, in the working directory. Work autonomously: make reasonable decisions yourself, keep going until the ticket is done, and verify the result (run the tests or build, check UI changes in the browser).

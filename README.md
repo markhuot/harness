@@ -117,11 +117,14 @@ you answer.
 - Tick **Skip agent review** in New session's Options (or on the ticket's Details tab) for tickets that
   don't need a reviewer agent, like a quick question. The ticket goes to Review and waits
   only on you. The agent can also skip its own review when you ask it to, or when it only
-  answered a question, as long as the project requires your review.
+  answered a question, as long as the ticket still gets your review.
 - Tick **Skip human review** for tickets you don't need to look at yourself. The ticket lands as
   soon as the agent review approves it, the way the Approve button's default would land it. With
   both switches on, it lands as soon as it's submitted. Agents can turn it on when you ask them to,
   but an agent can't skip both reviews: one of them always checks the work.
+- Both switches start from the project's **Skip agent review** and **Skip human review**
+  settings (Project settings → Agents), so one project can skip your review by default while
+  another skips the agent's. Changing them affects new tickets only.
 - The **Approve** button picks how the work lands: **Approve and merge** (merge the ticket's
   branch into its base branch), **Approve and open PR** (push the branch and open a GitHub pull
   request, which ends the ticket), **Approve and…** (your own instructions for the agent), or

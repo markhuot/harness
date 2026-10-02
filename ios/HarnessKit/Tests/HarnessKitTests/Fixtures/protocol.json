@@ -180,7 +180,8 @@
       "key": "NYT",
       "defaultDriver": "claude-code",
       "useWorktrees": true,
-      "requireHumanReview": false,
+      "skipAgentReview": true,
+      "skipHumanReview": false,
       "color": "#336699",
       "permissionMode": "auto",
       "defaultModels": {
@@ -196,6 +197,10 @@
       "color": null,
       "permissionMode": null,
       "baseBranch": null
+    },
+    {
+      "path": "/tmp/y",
+      "requireHumanReview": false
     }
   ],
   "CreateTicketBody": [
@@ -462,7 +467,9 @@
         },
         "useWorktrees": true,
         "isGit": true,
-        "requireHumanReview": true,
+        "skipAgentReview": false,
+        "skipHumanReview": true,
+        "requireHumanReview": false,
         "permissionMode": "ask",
         "baseBranch": "develop",
         "completionAction": "pr",
@@ -1207,7 +1214,9 @@
       },
       "useWorktrees": true,
       "isGit": true,
-      "requireHumanReview": true,
+      "skipAgentReview": false,
+      "skipHumanReview": true,
+      "requireHumanReview": false,
       "permissionMode": "ask",
       "baseBranch": "develop",
       "completionAction": "pr",
@@ -1250,7 +1259,9 @@
       },
       "useWorktrees": true,
       "isGit": false,
-      "requireHumanReview": true,
+      "skipAgentReview": false,
+      "skipHumanReview": true,
+      "requireHumanReview": false,
       "permissionMode": "ask",
       "baseBranch": null,
       "completionAction": "custom",
@@ -2837,9 +2848,13 @@
       "permissionMode": "ask",
       "defaultDriver": "anthropic-api",
       "useWorktrees": false,
-      "requireHumanReview": true,
+      "skipHumanReview": true,
       "baseBranch": "main",
       "color": "teal"
+    },
+    {
+      "skipAgentReview": false,
+      "skipHumanReview": false
     },
     {}
   ],

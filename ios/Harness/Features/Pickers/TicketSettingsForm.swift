@@ -149,7 +149,7 @@ private struct TicketSettingsRows: View {
                 .tint(c.accent)
                 .disabled(!rows.editable)
         }
-        TicketSettingsRow(label: "Skip human review", hint: rows.editable ? NewSession.skipHumanReviewHint(ticket, project: project) : nil) {
+        TicketSettingsRow(label: "Skip human review", hint: rows.editable ? NewSession.skipHumanReviewHint(ticket) : nil) {
             Toggle("Skip human review", isOn: Binding(get: { ticket.skipHumanReview == true }, set: { onPatch(UpdateTicketBody(skipHumanReview: $0)) }))
                 .labelsHidden()
                 .tint(c.accent)

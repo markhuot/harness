@@ -213,7 +213,7 @@ plan`; the `mcp__harness` allow rule keeps `update_plan` and `post_summary` runn
 | Human message in review or done | status and reviews unchanged; human summary with the message; a **chat** run that's going takes it in, otherwise enqueue one. When the chat leaves the ticket where it is, its last text is posted as an agent summary |
 | Human message with `move: true` in review | status `in_progress`, both reviews reset to pending, enqueue work run with the message |
 | Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is posts its answer and neither auto-submits nor blocks. A failed chat adds a "Run failed" summary and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
-| Agent calls `submit_for_review(summary)` (in_progress, blocked or review; refused in planning and done) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the project doesn't require human review or the ticket has `skipHumanReview`, see "Skipping the human review"), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
+| Agent calls `submit_for_review(summary)` (in_progress, blocked or review; refused in planning and done) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the ticket has `skipHumanReview`, see "Skipping the human review"), summary posted; after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
 | Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; summary = last assistant text (system author). A trailing question blocks with it instead |
 | Work run fails | status `blocked`, `blockedReason` = error. A ticket already `done` stays done (summary posted): a run queued before it completed can only fail on the removed worktree |
 | Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, the denied calls posted as a system summary. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
@@ -239,12 +239,14 @@ agent to check, like a question answered in text. Submitting such a ticket (the 
 `submit_for_review` or the auto-submit at the end of a run) sets `agentReview = "skipped"` and
 starts no review run, so the ticket waits in Review only on the human, or on its conductor for a
 child. `"skipped"` is only ever an agent review state, and `reviewPassed` (shared) treats it like
-`approved`: the human's approval makes the ticket ready, and it completes right away. A project
-with human review off completes the ticket as soon as it's submitted. A request
+`approved`: the human's approval makes the ticket ready, and it completes right away. A ticket
+that skips its human review too completes as soon as it's submitted. A request
 for changes resets the agent review to `pending` as usual; the next submit skips it again.
 
 Who sets it:
 
+- **The project's default**: a create that leaves `skipAgentReview` out takes
+  `Project.skipAgentReview` (see "Review defaults").
 - **The human**, with `CreateTicketBody.skipAgentReview` (the "Skip agent review" switch in
   New session's Options on Mac and iPhone) or `UpdateTicketBody.skipAgentReview` (the ticket's
   details). A change while the ticket is in review applies at once: turned on with the agent
@@ -259,30 +261,28 @@ Who sets it:
 - **Other agents**, with `create_ticket` / `update_ticket` `skip_agent_review` (see "Board changes by
   agents").
 
-Agents can only turn it on where someone else still reviews the work: for a project that requires
-a human review (`requireHumanReview`), on a ticket that doesn't skip its human review. Otherwise
-the agent review is the only check, and the call fails with an error saying a human can turn it
-off on the ticket. Humans can set it anywhere.
+Agents can only turn it on where someone else still reviews the work: on a ticket that doesn't
+skip its human review (for a new ticket, the project's default unless the same call sets
+`skip_human_review: false`). Otherwise the agent review is the only check, and the call fails
+with an error saying a human can turn it off on the ticket. Humans can set it anywhere.
 
 ### Skipping the human review
 
 `Ticket.skipHumanReview` (migration 23, default false) is the other half: the ticket lands without
 waiting on anyone once its agent review passes. Submitting such a ticket sets `humanReview =
-"approved"` (status "Human review: skipped"), the same state a project with human review off gives
-every ticket, so the agent review's approval makes it ready and `noteReady` starts the complete
+"approved"` (status "Human review: skipped"), so the agent review's approval makes it ready and `noteReady` starts the complete
 run with the stored completion choice, else the project default. With `skipAgentReview` as well,
 the ticket completes as soon as it's submitted. A conductor's child that skips it lands on its own
 too (its conductor is the reviewer it skips) instead of waiting on `complete_ticket`. The human
 can still request changes while the ticket is in review, and a request for changes (or a block
 from review) resets the human review to `pending`; the next submit approves it again.
 
-A change while the ticket is in review applies at once (a project without human review ignores
-the flag): turned on with the human review `pending`, it's approved and the ticket completes if
+A change while the ticket is in review applies at once: turned on with the human review `pending`, it's approved and the ticket completes if
 its agent review passed; turned off with it `approved` and no complete run queued or running, it
 goes back to `pending` (status "Human review: waiting on a human again"). There's no telling that
 approval apart from a human's own, so turning the switch off always asks for an approval.
 
-Who sets it: the human with `CreateTicketBody.skipHumanReview` / `UpdateTicketBody.skipHumanReview`
+Who sets it: the project's default (`Project.skipHumanReview`) when a create leaves it out; the human with `CreateTicketBody.skipHumanReview` / `UpdateTicketBody.skipHumanReview`
 (the "Skip human review" switch under Agent review in New session's Options and the ticket's
 Details, Mac and iPhone); the ticket's own agent with `submit_for_review { skip_human_review }`,
 when the human asked for the work to land without their review (the work prompt says so, and
@@ -290,6 +290,32 @@ says when the ticket already skips it); other agents with `create_ticket` / `upd
 `skip_human_review`. Agents can only turn it on while the agent review still runs: a call that
 would leave a ticket skipping both reviews (`skipAgentReview` already set, or both in one call) is
 refused, so nothing lands on an agent's say-so with nobody checking. Humans can set both.
+
+### Review defaults
+
+`Project.skipAgentReview` and `Project.skipHumanReview` (migration 25, default false) are the
+values a new ticket's two switches start from: `createTicket` uses them for a
+`CreateTicketBody` that leaves `skipAgentReview` / `skipHumanReview` out (an agent's
+`create_ticket` too), and the apps' blank draft (`blankDraftTicket`) starts on them. They're
+copied, not inherited: the ticket keeps its own flags from then on, so changing a project's
+defaults never touches existing tickets, and the ticket's switch is the only thing `submit` reads.
+Humans set them in Project settings (Agents: "Skip agent review", "Skip human review", Mac and
+iPhone), or through `create_project` / `update_project` (`skip_agent_review`,
+`skip_human_review`, approved by a human like any configuration call). A project may skip both:
+its tickets then land as soon as they're submitted unless someone turns a review back on.
+
+In a draft, a switch still on its project's default counts as inherited: `draftIsEmpty` and the
+collapsed Options summary compare against the project ("With agent review" when a draft turns a
+skipped review back on), and moving the draft to another project (`draftReviewSkipsPatch`) moves
+such a switch to the new project's default while a switch the user flipped stays as it is. Since
+the service fills in its own copy of the defaults, `draftCreateBody` always sends both switches.
+
+They replace `requireHumanReview` (migration 25 dropped `require_human_review`), which skipped
+the human review of every ticket in its project whatever the ticket said. The migration turned
+`require_human_review = 0` into `skip_human_review = 1` on the project and on each of its
+tickets, so nothing in flight changed. The service still sends `requireHumanReview`
+(`!skipHumanReview`) for iPhone builds from before, which require the field, and maps one sent by
+them onto `skipHumanReview` (`skipHumanReview` wins when both come); nothing else reads it.
 
 ### Drafts
 
@@ -444,7 +470,7 @@ and GitHub Enterprise hosts work alike, and Bitbucket, GitLab and hosts gh isn't
 PR option.
 
 **The project default** (`Project.completionAction`, migration 18, default `merge`) is what the
-Approve button preselects and what completes a ticket nobody picks for (human review off, a
+Approve button preselects and what completes a ticket nobody picks for (a skipped human review, a
 conductor's `complete_ticket` without `action`). `create_project` /
 `update_project` / `PATCH /projects/:id` refuse a default the project doesn't offer; a stored
 default the project stops offering (gh logged out, the remote removed) falls back to merge, then
@@ -604,10 +630,10 @@ Harness tools (always exposed, via MCP for claude-code):
 | `block` | work, chat (not a conductor ticket's) | `{ question }` |
 | `unblock` | work, conductor, chat | `{ note? }`: blocked → in progress once the human's message resolves the block |
 | `resume_work` | work, conductor, chat | `{ note? }`: review → in progress before a chat changes the work again (both reviews start over) |
-| `submit_for_review` | work, conductor, chat | `{ summary, attachments?: string[], skip_agent_review?, skip_human_review? }`: `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too, and `skip_agent_review` also when the project doesn't require a human review; see "Skipping the agent review" and "Skipping the human review") |
+| `submit_for_review` | work, conductor, chat | `{ summary, attachments?: string[], skip_agent_review?, skip_human_review? }`: `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
-| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview`. `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
@@ -630,7 +656,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, require_human_review?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
@@ -668,9 +694,9 @@ hits them too:
   or out of it (the agent reviewer, then the human or the parent conductor via `review_ticket` /
   `complete_ticket`, decide). `message_ticket` on a ticket in review is refused too, since a
   message sends it back to in progress, unless the caller is that ticket's parent conductor.
-- **No skipping the only review.** `create_ticket` / `update_ticket` with `skip_agent_review: true`
-  are refused for a project without human review, and either skip is refused when the ticket
-  would end up skipping both reviews, like the ticket's own `submit_for_review` ("Skipping the
+- **No skipping the only review.** `create_ticket` / `update_ticket` turning either skip on are
+  refused when the ticket would end up skipping both reviews (a new ticket starts from its
+  project's defaults), like the ticket's own `submit_for_review` ("Skipping the
   agent review", "Skipping the human review"). `update_ticket` `skip_agent_review` /
   `skip_human_review` on a ticket in review is refused unless the caller is its parent conductor
   (its reviewer): it would end, start or approve the review under way.
@@ -771,7 +797,7 @@ client state, not service state.
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, human review, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
 | Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |

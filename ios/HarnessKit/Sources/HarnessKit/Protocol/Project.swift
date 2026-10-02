@@ -19,8 +19,14 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// Whether the project path is inside a git checkout (checked each time the project is read).
     /// Clients hide worktree choices when it's false. Optional only so older payloads type-check.
     public var isGit: Bool?
-    /// When false, the human review step is skipped (agent review alone gates completion)
-    public var requireHumanReview: Bool
+    /// New tickets skip their agent review (Ticket.skipAgentReview) unless they say otherwise: the
+    /// default the New session's switch starts from and a create without the field gets. Existing
+    /// tickets keep their own. Optional only so older payloads type-check.
+    public var skipAgentReview: Bool?
+    /// Same, for the human review (Ticket.skipHumanReview). Optional only so older payloads type-check.
+    public var skipHumanReview: Bool?
+    /// Deprecated: `!skipHumanReview`, sent only for apps from before the two defaults. Nothing reads it.
+    public var requireHumanReview: Bool?
     /// Permission mode for this project's tickets (null → settings.permissionMode)
     @Nullable public var permissionMode: PermissionMode?
     /// Branch this project's tickets merge into when they complete, and new ticket branches start
@@ -49,7 +55,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
 
     public init(
         id: String, key: String, name: String, path: String, nextSeq: Int, defaultDriver: String? = nil,
-        defaultModels: [String: String] = [:], useWorktrees: Bool, isGit: Bool? = nil, requireHumanReview: Bool,
+        defaultModels: [String: String] = [:], useWorktrees: Bool, isGit: Bool? = nil,
+        skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil, completionActions: [CompletionAction]? = nil,
         pullRequestHost: Patch<String> = .absent, color: String? = nil, createdAt: Timestamp, updatedAt: Timestamp
@@ -63,6 +70,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.defaultModels = defaultModels
         self.useWorktrees = useWorktrees
         self.isGit = isGit
+        self.skipAgentReview = skipAgentReview
+        self.skipHumanReview = skipHumanReview
         self.requireHumanReview = requireHumanReview
         self.permissionMode = permissionMode
         self.baseBranch = baseBranch

@@ -17,13 +17,11 @@ public enum NewSession {
     }
 
     /// What flipping the ticket's "Skip human review" switch does now (UpdateTicketBody.skipHumanReview).
-    /// `requireHumanReview` is the project's; nil (no project loaded) counts as true.
     public static func skipHumanReviewHint(
         status: TicketStatus, agentReview: ReviewState, humanReview: ReviewState,
-        skipAgentReview: Bool?, skipHumanReview: Bool?, requireHumanReview: Bool?
+        skipAgentReview: Bool?, skipHumanReview: Bool?
     ) -> String {
         let skip = skipHumanReview == true
-        if requireHumanReview == false { return "This project doesn't ask for a human review" }
         if status == .review, !skip, humanReview == .pending {
             return agentReview.passed ? "Turning it on lands the ticket now" : "Turning it on lands the ticket once its agent review passes"
         }
@@ -31,11 +29,10 @@ public enum NewSession {
         return skipAgentReview == true ? "Lands as soon as it's submitted" : "Lands as soon as the agent review approves it"
     }
 
-    public static func skipHumanReviewHint(_ t: Ticket, project: Project?) -> String {
+    public static func skipHumanReviewHint(_ t: Ticket) -> String {
         skipHumanReviewHint(
             status: t.status, agentReview: t.agentReview, humanReview: t.humanReview,
-            skipAgentReview: t.skipAgentReview, skipHumanReview: t.skipHumanReview,
-            requireHumanReview: project?.requireHumanReview
+            skipAgentReview: t.skipAgentReview, skipHumanReview: t.skipHumanReview
         )
     }
 }

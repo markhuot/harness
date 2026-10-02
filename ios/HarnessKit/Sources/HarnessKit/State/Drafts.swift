@@ -25,15 +25,33 @@ public struct DraftSettings: Codable, Sendable, Equatable {
 }
 
 public enum Drafts {
+    /// The review switches a new ticket of `project` starts with (Project.skipAgentReview / skipHumanReview).
+    public static func projectReviewSkips(_ project: Project?) -> (skipAgentReview: Bool, skipHumanReview: Bool) {
+        (project?.skipAgentReview == true, project?.skipHumanReview == true)
+    }
+
+    /// The review switches for a draft moving from project `from` to `to`: a switch still on its old
+    /// project's default follows the new project's, and one the user flipped stays flipped. Only the
+    /// switches that change, so it merges into the move's PATCH.
+    public static func draftReviewSkipsPatch(_ t: Ticket, from: Project?, to: Project?) -> UpdateTicketBody {
+        let was = projectReviewSkips(from)
+        let next = projectReviewSkips(to)
+        var p = UpdateTicketBody()
+        if (t.skipAgentReview == true) == was.skipAgentReview, was.skipAgentReview != next.skipAgentReview { p.skipAgentReview = next.skipAgentReview }
+        if (t.skipHumanReview == true) == was.skipHumanReview, was.skipHumanReview != next.skipHumanReview { p.skipHumanReview = next.skipHumanReview }
+        return p
+    }
+
     /// The ticket a New session edits before anything is saved: a draft in planning with every
-    /// setting inherited. `key` is the predicted key (`Branches.predictedTicketKey`), used only for
-    /// the harness/<key> label.
+    /// setting inherited, and the project's review switches. `key` is the predicted key
+    /// (`Branches.predictedTicketKey`), used only for the harness/<key> label.
     public static func blankDraftTicket(project: Project, settings: DraftSettings?, key: String, now: Double = Date().timeIntervalSince1970 * 1000) -> Ticket {
-        Ticket(
+        let skips = projectReviewSkips(project)
+        return Ticket(
             id: "", key: key, projectId: project.id, kind: .task, title: "", description: "", status: .planning,
             sessionId: "", driver: projectDriver(project, settings), parentId: nil, childCount: 0, dependsOn: [],
             autoStart: false, agentReview: .pending, humanReview: .pending, externalRef: nil, workdir: nil, branch: nil,
-            requestedBranch: .null, baseBranch: .null, useWorktree: .null, skipAgentReview: false, skipHumanReview: false, draft: true,
+            requestedBranch: .null, baseBranch: .null, useWorktree: .null, skipAgentReview: skips.skipAgentReview, skipHumanReview: skips.skipHumanReview, draft: true,
             blockedReason: nil, busy: false, pendingApproval: nil, allowedTools: [], permissionMode: nil, model: nil,
             position: 0, createdAt: now, updatedAt: now
         )
@@ -72,23 +90,26 @@ public enum Drafts {
         return t.useWorktree.optional ?? project.useWorktrees
     }
 
-    /// Nothing worth keeping: no prompt and every setting still inherited. A New session isn't
-    /// saved until this turns false, and closing one that's still empty doesn't ask.
+    /// Nothing worth keeping: no prompt, every setting still inherited and the review switches on
+    /// the project's defaults. A New session isn't saved until this turns false, and closing one
+    /// that's still empty doesn't ask.
     public static func draftIsEmpty(_ t: Ticket, project: Project?, settings: DraftSettings?) -> Bool {
-        JSCompat.trim(t.description).isEmpty
+        let skips = projectReviewSkips(project)
+        return JSCompat.trim(t.description).isEmpty
             && t.kind == .task
             && choiceDriver(t, project, settings) == nil
             && t.permissionMode == nil
             && t.useWorktree.optional == nil
             && Branches.nonEmpty(t.requestedBranch.optional) == nil
             && Branches.nonEmpty(t.baseBranch.optional) == nil
-            && t.skipAgentReview != true
-            && t.skipHumanReview != true
+            && (t.skipAgentReview == true) == skips.skipAgentReview
+            && (t.skipHumanReview == true) == skips.skipHumanReview
             && t.dependsOn.isEmpty
     }
 
     /// POST /tickets for a draft's first save. Branch and base go only with a worktree (the
-    /// service refuses a branch without one), and useWorktree only for a git project.
+    /// service refuses a branch without one), and useWorktree only for a git project. Both review
+    /// switches always go: the service would fill in its own copy of the project's defaults otherwise.
     public static func draftCreateBody(_ t: Ticket, project: Project) -> CreateTicketBody {
         let worktree = draftUsesWorktree(t, project: project)
         return CreateTicketBody(
@@ -102,8 +123,8 @@ public enum Drafts {
             useWorktree: project.isGit == false ? .null : Patch(t.useWorktree.optional),
             branch: worktree ? Patch(t.requestedBranch.optional) : .absent,
             baseBranch: worktree ? Patch(t.baseBranch.optional) : .absent,
-            skipAgentReview: t.skipAgentReview == true ? true : nil,
-            skipHumanReview: t.skipHumanReview == true ? true : nil,
+            skipAgentReview: t.skipAgentReview == true,
+            skipHumanReview: t.skipHumanReview == true,
             dependsOn: t.dependsOn.isEmpty ? nil : t.dependsOn,
             draft: true
         )
@@ -319,8 +340,11 @@ public enum Drafts {
             }
             if worktree, let base = Branches.nonEmpty(t.baseBranch.optional) { out.append("into \(base)") }
         }
-        if t.skipAgentReview == true { out.append("Skip agent review") }
-        if t.skipHumanReview == true { out.append("Skip human review") }
+        let skips = projectReviewSkips(project)
+        let skipAgent = t.skipAgentReview == true
+        let skipHuman = t.skipHumanReview == true
+        if skipAgent != skips.skipAgentReview { out.append(skipAgent ? "Skip agent review" : "With agent review") }
+        if skipHuman != skips.skipHumanReview { out.append(skipHuman ? "Skip human review" : "With human review") }
         if !t.dependsOn.isEmpty { out.append("After \(t.dependsOn.joined(separator: ", "))") }
         return out
     }
