@@ -1310,6 +1310,389 @@
       ]
     },
     {
+      "name": "nested three levels",
+      "input": "- one\n  - two\n    - three\n  - two b\n- one b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- one\n  - two\n    - three\n  - two b\n- one b"
+        }
+      ]
+    },
+    {
+      "name": "ul inside ol",
+      "input": "1. first\n   - bullet\n   - bullet b\n2. second",
+      "output": [
+        {
+          "t": "text",
+          "text": "1. first\n   - bullet\n   - bullet b\n2. second"
+        }
+      ]
+    },
+    {
+      "name": "ol inside ul",
+      "input": "- top\n  1. one\n  2. two\n- next",
+      "output": [
+        {
+          "t": "text",
+          "text": "- top\n  1. one\n  2. two\n- next"
+        }
+      ]
+    },
+    {
+      "name": "nested kinds switch under one item",
+      "input": "- a\n  - b\n  1. c",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  - b\n  1. c"
+        }
+      ]
+    },
+    {
+      "name": "nested continuation lines",
+      "input": "- a\n  more a\n  - b\n    more b\n  back on a",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  more a\n  - b\n    more b\n  back on a"
+        }
+      ]
+    },
+    {
+      "name": "tab-indented child",
+      "input": "- parent\n\t- child\n\t\t- grandchild",
+      "output": [
+        {
+          "t": "text",
+          "text": "- parent\n\t- child\n\t\t- grandchild"
+        }
+      ]
+    },
+    {
+      "name": "one-space indent stays a sibling",
+      "input": "- a\n - b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n - b"
+        }
+      ]
+    },
+    {
+      "name": "dedent past the parent",
+      "input": "- a\n    - b\n  - c\n- d",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n    - b\n  - c\n- d"
+        }
+      ]
+    },
+    {
+      "name": "nested list then paragraph",
+      "input": "- a\n  - b\nafter",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  - b\nafter"
+        }
+      ]
+    },
+    {
+      "name": "list, blank line, paragraph",
+      "input": "- a\n  - b\n\nafter",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  - b\n\nafter"
+        }
+      ]
+    },
+    {
+      "name": "ordered start number",
+      "input": "3. three\n4. four",
+      "output": [
+        {
+          "t": "text",
+          "text": "3. three\n4. four"
+        }
+      ]
+    },
+    {
+      "name": "ordered start zero",
+      "input": "0. zero",
+      "output": [
+        {
+          "t": "text",
+          "text": "0. zero"
+        }
+      ]
+    },
+    {
+      "name": "huge ordered start",
+      "input": "12345678901. big",
+      "output": [
+        {
+          "t": "text",
+          "text": "12345678901. big"
+        }
+      ]
+    },
+    {
+      "name": "nested ordered start",
+      "input": "- a\n  5. five\n  6. six",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  5. five\n  6. six"
+        }
+      ]
+    },
+    {
+      "name": "image on its own line",
+      "input": "Before\n![shot](attachment:abc123)\nAfter",
+      "output": [
+        {
+          "t": "text",
+          "text": "Before\n"
+        },
+        {
+          "t": "img",
+          "alt": "shot",
+          "id": "abc123",
+          "video": false
+        },
+        {
+          "t": "text",
+          "text": "\nAfter"
+        }
+      ]
+    },
+    {
+      "name": "indented image line",
+      "input": "  ![shot](attachment:abc)  ",
+      "output": [
+        {
+          "t": "text",
+          "text": "  "
+        },
+        {
+          "t": "img",
+          "alt": "shot",
+          "id": "abc",
+          "video": false
+        },
+        {
+          "t": "text",
+          "text": "  "
+        }
+      ]
+    },
+    {
+      "name": "inline image",
+      "input": "See ![shot](attachment:abc) here",
+      "output": [
+        {
+          "t": "text",
+          "text": "See "
+        },
+        {
+          "t": "img",
+          "alt": "shot",
+          "id": "abc",
+          "video": false
+        },
+        {
+          "t": "text",
+          "text": " here"
+        }
+      ]
+    },
+    {
+      "name": "attachment video",
+      "input": "![demo](attachment:v1.mp4)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "demo",
+          "id": "v1.mp4",
+          "video": true
+        }
+      ]
+    },
+    {
+      "name": "video by alt name",
+      "input": "![flow.MOV](attachment:v2)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "flow.MOV",
+          "id": "v2",
+          "video": true
+        }
+      ]
+    },
+    {
+      "name": "remote image on its own line",
+      "input": "![pixel](https://tracker.example/p.gif)",
+      "output": [
+        {
+          "t": "link",
+          "text": "pixel",
+          "url": "https://tracker.example/p.gif"
+        }
+      ]
+    },
+    {
+      "name": "remote image without alt",
+      "input": "![](https://x.test/a.png)",
+      "output": [
+        {
+          "t": "link",
+          "text": "https://x.test/a.png",
+          "url": "https://x.test/a.png"
+        }
+      ]
+    },
+    {
+      "name": "file image on its own line",
+      "input": "![after](harness://file/shots/after.png)",
+      "output": [
+        {
+          "t": "link",
+          "text": "after",
+          "url": "harness://file/shots/after.png"
+        }
+      ]
+    },
+    {
+      "name": "relative path image",
+      "input": "![after](shots/after.png)",
+      "output": [
+        {
+          "t": "link",
+          "text": "after",
+          "url": "shots/after.png"
+        }
+      ]
+    },
+    {
+      "name": "javascript image",
+      "input": "![x](javascript:alert(1))",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        },
+        {
+          "t": "text",
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "name": "data image",
+      "input": "![x](data:image/png;base64,AAAA)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "bad attachment id",
+      "input": "![x](attachment:a/b)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "empty attachment id",
+      "input": "![x](attachment:)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "image in a list item",
+      "input": "- ![shot](attachment:abc)",
+      "output": [
+        {
+          "t": "text",
+          "text": "- "
+        },
+        {
+          "t": "img",
+          "alt": "shot",
+          "id": "abc",
+          "video": false
+        }
+      ]
+    },
+    {
+      "name": "two images on one line",
+      "input": "![a](attachment:a) ![b](attachment:b)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "img",
+          "alt": "b",
+          "id": "b",
+          "video": false
+        }
+      ]
+    },
+    {
+      "name": "image with empty alt",
+      "input": "![](attachment:abc)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "",
+          "id": "abc",
+          "video": false
+        }
+      ]
+    },
+    {
+      "name": "link next to image",
+      "input": "[docs](https://x.y) ![i](attachment:i)",
+      "output": [
+        {
+          "t": "link",
+          "text": "docs",
+          "url": "https://x.y"
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "img",
+          "alt": "i",
+          "id": "i",
+          "video": false
+        }
+      ]
+    },
+    {
       "name": "hr dashes",
       "input": "---",
       "output": [
@@ -1978,8 +2361,14 @@
         {
           "t": "ul",
           "items": [
-            "a",
-            "b"
+            {
+              "text": "a",
+              "children": []
+            },
+            {
+              "text": "b",
+              "children": []
+            }
           ]
         }
       ]
@@ -2090,10 +2479,22 @@
         {
           "t": "ul",
           "items": [
-            "a",
-            "b",
-            "c",
-            "d"
+            {
+              "text": "a",
+              "children": []
+            },
+            {
+              "text": "b",
+              "children": []
+            },
+            {
+              "text": "c",
+              "children": []
+            },
+            {
+              "text": "d",
+              "children": []
+            }
           ]
         }
       ]
@@ -2104,10 +2505,20 @@
       "output": [
         {
           "t": "ol",
+          "start": 1,
           "items": [
-            "one",
-            "two",
-            "ten"
+            {
+              "text": "one",
+              "children": []
+            },
+            {
+              "text": "two",
+              "children": []
+            },
+            {
+              "text": "ten",
+              "children": []
+            }
           ]
         }
       ]
@@ -2118,20 +2529,31 @@
       "output": [
         {
           "t": "ol",
+          "start": 1,
           "items": [
-            "one"
+            {
+              "text": "one",
+              "children": []
+            }
           ]
         },
         {
           "t": "ul",
           "items": [
-            "two"
+            {
+              "text": "two",
+              "children": []
+            }
           ]
         },
         {
           "t": "ol",
+          "start": 2,
           "items": [
-            "three"
+            {
+              "text": "three",
+              "children": []
+            }
           ]
         }
       ]
@@ -2143,13 +2565,20 @@
         {
           "t": "ul",
           "items": [
-            "a"
+            {
+              "text": "a",
+              "children": []
+            }
           ]
         },
         {
           "t": "ol",
+          "start": 1,
           "items": [
-            "b"
+            {
+              "text": "b",
+              "children": []
+            }
           ]
         }
       ]
@@ -2161,8 +2590,14 @@
         {
           "t": "ul",
           "items": [
-            "first continued here",
-            "second deeper"
+            {
+              "text": "first continued here",
+              "children": []
+            },
+            {
+              "text": "second deeper",
+              "children": []
+            }
           ]
         }
       ]
@@ -2174,7 +2609,10 @@
         {
           "t": "ul",
           "items": [
-            "first"
+            {
+              "text": "first",
+              "children": []
+            }
           ]
         },
         {
@@ -2200,9 +2638,24 @@
         {
           "t": "ul",
           "items": [
-            "nested",
-            "deeper",
-            "top"
+            {
+              "text": "nested",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "deeper",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text": "top",
+              "children": []
+            }
           ]
         }
       ]
@@ -2214,7 +2667,10 @@
         {
           "t": "ul",
           "items": [
-            "tab item"
+            {
+              "text": "tab item",
+              "children": []
+            }
           ]
         }
       ]
@@ -2226,8 +2682,14 @@
         {
           "t": "ul",
           "items": [
-            "",
-            "x"
+            {
+              "text": "",
+              "children": []
+            },
+            {
+              "text": "x",
+              "children": []
+            }
           ]
         }
       ]
@@ -2239,12 +2701,606 @@
         {
           "t": "ul",
           "items": [
-            "a"
+            {
+              "text": "a",
+              "children": []
+            }
           ]
         },
         {
           "t": "p",
           "text": "after"
+        }
+      ]
+    },
+    {
+      "name": "nested three levels",
+      "input": "- one\n  - two\n    - three\n  - two b\n- one b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "one",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "two",
+                      "children": [
+                        {
+                          "t": "ul",
+                          "items": [
+                            {
+                              "text": "three",
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "text": "two b",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text": "one b",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ul inside ol",
+      "input": "1. first\n   - bullet\n   - bullet b\n2. second",
+      "output": [
+        {
+          "t": "ol",
+          "start": 1,
+          "items": [
+            {
+              "text": "first",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "bullet",
+                      "children": []
+                    },
+                    {
+                      "text": "bullet b",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text": "second",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ol inside ul",
+      "input": "- top\n  1. one\n  2. two\n- next",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "top",
+              "children": [
+                {
+                  "t": "ol",
+                  "start": 1,
+                  "items": [
+                    {
+                      "text": "one",
+                      "children": []
+                    },
+                    {
+                      "text": "two",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text": "next",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nested kinds switch under one item",
+      "input": "- a\n  - b\n  1. c",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "t": "ol",
+                  "start": 1,
+                  "items": [
+                    {
+                      "text": "c",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nested continuation lines",
+      "input": "- a\n  more a\n  - b\n    more b\n  back on a",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a more a back on a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b more b",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tab-indented child",
+      "input": "- parent\n\t- child\n\t\t- grandchild",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "parent",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "child",
+                      "children": [
+                        {
+                          "t": "ul",
+                          "items": [
+                            {
+                              "text": "grandchild",
+                              "children": []
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "one-space indent stays a sibling",
+      "input": "- a\n - b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": []
+            },
+            {
+              "text": "b",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dedent past the parent",
+      "input": "- a\n    - b\n  - c\n- d",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": []
+                    },
+                    {
+                      "text": "c",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "text": "d",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nested list then paragraph",
+      "input": "- a\n  - b\nafter",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "p",
+          "text": "after"
+        }
+      ]
+    },
+    {
+      "name": "list, blank line, paragraph",
+      "input": "- a\n  - b\n\nafter",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "p",
+          "text": "after"
+        }
+      ]
+    },
+    {
+      "name": "ordered start number",
+      "input": "3. three\n4. four",
+      "output": [
+        {
+          "t": "ol",
+          "start": 3,
+          "items": [
+            {
+              "text": "three",
+              "children": []
+            },
+            {
+              "text": "four",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ordered start zero",
+      "input": "0. zero",
+      "output": [
+        {
+          "t": "ol",
+          "start": 0,
+          "items": [
+            {
+              "text": "zero",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "huge ordered start",
+      "input": "12345678901. big",
+      "output": [
+        {
+          "t": "ol",
+          "start": 1,
+          "items": [
+            {
+              "text": "big",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nested ordered start",
+      "input": "- a\n  5. five\n  6. six",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ol",
+                  "start": 5,
+                  "items": [
+                    {
+                      "text": "five",
+                      "children": []
+                    },
+                    {
+                      "text": "six",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "image on its own line",
+      "input": "Before\n![shot](attachment:abc123)\nAfter",
+      "output": [
+        {
+          "t": "p",
+          "text": "Before"
+        },
+        {
+          "t": "img",
+          "alt": "shot",
+          "id": "abc123",
+          "video": false
+        },
+        {
+          "t": "p",
+          "text": "After"
+        }
+      ]
+    },
+    {
+      "name": "indented image line",
+      "input": "  ![shot](attachment:abc)  ",
+      "output": [
+        {
+          "t": "img",
+          "alt": "shot",
+          "id": "abc",
+          "video": false
+        }
+      ]
+    },
+    {
+      "name": "inline image",
+      "input": "See ![shot](attachment:abc) here",
+      "output": [
+        {
+          "t": "p",
+          "text": "See ![shot](attachment:abc) here"
+        }
+      ]
+    },
+    {
+      "name": "attachment video",
+      "input": "![demo](attachment:v1.mp4)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "demo",
+          "id": "v1.mp4",
+          "video": true
+        }
+      ]
+    },
+    {
+      "name": "video by alt name",
+      "input": "![flow.MOV](attachment:v2)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "flow.MOV",
+          "id": "v2",
+          "video": true
+        }
+      ]
+    },
+    {
+      "name": "remote image on its own line",
+      "input": "![pixel](https://tracker.example/p.gif)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![pixel](https://tracker.example/p.gif)"
+        }
+      ]
+    },
+    {
+      "name": "remote image without alt",
+      "input": "![](https://x.test/a.png)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![](https://x.test/a.png)"
+        }
+      ]
+    },
+    {
+      "name": "file image on its own line",
+      "input": "![after](harness://file/shots/after.png)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![after](harness://file/shots/after.png)"
+        }
+      ]
+    },
+    {
+      "name": "relative path image",
+      "input": "![after](shots/after.png)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![after](shots/after.png)"
+        }
+      ]
+    },
+    {
+      "name": "javascript image",
+      "input": "![x](javascript:alert(1))",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](javascript:alert(1))"
+        }
+      ]
+    },
+    {
+      "name": "data image",
+      "input": "![x](data:image/png;base64,AAAA)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](data:image/png;base64,AAAA)"
+        }
+      ]
+    },
+    {
+      "name": "bad attachment id",
+      "input": "![x](attachment:a/b)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](attachment:a/b)"
+        }
+      ]
+    },
+    {
+      "name": "empty attachment id",
+      "input": "![x](attachment:)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](attachment:)"
+        }
+      ]
+    },
+    {
+      "name": "image in a list item",
+      "input": "- ![shot](attachment:abc)",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "![shot](attachment:abc)",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "two images on one line",
+      "input": "![a](attachment:a) ![b](attachment:b)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![a](attachment:a) ![b](attachment:b)"
+        }
+      ]
+    },
+    {
+      "name": "image with empty alt",
+      "input": "![](attachment:abc)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "",
+          "id": "abc",
+          "video": false
+        }
+      ]
+    },
+    {
+      "name": "link next to image",
+      "input": "[docs](https://x.y) ![i](attachment:i)",
+      "output": [
+        {
+          "t": "p",
+          "text": "[docs](https://x.y) ![i](attachment:i)"
         }
       ]
     },
@@ -2282,7 +3338,10 @@
         {
           "t": "ul",
           "items": [
-            "- -"
+            {
+              "text": "- -",
+              "children": []
+            }
           ]
         }
       ]
@@ -2427,7 +3486,10 @@
         {
           "t": "ul",
           "items": [
-            "item"
+            {
+              "text": "item",
+              "children": []
+            }
           ]
         },
         {
@@ -2438,7 +3500,10 @@
         {
           "t": "ul",
           "items": [
-            "next"
+            {
+              "text": "next",
+              "children": []
+            }
           ]
         }
       ]
@@ -2902,8 +3967,14 @@
         {
           "t": "ul",
           "items": [
-            "one",
-            "two"
+            {
+              "text": "one",
+              "children": []
+            },
+            {
+              "text": "two",
+              "children": []
+            }
           ]
         },
         {
@@ -2953,7 +4024,10 @@
         {
           "t": "ul",
           "items": [
-            "👍🏽 ok"
+            {
+              "text": "👍🏽 ok",
+              "children": []
+            }
           ]
         },
         {
@@ -3001,7 +4075,10 @@
         {
           "t": "ul",
           "items": [
-            "nbsp item"
+            {
+              "text": "nbsp item",
+              "children": []
+            }
           ]
         },
         {
@@ -3022,7 +4099,10 @@
         {
           "t": "ul",
           "items": [
-            "a"
+            {
+              "text": "a",
+              "children": []
+            }
           ]
         }
       ]
@@ -3053,7 +4133,10 @@
         {
           "t": "ul",
           "items": [
-            "item"
+            {
+              "text": "item",
+              "children": []
+            }
           ]
         },
         {
@@ -3087,7 +4170,10 @@
         {
           "t": "ul",
           "items": [
-            "ff"
+            {
+              "text": "ff",
+              "children": []
+            }
           ]
         }
       ]
@@ -3218,6 +4304,161 @@
       "name": "list then paragraph",
       "input": "- a\nafter",
       "output": "• a after"
+    },
+    {
+      "name": "nested three levels",
+      "input": "- one\n  - two\n    - three\n  - two b\n- one b",
+      "output": "• one • two • three • two b • one b"
+    },
+    {
+      "name": "ul inside ol",
+      "input": "1. first\n   - bullet\n   - bullet b\n2. second",
+      "output": "1. first • bullet • bullet b 2. second"
+    },
+    {
+      "name": "ol inside ul",
+      "input": "- top\n  1. one\n  2. two\n- next",
+      "output": "• top 1. one 2. two • next"
+    },
+    {
+      "name": "nested kinds switch under one item",
+      "input": "- a\n  - b\n  1. c",
+      "output": "• a • b 1. c"
+    },
+    {
+      "name": "nested continuation lines",
+      "input": "- a\n  more a\n  - b\n    more b\n  back on a",
+      "output": "• a more a • b more b back on a"
+    },
+    {
+      "name": "tab-indented child",
+      "input": "- parent\n\t- child\n\t\t- grandchild",
+      "output": "• parent • child • grandchild"
+    },
+    {
+      "name": "one-space indent stays a sibling",
+      "input": "- a\n - b",
+      "output": "• a • b"
+    },
+    {
+      "name": "dedent past the parent",
+      "input": "- a\n    - b\n  - c\n- d",
+      "output": "• a • b • c • d"
+    },
+    {
+      "name": "nested list then paragraph",
+      "input": "- a\n  - b\nafter",
+      "output": "• a • b after"
+    },
+    {
+      "name": "list, blank line, paragraph",
+      "input": "- a\n  - b\n\nafter",
+      "output": "• a • b after"
+    },
+    {
+      "name": "ordered start number",
+      "input": "3. three\n4. four",
+      "output": "3. three 4. four"
+    },
+    {
+      "name": "ordered start zero",
+      "input": "0. zero",
+      "output": "0. zero"
+    },
+    {
+      "name": "huge ordered start",
+      "input": "12345678901. big",
+      "output": "12345678901. big"
+    },
+    {
+      "name": "nested ordered start",
+      "input": "- a\n  5. five\n  6. six",
+      "output": "• a 5. five 6. six"
+    },
+    {
+      "name": "image on its own line",
+      "input": "Before\n![shot](attachment:abc123)\nAfter",
+      "output": "Before shot After"
+    },
+    {
+      "name": "indented image line",
+      "input": "  ![shot](attachment:abc)  ",
+      "output": "shot"
+    },
+    {
+      "name": "inline image",
+      "input": "See ![shot](attachment:abc) here",
+      "output": "See shot here"
+    },
+    {
+      "name": "attachment video",
+      "input": "![demo](attachment:v1.mp4)",
+      "output": "demo"
+    },
+    {
+      "name": "video by alt name",
+      "input": "![flow.MOV](attachment:v2)",
+      "output": "flow.MOV"
+    },
+    {
+      "name": "remote image on its own line",
+      "input": "![pixel](https://tracker.example/p.gif)",
+      "output": "pixel"
+    },
+    {
+      "name": "remote image without alt",
+      "input": "![](https://x.test/a.png)",
+      "output": ""
+    },
+    {
+      "name": "file image on its own line",
+      "input": "![after](harness://file/shots/after.png)",
+      "output": "after"
+    },
+    {
+      "name": "relative path image",
+      "input": "![after](shots/after.png)",
+      "output": "after"
+    },
+    {
+      "name": "javascript image",
+      "input": "![x](javascript:alert(1))",
+      "output": "x)"
+    },
+    {
+      "name": "data image",
+      "input": "![x](data:image/png;base64,AAAA)",
+      "output": "x"
+    },
+    {
+      "name": "bad attachment id",
+      "input": "![x](attachment:a/b)",
+      "output": "x"
+    },
+    {
+      "name": "empty attachment id",
+      "input": "![x](attachment:)",
+      "output": "x"
+    },
+    {
+      "name": "image in a list item",
+      "input": "- ![shot](attachment:abc)",
+      "output": "• shot"
+    },
+    {
+      "name": "two images on one line",
+      "input": "![a](attachment:a) ![b](attachment:b)",
+      "output": "a b"
+    },
+    {
+      "name": "image with empty alt",
+      "input": "![](attachment:abc)",
+      "output": ""
+    },
+    {
+      "name": "link next to image",
+      "input": "[docs](https://x.y) ![i](attachment:i)",
+      "output": "docs i"
     },
     {
       "name": "hr dashes",

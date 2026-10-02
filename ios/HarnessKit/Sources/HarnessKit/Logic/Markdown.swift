@@ -1,8 +1,8 @@
 import Foundation
 
 // Port of shared/src/state/markdown.ts. Markdown-ish parsing for agent summaries and transcript
-// text: paragraphs, headings, bullet / numbered lists, fenced code, quotes, rules, GFM pipe tables,
-// and inline code / bold / italic / links. Pure: each client renders the blocks and tokens with its
+// text: paragraphs, headings, nested bullet / numbered lists, fenced code, quotes, rules, GFM pipe
+// tables, attachment images and videos, and inline code / bold / italic / links / images. Pure: each client renders the blocks and tokens with its
 // own primitives (DOM on desktop, Text on iOS), so agent output can never inject markup.
 //
 // The TS regexes run through NSRegularExpression, which matches on UTF-16 like JS does. ICU's
@@ -18,19 +18,47 @@ public enum Markdown {
         case left, center, right
     }
 
+    /// A list item: its text (continuation lines joined with spaces) and the lists nested under it.
+    public struct ListItem: Codable, Equatable, Sendable {
+        public var text: String
+        public var children: [Block]
+
+        public init(text: String, children: [Block] = []) {
+            self.text = text
+            self.children = children
+        }
+    }
+
+    /// An attachment shown inline. `video` comes from a .mp4/.webm/.mov id or alt text; renderers
+    /// that know the attachment's kind may use that instead.
+    public struct Media: Equatable, Sendable {
+        public var alt: String
+        public var id: String
+        public var video: Bool
+
+        public init(alt: String, id: String, video: Bool) {
+            self.alt = alt
+            self.id = id
+            self.video = video
+        }
+    }
+
     /// A block, encoded like the TS union: `{ t: "p", text }`, `{ t: "table", align, header, rows }`…
-    public enum Block: Codable, Equatable, Sendable {
+    public indirect enum Block: Codable, Equatable, Sendable {
         case p(text: String)
         case h(level: Int, text: String)
-        case ul(items: [String])
-        case ol(items: [String])
+        case ul(items: [ListItem])
+        /// `start` is the first item's number ("3." starts at 3).
+        case ol(start: Int, items: [ListItem])
         case code(lang: String, text: String)
         case quote(text: String)
         /// `align` has one entry per column; nil is a column without a `:` (no alignment).
         case table(align: [Align?], header: [String], rows: [[String]])
         case hr
+        /// An `![alt](attachment:<id>)` alone on its line.
+        case img(Media)
 
-        private enum CodingKeys: String, CodingKey { case t, text, level, items, lang, align, header, rows }
+        private enum CodingKeys: String, CodingKey { case t, text, level, items, start, lang, align, header, rows, alt, id, video }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -38,8 +66,8 @@ public enum Markdown {
             switch t {
             case "p": self = .p(text: try c.decode(String.self, forKey: .text))
             case "h": self = .h(level: try c.decode(Int.self, forKey: .level), text: try c.decode(String.self, forKey: .text))
-            case "ul": self = .ul(items: try c.decode([String].self, forKey: .items))
-            case "ol": self = .ol(items: try c.decode([String].self, forKey: .items))
+            case "ul": self = .ul(items: try c.decode([ListItem].self, forKey: .items))
+            case "ol": self = .ol(start: try c.decode(Int.self, forKey: .start), items: try c.decode([ListItem].self, forKey: .items))
             case "code": self = .code(lang: try c.decode(String.self, forKey: .lang), text: try c.decode(String.self, forKey: .text))
             case "quote": self = .quote(text: try c.decode(String.self, forKey: .text))
             case "table":
@@ -49,6 +77,8 @@ public enum Markdown {
                     rows: try c.decode([[String]].self, forKey: .rows)
                 )
             case "hr": self = .hr
+            case "img":
+                self = .img(Media(alt: try c.decode(String.self, forKey: .alt), id: try c.decode(String.self, forKey: .id), video: try c.decode(Bool.self, forKey: .video)))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown block \(t)")
             }
         }
@@ -66,8 +96,9 @@ public enum Markdown {
             case let .ul(items):
                 try c.encode("ul", forKey: .t)
                 try c.encode(items, forKey: .items)
-            case let .ol(items):
+            case let .ol(start, items):
                 try c.encode("ol", forKey: .t)
+                try c.encode(start, forKey: .start)
                 try c.encode(items, forKey: .items)
             case let .code(lang, text):
                 try c.encode("code", forKey: .t)
@@ -83,6 +114,11 @@ public enum Markdown {
                 try c.encode(rows, forKey: .rows)
             case .hr:
                 try c.encode("hr", forKey: .t)
+            case let .img(m):
+                try c.encode("img", forKey: .t)
+                try c.encode(m.alt, forKey: .alt)
+                try c.encode(m.id, forKey: .id)
+                try c.encode(m.video, forKey: .video)
             }
         }
     }
@@ -96,8 +132,9 @@ public enum Markdown {
         case em(String)
         case link(text: String, url: String)
         case ticket(key: String, text: String? = nil)
+        case img(Media)
 
-        private enum CodingKeys: String, CodingKey { case t, text, url, key }
+        private enum CodingKeys: String, CodingKey { case t, text, url, key, alt, id, video }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -109,6 +146,8 @@ public enum Markdown {
             case "em": self = .em(try c.decode(String.self, forKey: .text))
             case "link": self = .link(text: try c.decode(String.self, forKey: .text), url: try c.decode(String.self, forKey: .url))
             case "ticket": self = .ticket(key: try c.decode(String.self, forKey: .key), text: try c.decodeIfPresent(String.self, forKey: .text))
+            case "img":
+                self = .img(Media(alt: try c.decode(String.self, forKey: .alt), id: try c.decode(String.self, forKey: .id), video: try c.decode(Bool.self, forKey: .video)))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown inline token \(t)")
             }
         }
@@ -136,6 +175,11 @@ public enum Markdown {
                 try c.encode("ticket", forKey: .t)
                 try c.encode(key, forKey: .key)
                 try c.encodeIfPresent(text, forKey: .text)
+            case let .img(m):
+                try c.encode("img", forKey: .t)
+                try c.encode(m.alt, forKey: .alt)
+                try c.encode(m.id, forKey: .id)
+                try c.encode(m.video, forKey: .video)
             }
         }
     }
@@ -197,22 +241,16 @@ public enum Markdown {
                 blocks.append(.hr)
                 continue
             }
-            if let li = Pattern.listItem.exec(line) {
+            if let img = Pattern.imageLine.exec(line), case let .img(media) = image(alt: img[1]!, src: img[2]!) {
                 flush()
-                let ordered = hasDigit(li[1]!)
-                var items = [li[2]!]
-                while i + 1 < lines.count {
-                    if let next = Pattern.listItem.exec(lines[i + 1]), hasDigit(next[1]!) == ordered {
-                        items.append(next[2]!)
-                        i += 1
-                    } else if Pattern.continuation.test(lines[i + 1]) {
-                        i += 1
-                        items[items.count - 1] += " " + JSCompat.trim(lines[i])
-                    } else {
-                        break
-                    }
-                }
-                blocks.append(ordered ? .ol(items: items) : .ul(items: items))
+                blocks.append(.img(media))
+                continue
+            }
+            if Pattern.listItem.test(line) {
+                flush()
+                let list = parseList(lines, start: i, outer: 0)
+                blocks.append(list.block)
+                i = list.end
                 continue
             }
             if line.unicodeScalars.first == ">" {
@@ -231,7 +269,65 @@ public enum Markdown {
         return blocks
     }
 
+    /// Columns of a line's leading whitespace: a tab counts as 4, any other `\s` character as 1.
+    private static func indentOf(_ line: String) -> Int {
+        var n = 0
+        for u in line.unicodeScalars {
+            guard JSCompat.isWhitespace(u) else { break }
+            n += u == "\t" ? 4 : 1
+        }
+        return n
+    }
+
+    /// The list whose first item is `lines[start]`, and the index of its last line. An item indented 2+
+    /// columns past this list's marker starts a list nested under the item before it; one indented
+    /// less than `outer` (the parent's marker + 2, 0 at the top) belongs to the parent. A sibling of the
+    /// other kind (bullet vs number) ends the list. A non-item line indented 2+ past the marker (2+ at
+    /// the top) continues the last item's text; anything else, a blank line included, ends the list.
+    private static func parseList(_ lines: [String], start: Int, outer: Int) -> (block: Block, end: Int) {
+        let first = Pattern.listItem.exec(lines[start])!
+        let indent = indentOf(lines[start])
+        let ordered = hasDigit(first[1]!)
+        var items = [ListItem(text: first[2]!)]
+        var i = start
+        while i + 1 < lines.count {
+            let line = lines[i + 1]
+            let at = indentOf(line)
+            let li = Pattern.listItem.exec(line)
+            if li != nil, at >= indent + 2 {
+                let sub = parseList(lines, start: i + 1, outer: indent + 2)
+                items[items.count - 1].children.append(sub.block)
+                i = sub.end
+            } else if let li {
+                if at < outer || hasDigit(li[1]!) != ordered { break }
+                items.append(ListItem(text: li[2]!))
+                i += 1
+            } else if !JSCompat.trim(line).isEmpty, at >= (outer > 0 ? indent + 2 : 2) {
+                items[items.count - 1].text += " " + JSCompat.trim(line)
+                i += 1
+            } else {
+                break
+            }
+        }
+        guard ordered else { return (.ul(items: items), i) }
+        // Past 9 digits the number isn't exact everywhere; start those at 1.
+        let digits = String(first[1]!.unicodeScalars.dropLast())
+        return (.ol(start: digits.unicodeScalars.count <= 9 ? Int(digits)! : 1, items: items), i)
+    }
+
     // MARK: Inline
+
+    /// What `![alt](src)` may show. `attachment:<id>` is an image (or video) the service serves; http(s)
+    /// and file sources become a link labelled with the alt text (remote images are never fetched, so
+    /// agent text can't load tracking pixels), and anything else keeps only the alt text.
+    private static func image(alt: String, src: String) -> InlineToken {
+        if let a = Pattern.attachmentSrc.exec(src) {
+            let id = a[1]!
+            return .img(Media(alt: alt, id: id, video: Pattern.videoName.test(id) || Pattern.videoName.test(alt)))
+        }
+        if Pattern.httpScheme.test(src) || FileLinks.parseFileLink(src) != nil { return .link(text: alt.isEmpty ? src : alt, url: src) }
+        return .text(alt)
+    }
 
     /// Inline markup of one line. [label](x) is a link when x is http(s) or a file link (`harness://file/…`,
     /// or a path with no scheme; see parseFileLink); other targets (javascript:, data:, anchors) keep only
@@ -241,6 +337,7 @@ public enum Markdown {
     /// [label](KEY), whose target is a whole ticket key (`[RFAWC-726](RFACOM-2)`: a remote ID labelling
     /// the local ticket), is a "ticket" token for KEY carrying the label as `text`; renderers show the
     /// label, linked to KEY when it's linkable and plain otherwise. Bare keys have no `text`.
+    /// ![alt](src) is an "img" token for an attachment, else a link or text (see `image`).
     public static func inlineTokens(_ text: String) -> [InlineToken] {
         let ns = text as NSString
         var out: [InlineToken] = []
@@ -269,6 +366,9 @@ public enum Markdown {
                 out.append(.link(text: s, url: s))
             } else if participated(m, 6) {
                 out.append(.ticket(key: s))
+            } else if participated(m, 7) {
+                let mm = Pattern.imageParts.exec(s)!
+                out.append(image(alt: mm[1]!, src: mm[2]!))
             }
             last = idx + len
         }
@@ -287,6 +387,7 @@ public enum Markdown {
         }
         s = Pattern.codeSpan.replace(s, with: "$1")
         s = Pattern.strongSpan.replace(s, with: "$1")
+        s = Pattern.imageSpan.replace(s, with: "$1")
         s = Pattern.linkSpan.replace(s, with: "$1")
         s = Pattern.headingMarks.replace(s, with: "")
         s = Pattern.bulletMarks.replace(s, with: "• ")
@@ -411,8 +512,8 @@ public enum Markdown {
     private struct Pattern: @unchecked Sendable {
         let regex: NSRegularExpression
 
-        init(_ pattern: String) {
-            regex = try! NSRegularExpression(pattern: pattern)
+        init(_ pattern: String, options: NSRegularExpression.Options = []) {
+            regex = try! NSRegularExpression(pattern: pattern, options: options)
         }
 
         /// `re.exec(s)` → the groups (index 0 is the whole match), nil for groups that didn't take part.
@@ -456,7 +557,15 @@ public enum Markdown {
         static let continuation = Pattern("^\(s){2,}\(notS)")
         /// `/^>\s?/` (no g flag, but it's anchored, so it can match only once)
         static let quotePrefix = Pattern("^>\(s)?")
-        /// INLINE: `` /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)/g ``
+        /// `/^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/`
+        static let imageLine = Pattern("^\(s)*!\\[([^\\]]*)\\]\\(([^)\(ws)]+)\\)\(s)*\\z")
+        /// `/^!\[([^\]]*)\]\(([^)\s]+)\)$/`
+        static let imageParts = Pattern("^!\\[([^\\]]*)\\]\\(([^)\(ws)]+)\\)\\z")
+        /// `/^attachment:([A-Za-z0-9._-]+)$/`
+        static let attachmentSrc = Pattern("^attachment:([A-Za-z0-9._-]+)\\z")
+        /// `/\.(mp4|webm|mov)$/i`
+        static let videoName = Pattern("\\.(mp4|webm|mov)\\z", options: .caseInsensitive)
+        /// INLINE: `` /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+\))/g ``
         static let inline = Pattern(
             "(`[^`]+`)"
                 + "|(\\*\\*[^*]+\\*\\*)"
@@ -464,6 +573,7 @@ public enum Markdown {
                 + "|(\\[[^\\]]+\\]\\([^)\(ws)]+\\))"
                 + "|(https?://[^\(ws))<>]+)"
                 + "|((?<![A-Za-z0-9_])[A-Z][A-Z0-9]*-[0-9]+(?![A-Za-z0-9_]))"
+                + "|(!\\[[^\\]]*\\]\\([^)\(ws)]+\\))"
         )
         /// `/^\[([^\]]+)\]\(([^)\s]+)\)$/`
         static let linkParts = Pattern("^\\[([^\\]]+)\\]\\(([^)\(ws)]+)\\)\\z")
@@ -479,6 +589,8 @@ public enum Markdown {
         static let codeSpan = Pattern("`([^`]+)`")
         /// `/\*\*([^*]+)\*\*/g`
         static let strongSpan = Pattern("\\*\\*([^*]+)\\*\\*")
+        /// `/!\[([^\]]*)\]\([^)]+\)/g`
+        static let imageSpan = Pattern("!\\[([^\\]]*)\\]\\([^)]+\\)")
         /// `/\[([^\]]+)\]\([^)]+\)/g`
         static let linkSpan = Pattern("\\[([^\\]]+)\\]\\([^)]+\\)")
         /// `/^#+\s+/gm`
