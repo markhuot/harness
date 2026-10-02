@@ -20,6 +20,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The ticket's Agents tab is now called Agents & tasks. It lists sub-agents and background tasks
   in one list, with the most recently updated first.
+- On the Mac, a ticket's tabs scroll sideways when they don't fit instead of wrapping onto a
+  second line.
 
 - On iPhone, Search sits on its own in the tab bar. One tap turns it into the search field right
   there at the bottom of the screen, ready to type, instead of opening a screen with the field at
