@@ -131,9 +131,6 @@ private struct ProjectSettingsForm: View {
                 toggleRow("Require human review", hint: "When off, the agent reviewer alone can clear a ticket for completion.", on: project.requireHumanReview) {
                     save(UpdateProjectBody(requireHumanReview: $0))
                 }
-                toggleRow("Complete when approved", hint: "Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done.", on: project.autoComplete) {
-                    save(UpdateProjectBody(autoComplete: $0))
-                }
                 if isGit {
                     let info = Completion.ProjectInfo(project)
                     SettingsRow(label: "When approved", hint: "What the Approve button does by default: merge the branch, open a pull request, or follow instructions you give. Each approval can pick another.") {

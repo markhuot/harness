@@ -61,7 +61,6 @@ export const project = (id: string, key: string, over: Partial<Project> = {}): P
   defaultModels: {},
   useWorktrees: false,
   requireHumanReview: true,
-  autoComplete: true,
   permissionMode: null,
   color: null,
   createdAt: 1,

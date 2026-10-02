@@ -280,50 +280,54 @@ try {
   const autoDone = await until("auto-completed", async () => (await api<{ ticket: { status: string } }>("GET", "/tickets/NYTIMES-4")).ticket.status === "done", 10000);
   check("approving a ready ticket runs the completion step and moves it to done", autoDone);
 
-  // 4b. With Complete when approved off, approval leaves the ticket ready and Complete runs it.
+  // 4b. Approving before the agent review is in: the ticket waits in review, and the agent's
+  // approval then completes it with no Complete step.
   const nyProject = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "NYTIMES")!;
-  await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: false });
-  const manual = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Manual completion" });
-  await until("manual ticket agent-approved", async () => {
-    const t = (await api<{ ticket: { status: string; agentReview: string; busy: boolean } }>("GET", `/tickets/${manual.key}`)).ticket;
-    return t.status === "review" && t.agentReview === "approved" && !t.busy;
+  const early = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Approve before the agent review" });
+  type EarlyT = { status: string; agentReview: string; humanReview: string };
+  const earlyT = async () => (await api<{ ticket: EarlyT }>("GET", `/tickets/${early.key}`)).ticket;
+  await until("early ticket in review, agent review running", async () => {
+    const t = await earlyT();
+    return t.status === "review" && t.agentReview === "pending";
   }, 15000);
-  await js(`location.hash = "#/board/all/ticket/${manual.key}"`);
+  await js(`location.hash = "#/board/all/ticket/${early.key}"`);
   await until("approve button", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Approve"))`));
   await clickText(".actions button", "Approve");
-  const completeEnabled = await until("Complete enabled", () =>
-    js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Complete") && !b.disabled)`),
-  );
-  check("with auto-complete off, Complete enables once both reviews approve", completeEnabled);
-  check("with auto-complete off, the ticket waits in review", (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "review");
-  // The two approved review marks say it's ready; the card has no separate Ready badge.
-  const readyCard = await until("ready card marks", () =>
-    js<{ marks: number; ready: boolean } | null>(`(() => { const card = document.querySelector('.card[data-key="${manual.key}"]'); if (!card) return null;
-      const marks = card.querySelectorAll(".card-reviews .badge-green").length; return marks === 2 ? { marks, ready: card.querySelectorAll(".badge-green").length > marks } : null; })()`),
-  );
-  check("a ready card shows both approved marks and no Ready badge", readyCard.marks === 2 && !readyCard.ready, JSON.stringify(readyCard));
-  const completeItems = await (async () => {
-    await js(`document.querySelector("[data-testid=complete-menu]").click()`);
-    const items = await until("complete menu", async () => {
-      const t = await js<string[]>(`[...document.querySelectorAll(".land-menu-complete button")].map(b => b.textContent.trim())`);
-      return t.length > 0 && t;
-    });
-    await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    await until("complete menu closed", async () => !(await exists(".land-menu-complete")));
-    return items;
-  })();
-  check(
-    "the Complete button offers the same choices as Approve",
-    completeItems.join("|") === "Complete and merge|Complete and open PR|Complete and clean up|Complete and…|Complete and take no action",
-    completeItems.join("|"),
-  );
-  await clickText(".actions button", "Complete");
-  await until("complete modal", () => exists(".modal"));
-  check("the Complete sheet has no Mark done switch (the menu's take no action replaces it)", !(await exists(".modal .switch")));
-  await clickText(".modal-foot button", "Complete");
-  const manualDone = await until("manual done", async () => (await api<{ ticket: { status: string } }>("GET", `/tickets/${manual.key}`)).ticket.status === "done", 10000);
-  check("Complete runs the completion step and moves it to done", manualDone);
-  await api("PATCH", `/projects/${nyProject.id}`, { autoComplete: true });
+  const waiting = await until("human approved first", async () => {
+    const t = await earlyT();
+    return t.humanReview === "approved" && t;
+  });
+  check("approving before the agent review leaves the ticket in review", waiting.status === "review" && waiting.agentReview === "pending", JSON.stringify(waiting));
+  // Approved and waiting on the agent: nothing to press (this is where a Complete button used to sit).
+  const actionsWhileWaiting = await until("approved actions", async () => {
+    const labels = await js<string[]>(`[...document.querySelectorAll(".actions button")].map(b => b.textContent.trim())`);
+    return !labels.some((l) => l.startsWith("Approve")) && labels;
+  });
+  check("an approved ticket shows no Approve or Complete while the agent review runs", !!actionsWhileWaiting && !actionsWhileWaiting.some((l) => l.startsWith("Complete")), String(actionsWhileWaiting));
+  const earlyDone = await until("early done", async () => (await earlyT()).status === "done", 10000);
+  check("the agent's approval then completes the ticket by itself", earlyDone);
+
+  // 4b'. Cancelling the completion puts the approval back: Approve shows again and lands it.
+  const stopped = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, prompt: "Cancel my completion" });
+  const stoppedT = async () => (await api<{ ticket: EarlyT & { busy: boolean } }>("GET", `/tickets/${stopped.key}`)).ticket;
+  await until("stopped ticket agent-approved", async () => {
+    const t = await stoppedT();
+    return t.status === "review" && t.agentReview === "approved" && !t.busy;
+  }, 15000);
+  await js(`location.hash = "#/board/all/ticket/${stopped.key}"`);
+  await until("approve split", () => exists("[data-testid=approve-primary]"));
+  await js(`document.querySelector("[data-testid=approve-primary]").click()`);
+  await until("completion running", async () => (await stoppedT()).busy);
+  await until("cancel run button", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Cancel run"))`));
+  await clickText(".actions button", "Cancel run");
+  const approvalBack = await until("approval back", async () => {
+    const t = await stoppedT();
+    return t.humanReview === "pending" && t;
+  });
+  check("cancelling the completion leaves the ticket in review with the approval open", approvalBack.status === "review" && approvalBack.agentReview === "approved", JSON.stringify(approvalBack));
+  check("Approve shows again after a cancelled completion", !!(await until("approve again", () => exists("[data-testid=approve-primary]"))));
+  await js(`document.querySelector("[data-testid=approve-primary]").click()`);
+  check("approving again lands it", await until("stopped done", async () => (await stoppedT()).status === "done", 10000));
 
   // 4c. The Approve split button: its menu follows the checkout (a gh remote: merge / PR / …; plain
   // git: no PR; no git: a plain Approve), "Approve and…" asks for instructions, "Approve and take
@@ -869,13 +873,8 @@ try {
   await until("project mode cleared", async () => (await api<{ id: string; permissionMode: string | null }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.permissionMode === null);
   const unnamed = await js<number>(`[...document.querySelectorAll("input[type=checkbox]")].filter(i => i.getAttribute("role") !== "switch" || !(i.getAttribute("aria-label") || i.closest("label")?.textContent.trim())).length`);
   check("every project settings switch is a named role=switch", unnamed === 0, `${unnamed} unnamed`);
-  const autoCompleteSwitch = `document.querySelector('#settings-project-agents input[role=switch][aria-label="Complete when approved"]')`;
-  check("project settings show Complete when approved, on by default", await js<boolean>(`${autoCompleteSwitch}?.checked === true`));
-  await js(`${autoCompleteSwitch}.click()`);
-  const autoOff = await until("autoComplete saved", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === false);
-  check("toggling Complete when approved PATCHes the project", autoOff && (await js<boolean>(`${autoCompleteSwitch}?.checked === false`)));
-  await js(`${autoCompleteSwitch}.click()`);
-  await until("autoComplete restored", async () => (await api<{ id: string; autoComplete: boolean }[]>("GET", "/projects")).find((p) => p.id === hh.id)?.autoComplete === true);
+  const switches = await js<string[]>(`[...document.querySelectorAll("#settings-project-agents input[role=switch]")].map(i => i.getAttribute("aria-label"))`);
+  check("project settings have no Complete when approved switch", switches.length > 0 && !switches.includes("Complete when approved"), switches.join(","));
   await js(`location.hash = "#/board/${hh.id}"`);
   const boardKeys = await until("board shows renamed cards", async () => {
     const k = await js<string[]>(`[...document.querySelectorAll(".card-key")].map(e => e.textContent)`);
@@ -993,14 +992,14 @@ try {
     check("approval child shows the tool it waits on", notes["HARNESS-8"] === "Needs approval: Bash|waiting onHARNESS-2", notes["HARNESS-8"]);
     check("blocked child shows its question and done dep", notes["HARNESS-7"]!.startsWith("Which Apple Developer team") && notes["HARNESS-7"]!.endsWith("|afterHARNESS-5"), notes["HARNESS-7"]);
 
-    // A child's conductor approves and lands it: Approve (and Complete) read as usual but are off,
-    // the menu too, and the palette doesn't offer them.
-    const landState = (mode: string) =>
+    // A child's conductor approves and lands it: Approve reads as usual but is off, the menu too,
+    // and the palette doesn't offer it.
+    const landState = () =>
       js<{ label: string; disabled: boolean; menu: boolean; title: string }>(
-        `(() => { const p = document.querySelector("[data-testid=${mode}-primary]"); return p && { label: p.textContent.trim(), disabled: p.disabled, menu: document.querySelector("[data-testid=${mode}-menu]").disabled, title: p.title }; })()`,
+        `(() => { const p = document.querySelector("[data-testid=approve-primary]"); return p && { label: p.textContent.trim(), disabled: p.disabled, menu: document.querySelector("[data-testid=approve-menu]").disabled, title: p.title }; })()`,
       );
     await js(`location.hash = "#/board/all/ticket/HARNESS-10"`);
-    const managedApprove = await until("conductor child approve", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-10"`)) && landState("approve"));
+    const managedApprove = await until("conductor child approve", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-10"`)) && landState());
     check(
       "a conductor child's Approve reads Approve and merge, disabled with its menu, saying the conductor manages it",
       !!managedApprove && managedApprove.label === "Approve and merge" && managedApprove.disabled && managedApprove.menu && managedApprove.title === "Conductor managed: HARNESS-1 approves and lands this ticket",
@@ -1008,13 +1007,12 @@ try {
     );
     await screenshot("/tmp/harness-160-conductor-child-approve.png");
     await js(`location.hash = "#/board/all/ticket/HARNESS-2"`);
-    const managedComplete = await until("conductor child complete", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-2"`)) && landState("complete"));
+    const managedReady = await until("ready conductor child", async () => (await js<boolean>(`document.querySelector(".detail-key")?.textContent === "HARNESS-2"`)) && landState());
     check(
-      "a ready conductor child's Complete is disabled with its menu, saying the conductor manages it",
-      !!managedComplete && managedComplete.disabled && managedComplete.menu && managedComplete.title.startsWith("Conductor managed: HARNESS-1"),
-      JSON.stringify(managedComplete),
-    );
-    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
+      "a ready conductor child keeps its Approve, disabled with its menu, saying the conductor manages it",
+      !!managedReady && managedReady.disabled && managedReady.menu && managedReady.title.startsWith("Conductor managed: HARNESS-1"),
+      JSON.stringify(managedReady),
+    );    await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
     await until("back on the conductor's tickets", async () => (await rowKeys()).length >= 7);
 
     // Live: a new child (ticket.upserted) appears, and a status change regroups an existing one.

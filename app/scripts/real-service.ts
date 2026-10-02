@@ -82,7 +82,7 @@ try {
   check("tool calls render in the transcript", toolRows.some((n) => /submit_for_review|post_summary/.test(n)), toolRows.join(","));
   await shot("2-transcript");
 
-  // --- 4. Summaries tab, then Approve → the complete run starts by itself (autoComplete) → Done.
+  // --- 4. Summaries tab, then Approve → the complete run starts by itself → Done.
   await go(`#/board/${project.id}/ticket/${created.key}`);
   await until("summaries", () => exists(".summary"));
   const summaryText = await js<string>(`document.querySelector(".summary-list")?.textContent ?? ""`);

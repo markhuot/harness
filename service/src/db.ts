@@ -442,7 +442,19 @@ export const MIGRATIONS: string[] = [
   END;
 
   `,
-  // 21: background tasks (DESIGN.md "Background tasks"). A subagents row can be a Bash command or
+  // 21: projects.auto_complete goes. Approving always completes now: the approval option picks
+  //     what happens (an action, or "Approve and take no action"), so the per-project switch that
+  //     could hold an approved ticket back from its complete run is gone. So is the Complete
+  //     button, so a ticket left approved and waiting (by that switch, or by a conductor that went
+  //     done without completing it) goes back to waiting on its approval: approving it again lands
+  //     it. Children of a conductor still running wait on its complete_ticket and keep theirs.
+  `
+  ALTER TABLE projects DROP COLUMN auto_complete;
+  UPDATE tickets SET human_review = 'pending'
+    WHERE status = 'review' AND human_review = 'approved' AND agent_review IN ('approved', 'skipped')
+      AND (parent_id IS NULL OR parent_id IN (SELECT id FROM tickets WHERE status = 'done'));
+  `,
+  // 22: background tasks (DESIGN.md "Background tasks"). A subagents row can be a Bash command or
   //     a Monitor the agent left running instead of an agent: kind ('agent', 'bash', 'monitor'),
   //     its command, and the file the CLI writes its output to (output_path, service-side only).
   //     output keeps the tail of that file once the task ends (the CLI's files live in /tmp),

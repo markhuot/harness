@@ -299,7 +299,7 @@ describe("dummy driver", () => {
   // Real triage prompts, so the dummy's parsing follows the prompt contract (prompts.ts).
   const web: Project = {
     id: "p1", key: "WEB", name: "Website", path: "/code/web", defaultDriver: null, defaultModels: {}, requireHumanReview: true,
-    autoComplete: true, permissionMode: null, createdAt: 0, updatedAt: 0,
+    permissionMode: null, createdAt: 0, updatedAt: 0,
   } as Project;
   const ROUTE = "Dispatch login bugs. [dummy:project WEB]";
   const triageFor = (text: string, prompt = ROUTE) =>

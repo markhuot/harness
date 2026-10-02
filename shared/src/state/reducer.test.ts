@@ -22,7 +22,7 @@ const project = (id: string, key: string): Project => ({
   defaultDriver: null,
   defaultModels: {},
   useWorktrees: false,
-  requireHumanReview: true, autoComplete: true, permissionMode: null, color: null,
+  requireHumanReview: true, permissionMode: null, color: null,
   createdAt: 1,
   updatedAt: 1,
 });

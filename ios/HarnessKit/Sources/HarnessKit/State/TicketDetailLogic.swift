@@ -43,15 +43,6 @@ public enum TicketDetailLogic {
 
     // MARK: Review actions
 
-    /// The Complete button's accessibility label, which says why it's disabled: a managing conductor
-    /// (`managedReason`) first, then readiness, then a run in progress.
-    public static func completeButtonLabel(ready: Bool, busy: Bool, managedReason: String? = nil) -> String {
-        if let managedReason { return "Complete (\(managedReason))" }
-        if !ready { return "Complete (needs both agent and human approval)" }
-        if busy { return "Complete (an agent run is in progress)" }
-        return "Complete"
-    }
-
     /// The agent review button: "Run agent review" after it was skipped, else "Re-run agent review".
     public static func agentReviewButton(_ state: ReviewState) -> String {
         state == .skipped ? "Run agent review" : "Re-run agent review"
@@ -61,42 +52,6 @@ public enum TicketDetailLogic {
     /// conductor-managed ticket.
     public static func approveButtonLabel(_ title: String, managedReason: String?) -> String {
         managedReason.map { "\(title) (\($0))" } ?? title
-    }
-
-    /// The toast after a Complete menu row: none marks the ticket done, an action queues a run.
-    public static func completeMenuToast(_ choice: Approve.Choice, label: String) -> String {
-        choice == .none ? "\(label) marked done" : "Completion run queued"
-    }
-
-    /// The Complete sheet's "When approved" choice: both reviews passed and nothing completes it on
-    /// its own (no auto-complete), with more than one action. A child on its parent's branch only
-    /// merges, so it never chooses.
-    public static func completeSheetChooses(ready: Bool, autoComplete: Bool, opts: Completion.Options) -> Bool {
-        ready && !autoComplete && opts.actions.count > 1
-    }
-
-    /// The Complete sheet's first pick: the menu's action when the ticket offers it, else the default.
-    public static func completeSheetInitial(_ requested: CompletionAction?, opts: Completion.Options) -> CompletionAction {
-        if let requested, opts.actions.contains(requested) { return requested }
-        return opts.defaultAction
-    }
-
-    /// "The agent finalizes the work: …, cleans up, and marks the ticket done."
-    public static func completeSheetText(_ action: CompletionAction, opts: Completion.Options) -> String {
-        let what: String
-        switch action {
-        case .merge: what = "merges the worktree branch"
-        case .pr: what = "pushes the branch and opens a pull request"
-        case .cleanup: what = "removes the worktree and the harness branch, once nothing on them would be lost"
-        default: what = "follows your instructions"
-        }
-        return "The agent finalizes the work: \(what), cleans up, and marks the ticket done."
-    }
-
-    /// The Complete sheet's Complete button: a custom action that the sheet (or the menu) chose needs
-    /// instructions.
-    public static func completeSheetCanSubmit(action: CompletionAction, explicit: Bool, instructions: String) -> Bool {
-        !(action == .custom && explicit && JSCompat.trim(instructions).isEmpty)
     }
 
     /// The "Approve and…" sheet's starting text: the instructions of an earlier custom approval.

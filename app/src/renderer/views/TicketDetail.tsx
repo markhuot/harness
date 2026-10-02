@@ -10,7 +10,6 @@ import {
   dependencyStates,
   effectiveTab,
   hasCustomDriver,
-  isReady,
   moveSwitchLabel,
   nextTab,
   openingTab,
@@ -35,7 +34,7 @@ import { Attachments } from "../components/Attachments";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, relativeTime, ReviewMark, StatusDot, StatusPill, Switch, TicketKey, useNow } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
-import { landCommands, landMenu, pullRequestLabel, type LandChoice, type LandMode } from "../state/approveMenu";
+import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
 import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
@@ -345,7 +344,6 @@ function DetailHeader({
   const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
-  const ready = isReady(ticket);
   const k = ticket.key;
   // What confirms and toasts call it: "MH-62 · MH-124" for a linked ticket (its remote ID first).
   const label = keyLabel(ticket);
@@ -358,24 +356,22 @@ function DetailHeader({
   // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
   // ⌘K palette (these are its "Actions" commands) run the same functions.
   const start = () => act(() => client.startTicket(k));
-  // How the approved work lands: the Approve split button while the human review is open, the
-  // Complete one once both reviews passed (state/approveMenu.ts).
-  const landMode: LandMode = ticket.humanReview === "approved" ? "complete" : "approve";
+  // How the approved work lands: the Approve split button (state/approveMenu.ts). Approving lands
+  // it once both reviews pass; there's no separate Complete step.
   // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
   const base = resolveBaseBranch(ticket, project, state.settings, parent).branch;
-  const land = landMenu(landMode, ticket, project, parent, base);
-  // A child's conductor acts as its human reviewer and lands it, so its Approve and Complete are off.
+  const land = landMenu(ticket, project, parent, base);
+  // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
   const conductor = managingConductor(ticket, parent);
   const managedReason = conductor && conductorManagedReason(conductor);
   const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
-  const completeWith = (action: CompletionAction, instructions?: string) => act(() => client.completeTicket(k, { action, ...(instructions ? { instructions } : {}) }), "Completion run queued");
   const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} approved, no action taken`);
-  const choose = (mode: LandMode) => (c: LandChoice) => {
+  const choose = (c: LandChoice) => {
     if (c.kind === "none") return void approveNoAction();
-    if (c.kind === "sheet") return setSheet({ mode, action: c.action, required: c.required });
-    void (mode === "approve" ? approveWith(c.action) : completeWith(c.action));
+    if (c.kind === "sheet") return setSheet({ action: c.action, required: c.required });
+    void approveWith(c.action);
   };
-  const approve = () => choose("approve")(landMenu("approve", ticket, project, parent, base).primary);
+  const approve = () => choose(land.primary);
   const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
   const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
   const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
@@ -383,12 +379,11 @@ function DetailHeader({
   const external = ticket.externalRef?.url;
   const reviewing = ticket.status === "review";
   const canApprove = reviewing && ticket.humanReview !== "approved";
-  const canComplete = reviewing && ready && !ticket.busy;
-  // The split button that's showing (Approve, or Complete once approved), as the palette names it.
-  const landing = !conductor && (landMode === "approve" ? canApprove : canComplete) && landCommands(land, landMode);
+  // The Approve split button as the palette names it.
+  const landing = !conductor && canApprove && landCommands(land);
   const landChoice = (action: CompletionAction) => {
     const c = landing && landing.others[action];
-    return c && { label: c.label, run: () => choose(landMode)(c) };
+    return c && { label: c.label, run: () => choose(c) };
   };
   useCommands(owner, {
     "ticket.start": ticket.status === "planning" && start,
@@ -399,7 +394,6 @@ function DetailHeader({
     "ticket.land.custom": landChoice("custom"),
     "ticket.requestChanges": canApprove && (() => setChanges(true)),
     "ticket.approveNoAction": reviewing && !conductor && { label: land.noAction.label, run: approveNoAction },
-    "ticket.complete": canComplete && landing && { label: landing.primary, run: () => choose("complete")(land.primary) },
     "ticket.rerunReview": reviewing && !ticket.busy && { label: ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review", run: rerunReview },
     "ticket.cancelRun": ticket.busy && cancelRun,
     "ticket.markDone": ticket.status !== "done" && markDone,
@@ -507,28 +501,17 @@ function DetailHeader({
               <Icon name="play" /> Start work
             </button>
           )}
+          {/* A conductor's child keeps its (turned off) Approve once approved: the conductor lands it. */}
+          {ticket.status === "review" && (ticket.humanReview !== "approved" || conductor) && (
+            <LandButton menu={land} locked={!!conductor} title={managedReason || undefined} onChoose={choose} />
+          )}
           {ticket.status === "review" && ticket.humanReview !== "approved" && (
-            <>
-              <LandButton mode="approve" icon="check" menu={land} locked={!!conductor} title={managedReason || undefined} onChoose={choose("approve")} />
-              <button className="btn" onClick={() => setChanges(true)}>
-                <Icon name="edit" /> Request changes
-              </button>
-            </>
+            <button className="btn" onClick={() => setChanges(true)}>
+              <Icon name="edit" /> Request changes
+            </button>
           )}
           {ticket.status === "review" && (
             <>
-              {ticket.humanReview === "approved" && (
-                <LandButton
-                  mode="complete"
-                  icon="checkCircle"
-                  menu={land}
-                  primaryClass={ready ? "btn-primary" : ""}
-                  disabled={!ready || ticket.busy}
-                  locked={!!conductor}
-                  title={managedReason || (!ready ? "Needs both agent and human approval" : ticket.busy ? "An agent run is in progress" : "Finalize: land the work, clean up, mark done")}
-                  onChoose={choose("complete")}
-                />
-              )}
               <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
                 <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
               </button>
@@ -551,10 +534,10 @@ function DetailHeader({
       {reopening && <RequestChangesModal reopen ticket={ticket} onClose={() => setReopening(false)} />}
       {sheet && (
         <LandSheet
-          key={`${sheet.mode}:${sheet.action}`}
+          key={sheet.action}
           ticket={ticket}
           sheet={sheet}
-          onSubmit={(instructions) => (sheet.mode === "approve" ? approveWith(sheet.action, instructions) : completeWith(sheet.action, instructions))}
+          onSubmit={(instructions) => approveWith(sheet.action, instructions)}
           onClose={() => setSheet(null)}
         />
       )}

@@ -119,6 +119,38 @@ test("reconcileRuns leaves a live run and the run queued behind it alone", async
   expect(work.map((r) => r.status)).toEqual<RunStatus[]>(["succeeded", "succeeded"]);
 });
 
+test("a complete run cut off by a restart puts the approval back, and approving again lands the ticket", async () => {
+  const h = setup();
+  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+  await h.orch.idle();
+  // The previous process approved it and started the complete run, then died.
+  h.store.tickets.update(t.id, { humanReview: "approved" });
+  const orphan = h.store.runs.create({ sessionId: t.sessionId, kind: "complete", driver: "fake", prompt: "p" });
+  h.store.runs.markRunning(orphan.id);
+
+  expect(h.orch.recoverStaleRuns()).toBe(1);
+  expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+  expect(statuses(h, t.sessionId)).toContain("Completion interrupted: approve again to land it");
+
+  h.orch.humanReview(t.key, { decision: "approve" });
+  await h.orch.idle();
+  expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+});
+
+test("an interrupted run of another kind leaves the human's approval alone", async () => {
+  const h = setup();
+  const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+  while (h.driver.holding === 0) await Bun.sleep(1);
+  h.orch.humanReview(t.key, { decision: "approve" });
+  const orphan = h.store.runs.create({ sessionId: t.sessionId, kind: "chat", driver: "fake", prompt: "p" });
+  h.store.runs.markRunning(orphan.id);
+  expect(h.orch.reconcileRuns()).toBe(1);
+  expect(h.orch.ticketDetail(t.key).ticket.humanReview).toBe("approved");
+  h.driver.release();
+  await h.orch.idle();
+  expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+});
+
 test("start() reconciles orphaned runs on a timer until stop()", async () => {
   const h = setup({ reconcileIntervalMs: 10 });
   const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "do it /nosubmit" });

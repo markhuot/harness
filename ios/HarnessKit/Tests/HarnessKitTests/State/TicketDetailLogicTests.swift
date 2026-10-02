@@ -39,53 +39,11 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.pullRequestShort("ftp://h/pull/1") == "ftp://h/pull/1")
     }
 
-    @Test("the Complete button says why it's disabled, readiness first")
-    func completeLabel() {
-        #expect(TicketDetailLogic.completeButtonLabel(ready: false, busy: true) == "Complete (needs both agent and human approval)")
-        #expect(TicketDetailLogic.completeButtonLabel(ready: true, busy: true) == "Complete (an agent run is in progress)")
-        #expect(TicketDetailLogic.completeButtonLabel(ready: true, busy: false) == "Complete")
+    @Test("the Approve button says why it's disabled on a conductor-managed ticket")
+    func approveLabel() {
         let reason = Completion.conductorManagedReason(conductorKey: "WEB-1")
-        #expect(TicketDetailLogic.completeButtonLabel(ready: false, busy: true, managedReason: reason) == "Complete (Conductor managed: WEB-1 approves and lands this ticket)")
         #expect(TicketDetailLogic.approveButtonLabel("Approve and merge", managedReason: reason) == "Approve and merge (Conductor managed: WEB-1 approves and lands this ticket)")
         #expect(TicketDetailLogic.approveButtonLabel("Approve and merge", managedReason: nil) == "Approve and merge")
-    }
-
-    @Test("the Complete sheet offers a choice only when nothing else decides")
-    func chooses() {
-        let three = Completion.Options(actions: [.merge, .pr, .custom], defaultAction: .merge)
-        let one = Completion.Options(actions: [.custom], defaultAction: .custom)
-        let child = Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "harness/web-1")
-        #expect(TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: three))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: false, autoComplete: false, opts: three))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: true, opts: three))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: one))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: child))
-    }
-
-    @Test("the Complete sheet starts on the menu's action only when the ticket offers it")
-    func initialAction() {
-        let opts = Completion.Options(actions: [.merge, .custom], defaultAction: .merge)
-        #expect(TicketDetailLogic.completeSheetInitial(.custom, opts: opts) == .custom)
-        #expect(TicketDetailLogic.completeSheetInitial(.pr, opts: opts) == .merge)
-        #expect(TicketDetailLogic.completeSheetInitial(nil, opts: opts) == .merge)
-    }
-
-    @Test("the Complete sheet's text says what the chosen action does")
-    func completeText() {
-        let opts = Completion.Options(actions: [.merge, .pr, .custom], defaultAction: .merge)
-        #expect(TicketDetailLogic.completeSheetText(.pr, opts: opts) == "The agent finalizes the work: pushes the branch and opens a pull request, cleans up, and marks the ticket done.")
-        #expect(TicketDetailLogic.completeSheetText(.custom, opts: opts).contains("follows your instructions"))
-        #expect(TicketDetailLogic.completeSheetText(.cleanup, opts: opts).contains("removes the worktree and the harness branch"))
-        #expect(TicketDetailLogic.completeSheetText(.merge, opts: opts).contains("merges the worktree branch"))
-    }
-
-    @Test("a custom completion that was chosen needs instructions; whitespace isn't any")
-    func canSubmit() {
-        #expect(!TicketDetailLogic.completeSheetCanSubmit(action: .custom, explicit: true, instructions: " \u{00A0}\n"))
-        #expect(TicketDetailLogic.completeSheetCanSubmit(action: .custom, explicit: true, instructions: "tag it"))
-        // Not chosen here: the service keeps the approval's choice and its instructions.
-        #expect(TicketDetailLogic.completeSheetCanSubmit(action: .custom, explicit: false, instructions: ""))
-        #expect(TicketDetailLogic.completeSheetCanSubmit(action: .merge, explicit: true, instructions: ""))
     }
 
     @Test("Approve and… starts from an earlier custom approval's instructions only")
@@ -95,10 +53,8 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.approveCustomInitial(Self.ticket(.review, completionAction: .value(.custom))) == "")
     }
 
-    @Test("the Complete menu toast and the agent review button")
+    @Test("the agent review button")
     func menuText() {
-        #expect(TicketDetailLogic.completeMenuToast(.none, label: "GREET-1") == "GREET-1 marked done")
-        #expect(TicketDetailLogic.completeMenuToast(.action(.merge), label: "GREET-1") == "Completion run queued")
         #expect(TicketDetailLogic.agentReviewButton(.skipped) == "Run agent review")
         #expect(TicketDetailLogic.agentReviewButton(.changesRequested) == "Re-run agent review")
     }

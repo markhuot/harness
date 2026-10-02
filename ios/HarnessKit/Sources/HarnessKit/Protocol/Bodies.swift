@@ -15,7 +15,6 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
     public var defaultDriver: Patch<String>
     public var useWorktrees: Bool?
     public var requireHumanReview: Bool?
-    public var autoComplete: Bool?
     /// Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent
     public var color: Patch<String>
     /// null → settings.permissionMode
@@ -29,7 +28,7 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
 
     public init(
         path: String, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
-        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil, autoComplete: Bool? = nil,
+        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
@@ -40,7 +39,6 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
         self.defaultDriver = defaultDriver
         self.useWorktrees = useWorktrees
         self.requireHumanReview = requireHumanReview
-        self.autoComplete = autoComplete
         self.color = color
         self.permissionMode = permissionMode
         self.defaultModels = defaultModels
@@ -57,7 +55,6 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
     public var defaultDriver: Patch<String>
     public var useWorktrees: Bool?
     public var requireHumanReview: Bool?
-    public var autoComplete: Bool?
     /// Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent
     public var color: Patch<String>
     /// null → settings.permissionMode
@@ -71,7 +68,7 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
 
     public init(
         path: String? = nil, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
-        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil, autoComplete: Bool? = nil,
+        useWorktrees: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
@@ -82,7 +79,6 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
         self.defaultDriver = defaultDriver
         self.useWorktrees = useWorktrees
         self.requireHumanReview = requireHumanReview
-        self.autoComplete = autoComplete
         self.color = color
         self.permissionMode = permissionMode
         self.defaultModels = defaultModels

@@ -8,7 +8,7 @@ import Testing
 @MainActor
 private enum DS {
     static func project(_ id: String, key: String, nextSeq: Int) -> Project {
-        Project(id: id, key: key, name: key.lowercased(), path: "/\(key.lowercased())", nextSeq: nextSeq, defaultDriver: nil, defaultModels: [:], useWorktrees: true, isGit: true, requireHumanReview: true, autoComplete: false, baseBranch: .null, createdAt: 0, updatedAt: 0)
+        Project(id: id, key: key, name: key.lowercased(), path: "/\(key.lowercased())", nextSeq: nextSeq, defaultDriver: nil, defaultModels: [:], useWorktrees: true, isGit: true, requireHumanReview: true, baseBranch: .null, createdAt: 0, updatedAt: 0)
     }
 
     static let projects: [String: Project] = [

@@ -1,8 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-// The ticket screen's sheets (Request changes, Approve and…,
-// Complete). Each draws its own header (Cancel, the title over the key, the primary action) rather
+// The ticket screen's sheets (Request changes, Approve and…). Each draws its own header (Cancel,
+// the title over the key, the primary action) rather
 // than toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" and
 // "Approve" by label.
 
@@ -149,69 +149,6 @@ struct TicketDetailApproveCustomSheet: View {
         let key = ticket.key
         Task {
             if await actions.run("Approved", { try await api.humanReview(key, body) }) != nil {
-                haptic(.success)
-                dismiss()
-            }
-        }
-    }
-}
-
-/// Complete: the completion run finalizes the work. When nothing else decides how the work lands,
-/// "When approved" picks it here; `initialAction` comes from the Complete menu's Custom.
-struct TicketDetailCompleteSheet: View {
-    let ticket: Ticket
-    var initialAction: CompletionAction?
-
-    @Environment(BoardStore.self) private var store
-    @Environment(Actions.self) private var actions
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.palette) private var c
-    @State private var choice: CompletionAction?
-    @State private var instructions: String
-
-    init(ticket: Ticket, initialAction: CompletionAction? = nil) {
-        self.ticket = ticket
-        self.initialAction = initialAction
-        _instructions = State(initialValue: ticket.completionInstructions.optional ?? "")
-    }
-
-    var body: some View {
-        let state = store.state
-        let project = state.projects[ticket.projectId]
-        let parent = ticket.parentId.flatMap { state.tickets[$0] }
-        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent, settingsBaseBranch: state.settings?.baseBranch)
-        let choose = TicketDetailLogic.completeSheetChooses(ready: BoardState.isReady(ticket), autoComplete: project?.autoComplete ?? false, opts: opts)
-        let action = choice ?? TicketDetailLogic.completeSheetInitial(initialAction, opts: opts)
-        let explicit = choose || initialAction != nil
-        TicketDetailSheetFrame(title: "Complete \(Keys.keyLabel(ticket))") {
-            HButton("Complete", variant: .primary, fullWidth: false, haptic: nil) { submit(choose: explicit, action: action) }
-                .disabled(!TicketDetailLogic.completeSheetCanSubmit(action: action, explicit: explicit, instructions: instructions))
-        } content: {
-            if choose {
-                HStack(spacing: 10) {
-                    Text("When approved").font(.scaled(size: 15)).foregroundStyle(c.text)
-                    Spacer()
-                    SelectMenu(value: action,
-                               options: Approve.completionActionOptions(opts.actions).map { PickerOption(value: $0.value, label: $0.label ?? $0.value.rawValue) },
-                               title: "How the work lands",
-                               accessibilityName: "Completion action") { choice = $0 }
-                }
-            }
-            Text(TicketDetailLogic.completeSheetText(action, opts: opts))
-                .font(.scaled(size: 15))
-                .foregroundStyle(c.text2)
-                .lineSpacing(4)
-            TicketDetailSheetField(text: $instructions,
-                                   placeholder: action == .custom ? "What should the agent do with the work?" : "Optional instructions, e.g. “squash-merge and delete the branch”",
-                                   accessibilityLabel: "Completion instructions")
-        }
-    }
-
-    private func submit(choose: Bool, action: CompletionAction) {
-        let key = ticket.key
-        let body = Approve.completeBody(choose: choose, action: action, instructions: instructions)
-        Task {
-            if await actions.run("Completion run queued", { try await store.connectedAPI().completeTicket(key, body) }) != nil {
                 haptic(.success)
                 dismiss()
             }

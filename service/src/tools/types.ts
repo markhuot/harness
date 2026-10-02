@@ -369,7 +369,6 @@ export interface ProjectView {
   defaultModels: Record<string, string>;
   useWorktrees: boolean;
   requireHumanReview: boolean;
-  autoComplete: boolean;
   /** null → the settings default */
   permissionMode: PermissionMode | null;
   /** Key badge color: a preset id or "#rrggbb"; null → the theme's accent */

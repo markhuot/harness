@@ -30,7 +30,6 @@ const project: P.Project = {
   useWorktrees: true,
   isGit: true,
   requireHumanReview: true,
-  autoComplete: false,
   permissionMode: "ask",
   baseBranch: "develop",
   completionAction: "pr",
@@ -54,7 +53,6 @@ export const Project: P.Project[] = [
     defaultModels: {},
     useWorktrees: false,
     requireHumanReview: false,
-    autoComplete: true,
     permissionMode: null,
     color: null,
     createdAt: T0,
@@ -704,7 +702,6 @@ export const CreateProjectBody: P.CreateProjectBody[] = [
     defaultDriver: "claude-code",
     useWorktrees: true,
     requireHumanReview: false,
-    autoComplete: true,
     color: "#336699",
     permissionMode: "auto",
     defaultModels: { "claude-code": "opus", "anthropic-api": null },
@@ -718,7 +715,7 @@ export const CreateProjectBody: P.CreateProjectBody[] = [
 export const UpdateProjectBody: Partial<P.CreateProjectBody>[] = [
   { name: "NYT", color: null, baseBranch: null },
   { defaultModels: { "claude-code": null }, permissionMode: null, defaultDriver: null },
-  { path: "/Users/mark/Sites/nyt", key: "NYT2", completionAction: "pr", permissionMode: "ask", defaultDriver: "anthropic-api", useWorktrees: false, requireHumanReview: true, autoComplete: false, baseBranch: "main", color: "teal" },
+  { path: "/Users/mark/Sites/nyt", key: "NYT2", completionAction: "pr", permissionMode: "ask", defaultDriver: "anthropic-api", useWorktrees: false, requireHumanReview: true, baseBranch: "main", color: "teal" },
   {},
 ];
 

@@ -106,19 +106,18 @@ export const COMMANDS: CommandSpec[] = [
   { id: "sidebar.exit", label: "Back to the panes", group: "Lists", scope: "sidebar", keys: [k("KeyL"), k("ArrowRight")], palette: false },
 
   // Actions: palette only (and their buttons). Never a bare key. The ticket pane names most of them
-  // the way its buttons read right now ("Approve and merge", "Complete and open PR"); these labels
-  // are the fallback. ticket.land.* are the Approve (or Complete) split button's other choices.
+  // the way its buttons read right now ("Approve and merge", "Approve and open PR"); these labels
+  // are the fallback. ticket.land.* are the Approve split button's other choices.
   ...(
     [
       ["ticket.start", "Start work", ["Start ticket"]],
-      ["ticket.approve", "Approve", ["Approve ticket"]],
+      ["ticket.approve", "Approve", ["Approve ticket", "Complete ticket", "Finalize"]],
       ["ticket.land.merge", "Approve and merge"],
       ["ticket.land.pr", "Approve and open PR", ["Pull request"]],
       ["ticket.land.cleanup", "Approve and clean up", ["Remove worktree", "Delete branch"]],
       ["ticket.land.custom", "Approve and…"],
       ["ticket.approveNoAction", "Approve and take no action"],
       ["ticket.requestChanges", "Request changes…", ["Reject", "Send back"]],
-      ["ticket.complete", "Complete…", ["Complete ticket", "Finalize"]],
       ["ticket.rerunReview", "Re-run agent review", ["Rerun agent review", "Run agent review"]],
       ["ticket.cancelRun", "Cancel run", ["Stop run", "Stop agent"]],
       ["ticket.markDone", "Mark done", ["Close ticket"]],

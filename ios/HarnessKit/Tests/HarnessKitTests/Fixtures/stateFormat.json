@@ -967,7 +967,7 @@
         "toolName": "update_project",
         "input": {
           "project_key": "ACME",
-          "auto_complete": true
+          "require_human_review": true
         }
       },
       "output": {
@@ -978,7 +978,7 @@
         },
         "description": null,
         "rest": {
-          "auto_complete": true
+          "require_human_review": true
         }
       }
     },
