@@ -88,7 +88,7 @@ export function notes(changelog: string, tag: string): string {
 }
 
 if (import.meta.main) {
-  const path = join(resolve(import.meta.dir, "../.."), "CHANGELOG.md");
+  const path = join(resolve(import.meta.dir, ".."), "CHANGELOG.md");
   const [cmd, arg, value] = process.argv.slice(2);
   try {
     const changelog = readFileSync(path, "utf8");

@@ -5,15 +5,7 @@
       "headers": [{ "key": "Content-Type", "value": "text/xml; charset=utf-8" }]
     },
     {
-      "source": "/manifest-beta.plist",
-      "headers": [{ "key": "Content-Type", "value": "text/xml; charset=utf-8" }]
-    },
-    {
       "source": "/Harness.ipa",
-      "headers": [{ "key": "Content-Type", "value": "application/octet-stream" }]
-    },
-    {
-      "source": "/HarnessBeta.ipa",
       "headers": [{ "key": "Content-Type", "value": "application/octet-stream" }]
     }
   ]
