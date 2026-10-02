@@ -2219,7 +2219,14 @@ export class Orchestrator {
     if (!found) {
       const requested = String(key ?? "").trim().toUpperCase();
       const related = requested ? this.relatedTickets(requested, null, { drafts: false }) : [];
-      if (!related.length) throw new Error(`Unknown ticket: ${key}`);
+      if (!related.length) {
+        const item = requested ? this.store.sessions.list("triage").find((s) => s.key.toUpperCase() === requested) : undefined;
+        if (item) {
+          const routed = item.outcome ? ` (${item.outcome})` : "";
+          throw new Error(`${item.key} is an Inbox item${routed}, not a ticket. Read it with list_inbox { key: "${item.key}", include_output: true }.`);
+        }
+        throw new Error(`Unknown ticket: ${key}`);
+      }
       throw new RemoteIdError(`${this.remoteOnlyMessage(requested, related)} Call get_ticket with one of those keys.`, {
         ticket: null,
         requested,
@@ -2278,10 +2285,12 @@ export class Orchestrator {
   async listInbox_(_ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: InboxItem[]; total: number }> {
     const limit = Math.min(Math.max(1, filter.limit ?? BOARD_INBOX_LIMIT), 100);
     const source = filter.source?.trim().toLowerCase();
+    const key = filter.key?.trim().toUpperCase();
     const matches = this.store.sessions
       .list("triage")
       .map((s) => ({ s, meta: this.store.sessions.getMeta<TriageMeta>(s.id) }))
       .filter(({ s, meta }) => {
+        if (key && s.key.toUpperCase() !== key) return false;
         if (filter.statuses?.length && !filter.statuses.includes(s.triageStatus ?? "triaging")) return false;
         return !source || (meta?.source ?? "").toLowerCase() === source;
       })
@@ -2643,8 +2652,17 @@ export class Orchestrator {
         this.touchTicket(existing.id);
       }
       const body = input.description?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
-      await this.sendMessage(existing.key, body);
-      this.finishTriage(session.id, "dispatched", link ? `Linked ${existing.key} to ${key} and sent update` : `Sent update to existing ${existing.key}`, input.title);
+      // Triage only dispatches work, and a done ticket's chat can't do any: its worktree may be
+      // gone and nothing reviews or lands the result. The update re-opens it instead.
+      const reopened = existing.status === "done";
+      await this.sendMessage(existing.key, body, { move: reopened });
+      const sent = reopened ? "re-opened it with the update" : "sent update";
+      this.finishTriage(
+        session.id,
+        "dispatched",
+        link ? `Linked ${existing.key} to ${key} and ${sent}` : reopened ? `Re-opened ${existing.key} with the update` : `Sent update to existing ${existing.key}`,
+        input.title,
+      );
       return this.store.tickets.get(existing.id)!;
     }
     const t = await this.createTicket({
@@ -3572,9 +3590,12 @@ export class Orchestrator {
     this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;
-    // A chat about a done ticket falls back to the checkout once the complete run removed the worktree.
-    const workdir = run.kind === "plan" || (run.kind === "chat" && ticket?.workdir && !existsSync(ticket.workdir)) ? null : ticket?.workdir;
-    const cwd = workdir ?? session.cwd ?? project?.path ?? this.paths.home;
+    // A chat about a done ticket falls back to the checkout once the complete run removed the
+    // worktree. The session's cwd is that same worktree, so it's skipped when it's gone too.
+    const gone = run.kind === "chat" && !!ticket?.workdir && !existsSync(ticket.workdir);
+    const workdir = run.kind === "plan" || gone ? null : ticket?.workdir;
+    const sessionCwd = gone && session.cwd && !existsSync(session.cwd) ? null : session.cwd;
+    const cwd = workdir ?? sessionCwd ?? project?.path ?? this.paths.home;
     if (!driver) error = `Unknown driver: ${run.driver}`;
     else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
     else {

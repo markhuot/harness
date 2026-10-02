@@ -1068,6 +1068,21 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
   });
 
+  test("a done ticket chats from the checkout when its session still points at the removed worktree", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    // What a real worktree leaves behind: the ticket and its session both named it.
+    const gone = join(h.home, "worktrees", t.key);
+    h.store.tickets.update(t.id, { workdir: gone });
+    h.store.sessions.update(t.sessionId, { cwd: gone });
+    await h.orch.sendMessage(t.key, "what did you change?");
+    await h.orch.idle();
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
+    expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
+  });
+
   test("refused while the ticket is completing; text is required", async () => {
     const h = setup();
     const b = await h.orch.createTicket({ projectId: h.project.id, prompt: "y" });
