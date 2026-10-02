@@ -40,7 +40,10 @@ struct DeepLinkTests {
         ("harness://ticket/GREET-1?tab=browser", .ticket(key: "GREET-1", tab: .browser)),
         // sim-check encodes the sub-agent tab's colon.
         ("harness://ticket/GREET-1?tab=agent%3Atoolu_01", .ticket(key: "GREET-1", tab: TicketTab("agent:toolu_01"))),
-        ("harness://ticket/GREET-1?tab=plugin:git:changes", .ticket(key: "GREET-1", tab: TicketTab("plugin:git:changes"))),
+        // Changes is built in: its old plugin id maps to it.
+        ("harness://ticket/GREET-1?tab=plugin:git:changes", .ticket(key: "GREET-1", tab: .changes)),
+        ("harness://ticket/GREET-1?tab=changes", .ticket(key: "GREET-1", tab: .changes)),
+        ("harness://ticket/GREET-1?tab=plugin:notes:list", .ticket(key: "GREET-1", tab: TicketTab("plugin:notes:list"))),
         // A tab the app doesn't know is dropped, not passed on.
         ("harness://ticket/GREET-1?tab=bogus", .ticket(key: "GREET-1", tab: nil)),
         ("harness://ticket/GREET-1?tab=plugin:Git:changes", .ticket(key: "GREET-1", tab: nil)),

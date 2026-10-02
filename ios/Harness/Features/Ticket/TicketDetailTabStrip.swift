@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// The ticket's tabs (TicketDetail.tsx TabStrip): Summaries, Tickets (conductors), Transcript,
-/// Agents (once there are sub-agents), Browser, Details, then the plugin tabs. Counts and a live
+/// Agents (once there are sub-agents), Browser, Changes (with a workdir or a pinned diff),
+/// Details, then the plugin tabs. Counts and a live
 /// dot ride along; a sub-agent's view highlights Agents.
 struct TicketDetailTabStrip: View {
     let ticket: Ticket
@@ -52,10 +53,16 @@ struct TicketDetailTabStrip: View {
                 let live = (t == .transcript && ticket.busy) || (t == .agents && (subagents?.contains { $0.status == .running } ?? false))
                 return Item(id: TicketTab(t), label: Tabs.tabLabel[t] ?? t.rawValue, count: count, live: live)
             }
-        let plugins = (pluginTabs ?? []).map { p in
+        // Changes is built in (ChangesTabView), after Browser and ahead of Details; the git plugin's
+        // own tab never shows.
+        var tabs = builtin
+        if ChangesTab.shows(workdir: ticket.workdir, pluginTabs: pluginTabs), let i = tabs.firstIndex(where: { $0.id == .details }) {
+            tabs.insert(Item(id: .changes, label: ChangesTab.label), at: i)
+        }
+        let plugins = (ChangesTab.otherPluginTabs(pluginTabs) ?? []).map { p in
             Item(id: Tabs.pluginTabRoute(p.pluginId, p.id), label: p.title, icon: p.icon.flatMap { Icons.isIconName($0) ? $0 : nil })
         }
-        return builtin + plugins
+        return tabs + plugins
     }
 
     private func button(_ item: Item, on: Bool) -> some View {

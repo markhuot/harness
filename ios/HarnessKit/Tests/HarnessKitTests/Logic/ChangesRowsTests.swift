@@ -3,7 +3,7 @@ import Testing
 @testable import HarnessKit
 
 @Suite struct ChangesRowsTests {
-    /// Two hunks of lib/greet.py: lines 2-6 (new) and 41-43, with gaps 1, 7-40 and (once the file is known) 44+.
+    /// Two hunks of lib/greet.py: lines 2-6 (new) and 41-45, with gaps 1, 7-40 and (once the file is known) 46+.
     static let patch = [
         "diff --git a/lib/greet.py b/lib/greet.py",
         "index 1111111..2222222 100644",
@@ -16,11 +16,13 @@ import Testing
         "+    return x + y",
         " ",
         " def other():",
-        "@@ -40,3 +41,3 @@ class Greeter:",
+        "@@ -40,5 +41,5 @@ class Greeter:",
         "     pass",
         "-    # old",
         "+    # new",
         "     done",
+        "     x",
+        "     y",
         "",
     ].joined(separator: "\n")
 
@@ -36,7 +38,7 @@ import Testing
 
     @Test func linesCarryBothSidesNumbers() {
         let l = lines(ChangesRows.rows(Self.diff))
-        #expect(l.map(\.kind) == [.ctx, .del, .add, .add, .ctx, .ctx, .ctx, .del, .add, .ctx])
+        #expect(l.map(\.kind) == [.ctx, .del, .add, .add, .ctx, .ctx, .ctx, .del, .add, .ctx, .ctx, .ctx])
         #expect(l[0] == ChangesLine(kind: .ctx, text: "    x = 1", oldLine: 2, newLine: 2))
         #expect(l[1] == ChangesLine(kind: .del, text: "    return x", oldLine: 3, newLine: nil))
         #expect(l[3] == ChangesLine(kind: .add, text: "    return x + y", oldLine: nil, newLine: 4))
@@ -50,11 +52,11 @@ import Testing
         #expect(g[0] == ChangesGap(index: 0, newStart: 1, oldStart: 1, count: 1, context: "def greet(name):"))
         // Hunk 1 ends at new line 6 / old line 5; hunk 2 starts at 41 / 40.
         #expect(g[1] == ChangesGap(index: 1, newStart: 7, oldStart: 6, count: 34, context: "class Greeter:"))
-        #expect(g[2].count == nil && g[2].newStart == 44 && g[2].oldStart == 43)
+        #expect(g[2].count == nil && g[2].newStart == 46 && g[2].oldStart == 45)
     }
 
     @Test func expandingAGapNeedsTheContents() {
-        let contents = (1...45).map { "line \($0)" }
+        let contents = (1...47).map { "line \($0)" }
         let noContents = ChangesRows.rows(Self.diff, expanded: [1])
         #expect(gaps(noContents).count == 3)
 
@@ -64,17 +66,27 @@ import Testing
         #expect(filled.count == 34)
         #expect(filled.first == ChangesLine(kind: .ctx, text: "line 7", oldLine: 6, newLine: 7))
         #expect(filled.last == ChangesLine(kind: .ctx, text: "line 40", oldLine: 39, newLine: 40))
-        // With the contents known, the trailing gap has a count: lines 44 and 45.
+        // With the contents known, the trailing gap has a count: lines 46 and 47.
         #expect(gaps(rows).last?.count == 2)
     }
 
     @Test func trailingGapExpandsToTheEndAndVanishesWhenNothingFollows() {
-        let contents = (1...45).map { "l\($0)" }
+        let contents = (1...47).map { "l\($0)" }
         let rows = ChangesRows.rows(Self.diff, contents: contents, expanded: [2])
-        #expect(lines(rows).suffix(2).map(\.newLine) == [44, 45])
-        #expect(lines(rows).last?.oldLine == 44)
-        let exact = ChangesRows.rows(Self.diff, contents: Array(contents.prefix(43)))
+        #expect(lines(rows).suffix(2).map(\.newLine) == [46, 47])
+        #expect(lines(rows).last?.oldLine == 46)
+        let exact = ChangesRows.rows(Self.diff, contents: Array(contents.prefix(45)))
         #expect(gaps(exact).map(\.index) == [0, 1])
+    }
+
+    @Test func aHunkEndingShortOfGitsContextReachesTheEndOfTheFile() {
+        let header = "diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n"
+        let ends = ChangesPatch.parse(header + "@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n")[0]
+        #expect(gaps(ChangesRows.rows(ends)).isEmpty)
+        let more = ChangesPatch.parse(header + "@@ -1,4 +1,4 @@\n-a\n+A\n b\n c\n d\n")[0]
+        #expect(gaps(ChangesRows.rows(more)).map(\.index) == [1])
+        // Once the contents are known they decide.
+        #expect(gaps(ChangesRows.rows(ends, contents: ["a", "B", "c", "d"])).map(\.count) == [1])
     }
 
     @Test func newAndDeletedFilesHaveNoGaps() {
@@ -88,10 +100,13 @@ import Testing
     @Test func splitPairsEachChangeBlocksLines() {
         let split = ChangesRows.split(ChangesRows.rows(Self.diff))
         let rows: [ChangesSplitRow] = split.compactMap { if case let .row(r) = $0 { r } else { nil } }
-        // ctx, (del|add), (nil|add), ctx, ctx, | ctx, (del|add), ctx
-        #expect(rows.count == 8)
+        // ctx, (del|add), (nil|add), ctx, ctx, | ctx, (del|add), ctx, ctx, ctx
+        #expect(rows.count == 10)
         #expect(rows[1].old?.text == "    return x" && rows[1].new?.text == "    y = 2")
         #expect(rows[2].old == nil && rows[2].new?.text == "    return x + y")
+        // Each side points at its line's place in the unified order (its highlighted line).
+        #expect([rows[1].oldCode, rows[1].newCode, rows[2].oldCode, rows[2].newCode] == [1, 2, nil, 3])
+        #expect(rows[0].oldCode == 0 && rows[0].newCode == 0 && rows[7].newCode == 9)
         #expect(rows[0].old == rows[0].new)
         if case .gap = split[0] {} else { Issue.record("split keeps the leading gap") }
     }
@@ -103,7 +118,7 @@ import Testing
         let kinds = parsed.lines.filter { $0.kind != .hunk && $0.kind != .meta }.map(\.kind.rawValue)
         #expect(kinds == lines(ChangesRows.rows(Self.diff)).map(\.kind.rawValue))
         #expect(parsed.files.map(\.path) == ["lib/greet.py"])
-        #expect(src.contains("@@ -1,4 +1,5 @@") && src.contains("@@ -1,3 +1,3 @@"))
+        #expect(src.contains("@@ -1,4 +1,5 @@") && src.contains("@@ -1,5 +1,5 @@"))
     }
 
     @Test func removedLinesThatLookLikeFileHeadersStayCodeLines() {

@@ -127,10 +127,14 @@ public final class ChangesStore {
             self?.debounce = nil
             self?.refresh()
         }
-        if busy != self.busy {
-            self.busy = busy
-            schedulePoll()
-        }
+        setBusy(busy)
+    }
+
+    /// Poll while the agent works (the ticket is busy), stop when it's done.
+    public func setBusy(_ busy: Bool) {
+        guard busy != self.busy else { return }
+        self.busy = busy
+        schedulePoll()
     }
 
     /// Whether the tab is on screen (and the app in the foreground). Polls only run while it is;

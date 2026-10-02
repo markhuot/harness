@@ -28,9 +28,15 @@ public enum ChangesRow: Sendable, Equatable {
 public struct ChangesSplitRow: Sendable, Equatable {
     public var old: ChangesLine?
     public var new: ChangesLine?
+    /// Each side's position among the file's code lines (its highlighted line)
+    public var oldCode: Int?
+    public var newCode: Int?
 }
 
 public enum ChangesRows {
+    /// The unchanged lines git puts around each change (`git diff`'s default -U3).
+    public static let contextLines = 3
+
     /// A file's contents as lines (JS `split("\n")`, without the empty string after a final newline).
     public static func lines(of contents: String) -> [String] {
         var out = contents.components(separatedBy: "\n")
@@ -66,20 +72,28 @@ public enum ChangesRows {
             prevNew = newBefore + h.additionCount
             prevOld = oldBefore + h.deletionCount
         }
-        // After the last hunk: unknown until the contents load, then whatever follows.
-        let trailing = contents.map { max(0, $0.count - prevNew) }
-        gap(d.hunks.count, newStart: prevNew + 1, oldStart: prevOld + 1, count: trailing, context: nil)
+        // After the last hunk: unknown until the contents load, then whatever follows. Git closes a
+        // hunk with `contextLines` unchanged lines unless the file ends first, so a hunk ending in
+        // fewer reaches the end of the file.
+        let tail = d.hunks.last!.lines.reversed().prefix { $0.kind == .ctx }.count
+        if contents != nil || tail >= contextLines {
+            let trailing = contents.map { max(0, $0.count - prevNew) }
+            gap(d.hunks.count, newStart: prevNew + 1, oldStart: prevOld + 1, count: trailing, context: nil)
+        }
         return out
     }
 
     /// Unified rows as split rows: each change block's removed lines beside its added ones.
     public static func split(_ rows: [ChangesRow]) -> [Either] {
         var out: [Either] = []
-        var dels: [ChangesLine] = []
-        var adds: [ChangesLine] = []
+        var dels: [(ChangesLine, Int)] = []
+        var adds: [(ChangesLine, Int)] = []
+        var code = 0
         func flush() {
             for k in 0..<max(dels.count, adds.count) {
-                out.append(.row(ChangesSplitRow(old: k < dels.count ? dels[k] : nil, new: k < adds.count ? adds[k] : nil)))
+                let d = k < dels.count ? dels[k] : nil
+                let a = k < adds.count ? adds[k] : nil
+                out.append(.row(ChangesSplitRow(old: d?.0, new: a?.0, oldCode: d?.1, newCode: a?.1)))
             }
             dels = []
             adds = []
@@ -91,12 +105,13 @@ public enum ChangesRows {
                 out.append(.gap(g))
             case let .line(l):
                 switch l.kind {
-                case .del: dels.append(l)
-                case .add: adds.append(l)
+                case .del: dels.append((l, code))
+                case .add: adds.append((l, code))
                 case .ctx:
                     flush()
-                    out.append(.row(ChangesSplitRow(old: l, new: l)))
+                    out.append(.row(ChangesSplitRow(old: l, new: l, oldCode: code, newCode: code)))
                 }
+                code += 1
             }
         }
         flush()
