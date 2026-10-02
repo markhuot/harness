@@ -1,13 +1,12 @@
 import HarnessKit
 import SwiftUI
 
-/// The desktop sidebar on a phone: Inbox, All projects and each project
-/// with its open count and a settings gear; pick one to filter the board (or the Search tab's
-/// scope, when `fromSearch`). Add a project by its path on the Mac. Presented with medium/large
-/// detents by the shell, which closes it by its grabber (no Cancel button).
+/// The desktop sidebar on a phone, and how the app moves between its sections: Inbox, All
+/// projects and each project with its open count and a settings gear (pick one to filter the
+/// board), and Settings at the bottom with the connection. Add a project by its path on the Mac.
+/// Presented with medium/large detents by the shell, which closes it by its grabber (no Cancel
+/// button).
 struct ProjectsSheet: View {
-    let fromSearch: Bool
-
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -23,15 +22,16 @@ struct ProjectsSheet: View {
         let counts = BoardScreenRules.openCounts(state.tickets.values)
         let totalOpen = counts.values.reduce(0, +)
         let triaging = state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
+        let section = router.selectedTab
 
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Card {
-                    ProjectsNavRow(icon: "inbox", label: "Inbox", badge: triaging) {
-                        router.open(.tab(.inbox))
+                    ProjectsNavRow(icon: "inbox", label: "Inbox", badge: triaging, active: section == .inbox) {
+                        open(.inbox)
                     }
                     Divider().overlay(c.border)
-                    ProjectsNavRow(icon: "layers", label: "All projects", count: totalOpen, active: app.prefs.boardProject == nil) {
+                    ProjectsNavRow(icon: "layers", label: "All projects", count: totalOpen, active: section == .board && app.prefs.boardProject == nil) {
                         choose(nil)
                     }
                 }
@@ -65,6 +65,17 @@ struct ProjectsSheet: View {
                         }
                     }
                 }
+            }
+            .padding(16)
+        }
+        // Settings and the connection stay at the bottom while the projects scroll.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Card {
+                    ProjectsNavRow(icon: "settings", label: "Settings", active: section == .settings) {
+                        open(.settings)
+                    }
+                }
                 HStack(spacing: 8) {
                     Circle().fill(state.connected ? c.green : c.amber).frame(width: 8, height: 8).accessibilityHidden(true)
                     Text(state.connected ? "Connected" : "Reconnecting…").font(.scaled(size: 13)).foregroundStyle(c.text2)
@@ -73,7 +84,10 @@ struct ProjectsSheet: View {
                 }
                 .padding(.horizontal, 4)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .background(c.bg)
         }
         .background(c.bg)
         .navigationTitle("Projects")
@@ -124,11 +138,16 @@ struct ProjectsSheet: View {
         .background(active ? c.accentSoft : .clear)
     }
 
-    /// Filter the board (or Search) by a project, or none, and go back to it.
+    /// Filter the board by a project, or none, and go back to it.
     private func choose(_ id: String?) {
-        haptic(.select)
         app.setPref(\.boardProject, id)
-        router.open(.tab(fromSearch ? .search : .board))
+        open(.board)
+    }
+
+    /// Show a section at its root; the link closes this sheet.
+    private func open(_ section: AppTab) {
+        haptic(.select)
+        router.open(.tab(section))
     }
 
     private func startAdding() {

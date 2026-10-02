@@ -1,9 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// The UIKit bar styling SwiftUI has no modifier for (title colors and the
-/// tab bar's badgeBackgroundColor): navigation titles in the theme's `text`, tab
-/// badges in `redSolid`. Backgrounds stay the system's: the default material once content scrolls
+/// The UIKit bar styling SwiftUI has no modifier for (title colors): navigation titles in the
+/// theme's `text`. Backgrounds stay the system's: the default material once content scrolls
 /// under the bar, transparent at the scroll edge. RootView calls `apply` with the palettes for a
 /// light and a dark trait whenever either changes, and the colors resolve per trait: a bar keeps a
 /// UIColor it was given, so a static color would stay on the old appearance's text color after
@@ -12,7 +11,6 @@ import UIKit
 @MainActor enum BarAppearance {
     static func apply(light: Palette, dark: Palette) {
         let titleColor = dynamic(light.text, dark.text)
-        let badgeColor = dynamic(light.redSolid, dark.redSolid)
 
         let standard = UINavigationBarAppearance()
         standard.configureWithDefaultBackground()
@@ -28,10 +26,9 @@ import UIKit
         nav.compactAppearance = standard
         nav.scrollEdgeAppearance = edge
         nav.compactScrollEdgeAppearance = edge
-        UITabBarItem.appearance().badgeColor = badgeColor
 
         for window in windows {
-            restyle(window, standard: standard, edge: edge, badge: badgeColor)
+            restyle(window, standard: standard, edge: edge)
         }
     }
 
@@ -44,15 +41,13 @@ import UIKit
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
     }
 
-    private static func restyle(_ view: UIView, standard: UINavigationBarAppearance, edge: UINavigationBarAppearance, badge: UIColor) {
+    private static func restyle(_ view: UIView, standard: UINavigationBarAppearance, edge: UINavigationBarAppearance) {
         if let bar = view as? UINavigationBar {
             bar.standardAppearance = standard
             bar.compactAppearance = standard
             bar.scrollEdgeAppearance = edge
             bar.compactScrollEdgeAppearance = edge
-        } else if let bar = view as? UITabBar {
-            for item in bar.items ?? [] { item.badgeColor = badge }
         }
-        for sub in view.subviews { restyle(sub, standard: standard, edge: edge, badge: badge) }
+        for sub in view.subviews { restyle(sub, standard: standard, edge: edge) }
     }
 }

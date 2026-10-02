@@ -2,9 +2,9 @@ import HarnessKit
 import SwiftUI
 
 /// The app shell: holds the launch UI
-/// until the Keychain has loaded, shows Connect without an active server and the tabs with one,
-/// presents the Router's sheet and cover, routes harness:// links, applies the theme (bar titles
-/// and tab badges included, through BarAppearance), and forwards scene phases to the store.
+/// until the Keychain has loaded, shows Connect without an active server and the sections with
+/// one, presents the Router's sheet and cover, routes harness:// links, applies the theme (bar
+/// titles included, through BarAppearance), and forwards scene phases to the store.
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -18,11 +18,10 @@ struct RootView: View {
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
-    /// What the bar colors depend on: both appearances' text and redSolid (BarAppearance).
+    /// What the bar colors depend on: both appearances' text (BarAppearance).
     private var barColorKey: String {
         [false, true].map { dark in
-            let p = Palette(app.resolvedTheme(systemDark: dark))
-            return "\(p.tokens[.text]) \(p.tokens[.redSolid])"
+            "\(Palette(app.resolvedTheme(systemDark: dark)).tokens[.text])"
         }.joined(separator: " | ")
     }
 
@@ -41,7 +40,7 @@ struct RootView: View {
             // Alerts, action sheets, sheets and the keyboard follow Settings → Appearance.
             .preferredColorScheme(app.prefs.theme == .system ? nil : app.prefs.theme == .dark ? .dark : .light)
             .onOpenURL { url in router.open(url: url, applyThemes: app.applyThemes) }
-            // Navigation titles in the theme's text color, tab badges in its redSolid (BarAppearance).
+            // Navigation titles in the theme's text color (BarAppearance).
             .onChange(of: barColorKey, initial: true) {
                 BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
             }
@@ -101,48 +100,33 @@ struct RootView: View {
     }
 }
 
-/// The tab bar: Board, Inbox (badge: triage sessions triaging or busy), Settings, and Search in
-/// the search role. Each tab has its own NavigationStack bound to the Router's path for it.
-/// `.searchable` is on the Search tab's NavigationStack rather than on its screen, so the Search
-/// button sits apart in the tab bar and one tap turns it into the field there (not at the top).
-/// On the TabView it would put a field on every tab.
+/// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar:
+/// the Projects sidebar, behind each section's sidebar button, switches between them, and the
+/// board's bottom bar holds its filter, search field and New session.
 struct MainTabs: View {
     @Environment(Router.self) private var router
-    @Environment(BoardStore.self) private var store
-    @Environment(AppModel.self) private var app
-    @State private var query = ""
 
     var body: some View {
-        @Bindable var router = router
-        let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
-        TabView(selection: $router.selectedTab) {
-            Tab("Board", systemImage: "rectangle.split.3x1", value: AppTab.board) {
-                TabStack(tab: .board) { BoardScreen(mode: .board) }
-            }
-            Tab("Inbox", systemImage: "tray", value: AppTab.inbox) {
-                TabStack(tab: .inbox) { InboxScreen() }
-            }
-            .badge(triaging)
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
-                TabStack(tab: .settings) { SettingsScreen() }
-            }
-            Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
-                TabStack(tab: .search) { BoardScreen(mode: .search, query: query) }
-                    .searchable(text: $query, prompt: searchPrompt)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-            }
+        switch router.selectedTab {
+        case .board: TabStack(tab: .board) { BoardScreen() }
+        case .inbox: TabStack(tab: .inbox) { InboxScreen() }
+        case .settings: TabStack(tab: .settings) { SettingsScreen() }
         }
-        .tabViewSearchActivation(.searchTabSelection)
-    }
-
-    /// "Search <project>" when the board is filtered to a project, else "Search tickets".
-    private var searchPrompt: String {
-        app.prefs.boardProject.flatMap { store.state.projects[$0] }.map { "Search \($0.name)" } ?? "Search tickets"
     }
 }
 
-/// One tab's NavigationStack, bound to `router.paths[tab]`, with every pushed Route's screen.
+/// The header button that opens the Projects sidebar, on each section's root screen.
+struct SidebarToolbarItem: ToolbarContent {
+    @Environment(Router.self) private var router
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button("Projects", systemImage: "sidebar.left") { router.present(.projects) }
+        }
+    }
+}
+
+/// One section's NavigationStack, bound to `router.paths[tab]`, with every pushed Route's screen.
 struct TabStack<Root: View>: View {
     let tab: AppTab
     @ViewBuilder var root: Root

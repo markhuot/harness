@@ -7,12 +7,12 @@ import Testing
 struct DeepLinkTests {
     @Test(arguments: [
         ("harness://board", DeepLink.tab(.board)),
-        ("harness://search", .tab(.search)),
+        ("harness://search", .tab(.board)),
         ("harness://inbox", .tab(.inbox)),
         ("harness://settings", .tab(.settings)),
         ("HARNESS://Board/", .tab(.board)),
-        ("harness://projects", .sheet(.projects(fromSearch: false))),
-        ("harness://projects?from=search", .sheet(.projects(fromSearch: true))),
+        ("harness://projects", .sheet(.projects)),
+        ("harness://projects?from=search", .sheet(.projects)),
         ("harness://connect", .sheet(.connect)),
         ("harness://scan", .cover(.scan)),
         ("harness://prompts", .push(.prompts)),
