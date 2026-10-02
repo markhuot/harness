@@ -9,8 +9,8 @@ summaries and an agent-driven browser. Every session is a Jira-style ticket (`NY
 │ Electron app │ ─────────────────────────────────────────▶ │ harness service (bun binary) │
 │ (React UI)   │ ◀──── events: tickets, transcript, frames ─ │  SQLite · orchestrator · runs │
 └──────────────┘                                            │  drivers · tools · MCP · CDP  │
-   iOS app ── Tailscale / LAN (settings.listen) ────────────▶ │  headless Chrome (one tab per │
-                                                             │  session, screencast relayed) │
+   iOS app ── Tailscale / LAN (settings.listen) ────────────▶ │  headless Chrome (numbered    │
+                                                             │  tabs per session, screencast)│
                                                              └─────────────────────────────┘
 ```
 
@@ -635,12 +635,14 @@ Harness tools (always exposed, via MCP for claude-code):
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
-| `browser_open` | plan, work, review, conductor, chat | `{ url }` |
-| `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars? }` |
-| `browser_click` | ″ | `{ selector }` |
-| `browser_type` | ″ | `{ selector, text, submit? }` |
-| `browser_eval` | ″ | `{ expression }` |
-| `browser_screenshot` | ″ | `{ save_to? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Summary attachments" |
+| `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab? }` → names the tab; `tab` with `new_tab` is refused. See "Browser tabs" |
+| `browser_tabs` | ″ | `{}` → one line per open tab: number, title, URL |
+| `browser_close_tab` | ″ | `{ tab }` |
+| `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars?, tab? }` |
+| `browser_click` | ″ | `{ selector, tab? }` |
+| `browser_type` | ″ | `{ selector, text, submit?, tab? }` |
+| `browser_eval` | ″ | `{ expression, tab? }` |
+| `browser_screenshot` | ″ | `{ save_to?, tab? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Summary attachments" |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
 The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
@@ -778,7 +780,7 @@ client state, not service state.
 | Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |
 | Drivers | list drivers and models, refresh models | `list_drivers` | |
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
-| Browser | watch or drive a session's browser tab | `browser_*` on the run's own tab | other sessions' tabs are a human's live view |
+| Browser | watch or drive a session's browser tabs, open and close tabs | `browser_*` on the run's own session's tabs | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
 | Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's summaries and transcript |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
@@ -1249,7 +1251,7 @@ GET    /settings                 PATCH /settings           (PATCH { listen } reb
 GET    /prompts                  → PromptEntry[] (see "Prompt overrides")
 GET    /network                  → NetworkStatus           GET /pairing → PairingInfo (409 in localhost mode)
 POST   /token/rotate             → { token }; the old token is rejected at once, open sockets closed
-GET    /browser/:sessionId       POST /browser/:sessionId/navigate { url }
+GET    /browser/:sessionId?tab=  POST /browser/:sessionId/navigate { url, tabId? }  (a tab that isn't open: GET → null, POST → 404)
 GET    /plugins                  GET /tickets/:key/tabs    → PluginInfo[] / PluginTab[]
 *      /plugins/:id/api/*        (plugin routes, bearer auth)
 GET    /plugins/:id/ui/*         (plugin static UI, no auth)
@@ -1259,6 +1261,33 @@ GET    /ws?token=                (WebSocket; ServerMessage / ClientMessage)
 
 Every mutation emits a `HarnessEvent`; the WS forwards all events to every client, except
 `browser.frame`/`browser.state`, which go only to clients subscribed to that session.
+
+### Browser tabs
+
+Each session's browser (`service/src/browser/manager.ts`) holds numbered tabs, each a Chrome page
+target in its own headless window (so every tab paints and can screencast). Numbers count up from
+1 per session and are never reused, so a number an agent holds can't come to mean another page.
+
+- **Which tab a call acts on.** Every `BrowserService` call takes `{ tab? }`. An explicit tab that
+  isn't open throws `No browser tab N. Open tabs: …` and never opens one; without `tab` it is the
+  lowest open tab, created as the next number when the session has none. `open { newTab }` always
+  makes a new one. That default never moves on its own (no "current tab" that one caller's action
+  could shift under another), so parallel sub-agents that each pass their own tab can't collide.
+- **Popups.** A page target whose `openerId` is one of a session's tabs (`target="_blank"`,
+  `window.open`) is attached as that session's next tab. A page that closes itself drops its tab.
+- **Viewers.** Each WS socket is one subscriber per session and watches one tab:
+  `browser.subscribe { tabId? }` (again with another `tabId` switches; again without one is a
+  no-op). A subscriber whose tab closes falls back to the lowest open tab. Only watched tabs
+  screencast. `browser.state` carries the watched tab's url/title/loading as `tabId` plus every
+  open tab in `tabs`, and goes to every subscriber whenever any tab changes, since all of them
+  draw the tab strip. A subscriber that has just moved to a tab gets its state and then its last
+  frame; frames carry `tabId` so a client drops in-flight frames from the tab it left.
+- **Viewer input.** `browser.input { tabId? }` without a tab goes to the socket's watched tab.
+  `newTab { url? }` opens a tab and moves that socket to it; `closeTab` closes the input's tab, and
+  closing the last one while anyone watches leaves a blank tab in its place. `resize` sets the
+  session's viewport for every tab, including ones opened later, so a switch needs no resize.
+- **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
+  apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 
 ### Summary attachments
 
@@ -2113,7 +2142,8 @@ the conventions, and ios/README.md the build and test commands.
   A tap sends move + down + up, a pan sends wheel events in page pixels, and hold-then-drag sends
   a mouse drag (HarnessKit `BrowserInput`). A hidden text field carries the keyboard (diffed into
   text inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
-  only on real changes.
+  only on real changes. A + button opens a tab (`newTab`); with more than one tab a strip of chips
+  switches (resubscribing with its `tabId`) and closes them. See "Browser tabs".
 - **Summary attachments.** `AttachmentRow` puts a summary's attachments in a horizontal row under
   its body, loading each from `client.attachmentUrl(id)` (the query token, since the image loader
   and AVPlayer fetch on their own). Thumbnails are 120 pt tall and as wide as the stored
