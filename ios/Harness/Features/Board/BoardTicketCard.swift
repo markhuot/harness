@@ -77,7 +77,7 @@ struct BoardTicketCard: View {
                         ReviewMark(who: .human, state: t.humanReview)
                     }
                 }
-                if t.busy { Spinner().controlSize(.small) }
+                if Conductor.isWorking(state.tickets, t) { Spinner().controlSize(.small) }
                 if let ext = t.externalRef { Badge(ext.source, icon: "link") }
                 if t.status == .done, case .value = t.pullRequestUrl { Badge("PR", tone: .violet, icon: "external") }
             }

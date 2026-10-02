@@ -8,12 +8,14 @@ import {
   dimOnBoard,
   groupChildren,
   hideOnBoard,
+  isWorking,
   progressLabel,
   progressOf,
   progressSegments,
   readHideChildren,
   HIDE_CHILDREN_KEY,
   waitingOn,
+  workingTitle,
   writeHideChildren,
 } from "./conductor";
 
@@ -108,6 +110,42 @@ describe("children and progress", () => {
     expect(segs.map((s) => s.status)).toEqual(["done", "review", "in_progress", "blocked", "planning"]);
     expect(segs.reduce((n, s) => n + s.pct, 0)).toBeCloseTo(100);
     expect(progressSegments(progressOf([]))).toEqual([]);
+  });
+});
+
+describe("isWorking (spinner rollup)", () => {
+  const conductor = tk({ key: "W-1", kind: "conductor" });
+  const sub = tk({ key: "W-2", kind: "conductor", parentId: conductor.id });
+
+  test("a conductor spins while any child or grandchild has a run going", () => {
+    const busyKid = tk({ key: "W-3", parentId: conductor.id, busy: true, status: "in_progress" });
+    expect(isWorking(rec(conductor, busyKid), conductor)).toBe(true);
+    const busyGrandkid = tk({ key: "W-4", parentId: sub.id, busy: true });
+    expect(isWorking(rec(conductor, sub, busyGrandkid), conductor)).toBe(true);
+    expect(isWorking(rec(conductor, sub, busyGrandkid), sub)).toBe(true);
+    expect(workingTitle(conductor)).toBe("A child ticket is working");
+  });
+
+  test("stops when every child is blocked, stopped or done, or the busy ticket belongs elsewhere", () => {
+    const idle = [
+      tk({ key: "W-5", parentId: conductor.id, status: "blocked" }),
+      tk({ key: "W-6", parentId: conductor.id, status: "in_progress" }),
+      tk({ key: "W-7", parentId: conductor.id, status: "done" }),
+    ];
+    const elsewhere = tk({ key: "W-8", parentId: "id-OTHER", busy: true });
+    expect(isWorking(rec(conductor, ...idle, elsewhere), conductor)).toBe(false);
+    // A busy parent doesn't make its child spin: the rollup only goes up.
+    expect(isWorking(rec({ ...conductor, busy: true }, idle[0]!), idle[0]!)).toBe(false);
+  });
+
+  test("its own run counts; a parent cycle or an unloaded ancestor ends the walk", () => {
+    expect(isWorking({}, tk({ key: "W-9", busy: true }))).toBe(true);
+    expect(workingTitle(tk({ key: "W-9", busy: true }))).toBe("Agent working");
+    const a = tk({ key: "W-10", parentId: "id-W-11", busy: true });
+    const b = tk({ key: "W-11", parentId: "id-W-10" });
+    expect(isWorking(rec(a, b), conductor)).toBe(false);
+    expect(isWorking(rec(a, b), b)).toBe(true);
+    expect(isWorking(rec(tk({ key: "W-12", parentId: "id-GONE", busy: true })), conductor)).toBe(false);
   });
 });
 

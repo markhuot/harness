@@ -37,6 +37,28 @@ export function childrenOfTicket(tickets: Record<string, Ticket>, conductorId: s
     .sort((a, b) => a.createdAt - b.createdAt || a.position - b.position);
 }
 
+/**
+ * Whether a ticket's card shows the working spinner: its own agent has a run going, or (rolled up
+ * for a conductor) any ticket below it does, children and their children alike. A conductor whose
+ * children are all blocked, stopped or crashed stops spinning like any idle ticket. Walks up from
+ * each busy ticket rather than down from this one, since few tickets are busy at once.
+ */
+export function isWorking(tickets: Record<string, Ticket>, t: Ticket): boolean {
+  if (t.busy) return true;
+  for (const b of Object.values(tickets)) {
+    if (!b.busy) continue;
+    const seen = new Set<string>([b.id]);
+    for (let id = b.parentId; id && !seen.has(id); id = tickets[id]?.parentId ?? null) {
+      if (id === t.id) return true;
+      seen.add(id);
+    }
+  }
+  return false;
+}
+
+/** The spinner's tooltip: whose work it stands for. */
+export const workingTitle = (t: Ticket) => (t.busy ? "Agent working" : "A child ticket is working");
+
 export interface Progress {
   total: number;
   byStatus: Record<TicketStatus, number>;

@@ -27,6 +27,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   by hand while it's in Review, opening the ticket brings the merge choices back.
 - On iPhone and iPad, the New session button at the bottom right of the board is now a pencil on a
   square, the same compose icon Mail and Notes use, instead of a plus.
+- A conductor's card now shows the working spinner whenever one of its child tickets (or their
+  children) has an agent running, not only when the conductor's own agent is running (Mac, iPhone
+  and iPad, on the board and in the Tickets tab). The spinner goes away once every child has
+  stopped, is blocked or has crashed.
 
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 
