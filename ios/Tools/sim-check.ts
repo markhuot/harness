@@ -1838,7 +1838,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
         if (!runs.some((r) => r.kind === "complete" && r.status === "succeeded")) throw new Error("no completion run landed it");
         await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("Re-open"));
-        const stray = (await labels(udid)).filter((l) => l.startsWith("Complete") || l === "More ways to complete");
+        // A Complete button ("Complete", "Complete and …"), not the completion run's "Completed." summary.
+        const stray = (await labels(udid)).filter((l) => l === "Complete" || l.startsWith("Complete ") || l === "More ways to complete");
         if (stray.length) throw new Error(`still offers ${stray.join(", ")}`);
         return `${t.key} → ${t.status} after one approval`;
       });
