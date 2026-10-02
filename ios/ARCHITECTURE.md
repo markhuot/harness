@@ -317,7 +317,7 @@ feature needs something new here, add to it without changing what's there.
   system appearance. RootView sets `preferredColorScheme` from Settings → Appearance (alerts,
   sheets and the keyboard follow it), `tint` = accent and the window background = `bg`. Use
   palette colors, never `Color.primary`/system grays, for anything the desktop themes.
-- **Actions** (RN `useAction`): `actions.perform("Started") { try await store.client… }` plays the
+- **Actions**: `actions.perform("Started") { try await store.client… }` plays the
   error haptic and toasts `Connection.describeError` on failure, and toasts the message on success.
   `await actions.run { … }` returns the value (nil after a failure).
 - **Toasts.** `ToastCenter.show(message, kind: .error | .info)`: at most 3 at the top, errors 6 s,
@@ -335,8 +335,8 @@ feature needs something new here, add to it without changing what's there.
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
   to the Board. Never keep your own `NavigationStack` inside a pushed screen. Sheets are wrapped in
   a NavigationStack with a Cancel (✕) toolbar button by `SheetHost` (Projects excepted), so a sheet
-  slot sets only its title and its own toolbar items. Pushed screens go on the selected tab's stack, and RouteScreen hides the tab bar under them (RN
-  pushes them on the root stack, over the tabs).
+  slot sets only its title and its own toolbar items. Pushed screens go on the selected tab's stack, and RouteScreen hides the tab bar under them, so
+  they cover the tabs.
   `RouteScreen`/`SheetHost`/`CoverHost` (App/Destinations.swift) are the only Route → view mapping.
 - **Deep links** (HarnessKit/Shell/DeepLink.swift, tested in DeepLinkTests):
 
@@ -359,13 +359,13 @@ feature needs something new here, add to it without changing what's there.
   `ModelBadge`, `DepChip`, `HButton` / `.buttonStyle(.harness(.primary))` (primary, secondary,
   ghost, danger, dangerSolid; small; loading; haptic), `Card`, `Callout`, `EmptyState`
   (ContentUnavailableView), `Spinner`, `LoadingScreen`, `SectionTitle`, `RelativeTimeText` /
-  `NowReader` (TimelineView at 30 s, 10 s or 1 s, as RN's useNow), `TicketKeyLabel`,
+  `NowReader` (TimelineView at 30 s, 10 s or 1 s), `TicketKeyLabel`,
   `RelatedTicketRows`, `ProgressBar`, `ConductorRollup`, `ParentCrumb`, `ConnectionBanner` (put it
   in a tab root's `.safeAreaInset(edge: .top)`), `Icon("name")` (every shared icon name maps to an
   SF Symbol, Icons.symbols in HarnessKit, checked by a test), `haptic(.success)`,
-  `.confirmation($item)` / `.choiceSheet($item)` (RN confirm / pick), `DraftField` (commits on
-  return or blur). Also `FlowLayout` (RN `flexWrap: "wrap"`; leading or trailing rows),
-  `.primaryToolbarItem(c)` (RN `primaryItemStyle`: prominent only when the theme's onAccent is
+  `.confirmation($item)` / `.choiceSheet($item)`, `DraftField` (commits on
+  return or blur). Also `FlowLayout` (wrapping rows, leading or trailing),
+  `.primaryToolbarItem(c)` (prominent only when the theme's onAccent is
   white), `PickerLatest`, `String.nilIfEmpty` and `deviceName`. Settings-style screens are plain `Form` + `LabeledContent`.
 
 ## Feature slots
@@ -421,7 +421,7 @@ HarnessKit's `BoardScreenRules`. The shared parameters a slot needs come from th
 environment (store, router, palette), not from extra initializer arguments.
 
 The ticket detail screen fetches its plugin tabs with `.pluginTabs(for: ticket, into: $tabs)`
-(Ticket/PluginTabsLoader.swift, RN `usePluginTabs`: nil until loaded, [] on failure, refetched on
+(Ticket/PluginTabsLoader.swift: nil until loaded, [] on failure, refetched on
 workdir/branch/epoch) and hosts each in `PluginTabView`. DEBUG builds also open either tab on its
 own with `-debugScreen browser:<KEY>` or `-debugScreen plugin:<KEY>:<pluginId>:<tabId>`
 (BrowserPluginDebugScreen; the plugin one adds a probe of the bridge messages the page receives).
@@ -447,7 +447,7 @@ from it (Ticket/TicketDetailSupport.swift):
   Its field's AX label is always "Message the agent" (MentionTextEditor `fieldLabel`).
 - Testable branches (menus, the Complete sheet's rules, run rows, labels) are in HarnessKit's
   `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; sim-check closes one with
-  "Dismiss context menu", where RN's action sheet has "Cancel".
+  "Dismiss context menu".
 
 ## Transcript, Agents and Inbox (Ticket/Transcript*, Ticket/Agents*, Inbox/)
 
@@ -469,7 +469,7 @@ What HARNESS-140 settled:
   bottom, and a fling's bounce back off the end unpinned it.
 - **Sub-agent links.** The tool row that started a sub-agent, an Agents row and the sub-agent
   breadcrumb open tabs through `\.ticketDetailOpenTab`; outside a ticket screen (triage) there
-  are no links, as in RN.
+  are no links.
 - **Not checked on screen:** thinking blocks (the dummy driver never emits one) and inline tool
   output images.
 
@@ -483,7 +483,7 @@ Changes is built in (HARNESS-153), not the git plugin's page in a WebView:
 - **Tabs.** `Tabs` stays a fixture-checked port of shared/src/state/tabs.ts. `ChangesTab` sits on
   top: `plugin:git:changes` normalizes to `changes`, git:changes is filtered out of the plugin
   tabs, and the tab shows only when the service lists the git plugin's tab (the plugin is enabled
-  and its `when: "workdir"` holds, or a diff was pinned before the worktree went away), as in RN.
+  and its `when: "workdir"` holds, or a diff was pinned before the worktree went away).
   Until the plugin tabs load it falls back to "has a workdir". It goes after Browser, ahead of
   Details, with the listed tab's icon (the plugin's `branch` by default).
 - **Decisions live in HarnessKit** (tested): `ChangesStore` (refresh queueing, a 600 ms debounce on
@@ -504,20 +504,19 @@ What screens that show agent text use (HARNESS-136):
 
 - **MarkdownView** parses through `MarkdownCache` (bounded, by source text), so re-rendering a long
   transcript doesn't re-parse every message. Ticket keys link only when `ticketLinkable` (it reads
-  the store when one is in the environment). `MarkdownView.scrollsSideways(text)` (RN
-  `scrollsSideways`) says whether a bubble needs a definite width: tables and code scroll sideways.
+  the store when one is in the environment). `MarkdownView.scrollsSideways(text)`
+  says whether a bubble needs a definite width: tables and code scroll sideways.
   Tables lay out with `MarkdownTableLayout` on HarnessKit's `MarkdownTable` (columns capped at
   240 pt).
 - **Links.** Screens set where relative file links open with `.fileLinkScope(ticketKey:)`,
-  `.fileLinkScope(projectId:)` or `.fileLinkScope(FileViewer.triageLinkContext(…))` (RN
-  `FileLinkScope`); MarkdownView's `linkContext` argument wins when it names a root. Where a link
+  `.fileLinkScope(projectId:)` or `.fileLinkScope(FileViewer.triageLinkContext(…))`; MarkdownView's `linkContext` argument wins when it names a root. Where a link
   goes is `LinkRouting.target` (HarnessKit, tested): other schemes open in the system, harness://
   links that aren't files go through the Router, file links push `.file`, and a file link with no
   root toasts. `ContentLinkOpener` is the same opener for links outside markdown.
 - **CodeBlockView** takes a fence tag or a Shiki id; long-press → Copy copies the whole block.
 - **AttachmentRow** presents `AttachmentViewer` itself (a clear fullScreenCover that fades in).
   `AttachmentMedia` caches images and video posters for the row and the viewer. The pager is
-  `AttachmentPager`, a UIKit paging UIScrollView (RN's viewer is a paging ScrollView) whose pages
+  `AttachmentPager`, a UIKit paging UIScrollView whose pages
   are UIHostingControllers of the SwiftUI page views, given the store and palette explicitly. A
   page-style TabView lost sideways swipes that started over AVPlayerViewController's view, so the
   viewer often couldn't page off a video; inside the scroll view, its pan sees them first. Paging is
