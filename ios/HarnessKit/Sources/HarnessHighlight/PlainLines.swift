@@ -1,7 +1,7 @@
 import Foundation
 import HarnessKit
 
-// plainLines and reuseLines from mobile/src/lib/highlight.ts: what a block shows before (or without)
+// plainLines and reuseLines from ios/Tools/highlighter/highlight.ts: what a block shows before (or without)
 // its colors, synchronously, so a view never waits on the highlighter to draw text.
 
 public enum PlainLines {

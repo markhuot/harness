@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A session's conversation (screens/Transcript.tsx), or with `subagentId` one of its sub-agents':
+/// A session's conversation, or with `subagentId` one of its sub-agents':
 /// the REST backfill merged with live transcript.appended events, the streaming delta of the
 /// current run, tool calls paired with their results as collapsible rows, and permission audit
 /// rows. It opens at the bottom and sticks there while the user is at the bottom.

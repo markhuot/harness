@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Settings tab (screens/Settings.tsx): connection (saved Macs, token rotation), network,
+/// The Settings tab: connection (saved Macs, token rotation), network,
 /// appearance and themes, drivers (each opens DriverSettingsScreen) with the default model,
 /// general, permissions, triage, prompts, watchers and projects. Pull to refresh reloads the board snapshot. A settings deep link's theme
 /// picks (`harness://settings?lightTheme=…`) are applied by the shell before this screen shows.
@@ -85,7 +85,7 @@ final class SettingsModel {
     }
 }
 
-/// An alert with one text field (RN Alert.prompt).
+/// An alert with one text field.
 struct SettingsTextPrompt: Identifiable {
     let id = UUID()
     var title: String

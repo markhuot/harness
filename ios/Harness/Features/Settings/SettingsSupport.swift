@@ -2,8 +2,8 @@ import HarnessKit
 import SafariServices
 import SwiftUI
 
-// Shared by Settings, Project settings, the watcher form and Prompts (ui/settings.tsx's Group and
-// SRow, as Form idioms).
+// Shared by Settings, Project settings, the watcher form and Prompts: grouped
+// settings rows, as Form idioms.
 
 extension View {
     /// A Form row drawn in the theme's elevated color.
@@ -15,7 +15,7 @@ extension View {
     }
 }
 
-/// A settings row with a control (RN SRow): the label and the control on one line, the hint across
+/// A settings row with a control: the label and the control on one line, the hint across
 /// the row under them, so a long hint never squeezes the control. Labels and controls stay separate
 /// AX elements (see ARCHITECTURE.md § Pickers: LabeledContent merges them).
 struct SettingsRow<Control: View>: View {
@@ -38,7 +38,7 @@ struct SettingsRow<Control: View>: View {
     }
 }
 
-/// A tappable Form row (RN SRow with onPress): title, an optional subtitle and a trailing view,
+/// A tappable Form row: title, an optional subtitle and a trailing view,
 /// the whole row hit-testable. `accessibilityLabel` replaces the merged label when given.
 struct SettingsButtonRow<Title: View, Subtitle: View, Trailing: View>: View {
     var chevron = false
@@ -80,7 +80,7 @@ private struct SettingsOptionalLabel: ViewModifier {
     }
 }
 
-/// A Section header with a trailing icon button (RN Group's `right`): "Refresh drivers",
+/// A Section header with a trailing icon button: "Refresh drivers",
 /// "Add watcher", "Add project".
 struct SettingsSectionHeader: View {
     let title: String
@@ -108,7 +108,7 @@ struct SettingsSectionHeader: View {
     }
 }
 
-/// A login page in an in-app Safari sheet (expo-web-browser's openBrowserAsync).
+/// A login page in an in-app Safari sheet.
 struct SettingsSafariView: UIViewControllerRepresentable {
     let url: URL
 

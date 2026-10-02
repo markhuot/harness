@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// One control picking a driver and model together (ui/DriverModelPicker.tsx on
+/// One control picking a driver and model together (on
 /// Models.driverModelChoices): watchers, the Triage default, New session, ticket details, and the
 /// project and app default models. A Menu can't search, so the trigger looks like the other
 /// selects but opens a page sheet: a type-ahead field over Default first, then each signed-in

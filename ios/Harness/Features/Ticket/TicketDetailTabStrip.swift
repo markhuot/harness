@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The ticket's tabs (TicketDetail.tsx TabStrip): Summaries, Tickets (conductors), Transcript,
+/// The ticket's tabs: Summaries, Tickets (conductors), Transcript,
 /// Agents (once there are sub-agents), Browser, Changes (when the service lists the git plugin's tab),
 /// Details, then the plugin tabs. Counts and a live
 /// dot ride along; a sub-agent's view highlights Agents.

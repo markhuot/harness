@@ -3,7 +3,7 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// The file a chat link points at (screens/FileViewer.tsx, opened from a harness://file/… link in
+/// The file a chat link points at (opened from a harness://file/… link in
 /// any markdown): the whole file syntax highlighted with line numbers, opened at and tinting the
 /// linked lines, plus a Diff tab with its uncommitted changes when git says it has some. Lines are
 /// a fixed-row-height list (FileCodeList), so a file of thousands of lines opens straight at its
@@ -352,7 +352,7 @@ private struct FileBody: View {
             guard let w = windows?.window, !w.isEmpty, let lang else { return }
             let code = text.lines[w].joined(separator: "\n")
             let hl = Highlighter.app
-            // RN's `lang && hasLanguage(lang)`: an unknown extension stays plain without a job.
+            // Only a bundled language gets a job: an unknown extension stays plain without a job.
             guard await hl.hasLanguage(lang), !Task.isCancelled else { return }
             let result: Highlighted?
             if let hit = hl.cached(code, language: lang, theme: theme, diff: false) {

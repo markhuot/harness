@@ -23,7 +23,7 @@ struct RouteScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(c.bg)
-        // RN pushes these on the root stack, over the tabs, so the tab bar isn't there.
+        // These cover the tabs, so the tab bar isn't there.
         .toolbar(.hidden, for: .tabBar)
     }
 }
@@ -87,7 +87,7 @@ struct CoverHost: View {
     }
 }
 
-/// Routes that need a connection (app/screens/RequireStore.tsx): a spinner until the saved server
+/// Routes that need a connection: a spinner until the saved server
 /// has loaded (a cold start through a deep link lands here first), Connect without one, and the
 /// screen with the store injected once there is one.
 struct RequireStore<Content: View>: View {

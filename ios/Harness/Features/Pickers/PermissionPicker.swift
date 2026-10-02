@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A permission mode, nil = inherit (ui/selects.tsx PermissionPicker): "Default (<inherited>)",
+/// A permission mode, nil = inherit: "Default (<inherited>)",
 /// then each mode with its description as the subtitle.
 struct PermissionPicker: View {
     let value: PermissionMode?

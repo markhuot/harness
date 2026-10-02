@@ -19,7 +19,7 @@ const REPO = resolve(IOS, "..");
 export const SCREENS = join(IOS, "build", "screens");
 const DEFAULT_APP = join(IOS, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
 const BUNDLE = "com.markhuot.harness";
-/** The Debug build ("Harness Dev"). It registers harness:// too, so one left on the shared simulator can catch the pair link. */
+/** The old Debug bundle id (Debug builds now use BUNDLE). It registered harness:// too, so one left on the shared simulator from before could catch the pair link; dev-sim removes it. */
 const DEV_BUNDLE = "com.markhuot.harness.dev";
 
 export const USAGE = `Usage: bun ios/Tools/dev-sim.ts [options]

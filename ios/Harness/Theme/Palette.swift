@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The active color theme as SwiftUI colors (RN `useColors()`), read with
+/// The active color theme as SwiftUI colors, read with
 /// `@Environment(\.palette) private var c`. RootView resolves it from prefs and the system
 /// appearance and injects it; previews get the default light theme.
 struct Palette: Sendable {
@@ -81,7 +81,7 @@ struct Palette: Sendable {
         }
     }
 
-    /// The tone's soft fill and its ink (RN `toneColors`).
+    /// The tone's soft fill and its ink.
     func tone(_ tone: Tone) -> (bg: Color, fg: Color) {
         switch tone {
         case .accent: (accentSoft, accentText)
@@ -97,12 +97,12 @@ struct Palette: Sendable {
     static let dark = Palette(Themes.resolve(ThemeChoice(appearance: .dark, lightTheme: Themes.defaultLightTheme, darkTheme: Themes.defaultDarkTheme), systemDark: true))
 }
 
-/// Badge, callout and toast tones (RN `Tone`).
+/// Badge, callout and toast tones.
 enum Tone: String, CaseIterable, Sendable {
     case neutral, accent, green, red, amber, violet
 }
 
-/// Claude's brand orange, for the claude-code driver badge (theme/tokens.ts CLAUDE_ORANGE).
+/// Claude's brand orange, for the claude-code driver badge.
 let claudeOrange = Color(red: 0xd9 / 255, green: 0x77 / 255, blue: 0x57 / 255)
 
 extension EnvironmentValues {
@@ -110,13 +110,13 @@ extension EnvironmentValues {
 }
 
 extension Font {
-    /// The monospaced face used for keys, paths and tokens (RN MONO).
+    /// The monospaced face used for keys, paths and tokens.
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .scaled(size: size, weight: weight, design: .monospaced)
     }
 
     /// The system face at `size` points at the default text size, following Dynamic Type like the
-    /// body style (RN Text scales with the system text size by default). `Font.system(size:)` never
+    /// body style. `Font.system(size:)` never
     /// scales; a custom font relative to a text style does, and a family that isn't installed falls
     /// back to the system face, so this keeps SF (or SF Mono) and only adds the scaling.
     static func scaled(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {

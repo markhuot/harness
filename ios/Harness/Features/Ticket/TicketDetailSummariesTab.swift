@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Summaries tab (TicketTabs.tsx SummariesTab): the brief (the plan while planning), what the
+/// The Summaries tab: the brief (the plan while planning), what the
 /// ticket depends on, and the summaries its agent and humans posted, newest last. It opens scrolled
 /// to the newest and follows new ones until the user scrolls up.
 struct TicketDetailSummariesTab: View {

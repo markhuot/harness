@@ -2,7 +2,8 @@ import Foundation
 
 /// The JavaScriptCore highlighter bundle for tests: built once per test run with
 /// `bun ios/Tools/build-highlighter.ts` into ios/build/highlighter/, so it always matches the
-/// checked-out highlight.ts. Set HARNESS_HIGHLIGHTER_JS to use a prebuilt file instead.
+/// checked-out ios/Tools/highlighter/highlight.ts. Set HARNESS_HIGHLIGHTER_JS to use a prebuilt
+/// file instead.
 enum HighlighterScript {
     static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // Support

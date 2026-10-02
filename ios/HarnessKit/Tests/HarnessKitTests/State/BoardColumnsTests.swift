@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("mobile boardColumns.ts parity")
+@Suite("BoardColumns")
 struct BoardColumnsTests {
     static func state(_ actions: [BoardAction]) -> BoardState {
         actions.reduce(into: BoardState.initial) { $0.reduce($1) }

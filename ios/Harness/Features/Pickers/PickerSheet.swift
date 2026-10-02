@@ -37,7 +37,7 @@ struct PickerSheet<Content: View, Trailing: View>: View {
         .onAppear { if autofocus { focused = true } }
     }
 
-    /// Cancel, the title and the accessory in the sheet itself (RN's header): AXe doesn't see a
+    /// Cancel, the title and the accessory in the sheet itself: AXe doesn't see a
     /// sheet's toolbar items, and sim-check taps "Cancel" by label.
     private var header: some View {
         HStack(spacing: 10) {

@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// How often a relative timestamp refreshes (RN `useNow(ms)` call sites): the default 30 s, 10 s
+/// How often a relative timestamp refreshes: the default 30 s, 10 s
 /// for approvals, 1 s while something is running.
 enum NowInterval: Double, Sendable {
     case standard = 30

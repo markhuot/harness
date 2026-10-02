@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Inbox tab (screens/Inbox.tsx): every watcher and what its process is doing, then the triage
+/// The Inbox tab: every watcher and what its process is doing, then the triage
 /// sessions their output started, newest first. A watcher opens its form; a session pushes
 /// `.triage(sessionId:)`.
 struct InboxScreen: View {

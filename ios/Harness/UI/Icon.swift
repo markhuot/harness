@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// One of the shared icons (shared/src/state/icons.ts) by name, drawn as its SF Symbol
-/// (Icons.symbols). `size` is the RN icon's box in points; `weight` stands in for its stroke width.
+/// (Icons.symbols). `size` is the icon's box in points; `weight` stands in for its stroke width.
 struct Icon: View {
     let name: String
     var size: CGFloat = 14

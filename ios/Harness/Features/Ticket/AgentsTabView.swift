@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The ticket's Agents tab (screens/AgentsTab.tsx): the sub-agents its agent started inside its
+/// The ticket's Agents tab: the sub-agents its agent started inside its
 /// session, running ones first, then finished ones, newest first. A row opens the sub-agent's
 /// `agent:<id>` tab on the hosting ticket screen. Only shown once the session has sub-agents
 /// (Tabs.effectiveTab falls back to Summaries until then).

@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A multiline editor with `@file` mentions and `/command` completion (ui/mentions.tsx on
+/// A multiline editor with `@file` mentions and `/command` completion (on
 /// Logic/Mentions, Commands and MentionCaret). Typing `@fo` lists matching files and folders, and
 /// tapping one completes it; picking a folder keeps the list open inside it. A /command or skill
 /// that starts the text completes the same way. The service attaches mentioned files to the
@@ -105,7 +105,7 @@ struct MentionTextEditor: View {
             .background(c.bgElev)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
-            // No container label (RN's "Commands"/"Files"): a labeled container is one element
+            // No container label ("Commands"/"Files"): a labeled container is one element
             // to AXe, which then hides the rows sim-check taps (ARCHITECTURE § Accessibility labels).
         }
     }

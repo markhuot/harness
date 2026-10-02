@@ -2,15 +2,15 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("prefs.ts parity")
+@Suite("Prefs")
 struct PrefsTests {
     struct Defaults: Decodable {
         let DEFAULT_PREFS: Prefs
         let HIDE_CHILDREN_DEFAULT: Bool
     }
 
-    /// The TS output as Prefs. TS passes lastProject/boardProject/activeServer through untyped; the
-    /// Swift port keeps only strings, so a non-string expected value means nil here.
+    /// The fixture's output as Prefs. The output passes lastProject/boardProject/activeServer through
+    /// untyped; Swift keeps only strings, so a non-string expected value means nil here.
     static func expected(_ out: JSONValue) throws -> Prefs {
         var o = try #require({ if case let .object(o) = out { o } else { nil } }())
         for k in ["lastProject", "boardProject", "activeServer"] where o[k]?.stringValue == nil { o[k] = .null }
@@ -32,7 +32,7 @@ struct PrefsTests {
         #expect(Prefs.normalize(stored) == got)
     }
 
-    /// After the one-time v2 reset, the user's own choice sticks (prefs.test.ts).
+    /// After the one-time v2 reset, the user's own choice sticks.
     @Test func migrationRunsOnce() throws {
         let migrated = Prefs.normalize(.object(["hideChildren": .bool(false), "theme": .string("dark")]))
         #expect(migrated.hideChildren == true)

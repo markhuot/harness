@@ -2,13 +2,13 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-// Opening links in rendered content (ui/fileLinks.tsx): http(s) and mailto go to Safari (or Mail);
+// Opening links in rendered content: http(s) and mailto go to Safari (or Mail);
 // a file link (harness://file/…, or a bare relative path) opens the file viewer, resolved in the
 // ticket or project the markdown belongs to, which the screen that renders it provides with
 // `.fileLinkScope(…)`; other harness:// links route in the app; ticket keys push the ticket.
 
 extension EnvironmentValues {
-    /// The ticket or project relative file links resolve in (RN `FileLinkScope`).
+    /// The ticket or project relative file links resolve in.
     @Entry var fileLinkContext = FileLinkContext()
 }
 
@@ -57,7 +57,7 @@ enum ContentLinkURL {
     }
 }
 
-/// RN `useOpenLink`: opens one markdown link with the nearest scope.
+/// Opens one markdown link with the nearest scope.
 struct ContentLinkOpener {
     let context: FileLinkContext
     let router: Router

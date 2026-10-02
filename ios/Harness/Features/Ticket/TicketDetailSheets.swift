@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// The ticket screen's sheets (TicketDetail.tsx SheetFrame, RequestChanges, ApproveCustom,
+// The ticket screen's sheets (Request changes, Approve and…,
 // Complete). Each draws its own header (Cancel, the title over the key, the primary action) rather
 // than toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" and
 // "Approve" by label.

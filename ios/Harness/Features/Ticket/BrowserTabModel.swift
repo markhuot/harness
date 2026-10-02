@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// The Browser tab's state and timing glue (screens/BrowserTab.tsx): the subscription, the latest
+/// The Browser tab's state and timing glue: the subscription, the latest
 /// decoded frame, live/idle, the resize gate and its debounce, wheel coalescing, and the hidden
 /// field's typing buffer. The input rules themselves are HarnessKit's (TouchGesture,
 /// WheelCoalescer, BrowserTyping, ResizeGate); this class feeds them touches and clock readings.

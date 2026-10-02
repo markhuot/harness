@@ -3,7 +3,9 @@ import HarnessHighlight
 import HarnessKit
 import Testing
 
-// Fixtures/highlight.json comes from the RN app's real highlight() (shared/fixtures/cases/highlight.ts).
+// Fixtures/highlight.json comes from the real highlight() in ios/Tools/highlighter/highlight.ts, run
+// over its corpus by shared/fixtures/cases/highlight.ts (regenerated, and checked for staleness by
+// shared/src/fixtures.test.ts).
 // These tests run the same inputs through the JavaScriptCore bundle and the Swift ports.
 
 struct HighlightInput: Decodable, Sendable {

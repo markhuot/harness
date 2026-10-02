@@ -19,7 +19,7 @@ struct StickConstants: Decodable {
     let STUCK: Stick
 }
 
-@Suite("stickToBottom.ts parity")
+@Suite("StickToBottom")
 struct StickToBottomTests {
     @Test("STICK_THRESHOLD and STUCK match the TS")
     func constants() throws {

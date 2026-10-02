@@ -3,14 +3,15 @@ import HarnessKit
 import Security
 
 /// The iOS Keychain as AppModel's SecureStorage: generic passwords under one service, readable
-/// after the first unlock (expo-secure-store's AFTER_FIRST_UNLOCK), keyed exactly like the RN
-/// app's entries (`harness.servers`, `harness.prefs`, `harness.token.<id>`).
+/// after the first unlock (the accessibility expo-secure-store used, AFTER_FIRST_UNLOCK), keyed
+/// exactly like the 1.x React Native app's entries (`harness.servers`, `harness.prefs`,
+/// `harness.token.<id>`).
 ///
-/// The service name differs from Expo's, so the native app keeps its own copy, but `get` migrates
-/// one way from the RN app it replaces (same bundle id, so the same default access group): when
-/// the native service has no item for a key, it reads the RN item, copies it into the native
-/// service and returns it. The RN item is only ever read, never changed or deleted. The Debug
-/// "Harness Dev" build has another bundle id (so another access group) and never sees RN items.
+/// The service name differs from Expo's, so this app keeps its own copy, but `get` migrates one
+/// way from the 1.x app it replaced (same bundle id, so the same default access group): when the
+/// service has no item for a key, it reads the 1.x item, copies it into this service and returns
+/// it. The 1.x item is only ever read, never changed or deleted. Every configuration, Debug
+/// included, uses the one bundle id, so a Debug build on a device that had 1.x sees those items too.
 struct KeychainStorage: SecureStorage {
     struct KeychainError: Error, LocalizedError {
         let status: OSStatus
@@ -22,11 +23,11 @@ struct KeychainStorage: SecureStorage {
     var service = "com.markhuot.harness.native"
 
     /// Where expo-secure-store (v57, ios/SecureStoreModule.swift `query(with:)`) keeps an item:
-    /// service `keychainService ?? "app"` plus `:no-auth` (the RN app never sets
+    /// service `keychainService ?? "app"` plus `:no-auth` (the 1.x app never set
     /// requireAuthentication), the key's UTF-8 bytes as both kSecAttrAccount and
     /// kSecAttrGeneric, and the value's UTF-8 bytes as the data. Items written by expo-secure-store
     /// before the suffix existed use the bare "app" service, which Expo still reads as a fallback.
-    /// The `:auth` variant is skipped: reading it would prompt for Face ID, and the RN app never
+    /// The `:auth` variant is skipped: reading it would prompt for Face ID, and the 1.x app never
     /// wrote one.
     static let legacyServices = ["app:no-auth", "app"]
 
@@ -70,8 +71,8 @@ struct KeychainStorage: SecureStorage {
         return value
     }
 
-    /// The RN app's value for `key`, read only. A Keychain error here counts as "no RN item", so a
-    /// broken legacy entry never stops the native app from loading.
+    /// The 1.x app's value for `key`, read only. A Keychain error here counts as "no legacy item",
+    /// so a broken legacy entry never stops the app from loading.
     private func legacyValue(_ key: String) -> String? {
         for legacy in Self.legacyServices {
             if let data = (try? Self.copyData(Self.legacyQuery(key, service: legacy))) ?? nil,
@@ -95,7 +96,7 @@ struct KeychainStorage: SecureStorage {
         guard status == errSecSuccess else { throw KeychainError(status: status) }
     }
 
-    /// Deletes the native item only. The RN item stays, so a later `get` of the same key would
+    /// Deletes this service's item only. The 1.x item stays, so a later `get` of the same key would
     /// migrate it again; AppModel only deletes the token of a server it has just dropped from
     /// `harness.servers`, and never reads that token again.
     func delete(_ key: String) throws {

@@ -16,7 +16,7 @@ final class PromptEditorHandle {
     }
 
     /// Focus with the cursor at `caret`, on the next turn of the run loop: the new text lands
-    /// natively first (RN's requestAnimationFrame).
+    /// natively first.
     func focus(caret: Int) {
         selection = NSRange(location: caret, length: 0)
         DispatchQueue.main.async { [weak self] in

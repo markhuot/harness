@@ -1,7 +1,7 @@
 import Foundation
 import Synchronization
 
-/// highlightCached's memo (mobile/src/lib/highlight.ts): finished highlights per (code, lang, theme,
+/// highlightCached's memo (ios/Tools/highlighter/highlight.ts): finished highlights per (code, lang, theme,
 /// diff), least recently used dropped past `capacity`. "Nothing to color it with" (nil) is cached
 /// too, so a plain block isn't re-tried on every render. Thread-safe and synchronous, so a view can
 /// draw a cached result in its first frame instead of flashing plain text.

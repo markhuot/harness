@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// One driver's settings (screens/DriverSettings.tsx), opened from Settings → Drivers: its status
+/// One driver's settings, opened from Settings → Drivers: its status
 /// and sign-in, the review model, and the Anthropic API key for anthropic-api.
 struct DriverSettingsScreen: View {
     let driverId: String

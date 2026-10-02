@@ -7,7 +7,7 @@ struct SkipReviewHintInput: Decodable, Sendable {
     let skipAgentReview: Bool?
 }
 
-@Suite("mobile/src/lib/newSession.ts parity")
+@Suite("NewSession")
 struct NewSessionTests {
     @Test(arguments: Fixture.cases("mobileNewSession", "skipReviewHintCases", input: SkipReviewHintInput.self, output: String.self))
     func skipReviewHint(_ c: Fixture.Case<SkipReviewHintInput, String>) {

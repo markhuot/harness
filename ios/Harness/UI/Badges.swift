@@ -1,8 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-// Badges, pills and chips in the desktop's design language (ui/kit.tsx), sized for touch and
-// capped for Dynamic Type the way the RN app caps them (maxFontSizeMultiplier ≈ 1.4).
+// Badges, pills and chips in the desktop's design language, sized for touch and
+// capped for Dynamic Type (at about 1.4× the default size).
 
 /// A small rounded label: a tone's soft fill and ink, or outlined (`outline`) on the surface.
 struct Badge: View {
@@ -151,8 +151,8 @@ struct KindBadge: View {
     }
 }
 
-/// The ticket's model, by its display name when the driver's model list has it (ui/selects.tsx
-/// ModelBadge). The list comes from the store's shared per-driver cache, loaded only when there's
+/// The ticket's model, by its display name when the driver's model list has it. The
+/// list comes from the store's shared per-driver cache, loaded only when there's
 /// a model to name; without a store in the environment (previews) it shows the raw id.
 struct ModelBadge: View {
     let model: String?

@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Pairing (screens/Connect.tsx): scan the desktop's QR code (or let the Camera app open
+/// Pairing: scan the desktop's QR code (or let the Camera app open
 /// harness://pair…), or enter the URL and token by hand. Saved Macs can be switched between.
 /// The root screen without an active server, and the Connect sheet (harness://connect) with one.
 struct ConnectScreen: View {

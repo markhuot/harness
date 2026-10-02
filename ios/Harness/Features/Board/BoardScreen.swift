@@ -6,7 +6,7 @@ enum BoardMode: Hashable, Sendable {
     case board, search
 }
 
-/// The board (screens/Board.tsx): five columns as horizontally paged lists with a status strip
+/// The board: five columns as horizontally paged lists with a status strip
 /// (counts) on top, the project filter behind the Projects button, "Show child tickets" in the
 /// options menu (off by default), pull to refresh. Done is paged: it scrolls into older pages
 /// (footer spinner) and its count is the server's total. The Search tab is this same board with
@@ -207,7 +207,7 @@ struct BoardScreen: View {
     }
 }
 
-/// What every part of the board reads, computed once per render (Board.tsx's top half).
+/// What every part of the board reads, computed once per render.
 struct BoardContext {
     let state: BoardState
     /// The project filter, when that project still exists.

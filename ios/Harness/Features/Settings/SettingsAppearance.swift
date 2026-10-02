@@ -1,8 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Settings → Appearance: System / Light / Dark, then a light and a dark theme picker
-/// (Settings.tsx AppearanceSection + ThemePicker, lib/themePicker).
+/// Settings → Appearance: System / Light / Dark, then a light and a dark theme picker.
 struct SettingsAppearanceSection: View {
     @Environment(AppModel.self) private var app
     @Environment(\.palette) private var c
@@ -58,7 +57,7 @@ private struct SettingsThemePicker: View {
                     .padding(12)
                 }
                 .onAppear {
-                    // The pick one swatch in from the leading edge, as RN's contentOffset does.
+                    // The pick one swatch in from the leading edge.
                     let picked = max(0, options.firstIndex { $0.selected } ?? 0)
                     proxy.scrollTo(options[max(0, picked - 1)].theme.id, anchor: .leading)
                 }
@@ -75,7 +74,7 @@ private struct SettingsThemePicker: View {
     }
 }
 
-/// A theme preview (ui/ThemeSwatch.tsx): a tiny board (sidebar, a column with a card, the five
+/// A theme preview: a tiny board (sidebar, a column with a card, the five
 /// status dots) drawn in that theme's own tokens, not the current theme's.
 struct SettingsThemeSwatch: View {
     let theme: Theme

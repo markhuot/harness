@@ -3,7 +3,7 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-// The file viewer's code list (FileViewer.tsx CodeList): fixed-height rows that never wrap, in one
+// The file viewer's code list: fixed-height rows that never wrap, in one
 // UICollectionView that scrolls both ways, so a 20 000-line file opens straight at its range and
 // long lines scroll sideways together. SwiftUI's lazy stacks estimate row heights and re-measure
 // as they go, which made jumping to a line deep in a big file land in the wrong place and stutter;
@@ -30,7 +30,7 @@ struct FileCodeRow {
     var edgeColor: UIColor?
 }
 
-/// Sizes shared by the file and diff bodies (FileViewer.tsx ROW, PAD, CHAR).
+/// Sizes shared by the file and diff bodies.
 enum FileCodeMetrics {
     static let row: CGFloat = 19
     static let pad: CGFloat = 10

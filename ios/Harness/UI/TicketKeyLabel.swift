@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A ticket's identifier as the board shows it (ui/TicketKey.tsx, DESIGN.md "Remote IDs"): its
+/// A ticket's identifier as the board shows it (DESIGN.md "Remote IDs"): its
 /// remote ID when linked, with the local key after it, muted and smaller ("MH-62 · MH-124"). An
 /// unlinked ticket shows its key alone. Only a label: routes and copy-key use the local key.
 struct TicketKeyLabel: View {
@@ -20,7 +20,7 @@ struct TicketKeyLabel: View {
     }
 }
 
-/// The tickets that share a remote ID (ui/RelatedTickets.tsx), as rows that open each one.
+/// The tickets that share a remote ID, as rows that open each one.
 struct RelatedTicketRows: View {
     let related: [RelatedTicket]
     let onOpen: (String) -> Void

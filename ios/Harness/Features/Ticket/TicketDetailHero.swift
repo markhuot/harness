@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The top of the ticket screen (TicketDetail.tsx Hero): the "Part of" crumb, the title, badges,
+/// The top of the ticket screen: the "Part of" crumb, the title, badges,
 /// the approval card and the actions for the ticket's state. It scrolls on its own, up to
 /// `maxHeight`. On the Browser, plugin and sub-agent tabs (`compactTab`) it shrinks to the title on
 /// one line, which expands it on tap.

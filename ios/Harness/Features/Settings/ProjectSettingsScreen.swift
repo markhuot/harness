@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A project's settings (screens/ProjectSettings.tsx): name, identifier (renamed with the live
+/// A project's settings: name, identifier (renamed with the live
 /// preview), color, folder (a text field: there's no folder picker on the phone), default driver /
 /// model / permission mode, worktrees, base branch and "When approved" (git projects), human
 /// review, auto-complete, and removing it. Every change goes out as an updateProject PATCH.

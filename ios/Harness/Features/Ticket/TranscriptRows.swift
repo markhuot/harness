@@ -2,11 +2,10 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-// The transcript's rows (screens/Transcript.tsx RowView, EntryRow, Thinking, PermissionRow,
-// ToolRow): messages, thinking, status dividers and permission decisions, errors, and tool calls
+// The transcript's rows: messages, thinking, status dividers and permission decisions, errors, and tool calls
 // with their results.
 
-/// "3:04 PM" (RN `toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })`).
+/// "3:04 PM": the locale's short time.
 func transcriptTime(_ ms: Double) -> String {
     Date(timeIntervalSince1970: ms / 1000).formatted(date: .omitted, time: .shortened)
 }

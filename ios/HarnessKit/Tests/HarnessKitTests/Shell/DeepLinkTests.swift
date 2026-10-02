@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// Every harness:// link scripts/sim-check.ts opens, and the edges around them.
-@Suite("DeepLink (mobile/app routes, +native-intent)")
+/// Every harness:// link ios/Tools/sim-check.ts opens, and the edges around them.
+@Suite("DeepLink")
 struct DeepLinkTests {
     @Test(arguments: [
         ("harness://board", DeepLink.tab(.board)),

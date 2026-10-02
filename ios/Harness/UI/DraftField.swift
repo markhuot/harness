@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// A text field with a local draft, committed on return or when it loses focus (ui/settings.tsx
-/// DraftField), and only when it changed. An outside change to `value` resets the draft.
+/// A text field with a local draft, committed on return or when it loses focus,
+/// and only when it changed. An outside change to `value` resets the draft.
 /// Use inside a Form row: `LabeledContent("Name") { DraftField(value: s.name, prompt: "Name") { rename($0) } }`.
 struct DraftField: View {
     let value: String

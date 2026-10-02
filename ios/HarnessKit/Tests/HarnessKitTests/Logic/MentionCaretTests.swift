@@ -27,7 +27,7 @@ extension MentionCaretTests {
     }
 }
 
-@Suite("mentionCaret.ts parity")
+@Suite("MentionCaret")
 struct MentionCaretTests {
     /// Replays the input events and checks the state after every one.
     @Test(arguments: Fixture.cases("mentionCaret", "replayCases", input: Run.self, output: [State].self))

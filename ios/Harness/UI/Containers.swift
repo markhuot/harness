@@ -101,7 +101,7 @@ struct Spinner: View {
     }
 }
 
-/// A screen-sized spinner on the theme background (RN requireStore's loading view).
+/// A screen-sized spinner on the theme background.
 struct LoadingScreen: View {
     @Environment(\.palette) private var c
 

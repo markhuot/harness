@@ -3,7 +3,7 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// In-app QR scanner for the pairing code (screens/Scan.tsx): back camera, QR codes only. A bad
+/// In-app QR scanner for the pairing code: back camera, QR codes only. A bad
 /// code says why (warning haptic); the same data isn't handled twice in a row (a failed pair
 /// clears that, so the code can be retried); a good one pairs and goes to the Board.
 struct ScanScreen: View {

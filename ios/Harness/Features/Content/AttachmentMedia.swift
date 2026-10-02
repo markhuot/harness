@@ -237,7 +237,7 @@ final class AttachmentPageController: UIViewController, UIScrollViewDelegate {
         }
     }
 
-    /// The offset past the page's resting place (negative while pulled down), as RN's contentOffset.y.
+    /// The offset past the page's resting place (negative while pulled down).
     private var restingOffsetY: CGFloat { scroll.contentOffset.y + scroll.adjustedContentInset.top }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
@@ -245,7 +245,7 @@ final class AttachmentPageController: UIViewController, UIScrollViewDelegate {
     }
 
     func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-        // UIKit's velocity is points/ms, positive while the content moves up, as RN reports it.
+        // UIKit's velocity is points/ms, positive while the content moves up.
         let close = Attachments.dismissOnRelease(offsetY: Double(restingOffsetY), velocityY: Double(velocity.y), zoomScale: Double(scroll.zoomScale))
         events.onRelease(close)
     }

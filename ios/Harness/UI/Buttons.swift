@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The RN kit's button variants (ui/kit.tsx Button).
+/// The app's button variants.
 enum ButtonVariant: Sendable {
     case primary, secondary, ghost, danger, dangerSolid
 }
@@ -91,7 +91,7 @@ struct HButton: View {
 }
 
 extension View {
-    /// A primary toolbar button (ui/header.ts primaryItemStyle). The system draws a prominent
+    /// A primary toolbar button. The system draws a prominent
     /// item's glyph in white on the tint, so only themes whose onAccent is white get one; the
     /// rest (Dracula, Catppuccin, Nord…) get a plain item tinted with the accent, which keeps the
     /// glyph readable.

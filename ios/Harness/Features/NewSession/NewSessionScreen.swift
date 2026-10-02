@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// New session (screens/NewSession.tsx) edits a draft ticket (DESIGN.md "Drafts"): the project
+/// New session edits a draft ticket (DESIGN.md "Drafts"): the project
 /// with Task | Conductor, the prompt, and an Options disclosure holding the same TicketSettings rows
 /// as ticket Details. The draft is saved lazily (DraftSync, through HarnessKit's NewSessionEditor):
 /// nothing until it has something worth keeping, then a POST and debounced PATCHes. Start session /
@@ -14,7 +14,7 @@ struct NewSessionScreen: View {
     @Environment(BoardStore.self) private var store
 
     var body: some View {
-        // A new store (another Mac, a new token) starts the editor over, as RN's keyed StoreProvider does.
+        // A new store (another Mac, a new token) starts the editor over.
         NewSessionEditorView(projectId: projectId, reopen: key)
             .id(ObjectIdentifier(store))
     }
@@ -141,7 +141,7 @@ private struct NewSessionEditorView: View {
                     Spacer(minLength: 0)
                 }
                 .listRowBackground(c.bgElev)
-                // RN's Segmented plays the select haptic on a change.
+                // The segmented control plays the select haptic on a change.
                 Picker("Kind", selection: Binding(get: { kind }, set: { next in
                     if next != kind { haptic(.select) }
                     editor.edit(UpdateTicketBody(kind: next))

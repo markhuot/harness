@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-// Port of mobile/src/lib/draftSync.test.ts. A fake service records calls (each answer can be held
+// DraftSync: syncing a new session's draft ticket with the service. A fake service records calls (each answer can be held
 // back until released, or fail), and ManualTimers stands in for the debounce's real waits.
 
 @MainActor
@@ -141,7 +141,7 @@ private final class Harness {
         sync.edit(Drafts.applyTicketPatch(sync.local, patch))
     }
 
-    /// The TS tests' `await wait(ms)`: move the clock, then let the requests it started run.
+    /// Waits `ms` of debounce time: move the clock, then let the requests it started run.
     func wait(_ ms: Double) async {
         timers.advance(by: ms)
         await DS.drain()
@@ -149,7 +149,7 @@ private final class Harness {
 }
 
 @MainActor
-@Suite("draftSync.ts parity")
+@Suite("DraftSync")
 struct DraftSyncTests {
     @Test func nothingIsSentWhileEmptyAndTheFirstRealEditCreatesAtOnce() async {
         let f = FakeDraftAPI()

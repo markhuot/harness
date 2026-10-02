@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// One plugin tab's WKWebView and its host bridge (screens/PluginTab.tsx PluginFrame + lib/pluginHost).
+/// One plugin tab's WKWebView and its host bridge.
 /// The page is the plugin's UI served by the service; the bridge rules are the desktop's
 /// (PluginHostBridge), carried over the web view:
 ///
@@ -137,8 +137,7 @@ extension PluginWebHost: WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    /// No new windows: a target=_blank link loads in place (react-native-webview without
-    /// multiple windows), where the navigation policy applies.
+    /// No new windows: a target=_blank link loads in place, where the navigation policy applies.
     func webView(
         _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
         windowFeatures: WKWindowFeatures

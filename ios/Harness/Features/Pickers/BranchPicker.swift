@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A project's branch, searchable, or a new one (ui/BranchPicker.tsx on Branches.branchRows). Same
+/// A project's branch, searchable, or a new one (on Branches.branchRows). Same
 /// trigger as the other selects; it opens a page sheet with a search field over the project's
 /// branches (GET /projects/:id/branches?q=, debounced): the default first, then the matches, then
 /// the typed name (a new branch, or why git won't take it).
@@ -148,7 +148,7 @@ private struct BranchSheet: View {
         }
     }
 
-    /// `useBranchSearch`: re-fetch (debounced) as the query changes; a newer query cancels this one.
+    /// Re-fetch (debounced) as the query changes; a newer query cancels this one.
     private func search() async {
         guard !projectId.isEmpty, let client = store.pickerClient else { return }
         loading = true

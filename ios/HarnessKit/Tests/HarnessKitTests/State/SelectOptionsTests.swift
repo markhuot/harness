@@ -7,7 +7,7 @@ struct SelectedLabelInput: Decodable, Sendable {
     let fallback: String
 }
 
-@Suite("mobile/src/lib/selectOptions.ts parity")
+@Suite("SelectOptions")
 struct SelectOptionsTests {
     @Test(arguments: Fixture.cases("mobileSelectOptions", "selectedLabelCases", input: SelectedLabelInput.self, output: String.self))
     func selectedLabel(_ c: Fixture.Case<SelectedLabelInput, String>) {

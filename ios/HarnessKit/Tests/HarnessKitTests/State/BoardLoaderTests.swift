@@ -2,9 +2,10 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// Port of mobile/src/lib/boardLoader.test.ts.
+/// BoardLoader: paging the board (auto-fill, load more, retry after a failure, refetch races) and
+/// debounced search, checking which requests go out and that stale answers are dropped.
 @MainActor
-@Suite("mobile boardLoader.ts")
+@Suite("BoardLoader")
 struct BoardLoaderTests {
     struct PageCall: Sendable {
         let cursor: String?

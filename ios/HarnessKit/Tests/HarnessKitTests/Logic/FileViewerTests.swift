@@ -13,7 +13,7 @@ struct TriageLinkContextInput: Decodable, Sendable {
     let dispatched: Dispatched?
 }
 
-/// expo-router's params: each value a string or an array of strings.
+/// Route params as the fixture writes them: each value a string or an array of strings.
 struct RouterParamsInput: Decodable, Sendable {
     let params: [String: [String]]
 
@@ -43,7 +43,7 @@ struct HighlightWindowInput: Decodable, Sendable {
     let maxChars: Int
 }
 
-@Suite("fileViewer.ts parity")
+@Suite("FileViewer")
 struct FileViewerTests {
     @Test(arguments: Fixture.cases("fileViewer", "fileRouteForCases", input: FileRouteForInput.self, output: FileRouteParams?.self))
     func fileRouteFor(_ c: Fixture.Case<FileRouteForInput, FileRouteParams?>) {

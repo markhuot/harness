@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Settings → Prompts (screens/Prompts.tsx PromptsScreen): the built-in agent prompts by group,
+/// Settings → Prompts: the built-in agent prompts by group,
 /// each built-in (follows app updates), customized or broken. Rows push `.prompt(id:)`.
 struct PromptsScreen: View {
     @Environment(Router.self) private var router
@@ -12,7 +12,7 @@ struct PromptsScreen: View {
         ZStack {
             if let prompts = catalog.prompts {
                 // A plain stack, not a lazy Form: every row is in the accessibility tree from the
-                // start, as in RN's ScrollView (sim-check waits for a row below the fold).
+                // start (sim-check waits for a row below the fold).
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         Text(promptsIntro).font(.scaled(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)

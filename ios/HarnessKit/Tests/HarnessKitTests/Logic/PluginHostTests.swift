@@ -7,7 +7,7 @@ private let SERVICE = "http://100.64.1.2:7717" // Tailscale address, not on the 
 
 /// A page inside the web view, in JavaScriptCore: window.postMessage dispatches a message event
 /// (synchronously here) with source = window and origin = location.origin, dropping it when
-/// targetOrigin doesn't match. Scripts run the way the TS test runs them:
+/// targetOrigin doesn't match. Scripts run as
 /// `new Function("window", "location", script)(window, location)`.
 private final class FakePage {
     let ctx = JSContext()!
@@ -59,9 +59,9 @@ private final class FakePage {
 
 private let hostileToken = "a\"b'c\\d\ne\r\u{2028}f\u{2029}g</script><script>globalThis.pwned=1</script>`${x}`"
 
-// MARK: - Direct ports of pluginHost.test.ts
+// MARK: - The host bridge against a JavaScriptCore page
 
-@Suite("pluginHost.test.ts")
+@Suite("PluginHost bridge")
 struct PluginHostTests {
     @Test func deliversTheExactMessageEvenWithQuotesBackslashesNewlinesLineSeparatorsAndScriptTags() {
         let msg: JSONValue = .object(["type": .string("harness:init"), "token": .string(hostileToken), "nested": .object(["list": .array([.number(1), .null, .string("\u{0}")])])])
@@ -103,7 +103,8 @@ struct PluginHostTests {
 }
 
 // MARK: - End to end: PluginHostBridge ↔ WebViewFrame ↔ a JS page (the SDK side is plugins/sdk; its
-// detection of ReactNativeWebView is stood in for by nativeBridgeScript)
+// detection of window.ReactNativeWebView, a name kept from the 1.x React Native app, is stood in for
+// by nativeBridgeScript)
 
 private final class EndToEnd {
     let page: FakePage
@@ -197,7 +198,7 @@ struct PluginHostEndToEndTests {
     }
 }
 
-// MARK: - Fixtures computed by the TS implementation
+// MARK: - Fixtures (Fixtures/pluginHost.json, frozen)
 
 private struct InjectionInput: Decodable, Sendable {
     let msg: JSONValue
@@ -226,7 +227,7 @@ private struct MessageEventOutput: Decodable, Sendable, Equatable {
     }
 }
 
-@Suite("pluginHost.ts parity")
+@Suite("PluginHost fixtures")
 struct PluginHostFixtureTests {
     @Test(arguments: Fixture.cases("pluginHost", "injectionCases", input: InjectionInput.self, output: String.self))
     fileprivate func injection(_ c: Fixture.Case<InjectionInput, String>) {
@@ -234,7 +235,7 @@ struct PluginHostFixtureTests {
     }
 
     /// The bridge's own messages (init with a full theme, theme, a full Ticket) through
-    /// WebViewFrame come out byte-identical to TS buildInjection.
+    /// WebViewFrame come out byte-identical to the fixture's buildInjection output.
     @Test(arguments: Fixture.cases("pluginHost", "bridgeInjectionCases", input: BridgeInjectionInput.self, output: [String].self))
     fileprivate func bridgeInjection(_ c: Fixture.Case<BridgeInjectionInput, [String]>) throws {
         let sample = try Fixture.value("protocol", "Ticket", as: [Ticket].self)[0]

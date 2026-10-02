@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("Plugin tab WebView policy (PluginTab.tsx)")
+@Suite("Plugin tab WebView policy")
 struct PluginWebPolicyTests {
     static let origin = "http://127.0.0.1:7717"
 

@@ -2,11 +2,16 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// Loads the JSON that `bun shared/scripts/export-fixtures.ts` writes to Fixtures/<module>.json.
+/// Loads Fixtures/<module>.json. Each file is `{ "<exportName>": <value> }`, and by convention a
+/// case list is `[{ name, input, output }]`.
 ///
-/// Each file is `{ "<exportName>": <value> }`, one entry per named export of
-/// shared/fixtures/cases/<module>.ts. By convention a case list is `[{ name, input, output }]`
-/// with `output` computed by calling the real TypeScript function.
+/// Most files are written by `bun shared/scripts/export-fixtures.ts`, one entry per named export of
+/// shared/fixtures/cases/<module>.ts, with `output` computed by calling the real TypeScript function
+/// in shared/ (or ios/Tools/highlighter); shared/src/fixtures.test.ts fails when one is stale.
+/// Frozen fixtures are the exception: their logic lived only in the 1.x React Native app and now
+/// exists only in Swift, so the committed JSON is the spec and is never regenerated. A module with
+/// nothing left to compute (listed in FROZEN in export-fixtures.ts) has no case file at all; a
+/// mixed one reads its frozen exports back with `frozen()` (shared/fixtures/case.ts).
 enum Fixture {
     struct Case<Input: Decodable & Sendable, Output: Decodable & Sendable>: Decodable, Sendable, CustomTestStringConvertible {
         let name: String

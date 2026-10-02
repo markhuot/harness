@@ -1,5 +1,5 @@
 // Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe), for
-// dev-sim.ts: the same accessibility-tree approach as mobile/scripts/sim-check.ts, so a dev loop
+// dev-sim.ts: the same accessibility-tree approach as sim-check.ts, so a dev loop
 // knows what's on screen instead of sleeping and hoping.
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
