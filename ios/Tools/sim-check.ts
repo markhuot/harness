@@ -1546,6 +1546,58 @@ function screens(s: Seeded): Screen[] {
       },
     },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
+    // iPad: the slide-over panel's "Open in New Window" makes a ticket window of its own (no board
+    // in it), and the next link brings the main window back.
+    ...(ipad
+      ? [
+          {
+            name: "ticket-window",
+            url: `harness://ticket/${k(s.hello)}?tab=transcript`,
+            ready: (l: string[]) => l.some((x) => x.startsWith("Message the agent")),
+            seconds: 12,
+            prepare: async (udid: string) => {
+              await tapWhere(udid, "Open in New Window");
+              await until("ticket window up", async () => {
+                const l = await labels(udid);
+                return !onBoard(l) && !l.includes("Close ticket") && l.some((x) => x.startsWith("Message the agent"));
+              }, 10000);
+              await Bun.sleep(800);
+            },
+            after: async (udid: string) => {
+              moved(udid);
+              // The window comes back on relaunch (the scene saves its ticket): home, kill, launch.
+              await axe("button", "home", "--udid", udid);
+              await Bun.sleep(1500);
+              await simctl("terminate", udid, BUNDLE).catch(() => {});
+              await simctl("launch", udid, BUNDLE);
+              await until("ticket window restored", async () => {
+                const l = await labels(udid);
+                return !onBoard(l) && l.includes("GREET-1") && l.some((x) => x.startsWith("Message the agent"));
+              }, 20000);
+              await simctl("openurl", udid, BOARD);
+              await until("main window back", async () => onBoard(await labels(udid)), 10000);
+            },
+          } satisfies Screen,
+          // A swipe on the panel's header toward the trailing edge closes it, back to the board.
+          {
+            name: "ticket-panel-swiped",
+            url: `harness://ticket/${k(s.hello)}?tab=summaries`,
+            seconds: 8,
+            prepare: async (udid: string) => {
+              const close = await until("panel up", () => findElement(udid, (l) => l === "Close ticket"), 8000);
+              const y = String(Math.round(close.frame.y + close.frame.height / 2));
+              const x = Math.round(close.frame.x + close.frame.width + 60);
+              await axe("swipe", "--start-x", String(x), "--start-y", y, "--end-x", String(x + 400), "--end-y", y, "--duration", "0.3", "--udid", udid);
+              await until("panel closed", async () => {
+                const l = await labels(udid);
+                return onBoard(l) && !l.includes("Close ticket");
+              }, 8000);
+              moved(udid);
+              await Bun.sleep(500);
+            },
+          } satisfies Screen,
+        ]
+      : []),
   ];
 }
 /** Deals `items` out to `n` lanes so each gets about the same total `weight`, keeping their order within a lane. */

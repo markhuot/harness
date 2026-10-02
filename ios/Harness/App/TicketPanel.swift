@@ -29,8 +29,6 @@ struct TicketPanel: View {
         .overlay { RoundedRectangle(cornerRadius: 22).strokeBorder(c.border, lineWidth: 1 / 3) }
         .shadow(color: .black.opacity(0.22), radius: 24, x: 0, y: 8)
         .offset(x: offset)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Ticket panel")
     }
 
     private var value: TicketWindowValue? { TicketWindowValue(route: panel.topTicket) }
