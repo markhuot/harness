@@ -273,6 +273,48 @@ describe("ticket lifecycle", () => {
     expect(runKinds(h, t).filter((k) => k.startsWith("complete"))).toEqual(["complete:succeeded"]);
   });
 
+  test("cancelling a running completion puts the approval back; approving again lands it", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
+    await h.orch.idle();
+    let started = false;
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      started = true;
+      await new Promise<void>((r) => req.signal.addEventListener("abort", () => r(), { once: true }));
+    };
+    h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "tag it" });
+    while (!started) await Bun.sleep(2);
+    await h.orch.cancelTicket(t.key);
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    // Still in review with the agent's approval; the human's is open again, the choice kept.
+    expect([cur.status, cur.agentReview, cur.humanReview, cur.completionAction]).toEqual(["review", "approved", "pending", "custom"]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:cancelled"]);
+    expect(statuses(h, t.sessionId)).toContain("Completion cancelled: approve again to land it");
+
+    h.driver.script = null;
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:cancelled", "complete:succeeded"]);
+  });
+
+  test("cancelling a completion still queued behind another run puts the approval back too", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x [hold-review]" });
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.completeTicket(t.key); // queued behind the held review
+    await h.orch.cancelTicket(t.key);
+    h.driver.release();
+    await h.orch.idle();
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect([cur.status, cur.humanReview]).toEqual(["review", "pending"]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:cancelled", "complete:cancelled"]);
+    expect(statuses(h, t.sessionId)).toContain("Completion cancelled: approve again to land it");
+  });
+
   test("while the complete run is in flight, a message or request for changes is refused and the ticket ends done", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "x" });
@@ -1010,6 +1052,19 @@ describe("conductor", () => {
     expect([child.status, child.agentReview, child.humanReview]).toEqual(["review", "approved", "approved"]);
     expect(runKinds(h, child)).toEqual(["work:succeeded", "review:succeeded"]);
     expect(statuses(h, child.sessionId)).toContain("Ready to complete");
+
+    // The conductor is marked done without landing it: the child is the human's again, and their
+    // approval lands it.
+    const parent = h.store.tickets.get(child.parentId!)!;
+    await h.orch.completeTicket(parent.key, { skipAgent: true });
+    const released = h.orch.ticketDetail(child.key).ticket;
+    expect([released.status, released.humanReview]).toEqual(["review", "pending"]);
+    expect(statuses(h, child.sessionId)).toContain(`${parent.key} is done: approve to land this ticket`);
+    h.driver.script = null;
+    h.orch.humanReview(child.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(child.key).ticket.status).toBe("done");
+    expect(runKinds(h, child)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
   });
 
   test("conductor auto-submits when its run ends with every child done", async () => {
