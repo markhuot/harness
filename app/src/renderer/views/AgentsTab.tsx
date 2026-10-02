@@ -1,11 +1,28 @@
-// The ticket's "Agents" tab: sub-agents the agent started inside its session (DESIGN.md
-// "Sub-agents"), and one sub-agent's own transcript ("agent:<id>" tab). Live from the store:
-// the ticket detail brings the list, subagent.upserted keeps it current.
+// The ticket's "Agents & tasks" tab: sub-agents the agent started inside its session and the
+// background tasks it left running (DESIGN.md "Sub-agents", "Background tasks"), one sub-agent's
+// own transcript, and one task's output ("agent:<id>" tab). Live from the store: the ticket detail
+// brings the list, subagent.upserted keeps it current.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Subagent, SubagentStatus, Ticket } from "@harness/shared";
-import { groupSubagents, SUBAGENT_STATUS_LABEL, subagentById, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTypeLabel, plainText } from "@harness/shared/state";
+import {
+  isTask,
+  plainText,
+  sortSubagents,
+  SUBAGENT_STATUS_LABEL,
+  subagentById,
+  subagentDuration,
+  subagentPath,
+  subagentsOf,
+  subagentTitle,
+  subagentTypeLabel,
+  TAB_LABEL,
+  TASK_OUTPUT_POLL_MS,
+  taskOutputOf,
+} from "@harness/shared/state";
 import { useStore } from "../state/store";
+import { pollTaskOutput } from "../state/taskOutputPoll";
+import { useStickToBottom } from "../components/stickToBottom";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { Transcript } from "./Transcript";
@@ -31,41 +48,29 @@ export function SubagentStatusMark({ status }: { status: SubagentStatus }) {
   );
 }
 
-/** Only shown once the session has sub-agents (effectiveTab falls back to Summaries until then). */
+/** Only shown once the session has sub-agents or tasks (effectiveTab falls back to Summaries until then). */
 export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (subagentId: string) => void }) {
   const { state } = useStore();
   const list = subagentsOf(state, ticket.sessionId);
-  const groups = useMemo(() => groupSubagents(list ?? []), [list]);
-  const now = useNow(groups.running.length > 0);
+  const sorted = useMemo(() => sortSubagents(list ?? []), [list]);
+  const now = useNow(sorted.some((a) => a.status === "running"));
 
-  const sections: { id: string; label: string; items: Subagent[] }[] = [
-    { id: "running", label: "Running", items: groups.running },
-    { id: "finished", label: "Finished", items: groups.finished },
-  ];
   return (
     <div className="agents-tab">
-      {sections
-        .filter((s) => s.items.length > 0)
-        .map((s) => (
-          <section key={s.id} className="children-group" data-group={s.id}>
-            <div className="children-group-head">
-              <span>{s.label}</span>
-              <span className="column-count">{s.items.length}</span>
-            </div>
-            <div className="children-list card-surface">
-              {s.items.map((a) => (
-                <AgentRow key={a.id} agent={a} parent={a.parentId ? subagentById(state, ticket.sessionId, a.parentId) : null} now={now} onOpen={onOpen} />
-              ))}
-            </div>
-          </section>
+      <div className="children-list card-surface">
+        {sorted.map((a) => (
+          <AgentRow key={a.id} agent={a} parent={a.parentId ? subagentById(state, ticket.sessionId, a.parentId) : null} now={now} onOpen={onOpen} />
         ))}
+      </div>
     </div>
   );
 }
 
 function AgentRow({ agent: a, parent, now, onOpen }: { agent: Subagent; parent: Subagent | null; now: number; onOpen: (id: string) => void }) {
   const type = subagentTypeLabel(a);
-  const preview = a.status !== "running" && a.result ? a.result : a.prompt;
+  const task = isTask(a);
+  // A task's command is its title or sits under it; an agent shows its task, then its report.
+  const preview = a.status !== "running" && a.result ? a.result : task ? (a.description.trim() ? a.command : null) : a.prompt;
   return (
     <div
       role="button"
@@ -73,6 +78,7 @@ function AgentRow({ agent: a, parent, now, onOpen }: { agent: Subagent; parent: 
       className={`child-row agent-row ${a.status !== "running" ? "is-done" : ""}`}
       data-agent={a.id}
       data-status={a.status}
+      data-kind={a.kind ?? "agent"}
       onClick={() => onOpen(a.id)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(a.id))}
     >
@@ -86,7 +92,7 @@ function AgentRow({ agent: a, parent, now, onOpen }: { agent: Subagent; parent: 
           </span>
           <Icon name="chevronRight" size={12} className="agent-go" />
         </div>
-        {preview && <div className="child-summary">{plainText(preview)}</div>}
+        {preview && <div className={`child-summary ${task && preview === a.command ? "mono" : ""}`}>{task ? preview : plainText(preview)}</div>}
         {parent && (
           <div className="agent-via">
             <Icon name="bot" size={10} /> started by {subagentTitle(parent)}
@@ -110,7 +116,7 @@ export function SubagentView({ ticket, subagentId, onBack, onOpen }: { ticket: T
       <div className="agent-head">
         <nav className="agent-crumbs">
           <button className="btn btn-ghost btn-sm" onClick={onBack} data-testid="agents-back">
-            <Icon name="chevronLeft" size={12} /> Agents
+            <Icon name="chevronLeft" size={12} /> {TAB_LABEL.agents}
           </button>
           {path.slice(0, -1).map((p) => (
             <span key={p.id} className="agent-crumb">
@@ -153,6 +159,89 @@ export function SubagentView({ ticket, subagentId, onBack, onOpen }: { ticket: T
           ) : null
         }
       />
+    </div>
+  );
+}
+
+/** One background task: its command, its output (polled while it runs) and how it ended. */
+export function TaskView({ ticket, subagentId, onBack }: { ticket: Ticket; subagentId: string; onBack: () => void }) {
+  const { state, client, dispatch, epoch } = useStore();
+  const sessionId = ticket.sessionId;
+  const task = subagentById(state, sessionId, subagentId);
+  const output = taskOutputOf(state, sessionId, subagentId);
+  const running = task?.status === "running";
+  const now = useNow(running);
+  const [error, setError] = useState<string | null>(null);
+
+  // The poll asks whether it's still running at each read; a status change wakes it for the final read.
+  const runningRef = useRef(running);
+  runningRef.current = running;
+  const poll = useRef<ReturnType<typeof pollTaskOutput> | null>(null);
+  useEffect(() => {
+    setError(null);
+    const p = pollTaskOutput({
+      read: (offset) => client.taskOutput(sessionId, subagentId, offset),
+      running: () => runningRef.current,
+      onOutput: (out) => {
+        setError(null);
+        dispatch({ type: "taskOutput", sessionId, subagentId, output: out });
+      },
+      onError: (e) => setError(e.message),
+      intervalMs: TASK_OUTPUT_POLL_MS,
+    });
+    poll.current = p;
+    return () => p.stop();
+  }, [client, dispatch, sessionId, subagentId, epoch]);
+  useEffect(() => poll.current?.wake(), [running]);
+
+  const scroller = useStickToBottom<HTMLDivElement>();
+  const empty = !output?.text;
+
+  return (
+    <div className="agent-view task-view">
+      <div className="agent-head">
+        <nav className="agent-crumbs">
+          <button className="btn btn-ghost btn-sm" onClick={onBack} data-testid="agents-back">
+            <Icon name="chevronLeft" size={12} /> {TAB_LABEL.agents}
+          </button>
+        </nav>
+        {task ? (
+          <div className="agent-title">
+            <SubagentStatusMark status={task.status} />
+            <strong className="truncate">{subagentTitle(task)}</strong>
+            {subagentTypeLabel(task) && <span className="badge badge-outline mono">{subagentTypeLabel(task)}</span>}
+            <span className="grow" />
+            <span className="agent-time">
+              {SUBAGENT_STATUS_LABEL[task.status]} · {subagentDuration(task, now)}
+            </span>
+          </div>
+        ) : (
+          <div className="agent-title muted">Loading…</div>
+        )}
+        {task?.command && <pre className="task-command selectable">{task.command}</pre>}
+      </div>
+      <div className="task-output" ref={scroller} data-state={output ? (output.available ? (empty ? "empty" : "text") : "unavailable") : "loading"}>
+        {output?.truncated && <div className="task-note">Showing the latest output only</div>}
+        {error && (
+          <div className="t-error">
+            <Icon name="alert" /> Couldn't read the output: {error}
+          </div>
+        )}
+        {!output && !error && (
+          <div className="empty">
+            <div className="spinner" />
+          </div>
+        )}
+        {output && !output.available && empty && <div className="task-note">Output isn't available</div>}
+        {output?.available && empty && (running ? <div className="task-note">Waiting for output…</div> : <div className="task-note">No output</div>)}
+        {!empty && <pre className="task-output-text selectable">{output!.text}</pre>}
+      </div>
+      {task?.result && (
+        <div className="task-result selectable">
+          <div className="t-label">Result</div>
+          <Markdown text={task.result} />
+        </div>
+      )}
     </div>
   );
 }

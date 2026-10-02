@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -11,7 +11,7 @@ export { groupTranscript, toolPreview } from "@harness/shared/state";
 
 /**
  * A session's conversation, or with `subagentId` one of its sub-agents'. `onOpenSubagent` turns
- * the tool rows that started sub-agents into links to their transcripts.
+ * the tool rows that started sub-agents or background tasks into links to their transcripts or output.
  */
 export function Transcript({
   sessionId,
@@ -194,7 +194,7 @@ const ToolRow = memo(function ToolRow({
 }: {
   call: (TranscriptEntry & { content: { type: "tool_call" } }) | null;
   result?: TranscriptEntry & { content: { type: "tool_result" } };
-  /** The sub-agent this call started, when it started one */
+  /** The sub-agent or background task this call started, when it started one */
   agent?: Subagent | null;
   onOpenAgent?: (id: string) => void;
 }) {
@@ -213,12 +213,12 @@ const ToolRow = memo(function ToolRow({
       </button>
       {agent && onOpenAgent && (
         <div className="t-tool-agent" data-agent={agent.id}>
-          <Icon name="bot" size={12} />
+          <Icon name={isTask(agent) ? "terminal" : "bot"} size={12} />
           <span className="truncate">
             {subagentTitle(agent)} · {SUBAGENT_STATUS_LABEL[agent.status]}
           </span>
           <button className="btn btn-ghost btn-sm" onClick={() => onOpenAgent(agent.id)}>
-            Open transcript <Icon name="chevronRight" size={11} />
+            {subagentOpenLabel(agent)} <Icon name="chevronRight" size={11} />
           </button>
         </div>
       )}
