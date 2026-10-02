@@ -33,8 +33,10 @@
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
 //      prompt editor keeps its cursor above it as the text grows, and the
-//      New session sheet scrolls to its last button above it. Needs the simulator's software
-//      keyboard (I/O → Keyboard → uncheck Connect Hardware Keyboard); keyboard-*.png
+//      New session sheet scrolls to its last button above it; keyboard-*.png. iOS hides the
+//      software keyboard once it has seen a hardware one, and AXe's typing is hardware key events,
+//      so before each focus the run clears the device's HardwareKeyboardLastSeen (in the simulated
+//      device's own preferences, so no other simulator changes) and puts the old value back after
 //
 //   --mentions: in New session and the ticket composer, typing `@…` lists the project's files,
 //      tapping one completes it, and the run the prompt starts gets the file attached ("Attached @…"
@@ -221,6 +223,28 @@ async function tapWhere(udid: string, label: string | ((l: string) => boolean), 
   const y = String(Math.round(el.frame.y + el.frame.height / 2));
   if (opts.longPress) await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", String(opts.longPress), "--udid", udid);
   else await axe("tap", "-x", x, "-y", y, "--udid", udid);
+}
+/**
+ * Taps a header item by its label when AXe can see it (the native app's toolbar items), else at the
+ * point where it sits in RN's header (RN's glass header buttons aren't in AXe's tree).
+ */
+async function tapHeader(udid: string, label: string | ((l: string) => boolean), at: { x: number; y: number }) {
+  const match = typeof label === "string" ? (l: string) => l === label : label;
+  const el = await until(`header ${label}`, () => findElement(udid, match), 1500).catch(() => null);
+  const x = el ? el.frame.x + el.frame.width / 2 : at.x;
+  const y = el ? el.frame.y + el.frame.height / 2 : at.y;
+  await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--udid", udid);
+}
+/**
+ * Closes an open menu without choosing anything: RN's action sheet by its Cancel, a native Menu by
+ * its "Dismiss context menu" backdrop. The backdrop covers the whole screen, so its center can sit
+ * under one of the menu's rows; tap near its bottom edge, below any menu that opens from the top.
+ */
+async function dismissMenu(udid: string) {
+  const el = await until("menu backdrop or Cancel", () => findElement(udid, (l) => l === "Cancel" || l === "Dismiss context menu"), 8000);
+  const x = Math.round(el.frame.x + el.frame.width / 2);
+  const y = Math.round(el.AXLabel === "Cancel" ? el.frame.y + el.frame.height / 2 : el.frame.y + el.frame.height - 60);
+  await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
 }
 /**
  * Scrolls the screen's scroll view with slow swipes (no fling) until an element `match` accepts
@@ -767,7 +791,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     throw new Error("couldn't open the Done column");
   };
   const boardMenu = async () => {
-    await axe("tap", "-x", "308", "-y", "84", "--udid", udid); // Board options (…), in the header
+    await tapHeader(udid, "Board options", { x: 308, y: 84 });
     await tapWhere(udid, "Show child tickets");
   };
   const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
@@ -978,13 +1002,39 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   });
 }
 
+/**
+ * The simulated device's "a hardware keyboard was seen" flag (com.apple.keyboard.preferences in the
+ * device's own data), which keeps the software keyboard down. AXe types with hardware key events,
+ * which set it again, so --keyboard clears it before every focus. Returns the value it found ("1",
+ * "0" or null when unset) so the run can put it back.
+ */
+async function hardwareKeyboardSeen(udid: string, value?: "0" | "1" | null): Promise<string | null> {
+  const domain = "com.apple.keyboard.preferences";
+  const key = "HardwareKeyboardLastSeen";
+  const was = (await sh(["xcrun", "simctl", "spawn", udid, "defaults", "read", domain, key], { allowFail: true })) || null;
+  if (value === null) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "delete", domain, key], { allowFail: true });
+  else if (value !== undefined) await sh(["xcrun", "simctl", "spawn", udid, "defaults", "write", domain, key, "-bool", value === "1" ? "YES" : "NO"]);
+  return was === "1" || was === "0" ? was : null;
+}
+
 /** --keyboard: the composer and a sheet's last control stay above the on-screen keyboard. */
 async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
+  const was = await hardwareKeyboardSeen(udid);
+  try {
+    await keyboardChecksWithSoftwareKeyboard(udid, p);
+  } finally {
+    await hardwareKeyboardSeen(udid, was as "0" | "1" | null);
+  }
+}
+
+async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
   // The keyboard's top edge: the highest key row. Keys are the only single-letter labels on screen.
   const keyboardTop = async () => {
     const keys = (await nodes(udid)).filter((n) => /^[a-zA-Z]$/.test(n.AXLabel ?? "") || n.AXLabel === "space");
     return keys.length >= 10 ? Math.min(...keys.map((k) => k.frame.y)) - 8 : null;
   };
+  // Before each focus: forget the hardware keyboard AXe's typing announced.
+  const software = () => hardwareKeyboardSeen(udid, "0");
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
 
   // The composer's "Move to in progress" switch and hint show only while writing: once the field
@@ -998,15 +1048,19 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
   await check("the composer's switch shows while writing", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
     if (await switchShown()) throw new Error("shown before the field was focused");
+    await software();
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
     if (!(await switchShown())) throw new Error("no switch once focused");
     await dismiss(top);
     await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
+    await software();
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     await until("keyboard up", keyboardTop, 8000);
     await axe("type", "Draft", "--udid", udid);
-    await dismiss(top);
+    // The typing announced a hardware keyboard, which may have taken the software one down already.
+    if (await keyboardTop()) await dismiss(top);
+    else await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", "700", "--duration", "0.3", "--udid", udid);
     await Bun.sleep(400);
     if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
     return "hidden until focused, gone after an empty blur, kept with a draft";
@@ -1014,6 +1068,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
 
   await check("ticket composer sits on top of the keyboard", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+    await software();
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
     await Bun.sleep(600);
@@ -1027,6 +1082,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
   });
 
   await check("New session scrolls to its last button above the keyboard", async () => {
+    await software();
     await goto(udid, "harness://new");
     const top = await until("keyboard up", keyboardTop, 8000);
     await Bun.sleep(600);
@@ -1051,6 +1107,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
     const isField = (l: string) => l === "Agent review prompt";
     await goto(udid, "harness://prompt/run.review", (l) => l.includes("Reset to built-in"));
     const start = await until("editor field", () => findElement(udid, isField), 5000);
+    await software();
     // Near its last line puts the cursor at the end of the text.
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
     const top = await until("keyboard up", keyboardTop, 8000);
@@ -1399,7 +1456,7 @@ function screens(s: Seeded): Screen[] {
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
       // RN's action sheet has Cancel; the native app's menu closes with a tap outside it.
-      after: (udid) => tapWhere(udid, (l) => l === "Cancel" || l === "Dismiss context menu").then(() => Bun.sleep(400)),
+      after: (udid) => dismissMenu(udid).then(() => Bun.sleep(400)),
     },
     {
       name: "approve-custom",
@@ -1580,7 +1637,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         });
         await shot(udid, "card-tap-detail-light");
         // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
-        await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
+        await tapHeader(udid, (l) => l === "Back" || l === "Board", { x: 32, y: 89 });
         await until("back on the board", async () => ((l) => l.some(card) && !l.includes(APPROVE_MERGE))(await labels(udid)), 8000);
         lastUrl.set(udid, BOARD);
         await shot(udid, "card-tap-back-light");
