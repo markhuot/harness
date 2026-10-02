@@ -27,6 +27,23 @@ describe("inlineTokens: ticket keys", () => {
     ]);
     expect(inlineTokens("[PLAYR-9](https://x.test/PLAYR-9)")).toEqual([{ t: "link", text: "PLAYR-9", url: "https://x.test/PLAYR-9" }]);
   });
+
+  test("[label](KEY) is a ticket token for KEY that carries the label", () => {
+    expect(inlineTokens("See [RFAWC-726](RFACOM-2) now")).toEqual([
+      { t: "text", text: "See " },
+      { t: "ticket", key: "RFACOM-2", text: "RFAWC-726" },
+      { t: "text", text: " now" },
+    ]);
+    expect(inlineTokens("[the fix](HARNESS-12)")).toEqual([{ t: "ticket", key: "HARNESS-12", text: "the fix" }]);
+  });
+
+  test("a link target that only looks like a key isn't a ticket (it stays a file link)", () => {
+    expect(inlineTokens("[x](rfacom-2)")).toEqual([{ t: "link", text: "x", url: "rfacom-2" }]);
+    expect(inlineTokens("[X](FOO-1a)")).toEqual([{ t: "link", text: "X", url: "FOO-1a" }]);
+    for (const s of ["[x](rfacom-2)", "[X](FOO-1a)", "[X](Foo-1)", "[X](2FA-3)", "[X](FOO-1/bar)", "[X](https://x.test/FOO-1)"]) {
+      expect(inlineTokens(s).some((t) => t.t === "ticket")).toBe(false);
+    }
+  });
 });
 
 describe("ticketLinkable", () => {

@@ -85,8 +85,8 @@ struct MarkdownStyle {
                 run = AttributedString(text)
                 run.font = base
                 run.link = ContentLinkURL.link(url)
-            case let .ticket(key):
-                run = AttributedString(key)
+            case let .ticket(key, text):
+                run = AttributedString(text ?? key)
                 run.font = base
                 if linkable(key) { run.link = ContentLinkURL.ticket(key) }
             }

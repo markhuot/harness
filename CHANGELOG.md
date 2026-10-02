@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Agents can now set a ticket's Remote ID and its link when they create or edit a ticket, not
+  only when triage dispatches one. A ticket an agent files for a Jira issue shows that issue's
+  key on the board, the same way it would if you'd typed it into the ticket's settings.
+- Summaries and messages can name a linked ticket as `[FOO-123](WEB-12)`. The Mac, iPhone and
+  iPad show FOO-123 as a link that opens WEB-12. Agents are now told to write linked tickets
+  this way.
+
 ### Changed
 
 - When a ticket has nothing to land, its Approve button no longer offers **Approve and merge** or

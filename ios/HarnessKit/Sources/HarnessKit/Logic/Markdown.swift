@@ -88,13 +88,14 @@ public enum Markdown {
     }
 
     /// An inline token, encoded like the TS union: `{ t: "link", text, url }`, `{ t: "ticket", key }`…
+    /// A ticket token's `text` is the label of a `[label](KEY)` link, nil (and not encoded) for a bare key.
     public enum InlineToken: Codable, Equatable, Sendable {
         case text(String)
         case code(String)
         case strong(String)
         case em(String)
         case link(text: String, url: String)
-        case ticket(key: String)
+        case ticket(key: String, text: String? = nil)
 
         private enum CodingKeys: String, CodingKey { case t, text, url, key }
 
@@ -107,7 +108,7 @@ public enum Markdown {
             case "strong": self = .strong(try c.decode(String.self, forKey: .text))
             case "em": self = .em(try c.decode(String.self, forKey: .text))
             case "link": self = .link(text: try c.decode(String.self, forKey: .text), url: try c.decode(String.self, forKey: .url))
-            case "ticket": self = .ticket(key: try c.decode(String.self, forKey: .key))
+            case "ticket": self = .ticket(key: try c.decode(String.self, forKey: .key), text: try c.decodeIfPresent(String.self, forKey: .text))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown inline token \(t)")
             }
         }
@@ -131,9 +132,10 @@ public enum Markdown {
                 try c.encode("link", forKey: .t)
                 try c.encode(text, forKey: .text)
                 try c.encode(url, forKey: .url)
-            case let .ticket(key):
+            case let .ticket(key, text):
                 try c.encode("ticket", forKey: .t)
                 try c.encode(key, forKey: .key)
+                try c.encodeIfPresent(text, forKey: .text)
             }
         }
     }
@@ -236,6 +238,9 @@ public enum Markdown {
     /// the label. Bare URLs are autolinked only for http(s).
     /// An UPPERCASE-NN word is a "ticket" token; renderers link it only when it names a ticket they
     /// can open (ticketLinkable), so "UTF-8" or "SHA-256" stay plain text.
+    /// [label](KEY), whose target is a whole ticket key (`[RFAWC-726](RFACOM-2)`: a remote ID labelling
+    /// the local ticket), is a "ticket" token for KEY carrying the label as `text`; renderers show the
+    /// label, linked to KEY when it's linkable and plain otherwise. Bare keys have no `text`.
     public static func inlineTokens(_ text: String) -> [InlineToken] {
         let ns = text as NSString
         var out: [InlineToken] = []
@@ -255,7 +260,11 @@ public enum Markdown {
             } else if participated(m, 4) {
                 let mm = Pattern.linkParts.exec(s)!
                 let label = mm[1]!, url = mm[2]!
-                out.append(Pattern.httpScheme.test(url) || FileLinks.parseFileLink(url) != nil ? .link(text: label, url: url) : .text(label))
+                if Pattern.ticketKey.test(url) {
+                    out.append(.ticket(key: url, text: label))
+                } else {
+                    out.append(Pattern.httpScheme.test(url) || FileLinks.parseFileLink(url) != nil ? .link(text: label, url: url) : .text(label))
+                }
             } else if participated(m, 5) {
                 out.append(.link(text: s, url: s))
             } else if participated(m, 6) {
@@ -458,6 +467,8 @@ public enum Markdown {
         )
         /// `/^\[([^\]]+)\]\(([^)\s]+)\)$/`
         static let linkParts = Pattern("^\\[([^\\]]+)\\]\\(([^)\(ws)]+)\\)\\z")
+        /// TICKET_KEY: `/^[A-Z][A-Z0-9]*-\d+$/` (the target never holds a line break, so `\z` is `$`)
+        static let ticketKey = Pattern("^[A-Z][A-Z0-9]*-[0-9]+\\z")
         /// `/^https?:/`
         static let httpScheme = Pattern("^https?:")
         /// `/```[\s\S]*?```/g`
