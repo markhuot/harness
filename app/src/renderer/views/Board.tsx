@@ -9,6 +9,8 @@ import {
   depChipTitle,
   dependencyStates,
   dimOnBoard,
+  isWorking,
+  workingTitle,
   doneCount,
   hasCustomDriver,
   hideOnBoard,
@@ -357,10 +359,11 @@ const TicketCard = memo(function TicketCard({
   const scope = usePaneScope();
   const draft = !!t.draft;
   const discard = () => onDiscard(t);
+  const working = isWorking(state.tickets, t);
 
   return (
     <article
-      className={`card ${draft ? "draft" : ""} ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${t.busy ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
+      className={`card ${draft ? "draft" : ""} ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${working ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={isConductor(t) ? () => onHoverConductor(t.id) : undefined}
@@ -399,7 +402,7 @@ const TicketCard = memo(function TicketCard({
             <ReviewMark who="human" state={t.humanReview} />
           </span>
         )}
-        {t.busy && <span className="spinner" title="Agent working" />}
+        {working && <span className="spinner" title={workingTitle(t)} />}
         {t.status === "done" && t.pullRequestUrl && (
           <span className="badge badge-outline card-pr" data-testid="card-pr" title={t.pullRequestUrl}>
             <Icon name="branch" />

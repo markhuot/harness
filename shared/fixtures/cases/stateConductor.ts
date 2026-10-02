@@ -13,12 +13,14 @@ import {
   HIDE_CHILDREN_KEY,
   hideOnBoard,
   isChild,
+  isWorking,
   needsHuman,
   progressLabel,
   progressOf,
   progressSegments,
   SEGMENT_ORDER,
   waitingOn,
+  workingTitle,
   type DepState,
 } from "../../src/state/conductor";
 import { cases } from "../case";
@@ -140,6 +142,31 @@ export const progressCases = cases(
     "attention counts approvals outside blocked": [kid({ key: "Q-1", status: "in_progress", pendingApproval: approval }), kid({ key: "Q-2", status: "review", humanReview: "pending" })],
     "top-level review counts as attention": [tk({ key: "Q-3", status: "review", humanReview: "pending" })],
     empty: [],
+  },
+);
+
+const w1 = tk({ key: "W-1", kind: "conductor" });
+const w2 = tk({ key: "W-2", kind: "conductor", parentId: w1.id });
+const wBusyKid = tk({ key: "W-3", parentId: w1.id, status: "in_progress", busy: true });
+const wBusyGrandkid = tk({ key: "W-4", parentId: w2.id, busy: true });
+const wBlocked = tk({ key: "W-5", parentId: w1.id, status: "blocked" });
+const wStopped = tk({ key: "W-6", parentId: w1.id, status: "in_progress" });
+const wElsewhere = tk({ key: "W-7", parentId: "id-OTHER", busy: true });
+const wCycleA = tk({ key: "W-8", parentId: "id-W-9", busy: true });
+const wCycleB = tk({ key: "W-9", parentId: "id-W-8" });
+
+export const isWorkingCases = cases(
+  ({ tickets, ticket }: { tickets: Record<string, Ticket>; ticket: Ticket }) => ({ working: isWorking(tickets, ticket), title: workingTitle(ticket) }),
+  {
+    "busy child": { tickets: rec(w1, wBusyKid), ticket: w1 },
+    "busy grandchild": { tickets: rec(w1, w2, wBusyGrandkid), ticket: w1 },
+    "busy grandchild, middle conductor": { tickets: rec(w1, w2, wBusyGrandkid), ticket: w2 },
+    "children blocked or stopped": { tickets: rec(w1, wBlocked, wStopped, wElsewhere), ticket: w1 },
+    "own run": { tickets: {}, ticket: tk({ key: "W-10", busy: true }) },
+    "busy parent doesn't roll down": { tickets: rec({ ...w1, busy: true }, wBlocked), ticket: wBlocked },
+    "parent cycle ends the walk": { tickets: rec(wCycleA, wCycleB), ticket: w1 },
+    "parent cycle still finds its member": { tickets: rec(wCycleA, wCycleB), ticket: wCycleB },
+    "empty-string parent ends the walk": { tickets: rec(tk({ key: "W-11", parentId: "", busy: true }), tk({ key: "W-12", id: "" } as Partial<Ticket> & { key: string })), ticket: w1 },
   },
 );
 

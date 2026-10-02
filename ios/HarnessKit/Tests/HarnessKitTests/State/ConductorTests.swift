@@ -16,6 +16,16 @@ struct ChildrenOfTicketInput: Decodable, Sendable {
     let conductorId: String
 }
 
+struct IsWorkingInput: Decodable, Sendable {
+    let tickets: [String: Ticket]
+    let ticket: Ticket
+}
+
+struct IsWorkingOutput: Decodable, Sendable, Equatable {
+    let working: Bool
+    let title: String
+}
+
 struct ProgressOutput: Decodable, Sendable {
     let progress: Conductor.Progress
     let label: String
@@ -83,6 +93,12 @@ struct ConductorTests {
     @Test(arguments: Fixture.cases("stateConductor", "childrenOfTicketCases", input: ChildrenOfTicketInput.self, output: [String].self))
     func childrenOfTicket(_ c: Fixture.Case<ChildrenOfTicketInput, [String]>) {
         #expect(Conductor.childrenOfTicket(c.input.tickets, conductorId: c.input.conductorId).map(\.key) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("stateConductor", "isWorkingCases", input: IsWorkingInput.self, output: IsWorkingOutput.self))
+    func isWorking(_ c: Fixture.Case<IsWorkingInput, IsWorkingOutput>) {
+        let got = IsWorkingOutput(working: Conductor.isWorking(c.input.tickets, c.input.ticket), title: Conductor.workingTitle(c.input.ticket))
+        #expect(got == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateConductor", "progressCases", input: [Ticket].self, output: ProgressOutput.self))

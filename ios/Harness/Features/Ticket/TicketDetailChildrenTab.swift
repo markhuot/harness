@@ -122,7 +122,7 @@ private struct TicketDetailChildRow: View {
                     .foregroundStyle(c.text)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if child.busy { Spinner() }
+                if Conductor.isWorking(state.tickets, child) { Spinner().accessibilityLabel(Conductor.workingTitle(child)) }
                 if child.status == .review {
                     HStack(spacing: 3) {
                         ReviewMark(who: .agent, state: child.agentReview)

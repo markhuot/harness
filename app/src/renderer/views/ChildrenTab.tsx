@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, latestSummary, plainText, progressLabel, progressOf } from "@harness/shared/state";
+import { attachmentsLabel, attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestSummary, plainText, progressLabel, progressOf, workingTitle } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
@@ -120,7 +120,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
             <TicketKey ticket={c} />
           </span>
           <span className="child-title">{c.title || "Untitled"}</span>
-          {c.busy && <span className="spinner" title="Agent working" />}
+          {isWorking(state.tickets, c) && <span className="spinner" title={workingTitle(c)} />}
           {c.status === "review" && (
             <span className="card-reviews">
               <ReviewMark who="agent" state={c.agentReview} />

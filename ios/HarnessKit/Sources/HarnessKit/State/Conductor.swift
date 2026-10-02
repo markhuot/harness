@@ -79,6 +79,27 @@ public enum Conductor {
             }
     }
 
+    /// Whether a ticket's card shows the working spinner: its own agent has a run going, or (rolled
+    /// up for a conductor) any ticket below it does, children and their children alike. A conductor
+    /// whose children are all blocked, stopped or crashed stops spinning like any idle ticket. Walks
+    /// up from each busy ticket rather than down from this one, since few tickets are busy at once.
+    public static func isWorking(_ tickets: [String: Ticket], _ t: Ticket) -> Bool {
+        if t.busy { return true }
+        for b in tickets.values where b.busy {
+            var seen: Set<String> = [b.id]
+            var id = b.parentId
+            while let cur = id, !cur.isEmpty, !seen.contains(cur) {
+                if cur == t.id { return true }
+                seen.insert(cur)
+                id = tickets[cur]?.parentId
+            }
+        }
+        return false
+    }
+
+    /// The spinner's accessibility label: whose work it stands for.
+    public static func workingTitle(_ t: Ticket) -> String { t.busy ? "Agent working" : "A child ticket is working" }
+
     // MARK: Progress
 
     public struct Progress: Codable, Sendable, Equatable {

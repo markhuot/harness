@@ -46,6 +46,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   narrow for all five (portrait on an 11-inch iPad, a small Stage Manager window), the board scrolls
   sideways, and tapping a column's header brings it into view. Move a card from its menu (touch and
   hold), as on the Mac. In a narrow Split View the board works as it does on iPhone.
+- A conductor's card now shows the working spinner whenever one of its child tickets (or their
+  children) has an agent running, not only when the conductor's own agent is running (Mac, iPhone
+  and iPad, on the board and in the Tickets tab). The spinner goes away once every child has
+  stopped, is blocked or has crashed.
 
 ### Removed
 
