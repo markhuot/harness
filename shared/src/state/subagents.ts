@@ -1,8 +1,9 @@
-// Sub-agents an agent started inside its session (DESIGN.md "Sub-agents"): selectors and labels
-// for the ticket's Agents tab and the sub-agent transcript view, shared by every client.
+// Sub-agents an agent started inside its session, and the background tasks it left running
+// (DESIGN.md "Sub-agents", "Background tasks"): selectors and labels for the ticket's Agents & tasks
+// tab, the sub-agent transcript view and the task output view, shared by every client.
 
-import type { Subagent, SubagentStatus } from "../index";
-import { transcriptKey, type State, type TranscriptState } from "./reducer";
+import type { Subagent, SubagentKind, SubagentStatus } from "../index";
+import { transcriptKey, type State, type TaskOutputState, type TranscriptState } from "./reducer";
 
 export const SUBAGENT_STATUS_LABEL: Record<SubagentStatus, string> = {
   running: "Running",
@@ -25,15 +26,42 @@ export function subagentTranscript(state: State, sessionId: string, id: string):
   return state.transcripts[transcriptKey(sessionId, id)];
 }
 
-/** What a sub-agent row is called: its task description, else its agent type. */
-export function subagentTitle(s: Pick<Subagent, "description" | "agentType">): string {
+export const TASK_KIND_LABEL: Record<Exclude<SubagentKind, "agent">, string> = {
+  bash: "Bash",
+  monitor: "Monitor",
+};
+
+/** A background task (a Bash command, a Monitor), not an agent. */
+export function isTask(s: Pick<Subagent, "kind">): boolean {
+  return s.kind === "bash" || s.kind === "monitor";
+}
+
+type Titled = Pick<Subagent, "description" | "agentType"> & Partial<Pick<Subagent, "kind" | "command">>;
+
+/** What a row is called: its task description, else its command (a task) or agent type. */
+export function subagentTitle(s: Titled): string {
+  if (isTask(s)) return s.description.trim() || s.command?.trim() || "Background task";
   return s.description.trim() || s.agentType || "Sub-agent";
 }
 
-/** "Explore" · "general-purpose" chip text; null when it would just repeat the title. */
-export function subagentTypeLabel(s: Pick<Subagent, "description" | "agentType">): string | null {
+/** "Explore" · "general-purpose" · "Bash" chip text; null when it would just repeat the title. */
+export function subagentTypeLabel(s: Titled): string | null {
+  if (isTask(s)) return TASK_KIND_LABEL[s.kind as "bash" | "monitor"];
   return s.agentType && s.description.trim() ? s.agentType : null;
 }
+
+/** The transcript link on the tool row that started it. */
+export function subagentOpenLabel(s: Pick<Subagent, "kind">): string {
+  return isTask(s) ? "Open output" : "Open transcript";
+}
+
+/** A background task's output as loaded so far (undefined before the first read). */
+export function taskOutputOf(state: State, sessionId: string, id: string): TaskOutputState | undefined {
+  return state.taskOutputs[transcriptKey(sessionId, id)];
+}
+
+/** How often a client polls a running task's output while its view is open. */
+export const TASK_OUTPUT_POLL_MS = 1000;
 
 /** 42s, 3m 5s, 1h 2m: how long it ran (so far, while running). */
 export function subagentDuration(s: Pick<Subagent, "startedAt" | "endedAt">, now = Date.now()): string {
@@ -44,16 +72,9 @@ export function subagentDuration(s: Pick<Subagent, "startedAt" | "endedAt">, now
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-export interface SubagentGroups {
-  running: Subagent[];
-  finished: Subagent[];
-}
-
-/** Running sub-agents first (oldest first), then finished ones, newest first. */
-export function groupSubagents(list: Subagent[]): SubagentGroups {
-  const running = list.filter((s) => s.status === "running");
-  const finished = list.filter((s) => s.status !== "running").sort((a, b) => (b.endedAt ?? b.startedAt) - (a.endedAt ?? a.startedAt));
-  return { running, finished };
+/** The Agents & tasks list: sub-agents and tasks together, the latest updated first. */
+export function sortSubagents(list: Subagent[]): Subagent[] {
+  return [...list].sort((a, b) => b.updatedAt - a.updatedAt || b.startedAt - a.startedAt);
 }
 
 /** The chain of sub-agents from the top down to `id` (for a nested agent's breadcrumb). */

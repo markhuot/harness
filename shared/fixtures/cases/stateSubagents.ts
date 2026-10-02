@@ -1,7 +1,7 @@
 // Sub-agent state and labels (shared/src/state/subagents.ts, the subagents.test.ts cases outside
 // tabs) for HarnessKit's Subagents.swift. See ../board.ts for the scenario format.
-import { groupSubagents, subagentDuration, subagentTitle, subagentTypeLabel, SUBAGENT_STATUS_LABEL } from "../../src/state";
-import type { Subagent } from "../../src/protocol";
+import { sortSubagents, subagentDuration, subagentOpenLabel, subagentTitle, subagentTypeLabel, SUBAGENT_STATUS_LABEL, TASK_KIND_LABEL, TASK_OUTPUT_KEEP_CHARS, TASK_OUTPUT_POLL_MS } from "../../src/state";
+import type { Subagent, TaskOutput } from "../../src/protocol";
 import { cases } from "../case";
 import { detail, entry, ev, scenario, sub, ticket } from "../board";
 
@@ -12,6 +12,20 @@ const upserted = (subagent: Subagent) => ev({ kind: "subagent.upserted", subagen
 const s1Detail = (subagents?: Subagent[]) => detail(ticket("t", { key: "T-1", sessionId: "s1" }), subagents ? { subagents } : {});
 
 export const statusLabel = SUBAGENT_STATUS_LABEL;
+export const taskKindLabel = TASK_KIND_LABEL;
+export const taskOutputKeepChars = TASK_OUTPUT_KEEP_CHARS;
+export const taskOutputPollMs = TASK_OUTPUT_POLL_MS;
+
+const out = (text: string, start: number, over: Partial<TaskOutput> = {}): TaskOutput => ({
+  text,
+  start,
+  end: start + new TextEncoder().encode(text).length,
+  size: start + new TextEncoder().encode(text).length,
+  done: false,
+  available: true,
+  ...over,
+});
+const taskOutput = (output: TaskOutput, subagentId = "c1") => ({ type: "taskOutput" as const, sessionId: "s1", subagentId, output });
 
 export const scenarios = [
   scenario("live entries go to the sub-agent's transcript, not the session's", [
@@ -37,6 +51,19 @@ export const scenarios = [
   scenario("an all-stale sub-agents action leaves a known list alone", [
     { actions: [upserted(sub("a", { updatedAt: 9 })), { type: "subagents", sessionId: "s1", subagents: [sub("a", { status: "failed", updatedAt: 1 })] }], probes: [["subagentById", "s1", "a"]] },
   ]),
+  scenario("a task's output: the first read replaces, the next appends, a repeat only updates done", [
+    { actions: [taskOutput(out("line 1\n", 0))], probes: [["taskOutputOf", "s1", "c1"], ["taskOutputOf", "s1", "other"]] },
+    { actions: [taskOutput(out("liné 2\n", 7))], probes: [["taskOutputOf", "s1", "c1"]] },
+    { actions: [taskOutput(out("liné 2\n", 7, { done: true }))], probes: [["taskOutputOf", "s1", "c1"]] },
+  ]),
+  scenario("a task's output after a gap (a burst bigger than one read) starts over, truncated", [
+    { actions: [taskOutput(out("a\n", 0)), taskOutput(out("z\n", 900_000))], probes: [["taskOutputOf", "s1", "c1"]] },
+  ]),
+  scenario("a tail that doesn't start at 0 is truncated; output that's gone keeps what was loaded", [
+    { actions: [taskOutput(out("tail\n", 40))], probes: [["taskOutputOf", "s1", "c1"]] },
+    { actions: [taskOutput({ text: "", start: 45, end: 45, size: 0, done: true, available: false })], probes: [["taskOutputOf", "s1", "c1"]] },
+    { actions: [taskOutput({ text: "", start: 0, end: 0, size: 0, done: false, available: false }, "c2")], probes: [["taskOutputOf", "s1", "c2"]] },
+  ]),
   scenario("path walks up to the top-level agent and survives a cycle", [
     {
       actions: [upserted(sub("top")), upserted(sub("mid", { parentId: "top" })), upserted(sub("leaf", { parentId: "mid" })), upserted(sub("x", { parentId: "y" })), upserted(sub("y", { parentId: "x" }))],
@@ -50,12 +77,25 @@ export const titleCases = cases(subagentTitle, {
   "nothing at all": { description: "", agentType: null },
   "description trimmed": { description: "  Scan the repo ", agentType: "Explore" },
   "empty type": { description: "", agentType: "" },
+  "a task's description": { description: "Run the tests", agentType: null, kind: "bash", command: "bun test" },
+  "a task without one falls back to its command": { description: " ", agentType: null, kind: "monitor", command: " tail -f log " },
+  "a task with neither": { description: "", agentType: null, kind: "bash", command: null },
+  "an explicit agent kind": { description: "", agentType: "Explore", kind: "agent", command: null },
+});
+
+export const openLabelCases = cases(subagentOpenLabel, {
+  agent: { kind: "agent" },
+  "older service (no kind)": {},
+  bash: { kind: "bash" },
+  monitor: { kind: "monitor" },
 });
 
 export const typeLabelCases = cases(subagentTypeLabel, {
   "hidden when it is the title": { description: "", agentType: "Explore" },
   shown: { description: "Scan", agentType: "Explore" },
   "no type": { description: "Scan", agentType: null },
+  "a Bash task": { description: "Run the tests", agentType: null, kind: "bash" },
+  "a Monitor": { description: "", agentType: null, kind: "monitor" },
 });
 
 export const durationCases = cases(({ startedAt, endedAt, now }: { startedAt: number; endedAt: number | null; now?: number }) => subagentDuration({ startedAt, endedAt }, now ?? 0), {
@@ -69,16 +109,16 @@ export const durationCases = cases(({ startedAt, endedAt, now }: { startedAt: nu
   "days stay in hours": { startedAt: 0, endedAt: 90_000_000 },
 });
 
-export const groupCases = cases(groupSubagents, {
-  "running first, finished newest first": [
-    sub("old-done", { status: "succeeded", startedAt: 1, endedAt: 2 }),
-    sub("run2", { startedAt: 5 }),
-    sub("new-done", { status: "failed", startedAt: 3, endedAt: 9 }),
-    sub("run1", { startedAt: 4 }),
+export const sortCases = cases(sortSubagents, {
+  "latest update first, running or not": [
+    sub("old-done", { status: "succeeded", startedAt: 1, endedAt: 2, updatedAt: 2 }),
+    sub("run2", { startedAt: 5, updatedAt: 5 }),
+    sub("new-done", { status: "failed", startedAt: 3, endedAt: 9, updatedAt: 9 }),
+    sub("task", { kind: "bash", command: "make", startedAt: 4, updatedAt: 7 }),
   ],
-  "finished without endedAt sort by start; ties keep order": [
-    sub("s1", { status: "stopped", startedAt: 4, endedAt: null }),
-    sub("s2", { status: "succeeded", startedAt: 1, endedAt: 4 }),
-    sub("s3", { status: "failed", startedAt: 7, endedAt: null }),
+  "ties go to the later start": [
+    sub("s1", { status: "stopped", startedAt: 4, updatedAt: 8 }),
+    sub("s2", { status: "succeeded", startedAt: 1, updatedAt: 8 }),
+    sub("s3", { startedAt: 7, updatedAt: 8 }),
   ],
 });

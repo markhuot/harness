@@ -35,6 +35,7 @@ import {
   subagentPath,
   subagentsOf,
   subagentTranscript,
+  taskOutputOf,
   ticketByKey,
   ticketLinkable,
   ticketsForProject,
@@ -257,6 +258,7 @@ const PROBES: Record<string, (s: State, ...args: never[]) => unknown> = {
     const t = subagentTranscript(s, sessionId, id);
     return t ? { seqs: t.entries.map((e) => e.seq), loaded: t.loaded } : null;
   },
+  taskOutputOf: (s, sessionId: string, id: string) => taskOutputOf(s, sessionId, id) ?? null,
   transcript: (s, key: string) => {
     const t = s.transcripts[key];
     return t ? { ids: t.entries.map((e) => e.id), loaded: t.loaded } : null;

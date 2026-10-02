@@ -331,6 +331,7 @@
     "subagentPath",
     "subagentTranscript",
     "subagentsOf",
+    "taskOutputOf",
     "ticketByKey",
     "ticketLinkable",
     "ticketsForProject",
@@ -467,6 +468,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -653,6 +655,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -739,6 +742,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -867,6 +871,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1010,6 +1015,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1114,6 +1120,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r1": "Hello",
@@ -1217,6 +1224,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r1": "Hello",
@@ -1416,6 +1424,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r2": "Other"
@@ -1541,6 +1550,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1635,6 +1645,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -1725,6 +1736,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r1": "one"
@@ -1815,6 +1827,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r1": "second"
@@ -1935,6 +1948,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2124,6 +2138,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r3": "c"
@@ -2375,6 +2390,7 @@
             },
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2469,6 +2485,7 @@
             },
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2598,6 +2615,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2661,6 +2679,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2695,6 +2714,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2892,6 +2912,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -2947,6 +2968,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {
               "w1": {
@@ -3006,6 +3028,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -3106,6 +3129,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": {
@@ -3174,6 +3198,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": {
@@ -3264,6 +3289,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -3404,6 +3430,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -3544,6 +3571,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -3640,6 +3668,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -4067,6 +4096,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {
               "s1": {
                 "r1": "streaming"
@@ -4470,6 +4500,7 @@
                 }
               ]
             },
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -4515,6 +4546,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -4665,6 +4697,7 @@
             },
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -4839,6 +4872,7 @@
             },
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -4992,6 +5026,7 @@
             },
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -5159,6 +5194,7 @@
             },
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -5387,6 +5423,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -5468,6 +5505,7 @@
               }
             },
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -5904,6 +5942,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -6347,6 +6386,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -6391,6 +6431,7 @@
         "summaries": {},
         "transcripts": {},
         "subagents": {},
+        "taskOutputs": {},
         "deltas": {},
         "watchers": {},
         "settings": {
@@ -6525,6 +6566,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": {
@@ -6577,6 +6619,7 @@
         "summaries": {},
         "transcripts": {},
         "subagents": {},
+        "taskOutputs": {},
         "deltas": {},
         "watchers": {},
         "settings": {
@@ -6704,6 +6747,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": {
@@ -6785,6 +6829,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -6828,6 +6873,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -6888,6 +6934,7 @@
         "summaries": {},
         "transcripts": {},
         "subagents": {},
+        "taskOutputs": {},
         "deltas": {},
         "watchers": {},
         "settings": null,
@@ -7011,6 +7058,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -7119,6 +7167,7 @@
         "summaries": {},
         "transcripts": {},
         "subagents": {},
+        "taskOutputs": {},
         "deltas": {},
         "watchers": {},
         "settings": null,
@@ -7238,6 +7287,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -7428,6 +7478,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -7574,6 +7625,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,
@@ -7811,6 +7863,7 @@
             "summaries": {},
             "transcripts": {},
             "subagents": {},
+            "taskOutputs": {},
             "deltas": {},
             "watchers": {},
             "settings": null,

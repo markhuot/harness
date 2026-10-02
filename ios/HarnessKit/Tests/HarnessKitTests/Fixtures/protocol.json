@@ -1766,7 +1766,27 @@
       "result": "The check is in requireAuth().",
       "startedAt": 1759190400000,
       "endedAt": 1759190405000,
-      "updatedAt": 1759190405000
+      "updatedAt": 1759190405000,
+      "kind": "agent",
+      "command": null,
+      "hasOutput": false
+    },
+    {
+      "id": "toolu_11",
+      "sessionId": "ses_31",
+      "runId": "run_7",
+      "parentId": null,
+      "description": "Run the tests",
+      "agentType": null,
+      "prompt": "",
+      "status": "running",
+      "result": null,
+      "startedAt": 1759190406000,
+      "endedAt": null,
+      "updatedAt": 1759190406000,
+      "kind": "bash",
+      "command": "bun test 2>&1 | tail -40",
+      "hasOutput": true
     }
   ],
   "SubmitTicketBody": [
@@ -1839,6 +1859,24 @@
       "mimeType": "video/mp4",
       "name": "flow.mp4",
       "size": 2400118
+    }
+  ],
+  "TaskOutput": [
+    {
+      "text": "✓ 12 pass\n",
+      "start": 0,
+      "end": 12,
+      "size": 12,
+      "done": false,
+      "available": true
+    },
+    {
+      "text": "",
+      "start": 40,
+      "end": 40,
+      "size": 0,
+      "done": true,
+      "available": false
     }
   ],
   "Ticket": [
@@ -2359,7 +2397,27 @@
           "result": "The check is in requireAuth().",
           "startedAt": 1759190400000,
           "endedAt": 1759190405000,
-          "updatedAt": 1759190405000
+          "updatedAt": 1759190405000,
+          "kind": "agent",
+          "command": null,
+          "hasOutput": false
+        },
+        {
+          "id": "toolu_11",
+          "sessionId": "ses_31",
+          "runId": "run_7",
+          "parentId": null,
+          "description": "Run the tests",
+          "agentType": null,
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 1759190406000,
+          "endedAt": null,
+          "updatedAt": 1759190406000,
+          "kind": "bash",
+          "command": "bun test 2>&1 | tail -40",
+          "hasOutput": true
         }
       ],
       "relatedTickets": [
@@ -3084,6 +3142,11 @@
       "succeeded",
       "failed",
       "stopped"
+    ],
+    "SubagentKind": [
+      "agent",
+      "bash",
+      "monitor"
     ],
     "SummaryAuthor": [
       "agent",

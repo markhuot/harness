@@ -326,7 +326,32 @@ export const Subagent: P.Subagent[] = [
     startedAt: T0,
     endedAt: T0 + 5_000,
     updatedAt: T0 + 5_000,
+    kind: "agent",
+    command: null,
+    hasOutput: false,
   },
+  {
+    id: "toolu_11",
+    sessionId: "ses_31",
+    runId: "run_7",
+    parentId: null,
+    description: "Run the tests",
+    agentType: null,
+    prompt: "",
+    status: "running",
+    result: null,
+    startedAt: T0 + 6_000,
+    endedAt: null,
+    updatedAt: T0 + 6_000,
+    kind: "bash",
+    command: "bun test 2>&1 | tail -40",
+    hasOutput: true,
+  },
+];
+
+export const TaskOutput: P.TaskOutput[] = [
+  { text: "✓ 12 pass\n", start: 0, end: 12, size: 12, done: false, available: true },
+  { text: "", start: 40, end: 40, size: 0, done: true, available: false },
 ];
 
 export const SummaryAttachment: P.SummaryAttachment[] = [
@@ -796,6 +821,7 @@ export const enums: Record<string, readonly string[]> = {
   RunStatus: all<P.RunStatus>({ queued: true, running: true, succeeded: true, failed: true, cancelled: true }),
   TranscriptRole: all<P.TranscriptRole>({ user: true, assistant: true, tool: true, system: true }),
   SubagentStatus: all<P.SubagentStatus>({ running: true, succeeded: true, failed: true, stopped: true }),
+  SubagentKind: all<P.SubagentKind>({ agent: true, bash: true, monitor: true }),
   SummaryAuthor: all<P.SummaryAuthor>({ agent: true, human: true, system: true }),
   AttachmentKind: all<P.AttachmentKind>({ image: true, video: true }),
   WatcherMode: all<P.Watcher["mode"]>({ loop: true, interval: true }),
