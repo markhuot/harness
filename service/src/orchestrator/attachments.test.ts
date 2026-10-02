@@ -1,20 +1,19 @@
-// Summary attachments through the orchestrator: post_summary / submit_for_review copy files into
-// HARNESS_HOME/attachments, bad input posts nothing, get_ticket and the review prompt name the
-// stored copies, and deleting a ticket or project removes them.
+// Ticket attachments through the orchestrator: images a spec write points at are copied into
+// HARNESS_HOME/attachments, bad input stores nothing, browser_screenshot's save_to follows the run's
+// read-only scope, and deleting a ticket or project removes the files.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, truncateSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, RunKind, Ticket } from "@harness/shared";
-import type { RunRequest } from "../drivers/types";
 import { makeOrchestrator } from "../testing/fakes";
 import { gif, mp4, png } from "../testing/media";
 import { allTools } from "../tools";
 import { fakeContext, fakeSession } from "../tools/fakes";
-import type { ToolResult } from "../tools/types";
 
 async function setup() {
   const h = makeOrchestrator();
+  h.driver.script = async function* () {}; // no plan run rewriting the spec
   const dir = join(h.home, "proj", "web");
   mkdirSync(join(dir, "shots"), { recursive: true });
   writeFileSync(join(dir, "shots", "after.png"), png(800, 600));
@@ -25,7 +24,7 @@ async function setup() {
   const events: HarnessEvent[] = [];
   h.bus.on((e) => events.push(e));
   const make = async (status: Ticket["status"] = "in_progress") => {
-    const t = await h.orch.createTicket({ projectId: project.id, prompt: "task", title: "task", start: false });
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "task", title: "task", start: false });
     h.store.tickets.update(t.id, { status });
     return h.store.tickets.get(t.id)!;
   };
@@ -36,96 +35,50 @@ async function setup() {
 }
 
 const tool = (name: string) => allTools.find((t) => t.name === name)!;
-const text = (r: ToolResult) => r.content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
 
-describe("post_summary attachments", () => {
-  test("copies the files, keeps their order and emits them on summary.added", async () => {
-    const h = await setup();
-    const t = await h.make();
-    const r = await tool("post_summary").execute({ summary: "Toggle works", attachments: ["shots/after.png", join(h.dir, "flow.mp4")] }, h.ctx(t));
-    expect(r.isError).toBeUndefined();
-    expect(text(r)).toBe("Summary posted with 2 attachments.");
-
-    const [summary] = h.orch.summaries(t.key);
-    expect(summary!.attachments.map(({ kind, mimeType, name, width, height }) => ({ kind, mimeType, name, width, height }))).toEqual([
-      { kind: "image", mimeType: "image/png", name: "after.png", width: 800, height: 600 },
-      { kind: "video", mimeType: "video/mp4", name: "flow.mp4", width: undefined, height: undefined },
-    ]);
-    const added = h.events.filter((e) => e.kind === "summary.added").at(-1);
-    expect(added).toMatchObject({ summary: { id: summary!.id, attachments: summary!.attachments } });
-
-    // The copies outlive the originals (worktrees are deleted after the merge).
-    unlinkSync(join(h.dir, "shots", "after.png"));
-    const copy = h.orch.attachmentFile(summary!.attachments[0]!.id)!;
-    expect(copy.path.startsWith(h.paths.attachmentsDir)).toBe(true);
-    expect(readFileSync(copy.path)).toEqual(png(800, 600));
-  });
-
-  test("relative paths resolve against the run's working directory", async () => {
+describe("spec attachments", () => {
+  test("relative image paths resolve against the run's working directory", async () => {
     const h = await setup();
     const t = await h.make();
     const elsewhere = join(h.home, "elsewhere");
     mkdirSync(elsewhere, { recursive: true });
     writeFileSync(join(elsewhere, "after.png"), png(1, 2));
-    await h.orch.ops.postSummary(h.ctx(t, elsewhere), "from another cwd", ["after.png"]);
-    const [s] = h.orch.summaries(t.key);
-    expect(s!.attachments[0]).toMatchObject({ name: "after.png", width: 1, height: 2 });
-    await expect(h.orch.ops.postSummary(h.ctx(t, h.dir), "x", ["after.png"])).rejects.toThrow("Attachment not found: after.png");
+    await h.orch.ops.updateSpec(h.ctx(t, elsewhere), { spec: "![a](after.png)", note: "x", baseRevision: 1 });
+    expect(h.store.attachments.listByTicket(t.id)[0]).toMatchObject({ name: "after.png", width: 1, height: 2 });
+    const fresh = h.store.tickets.get(t.id)!;
+    await expect(h.orch.ops.updateSpec(h.ctx(fresh, h.dir), { spec: "![b](after.png)", note: "x", baseRevision: 2 })).rejects.toThrow("Attachment not found: after.png");
   });
 
-  test("invalid input fails the call and posts nothing, even when earlier files were fine", async () => {
+  test("too many, too large or missing files fail the write and store nothing", async () => {
     const h = await setup();
     const t = await h.make();
     const big = join(h.dir, "huge.mp4");
     writeFileSync(big, mp4());
     truncateSync(big, 100 * 1024 * 1024 + 1);
-    const cases: [string[], string][] = [
-      [Array(11).fill("anim.gif"), "Too many attachments"],
-      [["anim.gif", "huge.mp4"], "Attachment too large: huge.mp4"],
-      [["anim.gif", "notes.txt"], "Unsupported attachment type: notes.txt"],
-      [["anim.gif", "missing.png"], "Attachment not found: missing.png"],
+    const many = Array.from({ length: 11 }, (_, i) => {
+      writeFileSync(join(h.dir, `a${i}.gif`), gif(1, 1));
+      return `![${i}](a${i}.gif)`;
+    }).join("\n");
+    const cases: [string, string][] = [
+      [many, "Too many attachments"],
+      ["![a](anim.gif)\n![b](huge.mp4)", "Attachment too large: huge.mp4"],
+      ["![a](anim.gif)\n![b](missing.png)", "Attachment not found: missing.png"],
     ];
-    // (the MCP layer turns the thrown error into an isError result)
-    for (const [attachments, error] of cases) {
-      await expect(tool("post_summary").execute({ summary: "should not post", attachments }, h.ctx(t))).rejects.toThrow(error);
+    for (const [spec, error] of cases) {
+      await expect(tool("update_spec").execute({ spec, note: "x", base_revision: 1 }, h.ctx(t))).rejects.toThrow(error);
     }
-    expect(h.orch.summaries(t.key)).toEqual([]);
-    expect(h.events.some((e) => e.kind === "summary.added")).toBe(false);
+    expect(h.store.tickets.get(t.id)!.specRevision).toBe(1);
+    expect(h.events.some((e) => e.kind === "spec.revised")).toBe(false);
     expect(h.stored()).toEqual([]);
   });
-});
 
-describe("submit_for_review attachments", () => {
-  test("a bad attachment leaves the ticket in progress with no summary", async () => {
+  test("a write refused for a stale revision keeps no copies", async () => {
     const h = await setup();
     const t = await h.make();
-    await expect(tool("submit_for_review").execute({ summary: "done", attachments: ["shots/after.png", "notes.txt"] }, h.ctx(t))).rejects.toThrow(
-      "Unsupported attachment type: notes.txt",
-    );
-    expect(h.store.tickets.get(t.id)!.status).toBe("in_progress");
-    expect(h.orch.summaries(t.key)).toEqual([]);
+    await h.orch.updateTicket(t.key, { spec: "human edit", baseRevision: 1 });
+    await expect(h.orch.ops.updateSpec(h.ctx(t), { spec: "![a](anim.gif)", note: "x", baseRevision: 1 })).rejects.toThrow("The spec is at revision 2, not 1");
     expect(h.stored()).toEqual([]);
-  });
-
-  test("attachments land on the submit summary, and the review prompt points at get_ticket, which names the stored copies", async () => {
-    const h = await setup();
-    h.driver.script = async function* (req: RunRequest) {
-      if (req.kind === "work") await req.toolContext.ops.submitForReview(req.toolContext, "Header toggle done", ["shots/after.png"]);
-    };
-    const t = await h.orch.createTicket({ projectId: h.project.id, prompt: "task", title: "task", start: true });
-    await h.orch.idle();
-    expect(h.store.tickets.get(t.id)!.status).toBe("review");
-    const [summary] = h.orch.summaries(t.key);
-    expect(summary!.body).toBe("Header toggle done");
-    const path = h.orch.attachmentFilePath(summary!.attachments[0]!);
-    expect(existsSync(path)).toBe(true);
-
-    const review = h.driver.calls.find((c) => c.kind === "review")!;
-    expect(review.prompt).toContain(`\`get_ticket\` { key: "${t.key}" }`);
-    expect(review.prompt).not.toContain("Header toggle done");
-
-    const detail = await h.orch.ops.getTicket(h.ctx(h.store.tickets.get(t.id)!), t.key);
-    expect(detail.summaries[0]!.attachments).toEqual([{ name: "after.png", kind: "image", path }]);
+    expect(h.store.attachments.listByTicket(t.id)).toEqual([]);
   });
 });
 
@@ -166,9 +119,9 @@ describe("deleting removes attachment files", () => {
     const h = await setup();
     const a = await h.make();
     const b = await h.make();
-    await h.orch.ops.postSummary(h.ctx(a), "a", ["anim.gif", "flow.mp4"]);
-    await h.orch.ops.postSummary(h.ctx(b), "b", ["anim.gif"]);
-    const [kept] = h.orch.summaries(b.key)[0]!.attachments;
+    await h.orch.ops.updateSpec(h.ctx(a), { spec: "![a](anim.gif)\n![b](flow.mp4)", note: "a", baseRevision: 1 });
+    await h.orch.ops.updateSpec(h.ctx(b), { spec: "![a](anim.gif)", note: "b", baseRevision: 1 });
+    const [kept] = h.store.attachments.listByTicket(b.id);
     expect(h.stored()).toHaveLength(3);
     await h.orch.deleteTicket(a.key);
     expect(h.stored()).toEqual([h.orch.attachmentFilePath(kept!).split("/").at(-1)!]);
@@ -179,8 +132,8 @@ describe("deleting removes attachment files", () => {
     const h = await setup();
     const a = await h.make();
     const b = await h.make("review");
-    await h.orch.ops.postSummary(h.ctx(a), "a", ["anim.gif"]);
-    await h.orch.ops.postSummary(h.ctx(b), "b", ["flow.mp4"]);
+    await h.orch.ops.updateSpec(h.ctx(a), { spec: "![a](anim.gif)", note: "a", baseRevision: 1 });
+    await h.orch.ops.updateSpec(h.ctx(b), { spec: "![b](flow.mp4)", note: "b", baseRevision: 1 });
     expect(h.stored()).toHaveLength(2);
     await h.orch.deleteProject(h.project.id);
     expect(h.stored()).toEqual([]);
