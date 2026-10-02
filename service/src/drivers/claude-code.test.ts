@@ -521,6 +521,32 @@ describe("StreamJsonParser background task rows", () => {
     expect(run(p, monitor("m2", "bm2"))[0]!.outputPath).toBe("/tmp/x/tasks/bm2.output");
   });
 
+  // Recorded from claude 2.1.286 (trimmed): both report is_backgrounded at task_started, and the
+  // terminal task_updated comes before the task_notification that carries the summary.
+  test("recorded: a background Bash and a Monitor, from start to notification", () => {
+    const p = new StreamJsonParser(null, null, "/private/tmp/h164-real");
+    p.handle(init("0780a3b2"));
+    const dir = "/private/tmp/claude-502/-private-tmp-h164-real/0780a3b2/tasks";
+    const evs = run(p, [
+      bashCall("toolu_B", "sh count.sh", { description: "Count to five", run_in_background: true }),
+      { type: "system", subtype: "task_started", task_id: "bvh", tool_use_id: "toolu_B", description: "Count to five", is_backgrounded: true, task_type: "local_bash" },
+      toolResult("toolu_B", `Command running in background with ID: bvh. Output is being written to: ${dir}/bvh.output. You will be notified when it completes. To check interim output, use Read on that file path.`),
+      { type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_M", name: "Monitor", input: { command: "sh ticks.sh", description: "Ticks", timeout_ms: 300000 } }] } },
+      { type: "system", subtype: "task_started", task_id: "bao", tool_use_id: "toolu_M", description: "Ticks", is_backgrounded: true, task_type: "local_bash" },
+      toolResult("toolu_M", "Monitor started (task bao, expires in 5m unless the source ends first; you get one notice at expiry — re-arm if you still need the watch)."),
+      { type: "system", subtype: "task_updated", task_id: "bao", patch: { status: "completed", end_time: 1 } },
+      { type: "system", subtype: "task_notification", task_id: "bao", tool_use_id: "toolu_M", status: "completed", output_file: `${dir}/bao.output`, summary: 'Monitor "Ticks" stream ended' },
+    ]);
+    expect(evs).toEqual([
+      { id: "toolu_B", kind: "bash", description: "Count to five", command: "sh count.sh", status: "running" },
+      { id: "toolu_B", outputPath: `${dir}/bvh.output` },
+      { id: "toolu_M", kind: "monitor", description: "Ticks", command: "sh ticks.sh", status: "running" },
+      { id: "toolu_M", outputPath: `${dir}/bao.output` },
+      { id: "toolu_M", status: "succeeded" },
+      { id: "toolu_M", status: "succeeded", outputPath: `${dir}/bao.output`, result: 'Monitor "Ticks" stream ended' },
+    ]);
+  });
+
   test("a sub-agent's own background command isn't one of the session's tasks", () => {
     const p = new StreamJsonParser();
     p.handle(init());

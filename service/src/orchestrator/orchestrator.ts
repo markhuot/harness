@@ -1761,11 +1761,15 @@ export class Orchestrator {
     }
   }
 
-  /** A background task ended: keep the tail of its output, since the CLI's file lives in /tmp. */
+  /**
+   * A background task ended: keep the tail of its output, since the CLI's file lives in /tmp.
+   * Every report after the end (the CLI's task_notification follows its task_updated) takes it
+   * again while the file is there, so the last lines the CLI writes are kept too.
+   */
   private keepTaskOutput(subagent: Subagent) {
     if (!subagent.kind || subagent.kind === "agent") return;
     const source = this.store.subagents.outputSource(subagent.sessionId, subagent.id);
-    if (!source?.path || source.snapshot) return;
+    if (!source?.path) return;
     const path = confineOutputPath(source.path);
     const snapshot = path && snapshotTaskOutput(path);
     if (snapshot) this.store.subagents.saveOutput(subagent.sessionId, subagent.id, snapshot);

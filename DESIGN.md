@@ -1087,7 +1087,9 @@ clients see `hasOutput`) and the kept output: `output` holds the raw tail of the
 256 KB) from byte `output_start` of `output_size`. The output path is set once and never moved.
 When a task finishes (a finishing report, a run's stop, a stale run's recovery), the orchestrator
 copies the tail of its file into `output`, because the CLI's files live in /tmp and don't survive
-a cleanup or a reboot.
+a cleanup or a reboot. A later report takes it again while the file is there: the CLI sends the
+terminal `task_updated` before the `task_notification`, and the file's last line ("[exited with
+code 0]") may land in between.
 
 **Output** (`service/src/task-output.ts`). `GET /sessions/:id/subagents/:subagentId/output?offset=N`
 → `TaskOutput { text, start, end, size, done, available }` (offsets in bytes; 404 for an unknown

@@ -55,6 +55,19 @@ describe("background tasks", () => {
     expect(h.orch.taskOutput(t.sessionId, "c1", 7)).toMatchObject({ text: "line 2\n", start: 7, end: 14 });
   });
 
+  test("the kept tail is taken again by a report after the end, so lines written in between are kept", async () => {
+    const path = outFile("late.output", "line 1\n");
+    const h = setup(async function* () {
+      yield { type: "subagent", subagent: { id: "c1", kind: "bash", command: "make", status: "running", outputPath: path } };
+      yield { type: "subagent", subagent: { id: "c1", status: "succeeded" } };
+      appendFileSync(path, "\n[exited with code 0]\n");
+      yield { type: "subagent", subagent: { id: "c1", status: "succeeded", result: "completed (exit code 0)" } };
+    });
+    const t = await h.run();
+    rmSync(path);
+    expect(h.orch.taskOutput(t.sessionId, "c1").text).toBe("line 1\n\n[exited with code 0]\n");
+  });
+
   test("a task still running when the run ends is stopped, and its output kept then", async () => {
     const path = outFile("stop.output", "serving on :3000\n");
     const h = setup(async function* () {
