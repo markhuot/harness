@@ -43,6 +43,16 @@ struct PrefsTests {
         #expect(Prefs.normalize(stored).hideChildren == false)
     }
 
+    /// The iPad sidebar's visibility: a bool is kept and round-trips, anything else means shown.
+    @Test func sidebarHidden() throws {
+        #expect(Prefs.normalize(.object([:])).sidebarHidden == nil)
+        #expect(Prefs.normalize(.object(["sidebarHidden": .string("yes")])).sidebarHidden == nil)
+        let hidden = Prefs.normalize(.object(["sidebarHidden": .bool(true), "version": .number(2)]))
+        #expect(hidden.sidebarHidden == true)
+        let stored = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(hidden))
+        #expect(Prefs.normalize(stored).sidebarHidden == true)
+    }
+
     @Test func rawBytes() {
         #expect(Prefs.normalize(data: nil) == Prefs.defaults)
         #expect(Prefs.normalize(data: Data("not json".utf8)) == Prefs.defaults)
