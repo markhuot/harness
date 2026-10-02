@@ -52,7 +52,7 @@ export function ConductorRollup({ progress }: { progress: Progress }) {
 export function ConductorProgress({ progress, onOpen }: { progress: Progress; onOpen: () => void }) {
   if (!progress.total) return null;
   return (
-    <button className="cond-progress" data-testid="children-progress" onClick={onOpen} title="Show the tickets">
+    <button className="cond-progress" data-testid="conductor-progress" onClick={onOpen} title="Show the tickets">
       <span className="cond-progress-top">
         <span className="cond-progress-text">{progressLabel(progress)}</span>
         {progress.attention > 0 && (
