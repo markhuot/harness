@@ -11,6 +11,7 @@ import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 import { checkChangesTab } from "./lib/changes-check";
 import { checkAgentsTab } from "./lib/agents-check";
+import { checkBrowserTabs } from "./lib/browser-tabs-check";
 
 const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots", "real"));
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
@@ -119,6 +120,9 @@ try {
   await shot("6-browser");
   const transcript = await api<TranscriptEntry[]>("GET", `/sessions/${browse.sessionId}/transcript?after=0`);
   check("agent's browser tools ran", transcript.some((e) => e.content.type === "tool_call" && e.content.name.includes("browser_open")));
+
+  // --- 5b. Browser tabs: the agent opens three pages in tabs of their own; the strip shows and switches them.
+  await checkBrowserTabs({ api, app, check, shot, project });
 
   // --- 6. Git plugin: a worktree ticket edits files via /bash; the Changes tab (plugin iframe) shows them.
   await checkChangesTab({ api, app, check, shot });
