@@ -119,7 +119,7 @@ export interface Highlighted {
 
 let core: Promise<HighlighterCore> | null = null;
 const highlighter = () =>
-  // ES2018 target: Hermes has lookbehind, named groups, \p{…} and the d flag, but no v flag.
+  // ES2018 target: the regexes compile to lookbehind, named groups, \p{…} and the d flag, never the v flag.
   (core ??= createHighlighterCore({ engine: createJavaScriptRegexEngine({ target: "ES2018", forgiving: true }) }));
 
 const loading = new Map<string, Promise<void>>();
