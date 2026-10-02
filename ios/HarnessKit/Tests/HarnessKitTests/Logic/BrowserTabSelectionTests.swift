@@ -64,6 +64,7 @@ struct BrowserTabSelectionTests {
         #expect(BrowserTabSelection.label(tab(1, "https://example.com/a", "  Example  ")) == "Example")
         #expect(BrowserTabSelection.label(tab(1, "https://docs.example.com:8443/a?b", " ")) == "docs.example.com")
         #expect(BrowserTabSelection.label(tab(1, "about:blank")) == "New Tab")
+        #expect(BrowserTabSelection.label(tab(1, "about:blank", "about:blank")) == "New Tab")
         #expect(BrowserTabSelection.label(tab(1, "")) == "New Tab")
         #expect(BrowserTabSelection.label(tab(1, "data:text/html,hi")) == "data:text/html,hi")
     }

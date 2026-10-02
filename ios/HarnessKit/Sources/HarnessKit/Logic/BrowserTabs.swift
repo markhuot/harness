@@ -49,12 +49,13 @@ public struct BrowserTabSelection: Sendable, Equatable {
         state?.tabs != nil
     }
 
-    /// A tab chip's label: its title, else its URL's host, else "New Tab" for a blank page.
+    /// A tab chip's label: "New Tab" for a blank page (Chrome titles it "about:blank"), else its
+    /// title, else its URL's host.
     public static func label(_ tab: BrowserTab) -> String {
-        let title = JSCompat.trim(tab.title)
-        if !title.isEmpty { return title }
         let url = JSCompat.trim(tab.url)
         if url.isEmpty || url == "about:blank" { return "New Tab" }
+        let title = JSCompat.trim(tab.title)
+        if !title.isEmpty { return title }
         if let host = URLComponents(string: url)?.host, !host.isEmpty { return host }
         return url
     }

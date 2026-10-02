@@ -130,7 +130,7 @@ struct BrowserTabView: View {
         HStack(spacing: 6) {
             Circle().fill(model.live ? c.green : c.text3).frame(width: 7, height: 7)
             Text(model.live ? "Live" : "Idle").font(.scaled(size: 12)).foregroundStyle(c.text3)
-            if let title = model.state?.title, !title.isEmpty {
+            if let title = model.state?.title, !title.isEmpty, title != model.state?.url {
                 Text("· \(title)").font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
             }
             Spacer(minLength: 0)
