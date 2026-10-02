@@ -122,7 +122,7 @@ if [[ $SKIP_IOS -eq 0 ]]; then
   unzip -q "$IPA" -d "$CHECK"
   APP="$CHECK/Payload/Harness.app"
   [[ -d "$APP" ]] || { echo "error: Payload/Harness.app missing from the IPA" >&2; exit 1; }
-  VERIFIED=$(bun "${NATIVE_BUILD[@]}" verify --bundle-id "$BUNDLE_ID" --build-number "$BUILD_NUMBER" "$APP") || exit 1
+  VERIFIED=$("${NATIVE_BUILD[@]}" verify --bundle-id "$BUNDLE_ID" --build-number "$BUILD_NUMBER" "$APP") || exit 1
   IOS_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Info.plist")
   IOS_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist")
   check_no_token "$CHECK"
