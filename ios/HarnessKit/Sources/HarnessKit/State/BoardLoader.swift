@@ -20,11 +20,11 @@ import Foundation
 @MainActor
 public final class BoardLoader {
     /// Below this many visible Done cards (child tickets hidden) the column loads another page itself.
-    public static let autofillMin = 12
+    public nonisolated static let autofillMin = 12
 
     /// Hidden child tickets can leave a loaded Done page nearly empty, and a list only reports
     /// "near the end" once there's something to scroll, so a short column asks for the next page itself.
-    public static func shouldAutoFill(visibleCount: Int, canLoad: Bool, min: Int = autofillMin) -> Bool {
+    public nonisolated static func shouldAutoFill(visibleCount: Int, canLoad: Bool, min: Int = autofillMin) -> Bool {
         canLoad && visibleCount < min
     }
 

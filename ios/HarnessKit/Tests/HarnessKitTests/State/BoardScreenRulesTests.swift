@@ -33,6 +33,52 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.columnWithResults(Columns(), current: .planning) == nil)
     }
 
+    @Test func sideBySideSearchStaysWhileAnyVisibleColumnHasResults() {
+        let cols = Columns(review: [Self.t("c", .review)], done: [Self.t("d", .done)])
+        #expect(BoardScreenRules.columnWithResults(cols, visible: [.planning, .inProgress, .review]) == nil)
+        #expect(BoardScreenRules.columnWithResults(cols, visible: [.planning, .inProgress, .blocked]) == .review)
+        // Before any column reports itself on screen there's nothing to judge by.
+        #expect(BoardScreenRules.columnWithResults(cols, visible: []) == nil)
+        #expect(BoardScreenRules.columnWithResults(Columns(), visible: [.planning]) == nil)
+    }
+
+    // MARK: side-by-side columns
+
+    @Test func columnsShareTheWidthWhenFiveFit() {
+        // An 11-inch iPad in landscape: 1210 − 2×14 − 4×10 = 1142, so 228.4 each.
+        let s = BoardScreenRules.columnSizing(available: 1210, spacing: 10, inset: 14)
+        #expect(!s.scrolls)
+        #expect(abs(s.width - 228.4) < 0.001)
+    }
+
+    @Test func columnsKeepTheMinimumAndScrollWhenTooNarrow() {
+        // Portrait (834 wide) can't fit five at 216.
+        #expect(BoardScreenRules.columnSizing(available: 834, spacing: 10, inset: 14) == .init(width: 216, scrolls: true))
+        // Exactly the minimum still fits: 5×216 + 4×10 + 2×14.
+        #expect(BoardScreenRules.columnSizing(available: 1148, spacing: 10, inset: 14) == .init(width: 216, scrolls: false))
+        #expect(BoardScreenRules.columnSizing(available: 1147, spacing: 10, inset: 14).scrolls)
+    }
+
+    @Test func columnsStopGrowingAtTheMaximum() {
+        #expect(BoardScreenRules.columnSizing(available: 3000, spacing: 10, inset: 14) == .init(width: 400, scrolls: false))
+        #expect(BoardScreenRules.columnSizing(available: 0, count: 0, spacing: 10, inset: 14).scrolls == false)
+    }
+
+    @Test func doneAutofillsOnlyWhileOnScreenAndNotSearching() {
+        func fill(_ layout: BoardScreenRules.Layout, page: TicketStatus? = nil, visible: Set<TicketStatus> = [], searching: Bool = false, count: Int = 3, canLoad: Bool = true) -> Bool {
+            BoardScreenRules.shouldAutofillDone(layout, page: page, visible: visible, searching: searching, visibleCount: count, canLoad: canLoad)
+        }
+        // The pager goes by its page; what's "visible" doesn't count there.
+        #expect(fill(.pager, page: .done))
+        #expect(!fill(.pager, page: .review, visible: [.done]))
+        // Side by side, Done only has to be partly on screen, whichever column leads.
+        #expect(fill(.columns, page: .planning, visible: [.blocked, .review, .done]))
+        #expect(!fill(.columns, page: .done, visible: [.planning, .inProgress]))
+        #expect(!fill(.columns, visible: [.done], searching: true))
+        #expect(!fill(.columns, visible: [.done], count: BoardLoader.autofillMin))
+        #expect(!fill(.columns, visible: [.done], canLoad: false))
+    }
+
     // MARK: card menu, labels, title
 
     @Test func draftMenuDiscardsInsteadOfMoving() {
