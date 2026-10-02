@@ -20,6 +20,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- A ticket with child tickets shows its progress bar at the top of the ticket, under the title,
+  on the Mac, iPhone and iPad, so it stays in view on every tab. It lists how many children are
+  done, in progress, blocked or in review, and how many are waiting on you. Click or tap it to
+  open the Tickets tab and see each child.
+
 - An agent review now opens with a short message naming the ticket, and the reviewer reads the
   brief and summaries itself with `get_ticket`. Its transcript no longer starts with a copy of
   every summary, which grew with each round of review. The Agent review prompt in Settings has a

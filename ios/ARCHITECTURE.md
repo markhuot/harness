@@ -788,12 +788,13 @@ native-pattern difference, not a missing feature.
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
 | Header menu: Copy key, Open external, Cancel run, Open PR, Mark done, Delete | screens/TicketDetail | TicketDetailScreen | done |
 | Hero: crumb, title (compact on Browser/plugin/sub-agent), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |
+| Hero progress across a conductor's children (waiting count); a tap opens the Tickets tab (HARNESS-201) | screens/TicketDetail | TicketDetailHero, ConductorProgressCard | done |
 | Start work, Approve (+ menu incl. clean up), Request changes, Complete (+ menu), agent review, Re-open, Cancel run | screens/TicketDetail, lib/approve, shared/completion | TicketDetailHero, TicketDetailSheets, HarnessKit Approve/Completion/TicketDetailLogic | done |
 | Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |
 | Hero collapse on scroll, back on tab change, news or a status-bar tap | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, HarnessKit HeroCollapse | done |
 | Tab strip: order, counts, live dots, plugin icons, sub-agent highlights Agents | screens/TicketDetail, shared/state/tabs | TicketDetailTabStrip, HarnessKit Tabs/ChangesTab | done |
 | Summaries: brief/plan, depends-on chips, empty state, attachments, stick to bottom | screens/TicketTabs | TicketDetailSummariesTab | done |
-| Tickets (children) tab: progress, waiting count, groups, rows with chips | screens/TicketTabs | TicketDetailChildrenTab | done |
+| Tickets (children) tab: groups, rows with chips | screens/TicketTabs | TicketDetailChildrenTab | done |
 | Details: title, brief (Unsaved/Revert/Save), ticket settings, links, runs, related | screens/TicketTabs, ui/TicketSettings | TicketDetailDetailsTab, Pickers/TicketSettingsForm | done |
 | Approval card: Allow once, Deny…, Always allow; announced to VoiceOver | screens/Approval | TicketDetailApprovalCard | done |
 | Composer: placeholder by status, move switch while writing, @files, /commands, Send | screens/TicketDetail, ui/mentions, lib/mentionCaret | TicketDetailComposer, Pickers/MentionTextEditor | done |

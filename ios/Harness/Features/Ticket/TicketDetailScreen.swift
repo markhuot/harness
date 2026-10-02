@@ -141,7 +141,10 @@ private struct TicketDetailBody: View {
         let plugin = Tabs.parsePluginTab(shown)
         let compact = shown == .browser || shown == .changes || plugin != nil || agent != nil
         VStack(spacing: 0) {
-            TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45) {
+                hero.show()
+                onTab(.children)
+            }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
                 .frame(height: hero.hidden ? 0 : nil, alignment: .top)
                 .clipped()

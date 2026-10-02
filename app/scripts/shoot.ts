@@ -228,6 +228,10 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "streaming", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 700 },
   { name: "error", route: "#/board/all" },
   { name: "children", route: "#/board/all/ticket/HARNESS-1/children" },
+  // The progress across a conductor's children stays in its header on every tab.
+  { name: "conductor-progress", route: "#/board/all/ticket/HARNESS-1/details" },
+  // Clicking it opens the Tickets tab.
+  { name: "conductor-progress-open", route: "#/board/all/ticket/HARNESS-1/details", setup: `document.querySelector("[data-testid=children-progress]")?.click()` },
   { name: "child", route: "#/board/all/ticket/HARNESS-6" },
   // Remote IDs: the native MH-62 beside MH-124 and MH-130, both linked to Jira's MH-62.
   { name: "remote-ids", route: `#/board/${mh}` },

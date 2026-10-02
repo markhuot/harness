@@ -45,6 +45,30 @@ export function ConductorRollup({ progress }: { progress: Progress }) {
   );
 }
 
+/**
+ * Progress across a ticket's children in the ticket detail's header: the label, how many wait on
+ * you, and the bar. Opens the Tickets tab, where each child has its detail.
+ */
+export function ConductorProgress({ progress, onOpen }: { progress: Progress; onOpen: () => void }) {
+  if (!progress.total) return null;
+  return (
+    <button className="cond-progress" data-testid="children-progress" onClick={onOpen} title="Show the tickets">
+      <span className="cond-progress-top">
+        <span className="cond-progress-text">{progressLabel(progress)}</span>
+        {progress.attention > 0 && (
+          <span className="cond-progress-attn">
+            <Icon name="alert" size={12} />
+            {progress.attention} ticket{progress.attention === 1 ? "" : "s"} waiting on you
+          </span>
+        )}
+        <span className="grow" />
+        <Icon name="chevronRight" size={12} />
+      </span>
+      <ProgressBar progress={progress} />
+    </button>
+  );
+}
+
 /** "Part of HEL-1 <title>" above a child's title; opens the conductor's Tickets tab. */
 export function ParentCrumb({ parent, onOpen }: { parent: Ticket; onOpen: (key: string) => void }) {
   return (

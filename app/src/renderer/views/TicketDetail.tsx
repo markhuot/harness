@@ -16,6 +16,7 @@ import {
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
+  progressOf,
   showsAgentsTab,
   isTask,
   subagentById,
@@ -43,7 +44,7 @@ import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
-import { ParentCrumb } from "../components/Conductor";
+import { ConductorProgress, ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { useStickToBottom } from "../components/stickToBottom";
@@ -269,7 +270,7 @@ export function TicketDetail({
 
   return (
     <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
-      <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
+      <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} onOpenChildren={() => setTab("children")} />
       <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
         {TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
@@ -325,6 +326,7 @@ function DetailHeader({
   onClose,
   zoomed,
   onToggleZoom,
+  onOpenChildren,
 }: {
   paneId: string;
   /** The pane's command area: the actions below are also palette commands (never bare keys). */
@@ -333,6 +335,7 @@ function DetailHeader({
   onClose: () => void;
   zoomed: boolean;
   onToggleZoom: () => void;
+  onOpenChildren: () => void;
 }) {
   const { state, client } = useStore();
   const openTicket = useOpenTicket();
@@ -342,6 +345,7 @@ function DetailHeader({
   const [reopening, setReopening] = useState(false);
   const [sheet, setSheet] = useState<LandSheetState | null>(null);
   const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
+  const progress = progressOf(children);
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const k = ticket.key;
@@ -492,6 +496,8 @@ function DetailHeader({
             </>
           )}
         </div>
+
+        <ConductorProgress progress={progress} onOpen={onOpenChildren} />
 
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
 

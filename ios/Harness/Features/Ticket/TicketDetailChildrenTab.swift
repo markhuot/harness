@@ -1,8 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-/// A conductor's Tickets tab: progress across its children, then the
-/// children grouped by status, each with what it's waiting on or its latest summary.
+/// A conductor's Tickets tab: its children grouped by status, each with what it's waiting on or
+/// its latest summary. Their progress is in the hero (ConductorProgressCard), which opens this tab.
 struct TicketDetailChildrenTab: View {
     let ticket: Ticket
 
@@ -33,27 +33,8 @@ struct TicketDetailChildrenTab: View {
     }
 
     private func list(_ children: [Ticket], complete: Bool) -> some View {
-        let progress = Conductor.progressOf(children)
-        return ScrollView {
+        ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack(spacing: 8) {
-                        Text(Conductor.progressLabel(progress)).font(.scaled(size: 14.5, weight: .medium)).foregroundStyle(c.text)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        if !complete { Spinner() }
-                    }
-                    ProgressBar(progress: progress)
-                    if progress.attention > 0 {
-                        HStack(spacing: 5) {
-                            Icon("alert", size: 12, weight: .semibold)
-                            Text(TicketDetailLogic.waitingOnYou(progress.attention)).font(.scaled(size: 13.5))
-                        }
-                        .foregroundStyle(c.red)
-                    }
-                }
-                .padding(13)
-                .background(c.bgElev, in: .rect(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
                 ForEach(Conductor.groupChildren(children), id: \.status) { group in
                     VStack(alignment: .leading, spacing: 7) {
                         HStack(spacing: 7) {
@@ -70,6 +51,8 @@ struct TicketDetailChildrenTab: View {
                         }
                     }
                 }
+                // The done children are still paging in.
+                if !complete { Spinner().frame(maxWidth: .infinity) }
             }
             .padding(14)
             .padding(.bottom, 16)

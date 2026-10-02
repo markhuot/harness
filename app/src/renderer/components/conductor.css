@@ -157,6 +157,50 @@
   color: var(--text-3);
 }
 
+/* Ticket detail header: progress across the children, opens the Tickets tab */
+.cond-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cond-progress:hover {
+  background: var(--bg-hover);
+}
+.cond-progress-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12.5px;
+}
+.cond-progress-text {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.cond-progress-attn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--red);
+}
+.cond-progress-top > svg {
+  flex: none;
+  color: var(--text-3);
+}
+.cond-progress .cond-bar {
+  width: 100%;
+}
+
 /* Tickets tab */
 .children-tab {
   overflow-y: auto;
@@ -164,24 +208,6 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-.children-progress {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.children-progress-text {
-  font-size: 13px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.children-attn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--red);
 }
 .children-group {
   display: flex;
