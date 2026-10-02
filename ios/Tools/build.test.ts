@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkApp, machOCpuTypes, parseArgs, UsageError } from "./build";
+import { checkApp, checkServed, clockBuildNumber, findToken, machOCpuTypes, parseArgs, UsageError, withBetaBuild } from "./build";
+import type { ReleaseInfo } from "../../mobile/Tools/install-page";
 
 const ARM64 = 0x0100000c;
 const X86_64 = 0x01000007;
@@ -145,4 +146,74 @@ test("ios/ export options stay in step with the RN app's until mobile/ is delete
     const read = (p: string) => readFileSync(join(import.meta.dir, p, name), "utf8");
     expect(read("..")).toBe(read("../../mobile"));
   }
+});
+
+test("checkApp checks the display name only when one is expected", () => {
+  writeApp(info({ CFBundleIdentifier: "com.markhuot.harness.dev", CFBundleDisplayName: "Harness Dev" }));
+  const beta = { ...expected, bundleId: "com.markhuot.harness.dev" };
+  expect(checkApp(app, beta).errors).toEqual([]);
+  expect(checkApp(app, { ...beta, displayName: "Harness Beta" }).errors).toEqual(["CFBundleDisplayName is 'Harness Dev', expected 'Harness Beta'"]);
+  writeApp(info({ CFBundleIdentifier: "com.markhuot.harness.dev", CFBundleDisplayName: "Harness Beta" }));
+  expect(checkApp(app, { ...beta, displayName: "Harness Beta" }).errors).toEqual([]);
+});
+
+test("parseArgs --beta: its own archive and export paths, dev export only", () => {
+  expect(parseArgs(["archive", "--build-number", "1", "--beta"])).toMatchObject({ beta: true, archivePath: expect.stringMatching(/HarnessBeta\.xcarchive$/) });
+  expect(parseArgs(["archive", "--build-number", "1"])).toMatchObject({ beta: false, archivePath: expect.stringMatching(/\/Harness\.xcarchive$/) });
+  expect(parseArgs(["export", "--method", "dev", "--beta"])).toMatchObject({
+    beta: true,
+    archivePath: expect.stringMatching(/HarnessBeta\.xcarchive$/),
+    exportPath: expect.stringMatching(/ipa-beta$/),
+  });
+  expect(() => parseArgs(["export", "--method", "testflight", "--beta"])).toThrow("never goes to TestFlight");
+  expect(() => parseArgs(["sim", "--beta"])).toThrow("sim doesn't take --beta");
+  expect(() => parseArgs(["device", "--device", "x", "--beta"])).toThrow("device doesn't take --beta");
+});
+
+test("parseArgs verify --beta: expects the beta id and name, native only, and no other --bundle-id", () => {
+  const v = ["verify", "--kind", "native", "--build-number", "1", "--beta", "a.app"];
+  expect(parseArgs(v)).toMatchObject({ bundleId: "com.markhuot.harness.dev", displayName: "Harness Beta" });
+  expect(parseArgs([...v, "--bundle-id", "com.markhuot.harness.dev"])).toMatchObject({ bundleId: "com.markhuot.harness.dev" });
+  expect(() => parseArgs([...v, "--bundle-id", "com.markhuot.harness"])).toThrow("not --bundle-id com.markhuot.harness");
+  expect(() => parseArgs(["verify", "--kind", "rn", "--build-number", "1", "--beta", "a.app"])).toThrow("--kind native");
+  // Without --beta, --bundle-id is still required and no display name is checked.
+  expect(() => parseArgs(["verify", "--kind", "native", "--build-number", "1", "a.app"])).toThrow("--bundle-id");
+  expect(parseArgs(["verify", "--kind", "native", "--bundle-id", "x", "--build-number", "1", "a.app"])).not.toHaveProperty("displayName");
+});
+
+test("parseArgs publish-beta deploys unless --no-deploy, and takes nothing else", () => {
+  expect(parseArgs(["publish-beta"])).toEqual({ command: "publish-beta", deploy: true });
+  expect(parseArgs(["publish-beta", "--no-deploy"])).toEqual({ command: "publish-beta", deploy: false });
+  expect(() => parseArgs(["publish-beta", "--build-number", "1"])).toThrow("publish-beta doesn't take --build-number");
+  expect(() => parseArgs(["publish-beta", "x"])).toThrow("unexpected argument");
+});
+
+test("clockBuildNumber is the UTC minute as digits, zero-padded", () => {
+  expect(clockBuildNumber(new Date("2026-01-02T03:04:59.999Z"))).toBe("202601020304");
+  expect(clockBuildNumber(new Date("2026-10-02T23:59:00-05:00"))).toBe("202610030459"); // UTC, not local
+});
+
+test("findToken finds a token in any file, nested or binary, and nothing when there are no tokens", () => {
+  mkdirSync(join(app, "Frameworks/X.framework"), { recursive: true });
+  writeFileSync(join(app, "Info.plist"), "plain");
+  expect(findToken(dir, ["secret-token-1234"])).toBeNull();
+  const nested = join(app, "Frameworks/X.framework/X");
+  writeFileSync(nested, new Uint8Array([0, 1, ...Buffer.from("xxsecret-token-1234yy"), 255]));
+  expect(findToken(dir, ["other-token-0000", "secret-token-1234"])).toBe(nested);
+  expect(findToken(dir, [])).toBeNull();
+});
+
+test("withBetaBuild puts the IPA on the site and keeps the release data", () => {
+  const saved = { site: "https://s.example", tag: "app-1", releaseUrl: "r", date: "d", ios: { url: "i", version: "1", build: "2", bytes: 3 }, mac: null, iosBeta: null } as ReleaseInfo;
+  const next = withBetaBuild(saved, { version: "1.0.0", build: "202610021200" }, 42, new Date("2026-10-02T23:00:00Z"));
+  expect(next.iosBeta).toEqual({ url: "https://s.example/HarnessBeta.ipa", version: "1.0.0", build: "202610021200", bytes: 42, builtAt: "2026-10-02" });
+  expect({ ...next, iosBeta: null } as ReleaseInfo).toEqual(saved);
+});
+
+test("checkServed reports the status, content type and length it got", async () => {
+  const served = (status: number, headers: Record<string, string>) => (async () => new Response(null, { status, headers })) as unknown as typeof fetch;
+  const ok = served(200, { "content-type": "application/octet-stream", "content-length": "42" });
+  expect(await checkServed("u", /^application\/octet-stream/, 42, ok)).toEqual([]);
+  expect(await checkServed("u", /^application\/octet-stream/, 43, ok)).toEqual(["u is 42 bytes, expected 43"]);
+  expect(await checkServed("u", /^(text|application)\/xml/, undefined, served(404, { "content-type": "text/html" }))).toEqual(["u returned 404", "u is served as 'text/html'"]);
 });

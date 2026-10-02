@@ -3,3 +3,4 @@
 .gitignore
 .vercelignore
 .DS_Store
+release.json

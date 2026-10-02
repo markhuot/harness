@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { features, manifest, page, privacy, readInfo, type ReleaseInfo } from "./install-page";
+import { betaManifest, carryBeta, features, manifest, page, privacy, readInfo, type ReleaseInfo } from "./install-page";
 
 const info = (over: Partial<ReleaseInfo["mac"]> = {}, ios: Partial<ReleaseInfo["ios"]> = {}): ReleaseInfo => ({
   site: "https://harness-install.vercel.app",
@@ -114,6 +114,89 @@ test("the footer links the privacy policy, which has the contact address and lin
   const pr = privacy();
   expect(pr).toContain('href="mailto:mark@markhuot.com"');
   expect(pr).toContain('href="index.html"');
+});
+
+const BETA: NonNullable<ReleaseInfo["iosBeta"]> = { url: "https://harness-install.vercel.app/HarnessBeta.ipa?a=1&b=2", version: "1.0.0", build: "202610021200", bytes: 13 * 1024 * 1024, builtAt: "2026-10-02" };
+const withBeta = (r: ReleaseInfo = info({}, { testflightUrl: TF })): ReleaseInfo => ({ ...r, iosBeta: BETA });
+const section = (p: string, cls: string) => p.match(new RegExp(`<section class="${cls}">[\\s\\S]*?</section>`))?.[0] ?? "";
+
+test("without a beta the page has no beta card, CSS or manifest, the same with iosBeta null", () => {
+  for (const r of [info({}, { testflightUrl: TF }), { ...info({}, { testflightUrl: TF }), iosBeta: null }]) {
+    const p = page(r);
+    expect(p).not.toContain("manifest-beta.plist");
+    expect(p).not.toContain('class="beta"');
+    expect(p).not.toContain("Harness Beta");
+    expect(p).not.toContain("section.beta");
+    expect(betaManifest(r)).toBeNull();
+  }
+  expect(page({ ...info(), iosBeta: null })).toBe(page(info()));
+});
+
+test("the committed page is what release.json generates, so a regeneration changes nothing else", () => {
+  const dir = resolve(import.meta.dir, "..", "Install");
+  const saved = JSON.parse(readFileSync(join(dir, "release.json"), "utf8")) as ReleaseInfo;
+  expect(readFileSync(join(dir, "index.html"), "utf8")).toBe(page(saved));
+  expect(readFileSync(join(dir, "manifest.plist"), "utf8")).toBe(manifest(saved));
+  expect(existsSync(join(dir, "manifest-beta.plist"))).toBe(!!saved.iosBeta);
+  if (saved.iosBeta) expect(readFileSync(join(dir, "manifest-beta.plist"), "utf8")).toBe(betaManifest(saved)!);
+});
+
+test("with a beta: a secondary card after the iPhone card installs it from its own manifest", () => {
+  const p = withBeta();
+  const html = page(p);
+  const card = section(html, "beta");
+  expect(card).toContain("Native iPhone app");
+  expect(card).toContain('href="itms-services://?action=download-manifest&amp;url=https://harness-install.vercel.app/manifest-beta.plist"');
+  expect(card).toContain('<a class="install secondary"');
+  expect(card).toContain("SwiftUI");
+  expect(card).toContain("beside the main app");
+  expect(card).toContain("registered to Mark's Apple Developer team");
+  expect(card).toContain("Enter manually");
+  expect(card).toContain("13.0 MB");
+  expect(card).toContain("(202610021200)");
+  // The main app is untouched: still the only primary button, still TestFlight, same manifest.
+  const [, href, label] = primaryButton(html) ?? [];
+  expect(label).toBe("Get it on TestFlight");
+  expect(href).toContain("testflight.apple.com");
+  expect(html.match(/<a class="install"/g)?.length).toBe(1);
+  expect(html).toContain("url=https://harness-install.vercel.app/manifest.plist");
+  // Order: iPhone, beta, Mac (and on wide screens, the beta sits under the iPhone card).
+  expect(html.indexOf("<h2>iPhone and iPad</h2>")).toBeLessThan(html.indexOf('class="beta"'));
+  expect(html.indexOf('class="beta"')).toBeLessThan(html.indexOf("<h2>Mac (Apple silicon)</h2>"));
+  expect(html).toContain(".installs section.beta { grid-column: 1; grid-row: 2; }");
+  // Everything outside the card and its CSS is the page without a beta.
+  const without = page({ ...p, iosBeta: null });
+  expect(html.replace(`\n    ${card}\n`, "").replace(/\n  @media \(min-width: 760px\) \{ \.installs section\.beta[^\n]*\n  h2 \.tag[^\n]*\n/, "")).toBe(without);
+  expect(html).not.toMatch(/—/);
+});
+
+test("the beta manifest has its own bundle id, title, version and escaped IPA URL; the main one doesn't change", () => {
+  const m = betaManifest(withBeta())!;
+  expect(m).toContain("<key>bundle-identifier</key><string>com.markhuot.harness.dev</string>");
+  expect(m).toContain("<key>title</key><string>Harness Beta</string>");
+  expect(m).toContain("<string>https://harness-install.vercel.app/HarnessBeta.ipa?a=1&amp;b=2</string>");
+  expect(m).not.toContain("releases/latest/download");
+  expect(manifest(withBeta())).toBe(manifest(info({}, { testflightUrl: TF })));
+});
+
+test("beta values are escaped", () => {
+  const card = section(page({ ...info(), iosBeta: { ...BETA, version: "<i>", build: '9"', builtAt: "a&b" } }), "beta");
+  expect(card).toContain("Version &lt;i&gt; (9&quot;)");
+  expect(card).toContain("a&amp;b");
+  expect(card).not.toContain("<i>");
+});
+
+test("carryBeta: a release keeps the previous beta only while that exact IPA is still in Install/", () => {
+  const release = info();
+  const prev = withBeta(info());
+  expect(carryBeta(release, prev, BETA.bytes).iosBeta).toEqual(BETA);
+  expect(carryBeta(release, prev, BETA.bytes - 1).iosBeta).toBeNull(); // a different IPA is there
+  expect(carryBeta(release, prev, null).iosBeta).toBeNull(); // no IPA to deploy
+  expect(carryBeta(release, null, BETA.bytes).iosBeta).toBeNull();
+  // Input that says what it wants wins: a new beta, or null to drop it.
+  const next = { ...BETA, build: "202610030000" };
+  expect(carryBeta({ ...release, iosBeta: next }, prev, BETA.bytes).iosBeta).toEqual(next);
+  expect(carryBeta({ ...release, iosBeta: null }, prev, BETA.bytes).iosBeta).toBeNull();
 });
 
 test("the CLI reads release info from an argument or --from-json <file>", () => {

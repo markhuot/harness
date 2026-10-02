@@ -3,6 +3,8 @@ build/
 *.ipa
 *.xcarchive
 Install/Harness.ipa
+# The native beta is deployed with the site (ios/Tools/build.ts publish-beta), never committed
+Install/HarnessBeta.ipa
 
 # Vercel project link
 Install/.vercel

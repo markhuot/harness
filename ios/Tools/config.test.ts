@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import appJson from "../../mobile/app.json";
+import { BETA_BUNDLE_ID, BETA_TITLE } from "../../mobile/Tools/install-page";
 
 // ios/project.yml is the source of the native app's Info.plist (XcodeGen writes it). These keys
 // broke real setups before; see mobile/Tools/ats-config.test.ts for the ATS history.
@@ -51,4 +52,11 @@ test("Release replaces the React Native app on TestFlight; Debug installs beside
   expect(plist.CFBundleDisplayName).toBe("$(HARNESS_DISPLAY_NAME)");
   expect(plist.CFBundleVersion).toBe("$(CURRENT_PROJECT_VERSION)");
   expect(spec.settings.base.DEVELOPMENT_TEAM).toBe(rn.ios.appleTeamId);
+});
+
+test("Beta is a Release build that installs beside the main app, as the install page's beta manifest says", () => {
+  expect(spec.configs).toEqual({ Debug: "debug", Release: "release", Beta: "release" });
+  expect(configs.Beta!.PRODUCT_BUNDLE_IDENTIFIER).toBe(BETA_BUNDLE_ID);
+  expect(configs.Beta!.PRODUCT_BUNDLE_IDENTIFIER).not.toBe(configs.Release!.PRODUCT_BUNDLE_IDENTIFIER);
+  expect(configs.Beta!.HARNESS_DISPLAY_NAME).toBe(BETA_TITLE);
 });
