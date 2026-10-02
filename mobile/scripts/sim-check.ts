@@ -1782,6 +1782,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       await check("Approve menu → Approve and take no action marks a review ticket done without a run", async () => {
         await goto(udid, `harness://ticket/${k(s.quick)}`, (l) => l.includes(APPROVE_MORE));
         await tapWhere(udid, APPROVE_MORE);
+        // Wait for the sheet to settle: a row tapped while it slides in can miss.
+        await approveMenuUp(udid);
         await tapWhere(udid, "Approve and take no action");
         const t = await settle(s.quick.key, (x) => x.status === "done", 15000);
         if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);
