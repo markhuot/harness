@@ -39,6 +39,9 @@ test("images: attachments become media, remote and file sources only ever become
     { t: "text", text: " y" },
   ]);
   expect(inlineTokens("![x](javascript:alert(1))")[0]).toEqual({ t: "text", text: "x" });
+  // `/attachments/..` would resolve to the service root, with the token attached.
+  expect(inlineTokens("![x](attachment:..)")).toEqual([{ t: "text", text: "x" }]);
+  expect(inlineTokens("![x](attachment:.x)")).toEqual([{ t: "text", text: "x" }]);
 });
 
 test("switching between bullets and numbers starts a new list; blank lines split paragraphs", () => {

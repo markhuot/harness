@@ -597,8 +597,8 @@ public enum Markdown {
         static let imageLine = Pattern("^\(s)*!\\[([^\\]]*)\\]\\(([^)\(ws)]+)\\)\(s)*\\z")
         /// `/^!\[([^\]]*)\]\(([^)\s]+)\)$/`
         static let imageParts = Pattern("^!\\[([^\\]]*)\\]\\(([^)\(ws)]+)\\)\\z")
-        /// `/^attachment:([A-Za-z0-9._-]+)$/`
-        static let attachmentSrc = Pattern("^attachment:([A-Za-z0-9._-]+)\\z")
+        /// `/^attachment:([A-Za-z0-9][A-Za-z0-9._-]*)$/` (a leading letter or digit, so `attachment:..` isn't the service root)
+        static let attachmentSrc = Pattern("^attachment:([A-Za-z0-9][A-Za-z0-9._-]*)\\z")
         /// `/\.(mp4|webm|mov)$/i`
         static let videoName = Pattern("\\.(mp4|webm|mov)\\z", options: .caseInsensitive)
         /// INLINE: `` /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+\))/g ``

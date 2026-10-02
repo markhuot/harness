@@ -1622,6 +1622,36 @@
       ]
     },
     {
+      "name": "dot-dot attachment id",
+      "input": "![x](attachment:..)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "dot-led attachment id",
+      "input": "![x](attachment:.x)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "dash-led attachment id",
+      "input": "![x](attachment:-x)",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
       "name": "image in a list item",
       "input": "- ![shot](attachment:abc)",
       "output": [
@@ -2594,6 +2624,21 @@
     {
       "name": "empty attachment id",
       "input": "![x](attachment:)",
+      "output": []
+    },
+    {
+      "name": "dot-dot attachment id",
+      "input": "![x](attachment:..)",
+      "output": []
+    },
+    {
+      "name": "dot-led attachment id",
+      "input": "![x](attachment:.x)",
+      "output": []
+    },
+    {
+      "name": "dash-led attachment id",
+      "input": "![x](attachment:-x)",
       "output": []
     },
     {
@@ -3906,6 +3951,36 @@
       ]
     },
     {
+      "name": "dot-dot attachment id",
+      "input": "![x](attachment:..)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](attachment:..)"
+        }
+      ]
+    },
+    {
+      "name": "dot-led attachment id",
+      "input": "![x](attachment:.x)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](attachment:.x)"
+        }
+      ]
+    },
+    {
+      "name": "dash-led attachment id",
+      "input": "![x](attachment:-x)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](attachment:-x)"
+        }
+      ]
+    },
+    {
       "name": "image in a list item",
       "input": "- ![shot](attachment:abc)",
       "output": [
@@ -5086,6 +5161,21 @@
     {
       "name": "empty attachment id",
       "input": "![x](attachment:)",
+      "output": "x"
+    },
+    {
+      "name": "dot-dot attachment id",
+      "input": "![x](attachment:..)",
+      "output": "x"
+    },
+    {
+      "name": "dot-led attachment id",
+      "input": "![x](attachment:.x)",
+      "output": "x"
+    },
+    {
+      "name": "dash-led attachment id",
+      "input": "![x](attachment:-x)",
       "output": "x"
     },
     {

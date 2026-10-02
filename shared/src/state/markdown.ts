@@ -207,7 +207,8 @@ const TICKET_KEY = /^[A-Z][A-Z0-9]*-\d+$/;
 
 const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+\))/g;
 
-const ATTACHMENT_SRC = /^attachment:([A-Za-z0-9._-]+)$/;
+// Starts with a letter or digit, so `attachment:..` can't become `/attachments/..` (the service root, token attached).
+const ATTACHMENT_SRC = /^attachment:([A-Za-z0-9][A-Za-z0-9._-]*)$/;
 const VIDEO_NAME = /\.(mp4|webm|mov)$/i;
 
 /**
