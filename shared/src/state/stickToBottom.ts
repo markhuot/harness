@@ -1,4 +1,4 @@
-// Whether a transcript or summaries list should keep following new content. Shared by the
+// Whether a transcript or Activity list should keep following new content. Shared by the
 // desktop and iOS scrollers so both decide "the user scrolled away" the same way.
 //
 // Scroll events don't say who caused them: the app's own jump to the bottom, the browser or

@@ -46,7 +46,9 @@ export function blankDraftTicket(project: DraftProject, settings: DraftSettings 
     projectId: project.id,
     kind: "task",
     title: "",
-    description: "",
+    spec: "",
+    specRevision: 1,
+    specBaselineRevision: null,
     status: "planning",
     sessionId: "",
     driver: projectDriver(project, settings),
@@ -86,7 +88,7 @@ const blankToNull = (v: string | null | undefined) => (v?.trim() ? v.trim() : nu
 export function applyTicketPatch(t: Ticket, patch: UpdateTicketBody): Ticket {
   const next: Ticket = { ...t };
   if (patch.title !== undefined) next.title = patch.title;
-  if (patch.description !== undefined) next.description = patch.description;
+  if (patch.spec !== undefined) next.spec = patch.spec;
   if (patch.driver !== undefined && patch.driver !== t.driver) {
     next.driver = patch.driver;
     if (patch.model === undefined) next.model = null;
@@ -111,7 +113,7 @@ export function draftUsesWorktree(t: Pick<Ticket, "useWorktree">, project: Pick<
 }
 
 /**
- * Nothing worth keeping: no prompt, every setting still inherited and the review switches on the
+ * Nothing worth keeping: no spec, every setting still inherited and the review switches on the
  * project's defaults. A New session isn't saved until this turns false, and closing one that's
  * still empty doesn't ask.
  */
@@ -119,7 +121,7 @@ export function draftIsEmpty(t: Ticket, project: DraftProject | null | undefined
   const choice = ticketChoice(t, project, settings);
   const skips = projectReviewSkips(project);
   return (
-    !t.description.trim() &&
+    !t.spec.trim() &&
     t.kind === "task" &&
     choice.driver === null &&
     t.permissionMode === null &&
@@ -141,7 +143,7 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
   const worktree = draftUsesWorktree(t, project);
   return {
     projectId: t.projectId,
-    prompt: t.description,
+    spec: t.spec,
     draft: true,
     start: false,
     kind: t.kind,
@@ -161,12 +163,12 @@ const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.
 /**
  * The PATCH taking a saved draft from `prev` (what the service has) to `next` (the editor's
  * state): only the fields that changed, or null when nothing did. The title isn't sent: the
- * service re-derives a draft's title from its prompt.
+ * service re-derives a draft's title from its spec.
  */
 export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null {
   const p: UpdateTicketBody = {};
   if (next.projectId !== prev.projectId) p.projectId = next.projectId;
-  if (next.description !== prev.description) p.description = next.description;
+  if (next.spec !== prev.spec) p.spec = next.spec;
   if (next.kind !== prev.kind) p.kind = next.kind;
   if (next.driver !== prev.driver) p.driver = next.driver;
   if (next.model !== prev.model || (p.driver !== undefined && next.model)) p.model = next.model;

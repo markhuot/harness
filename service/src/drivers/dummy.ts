@@ -207,6 +207,34 @@ export class DummyDriver implements Driver {
 
     const hasTool = (name: string) => req.tools.some((t) => t.name === name);
 
+    // The spec as read_spec shows it: "Revision N …" on the first line, then numbered lines.
+    async function* readSpec(spec: { rev: number; lines: string[] }): AsyncGenerator<DriverEvent> {
+      const out: { result?: ToolResult } = {};
+      yield* call("read_spec", {}, out);
+      const text = out.result && !out.result.isError ? resultText(out.result) : "";
+      const [head = "", ...rest] = text.split("\n");
+      spec.rev = Number(/^Revision (\d+)/.exec(head)?.[1] ?? 1);
+      spec.lines = rest.map((l) => l.replace(/^\s*\d+\t/, ""));
+    }
+    // Bring the spec's Status up to date the way an agent should: one edit_spec that adds a line
+    // under "## Status" (adding the section when the spec has none).
+    async function* status(text: string): AsyncGenerator<DriverEvent> {
+      const spec = { rev: 1, lines: [] as string[] };
+      yield* readSpec(spec);
+      const end = spec.lines.length;
+      const hasStatus = spec.lines.some((l) => l.trim() === "## Status");
+      yield* call("edit_spec", {
+        base_revision: spec.rev,
+        note: `Status: ${text}`,
+        edits: [{ start_line: end + 1, end_line: end, new_text: hasStatus ? `* ${text}` : `\n## Status\n* ${text}` }],
+      });
+    }
+    // Spec first, in its own call, then the submit with a note on this round.
+    async function* submit(note: string): AsyncGenerator<DriverEvent> {
+      yield* status(note);
+      yield* call("submit_for_review", { note, spec_is_up_to_date: true });
+    }
+
     // `/tools [{"name":…,"input":{…}},…]`: call harness tools in order. The first error stops
     // the run with the rest kept in state; a later "Retry it now" prompt (an answered approval)
     // repeats the failed call with the same input, like an agent told to retry.
@@ -220,7 +248,7 @@ export class DummyDriver implements Driver {
         }
       }
       yield* say(`Ran ${calls.map((c) => c.name).join(", ")}.`);
-      yield* call("submit_for_review", { summary: `Ran ${calls.length} tool call${calls.length === 1 ? "" : "s"}.` });
+      yield* submit(`Ran ${calls.length} tool call${calls.length === 1 ? "" : "s"}.`);
     }
     // A later conductor run, or a work run on a task ticket with children: approve and complete
     // children whose agent review passed, and submit once every child is done.
@@ -248,7 +276,7 @@ export class DummyDriver implements Driver {
       }
       if (children.length > 0 && children.every((c) => c.status === "done")) {
         yield* say("All child tickets are done.");
-        yield* call("submit_for_review", { summary: `All ${children.length} child tickets are done.` });
+        yield* submit(`All ${children.length} child tickets are done.`);
       } else {
         yield* say(acted ? `Handled ${acted} child ticket${acted === 1 ? "" : "s"}; waiting on the rest.` : "Waiting on child tickets.");
       }
@@ -297,7 +325,9 @@ export class DummyDriver implements Driver {
           "| Review | The reviewer agent reads the diff against the ticket, then approves it or asks for changes | **medium** |",
         ].join("\n");
         yield* say(plan);
-        yield* call("update_plan", { plan });
+        const spec = { rev: 1, lines: [] as string[] };
+        yield* readSpec(spec);
+        yield* call("update_spec", { spec: plan, note: "Plan drafted", base_revision: spec.rev });
         break;
       }
 
@@ -311,7 +341,7 @@ export class DummyDriver implements Driver {
         } else if (directive === "child") {
           // `/child <title>`: a child of this task ticket, which then conducts it (no submit yet).
           const title = arg || "Child task";
-          yield* call("create_ticket", { title, description: `Dummy child ticket: ${title}`, child: true });
+          yield* call("create_ticket", { title, spec: `Dummy child ticket: ${title}`, child: true });
           yield* say(`Created a child ticket for "${title}"; I'll review and complete it when it's ready.`);
         } else if (directive === "block") {
           yield* call("block", { question: arg || "The dummy driver needs input." });
@@ -336,7 +366,7 @@ export class DummyDriver implements Driver {
           }
           if (decision.behavior === "allow") {
             yield* say(`Approved ${tool}`);
-            yield* call("submit_for_review", { summary: `Ran ${tool} after approval.` });
+            yield* submit(`Ran ${tool} after approval.`);
           }
           // Denied (or no answer): stop here, like a real agent told to wait for the human.
         } else if (directive === "tools") {
@@ -367,7 +397,7 @@ export class DummyDriver implements Driver {
             yield* subagent(n, null, nestLast && n === count - 1 ? () => subagent(count, parent) : undefined);
           }
           yield* say(`The ${count} sub-agent${count === 1 ? "" : "s"} finished.`);
-          yield* call("submit_for_review", { summary: `Ran ${count} sub-agent${count === 1 ? "" : "s"}.` });
+          yield* submit(`Ran ${count} sub-agent${count === 1 ? "" : "s"}.`);
         } else if (directive === "bgtask") {
           // `/bgtask [n]`: a background Bash command the way claude-code reports one (DESIGN.md
           // "Background tasks"): the call, its "Command running in background" result, a task
@@ -396,7 +426,7 @@ export class DummyDriver implements Driver {
           }
           yield { type: "subagent", subagent: { id, status: "succeeded", result: `Background command "${description}" completed (exit code 0)` } };
           yield* say(`Counted to ${lines}.`);
-          yield* call("submit_for_review", { summary: `Ran a background task that counted to ${lines}.` });
+          yield* submit(`Ran a background task that counted to ${lines}.`);
         } else if (directive === "bash") {
           if (hasTool("bash")) {
             const out: { result?: ToolResult } = {};
@@ -406,14 +436,16 @@ export class DummyDriver implements Driver {
             yield* say("The bash tool is not available in this run.");
           }
         } else {
-          yield* call("post_summary", { summary: `Dummy work done for: ${firstLine(prompt) || "(empty prompt)"}` });
-          yield* call("submit_for_review", { summary: "The dummy driver finished the work." });
+          yield* call("post_note", { note: `Dummy work done for: ${firstLine(prompt) || "(empty prompt)"}` });
+          yield* submit("The dummy driver finished the work.");
         }
         break;
       }
 
       case "review": {
-        const reject = prompt.includes("[dummy:reject]");
+        // [dummy:reject] rejects every round; [dummy:reject-once] only the first (a re-review's
+        // prompt lists the earlier rounds).
+        const reject = prompt.includes("[dummy:reject]") || (prompt.includes("[dummy:reject-once]") && !prompt.includes("## Earlier review rounds"));
         yield* say(reject ? "Reviewing the work: changes are needed." : "Reviewing the work: it looks good.");
         yield* call(
           "review_decision",
@@ -434,7 +466,7 @@ export class DummyDriver implements Driver {
         if (said.includes("[dummy:unblock]")) yield* call("unblock", { note: "The dummy's question was answered." });
         if (said.includes("[dummy:resume]")) yield* call("resume_work", { note: "The dummy is changing the work." });
         if (said.includes("[dummy:block]")) yield* call("block", { question: "The dummy needs another answer. What next?" });
-        else if (said.includes("[dummy:submit]")) yield* call("submit_for_review", { summary: "The dummy finished the work from a message." });
+        else if (said.includes("[dummy:submit]")) yield* submit("The dummy finished the work from a message.");
         break;
       }
 
@@ -445,7 +477,7 @@ export class DummyDriver implements Driver {
         if (t?.completionAction === "pr") {
           yield* call("record_pull_request", { url: t.pullRequestUrl ?? `https://github.com/example/dummy/pull/${t.key.split("-").pop()}` });
         }
-        yield* call("post_summary", { summary: "Completed." });
+        yield* call("post_note", { note: "Completed." });
         break;
       }
 
@@ -458,7 +490,7 @@ export class DummyDriver implements Driver {
           yield* say(`Splitting the work into ${specs.length} child ticket${specs.length === 1 ? "" : "s"}.`);
           const keys: string[] = [];
           for (const spec of specs) {
-            const input: Record<string, unknown> = { title: spec.title, description: `Dummy child ticket: ${spec.title}` };
+            const input: Record<string, unknown> = { title: spec.title, spec: `Dummy child ticket: ${spec.title}` };
             const dep = spec.dependsOnIndex !== undefined ? keys[spec.dependsOnIndex] : undefined;
             if (dep) input.depends_on = [dep];
             const out: { result?: ToolResult } = {};
@@ -493,7 +525,7 @@ export class DummyDriver implements Driver {
             yield* call("decline_work", { reason: "No project for this output.", title });
           } else {
             yield* say(`Dispatching to ${project}.`);
-            const input: Record<string, unknown> = { project_key: project, title, description: `Dispatched by the dummy triager.\n\n${title}`, start: true };
+            const input: Record<string, unknown> = { project_key: project, title, spec: `Dispatched by the dummy triager.\n\n${title}`, start: true };
             if (key) input.key = key;
             if (ticketKey) input.ticket_key = ticketKey;
             yield* call("dispatch_ticket", input);
@@ -507,7 +539,7 @@ export class DummyDriver implements Driver {
         } else {
           const big = prompt.includes("[big]");
           yield* say(`Dispatching to ${project}${big ? " as a conductor ticket" : ""}.`);
-          const input: Record<string, unknown> = { project_key: project, title, description: `Dispatched by the dummy triager.\n\n${title}` };
+          const input: Record<string, unknown> = { project_key: project, title, spec: `Dispatched by the dummy triager.\n\n${title}` };
           if (key) input.key = key;
           if (ticketKey) input.ticket_key = ticketKey;
           input.start = true;

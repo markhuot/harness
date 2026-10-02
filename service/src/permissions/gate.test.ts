@@ -33,7 +33,7 @@ function env(mode: PermissionMode, overrides: Partial<GateEnv> = {}) {
       return { behavior: "deny", message: "PENDING" };
     },
     log: (l) => logs.push(l),
-    context: () => ({ ticket: { key: "T-1", title: "Set up repo", brief: "Initialise a git repo" }, transcript: ["[human] please git init"] }),
+    context: () => ({ ticket: { key: "T-1", title: "Set up repo", spec: "Initialise a git repo" }, transcript: ["[human] please git init"] }),
     ...overrides,
   };
   return { env: e, logs, approvals, cwd };
@@ -150,7 +150,7 @@ describe("PermissionGate ask mode", () => {
 });
 
 describe("PermissionGate auto mode (classifier)", () => {
-  test("allow runs the call and logs backend + latency; the classifier sees the call, cwd, brief and transcript", async () => {
+  test("allow runs the call and logs backend + latency; the classifier sees the call, cwd, spec and transcript", async () => {
     let t = 1000;
     const c = fakeClassifier(async () => {
       t += 250;

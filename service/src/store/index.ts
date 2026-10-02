@@ -4,7 +4,8 @@ import { TicketRepo } from "./tickets";
 import { SessionRepo } from "./sessions";
 import { RunRepo } from "./runs";
 import { TranscriptRepo } from "./transcript";
-import { SummaryRepo } from "./summaries";
+import { ActivityRepo, AttachmentRepo } from "./activity";
+import { SpecRepo } from "./spec";
 import { SubagentRepo } from "./subagents";
 import { WatcherRepo } from "./watchers";
 import { CounterRepo, SeenRepo, SettingsRepo } from "./misc";
@@ -15,7 +16,9 @@ export class Store {
   readonly sessions: SessionRepo;
   readonly runs: RunRepo;
   readonly transcript: TranscriptRepo;
-  readonly summaries: SummaryRepo;
+  readonly activity: ActivityRepo;
+  readonly attachments: AttachmentRepo;
+  readonly specs: SpecRepo;
   readonly subagents: SubagentRepo;
   readonly watchers: WatcherRepo;
   readonly seen: SeenRepo;
@@ -28,7 +31,9 @@ export class Store {
     this.sessions = new SessionRepo(db);
     this.runs = new RunRepo(db);
     this.transcript = new TranscriptRepo(db);
-    this.summaries = new SummaryRepo(db);
+    this.activity = new ActivityRepo(db);
+    this.attachments = new AttachmentRepo(db);
+    this.specs = new SpecRepo(db);
     this.subagents = new SubagentRepo(db);
     this.watchers = new WatcherRepo(db);
     this.seen = new SeenRepo(db);
@@ -41,5 +46,6 @@ export class Store {
   }
 }
 
-export { ProjectRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, SummaryRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo };
+export { ProjectRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo };
 export { normalizeProjectKey } from "./projects";
+export { SpecConflictError } from "./spec";

@@ -78,22 +78,22 @@ const check = (ok: boolean, what: string) => {
 try {
   console.log("run 1");
   const first = await run(
-    'Call the post_summary tool with summary "smoke summary", then call submit_for_review with summary "smoke done". Do nothing else.',
+    'Call the post_note tool with note "smoke note", then call submit_for_review with note "smoke done" and spec_is_up_to_date true. Do nothing else.',
     null,
   );
   const names = first.filter((e) => e.type === "tool_call").map((e) => (e as { name: string }).name);
-  check(names.includes("post_summary") && names.includes("submit_for_review"), "tool_call post_summary + submit_for_review (prefix stripped)");
-  check(ops.calls.some((c) => c.method === "postSummary") && ops.calls.some((c) => c.method === "submitForReview"), "HarnessOps received the calls over MCP");
+  check(names.includes("post_note") && names.includes("submit_for_review"), "tool_call post_note + submit_for_review (prefix stripped)");
+  check(ops.calls.some((c) => c.method === "postNote") && ops.calls.some((c) => c.method === "submitForReview"), "HarnessOps received the calls over MCP");
   const state = first.filter((e) => e.type === "state").at(-1) as { state: { sessionId: string } } | undefined;
   check(!!state?.state.sessionId, `state event with sessionId (${state?.state.sessionId})`);
   check(first.some((e) => e.type === "usage" && typeof e.costUsd === "number"), "usage event with cost");
 
   console.log("run 2 (resume, switched to sonnet)");
-  const second = await run("What summary did you just submit for review? Answer in one short sentence.", state?.state, "sonnet");
+  const second = await run("What note did you just submit for review? Answer in one short sentence.", state?.state, "sonnet");
   const state2 = second.filter((e) => e.type === "state").at(-1) as { state: { sessionId: string } } | undefined;
   check(state2?.state.sessionId === state?.state.sessionId, `resume reused session id (${state2?.state.sessionId})`);
   const answer = second.filter((e) => e.type === "text").map((e) => (e as { text: string }).text).join(" ");
-  check(/smoke done/i.test(answer), "resumed conversation remembers the submitted summary");
+  check(/smoke done/i.test(answer), "resumed conversation remembers the submitted note");
 } finally {
   server.stop(true);
 }

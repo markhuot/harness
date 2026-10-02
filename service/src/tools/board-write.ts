@@ -49,7 +49,7 @@ const branchInput = (b: string | undefined) => (b === undefined ? undefined : b.
 
 export const createTicket = defineTool<{
   title: string;
-  description: string;
+  spec: string;
   project_key?: string;
   depends_on?: string[];
   start?: boolean;
@@ -68,11 +68,11 @@ export const createTicket = defineTool<{
 }>({
   name: "create_ticket",
   description:
-    "Create a ticket. With child true (the default for a conductor ticket) it is a child of this ticket: it starts on its own once its depends_on are done unless auto_start is false, and this ticket becomes its conductor, reviewing it with review_ticket and finalizing it with complete_ticket. Otherwise it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the description must be a self-contained brief: goal, relevant files or context, acceptance criteria. When the ticket is for an external item with a key (a Jira issue \"FOO-123\", say), pass it as remote_id and its link as remote_url. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's local key: use it, not the remote ID, in depends_on, in other tools and as the target of links to the ticket; pass keys from earlier create_ticket calls in depends_on to order work.",
+    "Create a ticket. With child true (the default for a conductor ticket) it is a child of this ticket: it starts on its own once its depends_on are done unless auto_start is false, and this ticket becomes its conductor, reviewing it with review_ticket and finalizing it with complete_ticket. Otherwise it is a new top-level ticket in this project (or project_key) that lands in planning, where an agent drafts a plan for a human, unless start is true. Another agent does the work, so the spec must be self-contained: the goal, relevant files or context, and acceptance criteria. When the ticket is for an external item with a key (a Jira issue \"FOO-123\", say), pass it as remote_id and its link as remote_url. The new ticket's permission mode is never looser than this ticket's. Returns the new ticket's local key: use it, not the remote ID, in depends_on, in other tools and as the target of links to the ticket; pass keys from earlier create_ticket calls in depends_on to order work.",
   inputSchema: schema(
     {
       title: { type: "string", minLength: 1, description: "Short ticket title." },
-      description: { type: "string", minLength: 1, description: "Self-contained brief for the agent that will do the work." },
+      spec: { type: "string", minLength: 1, description: "The new ticket's spec in markdown: a self-contained brief for the agent that will do the work." },
       project_key: { type: "string", minLength: 1, description: "Project key (see list_projects). Defaults to this ticket's project." },
       depends_on: depsProp,
       start: { type: "boolean", description: "Start work now (or as soon as depends_on are done) instead of planning. Default false." },
@@ -96,12 +96,12 @@ export const createTicket = defineTool<{
       remote_id: remoteIdProp,
       remote_url: remoteUrlProp,
     },
-    ["title", "description"],
+    ["title", "spec"],
   ),
   async run(input, ctx) {
     const ticket = await ctx.ops.createTicket(ctx, {
       title: input.title,
-      description: input.description,
+      spec: input.spec,
       projectKey: input.project_key,
       dependsOn: input.depends_on,
       start: input.start,
@@ -125,7 +125,7 @@ export const createTicket = defineTool<{
 export const updateTicket = defineTool<{
   key: string;
   title?: string;
-  description?: string;
+  spec?: string;
   driver?: string;
   model?: string;
   permission_mode?: PermissionMode | "inherit";
@@ -139,12 +139,12 @@ export const updateTicket = defineTool<{
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, description (its brief or plan), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app: title, spec (written as a new revision of it), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
       key: keyProp,
       title: { type: "string", minLength: 1, description: "New title." },
-      description: { type: "string", description: "New description (replaces it)." },
+      spec: { type: "string", description: "The ticket's whole new spec (a new revision; its history keeps the old one)." },
       driver: driverProp,
       model: modelProp,
       permission_mode: { type: "string", enum: [...PERMISSION_MODES, "inherit"], description: "\"inherit\" uses the project's mode." },
@@ -161,7 +161,7 @@ export const updateTicket = defineTool<{
   async run(input, ctx) {
     const ticket = await ctx.ops.updateTicket(ctx, input.key, {
       title: input.title,
-      description: input.description,
+      spec: input.spec,
       driver: input.driver,
       model: modelInput(input.model),
       permissionMode: input.permission_mode === undefined ? undefined : input.permission_mode === "inherit" ? null : input.permission_mode,

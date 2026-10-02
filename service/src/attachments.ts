@@ -1,10 +1,11 @@
-// Summary attachments (DESIGN.md "Summary attachments"): images and videos an agent attaches to
-// post_summary / submit_for_review. Files are validated up front, then copied into
-// $HARNESS_HOME/attachments/<id>.<ext>, since the agent's worktree is deleted after the merge.
+// Ticket attachments (DESIGN.md "Spec revisions and attachments"): images and videos an agent's
+// spec points at (`![After](shots/after.png)` in update_spec / edit_spec). Files are validated up
+// front, then copied into $HARNESS_HOME/attachments/<id>.<ext>, since the agent's worktree is
+// deleted after the merge, and the spec's src becomes attachment:<id>.
 
 import { closeSync, copyFileSync, mkdirSync, openSync, readSync, statSync, unlinkSync } from "node:fs";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
-import type { AttachmentKind, SummaryAttachment } from "@harness/shared";
+import type { AttachmentKind, Attachment } from "@harness/shared";
 import { newId } from "./store/util";
 
 export const MAX_ATTACHMENTS = 10;
@@ -36,12 +37,12 @@ const BY_MIME: Record<string, FileType> = Object.fromEntries(Object.values(BY_EX
 export const ALLOWED_EXTENSIONS = Object.keys(BY_EXT);
 
 /** A validated file, ready to copy in. `id` is the attachment's id and stored file name. */
-export interface PreparedAttachment extends SummaryAttachment {
+export interface PreparedAttachment extends Attachment {
   source: string;
 }
 
 /** Where an attachment's copy lives. */
-export function attachmentPath(dir: string, a: Pick<SummaryAttachment, "id" | "mimeType">): string {
+export function attachmentPath(dir: string, a: Pick<Attachment, "id" | "mimeType">): string {
   return join(dir, `${a.id}.${BY_MIME[a.mimeType]?.ext ?? "bin"}`);
 }
 
@@ -111,7 +112,7 @@ export function prepareAttachments(paths: unknown, cwd: string): PreparedAttachm
   if (paths === undefined || paths === null) return [];
   if (!Array.isArray(paths) || paths.some((p) => typeof p !== "string")) throw new Error("attachments must be a list of file paths");
   const list = (paths as string[]).map((p) => p.trim());
-  if (list.length > MAX_ATTACHMENTS) throw new Error(`Too many attachments: ${list.length} (at most ${MAX_ATTACHMENTS} per summary)`);
+  if (list.length > MAX_ATTACHMENTS) throw new Error(`Too many attachments: ${list.length} (at most ${MAX_ATTACHMENTS} new ones per spec write)`);
   return list.map((given) => {
     if (!given) throw new Error("An attachment path is empty");
     const source = isAbsolute(given) ? given : resolve(cwd, given);
@@ -144,7 +145,7 @@ export function prepareAttachments(paths: unknown, cwd: string): PreparedAttachm
 }
 
 /** Copy prepared files into `dir`. On a failure the copies made so far are removed. */
-export function storeAttachments(dir: string, prepared: PreparedAttachment[]): SummaryAttachment[] {
+export function storeAttachments(dir: string, prepared: PreparedAttachment[]): Attachment[] {
   if (prepared.length === 0) return [];
   mkdirSync(dir, { recursive: true });
   const done: string[] = [];

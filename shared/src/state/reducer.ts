@@ -10,7 +10,9 @@ import type {
   Session,
   Subagent,
   TaskOutput,
-  Summary,
+  ActivityEntry,
+  SpecRevision,
+  SpecRevisionInfo,
   Ticket,
   TicketDetail,
   TicketPage,
@@ -37,8 +39,15 @@ export interface State {
   tickets: Record<string, Ticket>;
   sessions: Record<string, Session>;
   runs: Record<string, Run>;
-  /** Keyed by sessionId, sorted by createdAt, unique by id */
-  summaries: Record<string, Summary[]>;
+  /** Activity per sessionId, sorted by createdAt, unique by id */
+  activity: Record<string, ActivityEntry[]>;
+  /**
+   * Spec revision metadata per ticket id, oldest first: from GET …/spec/revisions ("specRevisions")
+   * plus spec.revised events. approvedBaseline follows the ticket's specBaselineRevision.
+   */
+  specRevisions: Record<string, SpecRevisionInfo[]>;
+  /** Revision bodies fetched so far, keyed by specBodyKey(ticketId, rev); revisions never change */
+  specBodies: Record<string, string>;
   /**
    * Keyed by transcriptKey(sessionId, subagentId): the session agent's transcript under the
    * session id, each sub-agent's under "<sessionId>/<subagentId>". Sorted by seq, unique by id.
@@ -76,7 +85,9 @@ export const initialState: State = {
   tickets: {},
   sessions: {},
   runs: {},
-  summaries: {},
+  activity: {},
+  specRevisions: {},
+  specBodies: {},
   transcripts: {},
   subagents: {},
   taskOutputs: {},
@@ -119,7 +130,11 @@ export type Action =
   | { type: "subagents"; sessionId: string; subagents: Subagent[] }
   /** A slice of a background task's output (GET …/output), appended to what's loaded */
   | { type: "taskOutput"; sessionId: string; subagentId: string; output: TaskOutput }
-  | { type: "summaries"; sessionId: string; summaries: Summary[] }
+  | { type: "activity"; sessionId: string; activity: ActivityEntry[] }
+  /** GET /tickets/:key/spec/revisions: the ticket's whole list */
+  | { type: "specRevisions"; ticketId: string; revisions: SpecRevisionInfo[] }
+  /** GET /tickets/:key/spec/revisions/:rev: one revision's body */
+  | { type: "specRevision"; ticketId: string; revision: SpecRevision }
   | { type: "drivers"; drivers: DriverInfo[] }
   | PagingAction;
 
@@ -162,7 +177,25 @@ function preferNewer<T extends { id: string; updatedAt: number }>(snap: Record<s
 }
 
 const entryOrder = (e: TranscriptEntry) => e.seq;
-const summaryOrder = (s: Summary) => s.createdAt;
+const activityOrder = (e: ActivityEntry) => e.createdAt;
+
+/** Where a revision's body lives in State.specBodies. */
+export function specBodyKey(ticketId: string, rev: number): string {
+  return `${ticketId}#${rev}`;
+}
+
+/** A ticket's revision list with approvedBaseline set on `baseline` only (null: none). */
+function withBaseline(list: SpecRevisionInfo[], baseline: number | null | undefined): SpecRevisionInfo[] {
+  if (baseline === undefined) return list;
+  return list.some((r) => r.approvedBaseline !== (r.rev === baseline)) ? list.map((r) => ({ ...r, approvedBaseline: r.rev === baseline })) : list;
+}
+
+/** Revisions merged by rev, oldest first. */
+function mergeRevisions(prev: SpecRevisionInfo[], next: SpecRevisionInfo[]): SpecRevisionInfo[] {
+  const byRev = new Map(prev.map((r) => [r.rev, r]));
+  for (const r of next) byRev.set(r.rev, r);
+  return [...byRev.values()].sort((a, b) => a.rev - b.rev);
+}
 const subagentOrder = (s: Subagent) => s.startedAt;
 
 /** Where a transcript lives in State.transcripts: the session's own, or one sub-agent's. */
@@ -254,12 +287,16 @@ export function applyEvent(state: State, event: HarnessEvent): State {
       for (const t of Object.values(state.tickets)) if (t.projectId !== event.id) tickets[t.id] = t;
       return { ...state, projects: without(state.projects, event.id), tickets };
     }
-    case "ticket.upserted":
+    case "ticket.upserted": {
+      const list = state.specRevisions[event.ticket.id];
+      const marked = list ? withBaseline(list, event.ticket.specBaselineRevision) : list;
       return {
         ...state,
         tickets: { ...state.tickets, [event.ticket.id]: event.ticket },
         donePaging: adjustDoneTotals(state, state.tickets[event.ticket.id], event.ticket),
+        specRevisions: marked !== list ? { ...state.specRevisions, [event.ticket.id]: marked! } : state.specRevisions,
       };
+    }
     case "ticket.deleted":
       return {
         ...state,
@@ -296,12 +333,27 @@ export function applyEvent(state: State, event: HarnessEvent): State {
     }
     case "subagent.upserted":
       return { ...state, subagents: mergeSubagents(state, event.subagent.sessionId, [event.subagent]) };
-    case "summary.added": {
-      const s = event.summary;
+    case "activity.added": {
+      const e = event.entry;
       return {
         ...state,
-        summaries: { ...state.summaries, [s.sessionId]: mergeById(state.summaries[s.sessionId] ?? [], [s], summaryOrder) },
+        activity: { ...state.activity, [e.sessionId]: mergeById(state.activity[e.sessionId] ?? [], [e], activityOrder) },
       };
+    }
+    case "spec.revised": {
+      // Only a list that was loaded grows: an unknown one is fetched whole when it's shown.
+      const list = state.specRevisions[event.ticketId];
+      if (!list) return state;
+      const info: SpecRevisionInfo = {
+        rev: event.rev,
+        author: event.author,
+        note: event.note,
+        runId: event.runId ?? null,
+        runKind: event.runKind ?? null,
+        approvedBaseline: false,
+        createdAt: event.createdAt ?? 0,
+      };
+      return { ...state, specRevisions: { ...state.specRevisions, [event.ticketId]: mergeRevisions(list, [info]) } };
     }
     case "watcher.upserted":
       return { ...state, watchers: { ...state.watchers, [event.watcher.id]: event.watcher } };
@@ -326,7 +378,7 @@ export function reducer(state: State, action: Action): State {
       return state.connected === action.connected ? state : { ...state, connected: action.connected };
     case "snapshot": {
       const s = action.snapshot;
-      // A snapshot is authoritative for entity lists; transcripts/summaries are kept (they are
+      // A snapshot is authoritative for entity lists; transcripts/activity are kept (they are
       // merged by id, and views refetch them on reconnect). Paging restarts from its first page;
       // an active search is re-armed (ids → null) for the client to re-run.
       const all = s.donePage ? [...s.tickets, ...s.donePage.page.tickets] : s.tickets;
@@ -369,9 +421,9 @@ export function reducer(state: State, action: Action): State {
         sessions: { ...state.sessions, [d.session.id]: d.session },
         // Older services don't send sub-agents: leave the session's list unknown then.
         subagents: d.subagents ? mergeSubagents(state, d.session.id, d.subagents) : state.subagents,
-        summaries: {
-          ...state.summaries,
-          [d.session.id]: mergeById(state.summaries[d.session.id] ?? [], d.summaries, summaryOrder),
+        activity: {
+          ...state.activity,
+          [d.session.id]: mergeById(state.activity[d.session.id] ?? [], d.activity, activityOrder),
         },
       };
     }
@@ -385,14 +437,29 @@ export function reducer(state: State, action: Action): State {
       const next = mergeTaskOutput(prev, action.output);
       return next === prev ? state : { ...state, taskOutputs: { ...state.taskOutputs, [key]: next } };
     }
-    case "summaries":
+    case "activity":
       return {
         ...state,
-        summaries: {
-          ...state.summaries,
-          [action.sessionId]: mergeById(state.summaries[action.sessionId] ?? [], action.summaries, summaryOrder),
+        activity: {
+          ...state.activity,
+          [action.sessionId]: mergeById(state.activity[action.sessionId] ?? [], action.activity, activityOrder),
         },
       };
+    case "specRevisions": {
+      const baseline = state.tickets[action.ticketId]?.specBaselineRevision;
+      const list = withBaseline(mergeRevisions(state.specRevisions[action.ticketId] ?? [], action.revisions), baseline);
+      return { ...state, specRevisions: { ...state.specRevisions, [action.ticketId]: list } };
+    }
+    case "specRevision": {
+      const { revision: r } = action;
+      const { body: _body, ...info } = r;
+      const prev = state.specRevisions[action.ticketId];
+      return {
+        ...state,
+        specBodies: { ...state.specBodies, [specBodyKey(action.ticketId, r.rev)]: r.body },
+        specRevisions: prev ? { ...state.specRevisions, [action.ticketId]: mergeRevisions(prev, [info]) } : state.specRevisions,
+      };
+    }
     case "drivers":
       return { ...state, drivers: action.drivers };
     case "tickets":
@@ -534,9 +601,21 @@ export function dependentsOf(state: State, ticket: Ticket): { key: string; ticke
   return [...out.values()].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
 }
 
-export function latestSummary(state: State, sessionId: string): Summary | undefined {
-  const list = state.summaries[sessionId];
-  return list?.[list.length - 1];
+/** The session's newest Activity entry, or with `kinds` the newest of those kinds. */
+export function latestActivity(state: State, sessionId: string, kinds?: readonly ActivityEntry["kind"][]): ActivityEntry | undefined {
+  const list = state.activity[sessionId] ?? [];
+  for (let i = list.length - 1; i >= 0; i--) if (!kinds || kinds.includes(list[i]!.kind)) return list[i];
+  return undefined;
+}
+
+/**
+ * The body of a ticket's spec revision when it's known: the current one from the ticket itself,
+ * an earlier one once fetched ("specRevision"). Undefined means fetch it.
+ */
+export function specBody(state: State, ticketId: string, rev: number): string | undefined {
+  const t = state.tickets[ticketId];
+  if (t && (t.specRevision ?? 1) === rev) return t.spec;
+  return state.specBodies[specBodyKey(ticketId, rev)];
 }
 
 /** Concatenated in-flight text for a session (normally one run at a time). */
