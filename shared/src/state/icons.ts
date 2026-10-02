@@ -1,4 +1,4 @@
-// Icon set shared by the desktop (inline <svg>) and iOS (react-native-svg): 24×24 stroke paths,
+// Icon set shared by the desktop (inline <svg>) and iOS (SF Symbols, ios/Harness/UI/Icon.swift): 24×24 stroke paths,
 // drawn with round caps/joins and no fill. Plugin manifests name icons from this set.
 
 export const ICON_PATHS = {

@@ -10,7 +10,8 @@
 // calls are same-origin; they just need the bearer token from harness:init. Two hosts, one API:
 //   - Desktop: an iframe. Messages are accepted only from window.parent, first only from an allowed
 //     host origin, and replies go to window.parent.postMessage.
-//   - iOS: a React Native WebView (detected by window.ReactNativeWebView.postMessage). The host
+//   - iOS: a WKWebView (detected by window.ReactNativeWebView.postMessage, a name kept from the
+//     1.x React Native app). The host
 //     injects `window.postMessage(msg, serviceOrigin)` into the page, so messages are accepted only
 //     when event.source is this window and event.origin is this page's own origin; replies go to
 //     ReactNativeWebView.postMessage(JSON.stringify(msg)).
@@ -105,7 +106,7 @@ export class HarnessPluginError extends Error {
 export interface BridgeWindow {
   parent: { postMessage(message: unknown, targetOrigin: string): void } | null;
   location: { pathname: string; search: string; origin?: string };
-  /** Injected by react-native-webview before the page loads when hosted in the iOS app */
+  /** Injected before the page loads when hosted in the iOS app (a WKWebView; the name is historical) */
   ReactNativeWebView?: { postMessage(data: string): void };
   addEventListener(type: "message", listener: (e: MessageEvent) => void): void;
   removeEventListener(type: "message", listener: (e: MessageEvent) => void): void;

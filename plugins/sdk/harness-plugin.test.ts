@@ -150,7 +150,7 @@ describe("plugin sdk bridge", () => {
 
 const SERVICE = "http://100.64.1.2:7717"; // a Tailscale address: not on the localhost allowlist
 
-/** A top-level page (window.parent === window), optionally inside a React Native WebView. */
+/** A top-level page (window.parent === window), optionally inside the iOS app's web view. */
 function fakeTopWindow(opts: { native?: boolean; origin?: string } = {}) {
   const listeners = new Set<Listener>();
   const nativePosted: unknown[] = [];
@@ -172,7 +172,7 @@ function fakeTopWindow(opts: { native?: boolean; origin?: string } = {}) {
   return { win, send, nativePosted, parentPosted, listeners };
 }
 
-describe("plugin sdk bridge inside a React Native WebView", () => {
+describe("plugin sdk bridge inside the iOS app's web view (window.ReactNativeWebView)", () => {
   const rnInit = { ...init, baseUrl: SERVICE };
 
   test("ready goes to ReactNativeWebView as a JSON string, not window.parent", () => {
