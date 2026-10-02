@@ -73,7 +73,9 @@ test("a finished parent, or a child with its own base branch, no longer keeps th
 });
 
 test("cleanup is always offered in git, after merge and pr: even a ticket with nothing on its branch can clean up", () => {
-  expect(completionOptions({ branch: null }, gh).actions).toEqual(["merge", "pr", "cleanup", "custom"]);
+  // No branch of its own (it ran in the project checkout): clean up is still there, merge and pr aren't.
+  expect(completionOptions({ branch: null }, gh)).toMatchObject({ actions: ["cleanup", "custom"], defaultAction: "cleanup" });
+  expect(completionOptions({ branch: "harness/web-1", hasChanges: false }, gh, null, "main")).toMatchObject({ actions: ["cleanup", "custom"], defaultAction: "cleanup" });
   expect(completionOptions({ branch: "harness/web-1" }, gh, null, "main").actions).toEqual(["merge", "pr", "cleanup", "custom"]);
   expect(completionOptions({ branch: "harness/web-1" }, plain, null, "main").actions).toEqual(["custom"]);
   expect(completionOptions({ branch: "harness/web-1" }, { ...git, completionAction: "cleanup" }, null, "main").defaultAction).toBe("cleanup");

@@ -40,6 +40,15 @@ describe("landMenu", () => {
     expect(landCommands(m).others).toEqual({ custom: { kind: "sheet", action: "custom", required: true, label: "Approve and…" } });
   });
 
+  test("a ticket with nothing to land (no branch of its own, or no changes) drops merge and PR and preselects clean up", () => {
+    for (const ticket of [{ ...fresh, branch: null }, { ...fresh, branch: "harness/web-2", hasChanges: false }]) {
+      const m = landMenu(ticket, gh);
+      expect(m.primary).toEqual({ kind: "run", action: "cleanup", label: "Approve and clean up" });
+      expect(m.items.map((i) => i.label)).toEqual(["Approve and clean up", "Approve and…"]);
+    }
+    expect(landMenu({ ...fresh, branch: "harness/web-2", hasChanges: true }, gh).primary.label).toBe("Approve and merge");
+  });
+
   test("a child on its parent's branch only merges: the project's pr default and the other actions drop out", () => {
     const m = landMenu({ completionAction: "pr", pullRequestUrl: null }, gh, { branch: "harness/web-1" });
     expect(m.primary).toEqual({ kind: "run", action: "merge", label: "Approve and merge" });

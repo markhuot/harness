@@ -67,6 +67,12 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// The pull request a "pr" completion opened (the agent records it with record_pull_request).
     /// Later approvals of the ticket default to "pr", so they update the same pull request.
     public var pullRequestUrl: Patch<String>
+    /// Whether the ticket's worktree has anything to land: uncommitted changes, or commits its base
+    /// branch doesn't have. The service checks with git when the ticket moves to review and when it's
+    /// opened. false drops "merge" and "pr" from its completion choices (`Completion.completionOptions`);
+    /// null (not checked, no worktree, or git couldn't say) changes nothing. Optional so older payloads
+    /// type-check.
+    public var hasChanges: Patch<Bool>
     /// A draft (DESIGN.md "Drafts"): a New session saved before it was launched. It stays in planning
     /// and never runs or reaches agents until POST /tickets/:key/submit clears the flag. While it's set,
     /// `kind`, `useWorktree` and `projectId` can still change (UpdateTicketBody). Optional so fixtures
@@ -101,7 +107,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, draft: Bool? = nil, blockedReason: String? = nil, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, blockedReason: String? = nil, busy: Bool = false,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
         createdAt: Timestamp, updatedAt: Timestamp
@@ -132,6 +138,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.completionAction = completionAction
         self.completionInstructions = completionInstructions
         self.pullRequestUrl = pullRequestUrl
+        self.hasChanges = hasChanges
         self.draft = draft
         self.blockedReason = blockedReason
         self.busy = busy

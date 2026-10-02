@@ -437,6 +437,149 @@
         "base": "x"
       },
       "output": "Approve"
+    },
+    {
+      "name": "no branch of its own: no merge or pr",
+      "input": {
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "no branch of its own with an earlier merge: clean up",
+      "input": {
+        "ticket": {
+          "branch": null,
+          "completionAction": "merge"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "no branch of its own with an open PR",
+      "input": {
+        "ticket": {
+          "branch": null,
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "no branch of its own outside git",
+      "input": {
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        }
+      },
+      "output": "Approve"
+    },
+    {
+      "name": "a branch left out changes nothing",
+      "input": {
+        "ticket": {},
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "no changes to land: no merge or pr",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "no changes to land, project default pr, open PR",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": false,
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "changes to land keep every choice",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": true
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "not checked yet keeps every choice",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": "Approve and merge"
+    },
+    {
+      "name": "a child on its parent's branch with no changes still merges",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": "Approve and merge"
     }
   ],
   "completionOptionsCases": [
@@ -1101,6 +1244,223 @@
         "defaultAction": "custom",
         "parentBranch": null
       }
+    },
+    {
+      "name": "no branch of its own: no merge or pr",
+      "input": {
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no branch of its own with an earlier merge: clean up",
+      "input": {
+        "ticket": {
+          "branch": null,
+          "completionAction": "merge"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no branch of its own with an open PR",
+      "input": {
+        "ticket": {
+          "branch": null,
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no branch of its own outside git",
+      "input": {
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": false,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "actions": [
+          "custom"
+        ],
+        "defaultAction": "custom",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a branch left out changes nothing",
+      "input": {
+        "ticket": {},
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no changes to land: no merge or pr",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "no changes to land, project default pr, open PR",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": false,
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        }
+      },
+      "output": {
+        "actions": [
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "changes to land keep every choice",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": true
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "not checked yet keeps every choice",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "a child on its parent's branch with no changes still merges",
+      "input": {
+        "ticket": {
+          "branch": "harness/web-2",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        },
+        "parent": {
+          "branch": "harness/web-1"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge"
+        ],
+        "defaultAction": "merge",
+        "parentBranch": "harness/web-1"
+      }
     }
   ],
   "conductorManagedReasonCases": [
@@ -1117,6 +1477,39 @@
         "key": "JIRA-62"
       },
       "output": "Conductor managed: JIRA-62 approves and lands this ticket"
+    }
+  ],
+  "hasNoBranchCases": [
+    {
+      "name": "null branch",
+      "input": {
+        "branch": null
+      },
+      "output": true
+    },
+    {
+      "name": "branch left out",
+      "input": {},
+      "output": false
+    },
+    {
+      "name": "a branch",
+      "input": {
+        "branch": "harness/web-1"
+      },
+      "output": false
+    },
+    {
+      "name": "empty branch",
+      "input": {
+        "branch": ""
+      },
+      "output": false
+    },
+    {
+      "name": "no ticket",
+      "input": null,
+      "output": false
     }
   ],
   "isCompletionActionCases": [
@@ -1866,6 +2259,147 @@
       },
       "output": {
         "action": "cleanup",
+        "error": null
+      }
+    },
+    {
+      "name": "merge with no branch of its own",
+      "input": {
+        "requested": "merge",
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket has no branch of its own, so there is nothing to merge: complete it with \"cleanup\" or \"custom\""
+      }
+    },
+    {
+      "name": "pr with no branch of its own",
+      "input": {
+        "requested": "pr",
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket has no branch of its own, so there is nothing to open a pull request from: complete it with \"cleanup\" or \"custom\""
+      }
+    },
+    {
+      "name": "cleanup with no branch of its own",
+      "input": {
+        "requested": "cleanup",
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": "cleanup",
+        "error": null
+      }
+    },
+    {
+      "name": "nothing requested with no branch of its own",
+      "input": {
+        "requested": null,
+        "ticket": {
+          "branch": null
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "pr"
+        }
+      },
+      "output": {
+        "action": "cleanup",
+        "error": null
+      }
+    },
+    {
+      "name": "merge with no changes to land",
+      "input": {
+        "requested": "merge",
+        "ticket": {
+          "branch": "x",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket has no changes to land, so there is nothing to merge: complete it with \"cleanup\" or \"custom\""
+      }
+    },
+    {
+      "name": "pr with no changes to land",
+      "input": {
+        "requested": "pr",
+        "ticket": {
+          "branch": "x",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "this ticket has no changes to land, so there is nothing to open a pull request from: complete it with \"cleanup\" or \"custom\""
+      }
+    },
+    {
+      "name": "pr with no changes to land but no PR host",
+      "input": {
+        "requested": "pr",
+        "ticket": {
+          "branch": "x",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": null
+        }
+      },
+      "output": {
+        "action": null,
+        "error": "\"pr\" needs a git remote on a host gh is logged into (run gh auth login)"
+      }
+    },
+    {
+      "name": "custom with no changes to land",
+      "input": {
+        "requested": "custom",
+        "ticket": {
+          "branch": "x",
+          "hasChanges": false
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
+        }
+      },
+      "output": {
+        "action": "custom",
         "error": null
       }
     }

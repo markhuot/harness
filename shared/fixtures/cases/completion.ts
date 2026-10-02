@@ -5,6 +5,7 @@ import {
   COMPLETION_ACTION_LABELS,
   completionOptions,
   conductorManagedReason,
+  hasNoBranch,
   isCompletionAction,
   managingConductor,
   offeredCompletionActions,
@@ -16,7 +17,7 @@ import type { CompletionAction } from "../../src/protocol";
 import { cases } from "../case";
 
 type ProjectIn = { isGit?: boolean; completionAction?: CompletionAction; completionActions?: CompletionAction[]; pullRequestHost?: string | null } | null;
-type TicketIn = { completionAction?: CompletionAction | null; pullRequestUrl?: string | null; baseBranch?: string | null; branch?: string | null } | null;
+type TicketIn = { completionAction?: CompletionAction | null; pullRequestUrl?: string | null; baseBranch?: string | null; branch?: string | null; hasChanges?: boolean | null } | null;
 type ParentIn = { branch?: string | null; status?: string } | null;
 
 const git = { isGit: true, pullRequestHost: null } as const;
@@ -104,6 +105,16 @@ const optionInputs: Record<string, OptionsIn> = {
   "a child on its parent's branch ignores base": { ticket: { branch: "harness/web-1" }, project: gh, parent: { branch: "harness/web-1" }, base: "harness/web-1" },
   "earlier cleanup sticks": { ticket: { completionAction: "cleanup", pullRequestUrl: "https://github.com/a/b/pull/1" }, project: gh },
   "on base, only merge and pr offered": { ticket: { branch: "x" }, project: { ...gh, completionActions: ["merge", "pr"] }, base: "x" },
+  "no branch of its own: no merge or pr": { ticket: { branch: null }, project: { ...gh, completionAction: "merge" } },
+  "no branch of its own with an earlier merge: clean up": { ticket: { branch: null, completionAction: "merge" }, project: git },
+  "no branch of its own with an open PR": { ticket: { branch: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, project: gh },
+  "no branch of its own outside git": { ticket: { branch: null }, project: plain },
+  "a branch left out changes nothing": { ticket: {}, project: { ...gh, completionAction: "merge" } },
+  "no changes to land: no merge or pr": { ticket: { branch: "harness/web-2", hasChanges: false }, project: { ...gh, completionAction: "merge" } },
+  "no changes to land, project default pr, open PR": { ticket: { branch: "harness/web-2", hasChanges: false, pullRequestUrl: "https://github.com/a/b/pull/1" }, project: { ...gh, completionAction: "pr" } },
+  "changes to land keep every choice": { ticket: { branch: "harness/web-2", hasChanges: true }, project: gh },
+  "not checked yet keeps every choice": { ticket: { branch: "harness/web-2", hasChanges: null }, project: gh },
+  "a child on its parent's branch with no changes still merges": { ticket: { branch: "harness/web-2", hasChanges: false }, project: gh, parent: { branch: "harness/web-1" } },
 };
 
 export const completionOptionsCases = cases(({ ticket, project, parent, base }: OptionsIn) => completionOptions(ticket, project, parent, base), optionInputs);
@@ -120,6 +131,14 @@ export const worksOnBaseCases = cases(({ ticket, base }: { ticket: TicketIn; bas
   "no base": { ticket: { branch: "main" }, base: null },
   "case matters": { ticket: { branch: "Main" }, base: "main" },
 });
+
+export const hasNoBranchCases = cases(hasNoBranch, {
+  "null branch": { branch: null },
+  "branch left out": {},
+  "a branch": { branch: "harness/web-1" },
+  "empty branch": { branch: "" },
+  "no ticket": null,
+} as Record<string, TicketIn>);
 
 type ConductorIn = { key: string; status?: string };
 export const managingConductorCases = cases(({ ticket, parent }: { ticket: { parentId?: string | null } | null; parent: ConductorIn | null }) => managingConductor(ticket, parent), {
@@ -161,6 +180,14 @@ export const resolveCompletionActionCases = cases(({ requested, ticket, project,
   "pr on its base branch without a PR host": { requested: "pr", ticket: { branch: "x" }, project: git, base: "x" },
   "cleanup on its base branch": { requested: "cleanup", ticket: { branch: "x" }, project: gh, base: "x" },
   "nothing requested on its base branch": { requested: null, ticket: { branch: "x" }, project: gh, base: "x" },
+  "merge with no branch of its own": { requested: "merge", ticket: { branch: null }, project: gh },
+  "pr with no branch of its own": { requested: "pr", ticket: { branch: null }, project: gh },
+  "cleanup with no branch of its own": { requested: "cleanup", ticket: { branch: null }, project: gh },
+  "nothing requested with no branch of its own": { requested: null, ticket: { branch: null }, project: { ...gh, completionAction: "pr" } },
+  "merge with no changes to land": { requested: "merge", ticket: { branch: "x", hasChanges: false }, project: gh },
+  "pr with no changes to land": { requested: "pr", ticket: { branch: "x", hasChanges: false }, project: gh },
+  "pr with no changes to land but no PR host": { requested: "pr", ticket: { branch: "x", hasChanges: false }, project: git },
+  "custom with no changes to land": { requested: "custom", ticket: { branch: "x", hasChanges: false }, project: gh },
 } as Record<string, ResolveIn>);
 
 export const labels = { COMPLETION_ACTION_LABELS, APPROVE_NO_ACTION_LABEL };

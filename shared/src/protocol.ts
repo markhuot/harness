@@ -214,6 +214,14 @@ export interface Ticket {
    */
   pullRequestUrl?: string | null;
   /**
+   * Whether the ticket's worktree has anything to land: uncommitted changes, or commits its base
+   * branch doesn't have. The service checks with git when the ticket moves to review and when it's
+   * opened. false drops "merge" and "pr" from its completion choices (`completionOptions`); null
+   * (not checked, no worktree, or git couldn't say) changes nothing. Optional so older payloads
+   * type-check.
+   */
+  hasChanges?: boolean | null;
+  /**
    * A draft (DESIGN.md "Drafts"): a New session saved before it was launched. It stays in planning
    * and never runs or reaches agents until POST /tickets/:key/submit clears the flag. While it's set,
    * `kind`, `useWorktree` and `projectId` can still change (UpdateTicketBody). Optional so fixtures
