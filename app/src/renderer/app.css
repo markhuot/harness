@@ -579,52 +579,87 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   background: var(--bg);
 }
 
-/* Summaries */
-.summaries {
+/* Spec tab: the history bar, then the document (or its changes) */
+.spec-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.spec-history {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  flex: none;
+}
+.spec-history-meta {
+  color: var(--text-2);
+  margin: 0 6px 0 4px;
+  min-width: 0;
+}
+.spec-history-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.spec-baseline {
+  flex: none;
+}
+.spec-scrub {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 6px 12px 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+.spec-body {
   overflow-y: auto;
-  padding: 16px 20px 20px;
+  padding: 14px 20px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  flex: 1;
+  min-height: 0;
 }
-.brief {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 12px 14px;
-}
-.brief .section-title {
+.spec-diff .section-title {
   margin-bottom: 6px;
 }
-.summary-list {
+.spec-conflict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--amber-soft);
+  color: var(--text);
+  font-size: 12px;
+}
+.spec-conflict > svg {
+  color: var(--amber);
+  flex: none;
+}
+
+/* Activity tab: a compact timeline, one look per kind */
+.activity {
+  overflow-y: auto;
+  padding: 14px 20px 20px;
+}
+.activity-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
-.summary {
+.activity-entry {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   animation: fade-in 0.2s ease-out;
 }
-.summary-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: none;
-}
-.summary-rail::after {
-  content: "";
-  flex: 1;
-  width: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-.summary:last-child .summary-rail::after {
-  display: none;
-}
-.summary-avatar {
+.activity-icon {
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -634,28 +669,79 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--accent-text);
   flex: none;
 }
-.summary-human .summary-avatar {
-  background: var(--bg-active);
-  color: var(--text-2);
-}
-.summary-system .summary-avatar {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-.summary-main {
+.activity-main {
   flex: 1;
   min-width: 0;
-  padding-bottom: 18px;
 }
-.summary-meta {
+.activity-meta {
   display: flex;
   gap: 8px;
   align-items: baseline;
   font-size: 12px;
-  margin: 2px 0 4px;
+  margin: 2px 0 2px;
+}
+.activity-meta > svg {
+  align-self: center;
+}
+.activity-review_approved .activity-icon,
+.activity-approved .activity-icon {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.activity-changes_requested .activity-icon,
+.activity-reopened .activity-icon {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.activity-failed,
+.activity-system,
+.activity-permission,
+.activity-unblocked {
+  color: var(--text-2);
+}
+.activity-failed .activity-icon,
+.activity-system .activity-icon,
+.activity-permission .activity-icon,
+.activity-unblocked .activity-icon {
+  background: var(--bg-active);
+  color: var(--text-3);
+}
+.activity-failed .activity-main,
+.activity-system .activity-main {
+  font-size: 12px;
+}
+.activity-card {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  padding: 8px 12px;
+}
+.activity-card .activity-meta {
+  color: var(--amber);
+}
+.activity-blocked.is-open .activity-card {
+  background: var(--amber-soft);
+}
+.activity-chat .activity-bubble {
+  max-width: 85%;
+  border-radius: var(--radius-lg);
+  padding: 6px 12px 8px;
+}
+.activity-message {
+  justify-content: flex-end;
+}
+.activity-message .activity-bubble {
+  background: var(--accent-soft);
+}
+.activity-answer .activity-bubble {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
 }
 
-/* Summary attachments: thumbnails under the text, and the lightbox they open */
+/* Attachments: thumbnails under the text, and the lightbox they open */
 .attachments {
   display: flex;
   flex-wrap: wrap;
