@@ -16,7 +16,6 @@ struct ProjectsSidebar: View {
     /// In the iPad's sidebar column (the desktop sidebar's background), not the phone's sheet.
     var column = false
 
-
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
