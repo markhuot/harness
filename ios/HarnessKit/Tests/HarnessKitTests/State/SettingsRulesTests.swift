@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("Settings screen rules (Settings.tsx, ProjectSettings.tsx)")
+@Suite("Settings screen rules (settings, project settings)")
 struct SettingsRulesTests {
     static func net(_ mode: ListenMode, host: String? = nil, override: String? = nil) -> NetworkStatus {
         NetworkStatus(mode: mode, host: host, port: 4317, bound: [], active: mode, override: override)

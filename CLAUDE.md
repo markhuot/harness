@@ -21,7 +21,7 @@ one simulator and one runtime.
   another runtime (`xcodebuild -downloadPlatform`, `xcrun simctl runtime add`, Xcode's Components
   settings, and so on). Each one takes about 8 GB. If 27.0 is missing, block and ask.
 - Never create a simulator of your own. Use the shared one, `harness-shared` (an iPhone 18 Pro on
-  iOS 27.0), through `bun run sim` (`mobile/Tools/sim.ts`). `bun run sim ensure` creates it the
+  iOS 27.0), through `bun run sim` (`ios/Tools/sim.ts`). `bun run sim ensure` creates it the
   first time, boots it and prints its UDID. Don't use, shut down, or delete simulators that
   someone else owns (`harness-HARNESS-*`, `sim-check *`).
 - Run everything that touches the simulator (install, launch, screenshots, AXe taps, sim-check,
@@ -32,7 +32,7 @@ one simulator and one runtime.
   lock itself.
 - Before a heavy build (xcodebuild, sim-check, `release:publish`), run `bun run sim disk`. It exits
   1 when less than 5 GiB is free. Then block and ask rather than build.
-- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`, `mobile/build/dd`)
+- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`)
   and leave the shared simulator alone. `bun run sim shutdown` shuts it down once nobody holds the
   lock, if it needs to stop.
 
@@ -45,8 +45,8 @@ commit carries a release tag, and the release is exactly that commit.
 prepared (for example `app-20260927.1854`). Tags must be annotated (`git tag -a`), since
 `publish-install.sh` ignores lightweight tags. The iOS build number (`CFBundleVersion`) is the
 tag's digits (`202609271854`), which keeps it increasing from one release to the next as iOS
-requires. The user-facing versions (`version` in `mobile/app.json` and `app/package.json`) change
-only when someone decides to bump them. They don't identify a release; the tag does.
+requires. The user-facing versions (`MARKETING_VERSION` in `ios/project.yml` and `version` in
+`app/package.json`) change only when someone decides to bump them. They don't identify a release; the tag does.
 
 **Asking to cut a release approves the whole release.** A request to cut a release (or "ship",
 "publish", or "deploy" the apps) is approval to commit the changelog and any fixes the release
@@ -65,17 +65,17 @@ later work, and it never covers moving, deleting, or force-pushing a tag or `mai
 3. Commit the changelog as `Release app-…`, then tag that commit with
    `git tag -a app-… -m "Release app-…"`.
 4. Push the commit and the tag together: `git push origin main app-…`.
-5. Run `bun run release:publish` (`mobile/Tools/publish-install.sh`) from that commit. Before
+5. Run `bun run release:publish` (`release/publish-install.sh`) from that commit. Before
    building, it checks that HEAD carries an annotated `app-*` tag, the tree is clean, the tag's
    CHANGELOG section exists and is the newest, [Unreleased] is empty, origin has the tag at the
    same commit, the commit is on `origin/main`, and no GitHub release exists for the tag yet. It
-   then builds the IPA and the Mac zip, notarizing the Mac app with the App Store Connect API key
-   described under TestFlight below (set `NOTARY_PROFILE` to use a notarytool keychain profile
+   then builds the IPA (the SwiftUI app in `ios/`, through `ios/Tools/build.ts`) and the Mac
+   zip, notarizing the Mac app with the App Store Connect API key described under TestFlight below (set `NOTARY_PROFILE` to use a notarytool keychain profile
    instead, though a background session can't read one; the publish stops if Gatekeeper doesn't
    see a notarized app), and creates the GitHub release with
    `gh release create --verify-tag`, using the CHANGELOG section as the notes. Finally, it
    redeploys https://harness-install.vercel.app.
-6. Commit the regenerated `mobile/Install/` files on `main` as `Install page: release app-…`. This
+6. Commit the regenerated `release/Install/` files on `main` as `Install page: release app-…`. This
    commit changes only the install site, so it doesn't need a tag of its own.
 
 A release commit prepared on a ticket branch works the same way. The tag goes on the branch's
@@ -86,36 +86,24 @@ If a publish fails partway, fix the cause and rerun it on the same tag, as long 
 release exists for that tag yet. Once a release is published, it stays: never move, delete, or
 reuse a pushed tag. If a published build is broken, fix it on `main` and cut a new tag.
 
-The install page can also carry a native beta card (the SwiftUI app as "Harness Beta", IPA hosted
-on the Vercel site). It's deployed separately from tagged releases with
-`bun ios/Tools/build.ts publish-beta` (see ios/README.md → Beta install page build).
-
 `publish-install.sh --no-publish` builds locally without any tag checks (add `--skip-ios` or
 `--skip-mac` to build one app). An untagged build numbers itself from the clock.
 
-`--ios-app=native` builds the iPhone and iPad app from the SwiftUI project in `ios/`
-(`ios/Tools/build.ts`) instead of the React Native app in `mobile/`. The default is
-`--ios-app=rn`, and releases use it until the native app reaches parity. With either value the
-bundle id, build number, checks, TestFlight upload, GitHub release and install page are the same.
-The IPA check looks for the SwiftUI binary instead of `main.jsbundle` (see ios/README.md →
-Releases).
-
 **TestFlight.** Step 5 also publishes the iPhone and iPad build to TestFlight
-(`mobile/Tools/testflight.ts`), and nothing else has to be run by hand:
+(`release/testflight.ts`), and nothing else has to be run by hand:
 
 - Before building, it checks that it can reach App Store Connect: the API key, the app record for
   `com.markhuot.harness`, and the `Public` group. It stops there if it can't.
 - After exporting the development IPA, it exports the same archive with
-  `mobile/ExportOptions-testflight.plist` and uploads it to App Store Connect, signed in with the
+  `ios/ExportOptions-testflight.plist` and uploads it to App Store Connect, signed in with the
   same API key (not the Apple account in Xcode's settings, whose saved sign-in expires). Warnings
-  about missing dSYMs for prebuilt frameworks (React, hermesvm, Expo) are expected.
+  about missing dSYMs may appear and can be ignored.
 - It waits for App Store Connect to process the build, sets What to Test from the CHANGELOG
   section, adds the build to the external `Public` group and submits it for Beta App Review. Testers
   get the build once Apple approves it, usually within a day. Only one build of a version can wait
   in review, so while an earlier release's build is still there, the publish leaves the new build
   in the group unsubmitted and says so. Submit it once the earlier one clears with
-  `bun mobile/Tools/testflight.ts distribute <build number>` (from `mobile/`, as
-  `bun Tools/testflight.ts distribute …`).
+  `bun release/testflight.ts distribute <build number>` (from the repo root).
 - It writes the group's public link (https://testflight.apple.com/join/M8kvbuv1) on the install
   page as the **Get it on TestFlight** button.
 
@@ -127,7 +115,7 @@ twice. `--skip-testflight` publishes without TestFlight. If Beta App Review reje
 release still stands. Fix the cause, then cut a new tag.
 
 The app record and the Test Information (description, privacy policy, feedback email, review
-contact) are already set up. If they ever need to change, rerun `bun mobile/Tools/testflight.ts
+contact) are already set up. If they ever need to change, rerun `bun release/testflight.ts
 setup` with `ASC_FEEDBACK_EMAIL` and the `ASC_CONTACT_FIRST`/`_LAST`/`_EMAIL`/`_PHONE` variables.
 
 **The Mac zip carries its own service.** `bun run package` compiles the service into

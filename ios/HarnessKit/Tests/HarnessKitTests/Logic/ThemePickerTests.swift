@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("themePicker.ts parity")
+@Suite("ThemePicker")
 struct ThemePickerTests {
     struct PickerInput: Decodable, Sendable {
         let appearance: ThemeAppearance
@@ -32,7 +32,7 @@ struct ThemePickerTests {
     func themePrefKey(_ c: Fixture.Case<ThemeAppearance, String>) {
         let key = ThemePicker.themePrefKey(c.input)
         #expect(key.rawValue == c.output)
-        // The key path writes the field the TS key names.
+        // The key path writes the field the fixture's key names.
         var p = Prefs.defaults
         p[keyPath: key.keyPath] = "picked"
         #expect((c.output == "lightTheme" ? p.lightTheme : p.darkTheme) == "picked")

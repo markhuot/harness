@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A ticket's settings rows (ui/TicketSettings.tsx), the same for a launched ticket (the Details
+/// A ticket's settings rows, the same for a launched ticket (the Details
 /// tab) and a draft (New session's Options): Model, Permissions, Skip agent review, Branch (with the
 /// hint under it), Base branch, Remote ID (launched tickets) and Depends on. Which rows show and
 /// which can change come from Drafts.ticketSettingsRows; every change goes out as one
@@ -35,7 +35,7 @@ struct TicketSettingsForm: View {
     }
 }
 
-/// What the branch rows need from the project's branch list (`useTicketBranches`): the branch the
+/// What the branch rows need from the project's branch list: the branch the
 /// project directory has checked out (a draft's "no worktree" pick), the branches the hint can
 /// classify against, and the hint itself.
 @MainActor
@@ -209,7 +209,7 @@ private struct TicketSettingsRows: View {
     }
 }
 
-/// One settings row (RN `Prop`): the label with its hint under it, the control on the right, and
+/// One settings row: the label with its hint under it, the control on the right, and
 /// an optional footer across the row.
 struct TicketSettingsRow<Control: View, Footer: View>: View {
     let label: String
@@ -285,7 +285,7 @@ private struct TicketDependsOnRow: View {
             if !bad.isEmpty {
                 Text("Not a ticket key: \(bad.joined(separator: ", "))").font(.scaled(size: 13)).foregroundStyle(c.red)
             } else if !deps.isEmpty {
-                // RN wraps the chips (flexWrap) and packs them to the right.
+                // The chips wrap and pack to the right.
                 FlowLayout(spacing: 6, alignment: .trailing) {
                     ForEach(deps, id: \.key) { d in
                         let opens = Related.depOpens(key: d.key, missing: d.missing, byRemoteKey: store.related.byRemoteKey)
@@ -360,7 +360,7 @@ private struct TicketRemoteIdRow: View {
         .onAppear(perform: reset)
         .onChange(of: ref?.key) { reset() }
         .onChange(of: ref?.url) { reset() }
-        // Blur from either field saves (onBlur in RN); moving between the two saves too, as there.
+        // Blur from either field saves; moving between the two saves too.
         .onChange(of: focus) { old, _ in if old != nil { save() } }
     }
 

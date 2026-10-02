@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("Board screen rules (Board.tsx, TicketCard.tsx, Projects.tsx)")
+@Suite("Board screen rules (board, ticket cards, projects)")
 struct BoardScreenRulesTests {
     static func t(_ id: String, _ status: TicketStatus = .planning, position: Double = 0, project: String = "p1", parentId: String? = nil,
                   draft: Bool? = nil, title: String = "Title", description: String = "", completedAt: Patch<Timestamp> = .absent) -> Ticket {

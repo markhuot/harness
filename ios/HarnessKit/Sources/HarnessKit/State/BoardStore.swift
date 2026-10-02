@@ -1,11 +1,11 @@
 import Foundation
 import Observation
 
-// Port of mobile/src/state/store.tsx without React: Connection → HarnessClient + HarnessSocket →
-// the reducer. A full snapshot on connect and on every reconnect (views refetch what they own when
-// `epoch` bumps), raw event fan-out for the Browser tab, and the phone-specific policy: iOS
-// suspends the socket in the background, so returning to the foreground rebuilds it and
-// refetches; a 401 (token rotated on the Mac) is surfaced for re-pairing.
+// The app's live store: Connection → HarnessClient + HarnessSocket → the reducer. A full snapshot
+// on connect and on every reconnect (views refetch what they own when `epoch` bumps), raw event
+// fan-out for the Browser tab, and the phone-specific policy: iOS suspends the socket in the
+// background, so returning to the foreground rebuilds it and refetches; a 401 (token rotated on
+// the Mac) is surfaced for re-pairing.
 // Paging: the snapshot is every non-done ticket plus the first Done page for the board's project
 // filter; BoardLoader pages Done and runs the board search, DetailFetcher fills in the tickets the
 // UI references that aren't loaded (older done dependencies, conductors' done children).
@@ -38,7 +38,7 @@ extension HarnessSocket: BrowserChannel {}
 @MainActor
 @Observable
 public final class BoardStore {
-    /// Remote IDs from the details fetched so far (lib/related): each ticket's relatedTickets by
+    /// Remote IDs from the details fetched so far (Related.swift): each ticket's relatedTickets by
     /// ticket id, and the tickets a remote-only key points to by the upper-cased key.
     public struct Related: Equatable, Sendable {
         public var byTicket: [String: [RelatedTicket]] = [:]
@@ -63,7 +63,7 @@ public final class BoardStore {
     public private(set) var related = Related()
     /// Bumped whenever the socket is rebuilt (foregrounding). A rebuilt socket has no browser
     /// subscriptions and its first connect doesn't bump `epoch`, so the Browser tab resubscribes on
-    /// either (RN's effect depends on `socket` and `epoch`).
+    /// either.
     public private(set) var socketGeneration = 0
 
     public let baseUrl: String
@@ -170,8 +170,8 @@ public final class BoardStore {
         let socket = makeSocket()
         self.socket = socket
         socketGeneration += 1
-        // A rebuilt socket starts over: as in store.tsx (where `first` lives with the socket), its
-        // first connect doesn't bump the epoch.
+        // A rebuilt socket starts over (`first` lives with the socket): its first connect doesn't
+        // bump the epoch.
         var first = true
         let (ops, opsIn) = AsyncStream<BrowserOp>.makeStream()
         outbox = opsIn
@@ -283,13 +283,13 @@ public final class BoardStore {
     }
 
     /// Mouse, key, text, navigation and resize input for a session's browser, sent in call order.
-    /// Dropped while the socket is down, as in TS.
+    /// Dropped while the socket is down.
     public func sendBrowserInput(_ sessionId: String, _ input: BrowserInput) {
         outbox?.yield(.send(.browserInput(sessionId: sessionId, input: input)))
     }
 
-    /// Whether an action can change what DetailFetcher wants (store.tsx re-syncs on ready,
-    /// tickets, dependents, sessions, keyAliases, missingKeys, childrenLoaded).
+    /// Whether an action can change what DetailFetcher wants (it re-syncs on ready, tickets,
+    /// dependents, sessions, keyAliases, missingKeys, childrenLoaded).
     static func affectsKeys(_ action: BoardAction) -> Bool {
         switch action {
         case let .event(e):
@@ -321,7 +321,7 @@ public final class BoardStore {
             syncDetails()
             authError = nil
             loadError = nil
-            // Not awaited (store.tsx's `void pool(...)`): pull to refresh ends once the snapshot lands.
+            // Not awaited: pull to refresh ends once the snapshot lands.
             Task { await self.backfillSummaries(snapshot) }
         } catch {
             guard !closed else { return }

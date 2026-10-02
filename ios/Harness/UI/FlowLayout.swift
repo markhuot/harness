@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lays its children out in rows, wrapping onto as many as they need (RN `flexWrap: "wrap"`).
+/// Lays its children out in rows, wrapping onto as many as they need.
 /// `spacing` is the gap between children in a row, `lineSpacing` the gap between rows (default:
 /// `spacing`). `alignment` places each row: leading, or trailing for a value column. Children are
 /// centered vertically in their row. A child wider than the row (a long branch name) is offered

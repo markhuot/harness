@@ -63,7 +63,7 @@ export function parseFileLink(url: string): FileLink | null {
       if (end !== undefined && end !== start) link.endLine = end;
     }
   }
-  // Parsed by hand: React Native's URLSearchParams is incomplete.
+  // Parsed by hand, so the Swift port (FileLinks.swift) can follow it step for step.
   for (const pair of query ? query.split("&") : []) {
     const eq = pair.indexOf("=");
     const key = eq >= 0 ? pair.slice(0, eq) : pair;

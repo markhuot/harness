@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// One sub-agent (the `agent:<id>` tab, screens/AgentsTab.tsx SubagentView): back to the list
+/// One sub-agent (the `agent:<id>` tab): back to the list
 /// through its parents, its status, title and type, the task it was given, and its transcript.
 struct SubagentView: View {
     let ticket: Ticket

@@ -1,7 +1,7 @@
 import Foundation
 import HarnessKit
 
-// gitColors and diffTints from mobile/src/lib/highlight.ts.
+// gitColors and diffTints from ios/Tools/highlighter/highlight.ts.
 
 public struct GitColors: Codable, Sendable, Hashable {
     public var added: String

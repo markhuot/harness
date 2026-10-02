@@ -2,9 +2,9 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// Outputs are compared as JSON (what the TS sends or renders), so a key that should be omitted, or a
+/// Outputs are compared as JSON (the request body sent, or the labels shown), so a key that should be omitted, or a
 /// label that should be missing, fails the case.
-@Suite("approve.ts parity")
+@Suite("Approve")
 struct ApproveTests {
     struct RequestInput: Decodable, Sendable {
         let choice: Approve.Choice
@@ -54,7 +54,7 @@ struct ApproveTests {
     func approveRequest(_ c: Fixture.Case<RequestInput, JSONValue>) throws {
         let got = Approve.approveRequest(c.input.choice, instructions: c.input.instructions)
         #expect(try Self.json(got) == c.output)
-        // And the TS JSON decodes back to the same request.
+        // And the fixture's JSON decodes back to the same request.
         #expect(try c.output.decode(as: Approve.Request.self) == got)
     }
 

@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Create or edit a watcher (screens/WatcherForm.tsx on HarnessKit's WatcherDraft), in a sheet:
+/// Create or edit a watcher (on HarnessKit's WatcherDraft), in a sheet:
 /// the shell's Cancel on the leading side, Create / Save on the trailing side once the name and
 /// command are filled in. nil `id` is a new watcher. The body always sends `args: []`, so saving a
 /// legacy direct-exec watcher turns it into a shell watcher running the line shown.

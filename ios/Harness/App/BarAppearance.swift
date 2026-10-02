@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// The UIKit bar styling SwiftUI has no modifier for (RN's headerTitleStyle / headerLargeTitleStyle
-/// color and the tab bar's badgeBackgroundColor): navigation titles in the theme's `text`, tab
+/// The UIKit bar styling SwiftUI has no modifier for (title colors and the
+/// tab bar's badgeBackgroundColor): navigation titles in the theme's `text`, tab
 /// badges in `redSolid`. Backgrounds stay the system's: the default material once content scrolls
 /// under the bar, transparent at the scroll edge. RootView calls `apply` with the palettes for a
 /// light and a dark trait whenever either changes, and the colors resolve per trait: a bar keeps a

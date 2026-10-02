@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// One prompt (screens/Prompts.tsx PromptDetailScreen): its badge and description, the built-in
+/// One prompt: its badge and description, the built-in
 /// text read-only, or the customized text in an editor with a diff against the built-in, the
 /// variables it can use, Customize / Reset to built-in, and Save in the header. While there's
 /// something to cancel, Cancel stands in for Back (and the swipe back is off), so edits aren't lost.
@@ -261,7 +261,7 @@ private struct PromptDetailView: View {
     }
 }
 
-/// Edit / Compare with built-in (RN Segmented). Two buttons drawn as a segmented control rather
+/// Edit / Compare with built-in. Two buttons drawn as a segmented control rather
 /// than a segmented Picker, whose segments AXe doesn't list by label (sim-check waits for
 /// "Compare with built-in").
 private struct PromptSegmented: View {
@@ -300,7 +300,7 @@ private struct PromptSegmented: View {
     }
 }
 
-/// The draft against the built-in, line by line: + green, − red (Prompts.tsx PromptDiff).
+/// The draft against the built-in, line by line: + green, − red.
 private struct PromptDiffView: View {
     let from: String
     let to: String

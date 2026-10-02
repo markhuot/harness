@@ -55,7 +55,7 @@ struct AttachmentConstants: Decodable {
     let DISMISS: Attachments.DismissThresholds
 }
 
-@Suite("attachments.ts parity")
+@Suite("Attachments")
 struct AttachmentsTests {
     @Test("THUMB and DISMISS match the TS")
     func constants() throws {

@@ -1,11 +1,11 @@
 import Foundation
 
-// The decisions screens/Transcript.tsx makes inline, for the native TranscriptView: which rows the
-// list shows (grouped entries, the streaming delta, "Working…"), which sub-agent a tool row started,
-// and how a tool call's input is printed.
+// The decisions behind the native TranscriptView: which rows the list shows (grouped entries, the
+// streaming delta, "Working…"), which sub-agent a tool row started, and how a tool call's input is
+// printed.
 
 public enum TranscriptLogic {
-    /// One row of the transcript list (RN `Row`).
+    /// One row of the transcript list.
     public enum Row: Sendable, Equatable, Identifiable {
         case item(Format.TranscriptItem)
         /// The current run's streaming text (not for sub-agents, whose blocks arrive whole)
@@ -13,7 +13,7 @@ public enum TranscriptLogic {
         /// The agent is busy and hasn't streamed anything yet
         case working
 
-        /// Stable across renders (RN keyExtractor): the entry's id, `delta-<run>`, `working`.
+        /// Stable across renders: the entry's id, `delta-<run>`, `working`.
         public var id: String {
             switch self {
             case let .item(i): i.id
@@ -85,7 +85,8 @@ public enum TranscriptLogic {
         JSJSON.stringify(input, indent: 2)
     }
 
-    /// The tool output cap the expanded row shows (RN `formatMaybeJson(o.text, 12000)`).
+    /// The tool output cap the expanded row shows (`formatMaybeJson(o.text, 12000)`, from
+    /// shared/src/state/format.ts).
     public static let outputLimit = 12000
 
     /// The tool row's trailing mark: running until the result arrives, then ✓ or ✗.

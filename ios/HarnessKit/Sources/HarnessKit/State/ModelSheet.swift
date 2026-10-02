@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/modelSheet.ts. Rows for the searchable Model sheet (the combined driver +
+// Rows for the searchable Model sheet (the combined driver +
 // model picker): the Default option (when offered), then one section per driver, narrowed by the
 // type-ahead query.
 

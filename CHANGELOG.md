@@ -11,6 +11,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The iPhone and iPad app is now a fully native iOS app (built in SwiftUI), version 2.0. It has
+  every feature of the previous app, and it uses the standard iOS controls for lists, sheets, menus
+  and the tab bar. Code in transcripts and files is colored with the same themes as on the Mac.
+- Menus (the Approve menu, a ticket's actions) open as iOS menus. Tap outside one to close it.
+- Leaving New session with unsaved text asks whether to keep the draft in an alert.
+- To copy a code block, press and hold it.
+- Your paired Macs carry over from the previous version. If the app asks you to pair again, scan
+  the QR code under Settings → Network on the Mac, or enter the address and token by hand.
 - Settings groups each driver's settings under that driver. On the Mac, click a driver in
   Settings → Drivers to open its sign-in and review model. On iPhone and iPad, tap a driver to
   open its own screen. The Anthropic API key moved from General into the Anthropic API driver.
@@ -20,6 +28,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Mac, the tooltip says the ticket is conductor managed. On iPhone and iPad, a note under the
   buttons says so. The conductor approves and lands its children itself. Once the conductor is
   done, the buttons work again.
+
+### Removed
+
+- The install page no longer offers the separate Harness Beta download, since the native app is
+  now the iPhone and iPad app. If you installed Harness Beta or Harness Dev, delete it once 2.0 is
+  on your device.
 
 ### Fixed
 

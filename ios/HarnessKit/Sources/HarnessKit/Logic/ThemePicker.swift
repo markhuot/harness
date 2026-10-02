@@ -1,10 +1,10 @@
 import Foundation
 
-// Port of mobile/src/lib/themePicker.ts: the model for Settings → Appearance's light/dark theme
+// The model for Settings → Appearance's light/dark theme
 // pickers, and the theme picks a settings deep link carries.
 
 public enum ThemePicker {
-    /// The theme fields of Prefs (TS `Pick<Prefs, "theme" | "lightTheme" | "darkTheme">`).
+    /// The theme fields of Prefs (`theme`, `lightTheme`, `darkTheme`).
     public struct ThemePrefs: Codable, Sendable, Equatable {
         public var theme: Prefs.ThemePreference
         public var lightTheme: String
@@ -88,10 +88,10 @@ public enum ThemePicker {
     }
 
     /// Theme picks from a settings deep link (harness://settings?darkTheme=catppuccin-mocha&theme=dark),
-    /// used to share a setup and by scripts/sim-check.ts. Only valid values come back; anything else is
-    /// dropped rather than falling back, so a bad link changes nothing.
+    /// used to share a setup and by ios/Tools/sim-check.ts. Only valid values come back; anything
+    /// else is dropped rather than falling back, so a bad link changes nothing.
     ///
-    /// `params` is the router's params: a string, or an array for a repeated param (which is dropped).
+    /// `params` is the link's params: a string, or an array for a repeated param (which is dropped).
     public static func themeLinkPrefs(_ params: [String: JSONValue]) -> ThemePrefsPatch {
         func one(_ k: String) -> String? { params[k]?.stringValue }
         var out = ThemePrefsPatch()
@@ -101,8 +101,8 @@ public enum ThemePicker {
         return out
     }
 
-    /// `themeLinkPrefs` for a URL's query: a param given once is a string, a repeated one an array
-    /// (as expo-router's search params), and a param without a value is "".
+    /// `themeLinkPrefs` for a URL's query: a param given once is a string, a repeated one an array,
+    /// and a param without a value is "".
     public static func themeLinkPrefs(queryItems: [URLQueryItem]) -> ThemePrefsPatch {
         var grouped: [String: [String]] = [:]
         for item in queryItems { grouped[item.name, default: []].append(item.value ?? "") }

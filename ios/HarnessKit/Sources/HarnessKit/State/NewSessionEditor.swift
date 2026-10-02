@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-// New session's editor state (mobile/src/screens/NewSession.tsx), without the drawing: when the
+// New session's editor state, without the drawing: when the
 // editor can start (a project, or the reopened draft), the draft's DraftSync, what another
 // device's change to the saved draft means for the sheet (adopt it, it was discarded, it was
 // launched), the project switch, the submit gate and the Cancel decision. The SwiftUI screen

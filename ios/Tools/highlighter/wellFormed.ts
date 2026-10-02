@@ -3,7 +3,7 @@
 // which Swift strings can't hold and JSONDecoder rejects. Before handing lines to Swift, move such a
 // surrogate into the next span, so the sign is "" and the character stays whole. Nothing else changes.
 
-import type { Highlighted, HighlightedLine } from "../../../mobile/src/lib/highlight";
+import type { Highlighted, HighlightedLine } from "./highlight";
 
 const isHigh = (c: number) => c >= 0xd800 && c <= 0xdbff;
 const isLow = (c: number) => c >= 0xdc00 && c <= 0xdfff;

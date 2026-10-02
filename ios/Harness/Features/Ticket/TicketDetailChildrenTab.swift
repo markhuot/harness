@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A conductor's Tickets tab (TicketTabs.tsx ChildrenTab): progress across its children, then the
+/// A conductor's Tickets tab: progress across its children, then the
 /// children grouped by status, each with what it's waiting on or its latest summary.
 struct TicketDetailChildrenTab: View {
     let ticket: Ticket

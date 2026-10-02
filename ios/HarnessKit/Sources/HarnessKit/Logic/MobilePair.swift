@@ -1,11 +1,10 @@
 import Foundation
 
-// Port of mobile/src/lib/pair.ts: pairing links and manual server entry. The desktop app shows a
+// Pairing links and manual server entry. The desktop app shows a
 // QR code of exactly harness://pair?url=<encodeURIComponent(baseUrl)>&token=<…> (Pairing.swift);
 // this adds reasons for failures and normalizes the URL the same way manual entry does.
 //
-// The TS regexes run without the `u` flag, so their `[a-z]` + `/i` classes are ASCII-only and
-// they match code units. The Swift regexes below spell out `[a-zA-Z]` (Swift's case-insensitive
+// Letter classes are ASCII-only. The regexes below spell out `[a-zA-Z]` (Swift's case-insensitive
 // mode folds some non-ASCII letters, such as the Kelvin sign, into `k`) and run with
 // `.unicodeScalar` semantics so a combining mark can't glue itself onto a `/`, `:` or `?`.
 
@@ -134,7 +133,7 @@ public enum MobilePair {
     }
 
     /// A deep link's already-decoded `url` and `token` values, re-encoded and parsed like a
-    /// scanned link. (The TS takes expo-router params, which may be arrays; pass the first value.)
+    /// scanned link. When a param repeats, pass the first value.
     public static func pairParams(url: String?, token: String?) -> ParseResult<ServerAddress> {
         let url = url ?? ""
         let token = token ?? ""
@@ -143,7 +142,7 @@ public enum MobilePair {
         return parsePairLink(Pairing.buildPairUrl(baseUrl: url, token: token))
     }
 
-    /// "http://100.64.0.2:7717" → "100.64.0.2:7717" for compact display (case-sensitive, like the TS).
+    /// "http://100.64.0.2:7717" → "100.64.0.2:7717" for compact display (case-sensitive).
     public static func displayHost(_ baseUrl: String) -> String {
         let u = baseUrl.unicodeScalars
         for p in ["https://", "http://"] where u.starts(with: p.unicodeScalars) {

@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/related.ts. Remote IDs (DESIGN.md "Remote IDs"): the tickets that share
+// Remote IDs (DESIGN.md "Remote IDs"): the tickets that share
 // one. A ticket's detail carries `relatedTickets` (other tickets linked to the remote ID it was asked
 // for or carries), and a remote ID that no local key matches 404s with RemoteKeyMatches. The fetched
 // list is a snapshot; relatedOf folds in the loaded tickets so a link made or removed since shows
@@ -8,12 +8,12 @@ import Foundation
 //
 // Keys are compared the way JS compares strings, by code unit after `toUpperCase()` (Swift's String
 // `==` and hashing would merge a precomposed and a decomposed É). The loaded tickets come in as an
-// array in the TS map's insertion order, because that order decides ties (JS's sort is stable) and
-// which of two same-key tickets wins.
+// array in the store's order, because that order decides ties (the sort is stable) and which of
+// two same-key tickets wins.
 
 public enum Related {
     /// What the Remote ID field saves (`remoteIdPatch`): link (the key upper-cased, with an optional
-    /// URL), unlink, or an error to show. Encodes as the TS object (`{ externalRef }` or `{ error }`).
+    /// URL), unlink, or an error to show. Encodes as `{ externalRef }` or `{ error }`.
     public enum RemoteIdPatch: Codable, Sendable, Equatable {
         case link(key: String, url: String?)
         case unlink
@@ -59,7 +59,7 @@ public enum Related {
     /// loaded ticket wins over its fetched entry (it may have been relinked or unlinked since), and
     /// loaded ones the fetch didn't know about come first (they're the newest).
     ///
-    /// `tickets` is the loaded tickets in the store's order (TS: `Object.values(tickets)`).
+    /// `tickets` is the loaded tickets in the store's order.
     public static func relatedOf(_ tickets: [Ticket], _ ticket: Ticket, fetched: [RelatedTicket]?) -> [RelatedTicket] {
         let selfKey = up(ticket.key)
         var ids: Set<[UInt16]> = [selfKey]
@@ -107,7 +107,7 @@ public enum Related {
     }
 
     /// The RemoteKeyMatches a ticket lookup's 404 carries, when the key asked for is only a remote ID.
-    /// (TS passes the entries through unchecked; here entries that don't decode as RelatedTicket make it nil.)
+    /// Entries that don't decode as RelatedTicket make it nil.
     public static func remoteMatchesOf(_ error: any Error) -> RemoteKeyMatches? {
         guard let e = error as? HarnessAPIError, e.status == 404, case let .object(d)? = e.data else { return nil }
         guard case let .string(requested)? = d["requested"], case let .array(list)? = d["relatedTickets"], !list.isEmpty else { return nil }

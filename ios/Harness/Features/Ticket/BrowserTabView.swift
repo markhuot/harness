@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Live view of the session's headless Chrome tab (screens/BrowserTab.tsx). Screencast frames
+/// Live view of the session's headless Chrome tab. Screencast frames
 /// (base64 JPEG) are letterboxed into the stage and swapped only once decoded, so a new frame never
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
 /// field carries the keyboard. The page viewport follows the stage size, sent once the
@@ -45,7 +45,7 @@ struct BrowserTabView: View {
         }
         .onChange(of: editingUrl) { _, editing in
             if editing {
-                // selectTextOnFocus
+                // Editing starts with the whole URL selected.
                 urlSelection = TextSelection(range: urlDraft.startIndex..<urlDraft.endIndex)
             } else {
                 urlDraft = model.state?.url ?? urlDraft
@@ -155,7 +155,7 @@ struct BrowserTabView: View {
     }
 }
 
-/// A toolbar icon button (BrowserTab.tsx BarButton): 34 pt, tap haptic, accent tint when active.
+/// A toolbar icon button: 34 pt, tap haptic, accent tint when active.
 struct BrowserBarButton: View {
     let icon: String
     let label: String

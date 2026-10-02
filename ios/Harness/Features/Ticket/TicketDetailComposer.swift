@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The message composer under every tab (TicketDetail.tsx Composer): @file mentions and /commands,
+/// The message composer under every tab: @file mentions and /commands,
 /// a placeholder for the ticket's state (red while it's blocked on the human), the switch that moves
 /// the ticket first and the hint about what a message does. The switch and hint show only while
 /// writing: once the field is focused, and after a blur only while it holds a message.

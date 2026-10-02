@@ -1,6 +1,6 @@
 import Foundation
 
-// Where a link tapped in markdown goes (mobile/src/ui/fileLinks.tsx useOpenLink): http(s), mailto
+// Where a link tapped in markdown goes: http(s), mailto
 // and any other scheme open outside the markdown (harness:// links that aren't file links route in
 // the app); a file link (harness://file/…, or a bare relative or absolute path) opens the file
 // viewer, resolved in the ticket or project the markdown belongs to.
@@ -15,9 +15,9 @@ public enum LinkRouting {
         case noRoot
     }
 
-    /// RN's toast when a file link names no root.
+    /// The toast when a file link names no root.
     public static let noRootMessage = "That file link doesn't say which ticket or project it's in"
-    /// RN's toast when the system can't open a link.
+    /// The toast when the system can't open a link.
     public static let openFailedMessage = "Couldn't open that link"
 
     public static func target(_ url: String, context: FileLinkContext) -> Target {

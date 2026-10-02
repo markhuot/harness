@@ -1,6 +1,6 @@
 import Foundation
 
-// The WKWebView glue rules of mobile/src/screens/PluginTab.tsx that aren't in pluginHost.ts: which
+// The plugin tab's WKWebView glue rules that aren't the bridge transport (PluginHost.swift): which
 // navigations load inside a plugin tab, and which script messages reach the bridge. Foundation
 // only, so the app's WKNavigationDelegate / WKScriptMessageHandler just forward to these.
 
@@ -15,8 +15,8 @@ extension PluginHost {
         case deny
     }
 
-    /// `onShouldStartLoadWithRequest`: only the service origin may load in the tab; anything else
-    /// that looks like a link opens outside the app. String prefix checks, as in the TS.
+    /// Only the service origin may load in the tab; anything else
+    /// that looks like a link opens outside the app. String prefix checks.
     public static func navigationPolicy(url: String, serviceOrigin: String) -> NavigationPolicy {
         if url.hasPrefix(serviceOrigin + "/") || url == serviceOrigin || url == "about:blank" { return .allow }
         // /^(https?:|mailto:)/i (ASCII folding only)

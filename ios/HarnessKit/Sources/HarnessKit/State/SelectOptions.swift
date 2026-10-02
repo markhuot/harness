@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/selectOptions.ts: the option shape for native selects, and the trigger's
+// The option shape for native selects, and the trigger's
 // label for a value.
 
 public struct SelectOption: Codable, Sendable, Equatable, Hashable {

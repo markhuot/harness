@@ -3,7 +3,7 @@ import AVKit
 import HarnessKit
 import SwiftUI
 
-/// Full-screen pager over one summary's attachments (ui/Attachments.tsx AttachmentViewer): ✕,
+/// Full-screen pager over one summary's attachments: ✕,
 /// the file name and "2 of 4 · 1.2 MB" on top; pages swipe sideways (a select haptic each),
 /// images pinch-zoom 1–4× or double-tap to 2.5× (paging stops while zoomed), videos play with the
 /// system controls while their page shows, and pulling a page down (or ✕) closes it.
@@ -36,7 +36,7 @@ struct AttachmentViewer: View {
             let header = safe.top + 56
             ZStack(alignment: .top) {
                 AttachmentViewerBackdrop(pull: pull, height: geo.size.height)
-                // A UIKit paging scroll view, like RN's (AttachmentPager): the pages, a video's
+                // A UIKit paging scroll view (AttachmentPager): the pages, a video's
                 // player included, sit inside it, so its pan gets every sideways swipe.
                 AttachmentPager(
                     count: attachments.count,

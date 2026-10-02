@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A project's key color (ui/ProjectColor.tsx, ProjectColors.swift): Default (the theme accent),
+/// A project's key color (ProjectColors.swift): Default (the theme accent),
 /// the eleven presets, and Custom, which opens a hue × shade grid (like the Grid tab of the
 /// system color picker) with a hex field for an exact value. nil = the accent.
 struct ProjectColorPicker: View {
@@ -103,7 +103,7 @@ struct ProjectColorPicker: View {
     }
 }
 
-/// A round swatch with a ring when selected (ProjectColor.tsx Swatch).
+/// A round swatch with a ring when selected.
 private struct ProjectColorSwatch<Content: View>: View {
     let fill: Color
     let selected: Bool

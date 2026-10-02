@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A board card with everything the desktop card shows (screens/TicketCard.tsx). Touch and hold
+/// A board card with everything the desktop card shows. Touch and hold
 /// opens the context menu (move between columns, reorder, open the parent, copy the key); VoiceOver
 /// gets the moves as custom actions; the card drags by its key onto another card (to sit above it)
 /// or onto a status chip. A draft (a New session saved before launch) is dashed and dimmed with a
@@ -154,7 +154,7 @@ struct BoardTicketCard: View {
 
     @ViewBuilder private func menu(parent: Ticket?) -> some View {
         let t = ticket
-        // The RN action sheet's title, as the menu's header.
+        // The ticket's key and title, as the menu's header.
         Section(BoardScreenRules.menuTitle(t)) { menuItems(t, parent: parent) }
     }
 
@@ -183,7 +183,7 @@ struct BoardTicketCard: View {
     }
 }
 
-/// The RN card's press feedback: a little dimmer and smaller while held.
+/// The card's press feedback: a little dimmer and smaller while held.
 private struct BoardCardPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

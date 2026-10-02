@@ -4,7 +4,7 @@ import Observation
 /// Where the app is: the selected tab, each tab's NavigationStack path, and the one sheet and one
 /// full-screen cover that can be up. Views bind to it; deep links go through `open`.
 ///
-/// RN semantics (mobile/app/_layout.tsx, as sim-check.ts relies on them): a tab link pops
+/// Link semantics (ios/Tools/sim-check.ts relies on them): a tab link pops
 /// everything above the tabs, modals included; a ticket (or any pushed) link pushes a fresh screen,
 /// so opening the same ticket twice stacks two. Sheets replace each other; the scanner covers
 /// whatever is up.

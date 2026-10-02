@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/boardLoader.ts: the iPhone board's I/O for paged Done columns and
+// The iPhone board's I/O for paged Done columns and
 // server-side search. The state and selectors are shared (Paging.swift); this decides WHEN to ask
 // the service for what, and drops answers that arrive too late. Client, dispatch, state getter and
 // timers are injected so tests drive it without a service or real waiting.
@@ -15,7 +15,7 @@ import Foundation
 //   snapshot and per query rules those out.
 //
 // Request-starting methods do their bookkeeping (gates, the "request" dispatch) synchronously,
-// as the TS does before its first await, and return the Task that finishes the request.
+// before anything awaits, and return the Task that finishes the request.
 
 @MainActor
 public final class BoardLoader {

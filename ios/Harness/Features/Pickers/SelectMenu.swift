@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// The desktop's <select>s as native pull-down menus (ui/selects.tsx): a Menu whose label shows the
+// The desktop's <select>s as native pull-down menus: a Menu whose label shows the
 // current value with the ⌃⌄ select glyph. Each option is a Toggle, which a menu draws as a
 // checkmark item; `isOn` comes from `value` alone, so the menu never shows a choice the parent
 // refused (a disabled driver, a failed save). Actions sit in their own section, headed by the

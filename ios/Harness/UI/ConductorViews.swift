@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// Conductor presentation shared by the board and ticket detail (ui/Conductor.tsx): the segmented
+// Conductor presentation shared by the board and ticket detail: the segmented
 // progress bar, the rollup on a conductor's card and the "Part of" breadcrumb on a child.
 
 struct ProgressBar: View {

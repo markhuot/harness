@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of mobile/src/lib/boardColumns.ts: what the board shows and sends, apart from the screen —
+// What the board shows and sends, apart from the screen —
 // the columns once "Show child tickets" is applied, each column header's count, and the update a
 // card move makes.
 

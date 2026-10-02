@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// An expo-router param: a string, an array of strings, or null/missing. The iOS app reads the
-/// first value itself (URLComponents query items), so the test does what the TS `one()` does.
+/// A route param as the fixture writes it: a string, an array of strings, or null/missing. The app
+/// reads the first value itself (URLComponents query items), so the test takes the first value too.
 struct RouteValue: Decodable, Sendable {
     let first: String?
     init(from decoder: Decoder) throws {
@@ -19,7 +19,7 @@ struct PairParamsInput: Decodable, Sendable {
     let token: RouteValue?
 }
 
-@Suite("mobile pair.ts parity")
+@Suite("MobilePair")
 struct MobilePairTests {
     @Test(arguments: Fixture.cases("mobilePair", "normalizeBaseUrlCases", input: String.self, output: ParseResult<String>.self))
     func normalizeBaseUrl(_ c: Fixture.Case<String, ParseResult<String>>) {

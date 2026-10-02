@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A plugin's ticket tab (screens/PluginTab.tsx PluginFrame): the plugin's UI page from the service
+/// A plugin's ticket tab: the plugin's UI page from the service
 /// in a WKWebView, driven by the shared host bridge (PluginWebHost). It gets the token, ticket and
 /// the full theme in harness:init, harness:theme when the theme changes and harness:ticket when the
 /// ticket does; harness:navigate pushes the ticket and harness:openExternal opens the URL outside
@@ -19,7 +19,7 @@ struct PluginTabView: View {
     @Environment(\.pluginTabProbe) private var probe
     #endif
 
-    /// What the bridge is built for (RN's useMemo deps: client, ticket key, tab).
+    /// What the bridge is built for: client, ticket key, tab.
     private struct HostKey: Hashable {
         let baseUrl: String
         let token: String

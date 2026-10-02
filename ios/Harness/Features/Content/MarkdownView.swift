@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Agent markdown (ui/Markdown.tsx): blocks and inline tokens come from HarnessKit's port of the
+/// Agent markdown: blocks and inline tokens come from HarnessKit's port of the
 /// shared parser; web links open in Safari, file links in the file viewer (ContentLinks), ticket
 /// keys open the ticket, and wide tables scroll sideways. Fenced code is syntax highlighted
 /// (CodeBlockView). Nothing is ever interpreted as markup.
@@ -55,7 +55,7 @@ struct MarkdownStyle {
     let linkable: (String) -> Bool
 
     var font: Font { .scaled(size: size) }
-    /// RN lineHeight round(size × 1.45), as extra spacing over the font's own line height.
+    /// A line height of round(size × 1.45), as extra spacing over the font's own line height.
     var lineSpacing: CGFloat { (size * 1.45).rounded() - size * 1.2 }
 
     /// Inline tokens as one AttributedString: code spans in mono on bgActive, bold, italic, links
@@ -190,7 +190,7 @@ private struct MarkdownBlockView: View {
     }
 }
 
-/// A one-pixel line (StyleSheet.hairlineWidth).
+/// A one-pixel line.
 struct HairlineRule: View {
     let color: Color
     var vertical = false

@@ -1,8 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// The attachment viewer's pager: a horizontal paging UIScrollView, as RN's viewer is a paging
-/// ScrollView. Each page hosts its SwiftUI page view, so a video page's AVPlayerViewController sits
+/// The attachment viewer's pager: a horizontal paging UIScrollView.
+/// Each page hosts its SwiftUI page view, so a video page's AVPlayerViewController sits
 /// inside the scroll view and the scroll view's pan sees every sideways swipe first. (A page-style
 /// TabView lost swipes that started over the player's view, so the viewer often couldn't page off
 /// a video.) `index` is the page to show; `onPage` reports the page a swipe settled on.

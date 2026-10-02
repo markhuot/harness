@@ -2,9 +2,9 @@ import SwiftUI
 import UIKit
 
 /// The stage's touch surface: one finger's raw began/moved/ended/cancelled with UITouch
-/// timestamps, for TouchGesture (RN's responder handlers). A gesture recognizer rather than a
+/// timestamps, for TouchGesture. A gesture recognizer rather than a
 /// SwiftUI DragGesture because it reports cancellation, and because it keeps the touch once it has
-/// it (RN's `onResponderTerminationRequest={() => false}`): an enclosing scroll or paging view can't
+/// it: an enclosing scroll or paging view can't
 /// take a drag over the page away.
 struct BrowserTouchSurface: UIViewRepresentable {
     var enabled: Bool
@@ -89,7 +89,7 @@ struct BrowserTouchSurface: UIViewRepresentable {
     }
 }
 
-/// The hidden text field that carries the keyboard into the page (RN's offscreen TextInput):
+/// The hidden text field that carries the keyboard into the page:
 /// text changes, Return, Tab (hardware keyboards) and Backspace on an empty field. `focused`
 /// follows the field and moves it.
 struct BrowserKeyField: UIViewRepresentable {

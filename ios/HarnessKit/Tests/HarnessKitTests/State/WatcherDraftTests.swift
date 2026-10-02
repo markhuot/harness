@@ -13,7 +13,7 @@ struct WatcherDraftBodyInput: Decodable, Sendable {
     let existing: Existing?
 }
 
-@Suite("mobile/src/lib/watcherDraft.ts parity")
+@Suite("WatcherDraft")
 struct WatcherDraftTests {
     @Test(arguments: Fixture.cases("mobileWatcherDraft", "toDraftCases", input: ToDraftInput.self, output: WatcherDraft.self))
     func toDraft(_ c: Fixture.Case<ToDraftInput, WatcherDraft>) {
@@ -22,8 +22,8 @@ struct WatcherDraftTests {
         #expect(Array(got.command.unicodeScalars) == Array(c.output.command.unicodeScalars))
     }
 
-    /// Decoding TS's output as a WatcherBody keeps absent vs null (cwd, driver), and maps
-    /// `intervalSec: null` (TS's Infinity) to nil, which Swift omits.
+    /// Decoding the fixture's output as a WatcherBody keeps absent vs null (cwd, driver), and maps
+    /// `intervalSec: null` (JS Infinity, which JSON can't hold) to nil, which Swift omits.
     @Test(arguments: Fixture.cases("mobileWatcherDraft", "watcherBodyCases", input: WatcherDraftBodyInput.self, output: WatcherBody.self))
     func watcherBody(_ c: Fixture.Case<WatcherDraftBodyInput, WatcherBody>) {
         let got = WatcherDraft.watcherBody(c.input.draft, existingModels: c.input.existing?.models.map { $0.mapValues { $0 } })

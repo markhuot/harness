@@ -24,7 +24,7 @@ enum ScriptedReply: Decodable, Sendable {
 
 struct SomethingElse: Error {}
 
-/// Answers requests in order from a script and records them, like the TS case file's fakeFetch.
+/// Answers requests in order from a script and records them, as each fixture case scripts its replies.
 actor ScriptedTransport: HTTPTransport {
     private let replies: [ScriptedReply]
     private(set) var requests: [HTTPRequest] = []
@@ -97,7 +97,7 @@ struct DescribeErrorInput: Decodable, Sendable {
     let baseUrl: String?
 }
 
-@Suite("mobile connection.ts parity")
+@Suite("Connection")
 struct ConnectionTests {
     @Test(arguments: Fixture.cases("mobileConnection", "probeServerCases", input: ProbeInput.self, output: ProbeOutput.self))
     func probeServer(_ c: Fixture.Case<ProbeInput, ProbeOutput>) async {

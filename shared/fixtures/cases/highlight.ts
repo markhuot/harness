@@ -1,5 +1,5 @@
-// Syntax highlighting (mobile/src/lib/highlight.ts) for the native app's HarnessHighlight target.
-// `highlightCases` is the RN app's real highlight() over ios/Tools/highlighter/corpus.ts, and
+// Syntax highlighting (ios/Tools/highlighter/highlight.ts) for the native app's HarnessHighlight target.
+// `highlightCases` is the real highlight() over ios/Tools/highlighter/corpus.ts, and
 // HighlighterTests checks that the JavaScriptCore bundle (ios/Tools/build-highlighter.ts) returns
 // the same tokens and colors. It runs in a child bun with JavaScriptCore's regex JIT off, as an iOS
 // app's JSContext runs (see ios/Tools/highlighter/runCorpus.ts). Highlight outputs go through
@@ -7,7 +7,7 @@
 // reuseLines) are ported to Swift and checked against their TS outputs here.
 
 import { resolve } from "node:path";
-import { diffTints, gitColors, LANGUAGE_IDS, MAX_HIGHLIGHT_CHARS, plainLines, reuseLines, SYNTAX_THEME_IDS, type HighlightedLine } from "../../../mobile/src/lib/highlight";
+import { diffTints, gitColors, LANGUAGE_IDS, MAX_HIGHLIGHT_CHARS, plainLines, reuseLines, SYNTAX_THEME_IDS, type HighlightedLine } from "../../../ios/Tools/highlighter/highlight";
 import { BARE_DIFF, CRLF_DIFF, EMOJI_DIFF, MULTI_DIFF, RB_DIFF } from "../../../ios/Tools/highlighter/corpus";
 import { wellFormedLines } from "../../../ios/Tools/highlighter/wellFormed";
 import type { ThemeAppearance } from "../../src/themes";

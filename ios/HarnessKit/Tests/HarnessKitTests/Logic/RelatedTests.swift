@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("related.ts parity")
+@Suite("Related")
 struct RelatedTests {
     struct RelatedInput: Decodable, Sendable {
         let tickets: [Ticket]
@@ -15,7 +15,7 @@ struct RelatedTests {
         let message: String?
         let data: JSONValue?
         let plain: String?
-        /// `data: undefined` and a missing key are the same in TS; `data: null` decodes as JSONValue.null.
+        /// `data: undefined` and a missing key are the same in JS; `data: null` decodes as JSONValue.null.
         private enum CodingKeys: String, CodingKey { case status, message, data, plain }
         init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -71,7 +71,7 @@ struct RelatedTests {
         let current = c.input.current.map { (key: $0.key, url: $0.url) }
         let got = Related.remoteIdPatch(current: current, key: c.input.input.key, url: c.input.input.url)
         #expect(got == c.output)
-        // The encoded patch is what TS sends (externalRef: null to unlink, url: null kept).
+        // The encoded patch is the fixture's (externalRef: null to unlink, url: null kept).
         if let got {
             let ours = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(got))
             let theirs = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(c.output))

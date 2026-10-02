@@ -1,11 +1,11 @@
 import HarnessKit
 import SwiftUI
 
-// Pieces the ticket screen shares with its tab bodies (ui/heroCollapse.tsx, ui/stickToBottom.ts):
+// Pieces the ticket screen shares with its tab bodies:
 // the hero's collapse state, the scroll trackers a tab body attaches, the tab opener the Agents and
 // Transcript slots use to open a sub-agent, and a wrapping row layout.
 
-/// The ticket hero's collapse (RN `useHeroCollapse`): HeroCollapse's rules fed by the tab body's
+/// The ticket hero's collapse: HeroCollapse's rules fed by the tab body's
 /// scroll gestures. `show()` brings it back (another tab, news on the ticket); `measured` takes the
 /// hero's height while it's shown, which is how much room hiding it gives the tab body.
 @MainActor
@@ -54,11 +54,11 @@ extension EnvironmentValues {
 }
 
 extension View {
-    /// On a tab body's ScrollView or List: its drags and flings hide and bring back the ticket hero
-    /// (RN `useHeroScroll`). Does nothing outside a ticket screen.
+    /// On a tab body's ScrollView or List: its drags and flings hide and bring back the ticket hero.
+    /// Does nothing outside a ticket screen.
     func ticketHeroScroll() -> some View { modifier(TicketDetailHeroScroll()) }
 
-    /// On a ScrollView whose newest content is last (RN `useStickToBottom`): opens at the bottom,
+    /// On a ScrollView whose newest content is last: opens at the bottom,
     /// follows new content while the user is at the bottom, stays put once they scroll up, and
     /// follows again when they come back down.
     func ticketStickToBottom() -> some View { modifier(TicketDetailStickToBottom()) }

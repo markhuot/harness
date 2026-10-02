@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// A tool call with its result (RN ToolRow): chevron, icon, short name, a mono preview of the
+/// A tool call with its result: chevron, icon, short name, a mono preview of the
 /// input and a spinner, ✓ or ✗. Expanded, it shows the input as JSON and the output (text pretty
 /// printed and capped, images inline). A call that started a sub-agent links to its transcript.
 struct TranscriptToolRow: View {
@@ -91,7 +91,7 @@ struct TranscriptToolRow: View {
     }
 }
 
-/// A tappable row that tints while pressed (RN `pressed ? bgHover`).
+/// A tappable row that tints while pressed (`bgHover`).
 struct TranscriptPressedRowStyle: ButtonStyle {
     @Environment(\.palette) private var c
 

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-@Suite("heroCollapse.ts parity")
+@Suite("HeroCollapse")
 struct HeroCollapseTests {
     struct Input: Decodable, Sendable {
         let from: Collapse

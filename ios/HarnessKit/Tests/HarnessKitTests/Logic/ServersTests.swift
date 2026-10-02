@@ -24,7 +24,7 @@ struct ServersInput: Decodable, Sendable {
     let ops: [ServerOp]
 }
 
-/// One step's TS output: upsert → list/server/added, remove → list/active, rename → list.
+/// One step's expected output: upsert → list/server/added, remove → list/active, rename → list.
 struct ServerStep: Decodable, Sendable, Equatable {
     let list: [SavedServer]
     let server: SavedServer?
@@ -32,7 +32,7 @@ struct ServerStep: Decodable, Sendable, Equatable {
     let active: String?
 }
 
-@Suite("mobile servers.ts parity")
+@Suite("Servers")
 struct ServersTests {
     @Test(arguments: Fixture.cases("mobileServers", "serverCases", input: ServersInput.self, output: [ServerStep].self))
     func sequence(_ c: Fixture.Case<ServersInput, [ServerStep]>) {

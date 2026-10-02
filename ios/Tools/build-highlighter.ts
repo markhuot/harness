@@ -1,6 +1,6 @@
 // Bundles the syntax highlighter for JavaScriptCore (ios/Tools/highlighter/entry.ts: Shiki core, its
-// JavaScript regex engine, and exactly the RN app's languages and themes, taken from
-// mobile/src/lib/highlight.ts) into one classic script that defines the `HarnessHighlighter` global.
+// JavaScript regex engine, and the languages and themes in highlighter/highlight.ts) into one
+// classic script that defines the `HarnessHighlighter` global.
 //
 //   bun ios/Tools/build-highlighter.ts [--out <file>]
 //

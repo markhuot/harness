@@ -1,8 +1,9 @@
 import Foundation
 
-// Port of mobile/src/lib/servers.ts (pure saved-server list operations) and the SavedServer
-// record from mobile/src/lib/storage.ts. A server is identified by its base URL: pairing the same
-// Mac again reuses its entry instead of adding a duplicate. Tokens are stored separately, per id.
+// Pure saved-server list operations and the SavedServer record (the shape the 1.x React Native
+// app stored too, so its saved servers carry over). A server is identified by its base URL:
+// pairing the same Mac again reuses its entry instead of adding a duplicate. Tokens are stored
+// separately, per id.
 
 /// One saved server, as the app persists it (a JSON array of these).
 public struct SavedServer: Codable, Equatable, Hashable, Sendable, Identifiable {

@@ -3,10 +3,10 @@ import Synchronization
 import Testing
 @testable import HarnessKit
 
-/// mobile/src/state/app.tsx: cold start, pairing, switching, forgetting and renaming servers, and
+/// The app's server list: cold start, pairing, switching, forgetting and renaming servers, and
 /// one BoardStore per connection.
 @MainActor
-@Suite("AppModel (mobile state/app.tsx)")
+@Suite("AppModel")
 struct AppModelTests {
     static let mac = SavedServer(id: "srv-a", name: "mac:7717", baseUrl: "http://mac:7717", addedAt: 1)
     static let mini = SavedServer(id: "srv-b", name: "Mini", baseUrl: "http://mini:7717", addedAt: 2)
@@ -66,7 +66,7 @@ struct AppModelTests {
         let snap = storage.snapshot
         #expect(snap[StorageKeys.token("srv-new1")] == "tok")
         #expect(AppModel.decodeServers(snap[StorageKeys.servers]) == m.servers)
-        // The prefs blob round-trips through the RN normalizer's port.
+        // The prefs blob round-trips through Prefs.normalize.
         #expect(Prefs.normalize(data: snap[StorageKeys.prefs]?.data(using: .utf8)).activeServer == "srv-new1")
     }
 

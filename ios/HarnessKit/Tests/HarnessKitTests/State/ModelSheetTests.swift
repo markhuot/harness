@@ -11,7 +11,7 @@ struct ChoiceSectionsInput: Decodable, Sendable {
     let driverNames: [String: String]?
 }
 
-@Suite("mobile/src/lib/modelSheet.ts parity")
+@Suite("ModelSheet")
 struct ModelSheetTests {
     @Test(arguments: Fixture.cases("mobileModelSheet", "choiceSectionsCases", input: ChoiceSectionsInput.self, output: [ChoiceSection].self))
     func choiceSections(_ c: Fixture.Case<ChoiceSectionsInput, [ChoiceSection]>) {

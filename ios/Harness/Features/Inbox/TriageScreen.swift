@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// One triage item (screens/Inbox.tsx TriageScreen): its title, status and driver, the outcome,
+/// One triage item: its title, status and driver, the outcome,
 /// a link to the ticket it dispatched, and the triage agent's transcript. A triage session has no
 /// folder of its own, so file links resolve where it dispatched to.
 struct TriageScreen: View {

@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// One driver's model (ui/selects.tsx ModelPicker on Models.modelOptions). nil value = Default
+/// One driver's model (on Models.modelOptions). nil value = Default
 /// (`inherited` names what that is). The list comes from the shared per-driver cache; a failed
 /// list shows a warning on the trigger and its reason above "Refresh model list".
 struct ModelPicker: View {

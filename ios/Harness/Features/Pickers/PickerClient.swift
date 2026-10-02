@@ -15,7 +15,7 @@ protocol PickerClient: Sendable {
 
 extension HarnessClient: PickerClient {}
 
-/// The shared per-driver model list cache, one per store (`modelCacheFor(client)` in RN), so every
+/// The shared per-driver model list cache, one per store, so every
 /// model select on screen shares one fetch per driver.
 @MainActor
 private enum PickerModelCaches {

@@ -3,7 +3,7 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// A code block with syntax colors from the app theme's Shiki theme (ui/CodeBlock.tsx on
+/// A code block with syntax colors from the app theme's Shiki theme (through
 /// HarnessHighlight): it renders plain monospace at once and swaps in the colored tokens when
 /// they're ready, keeping unchanged lines' colors while a streaming block re-highlights. Diffs (a
 /// `diff`/`patch` fence, or an untagged block that reads as one) get the Git tab's added/removed
@@ -37,7 +37,7 @@ struct CodeBlockView: View {
     var body: some View {
         let fence = language ?? ""
         let diff = Code.codeKind(fence: fence, text: code) == .diff
-        // The app theme's Shiki theme, Pierre's when it names none (RN useSyntaxTheme). Every
+        // The app theme's Shiki theme, Pierre's when it names none. Every
         // registry theme's syntaxTheme is bundled (HighlighterTests.everyAppThemesSyntaxThemeIsBundled).
         let theme = c.syntaxTheme
         let key = HighlightCache.Key(code: code, language: Code.codeLanguage(fence), theme: theme, diff: diff)

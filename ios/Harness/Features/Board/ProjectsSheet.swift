@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The desktop sidebar on a phone (screens/Projects.tsx): Inbox, All projects and each project
+/// The desktop sidebar on a phone: Inbox, All projects and each project
 /// with its open count and a settings gear; pick one to filter the board (or the Search tab's
 /// scope, when `fromSearch`). Add a project by its path on the Mac. Presented with medium/large
 /// detents by the shell, which closes it by its grabber (no Cancel button).

@@ -2,8 +2,8 @@ import HarnessHighlight
 import HarnessKit
 import SwiftUI
 
-// SwiftUI bridge for HarnessHighlight: token lines → AttributedString, styled the way the RN app's
-// CodeBlock (mobile/src/ui/CodeBlock.tsx) styles spans. Views that show code (markdown code blocks,
+// SwiftUI bridge for HarnessHighlight: token lines → AttributedString, with each span's
+// color, weight, italics and underline. Views that show code (markdown code blocks,
 // the file viewer, diffs) build their text with this rather than redoing it.
 
 extension Highlighter {
@@ -12,8 +12,8 @@ extension Highlighter {
 }
 
 extension Palette {
-    /// The app theme's Shiki theme for its appearance, Pierre's when it names none (RN
-    /// useSyntaxTheme): the theme in every code view's HighlightCache key.
+    /// The app theme's Shiki theme for its appearance, Pierre's when it names none.
+    /// It's the theme in every code view's HighlightCache key.
     var syntaxTheme: String { SyntaxTheme.name(appearance, theme.syntaxTheme) }
 }
 

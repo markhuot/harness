@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A ticket's screen (screens/TicketDetail.tsx): the header menu, the hero (crumb, title, badges,
+/// A ticket's screen: the header menu, the hero (crumb, title, badges,
 /// approval card, actions), the tab strip and tab bodies, and the message composer. `key` may be
 /// an old key (from before a project rename), which it follows, or a remote ID, which lists the
 /// tickets sharing it (harness://ticket/JIRA-62). `initialTab` is the link's `?tab=`, already
@@ -264,7 +264,7 @@ private struct TicketDetailHeader: ViewModifier {
         }
     }
 
-    /// Back off the deleted ticket's screen (RN `router.back()`).
+    /// Back off the deleted ticket's screen.
     private func pop(_ key: String) {
         let tab = router.selectedTab
         var path = router.path(tab)

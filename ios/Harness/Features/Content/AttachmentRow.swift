@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// A summary's attachments as a horizontal thumbnail row (ui/Attachments.tsx); tapping one opens
+/// A summary's attachments as a horizontal thumbnail row; tapping one opens
 /// the full-screen viewer there. Sizing, paging and swipe math live in HarnessKit's Attachments.
 struct AttachmentRow: View {
     let attachments: [SummaryAttachment]
@@ -14,7 +14,7 @@ struct AttachmentRow: View {
                 HStack(spacing: 8) {
                     ForEach(Array(attachments.enumerated()), id: \.element.id) { i, a in
                         AttachmentThumb(attachment: a) {
-                            // The viewer fades itself in over a clear cover, as RN's Modal fades.
+                            // The viewer fades itself in over a clear cover.
                             var t = Transaction()
                             t.disablesAnimations = true
                             withTransaction(t) { open = AttachmentViewerStart(index: i) }

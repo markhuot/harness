@@ -3,9 +3,9 @@ import Synchronization
 import Testing
 @testable import HarnessKit
 
-/// The connection policy of mobile/src/state/store.tsx, driven with a fake service, socket and clock.
+/// BoardStore's connection policy, driven with a fake service, socket and clock.
 @MainActor
-@Suite("BoardStore (mobile store.tsx)")
+@Suite("BoardStore")
 struct BoardStoreTests {
     /// A fake service: canned answers, a log of every call, and optional failures.
     final class FakeClient: BoardClient {

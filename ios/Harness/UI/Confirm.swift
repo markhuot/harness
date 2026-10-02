@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Confirms and short action sheets (ui/pick.ts), as state + a modifier, the SwiftUI way:
+// Confirms and short action sheets, as state + a modifier, the SwiftUI way:
 //
 //   @State private var confirm: Confirmation?
 //   …
@@ -10,7 +10,7 @@ import SwiftUI
 //   @State private var sheet: ChoiceSheet?
 //   .choiceSheet($sheet)
 
-/// An alert with Cancel and one action (RN `confirm(title, message, action, destructive)`).
+/// An alert with Cancel and one action.
 struct Confirmation: Identifiable {
     let id = UUID()
     var title: String
@@ -20,7 +20,7 @@ struct Confirmation: Identifiable {
     var onConfirm: @MainActor () -> Void
 }
 
-/// One choice in an action sheet (RN `Choice`).
+/// One choice in an action sheet.
 struct Choice: Identifiable {
     let id = UUID()
     var label: String
@@ -29,7 +29,7 @@ struct Choice: Identifiable {
     var onPick: @MainActor () -> Void
 }
 
-/// An action sheet of choices plus Cancel (RN `pick({ title, message, choices })`).
+/// An action sheet of choices plus Cancel.
 struct ChoiceSheet: Identifiable {
     let id = UUID()
     var title: String?

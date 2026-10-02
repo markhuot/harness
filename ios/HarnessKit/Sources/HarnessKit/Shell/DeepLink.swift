@@ -1,11 +1,10 @@
 import Foundation
 
-// The app's navigation vocabulary and the harness:// links that reach it. The RN app routes
-// these with expo-router files under mobile/app/ (plus app/+native-intent.tsx for
-// harness://file/…), and scripts/sim-check.ts drives every screen through them. Parsing lives here
+// The app's navigation vocabulary and the harness:// links that reach it. ios/Tools/sim-check.ts
+// drives every screen through them. Parsing lives here
 // so it's tested on the host; the app's Router (Router.swift) applies a DeepLink.
 
-/// The tab bar's tabs (mobile/app/(tabs)).
+/// The tab bar's tabs.
 public enum AppTab: String, Codable, Hashable, Sendable, CaseIterable {
     case board, inbox, settings, search
 }
@@ -127,8 +126,8 @@ public enum DeepLink: Equatable, Sendable {
         }
     }
 
-    /// `a=1&b=%2F` → decoded items. A value that doesn't decode (a stray %) is kept as written,
-    /// as expo-router does. `+` stays a plus (encodeURIComponent never writes one for a space).
+    /// `a=1&b=%2F` → decoded items. A value that doesn't decode (a stray %) is kept as written.
+    /// `+` stays a plus (encodeURIComponent never writes one for a space).
     static func queryItems(_ query: String) -> [URLQueryItem] {
         query.split(separator: "&", omittingEmptySubsequences: true).map { part in
             guard let eq = part.firstIndex(of: "=") else {

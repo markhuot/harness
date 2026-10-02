@@ -1,9 +1,9 @@
 import HarnessKit
 import SwiftUI
 
-/// A tool-permission request (screens/Approval.tsx): allow once, always allow the tool on this
-/// ticket, or deny with an optional note for the agent. RN marks it `accessibilityRole="alert"`;
-/// here VoiceOver announces each new request and reads the card as one container.
+/// A tool-permission request: allow once, always allow the tool on this
+/// ticket, or deny with an optional note for the agent.
+/// VoiceOver announces each new request and reads the card as one container.
 struct TicketDetailApprovalCard: View {
     let ticket: Ticket
     let approval: PendingApproval

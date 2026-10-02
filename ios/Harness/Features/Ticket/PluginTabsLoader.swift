@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 extension View {
-    /// The plugin tabs that apply to a ticket (PluginTab.tsx `usePluginTabs`, GET
+    /// The plugin tabs that apply to a ticket (GET
     /// /tickets/:key/tabs): nil until loaded, [] when the request fails. Refetched when the
     /// ticket's worktree or branch changes and on every reconnect. The ticket detail screen's tab
     /// strip reads this and hosts each tab in PluginTabView.

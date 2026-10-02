@@ -130,7 +130,7 @@ struct PickerLogicTests {
     // MARK: Project colors
 
     @Test func customGridMatchesTheRNGrid() {
-        // Values from ProjectColor.tsx CUSTOM_GRID (bun).
+        // Values from the 1.x React Native app's custom project color grid (computed with bun).
         let g = PickerLogic.customGrid
         #expect(g.count == 7 && g.allSatisfy { $0.count == 12 })
         #expect(g[0][0] == "#f6acac")

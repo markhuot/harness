@@ -1,6 +1,6 @@
 // The JavaScriptCore side of the native app's syntax highlighter (HarnessHighlight/Highlighter.swift).
-// It is the RN app's mobile/src/lib/highlight.ts, unchanged: the same Shiki core, JS regex engine,
-// languages and themes, so code is colored exactly as on the phone, the desktop and the Git tab.
+// It wraps highlight.ts: Shiki core, its JS regex engine, and the languages and themes, so code is
+// colored as on the desktop and in the Git tab.
 // build-highlighter.ts bundles this file into one script that defines `HarnessHighlighter`.
 //
 // A plain JSContext has no Web APIs. Shiki only needs Date.now (vscode-textmate's time limit),
@@ -8,7 +8,7 @@
 // small UTF-8 shims below when missing.
 
 import "./polyfills";
-import { highlight, LANGUAGE_IDS, MAX_HIGHLIGHT_CHARS, SYNTAX_THEME_IDS } from "../../../mobile/src/lib/highlight";
+import { highlight, LANGUAGE_IDS, MAX_HIGHLIGHT_CHARS, SYNTAX_THEME_IDS } from "./highlight";
 import { wellFormed } from "./wellFormed";
 
 type Appearance = "light" | "dark";

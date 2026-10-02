@@ -1,10 +1,10 @@
 import HarnessKit
 import SwiftUI
 
-/// Settings → Prompts intro (Prompts.tsx PROMPTS_INTRO).
+/// Settings → Prompts intro.
 let promptsIntro = "The instructions Harness gives agents. A built-in prompt picks up improvements with each app update; a customized one stays as you wrote it until you reset it."
 
-/// The prompt catalog (Prompts.tsx usePrompts): GET /prompts, loaded again on reconnect and
+/// The prompt catalog: GET /prompts, loaded again on reconnect and
 /// whenever settings change on any client (`settings.updated`).
 @MainActor
 @Observable
@@ -67,7 +67,7 @@ private struct PromptCatalogLoader: ViewModifier {
     }
 }
 
-/// Built-in / Customized / Broken (Prompts.tsx PromptBadge).
+/// The Built-in / Customized / Broken badge.
 struct PromptBadge: View {
     let entry: PromptEntry
 

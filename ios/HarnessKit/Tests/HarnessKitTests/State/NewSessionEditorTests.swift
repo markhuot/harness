@@ -2,12 +2,12 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-// New session's editor decisions (screens/NewSession.tsx): when it starts, the predicted key,
+// New session's editor decisions: when it starts, the predicted key,
 // what another device's change means, the project switch, the submit gate and Cancel. A fake
 // service answers the DraftSync requests; ManualTimers stands in for the debounce.
 
 @MainActor
-@Suite("NewSessionEditor (screens/NewSession.tsx)")
+@Suite("NewSessionEditor")
 struct NewSessionEditorTests {
     static func project(_ id: String, key: String, name: String, nextSeq: Int, driver: String? = nil) -> Project {
         Project(id: id, key: key, name: name, path: "/\(name)", nextSeq: nextSeq, defaultDriver: driver, defaultModels: [:], useWorktrees: true, isGit: true, requireHumanReview: true, autoComplete: false, baseBranch: .null, createdAt: 0, updatedAt: 0)

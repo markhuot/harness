@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Toasts below the status bar (ui/Toasts.tsx): at most 3, newest last; errors stay 6 s, info
+/// Toasts below the status bar: at most 3, newest last; errors stay 6 s, info
 /// 2.6 s; a tap dismisses one. Post with `@Environment(ToastCenter.self)` → `toasts.show(…)`.
 @MainActor
 @Observable

@@ -2,9 +2,10 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// Port of mobile/src/lib/details.test.ts.
+/// DetailFetcher: fetching the ticket details the board needs (dependencies, a conductor's done
+/// children, related tickets) once each and a few at a time, with a 404 remembered as missing.
 @MainActor
-@Suite("mobile details.ts")
+@Suite("DetailFetcher")
 struct DetailFetcherTests {
     struct Call: Sendable {
         let key: String

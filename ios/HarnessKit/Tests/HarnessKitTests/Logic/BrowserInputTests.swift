@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-// fitRect / toPagePoint from shared/src/state/format.ts, which the TS tests and the RN screen use to
-// build `toPage`. Test-only here (the format.ts port is other work).
+// A test-only copy of fitRect / toPagePoint from shared/src/state/format.ts (Format.fitRect and
+// Format.toPagePoint in the app), used to build `toPage`.
 private struct DrawnRect {
     var x: Double, y: Double, w: Double, h: Double
 }
@@ -52,9 +52,9 @@ private let backspace: [BrowserInput] = [
     .key(.init(action: .down, key: "Backspace", code: "Backspace")), .key(.init(action: .up, key: "Backspace", code: "Backspace")),
 ]
 
-// MARK: - Direct ports of browserInput.test.ts
+// MARK: - TouchGesture, keyboard and resize
 
-@Suite("browserInput.test.ts: TouchGesture")
+@Suite("BrowserInput: TouchGesture")
 struct TouchGestureTests {
     @Test func tapIsMoveDownUpAtThePagePoint() {
         let g = makeGesture()
@@ -121,7 +121,7 @@ struct TouchGestureTests {
     }
 }
 
-@Suite("browserInput.test.ts: keyboard and resize")
+@Suite("BrowserInput: keyboard and resize")
 struct BrowserTypingTests {
     @Test func textDeltaTypingDeletingAutocorrect() {
         #expect(BrowserTyping.textDelta("", "a") == .init(deletes: 0, insert: "a"))
@@ -157,7 +157,7 @@ struct BrowserTypingTests {
         #expect(g.take(width: 390, height: 520) == .resize(width: 390, height: 520))
     }
 
-    // Swift-only: TS would emit width NaN/Infinity; an Int can't, so these are refused.
+    // Swift-only: a JS number could carry width NaN/Infinity; an Int can't, so these are refused.
     @Test(arguments: [Double.nan, .infinity, -.infinity, 1e300])
     func resizeGateRefusesNonIntegralSizes(_ bad: Double) {
         var g = ResizeGate()
@@ -174,7 +174,7 @@ struct BrowserTypingTests {
     }
 }
 
-// MARK: - Fixtures computed by the TS implementation
+// MARK: - Fixtures (Fixtures/browserInput.json, frozen)
 
 private struct GestureEvent: Decodable, Sendable {
     let t: String
@@ -231,7 +231,7 @@ private enum GateResult: Decodable, Sendable, Equatable {
     }
 }
 
-@Suite("browserInput.ts parity")
+@Suite("BrowserInput fixtures")
 struct BrowserInputFixtureTests {
     @Test(arguments: Fixture.cases("browserInput", "gestureCases", input: GestureInput.self, output: GestureOutput.self))
     fileprivate func gesture(_ c: Fixture.Case<GestureInput, GestureOutput>) {
@@ -303,7 +303,7 @@ struct BrowserInputFixtureTests {
     }
 }
 
-// MARK: - Swift-only: screen glue ported from BrowserTab.tsx
+// MARK: - Swift-only: the Browser tab's screen glue
 
 @Suite("BrowserTab wheel coalescing and hidden input")
 struct BrowserScreenGlueTests {

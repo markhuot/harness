@@ -101,7 +101,7 @@ public enum FileLinks {
                 if let e = end, e != start { link.endLine = e }
             }
         }
-        // Parsed by hand, like the TS (React Native's URLSearchParams is incomplete).
+        // Parsed by hand, like shared/src/fileLinks.ts, so both read a query the same way.
         if !query.isEmpty {
             for pair in query.split(separator: "&", omittingEmptySubsequences: false) {
                 let eq = pair.firstIndex(of: "=")

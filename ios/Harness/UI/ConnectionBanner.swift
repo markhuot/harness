@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// Connection status (screens/ConnectionBanner.tsx), shown only when something is wrong: a
+/// Connection status, shown only when something is wrong: a
 /// rejected token (red, opens Connect to pair again), or disconnected (amber "Reconnecting to …",
 /// with the last load error; a tap refreshes). Nothing while connected. Put it at the top of a
 /// tab's root screen: `.safeAreaInset(edge: .top) { ConnectionBanner() }`.

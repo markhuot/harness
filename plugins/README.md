@@ -88,8 +88,10 @@ argument unchanged, a plain `export default { routes(router, ctx) { … } }` wor
 ## UI
 
 The app loads `/plugins/<id>/ui/index.html?tab=<tabId>` from the service: in an iframe on the
-desktop, and in a React Native WebView in the iOS app. `connect()` handles both transports, so the
-same bundle works in each. Talk to the host only through the SDK, and don't assume `window.parent`
+desktop, and in a WKWebView in the iOS app. `connect()` handles both transports, so the same
+bundle works in each. The iOS app defines `window.ReactNativeWebView.postMessage` for the page to
+post through; the name is historical (the first iOS app was React Native) and stays because
+plugins rely on it. Talk to the host only through the SDK, and don't assume `window.parent`
 is the app (in the WebView it's the page itself). Use the SDK to get the connection details:
 
 ```ts
@@ -130,6 +132,7 @@ while `ticket.busy` is true, as the git plugin does.
   by default. See `plugins/git/server.test.ts`.
 - The bridge: `connect({ window, fetch })` accepts a fake window, so it can be tested without a DOM.
   Give the fake window a `ReactNativeWebView` to test the iOS transport. See
-  `plugins/sdk/harness-plugin.test.ts` and `mobile/src/lib/pluginHost.test.ts`.
+  `plugins/sdk/harness-plugin.test.ts`, and for the iOS host side, `PluginHostTests.swift` and
+  `PluginBridgeTests.swift` in `ios/HarnessKit/Tests/HarnessKitTests/Logic/`.
 - In the app: `cd app && bun run changes` runs the git plugin against a real daemon and saves
   screenshots. `app/scripts/lib/drive.ts`'s `frame(urlPart)` evaluates JavaScript inside a plugin iframe.

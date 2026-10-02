@@ -2,12 +2,11 @@ import Foundation
 
 // The decisions behind the app's pickers and form controls (Features/Pickers: the select menus,
 // DriverModelPicker, BranchPicker, ProjectColorPicker, MentionTextEditor, TicketSettingsForm),
-// pulled out of the views so they can be tested. Each piece names the RN code it follows:
-// mobile/src/ui/selects.tsx, DriverModelPicker.tsx, ProjectColor.tsx, mentions.tsx and
-// TicketSettings.tsx. The option lists themselves come from the shared ports (Models, BranchRows,
-// Drafts, Permissions); this file only holds the glue the RN components kept inline.
+// pulled out of the views so they can be tested. The option lists themselves come from the shared
+// ports (Models, BranchRows, Drafts, Permissions); this file only holds the glue between them and
+// the views.
 
-/// One row of a select menu (selects.tsx `SelectOption`, typed).
+/// One row of a select menu (a typed SelectOption).
 public struct PickerOption<Value: Hashable & Sendable>: Hashable, Sendable {
     public var value: Value
     public var label: String
@@ -22,13 +21,13 @@ public struct PickerOption<Value: Hashable & Sendable>: Hashable, Sendable {
     }
 }
 
-/// A row of the @-mention / slash-command list (mentions.tsx `MentionItem`).
+/// A row of the @-mention / slash-command list.
 public enum MentionItem: Equatable, Sendable {
     case file(FileMatch)
     case command(CommandMatch)
 }
 
-/// What the caret is in: a leading /command or an @mention (mentions.tsx `command` / `mention`).
+/// What the caret is in: a leading /command or an @mention.
 public enum MentionTarget: Equatable, Sendable {
     case command(ActiveCommand)
     case mention(ActiveMention)
@@ -66,7 +65,7 @@ public struct MentionRowDisplay: Equatable, Sendable {
     public var truncateHead: Bool
 }
 
-/// What the hex field does with what was typed (ProjectColor.tsx `commitHex`).
+/// What the hex field does with what was typed.
 public enum HexCommit: Equatable, Sendable {
     /// A new custom color to save
     case pick(String)
@@ -77,7 +76,7 @@ public enum HexCommit: Equatable, Sendable {
 }
 
 public enum PickerLogic {
-    // MARK: Select menus (selects.tsx)
+    // MARK: Select menus
 
     /// The menu's error line when a driver's model list failed: `error ?? data.error`.
     public static func modelListProblem(_ s: ModelListState) -> String? {
@@ -102,7 +101,7 @@ public enum PickerLogic {
         return "Default"
     }
 
-    // MARK: DriverModelPicker (useChoiceModels)
+    // MARK: DriverModelPicker
 
     /// The drivers whose model lists the picker loads: every installed, signed-in driver (or only
     /// `onlyDriver`), plus the picked and the resolved driver, without repeats, in that order.
@@ -131,7 +130,7 @@ public enum PickerLogic {
         Models.nonEmpty(section).map { "\($0), \(label)" } ?? label
     }
 
-    // MARK: MentionTextEditor (useFileMentions)
+    // MARK: MentionTextEditor
 
     /// What the caret is typing. With commands on, a /command at the start of the text wins over an
     /// @ inside it.
@@ -183,7 +182,7 @@ public enum PickerLogic {
         return i.samePosition(in: text.unicodeScalars) ?? u.index(before: i)
     }
 
-    // MARK: ProjectColorPicker (ProjectColor.tsx)
+    // MARK: ProjectColorPicker
 
     static let gridHues: [Double] = [0, 30, 45, 60, 90, 140, 170, 190, 210, 235, 270, 310]
     static let gridLightness: [Double] = [82, 68, 55, 45, 35, 25]
@@ -215,7 +214,7 @@ public enum PickerLogic {
         return n == current ? .keep : .pick(n)
     }
 
-    // MARK: TicketSettingsForm (TicketSettings.tsx)
+    // MARK: TicketSettingsForm
 
     /// The hints beside each row's label. A draft (New session's Options) shows none of them.
     public struct TicketSettingsHints: Equatable, Sendable {
@@ -262,9 +261,9 @@ public enum PickerLogic {
     }
 }
 
-/// The project's branches the Branch row's hint classifies against (TicketSettings.tsx
-/// `useTicketBranches`): the list the service returns (capped), plus branches picked in the sheet
-/// or looked up by name, which the capped list may not reach. Picked entries win.
+/// The project's branches the Branch row's hint classifies against: the list the service returns
+/// (capped), plus branches picked in the sheet or looked up by name, which the capped list may not
+/// reach. Picked entries win.
 public struct TicketBranchList: Equatable, Sendable {
     public var list: [BranchInfo] = []
     public var picked: [BranchInfo] = []

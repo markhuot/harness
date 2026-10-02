@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Details tab (TicketTabs.tsx DetailsTab): the title and brief, the settings rows
+/// The Details tab: the title and brief, the settings rows
 /// (TicketSettingsForm), then what it blocks, where it works, its remote ID and the tickets sharing
 /// it, granted tools, auto-start, timestamps and its runs.
 struct TicketDetailDetailsTab: View {

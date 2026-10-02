@@ -1,6 +1,6 @@
 import UIKit
 
-/// The RN app's haptic vocabulary (ui/haptics.ts): tap = light impact, heavy = medium impact,
+/// The app's haptic vocabulary: tap = light impact, heavy = medium impact,
 /// select = selection change, success/warning/error = notifications.
 enum Haptic: Sendable {
     case tap, heavy, select, success, warning, error

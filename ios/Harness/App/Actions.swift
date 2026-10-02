@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// RN `useAction()`: run a request; on failure play the error haptic and toast
+/// Run a request; on failure play the error haptic and toast
 /// `describeError(e, baseUrl)`; on success toast `okMessage` (info) when given.
 ///
 /// ```swift

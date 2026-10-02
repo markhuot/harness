@@ -1,16 +1,15 @@
 import Foundation
 
-// Port of mobile/src/lib/connection.ts: the reachability + token check before a server is saved,
+// The reachability + token check before a server is saved,
 // and plain-language errors for the failures people actually hit (Mac asleep, service only on
 // localhost, stale token).
 //
-// Error mapping (TS → Swift):
-// - TS tells a timeout from other failures by the AbortError its AbortController raises. Here a
-//   timeout is `URLError(.timedOut)`, from URLSession's own timeout or from probeServer's
+// Error mapping:
+// - A timeout is `URLError(.timedOut)`, from URLSession's own timeout or from probeServer's
 //   deadline; every other thrown error (other URLErrors, an unbuildable URL, anything else) is
-//   "unreachable", as any non-abort rejection is in TS.
+//   "unreachable".
 // - describeError matches /network request failed|failed to fetch|could not connect|load failed/i
-//   on the error message, which is how fetch failures read in React Native and browsers. URLSession
+//   on the error message, which is how fetch failures read in JavaScript clients. URLSession
 //   reports them as URLError codes instead, so the network codes in `unreachableCodes` count as
 //   "couldn't reach" too; the message match still runs on `localizedDescription` for anything else.
 
@@ -79,7 +78,7 @@ public enum Connection {
     ]
 
     /// GET /health (no auth) then an authenticated GET /settings. `timeout` bounds each request
-    /// (URLSession's timeout plus a hard deadline, like the TS AbortController).
+    /// (URLSession's timeout plus a hard deadline).
     public static func probeServer(baseUrl: String, token: String, transport: some HTTPTransport, timeout: TimeInterval = defaultTimeout) async -> ProbeResult {
         let host = MobilePair.displayHost(baseUrl)
         // `replace(/\/$/, "")`: one trailing slash only.
@@ -88,13 +87,13 @@ public enum Connection {
         do {
             let res = try await send(transport, url: "\(base)/health", headers: [:], timeout: timeout)
             // JSON.parse failing leaves `json` as {}; a literal `null` body makes `json.data` throw
-            // inside the try, which TS reports as unreachable.
+            // inside the try, which counts as unreachable.
             let json = try? JSONDecoder().decode(JSONValue.self, from: res.body)
             guard res.ok else { return notHarness(host, res.status) }
             if json == .null { return .failure(ProbeFailure(kind: .unreachable, message: unreachableMessage(baseUrl))) }
             let data = json?["data"]
             guard data?["ok"] == .bool(true) else { return notHarness(host, res.status) }
-            // `version ?? ""`. A non-string version (which TS would pass through untyped) is "".
+            // `version ?? ""`. A non-string version is "".
             version = data?["version"]?.stringValue ?? ""
         } catch {
             if isTimeout(error) {
@@ -165,7 +164,8 @@ public enum Connection {
         Int((x + 0.5).rounded(.down))
     }
 
-    /// The TS regex, case-insensitive over ASCII only (JS `/i` without `u` doesn't fold non-ASCII).
+    /// The network-failure regex, case-insensitive over ASCII only (JS `/i` without `u` doesn't
+    /// fold non-ASCII).
     static func mentionsNetworkFailure(_ message: String) -> Bool {
         let lowered = message.unicodeScalars.map { ("A"..."Z").contains($0) ? Unicode.Scalar($0.value + 32)! : $0 }
         return ["network request failed", "failed to fetch", "could not connect", "load failed"].contains { phrase in

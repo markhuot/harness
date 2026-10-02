@@ -43,57 +43,49 @@ logs, worktrees and the Chrome profile. Set `HARNESS_HOME` to use a different lo
 
 ## iPhone and iPad app
 
-`mobile/` is a native iOS app for iPhone and iPad (one universal build; Expo SDK 57, React
-Native, expo-router) with the desktop's board, ticket tabs (including the live browser and
-plugin tabs), approvals, Inbox and settings. It shares its state logic with the desktop through
-`@harness/shared/state`.
+`ios/` is a native SwiftUI app for iPhone and iPad (one universal build, iOS 26 and later) with
+the desktop's board, ticket tabs (including the live browser and plugin tabs), approvals, Inbox and
+settings. It's an XcodeGen project (`ios/project.yml`) plus the `HarnessKit` Swift package, which
+holds the protocol types, the HTTP and WebSocket client, and the app's logic and state. HarnessKit
+is checked against `shared/` with JSON fixtures that `shared/` generates, so the phone and the
+desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/README.md) and
+[ios/ARCHITECTURE.md](ios/ARCHITECTURE.md).
 
 - **Install:** open https://harness-install.vercel.app on the iPhone or iPad and follow its
   TestFlight link (any device, through Apple's TestFlight app). Each release also carries a
   development-signed build for devices registered to the Apple Developer team (plug it into the
   Mac once with Xcode open, or add its UDID in the developer portal) before the release that
-  installs on it is built. The page also has the notarized Mac build. Releases are cut from `app-YYYYMMDD.HHMM` git tags (see
-  CLAUDE.md → Releases and CHANGELOG.md); `bun run release:publish` builds the tagged commit,
-  publishes both apps as a GitHub release and redeploys the page.
+  installs on it is built. The page also has the notarized Mac build. Releases are cut from
+  `app-YYYYMMDD.HHMM` git tags (see CLAUDE.md → Releases and CHANGELOG.md); `bun run
+  release:publish` (`release/publish-install.sh`) builds the tagged commit, publishes both apps as
+  a GitHub release and redeploys the page from `release/Install/`.
 - **Pair:** on the Mac, set Settings → Network to Tailscale and scan the QR code with the iPhone
   or iPad camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
-- **Develop:** `cd mobile && bunx expo prebuild --platform ios && (cd ios && ../Tools/pod.sh install)`,
-  then `bun scripts/sim-check.ts` builds a Release app for the simulator, runs it against a
-  throwaway daemon, taps through opening a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
-  and saves light and dark screenshots to `mobile/build/screens/` (`--themes=catppuccin-mocha,…` adds
+- **Build:** `bun ios/Tools/build.ts` builds the app: `sim` (an ad-hoc signed Release build for
+  the simulator, into `ios/build/dd`), `device --device <name|udid> [--launch]` (a Debug build
+  installed with devicectl), `archive --build-number N`, `export --method dev|testflight` and
+  `verify`. Every configuration uses the bundle id `com.markhuot.harness`, so a Debug build
+  replaces a TestFlight or release install on the same device. Use
+  `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
+  at the Command Line Tools.
+- **Check on the simulator:** `bun ios/Tools/sim-check.ts` (or `bun run --cwd ios sim-check`)
+  builds a Release app for the simulator, runs it against a throwaway daemon, taps through opening
+  a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
+  and saves light and dark screenshots to `ios/build/screens/` (`--themes=catppuccin-mocha,…` adds
   board + settings shots per color theme). It runs on the shared `harness-shared` simulator
   (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
   the work across extra "sim-check 2" … "sim-check N" simulators, created on iOS 27.0 the first
   time. `--ipad` saves the same screens from an iPad simulator ("sim-check iPad 1") to
-  `mobile/build/screens-ipad/`, without the tap checks. With
-  `--no-build` and the simulator booted, a run takes a few minutes, and
-  `mobile/build/screens/timings.json` shows where the time went. `ios/` is gitignored and outlives dependency changes, so
-  `release:publish` regenerates it on every build, and sim-check does whenever it doesn't link
-  every native package in `mobile/package.json` (`bun Tools/nativeDeps.ts check`). A stale `ios/` still builds, but the
-  app then crashes on its first use of the missing module. Use
-  `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
-  at the Command Line Tools.
-- **Simulator:** `bun run sim` (`mobile/Tools/sim.ts`) manages the one simulator everyone shares.
+  `ios/build/screens-ipad/`, without the tap checks. With `--no-build` and the simulator booted,
+  a run takes a few minutes, and `ios/build/screens/timings.json` shows where the time went.
+  `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
+- **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the one simulator everyone shares.
   `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
   back to another runtime or downloads one), boots it and prints its UDID.
   `with-lock -- <command>` waits for exclusive use, then runs the command with `SIM_UDID` set.
   `status` shows who holds it, `shutdown` stops it once it's free, and `disk` fails below 5 GiB
   free. Locks live in `~/.harness/tmp/sim-locks`; a lock whose process died is taken over. See
   CLAUDE.md → Simulators for the rules agents follow.
-
-### Native iOS app (ios/)
-
-`ios/` is a SwiftUI rewrite of the iPhone app, at feature parity with `mobile/` (see the parity
-table in ios/ARCHITECTURE.md). It lives beside `mobile/` until releases switch over. It's an XcodeGen project (`cd ios && xcodegen`) plus the `HarnessKit` Swift
-package (`cd ios/HarnessKit && swift test`), which holds the protocol types, client and logic,
-checked against `shared/` through generated fixtures. See [ios/README.md](ios/README.md) and
-[ios/ARCHITECTURE.md](ios/ARCHITECTURE.md).
-
-`bun ios/Tools/build.ts` builds it: `sim` (an ad-hoc signed Release build for the simulator),
-`device --device <name>` (the Debug build, "Harness Dev", installed beside the RN app),
-`archive --build-number N` and `export --method dev|testflight`. Releases still ship the RN app.
-`release:publish --ios-app=native` builds the native app instead, with the same bundle id, checks
-and TestFlight upload, so switching the release over is one flag.
 
 ## Drivers
 
@@ -203,7 +195,9 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
 cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
-cd mobile && bun run test # pairing links, connection probe, browser touch → page coordinates, servers, prefs/theme pickers, install page
+cd ios/HarnessKit && swift test   # the iPhone app's protocol, client, logic and state, against the JSON fixtures
+cd ios && bun run test    # iOS build, simulator and highlighter tooling
+cd release && bun run test # release prepare, publish checks, TestFlight, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service

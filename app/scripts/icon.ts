@@ -1,4 +1,4 @@
-// Regenerate resources/icon.icns from the iPhone/iPad icon (mobile/assets/icon.png), so both apps
+// Regenerate resources/icon.icns from the iPhone/iPad app icon (the 1024 PNG in ios/), so both apps
 // share one artwork. icon-mask.swift clips the full-bleed art into the macOS squircle on a
 // transparent canvas; sips + iconutil build the .icns (macOS only).
 import { join, resolve } from "node:path";
@@ -6,7 +6,7 @@ import { $ } from "bun";
 import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
 
 const res = resolve(import.meta.dir, "..", "resources");
-const source = resolve(import.meta.dir, "..", "..", "mobile", "assets", "icon.png");
+const source = resolve(import.meta.dir, "..", "..", "ios", "Harness", "Resources", "Assets.xcassets", "AppIcon.appiconset", "icon.png");
 const work = tempDir("harness-icon-");
 const iconset = join(work, "icon.iconset");
 await $`mkdir -p ${iconset}`;

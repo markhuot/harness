@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The app shell (mobile/app/_layout.tsx, (tabs)/_layout.tsx, index.tsx): holds the launch UI
+/// The app shell: holds the launch UI
 /// until the Keychain has loaded, shows Connect without an active server and the tabs with one,
 /// presents the Router's sheet and cover, routes harness:// links, applies the theme (bar titles
 /// and tab badges included, through BarAppearance), and forwards scene phases to the store.
