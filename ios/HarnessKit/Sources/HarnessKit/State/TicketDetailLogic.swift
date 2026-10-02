@@ -68,11 +68,11 @@ public enum TicketDetailLogic {
         choice == .none ? "\(label) marked done" : "Completion run queued"
     }
 
-    /// The Complete sheet's "When approved" choice: both reviews passed and nothing completes it on
-    /// its own (no auto-complete), with more than one action. A child on its parent's branch only
-    /// merges, so it never chooses.
-    public static func completeSheetChooses(ready: Bool, autoComplete: Bool, opts: Completion.Options) -> Bool {
-        ready && !autoComplete && opts.actions.count > 1
+    /// The Complete sheet's "When approved" choice: both reviews passed but nothing completed it
+    /// (a conductor's child, or a ticket approved while it was held back), with more than one
+    /// action. A child on its parent's branch only merges, so it never chooses.
+    public static func completeSheetChooses(ready: Bool, opts: Completion.Options) -> Bool {
+        ready && opts.actions.count > 1
     }
 
     /// The Complete sheet's first pick: the menu's action when the ticket offers it, else the default.

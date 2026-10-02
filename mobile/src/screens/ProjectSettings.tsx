@@ -126,11 +126,8 @@ function ProjectSettings({ project }: { project: Project }) {
             />
           </SRow>
         )}
-        <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion.">
+        <SRow title="Require human review" sub="When off, the agent reviewer alone can clear a ticket for completion." last={!project.isGit}>
           <SSwitch label="Require human review" value={project.requireHumanReview} onChange={(v) => void save({ requireHumanReview: v })} />
-        </SRow>
-        <SRow title="Complete when approved" sub="Once both reviews approve, run the completion step (merge the branch, clean up) and move the ticket to Done." last={!project.isGit}>
-          <SSwitch label="Complete when approved" value={project.autoComplete} onChange={(v) => void save({ autoComplete: v })} />
         </SRow>
         {project.isGit && (
           <SRow title="When approved" sub="What the Approve button does by default: merge the branch, open a pull request, or follow instructions you give. Each approval can pick another." last>

@@ -578,7 +578,7 @@ function Complete({ ticket, initialAction, onClose }: { ticket: Ticket; initialA
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const opts = completionOptions(ticket, project, parent, resolveBaseBranch(ticket, project, state.settings, parent).branch);
   // Both reviews passed and nothing completes it on its own: choose how the work lands here.
-  const choose = isReady(ticket) && !project?.autoComplete && opts.actions.length > 1;
+  const choose = isReady(ticket) && opts.actions.length > 1;
   const [choice, setChoice] = useState<CompletionAction>(initialAction && opts.actions.includes(initialAction) ? initialAction : opts.defaultAction);
   const [instructions, setInstructions] = useState(ticket.completionInstructions ?? "");
   const submit = async () => {

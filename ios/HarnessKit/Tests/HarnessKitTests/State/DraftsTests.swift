@@ -88,7 +88,7 @@ struct DraftsTests {
     }
 
     @Test func blankDraftTicketDefaultsToNow() {
-        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, useWorktrees: true, requireHumanReview: true, autoComplete: false, createdAt: 0, updatedAt: 0)
+        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 4, useWorktrees: true, requireHumanReview: true, createdAt: 0, updatedAt: 0)
         let before = Date().timeIntervalSince1970 * 1000
         let t = Drafts.blankDraftTicket(project: project, settings: nil, key: "WEB-4")
         #expect(t.createdAt >= before && t.createdAt <= Date().timeIntervalSince1970 * 1000)

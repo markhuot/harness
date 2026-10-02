@@ -55,11 +55,10 @@ struct TicketDetailLogicTests {
         let three = Completion.Options(actions: [.merge, .pr, .custom], defaultAction: .merge)
         let one = Completion.Options(actions: [.custom], defaultAction: .custom)
         let child = Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "harness/web-1")
-        #expect(TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: three))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: false, autoComplete: false, opts: three))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: true, opts: three))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: one))
-        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, autoComplete: false, opts: child))
+        #expect(TicketDetailLogic.completeSheetChooses(ready: true, opts: three))
+        #expect(!TicketDetailLogic.completeSheetChooses(ready: false, opts: three))
+        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, opts: one))
+        #expect(!TicketDetailLogic.completeSheetChooses(ready: true, opts: child))
     }
 
     @Test("the Complete sheet starts on the menu's action only when the ticket offers it")
