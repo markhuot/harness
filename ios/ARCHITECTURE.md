@@ -505,10 +505,13 @@ What screens that show agent text use (HARNESS-136):
   root toasts. `ContentLinkOpener` is the same opener for links outside markdown.
 - **CodeBlockView** takes a fence tag or a Shiki id; long-press → Copy copies the whole block.
 - **AttachmentRow** presents `AttachmentViewer` itself (a clear fullScreenCover that fades in).
-  `AttachmentMedia` caches images and video posters for the row and the viewer. Pager pages are a
-  page-style TabView; a page must keep one view for its whole life (swapping a page's view as it
-  comes and goes made the pager jump back a page), so video pages keep one AVPlayerViewController
-  and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
+  `AttachmentMedia` caches images and video posters for the row and the viewer. The pager is
+  `AttachmentPager`, a UIKit paging UIScrollView (RN's viewer is a paging ScrollView) whose pages
+  are UIHostingControllers of the SwiftUI page views, given the store and palette explicitly. A
+  page-style TabView lost sideways swipes that started over AVPlayerViewController's view, so the
+  viewer often couldn't page off a video; inside the scroll view, its pan sees them first. Paging is
+  off while an image is zoomed. A page keeps one view for its whole life, so video pages keep one
+  AVPlayerViewController and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
   "Video x.mp4" thumbnails, "Close", "2 of 4 · 1.2 MB".
 - **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
   shows sample markdown and that ticket's summaries with their attachments.

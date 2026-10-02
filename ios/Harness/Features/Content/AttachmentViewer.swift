@@ -18,6 +18,10 @@ struct AttachmentViewer: View {
     @State private var closing = false
     @State private var slide: CGFloat = 0
 
+    // Hosted pages don't inherit the environment, so the viewer hands them these.
+    @Environment(BoardStore.self) private var store: BoardStore?
+    @Environment(\.palette) private var c
+
     init(attachments: [SummaryAttachment], start: Int, onClose: @escaping () -> Void) {
         self.attachments = attachments
         self.onClose = onClose
@@ -32,17 +36,22 @@ struct AttachmentViewer: View {
             let header = safe.top + 56
             ZStack(alignment: .top) {
                 AttachmentViewerBackdrop(pull: pull, height: geo.size.height)
-                // A page-style TabView keeps its selection in step with the page that shows (a
-                // paging ScrollView's scrollPosition fell a page behind once a page's content swapped).
-                TabView(selection: $position) {
-                    ForEach(attachments.indices, id: \.self) { i in
-                        page(attachments[i], current: i == index, insets: UIEdgeInsets(top: header, left: 0, bottom: safe.bottom, right: 0), height: geo.size.height + safe.top + safe.bottom)
-                            .ignoresSafeArea()
-                            .tag(Optional(i))
-                    }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .scrollDisabled(zoomed || closing)
+                // A UIKit paging scroll view, like RN's (AttachmentPager): the pages, a video's
+                // player included, sit inside it, so its pan gets every sideways swipe.
+                AttachmentPager(
+                    count: attachments.count,
+                    index: index,
+                    scrollEnabled: !(zoomed || closing),
+                    page: { i in
+                        AnyView(
+                            page(attachments[i], current: i == index, insets: UIEdgeInsets(top: header, left: 0, bottom: safe.bottom, right: 0), height: geo.size.height + safe.top + safe.bottom)
+                                .environment(\.palette, c)
+                                .modifier(AttachmentStoreEnvironment(store: store))
+                                .ignoresSafeArea()
+                        )
+                    },
+                    onPage: { position = $0 }
+                )
                 .ignoresSafeArea()
                 .offset(y: slide)
                 AttachmentViewerHeader(attachments: attachments, index: index, pull: pull, close: close)
@@ -93,6 +102,15 @@ struct AttachmentViewer: View {
             slide = height
             pull.value = height
         } completion: { onClose() }
+    }
+}
+
+/// Puts the store (when there is one) into a hosted page's environment.
+private struct AttachmentStoreEnvironment: ViewModifier {
+    let store: BoardStore?
+
+    func body(content: Content) -> some View {
+        if let store { content.environment(store) } else { content }
     }
 }
 
@@ -205,8 +223,8 @@ private struct AttachmentVideoPage: View {
     @State private var failed = false
 
     var body: some View {
-        // One view for the page's whole life: swapping a pager page's view as it comes and goes
-        // made the TabView jump back a page. The placeholder and the failure draw on top.
+        // One view for the page's whole life (the player view controller stays put as the page
+        // comes and goes). The placeholder and the failure draw on top.
         AttachmentPage(content: .controller(holder.controller), insets: insets, events: events)
             .accessibilityLabel(attachment.accessibilityName)
             .overlay {
