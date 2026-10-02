@@ -58,7 +58,7 @@ private struct DriverSettingsForm: View {
                 }
                 if let label = SettingsRules.loginLabel(d) {
                     SettingsButtonRow(action: login) {
-                        Text(label).font(.system(size: 16)).foregroundStyle(c.accent)
+                        Text(label).font(.scaled(size: 16)).foregroundStyle(c.accent)
                     } subtitle: {
                         EmptyView()
                     } trailing: {
@@ -131,11 +131,11 @@ private struct DriverAnthropicKeySection: View {
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Anthropic API key").font(.system(size: 15)).foregroundStyle(c.text)
+                Text("Anthropic API key").font(.scaled(size: 15)).foregroundStyle(c.text)
                 if settings.anthropicApiKeySet && !replacing {
                     HStack(spacing: 8) {
                         Icon("checkCircle", size: 15).foregroundStyle(c.green)
-                        Text("Key saved").font(.system(size: 15)).foregroundStyle(c.green).frame(maxWidth: .infinity, alignment: .leading)
+                        Text("Key saved").font(.scaled(size: 15)).foregroundStyle(c.green).frame(maxWidth: .infinity, alignment: .leading)
                         HButton("Replace", small: true, fullWidth: false) { replacing = true }
                         HButton("Clear", variant: .danger, small: true, fullWidth: false, action: clearKey)
                     }

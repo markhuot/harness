@@ -31,9 +31,9 @@ struct Callout<Content: View, Trailing: View>: View {
         HStack(alignment: .top, spacing: 10) {
             Icon(icon, size: 16, weight: .semibold).foregroundStyle(t.fg).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                if let title { Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(t.fg) }
+                if let title { Text(title).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(t.fg) }
                 if let message {
-                    Text(message).font(.system(size: 14)).foregroundStyle(c.text).lineSpacing(3).textSelection(.enabled)
+                    Text(message).font(.scaled(size: 14)).foregroundStyle(c.text).lineSpacing(3).textSelection(.enabled)
                 }
                 content
             }
@@ -117,6 +117,6 @@ struct SectionTitle: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        Text(text.uppercased()).font(.system(size: 12.5, weight: .semibold)).tracking(0.4).foregroundStyle(c.text3)
+        Text(text.uppercased()).font(.scaled(size: 12.5, weight: .semibold)).tracking(0.4).foregroundStyle(c.text3)
     }
 }

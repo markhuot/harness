@@ -62,7 +62,7 @@ struct MentionTextEditor: View {
 
     private var field: some View {
         TextField("", text: $text, selection: $selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
-            .font(.system(size: 16))
+            .font(.scaled(size: 16))
             .foregroundStyle(c.text)
             .lineLimit(1...maxLines)
             .frame(minHeight: minHeight, alignment: .topLeading)
@@ -105,15 +105,9 @@ struct MentionTextEditor: View {
             .background(c.bgElev)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
-            // A labeled container (mentions.tsx), whose rows stay their own tappable elements.
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(isCommands(shown) ? "Commands" : "Files")
+            // No container label (RN's "Commands"/"Files"): a labeled container is one element
+            // to AXe, which then hides the rows sim-check taps (ARCHITECTURE § Accessibility labels).
         }
-    }
-
-    private func isCommands(_ shown: [MentionItem]) -> Bool {
-        if case .command = shown.first { return true }
-        return false
     }
 
     private func pick(_ item: MentionItem, target: MentionTarget?) {
@@ -198,7 +192,7 @@ private struct MentionSuggestionRow: View {
                 Text(row.name).font(.mono(14)).foregroundStyle(c.text).lineLimit(1).layoutPriority(1)
                 if !row.detail.isEmpty {
                     Text(row.detail)
-                        .font(.system(size: 12.5))
+                        .font(.scaled(size: 12.5))
                         .foregroundStyle(c.text3)
                         .lineLimit(1)
                         .truncationMode(row.truncateHead ? .head : .tail)

@@ -15,7 +15,7 @@ struct PromptsScreen: View {
                 // start, as in RN's ScrollView (sim-check waits for a row below the fold).
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        Text(promptsIntro).font(.system(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)
+                        Text(promptsIntro).font(.scaled(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)
                         ForEach(Prompts.groupPrompts(prompts), id: \.title) { g in
                             VStack(alignment: .leading, spacing: 8) {
                                 SectionTitle(g.title).padding(.horizontal, 4)
@@ -25,7 +25,7 @@ struct PromptsScreen: View {
                                         row(p)
                                     }
                                 }
-                                Text(g.description).font(.system(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)
+                                Text(g.description).font(.scaled(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)
                             }
                         }
                     }
@@ -46,10 +46,10 @@ struct PromptsScreen: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(p.label).font(.system(size: 16)).foregroundStyle(c.text)
+                        Text(p.label).font(.scaled(size: 16)).foregroundStyle(c.text)
                         PromptBadge(entry: p)
                     }
-                    Text(p.description).font(.system(size: 13)).foregroundStyle(c.text3)
+                    Text(p.description).font(.scaled(size: 13)).foregroundStyle(c.text3)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Icon("chevronRight", size: 13).foregroundStyle(c.text3)

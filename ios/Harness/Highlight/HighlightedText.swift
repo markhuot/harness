@@ -20,7 +20,7 @@ extension Palette {
 enum HighlightedText {
     /// CodeBlock's FONT (12.5 pt) in SF Mono.
     static let fontSize: CGFloat = 12.5
-    static let font = Font.system(size: fontSize, design: .monospaced)
+    static let font = Font.scaled(size: fontSize, design: .monospaced)
 
     /// How lines draw beyond their spans' own colors.
     struct Style {

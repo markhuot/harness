@@ -41,11 +41,11 @@ struct ConductorRollup: View {
             HStack(spacing: 8) {
                 ProgressBar(progress: progress, height: 4)
                 Text("\(progress.count(.done))/\(progress.total) done")
-                    .font(.system(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(c.text2)
+                    .font(.scaled(size: 12, weight: .medium)).monospacedDigit().foregroundStyle(c.text2)
                 if progress.attention > 0 {
                     HStack(spacing: 3) {
                         Icon("alert", size: 10, weight: .semibold)
-                        Text("\(progress.attention) need\(progress.attention == 1 ? "s" : "") you").font(.system(size: 11.5, weight: .semibold))
+                        Text("\(progress.attention) need\(progress.attention == 1 ? "s" : "") you").font(.scaled(size: 11.5, weight: .semibold))
                     }
                     .foregroundStyle(c.red)
                     .padding(.horizontal, 7)
@@ -72,7 +72,7 @@ struct ParentCrumb: View {
                 Text(parent.title.isEmpty ? "Untitled" : parent.title).foregroundStyle(c.text2).lineLimit(1)
                 Icon("chevronRight", size: 12).foregroundStyle(c.text3)
             }
-            .font(.system(size: 13))
+            .font(.scaled(size: 13))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)

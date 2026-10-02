@@ -75,7 +75,7 @@ private struct AttachmentThumb: View {
                 }
                 if attachment.kind == .video && !failed {
                     Image(systemName: "play.fill")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.scaled(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                         .offset(x: 1)
                         .frame(width: 34, height: 34)

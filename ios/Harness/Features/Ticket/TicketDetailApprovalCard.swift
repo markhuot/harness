@@ -28,11 +28,11 @@ struct TicketDetailApprovalCard: View {
                     .background(c.bgElev, in: .circle)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("The agent wants to use \(Text(tool).font(.mono(15.5, weight: .semibold)))")
-                        .font(.system(size: 15.5, weight: .semibold))
+                        .font(.scaled(size: 15.5, weight: .semibold))
                         .foregroundStyle(c.text)
                     NowReader(interval: .approval) { now in
                         Text("\(TicketDetailLogic.approvalSubtitle(approval, description: input.description)) · requested \(Format.relativeTime(approval.requestedAt, now: now))")
-                            .font(.system(size: 13))
+                            .font(.scaled(size: 13))
                             .foregroundStyle(c.text2)
                     }
                 }
@@ -42,7 +42,7 @@ struct TicketDetailApprovalCard: View {
                 HStack(alignment: .top, spacing: 7) {
                     Icon("shield", size: 13).foregroundStyle(c.text2).padding(.top, 2)
                     Text("\(Text("\(TicketDetailLogic.approvalReasonSource(approval.source)):").fontWeight(.semibold)) \(reason)")
-                        .font(.system(size: 13))
+                        .font(.scaled(size: 13))
                         .foregroundStyle(c.text2)
                         .lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,10 +50,10 @@ struct TicketDetailApprovalCard: View {
             }
             if let primary = input.primary {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(primary.label.uppercased()).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
+                    Text(primary.label.uppercased()).font(.scaled(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
                     ScrollView(primary.code ? [.horizontal, .vertical] : .vertical) {
                         Text(primary.value)
-                            .font(primary.code ? .mono(13) : .system(size: 13))
+                            .font(primary.code ? .mono(13) : .scaled(size: 13))
                             .foregroundStyle(c.text)
                             .textSelection(.enabled)
                             .fixedSize(horizontal: primary.code, vertical: true)
@@ -69,7 +69,7 @@ struct TicketDetailApprovalCard: View {
             if let rest = input.rest {
                 VStack(alignment: .leading, spacing: 6) {
                     Button(TicketDetailLogic.approvalRestToggle(showing: showRest, hasPrimary: input.primary != nil)) { showRest.toggle() }
-                        .font(.system(size: 13))
+                        .font(.scaled(size: 13))
                         .foregroundStyle(c.accentText)
                         .buttonStyle(.plain)
                     if showRest {
@@ -82,7 +82,7 @@ struct TicketDetailApprovalCard: View {
             }
             if denying {
                 TextField("", text: $message, prompt: Text("Optional: tell the agent why, or what to do instead").foregroundStyle(c.text3), axis: .vertical)
-                    .font(.system(size: 15))
+                    .font(.scaled(size: 15))
                     .foregroundStyle(c.text)
                     .lineLimit(3...8)
                     .focused($messageFocused)

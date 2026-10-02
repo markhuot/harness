@@ -60,7 +60,7 @@ struct TranscriptView<Header: View>: View {
             if let error {
                 HStack(alignment: .top, spacing: 6) {
                     Icon("alert", size: 14).foregroundStyle(c.red)
-                    Text("Couldn't load the transcript: \(error)").font(.system(size: 15)).foregroundStyle(c.red)
+                    Text("Couldn't load the transcript: \(error)").font(.scaled(size: 15)).foregroundStyle(c.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(10)

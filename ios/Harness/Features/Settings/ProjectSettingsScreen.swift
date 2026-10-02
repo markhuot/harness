@@ -64,17 +64,17 @@ private struct ProjectSettingsForm: View {
                 ProjectSettingsKeyRow(project: project)
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
-                        Text("Color").font(.system(size: 15)).foregroundStyle(c.text)
+                        Text("Color").font(.scaled(size: 15)).foregroundStyle(c.text)
                         ProjectKeyBadge(project.key, color: project.color)
                     }
-                    Text("Tints the project's key badge on cards, tickets and lists.").font(.system(size: 12.5)).foregroundStyle(c.text3)
+                    Text("Tints the project's key badge on cards, tickets and lists.").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                     ProjectColorPicker(value: project.color) { save(UpdateProjectBody(color: Patch($0))) }
                 }
                 .settingsRowBackground(c)
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Folder").font(.system(size: 15)).foregroundStyle(c.text)
-                        Text("Absolute path on the Mac").font(.system(size: 12.5)).foregroundStyle(c.text3)
+                        Text("Folder").font(.scaled(size: 15)).foregroundStyle(c.text)
+                        Text("Absolute path on the Mac").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                     }
                     TextField("", text: $path)
                         .font(.mono(14))
@@ -152,8 +152,8 @@ private struct ProjectSettingsForm: View {
             Section("Danger zone") {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Remove project").font(.system(size: 15)).foregroundStyle(c.text)
-                        Text(SettingsRules.removeProjectHint(count)).font(.system(size: 12.5)).foregroundStyle(c.text3)
+                        Text("Remove project").font(.scaled(size: 15)).foregroundStyle(c.text)
+                        Text(SettingsRules.removeProjectHint(count)).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                     }
                     HButton("Remove project…", icon: "trash", variant: .dangerSolid, haptic: .warning) { remove(count) }
                 }
@@ -249,7 +249,7 @@ private struct ProjectSettingsKeyRow: View {
         let _ = latest.set(preview)
         let tint = preview.error != nil ? c.red : preview.changed ? c.amber : c.text3
         VStack(alignment: .leading, spacing: 8) {
-            Text("Identifier").font(.system(size: 15)).foregroundStyle(c.text)
+            Text("Identifier").font(.scaled(size: 15)).foregroundStyle(c.text)
             TextField("", text: Binding(get: { draft }, set: { draft = SettingsRules.identifierDraft($0) }))
                 .font(.mono(16))
                 .foregroundStyle(c.text)
@@ -264,7 +264,7 @@ private struct ProjectSettingsKeyRow: View {
                 .accessibilityLabel("Identifier")
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if preview.error != nil { Icon("alert", size: 12).foregroundStyle(c.red) }
-                Text(preview.message).font(.system(size: 13)).foregroundStyle(tint).frame(maxWidth: .infinity, alignment: .leading)
+                Text(preview.message).font(.scaled(size: 13)).foregroundStyle(tint).frame(maxWidth: .infinity, alignment: .leading)
             }
             if preview.changed {
                 HStack(spacing: 8) {

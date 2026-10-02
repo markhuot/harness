@@ -34,7 +34,7 @@ struct TranscriptRowView: View, Equatable {
             VStack(alignment: .leading, spacing: 4) {
                 TranscriptWho(icon: "sparkle", label: "Agent")
                 Text("\(text)\(Text("▍").foregroundStyle(c.accent))")
-                    .font(.system(size: 15))
+                    .font(.scaled(size: 15))
                     .foregroundStyle(c.text)
                     .lineSpacing(4)
                     .textSelection(.enabled)
@@ -43,7 +43,7 @@ struct TranscriptRowView: View, Equatable {
         case .working:
             HStack(spacing: 8) {
                 Spinner()
-                Text("Working…").font(.system(size: 14)).foregroundStyle(c.text3)
+                Text("Working…").font(.scaled(size: 14)).foregroundStyle(c.text3)
             }
             .padding(.vertical, 4)
         }
@@ -61,8 +61,8 @@ struct TranscriptWho: View {
     var body: some View {
         HStack(spacing: 5) {
             Icon(icon, size: 12, weight: .semibold).foregroundStyle(icon == "sparkle" ? c.accent : c.text2)
-            Text(label).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(c.text2)
-            if let time { Text(time).font(.system(size: 12)).foregroundStyle(c.text3) }
+            Text(label).font(.scaled(size: 12.5, weight: .semibold)).foregroundStyle(c.text2)
+            if let time { Text(time).font(.scaled(size: 12)).foregroundStyle(c.text3) }
         }
     }
 }
@@ -102,7 +102,7 @@ struct TranscriptEntryRow: View {
             } else {
                 HStack(spacing: 8) {
                     Rectangle().fill(c.border).frame(height: 1 / 3).frame(maxWidth: .infinity)
-                    Text("\(text) · \(time)").font(.system(size: 12)).foregroundStyle(c.text3).multilineTextAlignment(.center)
+                    Text("\(text) · \(time)").font(.scaled(size: 12)).foregroundStyle(c.text3).multilineTextAlignment(.center)
                         .layoutPriority(1)
                     Rectangle().fill(c.border).frame(height: 1 / 3).frame(maxWidth: .infinity)
                 }
@@ -112,7 +112,7 @@ struct TranscriptEntryRow: View {
         case let .error(text):
             HStack(alignment: .top, spacing: 8) {
                 Icon("alert", size: 14, weight: .semibold).foregroundStyle(c.red)
-                Text(text).font(.system(size: 14)).foregroundStyle(c.red).textSelection(.enabled)
+                Text(text).font(.scaled(size: 14)).foregroundStyle(c.red).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(10)
@@ -161,14 +161,14 @@ struct TranscriptThinking: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Icon(open ? "chevronDown" : "chevronRight", size: 12).foregroundStyle(c.text3)
-                    Text("Thinking").font(.system(size: 13).italic()).foregroundStyle(c.text3)
+                    Text("Thinking").font(.scaled(size: 13).italic()).foregroundStyle(c.text3)
                     if !open {
-                        Text(text).font(.system(size: 13)).foregroundStyle(c.text3).lineLimit(1)
+                        Text(text).font(.scaled(size: 13)).foregroundStyle(c.text3).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if open {
-                    Text(text).font(.system(size: 13.5)).foregroundStyle(c.text2).lineSpacing(5).textSelection(.enabled)
+                    Text(text).font(.scaled(size: 13.5)).foregroundStyle(c.text2).lineSpacing(5).textSelection(.enabled)
                         .padding(.leading, 17)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -200,12 +200,12 @@ struct TranscriptPermissionRow: View {
             Icon("shield", size: 12, weight: .semibold).foregroundStyle(color).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(Text(verb).fontWeight(.semibold).foregroundStyle(color)) \(Text(log.summary).font(.mono(12.5)))")
-                    .font(.system(size: 13))
+                    .font(.scaled(size: 13))
                     .foregroundStyle(c.text)
                 if !log.reason.isEmpty {
-                    Text(log.reason).font(.system(size: 12.5)).foregroundStyle(c.text2)
+                    Text(log.reason).font(.scaled(size: 12.5)).foregroundStyle(c.text2)
                 }
-                Text(TranscriptLogic.permissionFooter(log, time: time)).font(.system(size: 11.5)).foregroundStyle(c.text3)
+                Text(TranscriptLogic.permissionFooter(log, time: time)).font(.scaled(size: 11.5)).foregroundStyle(c.text3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

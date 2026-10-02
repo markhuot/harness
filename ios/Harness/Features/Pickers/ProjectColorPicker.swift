@@ -37,14 +37,14 @@ struct ProjectColorPicker: View {
                     open = true
                 } content: {
                     if custom == nil {
-                        Text("+").font(.system(size: 16, weight: .semibold)).foregroundStyle(c.text2)
+                        Text("+").font(.scaled(size: 16, weight: .semibold)).foregroundStyle(c.text2)
                     }
                 }
             }
             if showGrid {
                 grid(current: current)
                 HStack(spacing: 10) {
-                    Text("Hex").font(.system(size: 14)).foregroundStyle(c.text2)
+                    Text("Hex").font(.scaled(size: 14)).foregroundStyle(c.text2)
                     TextField("", text: $hex, prompt: Text("#5e6ad2").foregroundStyle(c.text3))
                         .font(.mono(14))
                         .foregroundStyle(c.text)
@@ -63,8 +63,7 @@ struct ProjectColorPicker: View {
                 }
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Project color")
+
         .onAppear { hex = custom ?? "" }
         .onChange(of: custom) { _, v in hex = v ?? "" }
     }
@@ -91,8 +90,7 @@ struct ProjectColorPicker: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Custom colors")
+
     }
 
     private func commitHex() {

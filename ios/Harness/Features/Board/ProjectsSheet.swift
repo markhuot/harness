@@ -54,7 +54,7 @@ struct ProjectsSheet: View {
                             Button { startAdding() } label: {
                                 HStack(spacing: 10) {
                                     Icon("folder", size: 16).foregroundStyle(c.accent)
-                                    Text("Add a project folder…").font(.system(size: 16)).foregroundStyle(c.accent)
+                                    Text("Add a project folder…").font(.scaled(size: 16)).foregroundStyle(c.accent)
                                     Spacer()
                                 }
                                 .padding(.horizontal, 14)
@@ -67,7 +67,7 @@ struct ProjectsSheet: View {
                 }
                 HStack(spacing: 8) {
                     Circle().fill(state.connected ? c.green : c.amber).frame(width: 8, height: 8).accessibilityHidden(true)
-                    Text(state.connected ? "Connected" : "Reconnecting…").font(.system(size: 13)).foregroundStyle(c.text2)
+                    Text(state.connected ? "Connected" : "Reconnecting…").font(.scaled(size: 13)).foregroundStyle(c.text2)
                     Spacer()
                     Text(MobilePair.displayHost(store.baseUrl)).font(.mono(12)).foregroundStyle(c.text3).lineLimit(1)
                 }
@@ -97,11 +97,11 @@ struct ProjectsSheet: View {
                 HStack(spacing: 10) {
                     ProjectKeyBadge(p.key, color: p.color)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(p.name).font(.system(size: 16)).foregroundStyle(c.text).lineLimit(1)
+                        Text(p.name).font(.scaled(size: 16)).foregroundStyle(c.text).lineLimit(1)
                         Text(Format.tildify(p.path)).font(.mono(12)).foregroundStyle(c.text3).lineLimit(1).truncationMode(.middle)
                     }
                     Spacer(minLength: 0)
-                    if count > 0 { Text("\(count)").font(.system(size: 14)).monospacedDigit().foregroundStyle(c.text3) }
+                    if count > 0 { Text("\(count)").font(.scaled(size: 14)).monospacedDigit().foregroundStyle(c.text3) }
                 }
                 .contentShape(.rect)
             }
@@ -158,17 +158,17 @@ private struct ProjectsNavRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Icon(icon, size: 18).foregroundStyle(active ? c.accentText : c.text2)
-                Text(label).font(.system(size: 16)).foregroundStyle(c.text)
+                Text(label).font(.scaled(size: 16)).foregroundStyle(c.text)
                 Spacer()
                 if badge > 0 {
                     Text("\(badge)")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.scaled(size: 12, weight: .bold))
                         .foregroundStyle(c.onAmber)
                         .padding(.horizontal, 6)
                         .frame(minWidth: 20, minHeight: 20)
                         .background(c.amber, in: .capsule)
                 } else if count > 0 {
-                    Text("\(count)").font(.system(size: 14)).monospacedDigit().foregroundStyle(c.text3)
+                    Text("\(count)").font(.scaled(size: 14)).monospacedDigit().foregroundStyle(c.text3)
                 }
             }
             .padding(.horizontal, 14)

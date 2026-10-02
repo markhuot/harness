@@ -115,7 +115,7 @@ private struct SettingsConnectionSection: View {
                 SettingsButtonRow(action: { openMenu(s) }) {
                     HStack(spacing: 8) {
                         if active { Circle().fill(connected ? c.green : c.amber).frame(width: 8, height: 8).accessibilityHidden(true) }
-                        Text(s.name).font(.system(size: 16)).foregroundStyle(c.text)
+                        Text(s.name).font(.scaled(size: 16)).foregroundStyle(c.text)
                     }
                 } subtitle: {
                     if let host = SettingsRules.serverHost(s) { Text(host).font(.mono(12.5)).foregroundStyle(c.text3) }
@@ -128,12 +128,12 @@ private struct SettingsConnectionSection: View {
                 }
             }
             SettingsButtonRow(action: { router.present(.connect) }) {
-                Text("Pair a Mac…").font(.system(size: 16)).foregroundStyle(c.accent)
+                Text("Pair a Mac…").font(.scaled(size: 16)).foregroundStyle(c.accent)
             } subtitle: { EmptyView() } trailing: { EmptyView() }
             SettingsButtonRow(action: rotate) {
-                Text("Rotate token…").font(.system(size: 16)).foregroundStyle(c.red)
+                Text("Rotate token…").font(.scaled(size: 16)).foregroundStyle(c.red)
             } subtitle: {
-                Text("Invalidates the current token for every client.").font(.system(size: 13)).foregroundStyle(c.text3)
+                Text("Invalidates the current token for every client.").font(.scaled(size: 13)).foregroundStyle(c.text3)
             } trailing: { EmptyView() }
         } header: {
             Text("Connection")
@@ -209,7 +209,7 @@ private struct SettingsNetworkSection: View {
 
     private func addressRow(_ label: String, _ lines: [(String, Bool)]) -> some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(label).font(.system(size: 15)).foregroundStyle(c.text)
+            Text(label).font(.scaled(size: 15)).foregroundStyle(c.text)
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 2) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in

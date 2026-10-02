@@ -28,11 +28,11 @@ struct SettingsRow<Control: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .center, spacing: 12) {
-                Text(label).font(.system(size: 15)).foregroundStyle(c.text).layoutPriority(1)
+                Text(label).font(.scaled(size: 15)).foregroundStyle(c.text).layoutPriority(1)
                 Spacer(minLength: 8)
                 control
             }
-            if let hint, !hint.isEmpty { Text(hint).font(.system(size: 12.5)).foregroundStyle(c.text3) }
+            if let hint, !hint.isEmpty { Text(hint).font(.scaled(size: 12.5)).foregroundStyle(c.text3) }
         }
         .settingsRowBackground(c)
     }

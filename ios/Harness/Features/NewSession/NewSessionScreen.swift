@@ -166,7 +166,7 @@ private struct NewSessionEditorView: View {
                 .listRowBackground(c.bgElev)
             } footer: {
                 if kind == .conductor {
-                    Text("Orchestrates child tickets.").font(.system(size: 13)).foregroundStyle(c.text3)
+                    Text("Orchestrates child tickets.").font(.scaled(size: 13)).foregroundStyle(c.text3)
                 }
             }
             Section {
@@ -176,11 +176,11 @@ private struct NewSessionEditorView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: optionsOpen ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.scaled(size: 14, weight: .semibold))
                             .foregroundStyle(needsLook ? c.amber : c.text2)
                             .frame(width: 18)
                         Text(summary.isEmpty ? "Options" : summary.joined(separator: " · "))
-                            .font(.system(size: 15))
+                            .font(.scaled(size: 15))
                             .foregroundStyle(summary.isEmpty ? c.text2 : c.text)
                             .lineLimit(1)
                         Spacer(minLength: 0)

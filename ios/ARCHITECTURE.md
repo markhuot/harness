@@ -626,6 +626,10 @@ rule for every screen:
   with the whole string instead of its pieces.
 - The root AX element must stay the app ("Harness"), so no full-screen overlay may take
   accessibility focus above the window.
+- Don't label a container whose children sim-check taps (`.accessibilityElement(children:
+  .contain)` plus `.accessibilityLabel`): AXe then lists the container as one element and drops
+  its rows. That's why the mention list and the project color swatches have no group label,
+  where RN labels them "Files"/"Commands" and "Project color" for VoiceOver.
 - Every route in § App shell is reachable by the same `harness://` link as in RN, with the same
   semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
 

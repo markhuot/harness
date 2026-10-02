@@ -23,8 +23,8 @@ struct AgentsTabView: View {
                     ForEach(sections) { s in
                         VStack(alignment: .leading, spacing: 7) {
                             HStack(spacing: 7) {
-                                Text(s.label).font(.system(size: 14, weight: .semibold)).foregroundStyle(c.text)
-                                Text("\(s.items.count)").font(.system(size: 13)).foregroundStyle(c.text3)
+                                Text(s.label).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(c.text)
+                                Text("\(s.items.count)").font(.scaled(size: 13)).foregroundStyle(c.text3)
                             }
                             .padding(.horizontal, 2)
                             .accessibilityElement(children: .combine)
@@ -98,21 +98,21 @@ private struct AgentsRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     AgentsStatusMark(status: a.status)
-                    Text(Subagents.title(a)).font(.system(size: 14.5, weight: .medium))
+                    Text(Subagents.title(a)).font(.scaled(size: 14.5, weight: .medium))
                         .foregroundStyle(a.status == .running ? c.text : c.text2).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(Subagents.duration(a, now: now)).font(.system(size: 12.5).monospacedDigit()).foregroundStyle(c.text3)
+                    Text(Subagents.duration(a, now: now)).font(.scaled(size: 12.5).monospacedDigit()).foregroundStyle(c.text3)
                     Icon("chevronRight", size: 13).foregroundStyle(c.text3)
                 }
                 if !preview.isEmpty {
-                    Text(Markdown.plainText(preview)).font(.system(size: 13)).foregroundStyle(c.text2).lineLimit(2)
+                    Text(Markdown.plainText(preview)).font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
                 if type != nil || parent != nil {
                     FlowLayout(spacing: 6) {
                         if let type { AgentsTypeBadge(type: type) }
                         if let parent {
-                            Text("started by \(Subagents.title(parent))").font(.system(size: 12.5)).foregroundStyle(c.text3)
+                            Text("started by \(Subagents.title(parent))").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                         }
                     }
                 }

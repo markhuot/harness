@@ -18,7 +18,7 @@ struct SettingsDriversSection: View {
         let settings = store.state.settings
         Section {
             if drivers.isEmpty {
-                Text("No drivers reported by the service.").font(.system(size: 15)).foregroundStyle(c.text2).settingsRowBackground(c)
+                Text("No drivers reported by the service.").font(.scaled(size: 15)).foregroundStyle(c.text2).settingsRowBackground(c)
             }
             ForEach(drivers) { d in row(d, isDefault: settings?.defaultDriver == d.id) }
             if let settings {
@@ -48,12 +48,12 @@ struct SettingsDriversSection: View {
     private func row(_ d: DriverInfo, isDefault: Bool) -> some View {
         SettingsButtonRow(chevron: true, action: { router.push(.driver(id: d.id)) }) {
             HStack(spacing: 6) {
-                Text(d.name).font(.system(size: 16)).foregroundStyle(c.text)
+                Text(d.name).font(.scaled(size: 16)).foregroundStyle(c.text)
                 DriverStatusBadge(driver: d)
                 if isDefault { Badge("Default", tone: .accent) }
             }
         } subtitle: {
-            if !d.description.isEmpty { Text(d.description).font(.system(size: 13)).foregroundStyle(c.text3) }
+            if !d.description.isEmpty { Text(d.description).font(.scaled(size: 13)).foregroundStyle(c.text3) }
         } trailing: {
             EmptyView()
         }

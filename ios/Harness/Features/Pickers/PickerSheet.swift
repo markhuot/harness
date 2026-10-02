@@ -42,11 +42,11 @@ struct PickerSheet<Content: View, Trailing: View>: View {
     private var header: some View {
         HStack(spacing: 10) {
             Button("Cancel") { dismiss() }
-                .font(.system(size: 16))
+                .font(.scaled(size: 16))
                 .foregroundStyle(c.accent)
                 .frame(width: 72, alignment: .leading)
             Text(title)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.scaled(size: 16, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
@@ -66,7 +66,7 @@ struct PickerSheet<Content: View, Trailing: View>: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 15)).foregroundStyle(c.text3)
                 TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(c.text3))
-                    .font(mono ? .mono(16) : .system(size: 16))
+                    .font(mono ? .mono(16) : .scaled(size: 16))
                     .foregroundStyle(c.text)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -85,7 +85,7 @@ struct PickerSheet<Content: View, Trailing: View>: View {
             .padding(.vertical, 9)
             .background(c.bgElev, in: RoundedRectangle(cornerRadius: 10))
             if let problem {
-                Text(problem).font(.system(size: 13)).foregroundStyle(c.amber)
+                Text(problem).font(.scaled(size: 13)).foregroundStyle(c.amber)
             }
         }
         .padding(.horizontal, 16)
@@ -115,7 +115,7 @@ struct PickerSheetRow<Leading: View, Subtitle: View>: View {
                 leading
                 VStack(alignment: .leading, spacing: 2) {
                     Text(label)
-                        .font(mono ? .mono(15) : .system(size: 16))
+                        .font(mono ? .mono(15) : .scaled(size: 16))
                         .foregroundStyle(titleColor ?? c.text)
                         .lineLimit(2)
                     subtitle

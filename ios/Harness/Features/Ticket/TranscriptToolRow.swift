@@ -50,9 +50,9 @@ struct TranscriptToolRow: View {
                     HStack(spacing: 7) {
                         Icon("bot", size: 13).foregroundStyle(c.text2)
                         Text("\(Subagents.title(agent)) · \(Subagents.statusLabel(agent.status))")
-                            .font(.system(size: 13)).foregroundStyle(c.text2).lineLimit(1)
+                            .font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        Text("Transcript").font(.system(size: 13)).foregroundStyle(c.accent)
+                        Text("Transcript").font(.scaled(size: 13)).foregroundStyle(c.accent)
                         Icon("chevronRight", size: 12).foregroundStyle(c.accent)
                     }
                     .padding(.horizontal, 10)
@@ -75,7 +75,7 @@ struct TranscriptToolRow: View {
                         TranscriptLabel(isError ? "Error" : "Output")
                         TranscriptToolOutput(output: output)
                     } else {
-                        Text("Running…").font(.system(size: 15)).foregroundStyle(c.text3)
+                        Text("Running…").font(.scaled(size: 15)).foregroundStyle(c.text3)
                     }
                 }
                 .padding(.horizontal, 10)
@@ -107,7 +107,7 @@ struct TranscriptLabel: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        Text(text.uppercased()).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
+        Text(text.uppercased()).font(.scaled(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
     }
 }
 
@@ -138,7 +138,7 @@ struct TranscriptToolOutput: View {
 
     var body: some View {
         if output.isEmpty {
-            Text("(no output)").font(.system(size: 15)).foregroundStyle(c.text3)
+            Text("(no output)").font(.scaled(size: 15)).foregroundStyle(c.text3)
         } else {
             ForEach(output.indices, id: \.self) { i in
                 switch output[i] {

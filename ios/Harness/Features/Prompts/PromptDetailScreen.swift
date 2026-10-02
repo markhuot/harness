@@ -72,7 +72,7 @@ private struct PromptDetailView: View {
                         PromptBadge(entry: entry)
                         if saving { Spinner() }
                     }
-                    Text(entry.description).font(.system(size: 14)).foregroundStyle(c.text2)
+                    Text(entry.description).font(.scaled(size: 14)).foregroundStyle(c.text2)
                 }
 
                 if state == .broken {
@@ -112,7 +112,7 @@ private struct PromptDetailView: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("BUILT-IN TEXT · READ-ONLY").font(.system(size: 12, weight: .semibold)).foregroundStyle(c.text3)
+                        Text("BUILT-IN TEXT · READ-ONLY").font(.scaled(size: 12, weight: .semibold)).foregroundStyle(c.text3)
                         Text(entry.builtin)
                             .font(.mono(13))
                             .foregroundStyle(c.text)
@@ -129,7 +129,7 @@ private struct PromptDetailView: View {
                 Text(editing
                     ? "A customized prompt doesn't pick up built-in improvements from app updates. Reset it to follow the built-in again. Leaving it empty, or the same as the built-in, saves it as built-in."
                     : "Built-in: this text improves with app updates while the prompt isn't customized.")
-                    .font(.system(size: 13))
+                    .font(.scaled(size: 13))
                     .foregroundStyle(c.text3)
 
                 if !entry.variables.isEmpty { variables(insertable: insertable) }
@@ -183,7 +183,7 @@ private struct PromptDetailView: View {
             }
             (Text("{{#if name}} … {{else}} … {{/if}}").font(.mono(12))
                 + Text(" includes text only when a variable is set (true or not empty).\(insertable ? " Tap a variable to insert it at the cursor." : "")"))
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(c.text3)
                 .padding(.horizontal, 4)
         }
@@ -192,7 +192,7 @@ private struct PromptDetailView: View {
     private func variableRow(_ v: PromptVariable, insertable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("{{\(v.name)}}").font(.mono(14)).foregroundStyle(insertable ? c.accent : c.text)
-            Text(v.description).font(.system(size: 13)).foregroundStyle(c.text3)
+            Text(v.description).font(.scaled(size: 13)).foregroundStyle(c.text3)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
@@ -287,7 +287,7 @@ private struct PromptSegmented: View {
             }
         } label: {
             Text(label)
-                .font(.system(size: 14, weight: selected ? .semibold : .regular))
+                .font(.scaled(size: 14, weight: selected ? .semibold : .regular))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 32)
@@ -313,7 +313,7 @@ private struct PromptDiffView: View {
         let del = c.tone(.red)
         VStack(alignment: .leading, spacing: 0) {
             if !lines.contains(where: { $0.type != .same }) {
-                Text("Same as the built-in.").font(.system(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 12).padding(.bottom, 6)
+                Text("Same as the built-in.").font(.scaled(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 12).padding(.bottom, 6)
             }
             ForEach(Array(lines.enumerated()), id: \.offset) { _, l in
                 Text((l.type == .add ? "+ " : l.type == .del ? "− " : "  ") + l.text)

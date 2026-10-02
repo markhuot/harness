@@ -282,12 +282,12 @@ private struct BoardSearchNote: View {
         HStack(spacing: 8) {
             if (search.ids == nil || search.loading) && search.error == nil { Spinner().controlSize(.small) }
             Text(text)
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(search.error != nil ? c.red : c.text3)
                 .lineLimit(1)
             if search.error != nil {
                 Button("Retry", action: onRetry)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.scaled(size: 13, weight: .semibold))
                     .foregroundStyle(c.accentText)
             }
         }

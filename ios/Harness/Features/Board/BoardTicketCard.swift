@@ -84,7 +84,7 @@ struct BoardTicketCard: View {
             .frame(minHeight: 21)
 
             Text(BoardScreenRules.cardTitle(t))
-                .font(.system(size: dim ? 14.5 : 15.5, weight: .medium))
+                .font(.scaled(size: dim ? 14.5 : 15.5, weight: .medium))
                 .foregroundStyle(dim ? c.text2 : c.text)
                 .lineLimit(dim ? 2 : 3)
                 .lineSpacing(2)
@@ -102,7 +102,7 @@ struct BoardTicketCard: View {
 
             if let summary, t.status != .blocked, t.pendingApproval == nil {
                 Text(Markdown.plainText(summary.body))
-                    .font(.system(size: 13.5))
+                    .font(.scaled(size: 13.5))
                     .foregroundStyle(dim ? c.text3 : c.text2)
                     .lineLimit(dim ? 1 : 2)
                     .lineSpacing(2)
@@ -142,7 +142,7 @@ struct BoardTicketCard: View {
         let t = c.tone(tone)
         return HStack(alignment: .firstTextBaseline, spacing: 7) {
             Icon(icon, size: 12, weight: .semibold)
-            content().font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading).multilineTextAlignment(.leading)
+            content().font(.scaled(size: 13)).frame(maxWidth: .infinity, alignment: .leading).multilineTextAlignment(.leading)
         }
         .foregroundStyle(t.fg)
         .padding(.vertical, 7)

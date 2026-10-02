@@ -72,11 +72,11 @@ struct TicketDetailTabStrip: View {
             HStack(spacing: 5) {
                 if let icon = item.icon { Icon(icon, size: 13).foregroundStyle(on ? c.text : c.text2) }
                 Text(item.label)
-                    .font(.system(size: 14.5, weight: on ? .semibold : .medium))
+                    .font(.scaled(size: 14.5, weight: on ? .semibold : .medium))
                     .foregroundStyle(on ? c.text : c.text2)
                 if let count = item.count, count > 0 {
                     Text("\(count)")
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.scaled(size: 11.5, weight: .semibold))
                         .foregroundStyle(c.text2)
                         .padding(.horizontal, 5)
                         .frame(minWidth: 18, minHeight: 18)

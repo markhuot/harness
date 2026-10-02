@@ -102,12 +102,12 @@ private struct FileViewerContent: View {
         let isTicket = if case .ticket = root { true } else { false }
         return VStack(spacing: 0) {
             Text(FileViewerRules.fileName(shownPath))
-                .font(.system(size: 16, weight: .semibold))
+                .font(.scaled(size: 16, weight: .semibold))
                 .foregroundStyle(c.text)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Text(subtitle)
-                .font(isTicket ? .mono(12) : .system(size: 12))
+                .font(isTicket ? .mono(12) : .scaled(size: 12))
                 .foregroundStyle(c.text3)
                 .lineLimit(1)
         }
@@ -162,7 +162,7 @@ private struct FileInfoBar: View {
                     }
                     if view.git.ignored { Badge("Ignored") }
                     Text(FileViewerRules.meta(size: view.size, lineCount: lineCount, range: range))
-                        .font(.system(size: 12.5))
+                        .font(.scaled(size: 12.5))
                         .foregroundStyle(c.text3)
                         .lineLimit(1)
                 }
@@ -218,7 +218,7 @@ private struct FileTabsBar: View {
             }
         } label: {
             label()
-                .font(.system(size: 14, weight: on ? .semibold : .regular))
+                .font(.scaled(size: 14, weight: on ? .semibold : .regular))
                 .foregroundStyle(on ? c.text : c.text2)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: 32)
@@ -277,7 +277,7 @@ private struct FileBody: View {
             VStack(spacing: 0) {
                 if truncated {
                     Text("The file changed while it was read; this is only its start.")
-                        .font(.system(size: 12.5))
+                        .font(.scaled(size: 12.5))
                         .foregroundStyle(c.text3)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)

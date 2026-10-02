@@ -82,14 +82,14 @@ struct TicketDetailHero: View {
         // A child's conductor acts as its human reviewer and lands it, so its Approve and Complete are off.
         if !compact, ticket.status == .review, let conductor = Completion.managingConductor(ticket: ticket, parent: parent) {
             Text(Completion.conductorManagedReason(conductorKey: conductor.key))
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(c.text3)
         }
     }
 
     private func title(compact: Bool) -> some View {
         let text = Text(ticket.title.isEmpty ? "Untitled" : ticket.title)
-            .font(.system(size: compact ? 16 : 19, weight: .bold))
+            .font(.scaled(size: compact ? 16 : 19, weight: .bold))
             .foregroundStyle(c.text)
             .lineLimit(compact ? 1 : nil)
             .frame(maxWidth: .infinity, alignment: .leading)

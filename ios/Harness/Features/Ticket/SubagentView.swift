@@ -23,10 +23,10 @@ struct SubagentView: View {
                     NowReader(interval: agent.status == .running ? .live : .standard) { now in
                         HStack(spacing: 8) {
                             AgentsStatusMark(status: agent.status)
-                            Text(Subagents.title(agent)).font(.system(size: 16, weight: .semibold)).foregroundStyle(c.text).lineLimit(2)
+                            Text(Subagents.title(agent)).font(.scaled(size: 16, weight: .semibold)).foregroundStyle(c.text).lineLimit(2)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Text("\(Subagents.statusLabel(agent.status)) · \(Subagents.duration(agent, now: now))")
-                                .font(.system(size: 12.5).monospacedDigit()).foregroundStyle(c.text3)
+                                .font(.scaled(size: 12.5).monospacedDigit()).foregroundStyle(c.text3)
                         }
                     }
                     if let type = Subagents.typeLabel(agent) { AgentsTypeBadge(type: type) }
@@ -51,7 +51,7 @@ struct SubagentView: View {
                 } label: {
                     HStack(spacing: 3) {
                         Icon("chevronLeft", size: 14).foregroundStyle(c.accent)
-                        Text("Agents").font(.system(size: 14.5)).foregroundStyle(c.accent)
+                        Text("Agents").font(.scaled(size: 14.5)).foregroundStyle(c.accent)
                     }
                     .contentShape(.rect)
                 }
@@ -63,7 +63,7 @@ struct SubagentView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Icon("chevronRight", size: 11).foregroundStyle(c.text3)
-                            Text(Subagents.title(p)).font(.system(size: 14.5)).foregroundStyle(c.accent).lineLimit(1)
+                            Text(Subagents.title(p)).font(.scaled(size: 14.5)).foregroundStyle(c.accent).lineLimit(1)
                         }
                         .contentShape(.rect)
                     }
@@ -82,12 +82,12 @@ struct SubagentView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
                     Icon(promptOpen ? "chevronDown" : "chevronRight", size: 12).foregroundStyle(c.text3)
-                    Text("TASK FROM THE AGENT").font(.system(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
+                    Text("TASK FROM THE AGENT").font(.scaled(size: 11.5, weight: .semibold)).foregroundStyle(c.text3)
                 }
                 if promptOpen {
                     MarkdownView(text: prompt, size: 14)
                 } else {
-                    Text(Markdown.plainText(prompt)).font(.system(size: 14)).foregroundStyle(c.text2).lineLimit(2)
+                    Text(Markdown.plainText(prompt)).font(.scaled(size: 14)).foregroundStyle(c.text2).lineLimit(2)
                         .multilineTextAlignment(.leading)
                 }
             }

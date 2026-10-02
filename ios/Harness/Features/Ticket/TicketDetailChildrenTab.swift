@@ -38,7 +38,7 @@ struct TicketDetailChildrenTab: View {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 9) {
                     HStack(spacing: 8) {
-                        Text(Conductor.progressLabel(progress)).font(.system(size: 14.5, weight: .medium)).foregroundStyle(c.text)
+                        Text(Conductor.progressLabel(progress)).font(.scaled(size: 14.5, weight: .medium)).foregroundStyle(c.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if !complete { Spinner() }
                     }
@@ -46,7 +46,7 @@ struct TicketDetailChildrenTab: View {
                     if progress.attention > 0 {
                         HStack(spacing: 5) {
                             Icon("alert", size: 12, weight: .semibold)
-                            Text(TicketDetailLogic.waitingOnYou(progress.attention)).font(.system(size: 13.5))
+                            Text(TicketDetailLogic.waitingOnYou(progress.attention)).font(.scaled(size: 13.5))
                         }
                         .foregroundStyle(c.red)
                     }
@@ -58,8 +58,8 @@ struct TicketDetailChildrenTab: View {
                     VStack(alignment: .leading, spacing: 7) {
                         HStack(spacing: 7) {
                             StatusDot(status: group.status)
-                            Text(statusLabel(group.status)).font(.system(size: 14, weight: .semibold)).foregroundStyle(c.text)
-                            Text("\(group.tickets.count)").font(.system(size: 13)).foregroundStyle(c.text3)
+                            Text(statusLabel(group.status)).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(c.text)
+                            Text("\(group.tickets.count)").font(.scaled(size: 13)).foregroundStyle(c.text3)
                         }
                         .padding(.horizontal, 2)
                         .accessibilityElement(children: .combine)
@@ -118,7 +118,7 @@ private struct TicketDetailChildRow: View {
             HStack(spacing: 7) {
                 TicketKeyLabel(ticket: child).fixedSize()
                 Text(child.title.isEmpty ? "Untitled" : child.title)
-                    .font(.system(size: 14.5, weight: .medium))
+                    .font(.scaled(size: 14.5, weight: .medium))
                     .foregroundStyle(c.text)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,13 +132,13 @@ private struct TicketDetailChildRow: View {
             }
             if let approval = child.pendingApproval {
                 Text("\(Image(icon: "lock")) Needs approval: \(Text(Format.shortToolName(approval.toolName)).font(.mono(13)))")
-                    .font(.system(size: 13))
+                    .font(.scaled(size: 13))
                     .foregroundStyle(c.amber)
             } else if child.status == .blocked {
                 Text(child.blockedReason.flatMap { $0.isEmpty ? nil : $0 } ?? "Blocked")
-                    .font(.system(size: 13)).foregroundStyle(c.red).lineLimit(3)
+                    .font(.scaled(size: 13)).foregroundStyle(c.red).lineLimit(3)
             } else if let summary = state.latestSummary(child.sessionId) {
-                Text(Markdown.plainText(summary.body)).font(.system(size: 13)).foregroundStyle(c.text2).lineLimit(2)
+                Text(Markdown.plainText(summary.body)).font(.scaled(size: 13)).foregroundStyle(c.text2).lineLimit(2)
             }
             if !deps.isEmpty || showDriver || child.model != nil {
                 HStack(alignment: .center, spacing: 5) {

@@ -18,7 +18,7 @@ struct TriageScreen: View {
                 let dispatched = InboxLogic.dispatchedTicket(state, session)
                 VStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text(session.title).font(.system(size: 19, weight: .bold)).foregroundStyle(c.text)
+                        Text(session.title).font(.scaled(size: 19, weight: .bold)).foregroundStyle(c.text)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         HStack(spacing: 6) {
                             InboxTriageBadge(session: session)

@@ -75,14 +75,14 @@ private struct InboxSessionRow: View {
                 HStack {
                     Text(s.key).font(.mono(12.5)).foregroundStyle(c.text3)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(Format.relativeTime(s.createdAt, now: now)).font(.system(size: 12.5)).foregroundStyle(c.text3)
+                    Text(Format.relativeTime(s.createdAt, now: now)).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                 }
-                Text(s.title.isEmpty ? "Untitled item" : s.title).font(.system(size: 16, weight: .medium)).foregroundStyle(c.text)
+                Text(s.title.isEmpty ? "Untitled item" : s.title).font(.scaled(size: 16, weight: .medium)).foregroundStyle(c.text)
                     .lineLimit(2).multilineTextAlignment(.leading)
                 HStack(spacing: 8) {
                     InboxTriageBadge(session: s)
                     if let outcome = s.outcome, !outcome.isEmpty {
-                        Text(outcome).font(.system(size: 13)).foregroundStyle(c.text3).lineLimit(1)
+                        Text(outcome).font(.scaled(size: 13)).foregroundStyle(c.text3).lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -118,7 +118,7 @@ private struct InboxWatcherRow: View {
             Button(action: edit) {
                 HStack(spacing: 8) {
                     Circle().fill(dot).frame(width: 8, height: 8)
-                    Text(w.name).font(.system(size: 15, weight: .medium)).foregroundStyle(c.text).lineLimit(1)
+                    Text(w.name).font(.scaled(size: 15, weight: .medium)).foregroundStyle(c.text).lineLimit(1)
                     Badge(InboxLogic.scheduleLabel(w))
                     Spacer(minLength: 0)
                     Badge(s.label, tone: Tone(rawValue: s.tone.rawValue) ?? .neutral)
@@ -127,7 +127,7 @@ private struct InboxWatcherRow: View {
             }
             .buttonStyle(.plain)
             HStack(spacing: 8) {
-                Text(s.detail).font(.system(size: 12.5)).foregroundStyle(c.text3).lineLimit(1)
+                Text(s.detail).font(.scaled(size: 12.5)).foregroundStyle(c.text3).lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(.rect)
                     .onTapGesture(perform: edit)

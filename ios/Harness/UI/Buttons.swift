@@ -25,7 +25,7 @@ struct HarnessButtonStyle: ButtonStyle {
         case .dangerSolid: (c.redSolid, c.onDanger, c.redSolid)
         }
         configuration.label
-            .font(.system(size: small ? 14 : 15, weight: .semibold))
+            .font(.scaled(size: small ? 14 : 15, weight: .semibold))
             .lineLimit(1)
             .foregroundStyle(fg)
             .padding(.horizontal, small ? 10 : 14)

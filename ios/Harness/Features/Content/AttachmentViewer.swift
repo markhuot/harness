@@ -126,7 +126,7 @@ private struct AttachmentViewerHeader: View {
         HStack(spacing: 8) {
             Button(action: close) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.scaled(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(.white.opacity(0.14), in: .circle)
@@ -136,10 +136,10 @@ private struct AttachmentViewerHeader: View {
             VStack(spacing: 1) {
                 if let current {
                     Text(current.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.scaled(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                     Text((attachments.count > 1 ? "\(index + 1) of \(attachments.count) · " : "") + Attachments.formatSize(Double(current.size)))
-                        .font(.system(size: 12.5))
+                        .font(.scaled(size: 12.5))
                         .foregroundStyle(.white.opacity(0.6))
                 }
             }
@@ -248,6 +248,9 @@ final class AttachmentPlayerHolder {
         vc.canStartPictureInPictureAutomaticallyFromInline = false
         vc.showsPlaybackControls = true
         vc.videoGravity = .resizeAspect
+        // Live Text on video frames adds an interaction that can take a sideways swipe, which then
+        // doesn't page the viewer off the video.
+        vc.allowsVideoFrameAnalysis = false
         vc.view.backgroundColor = .clear
         made = vc
         return vc

@@ -25,7 +25,7 @@ private struct ChangesStatusBadge: View {
     var body: some View {
         let t = statusTone(status, c)
         Text(ChangesRows.statusLetter(status))
-            .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+            .font(.scaled(size: 10.5, weight: .bold, design: .monospaced))
             .foregroundStyle(t.fg)
             .frame(width: 18, height: 18)
             .background(t.bg, in: .rect(cornerRadius: 4))
@@ -46,7 +46,7 @@ private struct ChangesDecoration: View {
                     Text("+\(file.additions)").foregroundStyle(c.green) + Text(" −\(file.deletions)").foregroundStyle(c.red)
                 }
             }
-            .font(.system(size: 12, weight: .medium, design: .monospaced))
+            .font(.scaled(size: 12, weight: .medium, design: .monospaced))
             .lineLimit(1)
             .fixedSize()
         }
@@ -77,7 +77,7 @@ struct ChangesOverview: View {
                             .accessibilityLabel("\(model.viewedCount) of \(model.fingerprints.count) files viewed")
                     }
                 }
-                .font(.system(size: 13, weight: .medium))
+                .font(.scaled(size: 13, weight: .medium))
                 .accessibilityElement(children: .combine)
             }
             HStack(spacing: 8) {
@@ -90,7 +90,7 @@ struct ChangesOverview: View {
                             Text(ChangesRows.plural(commits.count, "commit"))
                             if !commits.isEmpty { Icon("chevronDown", size: 10).rotationEffect(.degrees(model.showCommits ? 180 : 0)) }
                         }
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.scaled(size: 13, weight: .medium))
                         .foregroundStyle(model.showCommits ? c.accentText : c.text2)
                         .padding(.horizontal, 10)
                         .frame(height: 30)
@@ -118,7 +118,7 @@ struct ChangesOverview: View {
             }
             if model.chosenStyle == .split && model.style(width: Double(width)) == .unified {
                 Text("Split needs a wider screen, so this shows unified.")
-                    .font(.system(size: 12))
+                    .font(.scaled(size: 12))
                     .foregroundStyle(c.text3)
             }
             if model.showCommits && !commits.isEmpty { commitList(commits) }
@@ -159,7 +159,7 @@ struct ChangesOverview: View {
                 ref(changes?.branch ?? "HEAD")
             }
         }
-        .font(.system(size: 13))
+        .font(.scaled(size: 13))
         .lineLimit(1)
         .accessibilityElement(children: .combine)
     }
@@ -185,7 +185,7 @@ struct ChangesOverview: View {
                     model.setStyle(s)
                 } label: {
                     Text(s == .unified ? "Unified" : "Split")
-                        .font(.system(size: 12.5, weight: on ? .semibold : .medium))
+                        .font(.scaled(size: 12.5, weight: on ? .semibold : .medium))
                         .foregroundStyle(on ? c.text : c.text2)
                         .padding(.horizontal, 9)
                         .frame(height: 26)
@@ -206,10 +206,10 @@ struct ChangesOverview: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(commit.shortSha).font(.mono(12, weight: .medium)).foregroundStyle(c.accentText)
-                        Text(commit.subject).font(.system(size: 13.5)).foregroundStyle(c.text).lineLimit(2)
+                        Text(commit.subject).font(.scaled(size: 13.5)).foregroundStyle(c.text).lineLimit(2)
                     }
                     Text("\(commit.author) · \(ChangesRows.relTime(commit.date, now: now))")
-                        .font(.system(size: 12))
+                        .font(.scaled(size: 12))
                         .foregroundStyle(c.text3)
                 }
                 // Touch and hold to select and copy a sha or subject.
@@ -309,9 +309,9 @@ struct ChangesFileHeader: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: viewed ? "checkmark.square.fill" : "square")
-                        .font(.system(size: 14))
+                        .font(.scaled(size: 14))
                         .foregroundStyle(viewed ? c.accent : c.text3)
-                    Text("Viewed").font(.system(size: 12.5, weight: .medium)).foregroundStyle(viewed ? c.text : c.text2)
+                    Text("Viewed").font(.scaled(size: 12.5, weight: .medium)).foregroundStyle(viewed ? c.text : c.text2)
                 }
                 .padding(.horizontal, 7)
                 .frame(height: 28)
@@ -350,7 +350,7 @@ struct ChangesGapRow: View {
             HStack(spacing: 8) {
                 if loading { Spinner().controlSize(.mini) } else { Icon("expand", size: 11).foregroundStyle(c.accentText) }
                 Text(gap.count.map { ChangesRows.plural($0, "unmodified line") } ?? "Lines below")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.scaled(size: 12, weight: .medium))
                     .foregroundStyle(c.accentText)
                 if let ctx = gap.context, !ctx.isEmpty {
                     Text(ctx).font(.mono(11.5)).foregroundStyle(c.text3).lineLimit(1)

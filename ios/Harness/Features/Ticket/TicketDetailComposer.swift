@@ -36,11 +36,11 @@ struct TicketDetailComposer: View {
                         .tint(c.accent)
                         .scaleEffect(0.75)
                         .frame(width: 40)
-                        Text(switchLabel).font(.system(size: 13)).foregroundStyle(c.text2).accessibilityHidden(true)
+                        Text(switchLabel).font(.scaled(size: 13)).foregroundStyle(c.text2).accessibilityHidden(true)
                     }
                     if !hint.isEmpty {
                         Text(hint)
-                            .font(.system(size: 12))
+                            .font(.scaled(size: 12))
                             .foregroundStyle(c.text3)
                             .lineLimit(1)
                             .frame(maxWidth: .infinity, alignment: switchLabel != nil ? .trailing : .leading)

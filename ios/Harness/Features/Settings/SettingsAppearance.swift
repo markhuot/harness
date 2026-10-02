@@ -99,7 +99,7 @@ struct SettingsThemeSwatch: View {
                 HStack(spacing: 3) {
                     if selected { Icon("check", size: 11, weight: .bold).foregroundStyle(c.accentText) }
                     Text(theme.name)
-                        .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                        .font(.scaled(size: 12, weight: selected ? .semibold : .regular))
                         .foregroundStyle(selected ? c.text : c.text2)
                         .lineLimit(1)
                 }

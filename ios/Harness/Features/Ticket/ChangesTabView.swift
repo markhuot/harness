@@ -50,7 +50,7 @@ private struct ChangesLoading: View {
     var body: some View {
         VStack(spacing: 10) {
             Spinner()
-            Text("Loading changes…").font(.system(size: 14)).foregroundStyle(c.text2)
+            Text("Loading changes…").font(.scaled(size: 14)).foregroundStyle(c.text2)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 40)
@@ -229,7 +229,7 @@ private struct ChangesTabContent: View {
                 .padding(.top, 14)
         case let .placeholder(_, text):
             Text(text)
-                .font(.system(size: 13))
+                .font(.scaled(size: 13))
                 .foregroundStyle(c.text3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)

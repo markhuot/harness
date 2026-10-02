@@ -27,7 +27,7 @@ struct Badge: View {
         HStack(spacing: 4) {
             if let icon { Icon(icon, size: 11, weight: .semibold).foregroundStyle(iconColor ?? t.fg) }
             if let text {
-                Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(t.fg).lineLimit(1)
+                Text(text).font(.scaled(size: 12, weight: .medium)).foregroundStyle(t.fg).lineLimit(1)
             }
         }
         .padding(.horizontal, 7)
@@ -57,7 +57,7 @@ struct StatusPill: View {
     var body: some View {
         HStack(spacing: 6) {
             StatusDot(status: status)
-            Text(statusLabel(status)).font(.system(size: 12.5, weight: .medium)).foregroundStyle(c.text2)
+            Text(statusLabel(status)).font(.scaled(size: 12.5, weight: .medium)).foregroundStyle(c.text2)
         }
         .padding(.horizontal, 9)
         .frame(height: 24)
@@ -90,7 +90,7 @@ struct ProjectKeyBadge: View {
         case .lg: (24, 11, 34)
         }
         Text(String(key_.prefix(3)))
-            .font(.system(size: fs, weight: .bold))
+            .font(.scaled(size: fs, weight: .bold))
             .tracking(0.3)
             .foregroundStyle(Color(css: colors.fg) ?? c.accentText)
             .padding(.horizontal, 3)
@@ -188,7 +188,7 @@ struct DepChip: View {
         let chip = HStack(spacing: 4) {
             if !unknown {
                 Icon(done ? "check" : "clock", size: 9, weight: done ? .heavy : .semibold).foregroundStyle(done ? c.green : c.text2)
-                if let prefix { Text(prefix).font(.system(size: 11.5)).foregroundStyle(c.text3) }
+                if let prefix { Text(prefix).font(.scaled(size: 11.5)).foregroundStyle(c.text3) }
             }
             Text(label).font(.mono(11.5)).foregroundStyle(done ? c.green : c.text2)
         }
