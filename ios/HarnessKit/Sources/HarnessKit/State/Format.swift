@@ -130,7 +130,7 @@ public enum Format {
 
     // MARK: Tools, approvals, permissions
 
-    /// mcp__harness__post_summary → post_summary (`/^mcp__[^_]+__/`)
+    /// mcp__harness__post_note → post_note (`/^mcp__[^_]+__/`)
     public static func shortToolName(_ name: String) -> String {
         let s = Array(name.unicodeScalars)
         let head = Array("mcp__".unicodeScalars)
@@ -293,7 +293,7 @@ public enum Format {
         return items
     }
 
-    static let previewKeys = ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "summary", "expression", "text"]
+    static let previewKeys = ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "note", "expression", "text"]
 
     /// One-line preview of a tool input, e.g. the bash command or file path.
     ///

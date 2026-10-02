@@ -30,6 +30,15 @@ public enum ChangesTab {
         return TicketTab(t) == .changes || Tabs.isTicketTab(t)
     }
 
+    /// Tabs.ticketTabFrom, plus "changes" (and "plugin:git:changes" normalized to it): a tab id from
+    /// a link, a saved route or a window's userInfo, renamed ids ("summaries") mapped to their new
+    /// tab, nil when it isn't one.
+    public static func ticketTabFrom(_ t: String?) -> TicketTab? {
+        guard let t else { return nil }
+        if TicketTab(t) == .changes { return .changes }
+        return Tabs.ticketTabFrom(t).map(normalize)
+    }
+
     /// The ticket's plugin tabs without git:changes, which the built-in tab replaces. Nil stays nil
     /// (not loaded yet).
     public static func otherPluginTabs(_ tabs: [PluginTab]?) -> [PluginTab]? {
@@ -56,11 +65,11 @@ public enum ChangesTab {
     }
 
     /// Tabs.effectiveTab with the built-in Changes tab: shown while it applies (and while the plugin
-    /// tabs that could say it does aren't loaded yet), else Summaries.
+    /// tabs that could say it does aren't loaded yet), else the Spec.
     public static func effectiveTab(_ requested: TicketTab, conductor: Bool, workdir: String?, pluginTabs: [PluginTab]?, subagents: [Subagent]? = nil) -> TicketTab {
         let tab = normalize(requested)
         if tab == .changes {
-            return shows(workdir: workdir, pluginTabs: pluginTabs) || pluginTabs == nil ? .changes : .summaries
+            return shows(workdir: workdir, pluginTabs: pluginTabs) || pluginTabs == nil ? .changes : .spec
         }
         return Tabs.effectiveTab(tab, conductor: conductor, pluginTabs: otherPluginTabs(pluginTabs), subagents: subagents)
     }

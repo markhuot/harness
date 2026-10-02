@@ -43,8 +43,8 @@ enum BoardProbe {
     /// Every probe this runner knows; checked against PROBE_NAMES in board.ts.
     static let names = [
         "boardColumns", "canLoadMoreDone", "canLoadMoreSearch", "childrenOf", "composerProject", "conductorsNeedingChildren",
-        "defaultDriverOf", "dependencyStates", "dependentsOf", "doneColumn", "doneCount", "hasCustomDriver", "latestSummary",
-        "liveDelta", "matchesQuery", "needsFirstDonePage", "searchColumns", "searchStatusText", "sortedProjects",
+        "defaultDriverOf", "dependencyStates", "dependentsOf", "doneColumn", "doneCount", "hasCustomDriver", "latestActivity",
+        "liveDelta", "matchesQuery", "needsFirstDonePage", "searchColumns", "searchStatusText", "sortedProjects", "specBody", "specRevisions",
         "subagentById", "subagentPath", "subagentTranscript", "subagentsOf", "taskOutputOf", "ticketByKey", "ticketLinkable",
         "ticketsForProject", "transcript", "triageSessions", "unresolvedKeys",
     ].sorted()
@@ -88,7 +88,11 @@ enum BoardProbe {
             let t = s.tickets[try arg(0, String.self)]!
             return .array(s.dependentsOf(t).map { .object(["key": .string($0.key), "ticket": id($0.ticket)]) })
         case "liveDelta": return .array(s.liveDelta(try arg(0)).map { .object(["runId": .string($0.runId), "text": .string($0.text)]) })
-        case "latestSummary": return opt(s.latestSummary(try arg(0))?.id)
+        case "latestActivity": return opt(s.latestActivity(try arg(0), kinds: args.count > 1 ? try arg(1, [ActivityKind].self) : nil)?.id)
+        case "specBody": return opt(s.specBody(try arg(0), rev: try arg(1)))
+        case "specRevisions":
+            guard let list = s.specRevisions[try arg(0, String.self)] else { return .null }
+            return .array(list.map { .object(["rev": .number(Double($0.rev)), "approvedBaseline": .bool($0.approvedBaseline)]) })
         case "triageSessions": return strings(s.triageSessions().map(\.id))
         case "defaultDriverOf": return opt(s.defaultDriverOf(try arg(0)))
         case "hasCustomDriver": return .bool(s.hasCustomDriver(try arg(0, Ticket.self)))
@@ -171,7 +175,7 @@ struct ReducerScenarioTests {
 
     @Test(arguments: Fixture.cases("stateReducer", "isReadyCases", input: ReadyInput.self, output: Bool.self))
     func isReady(_ c: Fixture.Case<ReadyInput, Bool>) {
-        let t = Ticket(id: "t", key: "T", projectId: "p1", title: "t", description: "", status: c.input.status, sessionId: "s", driver: "dummy",
+        let t = Ticket(id: "t", key: "T", projectId: "p1", title: "t", spec: "", status: c.input.status, sessionId: "s", driver: "dummy",
                        agentReview: c.input.agentReview, humanReview: c.input.humanReview, createdAt: 0, updatedAt: 0)
         #expect(BoardState.isReady(t) == c.output)
     }

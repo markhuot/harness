@@ -154,7 +154,7 @@ struct PluginHostEndToEndTests {
         #expect(initMsg?["theme"]?.stringValue == "dark")
 
         s.bridge.sendTheme(.appearance(.light))
-        let ticket = Ticket(id: "t", key: "HELLO-1", projectId: "p", title: "T", description: "", status: .done, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
+        let ticket = Ticket(id: "t", key: "HELLO-1", projectId: "p", title: "T", spec: "", status: .done, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
         s.bridge.sendTicket(ticket)
         var other = ticket
         other.key = "OTHER-2"

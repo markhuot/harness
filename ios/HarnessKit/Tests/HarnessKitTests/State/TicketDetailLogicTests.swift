@@ -6,7 +6,7 @@ import Testing
 struct TicketDetailLogicTests {
     static func ticket(_ status: TicketStatus, externalRef: ExternalRef? = nil, completionAction: Patch<CompletionAction> = .absent,
                        completionInstructions: Patch<String> = .absent) -> Ticket {
-        Ticket(id: "t1", key: "GREET-1", projectId: "p1", title: "Hi", description: "", status: status, sessionId: "s1", driver: "dummy",
+        Ticket(id: "t1", key: "GREET-1", projectId: "p1", title: "Hi", spec: "", status: status, sessionId: "s1", driver: "dummy",
                externalRef: externalRef, completionAction: completionAction, completionInstructions: completionInstructions,
                createdAt: 1, updatedAt: 1)
     }

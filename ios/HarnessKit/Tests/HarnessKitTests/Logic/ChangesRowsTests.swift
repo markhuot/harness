@@ -220,23 +220,23 @@ import Testing
         #expect(ChangesTab.effectiveTab("plugin:git:changes", conductor: false, workdir: "/w", pluginTabs: [Self.git]) == .changes)
         // Plugin tabs not loaded yet: keep it, they may say the diff was pinned.
         #expect(ChangesTab.effectiveTab(.changes, conductor: false, workdir: nil, pluginTabs: nil) == .changes)
-        #expect(ChangesTab.effectiveTab(.changes, conductor: false, workdir: nil, pluginTabs: [Self.other]) == .summaries)
+        #expect(ChangesTab.effectiveTab(.changes, conductor: false, workdir: nil, pluginTabs: [Self.other]) == .spec)
         #expect(ChangesTab.effectiveTab(.changes, conductor: false, workdir: nil, pluginTabs: [Self.git]) == .changes)
         // Other tabs go through Tabs.effectiveTab, which no longer sees git:changes as a plugin tab.
-        #expect(ChangesTab.effectiveTab("plugin:notes:list", conductor: false, workdir: nil, pluginTabs: [Self.git]) == .summaries)
+        #expect(ChangesTab.effectiveTab("plugin:notes:list", conductor: false, workdir: nil, pluginTabs: [Self.git]) == .spec)
         #expect(ChangesTab.effectiveTab("plugin:notes:list", conductor: false, workdir: nil, pluginTabs: [Self.other]) == "plugin:notes:list")
-        #expect(ChangesTab.effectiveTab(.children, conductor: false, workdir: "/w", pluginTabs: nil) == .summaries)
+        #expect(ChangesTab.effectiveTab(.children, conductor: false, workdir: "/w", pluginTabs: nil) == .spec)
     }
 
     @Test func visibleTabsPutChangesBeforeDetails() {
         #expect(ChangesTab.visibleTabs(conductor: false, workdir: "/w", subagents: nil, pluginTabs: [Self.git, Self.other])
-            == [.summaries, .transcript, .browser, .changes, .details, "plugin:notes:list"])
+            == [.spec, .activity, .transcript, .browser, .changes, .details, "plugin:notes:list"])
         #expect(ChangesTab.visibleTabs(conductor: false, workdir: nil, subagents: nil, pluginTabs: [Self.other])
-            == [.summaries, .transcript, .browser, .details, "plugin:notes:list"])
+            == [.spec, .activity, .transcript, .browser, .details, "plugin:notes:list"])
         #expect(ChangesTab.visibleTabs(conductor: false, workdir: "/w", subagents: nil, pluginTabs: [Self.other])
-            == [.summaries, .transcript, .browser, .details, "plugin:notes:list"])
+            == [.spec, .activity, .transcript, .browser, .details, "plugin:notes:list"])
         #expect(ChangesTab.visibleTabs(conductor: false, workdir: "/w", subagents: nil, pluginTabs: nil)
-            == [.summaries, .transcript, .browser, .changes, .details])
+            == [.spec, .activity, .transcript, .browser, .changes, .details])
     }
 
     @Test func styleFallsBackOnNarrowScreensButKeepsTheChoice() {

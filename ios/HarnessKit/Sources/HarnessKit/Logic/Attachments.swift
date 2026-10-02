@@ -1,7 +1,7 @@
 import Foundation
 
 // A port of shared/src/state/attachments.ts (thumbnail boxes, lightbox stepping, the count label),
-// plus the iPhone's own layout: thumbnail sizes in the Summaries tab, fitting, paging and
+// plus the iPhone's own layout: thumbnail sizes in the spec, fitting, paging and
 // swipe-to-close in the full-screen viewer. Pure layout math: points in, points out.
 //
 // FileViewer.formatSize and Attachments.formatSize are deliberately different (one keeps
@@ -20,7 +20,7 @@ public struct AttachmentDimensions: Codable, Equatable, Sendable {
         self.height = height
     }
 
-    public init(_ a: SummaryAttachment) {
+    public init(_ a: Attachment) {
         self.init(kind: a.kind, width: a.width.map(Double.init), height: a.height.map(Double.init))
     }
 
@@ -58,7 +58,7 @@ public enum Attachments {
         return AttachmentSize(width: JSCompat.round(height * aspect), height: height)
     }
 
-    public static func thumbnailBox(_ a: SummaryAttachment, height: Double) -> AttachmentSize {
+    public static func thumbnailBox(_ a: Attachment, height: Double) -> AttachmentSize {
         thumbnailBox(AttachmentDimensions(a), height: height)
     }
 
@@ -77,7 +77,7 @@ public enum Attachments {
         return [part(images, "image"), part(videos, "video")].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
-    public static func attachmentsLabel(_ list: [SummaryAttachment]) -> String {
+    public static func attachmentsLabel(_ list: [Attachment]) -> String {
         attachmentsLabel(list.map(\.kind))
     }
 
@@ -110,7 +110,7 @@ public enum Attachments {
         return AttachmentSize(width: width, height: t.height)
     }
 
-    public static func thumbSize(_ a: SummaryAttachment, metrics t: ThumbMetrics = thumb) -> AttachmentSize {
+    public static func thumbSize(_ a: Attachment, metrics t: ThumbMetrics = thumb) -> AttachmentSize {
         thumbSize(AttachmentDimensions(a), metrics: t)
     }
 
@@ -124,7 +124,7 @@ public enum Attachments {
         return AttachmentSize(width: JSCompat.round(width), height: JSCompat.round(width / ratio))
     }
 
-    public static func fitSize(_ a: SummaryAttachment, in box: AttachmentSize) -> AttachmentSize {
+    public static func fitSize(_ a: Attachment, in box: AttachmentSize) -> AttachmentSize {
         fitSize(AttachmentDimensions(a), in: box)
     }
 

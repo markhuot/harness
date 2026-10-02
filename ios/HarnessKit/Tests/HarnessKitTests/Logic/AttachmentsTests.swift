@@ -141,10 +141,10 @@ struct AttachmentsTests {
         #expect(Attachments.formatSize(.infinity) == "")
     }
 
-    @Test("SummaryAttachment overloads read its kind and pixel size")
-    func summaryAttachmentOverloads() {
-        let video = SummaryAttachment(id: "1", kind: .video, mimeType: "video/mp4", name: "a.mp4", size: 1)
-        let wide = SummaryAttachment(id: "2", kind: .image, mimeType: "image/png", name: "a.png", size: 1, width: 2000, height: 1000)
+    @Test("Attachment overloads read its kind and pixel size")
+    func attachmentOverloads() {
+        let video = Attachment(id: "1", kind: .video, mimeType: "video/mp4", name: "a.mp4", size: 1)
+        let wide = Attachment(id: "2", kind: .image, mimeType: "image/png", name: "a.png", size: 1, width: 2000, height: 1000)
         #expect(Attachments.thumbSize(video).width == 213)
         #expect(Attachments.thumbSize(wide).width == 240)
         #expect(Attachments.thumbnailBox(wide, height: 100).width == 200)

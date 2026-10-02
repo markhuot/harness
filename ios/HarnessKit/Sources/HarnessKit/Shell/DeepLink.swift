@@ -105,7 +105,7 @@ public enum DeepLink: Equatable, Sendable {
         case "ticket":
             guard let key = tail.first, !key.isEmpty else { return nil }
             // Changes is a built-in tab here; "plugin:git:changes" links open it.
-            let tab = param("tab").flatMap { ChangesTab.isTicketTab($0) ? ChangesTab.normalize(TicketTab($0)) : nil }
+            let tab = ChangesTab.ticketTabFrom(param("tab"))
             return .push(.ticket(key: key, tab: tab))
         case "project":
             guard let id = tail.first, !id.isEmpty else { return nil }

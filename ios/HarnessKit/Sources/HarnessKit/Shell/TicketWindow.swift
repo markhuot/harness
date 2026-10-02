@@ -35,10 +35,10 @@ public struct TicketWindowValue: Codable, Hashable, Sendable {
     }
 
     /// Back from an activity's userInfo; nil without a key. An unknown tab is dropped, as a
-    /// link's is (Tabs.isTicketTab).
+    /// link's is, and a renamed one maps to its new tab (ChangesTab.ticketTabFrom).
     public init?(userInfo: [AnyHashable: Any]?) {
         guard let key = (userInfo?["key"] as? String)?.trimmingCharacters(in: .whitespaces), !key.isEmpty else { return nil }
-        let tab = (userInfo?["tab"] as? String).flatMap { ChangesTab.isTicketTab($0) ? ChangesTab.normalize(TicketTab($0)) : nil }
+        let tab = ChangesTab.ticketTabFrom(userInfo?["tab"] as? String)
         self.init(key: key, tab: tab)
     }
 }

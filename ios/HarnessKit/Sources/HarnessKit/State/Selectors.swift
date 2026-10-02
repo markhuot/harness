@@ -98,9 +98,18 @@ extension BoardState {
         return order.compactMap { out[$0] }.sorted { BoardState.numericLess($0.key, $1.key) }
     }
 
-    /// The newest summary of a session.
-    public func latestSummary(_ sessionId: String) -> Summary? {
-        summaries[sessionId]?.last
+    /// The session's newest Activity entry, or with `kinds` the newest of those kinds.
+    public func latestActivity(_ sessionId: String, kinds: [ActivityKind]? = nil) -> ActivityEntry? {
+        let list = activity[sessionId] ?? []
+        guard let kinds else { return list.last }
+        return list.last { kinds.contains($0.kind) }
+    }
+
+    /// The body of a ticket's spec revision when it's known: the current one from the ticket
+    /// itself, an earlier one once fetched (`.specRevision`). nil means fetch it.
+    public func specBody(_ ticketId: String, rev: Int) -> String? {
+        if let t = tickets[ticketId], (t.specRevision ?? 1) == rev { return t.spec }
+        return specBodies[Self.specBodyKey(ticketId, rev)]
     }
 
     /// In-flight text for a session (normally one run at a time), by run id.

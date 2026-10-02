@@ -83,8 +83,8 @@ public enum TicketDetailLogic {
 
     // MARK: Tabs
 
-    /// A summary's author as the list names it.
-    public static func authorLabel(_ a: SummaryAuthor) -> String {
+    /// An Activity entry's author as the list names it.
+    public static func authorLabel(_ a: ActivityAuthor) -> String {
         switch a {
         case .agent: "Agent"
         case .human: "You"

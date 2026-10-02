@@ -1,6 +1,6 @@
 import Foundation
 
-// Port of shared/src/state/markdown.ts. Markdown-ish parsing for agent summaries and transcript
+// Port of shared/src/state/markdown.ts. Markdown-ish parsing for specs, Activity and transcript
 // text: paragraphs, headings, nested bullet / numbered lists, fenced code, quotes, rules, GFM pipe
 // tables, attachment images and videos, and inline code / bold / italic / links / images. Pure: each client renders the blocks and tokens with its
 // own primitives (DOM on desktop, Text on iOS), so agent output can never inject markup.

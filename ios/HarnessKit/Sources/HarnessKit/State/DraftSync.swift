@@ -244,11 +244,11 @@ public final class DraftSync {
     /// Save what's left, then launch it: start work now, or plan first.
     public func submit(start: Bool) async throws -> Ticket {
         if isClosed { throw DraftSyncError.closed }
-        // The brief launches trimmed (a picked @mention leaves a trailing space).
-        let brief = JSCompat.trim(local.description)
-        if !Branches.jsEqual(brief, local.description) {
+        // The spec launches trimmed (a picked @mention leaves a trailing space).
+        let spec = JSCompat.trim(local.spec)
+        if !Branches.jsEqual(spec, local.spec) {
             var next = local
-            next.description = brief
+            next.spec = spec
             edit(next)
         }
         try await settle()

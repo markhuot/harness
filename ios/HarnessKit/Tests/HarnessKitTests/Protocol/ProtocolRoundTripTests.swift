@@ -30,8 +30,13 @@ struct ProtocolRoundTripTests {
         "TranscriptEntry": rt(TranscriptEntry.self),
         "Subagent": rt(Subagent.self),
         "TaskOutput": rt(TaskOutput.self),
-        "SummaryAttachment": rt(SummaryAttachment.self),
-        "Summary": rt(Summary.self),
+        "Attachment": rt(Attachment.self),
+        "ActivityMeta": rt(ActivityMeta.self),
+        "ActivityEntry": rt(ActivityEntry.self),
+        "SpecRevisionInfo": rt(SpecRevisionInfo.self),
+        "SpecRevision": rt(SpecRevision.self),
+        "SpecDiff": rt(SpecDiff.self),
+        "SpecConflict": rt(SpecConflict.self),
         "WatcherLive": rt(WatcherLive.self),
         "Watcher": rt(Watcher.self),
         "DriverInfo": rt(DriverInfo.self),
@@ -161,7 +166,9 @@ struct ProtocolRoundTripTests {
         "TranscriptRole": en(TranscriptRole.self),
         "SubagentStatus": en(SubagentStatus.self),
         "SubagentKind": en(SubagentKind.self),
-        "SummaryAuthor": en(SummaryAuthor.self),
+        "ActivityAuthor": en(ActivityAuthor.self),
+        "ActivityKind": en(ActivityKind.self),
+        "SpecRevisionAuthor": en(SpecRevisionAuthor.self),
         "AttachmentKind": en(AttachmentKind.self),
         "WatcherMode": en(WatcherMode.self),
         "WatcherLiveState": en(WatcherLiveState.self),
@@ -224,7 +231,7 @@ struct ProtocolRoundTripTests {
             #expect(Set(seen) == Set(expected), "\(name): samples decode to \(Set(seen).sorted()), TS declares \(expected.sorted())")
         }
         #expect(fixture["HarnessEvent"] == HarnessEvent.knownKinds)
-        #expect(HarnessEvent.knownKinds.count == 17)
+        #expect(HarnessEvent.knownKinds.count == 18)
     }
 
     // MARK: Forward compatibility
@@ -258,6 +265,10 @@ struct ProtocolRoundTripTests {
         "Run": {
             let r = try JSONDecoder().decode(Run.self, from: $0)
             return !r.kind.isKnown && !r.status.isKnown
+        },
+        "ActivityEntry": {
+            let e = try JSONDecoder().decode(ActivityEntry.self, from: $0)
+            return !e.kind.isKnown && !e.author.isKnown
         },
         "TranscriptEntry": { !(try JSONDecoder().decode(TranscriptEntry.self, from: $0)).role.isKnown },
         "PublicSettings": {

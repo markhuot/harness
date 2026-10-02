@@ -61,7 +61,7 @@ private func msg(_ d: [String: Any]) -> JSONValue {
 private let readyMsg: JSONValue = msg(["type": "harness:ready"])
 
 private func sampleTicket(key: String, busy: Bool = false) -> Ticket {
-    Ticket(id: "t", key: key, projectId: "p", title: "T", description: "", status: .planning, sessionId: "s", driver: "claude-code", busy: busy, createdAt: 0, updatedAt: 0)
+    Ticket(id: "t", key: key, projectId: "p", title: "T", spec: "", status: .planning, sessionId: "s", driver: "claude-code", busy: busy, createdAt: 0, updatedAt: 0)
 }
 
 // MARK: - Direct ports of pluginBridge.test.ts

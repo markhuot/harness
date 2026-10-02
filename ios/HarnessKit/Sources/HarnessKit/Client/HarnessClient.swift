@@ -163,8 +163,8 @@ public final class HarnessClient: Sendable {
         return try await request("GET", "/tickets/page\(query)")
     }
 
-    /// Search every status: key (current or pre-rename, exact/prefix), title, description and the
-    /// latest summary. Key matches rank first, then title, then the rest; newest first within a rank.
+    /// Search every status: key (current or pre-rename, exact/prefix), title, spec and the
+    /// latest Activity note. Key matches rank first, then title, then the rest; newest first within a rank.
     /// An empty/whitespace `q` is a 400.
     public func searchTickets(q: String, projectId: String? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> TicketPage {
         let query = Query.build([("q", .str(q)), ("projectId", .str(projectId)), ("limit", .int(limit)), ("cursor", .str(cursor))])
@@ -180,6 +180,8 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/tickets/\(key)")
     }
 
+    /// A PATCH with `spec` needs `baseRevision` (outside drafts). When the spec moved on since, it
+    /// throws a HarnessAPIError of status 409 whose `specConflict` is set.
     public func updateTicket(_ key: String, _ body: UpdateTicketBody) async throws -> Ticket {
         try await request("PATCH", "/tickets/\(key)", body: body)
     }
@@ -197,9 +199,10 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/submit", body: body)
     }
 
-    /// `move` is only sent when true.
-    public func sendMessage(_ key: String, text: String, move: Bool = false) async throws -> Ticket {
-        try await request("POST", "/tickets/\(key)/messages", body: MessageBody(text: text, move: move ? true : nil))
+    /// `move` and `log` are only sent when true. `log`: the message (and the agent's answer) also go
+    /// into Activity; send true from the Spec and Activity tabs (`Tabs.logsMessages`).
+    public func sendMessage(_ key: String, text: String, move: Bool = false, log: Bool = false) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/messages", body: MessageBody(text: text, move: move ? true : nil, log: log ? true : nil))
     }
 
     public func humanReview(_ key: String, _ body: HumanReviewBody) async throws -> Ticket {
@@ -253,11 +256,26 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/tickets/\(key)/file/diff\(Query.build([("path", .str(path))]))")
     }
 
-    public func listSummaries(_ key: String) async throws -> [Summary] {
-        try await request("GET", "/tickets/\(key)/summaries")
+    public func listActivity(_ key: String) async throws -> [ActivityEntry] {
+        try await request("GET", "/tickets/\(key)/activity")
     }
 
-    /// Absolute URL of a summary attachment, token in the query so an image or video view can load it.
+    /// Every spec revision's metadata, oldest first (no bodies).
+    public func specRevisions(_ key: String) async throws -> [SpecRevisionInfo] {
+        try await request("GET", "/tickets/\(key)/spec/revisions")
+    }
+
+    /// One spec revision with its body.
+    public func specRevision(_ key: String, rev: Int) async throws -> SpecRevision {
+        try await request("GET", "/tickets/\(key)/spec/revisions/\(rev)")
+    }
+
+    /// The unified diff from revision `from` to `to` (`Diff.parse` reads it); "" when they're equal.
+    public func specDiff(_ key: String, from: Int, to: Int) async throws -> SpecDiff {
+        try await request("GET", "/tickets/\(key)/spec/revisions/\(to)\(Query.build([("diff", .int(from))]))")
+    }
+
+    /// Absolute URL of a ticket attachment (attachment:<id> in a spec), token in the query so an image or video view can load it.
     public func attachmentUrl(_ id: String) -> String {
         "\(baseUrl)/attachments/\(URIComponent.encode(id))?token=\(URIComponent.encode(token))"
     }

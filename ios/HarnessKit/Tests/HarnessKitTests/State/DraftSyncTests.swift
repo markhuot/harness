@@ -77,7 +77,7 @@ private final class FakeDraftAPI: DraftAPI {
         return try await answer {
             var t = Drafts.blankDraftTicket(project: DS.projects[body.projectId]!, settings: DS.settings, key: nextKey(body.projectId))
             t.id = "t1"
-            t.description = body.prompt
+            t.spec = body.spec
             t.kind = body.kind ?? .task
             t.skipAgentReview = body.skipAgentReview == true
             t.skipHumanReview = body.skipHumanReview == true
@@ -156,16 +156,16 @@ struct DraftSyncTests {
     @Test func nothingIsSentWhileEmptyAndTheFirstRealEditCreatesAtOnce() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "   "))
+        h.edit(UpdateTicketBody(spec: "   "))
         await h.wait(40)
         #expect(f.calls.isEmpty)
         #expect(h.sync.clean)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await DS.drain()
         #expect(f.ops == ["create"])
         let body = f.calls.first?.create
         #expect(body?.draft == true)
-        #expect(body?.prompt == "Fix it")
+        #expect(body?.spec == "Fix it")
         #expect(body?.projectId == "p1")
         #expect(h.sync.key == "WEB-4")
         // The first save went out with no timer.
@@ -175,52 +175,52 @@ struct DraftSyncTests {
     @Test func editsBeforeTheCreateGoesOutRideAlongInIt() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await h.sync.flush()
         #expect(f.ops == ["create"])
-        #expect(f.calls.first?.create?.prompt == "Fix it")
+        #expect(f.calls.first?.create?.spec == "Fix it")
     }
 
     @Test func laterEditsAreDebouncedIntoOnePatchOfOnlyWhatChanged() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        h.edit(UpdateTicketBody(description: "Fix it"))
-        h.edit(UpdateTicketBody(description: "Fix it now"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it now"))
         h.edit(UpdateTicketBody(skipAgentReview: true))
         await DS.drain()
         #expect(f.calls.count == 1)
         #expect(!h.sync.clean)
         await h.wait(40)
         #expect(f.ops == ["create", "update"])
-        #expect(f.calls[1].update == UpdateTicketBody(description: "Fix it now", skipAgentReview: true))
+        #expect(f.calls[1].update == UpdateTicketBody(spec: "Fix it now", skipAgentReview: true))
         #expect(h.sync.clean)
     }
 
     @Test func eachEditRestartsTheDebounce() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await h.wait(15)
-        h.edit(UpdateTicketBody(description: "Fix it now"))
+        h.edit(UpdateTicketBody(spec: "Fix it now"))
         await h.wait(19)
         #expect(f.ops == ["create"])
         #expect(h.timers.count == 1)
         await h.wait(1)
         #expect(f.ops == ["create", "update"])
-        #expect(f.calls[1].update == UpdateTicketBody(description: "Fix it now"))
+        #expect(f.calls[1].update == UpdateTicketBody(spec: "Fix it now"))
     }
 
     @Test func editsMadeWhileTheCreateIsOutFollowItAsAPatchNeverASecondCreate() async {
         let f = FakeDraftAPI(hold: true)
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await h.wait(40)
         // One request at a time: the PATCH waits behind the held create.
         #expect(f.ops == ["create"])
@@ -229,14 +229,14 @@ struct DraftSyncTests {
         f.release()
         await DS.drain()
         #expect(f.ops == ["create", "update"])
-        #expect(f.calls[1].update == UpdateTicketBody(description: "Fix it"))
+        #expect(f.calls[1].update == UpdateTicketBody(spec: "Fix it"))
         #expect(h.sync.clean)
     }
 
     @Test func movingToAnotherProjectAdoptsTheKeyTheServiceAnswersWith() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await DS.drain()
         h.edit(UpdateTicketBody(baseBranch: .null, branch: .null, useWorktree: .null, projectId: "p2"))
         await h.sync.flush()
@@ -247,40 +247,40 @@ struct DraftSyncTests {
         #expect(h.sync.local.key == "API-5")
         #expect(h.changes.last?.key == "API-5")
         // The next PATCH goes to the new key.
-        h.edit(UpdateTicketBody(description: "Fix it there"))
+        h.edit(UpdateTicketBody(spec: "Fix it there"))
         await h.sync.flush()
         #expect(f.calls[2].key == "API-5")
-        #expect(f.calls[2].update?.description == "Fix it there")
+        #expect(f.calls[2].update?.spec == "Fix it there")
     }
 
     @Test func anotherDevicesChangeAppliesOnlyWhileNothingIsUnsentAndNeverAnOlderCopy() async throws {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await DS.drain()
         var theirs = try #require(f.server)
-        theirs.description = "Their words"
+        theirs.spec = "Their words"
         theirs.updatedAt = 100
-        h.edit(UpdateTicketBody(description: "Mine"))
+        h.edit(UpdateTicketBody(spec: "Mine"))
         #expect(h.sync.incoming(theirs) == false)
-        #expect(h.sync.local.description == "Mine")
+        #expect(h.sync.local.spec == "Mine")
         await h.sync.flush()
         var older = theirs
         older.updatedAt = 1
         #expect(h.sync.incoming(older) == false)
         #expect(h.sync.incoming(theirs) == true)
-        #expect(h.sync.local.description == "Their words")
-        #expect(h.changes.last?.description == "Their words")
+        #expect(h.sync.local.spec == "Their words")
+        #expect(h.changes.last?.spec == "Their words")
     }
 
     @Test func incomingIsIgnoredBeforeTheFirstSaveAndAfterClosing() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
         var t = h.sync.local
-        t.description = "Elsewhere"
+        t.spec = "Elsewhere"
         t.updatedAt = 100
         #expect(h.sync.incoming(t) == false)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await DS.drain()
         h.sync.dispose()
         var later = f.server!
@@ -292,15 +292,15 @@ struct DraftSyncTests {
     @Test func submitSavesWhatsPendingFirstThenLaunchesTheSavedKey() async throws {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         let t = try await h.sync.submit(start: false)
         #expect(f.ops == ["create", "update", "plan"])
         #expect(f.calls[2].key == "WEB-4")
         #expect(t.status == .planning)
         #expect(h.sync.isClosed)
-        h.edit(UpdateTicketBody(description: "after"))
+        h.edit(UpdateTicketBody(spec: "after"))
         await h.wait(40)
         #expect(f.calls.count == 3)
     }
@@ -308,17 +308,17 @@ struct DraftSyncTests {
     @Test func submitLaunchesTheBriefTrimmed() async throws {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Summarize @README.md "))
+        h.edit(UpdateTicketBody(spec: "Summarize @README.md "))
         await DS.drain()
         _ = try await h.sync.submit(start: true)
         #expect(f.ops == ["create", "update", "start"])
-        #expect(f.calls[1].update == UpdateTicketBody(description: "Summarize @README.md"))
+        #expect(f.calls[1].update == UpdateTicketBody(spec: "Summarize @README.md"))
     }
 
     @Test func submitRefusesWhenASaveFailedInsteadOfLaunchingStaleSettings() async {
         let f = FakeDraftAPI(fail: true)
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await #expect(throws: DraftSyncError.notSaved) { _ = try await h.sync.submit(start: true) }
         #expect(DraftSyncError.notSaved.localizedDescription == "The draft couldn't be saved.")
         #expect(!h.errors.isEmpty)
@@ -329,7 +329,7 @@ struct DraftSyncTests {
     @Test func submitWithoutAPromptAsksForOne() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "  "))
+        h.edit(UpdateTicketBody(spec: "  "))
         await #expect(throws: DraftSyncError.noPrompt) { _ = try await h.sync.submit(start: true) }
         #expect(DraftSyncError.noPrompt.localizedDescription == "Write a prompt first.")
         #expect(f.calls.isEmpty)
@@ -338,7 +338,7 @@ struct DraftSyncTests {
     @Test func submitAfterClosingIsRefused() async throws {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         try await h.sync.close()
         await #expect(throws: DraftSyncError.closed) { _ = try await h.sync.submit(start: true) }
         #expect(DraftSyncError.closed.localizedDescription == "This draft is closed.")
@@ -348,18 +348,18 @@ struct DraftSyncTests {
     @Test func closingSavesPendingEditsAndASavedDraftEmptiedAgainIsDeletedInstead() async throws {
         let f = FakeDraftAPI()
         let a = Harness(f)
-        a.edit(UpdateTicketBody(description: "Fix"))
+        a.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        a.edit(UpdateTicketBody(description: "Fix it"))
+        a.edit(UpdateTicketBody(spec: "Fix it"))
         try await a.sync.close()
         #expect(f.ops == ["create", "update"])
         #expect(a.sync.isClosed)
 
         let g = FakeDraftAPI()
         let b = Harness(g)
-        b.edit(UpdateTicketBody(description: "Fix"))
+        b.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        b.edit(UpdateTicketBody(description: ""))
+        b.edit(UpdateTicketBody(spec: ""))
         try await b.sync.close()
         #expect(g.ops == ["create", "remove"])
         #expect(g.calls[1].key == "WEB-4")
@@ -370,9 +370,9 @@ struct DraftSyncTests {
         try await Harness(f).sync.discard()
         #expect(f.calls.isEmpty)
         var saved = Drafts.blankDraftTicket(project: DS.projects["p1"]!, settings: DS.settings, key: "WEB-2", now: 1)
-        saved.description = "Old"
+        saved.spec = "Old"
         let r = Harness(f, saved: saved)
-        r.edit(UpdateTicketBody(description: "Old, edited"))
+        r.edit(UpdateTicketBody(spec: "Old, edited"))
         try await r.sync.discard()
         #expect(f.ops == ["remove"])
         #expect(f.calls.first?.key == "WEB-2")
@@ -384,7 +384,7 @@ struct DraftSyncTests {
     @Test func discardWaitsForTheCreateInFlightAndDeletesWhatItMade() async throws {
         let f = FakeDraftAPI(hold: true)
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         await DS.drain()
         async let done: Void = h.sync.discard()
         await DS.drain()
@@ -400,9 +400,9 @@ struct DraftSyncTests {
     @Test func disposeDropsThePendingSave() async {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         h.sync.dispose()
         #expect(h.timers.count == 0)
         await h.wait(40)
@@ -444,9 +444,9 @@ struct DraftSyncTests {
     @Test func saveDraftThenTheSheetsCloseShareOneSave() async throws {
         let f = FakeDraftAPI()
         let h = Harness(f)
-        h.edit(UpdateTicketBody(description: "Fix"))
+        h.edit(UpdateTicketBody(spec: "Fix"))
         await DS.drain()
-        h.edit(UpdateTicketBody(description: "Fix it"))
+        h.edit(UpdateTicketBody(spec: "Fix it"))
         async let a: Void = h.sync.close()
         async let b: Void = h.sync.close()
         _ = try await (a, b)

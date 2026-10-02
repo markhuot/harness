@@ -142,21 +142,43 @@ struct HarnessClientRequestTests {
 
     @Test func postWithBodyHasJSONContentType() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
-        _ = try await client(t, token: "secret").createTicket(CreateTicketBody(projectId: "prj_1", prompt: "Do it", start: false))
+        _ = try await client(t, token: "secret").createTicket(CreateTicketBody(projectId: "prj_1", spec: "Do it", start: false))
         let r = try #require(t.last)
         #expect(r.method == "POST")
         #expect(path(t) == "/tickets")
         #expect(r.headers == ["authorization": "Bearer secret", "content-type": "application/json"])
-        #expect(try bodyJSON(r) == json(#"{"projectId":"prj_1","prompt":"Do it","start":false}"#))
+        #expect(try bodyJSON(r) == json(#"{"projectId":"prj_1","spec":"Do it","start":false}"#))
     }
 
-    @Test func sendMessageSendsMoveOnlyWhenTrue() async throws {
+    @Test func sendMessageSendsMoveAndLogOnlyWhenTrue() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
         _ = try await client(t).sendMessage("NY-1", text: "hi")
         #expect(try bodyJSON(t.last) == json(#"{"text":"hi"}"#))
         _ = try await client(t).sendMessage("NY-1", text: "hi", move: true)
         #expect(try bodyJSON(t.last) == json(#"{"text":"hi","move":true}"#))
+        _ = try await client(t).sendMessage("NY-1", text: "hi", log: true)
+        #expect(try bodyJSON(t.last) == json(#"{"text":"hi","log":true}"#))
         #expect(path(t) == "/tickets/NY-1/messages")
+    }
+
+    @Test func specRoutes() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(.array([])))
+        _ = try await client(t).specRevisions("NY-1")
+        #expect(path(t) == "/tickets/NY-1/spec/revisions")
+        _ = try await client(t).listActivity("NY-1")
+        #expect(path(t) == "/tickets/NY-1/activity")
+        let one = FakeTransport(status: 200, body: try envelope(protocolSample("SpecRevision")))
+        _ = try await client(one).specRevision("NY-1", rev: 2)
+        #expect(path(one) == "/tickets/NY-1/spec/revisions/2")
+        let diff = FakeTransport(status: 200, body: try envelope(protocolSample("SpecDiff")))
+        _ = try await client(diff).specDiff("NY-1", from: 1, to: 2)
+        #expect(path(diff) == "/tickets/NY-1/spec/revisions/2?diff=1")
+    }
+
+    @Test func specPatchSendsBaseRevision() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        _ = try await client(t).updateTicket("NY-1", UpdateTicketBody(spec: "## Goal", baseRevision: 3))
+        #expect(try bodyJSON(t.last) == json(###"{"spec":"## Goal","baseRevision":3}"###))
     }
 
     @Test func completeTicketDefaultsToEmptyObject() async throws {
@@ -254,6 +276,21 @@ struct HarnessClientErrorTests {
         let decoded = try #require(err.data).decode(as: RemoteKeyMatches.self)
         #expect(decoded.requested == "PLAYR-123")
         #expect(decoded == (try matches.decode(as: RemoteKeyMatches.self)))
+    }
+
+    @Test func specConflictReadsA409sData() async throws {
+        let conflict = try protocolSample("SpecConflict")
+        let body = JSONValue.object(["error": .string("The spec changed"), "data": conflict])
+        let t = FakeTransport(status: 409, body: String(decoding: try JSONEncoder().encode(body), as: UTF8.self))
+        let err = try await #require(throws: HarnessAPIError.self) {
+            try await client(t).updateTicket("NY-1", UpdateTicketBody(spec: "Mine", baseRevision: 4))
+        }
+        #expect(err.specConflict == SpecConflict(currentRevision: 5, spec: "## Goal\n\nChanged by the agent."))
+        #expect(HarnessAPIError.specConflict(err) == err.specConflict)
+        // The same data on another status, or a 409 without it, isn't a spec conflict.
+        #expect(HarnessAPIError(status: 400, message: "x", data: conflict).specConflict == nil)
+        #expect(HarnessAPIError(status: 409, message: "x", data: .object(["x": .number(1)])).specConflict == nil)
+        #expect(HarnessAPIError.specConflict(CancellationError()) == nil)
     }
 
     @Test func missingErrorFallsBackToStatusText() async throws {
