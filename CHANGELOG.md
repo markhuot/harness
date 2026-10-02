@@ -9,7 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Background tasks an agent leaves running, such as a test suite, a dev server or a Monitor, now
+  show up on the ticket's Agents & tasks tab with their state. Click or tap one to watch its
+  output live while it runs; the output stays there after it finishes. In the transcript, the
+  command that started it has an Open output link.
+
 ### Changed
+
+- The ticket's Agents tab is now called Agents & tasks. It lists sub-agents and background tasks
+  in one list, with the most recently updated first.
 
 - On iPhone, Search sits on its own in the tab bar. One tap turns it into the search field right
   there at the bottom of the screen, ready to type, instead of opening a screen with the field at
