@@ -2011,3 +2011,40 @@ child tickets, rollups, key-rename preview, model and permission options) match 
   commits; the tag's digits are the build number and its CHANGELOG.md section is the notes; see
   CLAUDE.md → Releases), and deploys the install page plus `manifest.plist` to Vercel. The OTA manifest points at
   `releases/latest/download/Harness.ipa` on GitHub.
+
+## Native iOS app (`ios/`)
+
+`ios/` is a SwiftUI rewrite of the iPhone and iPad app. It's another client of the same REST +
+WebSocket API, with no service changes, and it replaces `mobile/` once releases switch to it
+(`release:publish --ios-app=native` already builds it, with the same bundle id, so it installs
+over the RN app). Until then both apps are maintained, and `mobile/` plus `shared/` are the spec:
+where they disagree, the RN app's behavior wins. ios/ARCHITECTURE.md has the conventions and the
+parity table, feature by feature.
+
+- **Two halves.** `ios/Harness` is the app target: SwiftUI views, navigation, and platform glue
+  (Keychain, camera, haptics, WKWebView). `ios/HarnessKit` is a Swift package with everything that
+  doesn't draw: the Codable protocol types, `HarnessClient` (REST) and `HarnessSocket` (WebSocket),
+  the board reducer and selectors, and every helper a screen branches on (completion and approve
+  menus, tabs, paging, drafts, mentions, markdown, file links, settings rules). It imports
+  Foundation only, so `swift test` runs on the Mac host in seconds.
+- **Fixture parity with `shared/`.** Ported logic can't drift from TypeScript. Each case file in
+  `shared/fixtures/cases/` runs the real TS functions over a list of inputs, and
+  `bun shared/scripts/export-fixtures.ts` writes the outputs as JSON into HarnessKit's tests.
+  `swift test` checks the Swift ports against them, and `bun run test` fails when the committed
+  JSON is stale. `cases/protocol.ts` holds a sample of every entity and event, which the Swift
+  types must decode and re-encode unchanged, so a field added to `shared/src/protocol.ts` has to
+  reach Swift too. Reducer scenarios replay real TS actions and compare selector probes.
+- **Syntax highlighting.** The RN app's own `mobile/src/lib/highlight.ts` (Shiki, its JavaScript
+  regex engine, the same languages and themes) is bundled into one script at build time and runs
+  in JavaScriptCore (`HarnessHighlight`), so code colors match the desktop and the RN app exactly.
+  A view draws plain lines in its first frame and swaps colors in when the job finishes.
+- **Plugin tabs.** A WKWebView loads the plugin's UI from the service, and the host bridge is a
+  fixture-checked port of `shared/src/state/pluginBridge.ts` over `WKScriptMessageHandler`, with
+  the same injected theme. The Browser tab draws `browser.frame` events natively and sends input
+  through the same touch and keyboard rules as the RN app (`lib/browserInput`).
+- **Changes tab.** Built in rather than the git plugin's page in a web view: the diff, file list,
+  viewed marks and Unified/Split toggle are SwiftUI, fed by a `ChangesSource`. Today that reads the
+  git plugin's `/plugins/git/api/*` routes; a core Changes API would be one more conformance.
+  `plugin:git:changes` links open it, and its files open in the file viewer.
+- **Checks.** `bun mobile/scripts/sim-check.ts --native` runs the RN app's simulator walk-through
+  against the native build, through the accessibility tree, so both apps expose the same labels.
