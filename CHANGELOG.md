@@ -20,6 +20,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- When a new ticket's text asks for ticket settings, such as dependencies, a branch or skipping
+  a review (`/depends: HARNESS-12`, `/branch: main`, `/skip-human-review`, or in plain words), the
+  planning agent now applies them to the ticket itself. They're already set when you read the plan
+  and press Start.
+- Agents can now turn off both of a ticket's reviews when you ask them to. The ticket then lands as
+  soon as it's submitted. Before, an agent could turn off only one of them.
 - A ticket with child tickets shows its progress bar at the top of the ticket, under the title,
   on the Mac, iPhone and iPad, so you see it without opening the Tickets tab. (On iPhone and iPad
   it's tucked away with the badges on the Browser, Changes and plugin tabs, where the top of the

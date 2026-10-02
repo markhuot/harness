@@ -32,7 +32,7 @@ const CONFIG_WRITE = [
   "delete_ticket",
 ];
 const TOOLS: Record<RunKind, string[]> = {
-  plan: ["post_summary", "update_plan", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  plan: ["post_summary", "update_plan", "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
   work: ["post_summary", "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   review: ["post_summary", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
   complete: ["post_summary", ...BOARD, ...CONFIG_READ],

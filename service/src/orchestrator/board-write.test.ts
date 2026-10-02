@@ -101,7 +101,7 @@ describe("create_ticket", () => {
 });
 
 describe("guard rails", () => {
-  test("skip_agent_review: agents set it only where a human or conductor still reviews, and not mid-review", async () => {
+  test("skip_agent_review: agents set it on create and update, but not mid-review", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
     const c = h.ctx("work", me);
@@ -112,27 +112,17 @@ describe("guard rails", () => {
     expect(created.skipAgentReview).toBe(true);
     expect(text(r)).toContain('"skipAgentReview": true');
 
-    // A project whose new tickets skip the human review: the agent review is all they get, unless
-    // the same call turns the human review back on.
+    // On top of a project default that skips the human review, the ticket skips both.
     h.orch.updateProject(h.api.id, { skipHumanReview: true });
-    await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true })).rejects.toThrow(
-      "The new ticket skips its human review (its project's default), so the agent review is the only review it gets",
-    );
-    const reviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true, skipHumanReview: false });
-    expect([reviewed.skipAgentReview, reviewed.skipHumanReview]).toEqual([true, false]);
+    const unreviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API", skipAgentReview: true });
+    expect([unreviewed.skipAgentReview, unreviewed.skipHumanReview]).toEqual([true, true]);
     const apiTicket = await h.make("api work", { projectId: h.api.id });
     expect(apiTicket.skipHumanReview).toBe(true);
-    await expect(h.orch.ops.updateTicket(c, apiTicket.key, { skipAgentReview: true })).rejects.toThrow(`${apiTicket.key} skips its human review`);
-    expect(h.get(apiTicket).skipAgentReview).toBe(false);
-    // Both skipped is the human's call on the project, and an agent's ticket there just follows it.
-    h.orch.updateProject(h.api.id, { skipAgentReview: true });
-    const unreviewed = await h.orch.ops.createTicket(c, { title: "x", description: "y", projectKey: "API" });
-    expect([unreviewed.skipAgentReview, unreviewed.skipHumanReview]).toEqual([true, true]);
+    expect((await h.orch.ops.updateTicket(c, apiTicket.key, { skipAgentReview: true })).skipAgentReview).toBe(true);
 
     const inReview = await h.make("in review", { status: "review" });
     await expect(h.orch.ops.updateTicket(c, inReview.key, { skipAgentReview: true })).rejects.toThrow(`${inReview.key} is in review; its reviewers decide`);
-    const planned = await h.make("planned");
-    expect((await h.orch.ops.updateTicket(c, planned.key, { skipAgentReview: true })).skipAgentReview).toBe(true);
+    expect(h.get(inReview).skipAgentReview).toBe(false);
 
     // A conductor is its child's reviewer, so it may skip the child's agent review in review too.
     const cond = await h.make("conduct", { kind: "conductor", status: "in_progress" });
@@ -142,7 +132,7 @@ describe("guard rails", () => {
     expect([skipped.skipAgentReview, skipped.agentReview]).toEqual([true, "skipped"]);
   });
 
-  test("skip_human_review: agents set it only while the agent review still runs, and not mid-review", async () => {
+  test("skip_human_review: agents may skip both reviews when asked, in one call or across two, but not mid-review", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
     const c = h.ctx("work", me);
@@ -152,21 +142,79 @@ describe("guard rails", () => {
     expect([created.skipHumanReview, created.skipAgentReview]).toEqual([true, false]);
     expect(text(r)).toContain('"skipHumanReview": true');
 
-    // One review has to check the work: never both from an agent, in one call or across two.
-    await expect(h.orch.ops.createTicket(c, { title: "x", description: "y", skipAgentReview: true, skipHumanReview: true })).rejects.toThrow("can't skip both");
-    await expect(h.orch.ops.updateTicket(c, created.key, { skipAgentReview: true })).rejects.toThrow(`${created.key} skips its human review`);
+    const both = await executeTool([createTicketTool], "create_ticket", { title: "x", description: "y", skip_agent_review: true, skip_human_review: true }, c);
+    expect(both.isError).toBeFalsy();
+    const bothTicket = h.store.tickets.getByKey(text(both).match(/Created (\S+)\./)![1]!)!;
+    expect([bothTicket.skipAgentReview, bothTicket.skipHumanReview]).toEqual([true, true]);
     const noBot = await h.make("no bot");
     await h.orch.ops.updateTicket(c, noBot.key, { skipAgentReview: true });
-    await expect(h.orch.ops.updateTicket(c, noBot.key, { skipHumanReview: true })).rejects.toThrow(`${noBot.key} skips its agent review`);
-    expect(h.get(noBot).skipHumanReview).toBe(false);
-    // Swapping which review is skipped in one call is fine: the other one still runs.
-    const swapped = await h.orch.ops.updateTicket(c, noBot.key, { skipAgentReview: false, skipHumanReview: true });
-    expect([swapped.skipAgentReview, swapped.skipHumanReview]).toEqual([false, true]);
-    // Turning a skip off is always allowed.
+    expect((await h.orch.ops.updateTicket(c, noBot.key, { skipHumanReview: true })).skipHumanReview).toBe(true);
+    // Turning a skip off is allowed too.
     expect((await h.orch.ops.updateTicket(c, created.key, { skipHumanReview: false })).skipHumanReview).toBe(false);
 
     const inReview = await h.make("in review", { status: "review" });
     await expect(h.orch.ops.updateTicket(c, inReview.key, { skipHumanReview: true })).rejects.toThrow(`${inReview.key} is in review; its reviewers decide`);
+  });
+
+  test("a plan run's update_ticket edits its own ticket, every field, looser permission mode included", async () => {
+    const h = await setup();
+    // A branch needs a git repository to land in.
+    expect(Bun.spawnSync(["git", "init", "-q", h.web.path]).exitCode).toBe(0);
+    const dep = await h.make("dep");
+    h.orch.updateProject(h.web.id, { permissionMode: "read_only" });
+    const me = await h.make("me");
+    expect(h.orch.ticketDetail(me.key).ticket.permissionMode).toBeNull();
+    const c = h.ctx("plan", me);
+    // Through the tool, as a planning agent applying `/depends: … /branch: … /skip-*` from the brief.
+    const r = await executeTool(
+      [updateTicketTool],
+      "update_ticket",
+      { key: me.key, title: "Renamed", depends_on: [dep.key], branch: "feature/x", base_branch: "develop", model: "fake-model", permission_mode: "auto", skip_agent_review: true, skip_human_review: true },
+      c,
+    );
+    expect(text(r)).toStartWith(`Updated ${me.key}.`);
+    const cur = h.get(me);
+    expect([cur.title, cur.dependsOn, cur.requestedBranch, cur.baseBranch, cur.model, cur.permissionMode, cur.skipAgentReview, cur.skipHumanReview, cur.status]).toEqual([
+      "Renamed",
+      [dep.key],
+      "feature/x",
+      "develop",
+      "fake-model",
+      "auto",
+      true,
+      true,
+      "planning",
+    ]);
+    // Dependency rules still hold on its own ticket.
+    await expect(h.orch.ops.updateTicket(c, me.key, { dependsOn: [me.key] })).rejects.toThrow("cannot depend on itself");
+    expect(h.get(me).dependsOn).toEqual([dep.key]);
+  });
+
+  test("end to end: a planning agent applies the brief's settings to its ticket before the human presses Start", async () => {
+    const h = await setup();
+    const dep = await h.make("dep");
+    const t = await h.make(`Cut a release\n/depends: ${dep.key}\n/skip-human-review\n/skip-agent-review\n/set-ticket {"depends_on":["${dep.key}"],"skip_agent_review":true,"skip_human_review":true}`);
+    expect(h.runKinds(t)).toEqual(["plan"]);
+    const cur = h.get(t);
+    expect([cur.status, cur.dependsOn, cur.skipAgentReview, cur.skipHumanReview, cur.description]).toEqual(["planning", [dep.key], true, true, "1. Do Cut a release"]);
+    const said = h.store.transcript.list(t.sessionId).flatMap((e) => (e.content.type === "text" ? [(e.content as { text: string }).text] : []));
+    expect(said.some((x) => x.startsWith(`Updated ${t.key}.`))).toBe(true);
+  });
+
+  test("a plan run's update_ticket can't reach another ticket, and a work run still can't edit its own", async () => {
+    const h = await setup();
+    const me = await h.make("me");
+    const other = await h.make("other");
+    await expect(h.orch.ops.updateTicket(h.ctx("plan", me), other.key, { title: "hijacked" })).rejects.toThrow(`In a planning run, update_ticket only edits your own ticket (${me.key})`);
+    await expect(h.orch.ops.updateTicket(h.ctx("plan", me), "WEB-99", { title: "nope" })).rejects.toThrow("only edits your own ticket");
+    expect(h.get(other).title).toBe("other");
+    h.store.tickets.update(me.id, { status: "in_progress" });
+    await expect(h.orch.ops.updateTicket(h.ctx("work", h.get(me)), me.key, { title: "renamed" })).rejects.toThrow(`${me.key} is your own ticket`);
+    expect(h.get(me).title).toBe("me");
+    // Plan runs are offered update_ticket and no other board write.
+    const offered = toolsForRun("plan", { hasBuiltinTools: true, usesPermissionPromptTool: false }).map((t) => t.name);
+    expect(offered).toContain("update_ticket");
+    for (const name of ["create_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"]) expect(offered).not.toContain(name);
   });
 
   test("plan, review, complete and triage runs can't change the board, even calling ops directly", async () => {

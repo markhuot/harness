@@ -195,7 +195,7 @@ the message where the ticket is, with its work tools, and moves the ticket itsel
 the message resolves its block, `resume_work` before it changes work that's in review (its call:
 an answer or an investigation leaves the ticket in review), then `submit_for_review` or `block`. A planning ticket's message
 goes to its plan run, so a planning agent is always in Claude Code's plan mode (`--permission-mode
-plan`; the `mcp__harness` allow rule keeps `update_plan` and `post_summary` running there).
+plan`; the `mcp__harness` allow rule keeps `update_plan`, `update_ticket` and `post_summary` running there).
 
 | Trigger | Effect |
 | --- | --- |
@@ -261,10 +261,12 @@ Who sets it:
 - **Other agents**, with `create_ticket` / `update_ticket` `skip_agent_review` (see "Board changes by
   agents").
 
-Agents can only turn it on where someone else still reviews the work: on a ticket that doesn't
-skip its human review (for a new ticket, the project's default unless the same call sets
-`skip_human_review: false`). Otherwise the agent review is the only check, and the call fails
-with an error saying a human can turn it off on the ticket. Humans can set it anywhere.
+- **The ticket's own planning agent**, with `update_ticket { key: <its own key>, skip_agent_review }`
+  when the brief asks for it (see "Board changes by agents").
+
+Agents may turn it on even when the ticket skips its human review too, which leaves the work
+landing as soon as it's submitted. The prompts and tool descriptions say to do that only when the
+human asked for it; nothing in code checks.
 
 ### Skipping the human review
 
@@ -287,9 +289,9 @@ Who sets it: the project's default (`Project.skipHumanReview`) when a create lea
 Details, Mac and iPhone); the ticket's own agent with `submit_for_review { skip_human_review }`,
 when the human asked for the work to land without their review (the work prompt says so, and
 says when the ticket already skips it); other agents with `create_ticket` / `update_ticket`
-`skip_human_review`. Agents can only turn it on while the agent review still runs: a call that
-would leave a ticket skipping both reviews (`skipAgentReview` already set, or both in one call) is
-refused, so nothing lands on an agent's say-so with nobody checking. Humans can set both.
+`skip_human_review`; the ticket's own planning agent with `update_ticket` on itself. Agents can
+set both skips, in one call or across two, when the human asks for no review at all; the ticket
+then lands as soon as it's submitted.
 
 ### Review defaults
 
@@ -638,7 +640,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }` |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
 | `create_ticket` | work, conductor | `{ title, description, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
-| `update_ticket` | work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
+| `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, description?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Description, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), summaries (each attachment's name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
@@ -685,25 +687,32 @@ and say that every config call waits for a human and is then repeated exactly.
 ### Board changes by agents
 
 The write tools (`service/src/tools/board-write.ts`, the `// --- board (write) ---` section of
-`HarnessOps`) let work and conductor runs do to other cards what a person does on the board.
+`HarnessOps`) let work and conductor runs do to other cards what a person does on the board, and
+a plan run set up its own card.
 They call the same `Orchestrator` methods as the HTTP API, so validation and side effects
 (moving to in_progress starts a work run, a move back from done re-opens, and so on) are shared.
 The guard rails live in the orchestrator ops, not in tool text, so a driver calling ops directly
 hits them too:
 
-- **Run kinds.** Only work and conductor runs. Plan, review, complete and triage runs don't get
-  the tools, and the ops throw for them.
-- **Never the caller's own ticket.** Its own state changes go through `block` /
-  `submit_for_review`. Keys resolve like the HTTP API (old aliases too), so an alias of the
-  caller's key is refused as well.
+- **Run kinds.** Only work and conductor runs, plus `update_ticket` in plan runs. Review,
+  complete and triage runs don't get the tools, plan runs get no other write tool, and the ops
+  throw for them.
+- **Never the caller's own ticket**, except a plan run's `update_ticket`. Its own state changes
+  go through `block` / `submit_for_review`. Keys resolve like the HTTP API (old aliases too), so
+  an alias of the caller's key is refused as well.
+- **A plan run edits only its own ticket, with full access.** `update_ticket` from a plan run
+  (`ownPlanTarget`) refuses any other key ("In a planning run, update_ticket only edits your own
+  ticket"). On its own ticket every field works, a looser `permission_mode` included: the
+  `system.plan` prompt has the agent apply the settings the brief asks for (`/depends: A-1`,
+  `/branch: main`, `/skip-human-review`, or plain words), and the human sees them with the plan
+  before pressing Start. Dependency and branch validation still run (`Orchestrator.updateTicket`).
 - **Reviews stay with reviewers.** No move goes into review (only the ticket's own agent submits)
   or out of it (the agent reviewer, then the human or the parent conductor via `review_ticket` /
   `complete_ticket`, decide). `message_ticket` on a ticket in review is refused too, since a
   message sends it back to in progress, unless the caller is that ticket's parent conductor.
-- **No skipping the only review.** `create_ticket` / `update_ticket` turning either skip on are
-  refused when the ticket would end up skipping both reviews (a new ticket starts from its
-  project's defaults), like the ticket's own `submit_for_review` ("Skipping the
-  agent review", "Skipping the human review"). `update_ticket` `skip_agent_review` /
+- **Review skips.** `create_ticket` / `update_ticket` may turn either skip on, or both, like the
+  ticket's own `submit_for_review` ("Skipping the agent review", "Skipping the human review").
+  `update_ticket` `skip_agent_review` /
   `skip_human_review` on a ticket in review is refused unless the caller is its parent conductor
   (its reviewer): it would end, start or approve the review under way.
 - **Done only from planning.** `move_ticket` to done works only on a ticket still in planning
@@ -711,7 +720,7 @@ hits them too:
 - **Tool approvals are a human's.** A ticket with a `pendingApproval` can't be messaged (a
   message would deny it), moved to another column, started, or cancelled (nothing is running,
   and cancelling would only strand the approval). There is no tool to answer one.
-- **Permission modes only tighten.** `update_ticket` compares the ticket's effective mode before
+- **Permission modes only tighten** on another ticket. `update_ticket` compares the ticket's effective mode before
   and after (`resolvePermissionMode`, order auto < ask < read_only) and refuses a looser one,
   including `"inherit"` when the project's mode is looser.
 - **No escalation through other tickets.** A ticket an agent creates (work or conductor run)
@@ -792,7 +801,7 @@ client state, not service state.
 | --- | --- | --- | --- |
 | Board | search, list, page Done, open a ticket, summaries, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`) | |
 | Board | create a ticket (task or conductor, driver, model, permission mode, start or plan, branch picked from the project's branches, base branch) | `create_ticket` (`branch`, `base_branch`; `remote_id`, `remote_url` link it as the Remote ID field does) | the branch list itself (`GET /projects/:id/branches`) has no tool: agents run `git branch` |
-| Board | edit title, brief, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree), remote ID and its link | `update_ticket` (`remote_id`, `remote_url`) | permission modes only tighten |
+| Board | edit title, brief, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree), remote ID and its link | `update_ticket` (`remote_id`, `remote_url`; a plan run's on its own ticket) | permission modes only tighten on another ticket |
 | Board | move a ticket's work to another branch after it started | `update_branch` (the ticket's own agent; ask it with a message) | the apps don't re-point a running ticket themselves: the agent has to move its commits |
 | Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
