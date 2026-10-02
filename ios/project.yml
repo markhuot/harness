@@ -8,6 +8,12 @@ options:
     iOS: "26.0"
   createIntermediateGroups: true
   developmentLanguage: en
+# Beta is a Release build (optimized, no DEBUG routes) that installs beside the main app, for the
+# install page's beta card (ios/Tools/build.ts archive --beta, publish-beta).
+configs:
+  Debug: debug
+  Release: release
+  Beta: release
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -101,6 +107,9 @@ targets:
         Release:
           PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
           HARNESS_DISPLAY_NAME: Harness
+        Beta:
+          PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.dev
+          HARNESS_DISPLAY_NAME: Harness Beta
 schemes:
   Harness:
     build:

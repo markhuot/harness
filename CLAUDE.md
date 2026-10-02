@@ -86,6 +86,10 @@ If a publish fails partway, fix the cause and rerun it on the same tag, as long 
 release exists for that tag yet. Once a release is published, it stays: never move, delete, or
 reuse a pushed tag. If a published build is broken, fix it on `main` and cut a new tag.
 
+The install page can also carry a native beta card (the SwiftUI app as "Harness Beta", IPA hosted
+on the Vercel site). It's deployed separately from tagged releases with
+`bun ios/Tools/build.ts publish-beta` (see ios/README.md → Beta install page build).
+
 `publish-install.sh --no-publish` builds locally without any tag checks (add `--skip-ios` or
 `--skip-mac` to build one app). An untagged build numbers itself from the clock.
 

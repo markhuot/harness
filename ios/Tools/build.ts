@@ -15,11 +15,20 @@
 //                                                      Debug build ("Harness Dev") installed with devicectl
 //   bun ios/Tools/build.ts verify --kind native|rn --bundle-id ID --build-number N <Harness.app>
 //                                                      checks an unpacked app before it's published
+//   bun ios/Tools/build.ts publish-beta [--no-deploy]  the install page's native beta: archive --beta
+//                                                      (build number from the clock), export, verify,
+//                                                      copy to mobile/Install/HarnessBeta.ipa, regenerate
+//                                                      the page and deploy it to Vercel
 //
 // archive and export take --archive-path; export takes --export-path. mobile/Tools/publish-install.sh
-// --ios-app=native runs archive, export and verify.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+// --ios-app=native runs archive, export and verify. --beta (archive, export --method dev, verify
+// --kind native) is the Beta configuration: a Release build as "Harness Beta" (com.markhuot.harness.dev),
+// which installs beside the main app.
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { BETA_BUNDLE_ID, BETA_IPA, BETA_MANIFEST, BETA_TITLE, type ReleaseInfo } from "../../mobile/Tools/install-page";
+import { checkDisk } from "../../mobile/Tools/sim";
 
 export const IOS = resolve(import.meta.dir, "..");
 export const BUILD = join(IOS, "build");
@@ -31,14 +40,24 @@ export type Method = "dev" | "testflight";
 export type Kind = "native" | "rn";
 export type Options =
   | { command: "sim" }
-  | { command: "archive"; buildNumber: string; archivePath: string }
-  | { command: "export"; method: Method; archivePath: string; exportPath: string }
+  | { command: "archive"; buildNumber: string; archivePath: string; beta: boolean }
+  | { command: "export"; method: Method; archivePath: string; exportPath: string; beta: boolean }
   | { command: "device"; device: string; launch: boolean }
-  | { command: "verify"; kind: Kind; bundleId: string; buildNumber: string; app: string };
+  | { command: "verify"; kind: Kind; bundleId: string; buildNumber: string; app: string; displayName?: string }
+  | { command: "publish-beta"; deploy: boolean };
 
 export class UsageError extends Error {}
 
-const defaultArchive = join(BUILD, "Harness.xcarchive");
+export const INSTALL = resolve(IOS, "../mobile/Install");
+export const SITE = "https://harness-install.vercel.app";
+const VERCEL_PROJECT = "harness-install";
+const defaultArchive = (beta: boolean) => join(BUILD, beta ? "HarnessBeta.xcarchive" : "Harness.xcarchive");
+const BOOLEAN_FLAGS = ["launch", "beta", "no-deploy"];
+
+/** An untagged build's number, as publish-install.sh makes it: the UTC minute, `date -u +%Y%m%d%H%M`. */
+export function clockBuildNumber(now = new Date()): string {
+  return now.toISOString().slice(0, 16).replace(/\D/g, "");
+}
 
 export function parseArgs(argv: string[]): Options {
   const [command, ...rest] = argv;
@@ -52,7 +71,7 @@ export function parseArgs(argv: string[]): Options {
     }
     const eq = a.indexOf("=");
     if (eq > 0) flags.set(a.slice(2, eq), a.slice(eq + 1));
-    else if (a === "--launch") flags.set("launch", true);
+    else if (BOOLEAN_FLAGS.includes(a.slice(2))) flags.set(a.slice(2), true);
     else {
       const value = rest[++i];
       if (value === undefined || value.startsWith("--")) throw new UsageError(`${a} needs a value`);
@@ -61,10 +80,11 @@ export function parseArgs(argv: string[]): Options {
   }
   const allowed: Record<string, string[]> = {
     sim: [],
-    archive: ["build-number", "archive-path"],
-    export: ["method", "archive-path", "export-path"],
+    archive: ["build-number", "archive-path", "beta"],
+    export: ["method", "archive-path", "export-path", "beta"],
     device: ["device", "launch"],
-    verify: ["kind", "bundle-id", "build-number"],
+    verify: ["kind", "bundle-id", "build-number", "beta"],
+    "publish-beta": ["no-deploy"],
   };
   if (!command || !(command in allowed)) throw new UsageError(`unknown command ${command ?? "(none)"}; expected ${Object.keys(allowed).join(", ")}`);
   for (const k of flags.keys()) if (!allowed[command]!.includes(k)) throw new UsageError(`${command} doesn't take --${k}`);
@@ -74,6 +94,7 @@ export function parseArgs(argv: string[]): Options {
     return typeof v === "string" ? v : undefined;
   };
   const need = (k: string): string => str(k) ?? fail(`${command} needs --${k}`);
+  const beta = flags.get("beta") === true;
   const buildNumber = (): string => {
     const n = need("build-number");
     // CFBundleVersion: digits only, so it orders like the tag (CLAUDE.md → Releases).
@@ -84,24 +105,34 @@ export function parseArgs(argv: string[]): Options {
     case "sim":
       return { command };
     case "archive":
-      return { command, buildNumber: buildNumber(), archivePath: resolve(str("archive-path") ?? defaultArchive) };
+      return { command, buildNumber: buildNumber(), archivePath: resolve(str("archive-path") ?? defaultArchive(beta)), beta };
     case "export": {
       const method = need("method");
       if (method !== "dev" && method !== "testflight") throw new UsageError(`--method must be dev or testflight, got ${method}`);
+      // The beta shares the dev bundle id, which has no App Store Connect record.
+      if (beta && method !== "dev") throw new UsageError("--beta exports with --method dev only; the beta never goes to TestFlight");
       return {
         command,
         method,
-        archivePath: resolve(str("archive-path") ?? defaultArchive),
-        exportPath: resolve(str("export-path") ?? join(BUILD, method === "dev" ? "ipa-dev" : "ipa-testflight")),
+        archivePath: resolve(str("archive-path") ?? defaultArchive(beta)),
+        exportPath: resolve(str("export-path") ?? join(BUILD, beta ? "ipa-beta" : method === "dev" ? "ipa-dev" : "ipa-testflight")),
+        beta,
       };
     }
     case "device":
       return { command, device: need("device"), launch: flags.get("launch") === true };
+    case "publish-beta":
+      return { command, deploy: flags.get("no-deploy") !== true };
     default: {
       const kind = need("kind");
       if (kind !== "native" && kind !== "rn") throw new UsageError(`--kind must be native or rn, got ${kind}`);
       if (positional.length !== 1) throw new UsageError("verify needs exactly one Harness.app path");
-      return { command: "verify", kind, bundleId: need("bundle-id"), buildNumber: buildNumber(), app: resolve(positional[0]!) };
+      const common = { command: "verify" as const, kind: kind as Kind, buildNumber: buildNumber(), app: resolve(positional[0]!) };
+      if (!beta) return { ...common, bundleId: need("bundle-id") };
+      if (kind !== "native") throw new UsageError("--beta is the native app; verify it with --kind native");
+      const id = str("bundle-id");
+      if (id !== undefined && id !== BETA_BUNDLE_ID) throw new UsageError(`--beta checks for ${BETA_BUNDLE_ID}, not --bundle-id ${id}`);
+      return { ...common, bundleId: BETA_BUNDLE_ID, displayName: BETA_TITLE };
     }
   }
 }
@@ -137,7 +168,7 @@ export type AppCheck = { errors: string[]; version?: string; build?: string };
  * main.jsbundle, or it would try to load from Metro. The pairing-token check stays in
  * publish-install.sh, which runs it on every artifact.
  */
-export function checkApp(app: string, expected: { kind: Kind; bundleId: string; buildNumber: string }): AppCheck {
+export function checkApp(app: string, expected: { kind: Kind; bundleId: string; buildNumber: string; displayName?: string }): AppCheck {
   const errors: string[] = [];
   const plistPath = join(app, "Info.plist");
   if (!existsSync(plistPath)) return { errors: [`${app} has no Info.plist`] };
@@ -146,6 +177,9 @@ export function checkApp(app: string, expected: { kind: Kind; bundleId: string; 
   if (id !== expected.bundleId) errors.push(`CFBundleIdentifier is '${id}', expected '${expected.bundleId}'`);
   const build = plist.CFBundleVersion;
   if (build !== expected.buildNumber) errors.push(`CFBundleVersion is '${build}', expected '${expected.buildNumber}'`);
+  if (expected.displayName !== undefined && plist.CFBundleDisplayName !== expected.displayName) {
+    errors.push(`CFBundleDisplayName is '${plist.CFBundleDisplayName}', expected '${expected.displayName}'`);
+  }
   const exe = typeof plist.CFBundleExecutable === "string" ? join(app, plist.CFBundleExecutable) : null;
   const binary = exe && existsSync(exe) ? new Uint8Array(readFileSync(exe)) : null;
   if (!binary) errors.push(`the executable ${plist.CFBundleExecutable ?? "(no CFBundleExecutable)"} is missing`);
@@ -212,10 +246,11 @@ function sim(): string {
 
 function archive(o: Extract<Options, { command: "archive" }>): string {
   xcodegen();
-  log(`==> Archiving (Release, build ${o.buildNumber})`);
+  const config = o.beta ? "Beta" : "Release";
+  log(`==> Archiving (${config}, build ${o.buildNumber})`);
   rmSync(o.archivePath, { recursive: true, force: true });
-  run("archive", [
-    "xcodebuild", ...project(), "-configuration", "Release", "-destination", "generic/platform=iOS",
+  run(o.beta ? "archive-beta" : "archive", [
+    "xcodebuild", ...project(), "-configuration", config, "-destination", "generic/platform=iOS",
     "-archivePath", o.archivePath, "-allowProvisioningUpdates",
     `DEVELOPMENT_TEAM=${TEAM_ID}`, "CODE_SIGN_STYLE=Automatic", `CURRENT_PROJECT_VERSION=${o.buildNumber}`, "archive",
   ]);
@@ -234,7 +269,7 @@ function exportArchive(o: Extract<Options, { command: "export" }>): string {
   if (o.method === "testflight" && !auth.length) fail("export --method testflight needs ASC_KEY_ID and ASC_ISSUER_ID");
   log(o.method === "dev" ? "==> Exporting a development-signed IPA" : "==> Uploading to App Store Connect (TestFlight)");
   rmSync(o.exportPath, { recursive: true, force: true });
-  run(`export-${o.method}`, [
+  run(o.beta ? "export-beta" : `export-${o.method}`, [
     "xcodebuild", "-exportArchive", "-archivePath", o.archivePath, "-exportOptionsPlist", plist,
     "-exportPath", o.exportPath, ...auth, "-allowProvisioningUpdates",
   ]);
@@ -258,6 +293,102 @@ function device(o: Extract<Options, { command: "device" }>): string {
   return app;
 }
 
+// ------------------------------------------------------------------ the install page's beta
+
+/** The pairing tokens this Mac can read (as publish-install.sh's check_no_token finds them). */
+export function readTokens(env = process.env): string[] {
+  const files = [env.HARNESS_HOME && join(env.HARNESS_HOME, "token"), join(homedir(), ".harness", "token")];
+  const tokens = files.flatMap((f) => (f && existsSync(f) ? [readFileSync(f, "utf8").replace(/\s/g, "")] : []));
+  return [...new Set(tokens.filter((t) => t.length >= 8))];
+}
+
+/** The first file under `dir` that contains one of `tokens`, or null. */
+export function findToken(dir: string, tokens: string[]): string | null {
+  if (!tokens.length) return null;
+  const needles = tokens.map((t) => Buffer.from(t));
+  for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const file = join(entry.parentPath, entry.name);
+    const bytes = readFileSync(file);
+    if (needles.some((n) => bytes.includes(n))) return file;
+  }
+  return null;
+}
+
+/** The saved page data with this beta on it: the IPA is served from the site, next to the page. */
+export function withBetaBuild(saved: ReleaseInfo, app: { version: string; build: string }, bytes: number, now = new Date()): ReleaseInfo {
+  return { ...saved, iosBeta: { url: `${saved.site}/${BETA_IPA}`, version: app.version, build: app.build, bytes, builtAt: now.toISOString().slice(0, 10) } };
+}
+
+/** Checks a deployed file: 200, the expected content type, and (for the IPA) the local file's length. */
+export async function checkServed(url: string, contentType: RegExp, bytes?: number, fetcher: typeof fetch = fetch): Promise<string[]> {
+  const r = await fetcher(url, { method: "HEAD" });
+  const errors: string[] = [];
+  if (r.status !== 200) errors.push(`${url} returned ${r.status}`);
+  const type = r.headers.get("content-type") ?? "";
+  if (!contentType.test(type)) errors.push(`${url} is served as '${type}'`);
+  if (bytes !== undefined) {
+    // Vercel answers a HEAD that misses its cache without a Content-Length; then count the body.
+    const length = r.headers.get("content-length") ?? String((await (await fetcher(url)).arrayBuffer()).byteLength);
+    if (length !== String(bytes)) errors.push(`${url} is ${length} bytes, expected ${bytes}`);
+  }
+  return errors;
+}
+
+async function publishBeta(o: Extract<Options, { command: "publish-beta" }>): Promise<string> {
+  try {
+    checkDisk();
+  } catch (e) {
+    fail((e as Error).message);
+  }
+  const saved = join(INSTALL, "release.json");
+  if (!existsSync(saved)) fail(`${saved} is missing; it's written by mobile/Tools/install-page.ts`);
+  const buildNumber = clockBuildNumber();
+  const archivePath = archive({ command: "archive", buildNumber, archivePath: defaultArchive(true), beta: true });
+  const ipa = exportArchive({ command: "export", method: "dev", archivePath, exportPath: join(BUILD, "ipa-beta"), beta: true });
+
+  log("==> Verifying the IPA");
+  const check = join(BUILD, "ipa-beta-check");
+  rmSync(check, { recursive: true, force: true });
+  run("unzip-beta", ["unzip", "-q", ipa, "-d", check]);
+  const r = checkApp(join(check, "Payload", "Harness.app"), { kind: "native", bundleId: BETA_BUNDLE_ID, buildNumber, displayName: BETA_TITLE });
+  if (r.errors.length) fail(r.errors.join("; "));
+  const tokens = readTokens();
+  const leak = findToken(check, tokens);
+  if (leak) fail(`${leak} contains a pairing token; refusing to publish`);
+  rmSync(check, { recursive: true, force: true });
+
+  log(`==> Writing ${BETA_IPA} and the install page`);
+  const dest = join(INSTALL, BETA_IPA);
+  copyFileSync(ipa, dest);
+  const bytes = statSync(dest).size;
+  const info = withBetaBuild(JSON.parse(readFileSync(saved, "utf8")) as ReleaseInfo, { version: r.version ?? "1.0.0", build: buildNumber }, bytes);
+  writeFileSync(saved, `${JSON.stringify(info, null, 2)}\n`);
+  run("install-page", ["bun", resolve(IOS, "../mobile/Tools/install-page.ts"), "--from-json", saved]);
+  const pageLeak = findToken(INSTALL, tokens);
+  if (pageLeak) fail(`${pageLeak} contains a pairing token; refusing to publish`);
+  rmSync(archivePath, { recursive: true, force: true });
+  rmSync(join(BUILD, "ipa-beta"), { recursive: true, force: true });
+  if (!o.deploy) return dest;
+
+  // Install/.vercel is gitignored, so a fresh worktree isn't linked to the project yet.
+  if (!existsSync(join(INSTALL, ".vercel", "project.json"))) {
+    log(`==> Linking mobile/Install to the Vercel project ${VERCEL_PROJECT}`);
+    run("vercel-link", ["vercel", "link", "--yes", "--project", VERCEL_PROJECT], INSTALL);
+    rmSync(join(INSTALL, ".env.local"), { force: true }); // the page needs no env vars
+  }
+  log("==> Deploying the install page (vercel deploy --prod)");
+  run("vercel-deploy", ["vercel", "deploy", "--prod", "--yes"], INSTALL);
+  log("==> Checking the published site");
+  const site = info.site;
+  const errors = [
+    ...(await checkServed(`${site}/${BETA_MANIFEST}`, /^(text|application)\/xml/)),
+    ...(await checkServed(`${site}/${BETA_IPA}`, /^application\/octet-stream/, bytes)),
+  ];
+  if (errors.length) fail(errors.join("; "));
+  return `${site} (${BETA_TITLE} ${info.iosBeta!.version} (${buildNumber}), ${bytes} bytes)`;
+}
+
 if (import.meta.main) {
   // xcode-select points at the Command Line Tools on this Mac; use the full Xcode for this process only.
   const xcode = "/Applications/Xcode-27.0.0.app/Contents/Developer";
@@ -268,9 +399,14 @@ if (import.meta.main) {
       const r = checkApp(o.app, o);
       for (const e of r.errors) console.error(`error: ${e}`);
       if (r.errors.length) process.exit(1);
-      console.log(`${o.bundleId} ${r.version} (${r.build}), ${o.kind === "native" ? "SwiftUI app, no JS bundle" : "main.jsbundle embedded"}`);
+      console.log(`${o.displayName ? `${o.displayName}, ` : ""}${o.bundleId} ${r.version} (${r.build}), ${o.kind === "native" ? "SwiftUI app, no JS bundle" : "main.jsbundle embedded"}`);
     } else {
-      const out = o.command === "sim" ? sim() : o.command === "archive" ? archive(o) : o.command === "export" ? exportArchive(o) : device(o);
+      const out =
+        o.command === "sim" ? sim()
+        : o.command === "archive" ? archive(o)
+        : o.command === "export" ? exportArchive(o)
+        : o.command === "publish-beta" ? await publishBeta(o)
+        : device(o);
       console.log(out);
     }
   } catch (e) {
