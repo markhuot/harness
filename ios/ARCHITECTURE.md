@@ -415,8 +415,8 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The
-board's decisions that don't draw (landing column, card menu and AX label, drop positions, column
-sizing, when Done tops itself up) are in HarnessKit's `BoardScreenRules`. The shared parameters a
+board's decisions that don't draw (landing column, card menu and AX label, column sizing, when
+Done tops itself up) are in HarnessKit's `BoardScreenRules`. The shared parameters a
 slot needs come from the environment (store, router, palette), not from extra initializer arguments.
 
 The board has two layouts, picked by `horizontalSizeClass` (never `userInterfaceIdiom`, so an iPad
@@ -434,8 +434,9 @@ in narrow Split View or a small Stage Manager window gets the phone's):
   sideways without paging. The board starts at Planning (no landing column). Which columns are
   on screen comes from `onScrollVisibilityChange` (all of them when they fit) and drives Done's
   autofill (`shouldAutofillDone`) and the jump to search results (`columnWithResults(_:visible:)`).
-  Like the Mac's board, it has no card drag and drop (`BoardColumnView(onDrop: nil)`): cards move
-  from their menu. Drag and drop is the phone pager's only.
+
+Neither layout drags cards between columns, as on the Mac: a card moves from its menu (Move to a
+column, top or bottom) or its VoiceOver actions.
 
 simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
 only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
@@ -695,7 +696,7 @@ native-pattern difference, not a missing feature.
 | Board header: title, sidebar (Projects); bottom bar: Filter (Show child tickets), search field, + New session | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
-| Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done (plus drag and drop, native only) |
+| Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |
 | Search: the board's always-visible field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen | done |
 | Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, rows, settings gear, Add project, Settings at the bottom | screens/Projects | Features/Board/ProjectsSheet, ProjectsAdd | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
@@ -761,7 +762,6 @@ Checked on the shared simulator (iOS 27.0) unless marked **device**:
 - **Large boards:** `--paging` (125+ done tickets) passes. The Done column loads 50 a page, so a
   bigger history only adds pages.
 - **Device only (simctl and AXe can't do these):**
-  - Board drag and drop with a real touch.
   - The chip-jump haptics.
   - Rotating on the Browser tab (ResizeGate).
   - Long-press-then-drag on the Browser tab.

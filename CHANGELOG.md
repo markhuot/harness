@@ -17,6 +17,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   sideways, and tapping a column's header brings it into view. Move a card from its menu (touch and
   hold), as on the Mac. In a narrow Split View the board works as it does on iPhone.
 
+### Removed
+
+- On iPhone and iPad, you can no longer drag a card to another column or chip on the board, the same
+  as on the Mac. Touch and hold a card and use its menu to move it to another column, or to the top
+  or bottom of its own.
+
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 
 ### Added

@@ -20,8 +20,6 @@ struct BoardScreen: View {
     @State private var landed = false
     /// Set while the pager scrolls because of a chip tap or a jump, so only swipes play the haptic.
     @State private var jumping = false
-    /// The chip a dragged card hovers over.
-    @State private var dropChip: TicketStatus?
     @State private var query = ""
     /// The side-by-side columns at least partly on screen (all of them when they fit).
     @State private var visible: Set<TicketStatus> = []
@@ -36,10 +34,7 @@ struct BoardScreen: View {
         VStack(spacing: 0) {
             if layout == .pager {
                 BoardStatusStrip(
-                    page: page ?? .planning, count: { ctx.count($0) }, dropChip: dropChip,
-                    onTap: goTo, onDrop: { key, s in dropOnChip(key, s, ctx) }, onTarget: { s, on in
-                        if on { dropChip = s } else if dropChip == s { dropChip = nil }
-                    })
+                    page: page ?? .planning, count: { ctx.count($0) }, onTap: goTo)
             }
             if let search = ctx.search {
                 BoardSearchNote(search: search) { store.loader.retrySearch() }
@@ -100,7 +95,6 @@ struct BoardScreen: View {
                     BoardColumnView(
                         status: status, ctx: ctx,
                         onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
-                        onDrop: { key, before in dropOnCard(key, status, before: before, ctx) },
                         onDiscard: discard)
                         .containerRelativeFrame(.horizontal)
                         .id(status)
@@ -127,11 +121,9 @@ struct BoardScreen: View {
                 HStack(alignment: .top, spacing: Self.columnSpacing) {
                     ForEach(TicketStatus.allKnown, id: \.self) { status in
                         BoardColumnFrame(status: status, count: ctx.count(status), onTap: { reveal(status) }) {
-                            // No drag and drop here, as on the Mac: cards move from their menu.
                             BoardColumnView(
                                 status: status, ctx: ctx,
                                 onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
-                                onDrop: nil,
                                 onDiscard: discard,
                                 inset: EdgeInsets(top: 6, leading: 8, bottom: 10, trailing: 8))
                         }
@@ -215,28 +207,6 @@ struct BoardScreen: View {
         Task {
             if await actions.run(message, { try await api.updateTicket(t.key, body) }) == nil { await store.refresh() }
         }
-    }
-
-    private func dropped(_ key: String) -> Ticket? {
-        guard let t = store.state.ticketByKey(key), t.draft != true else { return nil }
-        return t
-    }
-
-    /// A card dropped on another card sits just above it.
-    private func dropOnCard(_ key: String, _ status: TicketStatus, before: String?, _ ctx: BoardContext) -> Bool {
-        guard let t = dropped(key), let m = BoardScreenRules.dropMove(t, to: status, before: before, cols: ctx.board) else { return false }
-        haptic(.success)
-        move(t, m, to: status)
-        return true
-    }
-
-    /// A card dropped on a status chip goes to the bottom of that column (Done: newest).
-    private func dropOnChip(_ key: String, _ status: TicketStatus, _ ctx: BoardContext) -> Bool {
-        dropChip = nil
-        guard let t = dropped(key), t.status != status else { return false }
-        haptic(.success)
-        move(t, BoardColumns.moveBody(t, to: status, .bottom, cols: ctx.board), to: status)
-        return true
     }
 
     private func discard(_ t: Ticket) {

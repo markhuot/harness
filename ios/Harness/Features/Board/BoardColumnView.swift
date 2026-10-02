@@ -2,14 +2,11 @@ import HarnessKit
 import SwiftUI
 
 /// The status chips over the board: dot, label and count for each column. Tapping one pages to
-/// that column, the strip keeps the current chip in view, and a card dragged onto a chip moves there.
+/// that column, and the strip keeps the current chip in view.
 struct BoardStatusStrip: View {
     let page: TicketStatus
     let count: (TicketStatus) -> Int
-    let dropChip: TicketStatus?
     let onTap: (TicketStatus) -> Void
-    let onDrop: (String, TicketStatus) -> Bool
-    let onTarget: (TicketStatus, Bool) -> Void
 
     @Environment(\.palette) private var c
 
@@ -31,7 +28,6 @@ struct BoardStatusStrip: View {
 
     private func chip(_ s: TicketStatus) -> some View {
         let on = s == page
-        let target = dropChip == s
         let n = count(s)
         return Button { onTap(s) } label: {
             HStack(spacing: 7) {
@@ -46,26 +42,21 @@ struct BoardStatusStrip: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .background(target ? c.accentSoft : on ? c.bgElev : .clear, in: .capsule)
-            .overlay(Capsule().strokeBorder(target ? c.accent : on ? c.border : .clear, lineWidth: target ? 1.5 : 1 / 3))
+            .background(on ? c.bgElev : .clear, in: .capsule)
+            .overlay(Capsule().strokeBorder(on ? c.border : .clear, lineWidth: 1 / 3))
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(statusLabel(s)), \(n)")
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-        .dropDestination(for: String.self) { keys, _ in
-            guard let key = keys.first else { return false }
-            return onDrop(key, s)
-        } isTargeted: { onTarget(s, $0) }
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 }
 
 /// One of the iPad's side-by-side columns, as on the Mac: a rounded panel with a header (dot,
 /// label, count) over its cards. The header reads "Planning, 3" like a phone chip (sim-check and
-/// dev-sim look for it), and a tap scrolls the column into view. Like the Mac's board, it has no
-/// drag and drop: cards move from their menu.
+/// dev-sim look for it), and a tap scrolls the column into view.
 struct BoardColumnFrame<Content: View>: View {
     let status: TicketStatus
     let count: Int
@@ -111,9 +102,6 @@ struct BoardColumnView: View {
     let status: TicketStatus
     let ctx: BoardContext
     let onMove: (Ticket, TicketStatus, BoardColumns.Where) -> Void
-    /// A card (by key) dropped above `before` (nil: at the end). Nil: no drag and drop (the iPad's
-    /// side-by-side columns, like the Mac's).
-    let onDrop: ((String, String?) -> Bool)?
     let onDiscard: (Ticket) -> Void
     /// Around the cards: the pager's page, or tighter inside a side-by-side column's frame.
     var inset = EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
@@ -130,22 +118,10 @@ struct BoardColumnView: View {
             LazyVStack(spacing: 10) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
                     BoardTicketCard(ticket: t, showProject: ctx.projectId == nil, onMove: onMove, onDiscard: onDiscard)
-                        .cardDrag(t, onDrop.map { drop in { drop($0, t.id) } })
                         .onAppear { if i >= cards.count - Self.endThreshold { onEnd() } }
                 }
                 if cards.isEmpty { empty }
                 footer
-                // The rest of the column takes drops at the end.
-                if let onDrop {
-                    Color.clear
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .contentShape(.rect)
-                        .dropDestination(for: String.self) { keys, _ in
-                            guard let key = keys.first else { return false }
-                            return onDrop(key, nil)
-                        }
-                        .accessibilityHidden(true)
-                }
             }
             .padding(inset)
         }
@@ -177,7 +153,6 @@ struct BoardColumnView: View {
         .padding(.vertical, 24)
         .padding(.horizontal, 12)
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.borderStrong, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-        .cardDrop(onDrop.map { drop in { drop($0, nil) } })
     }
 
     private func emptyText(_ s: String) -> some View {
@@ -208,43 +183,5 @@ struct BoardColumnView: View {
                     .accessibilityLabel("Loading older tickets")
             }
         }
-    }
-}
-
-private extension View {
-    /// A card that drags (its key) and takes drops above itself; neither without a handler.
-    @ViewBuilder func cardDrag(_ t: Ticket, _ onDrop: ((String) -> Bool)?) -> some View {
-        if let onDrop {
-            draggable(t.key) { BoardDragPreview(ticket: t) }.cardDrop(onDrop)
-        } else {
-            self
-        }
-    }
-
-    @ViewBuilder func cardDrop(_ onDrop: ((String) -> Bool)?) -> some View {
-        if let onDrop {
-            dropDestination(for: String.self) { keys, _ in
-                guard let key = keys.first else { return false }
-                return onDrop(key)
-            }
-        } else {
-            self
-        }
-    }
-}
-
-/// What a dragged card looks like under the finger: its key and title.
-private struct BoardDragPreview: View {
-    let ticket: Ticket
-    @Environment(\.palette) private var c
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TicketKeyLabel(ticket: ticket)
-            Text(BoardScreenRules.cardTitle(ticket)).font(.scaled(size: 15, weight: .medium)).foregroundStyle(c.text).lineLimit(2)
-        }
-        .padding(12)
-        .frame(width: 260, alignment: .leading)
-        .background(c.bgElev, in: .rect(cornerRadius: 12))
     }
 }

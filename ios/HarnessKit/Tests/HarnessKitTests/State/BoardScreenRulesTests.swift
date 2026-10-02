@@ -127,54 +127,6 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.cardTitle(Self.t("1", title: "", description: "words")) == "Untitled")
     }
 
-    // MARK: drag and drop
-
-    @Test func dropBetweenTwoCardsTakesTheMidpoint() throws {
-        let a = Self.t("a", position: 1), b = Self.t("b", position: 2), c = Self.t("c", position: 3)
-        let cols = Columns(planning: [a, b, c])
-        // c dropped above b: between a (1) and b (2).
-        let m = try #require(BoardScreenRules.dropMove(c, to: .planning, before: "b", cols: cols))
-        #expect(m.body == .init(status: nil, position: 1.5))
-        // a dropped at the end: after c.
-        #expect(BoardScreenRules.dropMove(a, to: .planning, before: nil, cols: cols)?.body.position == 4)
-    }
-
-    @Test func dropWhereItAlreadyIsChangesNothing() {
-        let a = Self.t("a", position: 1), b = Self.t("b", position: 2), c = Self.t("c", position: 3)
-        let cols = Columns(planning: [a, b, c])
-        #expect(BoardScreenRules.dropMove(b, to: .planning, before: "b", cols: cols) == nil)
-        #expect(BoardScreenRules.dropMove(a, to: .planning, before: "b", cols: cols) == nil) // a is already above b
-        #expect(BoardScreenRules.dropMove(c, to: .planning, before: nil, cols: cols) == nil)
-        // One step down is a real move.
-        #expect(BoardScreenRules.dropMove(a, to: .planning, before: "c", cols: cols)?.body.position == 2.5)
-    }
-
-    @Test func dropCountsHiddenCardsSoTheyKeepTheirPlace() {
-        // A hidden child at position 2 sits between the two visible cards; dropping above b lands
-        // between the child and b, not between a and b.
-        let a = Self.t("a", position: 1), kid = Self.t("k", position: 2, parentId: "x"), b = Self.t("b", position: 3)
-        let moving = Self.t("m", .review)
-        let m = BoardScreenRules.dropMove(moving, to: .planning, before: "b", cols: Columns(planning: [a, kid, b]))
-        #expect(m?.body == .init(status: .planning, position: 2.5))
-        #expect(m?.completedAt == .null)
-    }
-
-    @Test func dropIntoDoneSendsNoPositionAndCompletesNow() {
-        let t = Self.t("a", .review)
-        let m = BoardScreenRules.dropMove(t, to: .done, before: "z", cols: Columns(done: [Self.t("z", .done)]), now: 42)
-        #expect(m?.body == .init(status: .done, position: nil))
-        #expect(m?.completedAt == .value(42))
-        // Reordering within Done is a no-op.
-        let d = Self.t("d", .done, completedAt: .value(5))
-        #expect(BoardScreenRules.dropMove(d, to: .done, before: nil, cols: Columns(done: [d])) == nil)
-    }
-
-    @Test func dropOnAnUnknownCardGoesToTheEnd() {
-        let a = Self.t("a", position: 1)
-        let m = BoardScreenRules.dropMove(Self.t("m", .review), to: .planning, before: "gone", cols: Columns(planning: [a]))
-        #expect(m?.body.position == 2)
-    }
-
     // MARK: projects
 
     @Test func openCountsLeaveDoneOut() {

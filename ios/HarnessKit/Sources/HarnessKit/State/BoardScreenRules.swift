@@ -1,9 +1,9 @@
 import Foundation
 
 // The board screen's decisions that don't need a screen (the board, its cards and the Projects
-// sheet): which column a first visit lands on, where search results jump,
-// what a card's menu offers, what VoiceOver reads for a card, where a dragged card goes, and the
-// Projects sheet's open counts.
+// sheet): which column a first visit lands on, where search results jump, how the iPad's
+// side-by-side columns are sized, when Done tops itself up, what a card's menu offers, what
+// VoiceOver reads for a card, and the Projects sheet's open counts.
 
 public enum BoardScreenRules {
     /// The first visit lands on the most useful column: what needs you, else what's moving.
@@ -114,24 +114,6 @@ public enum BoardScreenRules {
         let scalars = t.description.unicodeScalars
         let first = String(String.UnicodeScalarView(scalars.prefix { $0 != "\n" }))
         return first.isEmpty ? "Empty draft" : first
-    }
-
-    /// The update for dropping `t` into `status` just above the card `beforeId` (nil: at the end).
-    /// `cols` is the unfiltered board, so hidden children keep their place around the drop. Nil when
-    /// nothing would change (dropped where it already is). Done is ordered by completion, so a
-    /// drop there sends no position.
-    public static func dropMove(_ t: Ticket, to status: TicketStatus, before beforeId: String?, cols: Columns, now: Timestamp = Date().timeIntervalSince1970 * 1000) -> BoardColumns.Move? {
-        if beforeId == t.id { return nil }
-        let column = cols[status]
-        let others = column.filter { $0.id != t.id }
-        let index = beforeId.flatMap { id in others.firstIndex { $0.id == id } } ?? others.count
-        // Inserting a card back at its own index (in the column without it) leaves the order as is.
-        let inPlace = t.status == status && column.firstIndex { $0.id == t.id } == index
-        let position = status == .done || inPlace ? nil : BoardState.positionForDrop(others, index: index)
-        let body = BoardColumns.Move.Body(status: t.status != status ? status : nil, position: position)
-        if body.status == nil && body.position == nil { return nil }
-        let completedAt: Patch<Timestamp> = t.status == status ? t.completedAt : status == .done ? .value(now) : .null
-        return BoardColumns.Move(body: body, completedAt: completedAt)
     }
 
     /// Open (not done) tickets per project id, for the Projects sheet.
