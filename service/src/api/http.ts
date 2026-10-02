@@ -325,11 +325,23 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   });
 
   // Browser
-  add("GET", "/browser/:sessionId", ({ params }) => browser.state(o.getSession(params.sessionId!).id));
+  // `tab` / `tabId`: a tab number (omitted: the session's lowest open tab).
+  const tabNumber = (v: unknown): number | undefined => {
+    if (v === undefined || v === null || v === "") return undefined;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 1) throw new HarnessError(400, "tab must be a positive whole number");
+    return n;
+  };
+  add("GET", "/browser/:sessionId", ({ params, url }) =>
+    browser.state(o.getSession(params.sessionId!).id, { tab: tabNumber(url.searchParams.get("tab")) }),
+  );
   add("POST", "/browser/:sessionId/navigate", async ({ params, body }) => {
     const b = await body();
     if (typeof b?.url !== "string" || !b.url) throw new HarnessError(400, "url is required");
-    return browser.open(o.getSession(params.sessionId!).id, b.url);
+    const sessionId = o.getSession(params.sessionId!).id;
+    const tab = tabNumber(b.tabId);
+    if (tab !== undefined && !(await browser.tabs(sessionId)).some((t) => t.id === tab)) throw new HarnessError(404, `No browser tab ${tab}`);
+    return browser.open(sessionId, b.url, { tab });
   });
 
   // Plugins (DESIGN.md "Plugins"). /plugins/<id>/api/* and /plugins/<id>/ui/* are handled in createHttpServer.

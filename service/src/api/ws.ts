@@ -55,14 +55,22 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
           return send(ws, { type: "pong" });
         case "browser.subscribe": {
           const sid = msg.sessionId;
-          if (typeof sid !== "string" || ws.data.subs.has(sid)) return;
+          if (typeof sid !== "string") return;
+          const tab = typeof msg.tabId === "number" ? msg.tabId : undefined;
+          // Subscribing again is a tab switch; without a tab it changes nothing.
+          if (ws.data.subs.has(sid) && tab === undefined) return;
           ws.data.subs.add(sid);
           try {
             await browser.subscribe(
               sid,
               ws.data.id,
-              (f) => send(ws, { type: "event", event: { kind: "browser.frame", sessionId: sid, data: f.data, width: f.width, height: f.height } }),
+              (f) =>
+                send(ws, {
+                  type: "event",
+                  event: { kind: "browser.frame", sessionId: sid, tabId: f.tabId, data: f.data, width: f.width, height: f.height },
+                }),
               (state) => send(ws, { type: "event", event: { kind: "browser.state", sessionId: sid, state } }),
+              { tab },
             );
           } catch (err) {
             ws.data.subs.delete(sid);
@@ -74,7 +82,10 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
           return unsubscribe(ws, msg.sessionId);
         case "browser.input":
           try {
-            await browser.input(msg.sessionId, msg.input);
+            await browser.input(msg.sessionId, msg.input, {
+              tab: typeof msg.tabId === "number" ? msg.tabId : undefined,
+              subscriberId: ws.data.id,
+            });
           } catch (err) {
             send(ws, { type: "error", message: `browser.input failed: ${err instanceof Error ? err.message : String(err)}` });
           }

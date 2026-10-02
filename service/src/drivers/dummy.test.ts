@@ -186,7 +186,7 @@ describe("dummy driver", () => {
     const { req, browser, ops } = makeReq("work", "/browse https://example.com/x");
     const { events } = await collect(driver, req);
     expect(calls(events).map((c) => c.name)).toEqual(["browser_open", "browser_content"]);
-    expect(browser.calls[0]).toEqual({ method: "open", args: ["s_1", "https://example.com/x"] });
+    expect(browser.calls[0]).toEqual({ method: "open", args: ["s_1", "https://example.com/x", { tab: undefined, newTab: false }] });
     expect(browser.calls.some((c) => c.method === "content")).toBe(true);
     expect(texts(events).at(-1)).toContain("Example page text");
     expect(ops.calls).toEqual([]);

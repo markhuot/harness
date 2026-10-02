@@ -17,15 +17,17 @@ export function tempHome(prefix = "harness-test-") {
   return tempDir(prefix);
 }
 
-export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<string, { onFrame: Function; onState: Function }> } {
+type StubSub = { onFrame: Function; onState: Function; tab?: number };
+
+export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<string, StubSub> } {
   const states = new Map<string, BrowserState>();
-  const subs = new Map<string, { onFrame: Function; onState: Function }>();
+  const subs = new Map<string, StubSub>();
   const closed: string[] = [];
   return {
     closed,
     subs,
     async open(sessionId, url) {
-      const s = { sessionId, url, title: url, loading: false };
+      const s = { sessionId, tabId: 1, url, title: url, loading: false };
       states.set(sessionId, s);
       for (const [k, v] of subs) if (k.startsWith(sessionId + "|")) v.onState(s);
       return s;
@@ -33,6 +35,11 @@ export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<st
     async state(sessionId) {
       return states.get(sessionId) ?? null;
     },
+    async tabs(sessionId) {
+      const s = states.get(sessionId);
+      return s ? [{ id: 1, url: s.url, title: s.title, loading: s.loading }] : [];
+    },
+    async closeTab() {},
     async content() {
       return "page text";
     },
@@ -45,8 +52,8 @@ export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<st
       return "";
     },
     async input() {},
-    async subscribe(sessionId, subscriberId, onFrame, onState) {
-      subs.set(`${sessionId}|${subscriberId}`, { onFrame, onState });
+    async subscribe(sessionId, subscriberId, onFrame, onState, opts) {
+      subs.set(`${sessionId}|${subscriberId}`, { onFrame, onState, tab: opts?.tab });
     },
     async unsubscribe(sessionId, subscriberId) {
       subs.delete(`${sessionId}|${subscriberId}`);

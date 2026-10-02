@@ -331,6 +331,16 @@ feature needs something new here, add to it without changing what's there.
   `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
   (browserState, browserNavigate, ticketTabs, settings, prompts, watchers) use `store.api`, the
   store's client as a `HarnessClient` (UI/StoreAPI.swift). Never cast `store.client` inline.
+- **Browser tabs.** A session's browser can have several tabs; a socket watches one per session.
+  `subscribeBrowser(id, tabId:)` picks it (nil: the lowest open tab; again with another id
+  switches), `sendBrowserInput(id, tabId:, input)` aims one input at a tab (nil: the watched one;
+  `.closeTab` needs it), and `.newTab(url:)` opens a tab and moves the socket there. The service
+  moves a socket by itself (newTab, closing the watched tab), so HarnessSocket follows each
+  browser.state's `tabId` and resubscribes to that tab after a reconnect. BrowserTabModel keeps the
+  shown tab in HarnessKit's `BrowserTabSelection` across resubscribes of the same session: it drops
+  the frame when the tab changes, ignores frames from other tabs (in flight after a switch), and
+  supplies the strip (two or more tabs) and chip labels. Services from before tabs send no ids:
+  nothing is filtered, the strip never shows and New tab is disabled.
 - **Navigation.** `Router` (HarnessKit/Shell, one per window: § Windows) holds `selectedTab` (the section: Board, Inbox or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
@@ -789,7 +799,7 @@ native-pattern difference, not a missing feature.
 | Composer: placeholder by status, move switch while writing, @files, /commands, Send | screens/TicketDetail, ui/mentions, lib/mentionCaret | TicketDetailComposer, Pickers/MentionTextEditor | done |
 | Transcript: rows, deltas, Working…, thinking, tools (images, sub-agent links), permissions, errors, stick to bottom | screens/Transcript | TranscriptView, TranscriptRows, TranscriptToolRow, HarnessKit TranscriptLogic | done (windowed, "Show earlier messages (N)": native only) |
 | Agents & tasks tab: sub-agents and background tasks (Bash, Monitor) in one list, latest update first, with type chips; sub-agent view (Back to Agents & tasks, breadcrumbs, task, transcript); task output view (command, output polled every second and following the bottom, notes, result); tool rows link with "Open transcript" / "Open output" | — (native only) | AgentsTabView, SubagentView, TaskOutputView, HarnessKit AgentsLogic/Subagents (`taskOutputs`) | done |
-| Browser tab: toolbar, frames, touch/wheel/drag input, keyboard, resize gate | screens/BrowserTab, lib/browserInput | BrowserTabView, BrowserTabModel, BrowserInputViews | done |
+| Browser tab: toolbar, frames, touch/wheel/drag input, keyboard, resize gate, tab strip and New tab | screens/BrowserTab, lib/browserInput | BrowserTabView, BrowserTabModel, BrowserInputViews | done |
 | Plugin tabs in a web view with the host bridge and theme | screens/PluginTab, lib/pluginHost | PluginTabView, PluginWebHost, PluginTabsLoader | done |
 | Changes tab (the git plugin's page) | plugins/git/ui | ChangesTabView, ChangesRowViews, HarnessKit ChangesStore/ChangesRows/ChangesPatch | done (native; file paths open the file viewer: native only) |
 | Inbox: watcher strip, Retry now, error expand, sessions, Inbox zero | screens/Inbox | Features/Inbox/InboxScreen, HarnessKit InboxLogic | done |

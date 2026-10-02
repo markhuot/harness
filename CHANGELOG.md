@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- A ticket's browser can have several tabs. Agents can open pages in new tabs and work in each
+  one separately, so sub-agents can each browse in a tab of their own at the same time. A link
+  that opens a new window (or a page that opens a popup) shows up as a new tab too.
+- The Browser tab on the Mac, iPhone and iPad has a new-tab button, and once more than one tab is
+  open, a row of tabs above the page. Tap or click a tab to watch it, or close it with its ×.
+  Each app keeps its own place, so you can watch one tab while the agent works in another.
+
 ### Fixed
 
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for

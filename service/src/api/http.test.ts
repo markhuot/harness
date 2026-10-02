@@ -409,16 +409,22 @@ describe("http api", () => {
     a.socket.subscribeBrowser(t.sessionId);
     await until(() => [...browser.subs.keys()].some((k) => k.startsWith(t.sessionId + "|")));
     const sub = [...browser.subs.entries()].find(([k]) => k.startsWith(t.sessionId + "|"))![1];
-    sub.onFrame({ sessionId: t.sessionId, data: "AAAA", width: 10, height: 20 });
+    sub.onFrame({ sessionId: t.sessionId, tabId: 1, data: "AAAA", width: 10, height: 20 });
     await until(() => a.events.some((e) => e.kind === "browser.frame"));
     const frame = a.events.find((e) => e.kind === "browser.frame") as any;
-    expect([frame.sessionId, frame.data, frame.width, frame.height]).toEqual([t.sessionId, "AAAA", 10, 20]);
+    expect([frame.sessionId, frame.tabId, frame.data, frame.width, frame.height]).toEqual([t.sessionId, 1, "AAAA", 10, 20]);
 
     const inputs: unknown[] = [];
-    browser.input = async (sid, input) => void inputs.push([sid, input]);
+    browser.input = async (sid, input, opts) => void inputs.push([sid, input, opts]);
     a.socket.send({ type: "browser.input", sessionId: t.sessionId, input: { type: "reload" } });
-    await until(() => inputs.length === 1);
-    expect(inputs[0]).toEqual([t.sessionId, { type: "reload" }]);
+    a.socket.send({ type: "browser.input", sessionId: t.sessionId, tabId: 2, input: { type: "closeTab" } });
+    await until(() => inputs.length === 2);
+    // The socket is the subscriber, so input without a tab reaches the tab it watches.
+    const subscriberId = [...browser.subs.keys()].find((k) => k.startsWith(t.sessionId + "|"))!.split("|")[1];
+    expect(inputs).toEqual([
+      [t.sessionId, { type: "reload" }, { tab: undefined, subscriberId }],
+      [t.sessionId, { type: "closeTab" }, { tab: 2, subscriberId }],
+    ]);
 
     const state = await client.browserNavigate(t.sessionId, "https://example.com");
     expect(state.url).toBe("https://example.com");
@@ -430,6 +436,37 @@ describe("http api", () => {
     a.socket.close();
     b.socket.close();
     await until(() => browser.subs.size === 0);
+  });
+
+  test("browser.subscribe with a tab switches the socket's tab; a repeat without one changes nothing; the client resubscribes to it", async () => {
+    const { client, dir, browser } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, prompt: "x", start: false, driver: "fake" });
+    const a = collect(client);
+    await a.ready;
+    const subscribed: (number | undefined)[] = [];
+    const subscribe = browser.subscribe.bind(browser);
+    browser.subscribe = async (sid, id, onFrame, onState, opts) => {
+      subscribed.push(opts?.tab);
+      return subscribe(sid, id, onFrame, onState, opts);
+    };
+    a.socket.subscribeBrowser(t.sessionId);
+    a.socket.subscribeBrowser(t.sessionId, 3);
+    a.socket.send({ type: "browser.subscribe", sessionId: t.sessionId });
+    a.socket.subscribeBrowser(t.sessionId, 2);
+    await until(() => subscribed.length === 3);
+    await Bun.sleep(20);
+    expect(subscribed).toEqual([undefined, 3, 2]);
+
+    // ?tab= and tabId reach the browser; a tab that isn't open is a 404, not a new page.
+    const states: unknown[] = [];
+    browser.state = async (sid, opts) => (states.push(opts), null);
+    await client.browserState(t.sessionId, 2);
+    await client.browserState(t.sessionId);
+    expect(states).toEqual([{ tab: 2 }, { tab: undefined }]);
+    await expect(client.browserNavigate(t.sessionId, "https://example.com", 5)).rejects.toThrow("No browser tab 5");
+    await expect(client.browserNavigate(t.sessionId, "https://example.com", 0)).rejects.toThrow("positive whole number");
+    a.socket.close();
   });
 
   test("conductor with the real dummy driver + tools drives its children to done", async () => {

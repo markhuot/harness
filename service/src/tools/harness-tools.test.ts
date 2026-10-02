@@ -38,8 +38,14 @@ describe("tool catalogue", () => {
     expect(props("reopen_ticket")).toEqual(["key", "notes"]);
     expect(props("dispatch_ticket")).toEqual(["base_branch", "branch", "conductor", "description", "key", "project_key", "start", "ticket_key", "title", "url"]);
     expect(props("decline_work")).toEqual(["reason", "title"]);
-    expect(props("browser_content")).toEqual(["format", "max_chars", "selector"]);
-    expect(props("browser_type")).toEqual(["selector", "submit", "text"]);
+    expect(props("browser_open")).toEqual(["new_tab", "tab", "url"]);
+    expect(props("browser_tabs")).toEqual([]);
+    expect(props("browser_close_tab")).toEqual(["tab"]);
+    expect(props("browser_content")).toEqual(["format", "max_chars", "selector", "tab"]);
+    expect(props("browser_click")).toEqual(["selector", "tab"]);
+    expect(props("browser_type")).toEqual(["selector", "submit", "tab", "text"]);
+    expect(props("browser_eval")).toEqual(["expression", "tab"]);
+    expect(props("browser_screenshot")).toEqual(["save_to", "tab"]);
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
     expect(props("review_decision")).toEqual(["decision", "notes"]);
@@ -446,7 +452,7 @@ describe("browser tools → BrowserService", () => {
     const browser = fakeBrowser();
     const ctx = fakeContext({ browser });
     const opened = await tool("browser_open").execute({ url: "http://localhost:3000" }, ctx);
-    expect(text(opened)).toContain("Opened http://localhost:3000");
+    expect(text(opened)).toContain("Opened http://localhost:3000 in tab 1");
     expect(text(opened)).toContain("Title of http://localhost:3000");
     await tool("browser_content").execute({}, ctx);
     await tool("browser_content").execute({ selector: "main", format: "html", max_chars: 50 }, ctx);
@@ -460,15 +466,69 @@ describe("browser tools → BrowserService", () => {
 
     const calls = browser.calls.filter((c) => c.method !== "state");
     expect(calls).toEqual([
-      { method: "open", args: ["s_1", "http://localhost:3000"] },
-      { method: "content", args: ["s_1", { selector: undefined, format: "text", maxChars: 20000 }] },
-      { method: "content", args: ["s_1", { selector: "main", format: "html", maxChars: 50 }] },
-      { method: "click", args: ["s_1", "#go"] },
-      { method: "type", args: ["s_1", "input", "hi", { submit: true }] },
-      { method: "type", args: ["s_1", "input", "hi", { submit: false }] },
-      { method: "evaluate", args: ["s_1", "6*7"] },
-      { method: "screenshot", args: ["s_1"] },
+      { method: "open", args: ["s_1", "http://localhost:3000", { tab: undefined, newTab: false }] },
+      { method: "content", args: ["s_1", { selector: undefined, format: "text", maxChars: 20000, tab: undefined }] },
+      { method: "content", args: ["s_1", { selector: "main", format: "html", maxChars: 50, tab: undefined }] },
+      { method: "click", args: ["s_1", "#go", { tab: undefined }] },
+      { method: "type", args: ["s_1", "input", "hi", { submit: true, tab: undefined }] },
+      { method: "type", args: ["s_1", "input", "hi", { submit: false, tab: undefined }] },
+      { method: "evaluate", args: ["s_1", "6*7", { tab: undefined }] },
+      { method: "screenshot", args: ["s_1", { tab: undefined }] },
     ]);
+  });
+
+  test("tab and new_tab reach the browser, and the result names the tab", async () => {
+    const browser = fakeBrowser();
+    const ctx = fakeContext({ browser });
+    expect(text(await tool("browser_open").execute({ url: "http://a.test", new_tab: true }, ctx))).toContain("Opened http://a.test in tab 2");
+    expect(text(await tool("browser_open").execute({ url: "http://b.test", tab: 3 }, ctx))).toContain("in tab 3");
+    await tool("browser_content").execute({ tab: 2 }, ctx);
+    await tool("browser_click").execute({ selector: "#go", tab: 2 }, ctx);
+    await tool("browser_type").execute({ selector: "input", text: "hi", tab: 2 }, ctx);
+    await tool("browser_eval").execute({ expression: "1", tab: 2 }, ctx);
+    await tool("browser_screenshot").execute({ tab: 2 }, ctx);
+    const calls = browser.calls.filter((c) => c.method !== "state");
+    expect(calls.map((c) => c.args.at(-1))).toEqual([
+      { tab: undefined, newTab: true },
+      { tab: 3, newTab: false },
+      { selector: undefined, format: "text", maxChars: 20000, tab: 2 },
+      { tab: 2 },
+      { submit: false, tab: 2 },
+      { tab: 2 },
+      { tab: 2 },
+    ]);
+    // browser_click reports the url of the tab it clicked in
+    expect(browser.calls.find((c) => c.method === "state")?.args).toEqual(["s_1", { tab: 2 }]);
+  });
+
+  test("browser_open refuses tab together with new_tab, before touching the browser", async () => {
+    const browser = fakeBrowser();
+    const r = await tool("browser_open").execute({ url: "http://a.test", tab: 1, new_tab: true }, fakeContext({ browser }));
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("not both");
+    expect(browser.calls).toEqual([]);
+  });
+
+  test("tab must be a whole number from 1", async () => {
+    const r = await tool("browser_content").execute({ tab: 0 }, fakeContext());
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain(">= 1");
+  });
+
+  test("browser_tabs and browser_close_tab list what is open", async () => {
+    const tabs = [
+      { id: 1, url: "http://a.test/", title: "A", loading: false },
+      { id: 3, url: "http://c.test/", title: "", loading: true },
+    ];
+    const browser = fakeBrowser({ tabs: async () => tabs });
+    const ctx = fakeContext({ browser });
+    expect(text(await tool("browser_tabs").execute({}, ctx))).toBe("Tab 1: A — http://a.test/\nTab 3: (untitled) — http://c.test/ (loading)");
+    const closed = await tool("browser_close_tab").execute({ tab: 2 }, ctx);
+    expect(text(closed)).toBe("Closed tab 2.\nOpen tabs:\nTab 1: A — http://a.test/\nTab 3: (untitled) — http://c.test/ (loading)");
+    expect(browser.calls.find((c) => c.method === "closeTab")?.args).toEqual(["s_1", 2]);
+    const none = fakeBrowser({ tabs: async () => [] });
+    expect(text(await tool("browser_tabs").execute({}, fakeContext({ browser: none })))).toContain("No tabs are open");
+    expect(text(await tool("browser_close_tab").execute({ tab: 1 }, fakeContext({ browser: none })))).toBe("Closed tab 1. No tabs are open.");
   });
 
   describe("browser_screenshot save_to", () => {

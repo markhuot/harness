@@ -324,11 +324,12 @@ export class HarnessClient {
   }
 
   // Browser
-  browserState(sessionId: string) {
-    return this.request<BrowserState | null>("GET", `/browser/${sessionId}`);
+  /** `tabId` omitted: the lowest open tab. */
+  browserState(sessionId: string, tabId?: number) {
+    return this.request<BrowserState | null>("GET", `/browser/${sessionId}${tabId === undefined ? "" : `?tab=${tabId}`}`);
   }
-  browserNavigate(sessionId: string, url: string) {
-    return this.request<BrowserState>("POST", `/browser/${sessionId}/navigate`, { url });
+  browserNavigate(sessionId: string, url: string, tabId?: number) {
+    return this.request<BrowserState>("POST", `/browser/${sessionId}/navigate`, tabId === undefined ? { url } : { url, tabId });
   }
 
   // Plugins
@@ -349,11 +350,14 @@ export class HarnessClient {
   }
 }
 
+const browserSubscribe = (sessionId: string, tabId: number | undefined): ClientMessage =>
+  tabId === undefined ? { type: "browser.subscribe", sessionId } : { type: "browser.subscribe", sessionId, tabId };
+
 export class HarnessSocket {
   private ws: WebSocket | null = null;
   private closed = false;
   private retry = 250;
-  private browserSubs = new Set<string>();
+  private browserSubs = new Map<string, number | undefined>();
 
   constructor(
     private url: string,
@@ -368,7 +372,7 @@ export class HarnessSocket {
     ws.onopen = () => {
       this.retry = 250;
       this.send({ type: "hello", client: "harness-client" });
-      for (const id of this.browserSubs) this.send({ type: "browser.subscribe", sessionId: id });
+      for (const [id, tabId] of this.browserSubs) this.send(browserSubscribe(id, tabId));
       this.handlers.onStatus?.(true);
     };
     ws.onmessage = (m) => {
@@ -392,9 +396,14 @@ export class HarnessSocket {
     if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
   }
 
-  subscribeBrowser(sessionId: string) {
-    this.browserSubs.add(sessionId);
-    this.send({ type: "browser.subscribe", sessionId });
+  /** Watch a session's browser; again with another `tabId` switches tabs. Remembered across reconnects. */
+  subscribeBrowser(sessionId: string, tabId?: number) {
+    this.browserSubs.set(sessionId, tabId);
+    this.send(browserSubscribe(sessionId, tabId));
+  }
+  /** Remember the tab a session's subscription is on (the service moved it, e.g. after a newTab), for reconnects. */
+  noteBrowserTab(sessionId: string, tabId: number | undefined) {
+    if (this.browserSubs.has(sessionId)) this.browserSubs.set(sessionId, tabId);
   }
   unsubscribeBrowser(sessionId: string) {
     this.browserSubs.delete(sessionId);

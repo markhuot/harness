@@ -172,8 +172,11 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
   const calls: RecordedCall[] = [];
   let current: BrowserState | null = null;
   const defaults: Required<BrowserImpl> = {
-    open: async (sessionId: string, url: string) => (current = { sessionId, url, title: `Title of ${url}`, loading: false }),
+    open: async (sessionId: string, url: string, opts?: { tab?: number; newTab?: boolean }) =>
+      (current = { sessionId, tabId: opts?.tab ?? (opts?.newTab ? 2 : 1), url, title: `Title of ${url}`, loading: false }),
     state: async () => current,
+    tabs: async () => (current ? [{ id: current.tabId ?? 1, url: current.url, title: current.title, loading: false }] : []),
+    closeTab: async () => {},
     content: async () => "Example page text",
     click: async () => {},
     type: async () => {},

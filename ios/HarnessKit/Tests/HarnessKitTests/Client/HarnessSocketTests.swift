@@ -65,6 +65,68 @@ struct HarnessSocketTests {
         await s.close()
     }
 
+    @Test func resubscribeReturnsToTheLastTab() async {
+        let c1 = FakeConnection(), c2 = FakeConnection(), c3 = FakeConnection()
+        let sleep = ManualSleep()
+        let s = socket(FakeSocketFactory([c1, c2, c3]), sleep)
+        let status = Recorder(s.status)
+        let events = Recorder(s.events)
+        await eventually("first open") { status.items == [true] }
+
+        await s.subscribeBrowser("ses_1", tabId: 2)
+        await s.subscribeBrowser("ses_2")
+        await s.subscribeBrowser("ses_1", tabId: 3) // a switch: still one subscription, now on 3
+        #expect(c1.sentMessages == [
+            hello, .browserSubscribe(sessionId: "ses_1", tabId: 2), .browserSubscribe(sessionId: "ses_2"),
+            .browserSubscribe(sessionId: "ses_1", tabId: 3),
+        ])
+
+        // The service moved ses_2 to a new tab (newTab) and says so; a state for a session this
+        // socket doesn't watch changes nothing.
+        c1.push(eventText(#"{"kind":"browser.state","sessionId":"ses_2","state":{"sessionId":"ses_2","tabId":5,"url":"about:blank","title":"","loading":false}}"#))
+        c1.push(eventText(#"{"kind":"browser.state","sessionId":"ses_9","state":{"sessionId":"ses_9","tabId":1,"url":"about:blank","title":"","loading":false}}"#))
+        await eventually("states seen") { events.items.count == 2 }
+        #expect(await s.browserSubscriptions.map { "\($0.sessionId)#\($0.tabId ?? 0)" } == ["ses_1#3", "ses_2#5"])
+
+        c1.drop()
+        await eventually("sleeping") { sleep.pending == 1 }
+        sleep.advance()
+        await eventually("second open") { status.items == [true, false, true] }
+        #expect(c2.sentMessages == [hello, .browserSubscribe(sessionId: "ses_1", tabId: 3), .browserSubscribe(sessionId: "ses_2", tabId: 5)])
+
+        // A service without tabs answers with no tabId: forget the tab rather than keep a stale one.
+        c2.push(eventText(#"{"kind":"browser.state","sessionId":"ses_1","state":{"sessionId":"ses_1","url":"about:blank","title":"","loading":false}}"#))
+        await eventually("third state") { events.items.count == 3 }
+        await s.noteBrowserTab("ses_9", tabId: 4) // not subscribed: not remembered
+        c2.drop()
+        await eventually("sleeping again") { sleep.pending == 1 }
+        sleep.advance()
+        await eventually("third open") { status.items == [true, false, true, false, true] }
+        #expect(c3.sentMessages == [hello, .browserSubscribe(sessionId: "ses_1"), .browserSubscribe(sessionId: "ses_2", tabId: 5)])
+        await s.close()
+    }
+
+    @Test func tabIdsAreOnTheWireOnlyWhenSet() async throws {
+        let c = FakeConnection()
+        let s = socket(FakeSocketFactory([c]), ManualSleep())
+        await eventually("hello sent") { c.sent.count == 1 }
+        await s.subscribeBrowser("ses_1")
+        await s.subscribeBrowser("ses_1", tabId: 2)
+        await s.send(.browserInput(sessionId: "ses_1", tabId: 2, input: .closeTab))
+        await s.send(.browserInput(sessionId: "ses_1", input: .newTab(url: nil)))
+        await eventually("all sent") { c.sent.count == 5 }
+        let expected = [
+            #"{"type":"browser.subscribe","sessionId":"ses_1"}"#,
+            #"{"type":"browser.subscribe","sessionId":"ses_1","tabId":2}"#,
+            #"{"type":"browser.input","sessionId":"ses_1","tabId":2,"input":{"type":"closeTab"}}"#,
+            #"{"type":"browser.input","sessionId":"ses_1","input":{"type":"newTab"}}"#,
+        ]
+        for (sent, want) in zip(c.sent.dropFirst(), expected) {
+            #expect(try jsonEqual(Data(sent.utf8), Data(want.utf8)), "\(sent)")
+        }
+        await s.close()
+    }
+
     @Test func backoffDoublesToTheCapAcrossFailures() async {
         let factory = FakeSocketFactory() // every attempt is refused
         let sleep = ManualSleep()

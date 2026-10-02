@@ -1,13 +1,36 @@
 import Foundation
 
+/// A session's browser as one viewer sees it: the tab it is on (`tabId`, with that tab's url,
+/// title and loading) and every open tab. Services from before browser tabs omit `tabId` and
+/// `tabs` (both nil; they encode only when set, so a round trip keeps the wire shape).
 public struct BrowserState: Codable, Sendable, Equatable {
     public var sessionId: String
+    public var tabId: Int?
+    public var url: String
+    public var title: String
+    public var loading: Bool
+    /// Every open tab, ascending id.
+    public var tabs: [BrowserTab]?
+
+    public init(sessionId: String, tabId: Int? = nil, url: String, title: String, loading: Bool, tabs: [BrowserTab]? = nil) {
+        self.sessionId = sessionId
+        self.tabId = tabId
+        self.url = url
+        self.title = title
+        self.loading = loading
+        self.tabs = tabs
+    }
+}
+
+/// One tab of a session's browser. Ids count up from 1 per session and are never reused.
+public struct BrowserTab: Codable, Sendable, Equatable, Identifiable {
+    public var id: Int
     public var url: String
     public var title: String
     public var loading: Bool
 
-    public init(sessionId: String, url: String, title: String, loading: Bool) {
-        self.sessionId = sessionId
+    public init(id: Int, url: String, title: String, loading: Bool) {
+        self.id = id
         self.url = url
         self.title = title
         self.loading = loading
@@ -63,7 +86,13 @@ public enum BrowserInput: Codable, Sendable, Equatable {
     case back
     case forward
     case reload
+    /// The size of every tab in the session.
     case resize(width: Int, height: Int)
+    /// Open a tab (at `url`, else about:blank) and switch this socket to it.
+    case newTab(url: String?)
+    /// Close the input's tab (ClientMessage `browserInput`'s `tabId`); closing the last one
+    /// leaves a blank tab in its place.
+    case closeTab
     case unknown(type: String, raw: JSONValue)
 
     public var type: String {
@@ -76,6 +105,8 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         case .forward: "forward"
         case .reload: "reload"
         case .resize: "resize"
+        case .newTab: "newTab"
+        case .closeTab: "closeTab"
         case let .unknown(type, _): type
         }
     }
@@ -92,6 +123,8 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         case "forward": self = .forward
         case "reload": self = .reload
         case "resize": self = .resize(width: try c.decode(Int.self, forKey: "width"), height: try c.decode(Int.self, forKey: "height"))
+        case "newTab": self = .newTab(url: try c.decodeIfPresent(String.self, forKey: "url"))
+        case "closeTab": self = .closeTab
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -111,6 +144,7 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         case let .resize(width, height):
             try c.encode(width, forKey: "width")
             try c.encode(height, forKey: "height")
+        case let .newTab(url): try c.encodeIfPresent(url, forKey: "url")
         default: break
         }
     }
