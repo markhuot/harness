@@ -103,9 +103,14 @@ struct RootView: View {
 
 /// The tab bar: Board, Inbox (badge: triage sessions triaging or busy), Settings, and Search in
 /// the search role. Each tab has its own NavigationStack bound to the Router's path for it.
+/// `.searchable` is on the Search tab's NavigationStack rather than on its screen, so the Search
+/// button sits apart in the tab bar and one tap turns it into the field there (not at the top).
+/// On the TabView it would put a field on every tab.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(BoardStore.self) private var store
+    @Environment(AppModel.self) private var app
+    @State private var query = ""
 
     var body: some View {
         @Bindable var router = router
@@ -122,9 +127,18 @@ struct MainTabs: View {
                 TabStack(tab: .settings) { SettingsScreen() }
             }
             Tab("Search", systemImage: "magnifyingglass", value: AppTab.search, role: .search) {
-                TabStack(tab: .search) { BoardScreen(mode: .search) }
+                TabStack(tab: .search) { BoardScreen(mode: .search, query: query) }
+                    .searchable(text: $query, prompt: searchPrompt)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
             }
         }
+        .tabViewSearchActivation(.searchTabSelection)
+    }
+
+    /// "Search <project>" when the board is filtered to a project, else "Search tickets".
+    private var searchPrompt: String {
+        app.prefs.boardProject.flatMap { store.state.projects[$0] }.map { "Search \($0.name)" } ?? "Search tickets"
     }
 }
 
