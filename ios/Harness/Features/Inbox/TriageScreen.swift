@@ -44,8 +44,6 @@ struct TriageScreen: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
-        // RN's /inbox/[id] is a root-stack route, above the tabs.
-        .toolbar(.hidden, for: .tabBar)
     }
 }
 

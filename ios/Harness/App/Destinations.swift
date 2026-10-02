@@ -23,6 +23,8 @@ struct RouteScreen: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(c.bg)
+        // RN pushes these on the root stack, over the tabs, so the tab bar isn't there.
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
