@@ -14,9 +14,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPad, the board shows all five columns side by side, as on the Mac, instead of one column at a
   time. Each column has its own header with its count and scrolls on its own. When the window is too
   narrow for all five (portrait on an 11-inch iPad, a small Stage Manager window), the board scrolls
-  sideways, and tapping a column's header brings it into view. Drag a card onto another card to put
-  it there, or onto a column's header or empty space to move it to the end of that column. In a
-  narrow Split View the board works as it does on iPhone.
+  sideways, and tapping a column's header brings it into view. Move a card from its menu (touch and
+  hold), as on the Mac. In a narrow Split View the board works as it does on iPhone.
 
 ## [app-20261002.1101](https://github.com/markhuot/harness/releases/tag/app-20261002.1101) - 2026-10-02
 

@@ -22,8 +22,6 @@ struct BoardScreen: View {
     @State private var jumping = false
     /// The chip a dragged card hovers over.
     @State private var dropChip: TicketStatus?
-    /// The side-by-side column whose cards (or the space under them) a dragged card hovers over.
-    @State private var dropColumn: TicketStatus?
     @State private var query = ""
     /// The side-by-side columns at least partly on screen (all of them when they fit).
     @State private var visible: Set<TicketStatus> = []
@@ -39,7 +37,9 @@ struct BoardScreen: View {
             if layout == .pager {
                 BoardStatusStrip(
                     page: page ?? .planning, count: { ctx.count($0) }, dropChip: dropChip,
-                    onTap: goTo, onDrop: { key, s in dropOnChip(key, s, ctx) }, onTarget: target)
+                    onTap: goTo, onDrop: { key, s in dropOnChip(key, s, ctx) }, onTarget: { s, on in
+                        if on { dropChip = s } else if dropChip == s { dropChip = nil }
+                    })
             }
             if let search = ctx.search {
                 BoardSearchNote(search: search) { store.loader.retrySearch() }
@@ -126,25 +126,14 @@ struct BoardScreen: View {
             ScrollView(.horizontal) {
                 HStack(alignment: .top, spacing: Self.columnSpacing) {
                     ForEach(TicketStatus.allKnown, id: \.self) { status in
-                        BoardColumnFrame(
-                            status: status, count: ctx.count(status), targeted: dropChip == status || dropColumn == status,
-                            onTap: { reveal(status) },
-                            onDrop: { dropAtEnd($0, status, ctx) }, onTarget: { target(status, $0) }
-                        ) {
+                        BoardColumnFrame(status: status, count: ctx.count(status), onTap: { reveal(status) }) {
+                            // No drag and drop here, as on the Mac: cards move from their menu.
                             BoardColumnView(
                                 status: status, ctx: ctx,
                                 onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
-                                onDrop: { key, before in dropOnCard(key, status, before: before, ctx) },
+                                onDrop: nil,
                                 onDiscard: discard,
                                 inset: EdgeInsets(top: 6, leading: 8, bottom: 10, trailing: 8))
-                            // The column's own scroll view would keep drops off the panel's empty
-                            // space under the cards; cards still take drops above themselves.
-                            .dropDestination(for: String.self) { keys, _ in
-                                guard let key = keys.first else { return false }
-                                return dropAtEnd(key, status, ctx)
-                            } isTargeted: { on in
-                                if on { dropColumn = status } else if dropColumn == status { dropColumn = nil }
-                            }
                         }
                         .frame(width: sizing.width)
                         .id(status)
@@ -173,10 +162,6 @@ struct BoardScreen: View {
     /// they all fit).
     private func reveal(_ s: TicketStatus) {
         withAnimation(.snappy) { leading = s }
-    }
-
-    private func target(_ s: TicketStatus, _ on: Bool) {
-        if on { dropChip = s } else if dropChip == s { dropChip = nil }
     }
 
     private func goTo(_ s: TicketStatus) {
@@ -239,19 +224,10 @@ struct BoardScreen: View {
 
     /// A card dropped on another card sits just above it.
     private func dropOnCard(_ key: String, _ status: TicketStatus, before: String?, _ ctx: BoardContext) -> Bool {
-        dropColumn = nil
         guard let t = dropped(key), let m = BoardScreenRules.dropMove(t, to: status, before: before, cols: ctx.board) else { return false }
         haptic(.success)
         move(t, m, to: status)
         return true
-    }
-
-    /// A card dropped on a side-by-side column's header or the space under its cards goes to the
-    /// end of that column, its own included (Done: newest).
-    private func dropAtEnd(_ key: String, _ status: TicketStatus, _ ctx: BoardContext) -> Bool {
-        dropChip = nil
-        dropColumn = nil
-        return dropOnCard(key, status, before: nil, ctx)
     }
 
     /// A card dropped on a status chip goes to the bottom of that column (Done: newest).

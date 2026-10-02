@@ -434,9 +434,8 @@ in narrow Split View or a small Stage Manager window gets the phone's):
   sideways without paging. The board starts at Planning (no landing column). Which columns are
   on screen comes from `onScrollVisibilityChange` (all of them when they fit) and drives Done's
   autofill (`shouldAutofillDone`) and the jump to search results (`columnWithResults(_:visible:)`).
-  Drops: on a card, above it; on a header or the space under a column's cards, at its end
-  (`dropMove` with no card to go before). The empty-space drop sits on `BoardColumnView`, not the
-  panel, because the column's scroll view keeps drops from reaching the panel behind it.
+  Like the Mac's board, it has no card drag and drop (`BoardColumnView(onDrop: nil)`): cards move
+  from their menu. Drag and drop is the phone pager's only.
 
 simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
 only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
