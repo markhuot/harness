@@ -2799,6 +2799,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -2988,6 +2989,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 0,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3091,6 +3093,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3280,6 +3283,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3370,6 +3374,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3527,6 +3532,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 0,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3614,6 +3620,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3771,6 +3778,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -3872,6 +3880,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -4055,6 +4064,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 0,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -4155,6 +4165,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -4338,6 +4349,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
@@ -4414,6 +4426,7 @@
           "listen": {
             "mode": "tailscale"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null

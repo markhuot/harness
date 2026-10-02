@@ -30,6 +30,10 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Which addresses the service listens on (DESIGN.md "Network"). The service always sends it
     /// (default { mode: "localhost" }); optional so clients tolerate an older service without it.
     public var listen: ListenSetting?
+    /// Minutes a session browser tab may go unused (no agent call, no viewer input) while nobody has
+    /// it open in the app before the service suspends it (closes its page; it reloads when used). 0 = never. Integer 0–1440, default 5. The
+    /// service always sends it; optional so clients tolerate an older service without it.
+    public var browserIdleTabMinutes: Int?
     /// The user's prompt overrides (DESIGN.md "Prompt overrides"): prompt id → template text, or null
     /// for the built-in prompt that ships with the service. The service sends every id; unset ones
     /// are null, so they pick up the built-in text as it improves. PATCH merges per id; null or ""
@@ -43,7 +47,7 @@ public struct Settings: Codable, Sendable, Equatable {
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, baseBranch: String? = nil, listen: ListenSetting? = nil,
-        prompts: [String: String?]? = nil
+        browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil
     ) {
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -56,8 +60,16 @@ public struct Settings: Codable, Sendable, Equatable {
         self.anthropicApiKey = anthropicApiKey
         self.baseBranch = baseBranch
         self.listen = listen
+        self.browserIdleTabMinutes = browserIdleTabMinutes
         self.prompts = prompts
     }
+}
+
+/// `DEFAULT_BROWSER_IDLE_TAB_MINUTES` / `MAX_BROWSER_IDLE_TAB_MINUTES`: Settings.browserIdleTabMinutes
+/// when unset, and its upper bound (a day).
+public enum BrowserIdleTabs {
+    public static let defaultMinutes = 5
+    public static let maxMinutes = 1440
 }
 
 /// `Omit<Settings, "anthropicApiKey"> & { anthropicApiKeySet: boolean }`: what GET /settings and
@@ -73,6 +85,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var watcherModels: [String: String?]?
     public var baseBranch: String?
     public var listen: ListenSetting?
+    public var browserIdleTabMinutes: Int?
     /// Keyed by `PromptId.rawValue`.
     public var prompts: [String: String?]?
     /// Whether an API key for the anthropic-api driver is stored
@@ -82,7 +95,8 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
-        listen: ListenSetting? = nil, prompts: [String: String?]? = nil, anthropicApiKeySet: Bool
+        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
+        anthropicApiKeySet: Bool
     ) {
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -94,9 +108,13 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         self.watcherModels = watcherModels
         self.baseBranch = baseBranch
         self.listen = listen
+        self.browserIdleTabMinutes = browserIdleTabMinutes
         self.prompts = prompts
         self.anthropicApiKeySet = anthropicApiKeySet
     }
+
+    /// browserIdleTabMinutes, or the default when an older service doesn't send it.
+    public var idleTabMinutes: Int { browserIdleTabMinutes ?? BrowserIdleTabs.defaultMinutes }
 
     /// The override for one prompt, or nil when the built-in is used.
     public func promptOverride(_ id: PromptId) -> String? {

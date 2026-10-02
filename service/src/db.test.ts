@@ -44,7 +44,7 @@ function dbAt(version: number): Database {
 
 describe("migration 26: spec + Activity", () => {
   test("a database at schema 25 keeps its data under the new names", () => {
-    expect(SCHEMA_VERSION).toBe(26);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(26);
     const db = dbAt(25);
     const t0 = 1_700_000_000_000;
     db.exec(`
@@ -71,7 +71,7 @@ describe("migration 26: spec + Activity", () => {
     for (const a of [{ id: "a1", mimeType: "image/png" }, { id: "a2", mimeType: "video/mp4" }]) writeFileSync(attachmentPath(dir, a), "bytes");
 
     migrate(db);
-    expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(26);
+    expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
     const store = new Store(db);
 
     // Descriptions are specs at revision 1; the ticket that had left planning has it as its baseline.

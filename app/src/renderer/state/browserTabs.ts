@@ -23,6 +23,15 @@ export function tabLabel(tab: Pick<BrowserTab, "url" | "title">): string {
   return url;
 }
 
+/** A chip's tooltip: its label, the URL when that adds something, and whether its page is suspended. */
+export function tabTooltip(tab: Pick<BrowserTab, "url" | "title" | "suspended">): string {
+  const label = tabLabel(tab);
+  const lines = [label];
+  if (tab.url && tab.url !== label) lines.push(tab.url);
+  if (tab.suspended) lines.push("Suspended to save memory. Reloads when you open it.");
+  return lines.join("\n");
+}
+
 /**
  * Whether a frame belongs on screen. Frames without a tabId come from services before tabs (always
  * shown); otherwise only the shown tab's frames are, so in-flight frames from the tab just left

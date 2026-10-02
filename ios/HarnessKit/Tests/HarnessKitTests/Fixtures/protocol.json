@@ -263,6 +263,30 @@
           "loading": true
         }
       ]
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 2,
+      "url": "http://localhost:3000/settings",
+      "title": "Settings",
+      "loading": false,
+      "suspended": true,
+      "tabs": [
+        {
+          "id": 1,
+          "url": "http://localhost:3000/login",
+          "title": "Log in",
+          "loading": false,
+          "suspended": false
+        },
+        {
+          "id": 2,
+          "url": "http://localhost:3000/settings",
+          "title": "Settings",
+          "loading": false,
+          "suspended": true
+        }
+      ]
     }
   ],
   "ClientMessage": [
@@ -909,6 +933,7 @@
         "listen": {
           "mode": "tailscale"
         },
+        "browserIdleTabMinutes": 5,
         "prompts": {
           "system.intro": "You are {{agentName}}.",
           "run.review": null
@@ -1568,6 +1593,7 @@
       "listen": {
         "mode": "tailscale"
       },
+      "browserIdleTabMinutes": 5,
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
@@ -1604,6 +1630,7 @@
       "listen": {
         "mode": "tailscale"
       },
+      "browserIdleTabMinutes": 5,
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
@@ -1893,6 +1920,7 @@
       "listen": {
         "mode": "tailscale"
       },
+      "browserIdleTabMinutes": 5,
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
@@ -1929,6 +1957,7 @@
       "listen": {
         "mode": "tailscale"
       },
+      "browserIdleTabMinutes": 0,
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
@@ -1963,7 +1992,8 @@
       "watcherDriver": null,
       "maxConcurrentRuns": 8,
       "permissionMode": "ask",
-      "classifier": "anthropic-api"
+      "classifier": "anthropic-api",
+      "browserIdleTabMinutes": 30
     },
     {
       "watcherDriver": "claude-code",
@@ -3782,6 +3812,7 @@
           "listen": {
             "mode": "lan"
           },
+          "browserIdleTabMinutes": 5,
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null

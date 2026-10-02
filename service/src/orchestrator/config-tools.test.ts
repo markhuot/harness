@@ -226,15 +226,15 @@ describe("config tools behind human approval", () => {
 
   test("update_settings applies the same validation as PATCH /settings once approved", async () => {
     const h = scripted(async (req, call) => {
-      if (req.kind === "work") await call("update_settings", { permission_mode: "ask", max_concurrent_runs: 2 });
+      if (req.kind === "work") await call("update_settings", { permission_mode: "ask", max_concurrent_runs: 2, browser_idle_tab_minutes: 15 });
     });
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     expect(h.orch.settings().permissionMode).toBe("auto");
-    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe("Change settings: maxConcurrentRuns=2, permissionMode=ask");
+    expect(h.orch.ticketDetail(t.key).ticket.pendingApproval!.summary).toBe("Change settings: maxConcurrentRuns=2, browserIdleTabMinutes=15, permissionMode=ask");
     await h.orch.answerApproval(t.key, { decision: "allow_once" });
     await h.orch.idle();
-    expect([h.orch.settings().permissionMode, h.orch.settings().maxConcurrentRuns]).toEqual(["ask", 2]);
+    expect([h.orch.settings().permissionMode, h.orch.settings().maxConcurrentRuns, h.orch.settings().browserIdleTabMinutes]).toEqual(["ask", 2, 15]);
   });
 
   test("base_branch: bad names are refused before a human is asked; good ones apply to settings and projects once approved", async () => {

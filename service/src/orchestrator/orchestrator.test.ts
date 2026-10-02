@@ -471,6 +471,44 @@ describe("ticket lifecycle", () => {
     expect(statuses(h, t.sessionId)).toContain("Re-opened: moved to in progress");
   });
 
+  test("only moving to done suspends the ticket's browser tabs", async () => {
+    const h = setup();
+    const suspendedTabs = (h.browser as any).suspendedTabs as string[];
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /block which db?" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
+    await h.orch.sendMessage(t.key, "postgres /submit");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: "rename it" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    // Started, blocked, unblocked, submitted twice, sent back: the tabs stay for the human to look at.
+    expect(suspendedTabs).toEqual([]);
+
+    await h.orch.completeTicket(t.key);
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(suspendedTabs).toEqual([t.sessionId]);
+
+    // Re-opening doesn't close anything (there's nothing left); done again closes the new run's tabs.
+    await h.orch.reopenTicket(t.key, { notes: "again" });
+    await h.orch.idle();
+    expect(suspendedTabs).toEqual([t.sessionId]);
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    expect(suspendedTabs).toEqual([t.sessionId, t.sessionId]);
+
+    // A drag to done from planning closes tabs too; deleting still forgets the session.
+    const u = await h.orch.createTicket({ projectId: h.project.id, spec: "y", start: false });
+    await h.orch.idle();
+    expect(suspendedTabs).not.toContain(u.sessionId);
+    await h.orch.updateTicket(u.key, { status: "done" });
+    expect(suspendedTabs.at(-1)).toBe(u.sessionId);
+    await h.orch.deleteTicket(u.key);
+    expect((h.browser as any).closed).toEqual([u.sessionId]);
+    await h.orch.idle();
+  });
+
   test("external keys, duplicates and validation", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "mirror", key: "foo-123", start: false });

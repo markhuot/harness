@@ -60,7 +60,7 @@ struct SettingsDriversSection: View {
     }
 }
 
-/// Max concurrent runs and the app-wide base branch. (The Anthropic API key is on the
+/// Max concurrent runs, when unused browser tabs are suspended, and the app-wide base branch. (The Anthropic API key is on the
 /// anthropic-api driver's own screen.)
 struct SettingsGeneralSection: View {
     let settings: PublicSettings
@@ -79,6 +79,14 @@ struct SettingsGeneralSection: View {
                 .keyboardType(.numberPad)
                 .frame(maxWidth: 80)
                 .accessibilityLabel("Max concurrent runs")
+            }
+            SettingsRow(label: "Suspend unused browser tabs after", hint: "In minutes. A suspended tab's page closes to free memory and reloads when you or an agent open it. Tabs you're watching aren't suspended. 0 means never.") {
+                DraftField(value: String(settings.idleTabMinutes)) { v in
+                    if let n = SettingsRules.browserIdleTabMinutes(v) { save(SettingsPatch(browserIdleTabMinutes: n)) }
+                }
+                .keyboardType(.numberPad)
+                .frame(maxWidth: 80)
+                .accessibilityLabel("Suspend unused browser tabs after")
             }
             SettingsRow(label: "Base branch", hint: "Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.") {
                 DraftField(value: settings.baseBranch ?? Branches.defaultBaseBranch, prompt: Branches.defaultBaseBranch, mono: true) { v in

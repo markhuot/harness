@@ -377,6 +377,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var anthropicApiKey: Patch<String>
     public var baseBranch: String?
     public var listen: ListenSetting?
+    public var browserIdleTabMinutes: Int?
     /// Prompt id (`PromptId.rawValue`) → template; nil (null) or "" resets one to the built-in.
     public var prompts: [String: String?]?
 
@@ -385,7 +386,8 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         classifier: ClassifierBackend? = nil, defaultModels: [String: String?]? = nil,
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
-        baseBranch: String? = nil, listen: ListenSetting? = nil, prompts: [String: String?]? = nil
+        baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
+        prompts: [String: String?]? = nil
     ) {
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -398,6 +400,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         self.anthropicApiKey = anthropicApiKey
         self.baseBranch = baseBranch
         self.listen = listen
+        self.browserIdleTabMinutes = browserIdleTabMinutes
         self.prompts = prompts
     }
 }

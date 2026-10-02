@@ -8,7 +8,7 @@ import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { isAppChord } from "../state/keys";
-import { confirmsClose, confirmsNewTab, confirmsSwitch, frameIsForView, tabLabel, type ViewTab } from "../state/browserTabs";
+import { confirmsClose, confirmsNewTab, confirmsSwitch, frameIsForView, tabLabel, tabTooltip, type ViewTab } from "../state/browserTabs";
 import "./browser.css";
 
 function modifiersOf(e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
@@ -425,14 +425,14 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
             const label = tabLabel(tab);
             const on = tab.id === state?.tabId;
             return (
-              <div key={tab.id} className={`browser-tab ${on ? "on" : ""}`} role="presentation">
+              <div key={tab.id} className={`browser-tab ${on ? "on" : ""} ${tab.suspended && !on ? "suspended" : ""}`} role="presentation">
                 <button
                   className="browser-tab-select"
                   role="tab"
                   aria-selected={on}
                   tabIndex={on ? 0 : -1}
                   data-tab-id={tab.id}
-                  title={tab.url && tab.url !== label ? `${label}\n${tab.url}` : label}
+                  title={tabTooltip(tab)}
                   onClick={() => switchTab(tab)}
                   onAuxClick={(e) => e.button === 1 && closeTab(tab)}
                   onKeyDown={(e) => onTabKey(e, i)}

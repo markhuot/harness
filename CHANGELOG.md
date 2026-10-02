@@ -35,6 +35,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A new Activity tab on the Mac, iPhone and iPad lists the ticket's notes, submits, review rounds
   (with the round and the commit that was reviewed), approvals and failures. A question from the
   agent stands out as a card, and your messages and the agent's answers read as a conversation.
+- Settings has a new **Suspend unused browser tabs after** option on the Mac, iPhone and iPad. It
+  sets how many minutes a ticket's browser tab can go unused before its page is suspended to free
+  memory (5 by default, or 0 to keep pages running). A tab you're watching in an app's Browser tab
+  isn't suspended.
 
 ### Changed
 
@@ -103,6 +107,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Nested lists in ticket text now show their nesting. Indented items sit under the item above them
   on the Mac, iPhone and iPad, with bullets that change by level (• ◦ ▪), and a numbered list keeps
   the number it starts at.
+- Harness's background Chrome no longer keeps every page a ticket ever opened running. A tab nobody
+  has used for a few minutes (see the new setting above), and every tab of a ticket that moves to
+  Done, is suspended: its page closes, so a dev server or web app it was showing stops using the
+  Mac's CPU and memory, but the tab stays in the Browser tab's strip (dimmed). Open it and the page
+  reloads where you left off, including after a link you clicked or a restart of Harness. Once no
+  tab has a page, Chrome itself quits until it's needed again. Agents are also asked to close the
+  tabs they're done with.
 
 ### Removed
 

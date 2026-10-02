@@ -1361,6 +1361,34 @@ target in its own headless window (so every tab paints and can screencast). Numb
   `newTab { url? }` opens a tab and moves that socket to it; `closeTab` closes the input's tab, and
   closing the last one while anyone watches leaves a blank tab in its place. `resize` sets the
   session's viewport for every tab, including ones opened later, so a switch needs no resize.
+- **Suspended tabs.** A tab outlives its Chrome page, since Chrome runs with background throttling
+  off and every leftover page keeps its timers and rendering going. A suspended tab keeps its
+  number, URL and title with no page (`BrowserTab.suspended`, and `BrowserState.suspended` for a
+  viewer on one). It still counts as open: `tabs()` lists it, a call without `tab` uses the lowest
+  tab whether live or suspended, and `closeTab` (or deleting the session) is the only way a tab goes.
+  Watching a suspended tab or any call on it reopens a page under the same number on the stored URL
+  (an agent's call waits for it to load; `open` skips the reload and navigates). Tabs are
+  suspended when:
+  - **Idle.** `reapIdleTabs` (swept every 30 s) suspends any tab nobody watches that no agent call or
+    viewer input has used for `browserIdleTabMinutes` (Settings, default 5, 0 = never). `lastUsed`
+    is set when a page opens, whenever a call resolves to the tab, on viewer input, and when a viewer
+    leaves it (unsubscribe or a switch), so the countdown starts once nobody is looking.
+  - **Done.** A ticket that moves to done gets `suspendTabs(sessionId)` (from
+    `Orchestrator.transition`). Tabs nobody watches are suspended at once. The session is marked
+    retired, so a watched tab is suspended as soon as its viewer leaves, until an agent call on the
+    session (a re-opened ticket) clears the mark. Other column moves leave tabs alone.
+  - **Chrome goes away.** A crash, a Chrome that died, or the service stopping suspends every tab,
+    and a page that closes itself (`window.close()`) removes its tab.
+  A refresh reopens any suspended tab someone watches, so a viewer is never left on a page-less tab.
+- **Storage.** Each session's tabs are kept in the `browser_tabs` table (one row per session: the
+  next tab number and every tab's id, URL and title as JSON, deleted with the session). Writes
+  follow every state change (navigation, in-page navigation, title changes), coalesced 200 ms, and
+  `shutdown` flushes them. After a restart a session's entry is loaded on first use with every tab
+  suspended; listing tabs doesn't start Chrome.
+- **Stopping Chrome.** Once no tab in any session has a page and nothing is opening one
+  (`stopChromeIfIdle`, run 5 s after a suspension or close, and on every sweep), Chrome is closed
+  gracefully. The next call that needs a page relaunches it, waiting for the old one to finish
+  exiting since both use one profile.
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 

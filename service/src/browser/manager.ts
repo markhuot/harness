@@ -4,7 +4,7 @@ import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
 import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
-import type { BrowserFrame, BrowserService, TabOption } from "./types.ts";
+import type { BrowserFrame, BrowserService, BrowserTabStore, StoredBrowserTab, TabOption } from "./types.ts";
 
 export interface BrowserManagerOptions {
   profileDir: string;
@@ -20,7 +20,23 @@ export interface BrowserManagerOptions {
   commandTimeoutMs?: number;
   /** JPEG quality for the screencast. */
   screencastQuality?: number;
+  /**
+   * How long a tab nobody watches may go unused before its page is closed and the tab suspended
+   * (read on every sweep, so a settings change applies at once). 0 or omitted: never.
+   */
+  idleTabMs?: () => number;
+  /** Where sessions' tabs are kept, so a suspended tab (or every tab, after a restart) can reload. */
+  tabStore?: BrowserTabStore;
+  /** Clock for idle tracking (tests). */
+  now?: () => number;
 }
+
+/** How often idle tabs are swept (and Chrome stopped once no tab has a page). */
+const IDLE_SWEEP_MS = 30_000;
+/** How long after the last page closes Chrome is stopped, when a close (not a sweep) emptied it. */
+const STOP_GRACE_MS = 5_000;
+/** Coalesces a session's tab writes (a page can change its title many times a second). */
+const SAVE_DELAY_MS = 200;
 
 interface Subscriber {
   onFrame: (f: BrowserFrame) => void;
@@ -35,9 +51,18 @@ interface Subscriber {
 interface Entry {
   sessionId: string;
   subscribers: Map<string, Subscriber>;
-  /** Open tabs by id. */
+  /** Tabs with a live Chrome page, by id. */
   tabs: Map<number, Tab>;
+  /** Tabs whose page was closed (idle, done, Chrome stopped, a restart): they reload when used. */
+  suspended: Map<number, StoredBrowserTab>;
+  /** Suspended tabs whose page is being reopened, so concurrent calls share it. */
+  reviving: Map<number, Promise<Tab>>;
   nextTabId: number;
+  /** The ticket is done: a tab is suspended as soon as nobody watches it. An agent call clears it. */
+  retired: boolean;
+  saveTimer?: ReturnType<typeof setTimeout>;
+  /** What was last written to the store, so unchanged state isn't written again. */
+  savedKey?: string;
   /** Tab 1 (or the next default tab) while it is being created, so concurrent calls share it. */
   creating?: Promise<Tab>;
   /** Every tab's viewport: viewers resize the whole session, and new tabs start at it. */
@@ -65,6 +90,8 @@ interface Tab {
   lastFrame?: BrowserFrame;
   /** Mouse buttons currently held (CDP `buttons` bitmask). */
   buttons: number;
+  /** When an agent call or viewer input last used it, or a viewer last left it (see reapIdleTabs). */
+  lastUsed: number;
   closed: boolean;
   gone: Promise<void>;
   markGone: () => void;
@@ -110,20 +137,36 @@ function truncate(text: string, maxChars?: number): string {
   return `${text.slice(0, maxChars)}\n\n[truncated: showing ${maxChars} of ${text.length} characters]`;
 }
 
-/** A session's open tabs, lowest id first. */
+/** A session's tabs that have a live page, lowest id first. */
 function openTabs(entry: Entry): Tab[] {
   return [...entry.tabs.values()].filter((t) => !t.closed).sort((a, b) => a.id - b.id);
 }
 
-/** The tab a call without `tab` acts on: the lowest open one. */
-function defaultTab(entry: Entry): Tab | undefined {
-  return openTabs(entry)[0];
+/** Every tab of the session, live or suspended, lowest id first. */
+function tabIds(entry: Entry): number[] {
+  return [...new Set([...openTabs(entry).map((t) => t.id), ...entry.suspended.keys()])].sort((a, b) => a - b);
 }
 
-/** The tab a subscriber sees: the one it asked for while that is open, else the lowest open one. */
+const hasTab = (entry: Entry, id: number) => liveTab(entry, id) !== undefined || entry.suspended.has(id);
+
+function liveTab(entry: Entry, id: number | undefined): Tab | undefined {
+  const tab = id === undefined ? undefined : entry.tabs.get(id);
+  return tab && !tab.closed ? tab : undefined;
+}
+
+/** The tab a call without `tab` acts on: the lowest one, live or suspended. */
+function defaultId(entry: Entry): number | undefined {
+  return tabIds(entry)[0];
+}
+
+/** The tab a subscriber sees: the one it asked for while that exists, else the lowest one. */
+function watchedId(entry: Entry, sub: Subscriber): number | undefined {
+  return sub.want !== null && hasTab(entry, sub.want) ? sub.want : defaultId(entry);
+}
+
+/** The subscriber's tab when it has a live page (refresh reopens a watched suspended tab). */
 function watchedTab(entry: Entry, sub: Subscriber): Tab | undefined {
-  const wanted = sub.want === null ? undefined : entry.tabs.get(sub.want);
-  return wanted && !wanted.closed ? wanted : defaultTab(entry);
+  return liveTab(entry, watchedId(entry, sub));
 }
 
 function watchersOf(tab: Tab): Subscriber[] {
@@ -131,15 +174,30 @@ function watchersOf(tab: Tab): Subscriber[] {
 }
 
 function tabList(entry: Entry): BrowserTab[] {
-  return openTabs(entry).map((t) => ({ id: t.id, url: t.url, title: t.title, loading: t.loading }));
+  return tabIds(entry).map((id) => {
+    const t = liveTab(entry, id);
+    if (t) return { id, url: t.url, title: t.title, loading: t.loading };
+    const s = entry.suspended.get(id)!;
+    return { id, url: s.url, title: s.title, loading: false, suspended: true };
+  });
 }
 
 function stateOf(tab: Tab): BrowserState {
   return { sessionId: tab.entry.sessionId, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading, tabs: tabList(tab.entry) };
 }
 
+function suspendedStateOf(entry: Entry, id: number): BrowserState {
+  const s = entry.suspended.get(id)!;
+  return { sessionId: entry.sessionId, tabId: id, url: s.url, title: s.title, loading: false, suspended: true, tabs: tabList(entry) };
+}
+
+/** A tab as stored. */
+function record(tab: Tab): StoredBrowserTab {
+  return { id: tab.id, url: tab.url, title: tab.title };
+}
+
 function noTabMessage(entry: Entry | undefined, id: number): string {
-  const open = entry ? openTabs(entry).map((t) => t.id) : [];
+  const open = entry ? tabIds(entry) : [];
   return `No browser tab ${id}. ${open.length ? `Open tabs: ${open.join(", ")}.` : "This session has no open tabs."}`;
 }
 
@@ -151,14 +209,26 @@ export class BrowserManager implements BrowserService {
   private entries = new Map<string, Entry>();
   private browser?: Browser;
   private launching?: Promise<Browser>;
+  /** Chrome being stopped because no tab had a page; a launch waits for it (one profile, one Chrome). */
+  private stopping?: Promise<void>;
+  /** Pages being created or reopened: Chrome isn't stopped under them. */
+  private opening = 0;
+  private stopTimer?: ReturnType<typeof setTimeout>;
   private readonly viewport: { width: number; height: number };
   private readonly navigationTimeoutMs: number;
   private readonly settleTimeoutMs: number;
+  private readonly now: () => number;
+  private sweeper?: ReturnType<typeof setInterval>;
+  /** Sessions the store refused (no such session): logged once. */
+  private unsaved = new Set<string>();
+  /** shutdown() is running: nothing reopens a page (a watched tab would relaunch Chrome). */
+  private shuttingDown = false;
 
   constructor(private readonly opts: BrowserManagerOptions) {
     this.viewport = opts.viewport ?? { width: 1280, height: 800 };
     this.navigationTimeoutMs = opts.navigationTimeoutMs ?? 30_000;
     this.settleTimeoutMs = opts.settleTimeoutMs ?? 10_000;
+    this.now = opts.now ?? Date.now;
   }
 
   /** The running Chrome's code-sign clone directory (macOS), if attributed. */
@@ -176,27 +246,29 @@ export class BrowserManager implements BrowserService {
   // -------------------------------------------------------------------------
 
   async open(sessionId: string, url: string, opts: TabOption & { newTab?: boolean } = {}): Promise<BrowserState> {
-    const tab = opts.newTab ? await this.createTab(this.entry(sessionId)) : await this.tab(sessionId, opts.tab);
+    const tab = opts.newTab ? await this.newTab(this.entry(sessionId)) : await this.agentTab(sessionId, opts.tab, false);
     await this.navigateAndWait(tab, normalizeUrl(url), this.navigationTimeoutMs);
     return this.currentState(tab);
   }
 
   async state(sessionId: string, opts: TabOption = {}): Promise<BrowserState | null> {
-    const entry = this.entries.get(sessionId);
-    const tab = entry && (opts.tab === undefined ? defaultTab(entry) : entry.tabs.get(opts.tab));
-    if (!tab || tab.closed) return null;
-    return this.currentState(tab);
+    const entry = this.peek(sessionId);
+    const id = entry && (opts.tab ?? defaultId(entry));
+    if (!entry || id === undefined) return null;
+    const tab = liveTab(entry, id);
+    if (tab) return this.currentState(tab);
+    return entry.suspended.has(id) ? suspendedStateOf(entry, id) : null;
   }
 
   async tabs(sessionId: string): Promise<BrowserTab[]> {
-    const entry = this.entries.get(sessionId);
+    const entry = this.peek(sessionId);
     if (!entry) return [];
     await Promise.all(openTabs(entry).map((t) => this.refreshTarget(t)));
     return tabList(entry);
   }
 
   async content(sessionId: string, opts: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number } = {}): Promise<string> {
-    const tab = await this.tab(sessionId, opts.tab);
+    const tab = await this.agentTab(sessionId, opts.tab);
     const format = opts.format ?? "text";
     const selector = opts.selector ?? null;
     const result = (await this.evalValue(
@@ -217,7 +289,7 @@ export class BrowserManager implements BrowserService {
   }
 
   async click(sessionId: string, selector: string, opts: TabOption = {}): Promise<void> {
-    const tab = await this.tab(sessionId, opts.tab);
+    const tab = await this.agentTab(sessionId, opts.tab);
     await this.settle(tab, async () => {
       const box = (await this.evalValue(
         tab,
@@ -246,7 +318,7 @@ export class BrowserManager implements BrowserService {
   }
 
   async type(sessionId: string, selector: string, text: string, opts: TabOption & { submit?: boolean } = {}): Promise<void> {
-    const tab = await this.tab(sessionId, opts.tab);
+    const tab = await this.agentTab(sessionId, opts.tab);
     const r = (await this.evalValue(
       tab,
       `(() => {
@@ -281,7 +353,7 @@ export class BrowserManager implements BrowserService {
   }
 
   async evaluate(sessionId: string, expression: string, opts: TabOption = {}): Promise<string> {
-    const tab = await this.tab(sessionId, opts.tab);
+    const tab = await this.agentTab(sessionId, opts.tab);
     const res = await tab.session.send("Runtime.evaluate", {
       expression,
       awaitPromise: true,
@@ -293,26 +365,32 @@ export class BrowserManager implements BrowserService {
   }
 
   async screenshot(sessionId: string, opts: TabOption = {}): Promise<string> {
-    const tab = await this.tab(sessionId, opts.tab);
+    const tab = await this.agentTab(sessionId, opts.tab);
     const res = await tab.session.send("Page.captureScreenshot", { format: "png" });
     return res.data as string;
   }
 
   async closeTab(sessionId: string, id: number): Promise<void> {
-    const entry = this.entries.get(sessionId);
-    const tab = entry?.tabs.get(id);
-    if (!entry || !tab || tab.closed) throw new Error(noTabMessage(entry, id));
-    this.dropTab(tab);
-    await this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {});
+    const entry = this.peek(sessionId);
+    if (!entry || !hasTab(entry, id)) throw new Error(noTabMessage(entry, id));
+    const tab = liveTab(entry, id);
+    entry.suspended.delete(id);
+    if (tab) {
+      this.dropTabs([tab], "forget");
+      await this.closeTargets([tab]);
+    } else {
+      void this.refresh(entry).catch(() => {});
+    }
     // Someone is watching: don't leave them on nothing.
-    if (entry.subscribers.size > 0 && !defaultTab(entry)) await this.tab(sessionId);
+    if (entry.subscribers.size > 0 && defaultId(entry) === undefined) await this.tab(sessionId);
+    this.scheduleStop();
   }
 
   async input(sessionId: string, input: BrowserInput, opts: TabOption & { subscriberId?: string } = {}): Promise<void> {
     const entry = this.entry(sessionId);
     const sub = opts.subscriberId === undefined ? undefined : entry.subscribers.get(opts.subscriberId);
     if (input.type === "newTab") {
-      const tab = await this.createTab(entry);
+      const tab = await this.newTab(entry);
       if (sub && entry.subscribers.get(opts.subscriberId!) === sub) {
         sub.want = tab.id;
         await this.refresh(entry);
@@ -327,13 +405,20 @@ export class BrowserManager implements BrowserService {
       const width = Math.max(100, Math.min(4096, Math.round(input.width)));
       const height = Math.max(100, Math.min(4096, Math.round(input.height)));
       entry.viewport = { width, height };
-      if (!defaultTab(entry)) await this.tab(sessionId);
+      if (defaultId(entry) === undefined) await this.tab(sessionId);
       await Promise.all(openTabs(entry).map((t) => this.resizeTab(t)));
       return;
     }
-    const watched = opts.tab === undefined && sub ? watchedTab(entry, sub) : undefined;
-    const tab = watched ?? (await this.tab(sessionId, opts.tab));
-    if (input.type === "closeTab") return this.closeTab(sessionId, tab.id);
+    // Without a tab, input goes to the tab the subscriber watches (reopened if it was suspended).
+    const id = opts.tab ?? (sub ? watchedId(entry, sub) : undefined);
+    if (input.type === "closeTab") {
+      const target = id ?? defaultId(entry);
+      if (target === undefined) throw new Error("This session has no open tabs.");
+      return this.closeTab(sessionId, target);
+    }
+    // Navigating a suspended tab needn't load its old URL first.
+    const tab = await this.tab(sessionId, id, input.type !== "navigate");
+    tab.lastUsed = this.now();
     const s = tab.session;
     switch (input.type) {
       case "mouse": {
@@ -417,8 +502,12 @@ export class BrowserManager implements BrowserService {
     const entry = this.entry(sessionId);
     // A fresh record (no lastStateKey or watching), so the subscriber gets state and a frame at once.
     const sub: Subscriber = { onFrame, onState, want: opts.tab ?? null };
+    // Resubscribing switches tabs: the one it leaves starts its idle time now.
+    const prev = entry.subscribers.get(subscriberId);
+    const left = prev && watchedTab(entry, prev);
+    if (left) left.lastUsed = this.now();
     entry.subscribers.set(subscriberId, sub);
-    const tab = watchedTab(entry, sub) ?? (await this.tab(sessionId));
+    const tab = await this.tab(sessionId, watchedId(entry, sub));
     if (entry.subscribers.get(subscriberId) !== sub) return; // unsubscribed (or resubscribed) while the tab was starting
     await this.refresh(entry);
     await this.currentState(tab);
@@ -426,35 +515,114 @@ export class BrowserManager implements BrowserService {
 
   async unsubscribe(sessionId: string, subscriberId: string): Promise<void> {
     const entry = this.entries.get(sessionId);
-    if (!entry || !entry.subscribers.delete(subscriberId)) return;
+    const sub = entry?.subscribers.get(subscriberId);
+    if (!entry || !sub) return;
+    // Its idle time starts now, not when an agent last touched it.
+    const left = watchedTab(entry, sub);
+    if (left) left.lastUsed = this.now();
+    entry.subscribers.delete(subscriberId);
     await this.refresh(entry);
   }
 
   /** Diagnostics: a tab's screencast status (default: the lowest open tab), or null without one. */
   screencastInfo(sessionId: string, opts: TabOption = {}): { active: boolean; starts: number; width: number; height: number } | null {
     const entry = this.entries.get(sessionId);
-    const tab = entry && (opts.tab === undefined ? defaultTab(entry) : entry.tabs.get(opts.tab));
-    if (!tab || tab.closed) return null;
+    const tab = entry && liveTab(entry, opts.tab ?? defaultId(entry));
+    if (!tab) return null;
     return { active: tab.castSize !== null, starts: tab.castStarts, ...(tab.castSize ?? { width: 0, height: 0 }) };
   }
 
   async close(sessionId: string): Promise<void> {
     const entry = this.entries.get(sessionId);
+    this.opts.tabStore?.delete(sessionId);
     if (!entry) return;
+    clearTimeout(entry.saveTimer);
     await entry.creating?.catch(() => undefined);
+    await Promise.all([...entry.reviving.values()].map((p) => p.catch(() => undefined)));
     const tabs = openTabs(entry);
-    this.dropTabs(tabs);
-    await Promise.all(
-      tabs.map((tab) => this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {})),
-    );
+    entry.suspended.clear();
+    this.dropTabs(tabs, "forget");
+    await this.closeTargets(tabs);
+    // Saving now would write the rows back: the session is gone.
+    entry.savedKey = this.saveKey(entry);
     if (entry.subscribers.size === 0) this.entries.delete(sessionId);
+    this.scheduleStop();
+  }
+
+  async suspendTabs(sessionId: string): Promise<void> {
+    const entry = this.entries.get(sessionId);
+    if (!entry) return; // never opened since the service started: every tab is already suspended
+    entry.retired = true;
+    await entry.creating?.catch(() => undefined);
+    await Promise.all([...entry.reviving.values()].map((p) => p.catch(() => undefined)));
+    // A viewer's tab stays until the viewer leaves (refresh suspends it then, while retired).
+    await this.suspend(openTabs(entry).filter((t) => watchersOf(t).length === 0));
+  }
+
+  /**
+   * Suspend every tab nobody watches that no agent call or viewer input has used for idleTabMs:
+   * its page closes and the tab stays, reloading when used. A watched tab is in use: it counts as
+   * used now, so its idle time starts when the viewer leaves. Returns how many it suspended.
+   */
+  async reapIdleTabs(): Promise<number> {
+    const idleMs = this.opts.idleTabMs?.() ?? 0;
+    if (!(idleMs > 0)) return 0;
+    const now = this.now();
+    const idle: Tab[] = [];
+    for (const entry of this.entries.values()) {
+      for (const tab of openTabs(entry)) {
+        if (watchersOf(tab).length > 0) tab.lastUsed = now;
+        else if (now - tab.lastUsed >= idleMs) idle.push(tab);
+      }
+    }
+    await this.suspend(idle);
+    return idle.length;
+  }
+
+  /**
+   * Stop Chrome when no tab has a page and nothing is opening one, so an idle service holds no
+   * Chrome processes at all. The next call that needs a page relaunches it. Returns whether it stopped.
+   */
+  async stopChromeIfIdle(): Promise<boolean> {
+    clearTimeout(this.stopTimer);
+    const browser = this.browser;
+    if (!browser || this.launching || this.stopping || this.opening > 0) return false;
+    for (const entry of this.entries.values()) {
+      if (openTabs(entry).length || entry.creating || entry.reviving.size) return false;
+    }
+    this.browser = undefined;
+    this.stopping = (async () => {
+      await browser.chrome.close({ cdp: browser.cdp });
+      browser.cdp.close();
+    })().finally(() => {
+      this.stopping = undefined;
+    });
+    await this.stopping;
+    return true;
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
+    try {
+      await this.shutdownNow();
+    } finally {
+      this.shuttingDown = false;
+    }
+  }
+
+  private async shutdownNow(): Promise<void> {
+    if (this.sweeper) clearInterval(this.sweeper);
+    this.sweeper = undefined;
+    clearTimeout(this.stopTimer);
     const browser = this.browser ?? (await this.launching?.catch(() => undefined));
     this.browser = undefined;
-    for (const entry of this.entries.values()) this.dropTabs(openTabs(entry));
+    // Every tab keeps its place: after a restart each one reloads from the store when used.
+    for (const entry of this.entries.values()) {
+      this.dropTabs(openTabs(entry), "suspend");
+      this.saveNow(entry);
+    }
     this.entries.clear();
+    await this.stopping?.catch(() => {});
     if (!browser) return;
     // Graceful: Browser.close and wait for exit, so Chrome removes its code-sign clone.
     await browser.chrome.close({ cdp: browser.cdp });
@@ -477,6 +645,7 @@ export class BrowserManager implements BrowserService {
   }
 
   private async launch(): Promise<Browser> {
+    await this.stopping?.catch(() => {});
     const old = this.browser;
     this.browser = undefined;
     if (old) {
@@ -508,8 +677,9 @@ export class BrowserManager implements BrowserService {
     const browser: Browser = { chrome, cdp };
 
     cdp.onClose(() => {
-      // Chrome died or the socket dropped: forget every tab; the next call relaunches.
-      for (const entry of this.entries.values()) this.dropTabs(openTabs(entry));
+      // Chrome died, was stopped, or the socket dropped: every tab is suspended (it reloads when
+      // used, and a watched one reopens now); the next call that needs a page relaunches Chrome.
+      for (const entry of this.entries.values()) this.dropTabs(openTabs(entry), "suspend");
       if (this.browser === browser) this.browser = undefined;
       if (!chrome.exited) void chrome.close();
     });
@@ -530,20 +700,30 @@ export class BrowserManager implements BrowserService {
       const opener = this.tabByTarget(info.openerId);
       if (!opener) return;
       const entry = opener.entry;
-      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser).catch(() => {});
+      this.opening++;
+      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser)
+        .catch(() => {})
+        .finally(() => this.opening--);
     });
+    // A page that closed itself (window.close()) takes its tab with it; Chrome reports the detach
+    // before the destroy. Pages we close (suspended or closed) are dropped first, so they're no
+    // longer found here, and a crash or Chrome going away suspends instead (targetCrashed, onClose).
     cdp.on("Target.targetDestroyed", (p) => {
       const tab = this.tabByTarget(p.targetId);
-      if (tab) this.dropTab(tab);
+      if (tab) this.dropTabs([tab], "forget");
     });
     cdp.on("Target.detachedFromTarget", (p) => {
       for (const entry of this.entries.values()) {
-        for (const tab of openTabs(entry)) if (tab.session.id === p.sessionId) this.dropTab(tab);
+        for (const tab of openTabs(entry)) if (tab.session.id === p.sessionId) this.dropTabs([tab], "forget");
       }
     });
 
     await cdp.send("Target.setDiscoverTargets", { discover: true });
     this.browser = browser;
+    if (!this.sweeper) {
+      this.sweeper = setInterval(() => void this.sweep(), IDLE_SWEEP_MS);
+      this.sweeper.unref?.();
+    }
     return browser;
   }
 
@@ -551,10 +731,43 @@ export class BrowserManager implements BrowserService {
   // Tabs
   // -------------------------------------------------------------------------
 
+  private async sweep(): Promise<void> {
+    await this.reapIdleTabs().catch(() => {});
+    await this.stopChromeIfIdle().catch(() => {});
+  }
+
+  /** The session's entry, created (with its stored tabs, all suspended) on first use. */
   private entry(sessionId: string): Entry {
     let e = this.entries.get(sessionId);
-    if (!e) this.entries.set(sessionId, (e = { sessionId, subscribers: new Map(), tabs: new Map(), nextTabId: 1, viewport: { ...this.viewport } }));
+    if (e) return e;
+    const stored = this.loadStored(sessionId);
+    e = {
+      sessionId,
+      subscribers: new Map(),
+      tabs: new Map(),
+      suspended: new Map((stored?.tabs ?? []).map((t) => [t.id, t])),
+      reviving: new Map(),
+      nextTabId: Math.max(stored?.nextTabId ?? 1, ...(stored?.tabs ?? []).map((t) => t.id + 1)),
+      retired: false,
+      viewport: { ...this.viewport },
+    };
+    e.savedKey = this.saveKey(e);
+    this.entries.set(sessionId, e);
     return e;
+  }
+
+  /** The session's entry if it has one or has stored tabs; reads never create an empty one. */
+  private peek(sessionId: string): Entry | undefined {
+    return this.entries.get(sessionId) ?? (this.loadStored(sessionId) ? this.entry(sessionId) : undefined);
+  }
+
+  private loadStored(sessionId: string) {
+    try {
+      return this.opts.tabStore?.load(sessionId) ?? null;
+    } catch (e) {
+      console.error(`[browser] couldn't load ${sessionId}'s tabs:`, e);
+      return null;
+    }
   }
 
   private tabByTarget(targetId: string | undefined): Tab | undefined {
@@ -563,35 +776,92 @@ export class BrowserManager implements BrowserService {
     return undefined;
   }
 
-  /** The tab a call acts on: `id` (which must be open), else the lowest open tab, created when there is none. */
-  private async tab(sessionId: string, id?: number): Promise<Tab> {
+  /** An agent's call: like tab(), and the session is in use again (a done ticket re-opened, say). */
+  private agentTab(sessionId: string, id?: number, reload = true): Promise<Tab> {
+    this.entry(sessionId).retired = false;
+    return this.tab(sessionId, id, reload);
+  }
+
+  /**
+   * The tab a call acts on: `id` (which must exist), else the lowest tab, created when there is
+   * none. A suspended tab reopens on its stored URL (`reload` false: on about:blank, for a caller
+   * that navigates it anyway) and waits for that page to load.
+   */
+  private async tab(sessionId: string, id?: number, reload = true): Promise<Tab> {
     const entry = this.entry(sessionId);
-    if (id !== undefined) {
-      const tab = entry.tabs.get(id);
-      if (!tab || tab.closed) throw new Error(noTabMessage(entry, id));
-      return tab;
+    const target = id ?? defaultId(entry);
+    if (target === undefined) {
+      if (!entry.creating) {
+        entry.creating = this.newTab(entry).finally(() => {
+          entry.creating = undefined;
+        });
+      }
+      return entry.creating;
     }
-    const open = defaultTab(entry);
-    if (open) return open;
-    if (!entry.creating) {
-      entry.creating = this.createTab(entry).finally(() => {
-        entry.creating = undefined;
+    const live = liveTab(entry, target);
+    if (live) {
+      live.lastUsed = this.now();
+      return live;
+    }
+    if (!entry.suspended.has(target)) throw new Error(noTabMessage(entry, target));
+    return this.revive(entry, target, reload ? "wait" : "blank");
+  }
+
+  /** A new tab with the session's next number. */
+  private async newTab(entry: Entry): Promise<Tab> {
+    entry.retired = false;
+    const id = entry.nextTabId++;
+    this.scheduleSave(entry);
+    return this.createTab(entry, id);
+  }
+
+  private async createTab(entry: Entry, id: number, initial?: StoredBrowserTab): Promise<Tab> {
+    this.opening++;
+    try {
+      const browser = await this.ensureBrowser();
+      // newWindow: every tab gets its own (headless) window so it stays "visible";
+      // background tabs don't paint, which would starve the screencast.
+      const { targetId } = await browser.cdp.send("Target.createTarget", { url: "about:blank", newWindow: true });
+      return await this.attachTab(entry, id, targetId, browser, initial);
+    } finally {
+      this.opening--;
+    }
+  }
+
+  /**
+   * Give a suspended tab a page again, under its own number. "wait" loads its stored URL and waits
+   * for it (an agent call), "go" starts loading it (a viewer), "blank" leaves it on about:blank.
+   */
+  private revive(entry: Entry, id: number, mode: "wait" | "go" | "blank"): Promise<Tab> {
+    let p = entry.reviving.get(id);
+    if (!p) {
+      const stored = entry.suspended.get(id)!;
+      p = (async () => {
+        const tab = await this.createTab(entry, id, stored);
+        if (mode === "blank" || !stored.url || stored.url === "about:blank") return tab;
+        if (mode === "wait") await this.navigateAndWait(tab, stored.url, this.navigationTimeoutMs);
+        else void tab.session.send("Page.navigate", { url: stored.url }).catch(() => {});
+        return tab;
+      })().finally(() => entry.reviving.delete(id));
+      entry.reviving.set(id, p);
+    } else if (mode === "wait") {
+      // Joined a viewer's reopen, which doesn't wait for the page: an agent's call does.
+      p = p.then(async (tab) => {
+        await this.untilLoaded(tab);
+        return tab;
       });
     }
-    return entry.creating;
+    return p.then((tab) => {
+      tab.lastUsed = this.now();
+      return tab;
+    });
   }
 
-  private async createTab(entry: Entry): Promise<Tab> {
-    const id = entry.nextTabId++;
-    const browser = await this.ensureBrowser();
-    // newWindow: every tab gets its own (headless) window so it stays "visible";
-    // background tabs don't paint, which would starve the screencast.
-    const { targetId } = await browser.cdp.send("Target.createTarget", { url: "about:blank", newWindow: true });
-    return this.attachTab(entry, id, targetId, browser);
-  }
-
-  /** Attach to a page target (one we created, or a popup a tab opened) and make it tab `id`. */
-  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser): Promise<Tab> {
+  /**
+   * Attach to a page target (one we created, or a popup a tab opened) and make it tab `id`.
+   * `initial`: a suspended tab being reopened, whose URL and title stand until its page reports its own.
+   */
+  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab): Promise<Tab> {
     const { cdp } = browser;
     let sessionId: string;
     try {
@@ -609,8 +879,8 @@ export class BrowserManager implements BrowserService {
       targetId,
       session,
       frameId: targetId,
-      url: "about:blank",
-      title: "",
+      url: initial?.url ?? "about:blank",
+      title: initial?.title ?? "",
       loading: false,
       viewport: { ...entry.viewport },
       screencasting: false,
@@ -619,6 +889,7 @@ export class BrowserManager implements BrowserService {
       castStarts: 0,
       castChain: Promise.resolve(),
       buttons: 0,
+      lastUsed: this.now(),
       closed: false,
       gone,
       markGone,
@@ -640,14 +911,21 @@ export class BrowserManager implements BrowserService {
       ]);
       const { frameTree } = await session.send("Page.getFrameTree");
       tab.frameId = frameTree.frame.id;
-      tab.url = frameTree.frame.url || tab.url; // a popup may already be on its page
+      if (!initial) tab.url = frameTree.frame.url || tab.url; // a popup may already be on its page
     } catch (e) {
-      this.dropTab(tab);
+      this.dropTabs([tab], "forget");
       await cdp.send("Target.closeTarget", { targetId }).catch(() => {});
       throw e;
     }
     // Resized while this tab was starting: catch up.
     if (tab.viewport.width !== entry.viewport.width || tab.viewport.height !== entry.viewport.height) await this.resizeTab(tab);
+    // Closed (or the session deleted) while its page was being reopened: the tab is gone.
+    if (initial && entry.suspended.get(id) !== initial) {
+      this.dropTabs([tab], "forget");
+      await cdp.send("Target.closeTarget", { targetId }).catch(() => {});
+      throw new Error(noTabMessage(entry, id));
+    }
+    entry.suspended.delete(id);
     entry.tabs.set(id, tab);
     await this.refresh(entry);
     return tab;
@@ -711,18 +989,17 @@ export class BrowserManager implements BrowserService {
         this.emitState(tab);
       }),
       s.on("Inspector.targetCrashed", () => {
-        this.dropTab(tab);
+        this.dropTabs([tab], "suspend");
         this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }).catch(() => {});
       }),
     );
   }
 
-  private dropTab(tab: Tab): void {
-    this.dropTabs([tab]);
-  }
-
-  /** Forget tabs (closed, crashed, or Chrome gone), then move their viewers on once per session. */
-  private dropTabs(tabs: Tab[]): void {
+  /**
+   * Forget tabs' pages (closed, crashed, or Chrome gone), then move their viewers on once per
+   * session. "suspend" keeps each tab (its URL and title) to reload later; "forget" removes it.
+   */
+  private dropTabs(tabs: Tab[], mode: "suspend" | "forget"): void {
     const entries = new Set<Entry>();
     for (const tab of tabs) {
       if (tab.closed) continue;
@@ -732,19 +1009,89 @@ export class BrowserManager implements BrowserService {
       for (const off of tab.offs) off();
       tab.offs = [];
       tab.markGone();
-      if (tab.entry.tabs.get(tab.id) === tab) tab.entry.tabs.delete(tab.id);
+      if (tab.entry.tabs.get(tab.id) === tab) {
+        tab.entry.tabs.delete(tab.id);
+        if (mode === "suspend") tab.entry.suspended.set(tab.id, record(tab));
+      }
       entries.add(tab.entry);
     }
     for (const entry of entries) void this.refresh(entry).catch(() => {});
   }
 
+  /** Close tabs' pages and keep the tabs, then stop Chrome soon if nothing has a page any more. */
+  private async suspend(tabs: Tab[]): Promise<void> {
+    if (!tabs.length) return;
+    this.dropTabs(tabs, "suspend");
+    await this.closeTargets(tabs);
+    this.scheduleStop();
+  }
+
+  private closeTargets(tabs: Tab[]): Promise<unknown> {
+    return Promise.all(
+      tabs.map((tab) => this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }, undefined, 5000).catch(() => {})),
+    );
+  }
+
+  /** Stop Chrome a moment after the last page closes (a sweep would get there too, within 30 s). */
+  private scheduleStop(): void {
+    clearTimeout(this.stopTimer);
+    this.stopTimer = setTimeout(() => void this.stopChromeIfIdle().catch(() => {}), STOP_GRACE_MS);
+    this.stopTimer.unref?.();
+  }
+
   /**
-   * After tabs open or close, or a subscriber switches: run each tab's screencast only while
+   * After tabs open, close or suspend, or a subscriber switches: reopen a suspended tab someone
+   * watches, suspend a done session's tabs nobody watches, run each tab's screencast only while
    * someone watches it, and send every subscriber its state (the tab list changed for all of them).
    */
   private async refresh(entry: Entry): Promise<void> {
+    for (const sub of entry.subscribers.values()) {
+      const id = watchedId(entry, sub);
+      if (id !== undefined && entry.suspended.has(id) && !this.shuttingDown) void this.revive(entry, id, "go").catch(() => {});
+    }
+    if (entry.retired) {
+      const unwatched = openTabs(entry).filter((t) => watchersOf(t).length === 0);
+      if (unwatched.length) void this.suspend(unwatched);
+    }
     this.emitStates(entry);
     await Promise.all(openTabs(entry).map((t) => this.syncScreencast(t)));
+  }
+
+  // -------------------------------------------------------------------------
+  // Storage
+  // -------------------------------------------------------------------------
+
+  private saveKey(entry: Entry): string {
+    const tabs = tabIds(entry).map((id) => {
+      const t = liveTab(entry, id);
+      return t ? record(t) : entry.suspended.get(id)!;
+    });
+    return JSON.stringify({ nextTabId: entry.nextTabId, tabs });
+  }
+
+  /** Write the session's tabs soon (coalesced), when they changed since the last write. */
+  private scheduleSave(entry: Entry): void {
+    if (!this.opts.tabStore || entry.saveTimer) return;
+    entry.saveTimer = setTimeout(() => this.saveNow(entry), SAVE_DELAY_MS);
+    entry.saveTimer.unref?.();
+  }
+
+  private saveNow(entry: Entry): void {
+    clearTimeout(entry.saveTimer);
+    entry.saveTimer = undefined;
+    const store = this.opts.tabStore;
+    if (!store) return;
+    const key = this.saveKey(entry);
+    if (key === entry.savedKey) return;
+    try {
+      store.save(entry.sessionId, JSON.parse(key));
+      entry.savedKey = key;
+    } catch (e) {
+      // e.g. a session the database doesn't have: its tabs just don't survive a restart.
+      if (!this.unsaved.has(entry.sessionId)) console.error(`[browser] couldn't save ${entry.sessionId}'s tabs:`, e);
+      this.unsaved.add(entry.sessionId);
+      entry.savedKey = key;
+    }
   }
 
   /** Apply the session's viewport to a tab; an unchanged size restarts nothing (viewers resize on every layout pass). */
@@ -862,18 +1209,24 @@ export class BrowserManager implements BrowserService {
    * (subscribe, a switch, its tab closed) also gets that tab's last frame straight away.
    */
   private emitStates(entry: Entry): void {
+    this.scheduleSave(entry);
     for (const sub of entry.subscribers.values()) {
-      const tab = watchedTab(entry, sub);
-      if (!tab) continue;
-      const state = stateOf(tab);
+      const id = watchedId(entry, sub);
+      if (id === undefined) continue;
+      const tab = liveTab(entry, id);
+      const state = tab ? stateOf(tab) : suspendedStateOf(entry, id);
       const key = JSON.stringify(state);
       if (key !== sub.lastStateKey) {
         sub.lastStateKey = key;
         safeCall(() => sub.onState(state));
       }
-      if (sub.watching !== tab.id) {
-        sub.watching = tab.id;
-        const frame = tab.lastFrame;
+      // A suspended tab has no frames yet: it counts as watched once its page is back.
+      const now = tab?.id;
+      if (sub.watching !== now) {
+        const left = sub.watching === undefined ? undefined : entry.tabs.get(sub.watching);
+        if (left) left.lastUsed = this.now();
+        sub.watching = now;
+        const frame = tab?.lastFrame;
         if (frame) safeCall(() => sub.onFrame(frame));
       }
     }
@@ -910,6 +1263,13 @@ export class BrowserManager implements BrowserService {
     } finally {
       off();
     }
+  }
+
+  /** Wait (up to the navigation timeout) for a tab's page to stop loading. */
+  private async untilLoaded(tab: Tab): Promise<void> {
+    const deadline = Date.now() + this.navigationTimeoutMs;
+    await Bun.sleep(50); // a navigation just sent may not have reported it started yet
+    while (tab.loading && !tab.closed && Date.now() < deadline) await Bun.sleep(25);
   }
 
   /**

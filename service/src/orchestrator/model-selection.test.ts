@@ -63,6 +63,19 @@ describe("settings validation", () => {
     expect(() => validateSettingsPatch({ claudeModel: "haiku" })).toThrow(/Unknown setting/);
   });
 
+  test("browserIdleTabMinutes: default 5, integer 0–1440, a bad stored value falls back", () => {
+    expect(resolveSettings({}).browserIdleTabMinutes).toBe(5);
+    expect(validateSettingsPatch({ browserIdleTabMinutes: 0 })).toEqual({ browserIdleTabMinutes: 0 });
+    expect(validateSettingsPatch({ browserIdleTabMinutes: 1440 })).toEqual({ browserIdleTabMinutes: 1440 });
+    for (const bad of [-1, 1441, 2.5, "5", null]) {
+      expect(() => validateSettingsPatch({ browserIdleTabMinutes: bad })).toThrow(/browserIdleTabMinutes must be an integer/);
+    }
+    expect(resolveSettings({ browserIdleTabMinutes: -3, maxConcurrentRuns: 7 })).toMatchObject({ browserIdleTabMinutes: 5, maxConcurrentRuns: 7 });
+    const h = setup();
+    expect(h.orch.updateSettings({ browserIdleTabMinutes: 12 }).browserIdleTabMinutes).toBe(12);
+    expect(h.orch.settings().browserIdleTabMinutes).toBe(12);
+  });
+
   test("PATCH merges model maps per driver; null clears one", () => {
     const h = setup();
     h.orch.updateSettings({ defaultModels: { fake: "m1" } });

@@ -19,12 +19,14 @@ export function tempHome(prefix = "harness-test-") {
 
 type StubSub = { onFrame: Function; onState: Function; tab?: number };
 
-export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<string, StubSub> } {
+export function stubBrowser(): BrowserService & { closed: string[]; suspendedTabs: string[]; subs: Map<string, StubSub> } {
   const states = new Map<string, BrowserState>();
   const subs = new Map<string, StubSub>();
   const closed: string[] = [];
+  const suspendedTabs: string[] = [];
   return {
     closed,
+    suspendedTabs,
     subs,
     async open(sessionId, url) {
       const s = { sessionId, tabId: 1, url, title: url, loading: false };
@@ -57,6 +59,9 @@ export function stubBrowser(): BrowserService & { closed: string[]; subs: Map<st
     },
     async unsubscribe(sessionId, subscriberId) {
       subs.delete(`${sessionId}|${subscriberId}`);
+    },
+    async suspendTabs(sessionId) {
+      suspendedTabs.push(sessionId);
     },
     async close(sessionId) {
       closed.push(sessionId);

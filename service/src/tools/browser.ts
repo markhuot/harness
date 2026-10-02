@@ -17,13 +17,15 @@ const TAB = {
   },
 } as const;
 
-const tabLine = (tabs: { id: number; url: string; title: string; loading: boolean }[]) =>
-  tabs.map((t) => `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}${t.loading ? " (loading)" : ""}`).join("\n");
+const tabLine = (tabs: { id: number; url: string; title: string; loading: boolean; suspended?: boolean }[]) =>
+  tabs
+    .map((t) => `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}${t.loading ? " (loading)" : ""}${t.suspended ? " (suspended: reloads when you use it)" : ""}`)
+    .join("\n");
 
 export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean }>({
   name: "browser_open",
   description:
-    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Returns the tab, final URL and page title; use browser_content to read the page.",
+    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Returns the tab, final URL and page title; use browser_content to read the page.",
   inputSchema: schema(
     {
       url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." },
@@ -41,7 +43,7 @@ export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boo
 
 export const browserTabs = defineTool<Record<string, never>>({
   name: "browser_tabs",
-  description: "List this session's open browser tabs: number, title and URL of each.",
+  description: "List this session's browser tabs: number, title and URL of each. A suspended tab's page was closed to save memory; using it reloads its URL.",
   inputSchema: schema({}),
   async run(_input, ctx) {
     const tabs = await ctx.browser.tabs(ctx.session.id);
@@ -51,7 +53,7 @@ export const browserTabs = defineTool<Record<string, never>>({
 
 export const browserCloseTab = defineTool<{ tab: number }>({
   name: "browser_close_tab",
-  description: "Close a browser tab you opened and no longer need. Tab numbers aren't reused.",
+  description: "Close a browser tab you opened and no longer need. It's removed for good (a suspended tab too). Tab numbers aren't reused.",
   inputSchema: schema({ tab: { ...TAB.tab, description: "Number of the tab to close." } }, ["tab"]),
   async run({ tab }, ctx) {
     await ctx.browser.closeTab(ctx.session.id, tab);

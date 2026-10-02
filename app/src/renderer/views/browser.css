@@ -36,6 +36,11 @@
   background: var(--bg-hover);
   color: var(--text-2);
 }
+/* Its page is closed to save memory; it reloads when opened. */
+.browser-tab.suspended .browser-tab-select {
+  opacity: 0.55;
+  font-style: italic;
+}
 .browser-tab.on {
   background: var(--bg-elev);
   border-color: var(--border);

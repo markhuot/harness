@@ -604,6 +604,18 @@ export const MIGRATIONS: string[] = [
   UPDATE settings SET value = json_remove(value, '$."system.summaries"')
     WHERE key = 'prompts' AND json_valid(value) AND json_type(value, '$."system.summaries"') IS NOT NULL;
   `,
+  // 27: browser tabs (DESIGN.md "Browser tabs"). One row per session: its tabs' numbers, URLs and
+  //     titles as JSON, and the next tab number (numbers are never reused). A tab outlives its
+  //     Chrome page: an idle or done ticket's pages are closed and reload from here when someone
+  //     comes back, including after a restart. Deleting the session deletes its row.
+  `
+  CREATE TABLE browser_tabs (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    next_tab_id INTEGER NOT NULL,
+    tabs TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  `,
 ];
 
 /**

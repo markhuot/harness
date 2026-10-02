@@ -3,7 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, ModelInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
@@ -155,6 +155,16 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
             onCommit={(v) => {
               const n = Math.round(Number(v));
               if (Number.isFinite(n)) save({ maxConcurrentRuns: Math.min(32, Math.max(1, n)) });
+            }}
+          />
+        </Row>
+        <Row title="Suspend unused browser tabs after" sub="Minutes. Frees memory; pages reload when opened. 0 means never.">
+          <DraftInput
+            type="number"
+            value={String(settings.browserIdleTabMinutes ?? DEFAULT_BROWSER_IDLE_TAB_MINUTES)}
+            onCommit={(v) => {
+              const n = Math.round(Number(v));
+              if (v.trim() && Number.isFinite(n)) save({ browserIdleTabMinutes: Math.min(MAX_BROWSER_IDLE_TAB_MINUTES, Math.max(0, n)) });
             }}
           />
         </Row>

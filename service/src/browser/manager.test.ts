@@ -6,7 +6,7 @@ import type { BrowserState } from "@harness/shared";
 import { codeSignCloneRoot, findChrome } from "./chrome.ts";
 import { BrowserManager, normalizeUrl } from "./manager.ts";
 import { createBrowserService } from "./index.ts";
-import type { BrowserFrame } from "./types.ts";
+import type { BrowserFrame, StoredBrowserTabs } from "./types.ts";
 import { tempDir } from "@harness/shared/testing";
 
 const chromePath = findChrome();
@@ -41,6 +41,8 @@ function fixtures(req: Request): Response {
       );
     case "/page2":
       return html(`<h1>Second page</h1>`, "Page Two");
+    case "/links":
+      return html(`<a id="go" href="/page2" style="display:block;width:200px;height:40px">same tab</a>`, "Links");
     case "/popup":
       return html(
         `<a id="blank" href="/page2" target="_blank" style="display:block;width:200px;height:40px">new tab</a>
@@ -623,16 +625,314 @@ withChrome("BrowserManager (real Chrome)", () => {
     try {
       process.kill(pid, "SIGKILL");
       await until(() => !isAlive(pid), "chrome to die");
-      await until(async () => (await browser.state("s-crash")) === null, "tab to be forgotten");
+      // The tab outlives Chrome: suspended on its page, which reloads on the next call.
+      await until(async () => (await browser.state("s-crash"))?.suspended === true, "the tab to be suspended");
+      expect(await browser.state("s-crash")).toMatchObject({ tabId: 1, url: `${base}/`, title: "Home Page", suspended: true });
       if (clone) await until(() => !existsSync(clone), "the killed Chrome's clone to be removed", 10_000);
 
+      expect(await browser.content("s-crash", { selector: "h1" })).toBe("Welcome home");
+      expect(browser.chromePid).not.toBe(pid);
       const state = await browser.open("s-crash", `${base}/page2`);
-      expect(state.title).toBe("Page Two");
+      expect(state).toMatchObject({ tabId: 1, title: "Page Two" });
       expect(browser.chromePid).not.toBe(pid);
     } finally {
       if (clone && existsSync(clone)) rmSync(clone, { recursive: true, force: true });
     }
   }, 30_000);
+});
+
+/** An in-memory BrowserTabStore (the database's browser_tabs), so a test can play a restart. */
+function memoryTabStore() {
+  const rows = new Map<string, StoredBrowserTabs>();
+  return {
+    rows,
+    load: (id: string) => (rows.has(id) ? structuredClone(rows.get(id)!) : null),
+    save: (id: string, state: StoredBrowserTabs) => void rows.set(id, structuredClone(state)),
+    delete: (id: string) => void rows.delete(id),
+  };
+}
+
+/** URLs of the page targets Chrome itself reports (its DevTools /json/list), not our bookkeeping. */
+async function chromePages(browser: BrowserManager): Promise<string[]> {
+  const chrome = (browser as any).browser?.chrome;
+  if (!chrome) return [];
+  const res = await fetch(`http://${new URL(chrome.wsUrl).host}/json/list`);
+  const targets = (await res.json()) as { type: string; url: string }[];
+  return targets.filter((t) => t.type === "page").map((t) => t.url);
+}
+
+const ids = (tabs: { id: number; suspended?: boolean }[]) => tabs.map((t) => (t.suspended ? `${t.id}z` : `${t.id}`));
+
+withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
+  let server: Server<unknown>;
+  let base: string;
+  let browser: BrowserManager;
+  let store: ReturnType<typeof memoryTabStore>;
+  let clock = 1_000_000;
+  let idleMs = 60_000;
+
+  beforeAll(() => {
+    server = Bun.serve({ port: 0, fetch: fixtures });
+    base = `http://127.0.0.1:${server.port}`;
+    store = memoryTabStore();
+    browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock, tabStore: store });
+  });
+
+  afterAll(async () => {
+    await browser?.shutdown();
+    void server?.stop(true);
+  });
+
+  const pages = () => chromePages(browser);
+
+  test("suspendTabs closes every page in Chrome but keeps the tabs, which reload when used", async () => {
+    await browser.open("lc-done", `${base}/popup?lc-done`);
+    await browser.open("lc-done", `${base}/page2?lc-done`, { newTab: true });
+    await browser.click("lc-done", "#open"); // window.open: a popup becomes tab 3
+    await until(async () => (await browser.tabs("lc-done")).length === 3, "the popup's tab");
+    await browser.open("lc-other", `${base}/?lc-other`);
+    await browser.evaluate("lc-done", "window.mine = 'old'");
+    await until(async () => (await pages()).some((u) => u.endsWith("/form")), "the popup in Chrome");
+
+    await browser.suspendTabs("lc-done");
+
+    await until(async () => !(await pages()).some((u) => u.includes("lc-done") || u.endsWith("/form")), "the session's pages to leave Chrome");
+    expect(await pages()).toContain(`${base}/?lc-other`);
+    const tabs = await browser.tabs("lc-done");
+    expect(tabs.map((t) => [t.id, t.url, t.title, t.suspended])).toEqual([
+      [1, `${base}/popup?lc-done`, "Popup", true],
+      [2, `${base}/page2?lc-done`, "Page Two", true],
+      [3, `${base}/form`, "Form", true],
+    ]);
+    expect(await browser.state("lc-done", { tab: 2 })).toMatchObject({ tabId: 2, url: `${base}/page2?lc-done`, suspended: true });
+    await until(() => store.rows.get("lc-done")?.tabs.length === 3, "the tabs to be stored");
+    expect(store.rows.get("lc-done")!.nextTabId).toBe(4);
+
+    // A call reopens the tab it needs on its own URL, with a fresh page; the others stay suspended.
+    expect(await browser.content("lc-done", { selector: "h1", tab: 2 })).toBe("Second page");
+    expect(await browser.evaluate("lc-done", "window.mine")).toBe("undefined"); // tab 1, reopened
+    expect(ids(await browser.tabs("lc-done"))).toEqual(["1", "2", "3z"]);
+    expect((await browser.open("lc-done", `${base}/?lc-done-new`, { newTab: true })).tabId).toBe(4);
+  }, 30_000);
+
+  test("the stored URL follows the page: links, in-page navigation and title changes", async () => {
+    await browser.open("lc-nav", `${base}/links?lc-nav`);
+    // Let the tab's first write land, so what follows has to be written by the navigation itself.
+    await until(() => store.rows.get("lc-nav")?.tabs[0]?.title === "Links", "the first write");
+    await Bun.sleep(300);
+    await browser.click("lc-nav", "#go"); // a same-tab link
+    await until(async () => (await browser.state("lc-nav"))?.title === "Page Two", "the link to load");
+    await browser.evaluate("lc-nav", "history.pushState({}, '', '/page2?moved#here'); document.title = 'Renamed'");
+    await until(() => store.rows.get("lc-nav")?.tabs[0]?.url === `${base}/page2?moved#here` && store.rows.get("lc-nav")?.tabs[0]?.title === "Renamed", "the store to follow");
+    await browser.suspendTabs("lc-nav");
+    expect(await browser.state("lc-nav")).toMatchObject({ url: `${base}/page2?moved#here`, suspended: true });
+    // Coming back lands where the user was, not where the tab started.
+    expect(await browser.content("lc-nav", { selector: "h1" })).toBe("Second page");
+    expect((await browser.state("lc-nav"))?.url).toBe(`${base}/page2?moved#here`);
+  }, 30_000);
+
+  test("a done ticket's watched tab keeps its page until the viewer leaves; an agent call un-retires it", async () => {
+    await browser.open("lc-view", `${base}/?lc-view-1`);
+    await browser.open("lc-view", `${base}/page2?lc-view-2`, { newTab: true });
+    const states: BrowserState[] = [];
+    await browser.subscribe("lc-view", "v", () => {}, (s) => states.push(s), { tab: 2 });
+    await browser.suspendTabs("lc-view");
+    expect(ids(await browser.tabs("lc-view"))).toEqual(["1z", "2"]);
+    await until(() => states.at(-1)?.tabs?.find((t) => t.id === 1)?.suspended === true, "the viewer told tab 1 is suspended");
+    await browser.unsubscribe("lc-view", "v");
+    await until(async () => ids(await browser.tabs("lc-view")).join() === "1z,2z", "tab 2 suspended once nobody watches");
+    await until(async () => !(await pages()).some((u) => u.includes("lc-view")), "both pages out of Chrome");
+
+    // Re-opened: an agent uses it, so a viewer leaving no longer suspends anything.
+    await browser.content("lc-view", { tab: 2 });
+    await browser.subscribe("lc-view", "w", () => {}, () => {}, { tab: 2 });
+    await browser.unsubscribe("lc-view", "w");
+    await Bun.sleep(100);
+    expect(ids(await browser.tabs("lc-view"))).toEqual(["1z", "2"]);
+  }, 30_000);
+
+  test("watching a suspended tab reopens it on its URL and streams it", async () => {
+    await browser.open("lc-watch", `${base}/anim?lc-watch`);
+    await browser.suspendTabs("lc-watch");
+    expect(ids(await browser.tabs("lc-watch"))).toEqual(["1z"]);
+    const frames: BrowserFrame[] = [];
+    const states: BrowserState[] = [];
+    await browser.subscribe("lc-watch", "v", (f) => frames.push(f), (s) => states.push(s));
+    await until(() => frames.length >= 2, "frames from the reopened tab");
+    await until(() => states.at(-1)?.title === "Anim" && !states.at(-1)?.suspended, "a live state");
+    expect(states.at(-1)?.url).toBe(`${base}/anim?lc-watch`);
+    await browser.unsubscribe("lc-watch", "v");
+  }, 30_000);
+
+  test("closing a tab removes it for good, suspended or not", async () => {
+    await browser.open("lc-close", `${base}/?lc-close-1`);
+    await browser.open("lc-close", `${base}/page2?lc-close-2`, { newTab: true });
+    await browser.suspendTabs("lc-close");
+    await browser.closeTab("lc-close", 1);
+    expect(ids(await browser.tabs("lc-close"))).toEqual(["2z"]);
+    await until(() => store.rows.get("lc-close")?.tabs.map((t) => t.id).join() === "2", "the store to drop tab 1");
+    await expect(browser.content("lc-close", { tab: 1 })).rejects.toThrow("No browser tab 1. Open tabs: 2.");
+    await browser.close("lc-close");
+    expect(await browser.tabs("lc-close")).toEqual([]);
+    expect(store.rows.has("lc-close")).toBe(false);
+  }, 30_000);
+
+  test("suspendTabs also closes the page of a tab that was still being created", async () => {
+    const opening = browser.open("lc-race", `${base}/?lc-race`).catch((e) => e);
+    await browser.suspendTabs("lc-race");
+    await opening;
+    await until(async () => !(await pages()).some((u) => u.includes("lc-race")), "the half-made page to leave Chrome");
+    expect((await browser.tabs("lc-race")).every((t) => t.suspended)).toBe(true);
+  }, 30_000);
+
+  test("idle tabs nobody watches are suspended; use and watching keep them; 0 turns it off", async () => {
+    idleMs = 60_000;
+    await browser.open("lc-idle", `${base}/?lc-idle-1`);
+    await browser.open("lc-idle", `${base}/page2?lc-idle-2`, { newTab: true });
+    await browser.open("lc-busy", `${base}/?lc-busy`);
+    await browser.open("lc-input", `${base}/?lc-input`);
+    await browser.open("lc-watch2", `${base}/?lc-watch2`);
+    await browser.subscribe("lc-watch2", "w", () => {}, () => {});
+    clock += 59_000;
+    await browser.content("lc-busy"); // used just before the deadline
+    await browser.input("lc-input", { type: "mouse", action: "move", x: 1, y: 1 });
+    expect(await browser.reapIdleTabs()).toBe(0); // nothing is a full minute idle yet
+
+    clock += 1_000;
+    await browser.reapIdleTabs(); // every other test's tabs here are idle too; only these matter
+    expect(ids(await browser.tabs("lc-idle"))).toEqual(["1z", "2z"]);
+    await until(async () => !(await pages()).some((u) => u.includes("lc-idle")), "the idle pages to leave Chrome");
+    expect(ids(await browser.tabs("lc-busy"))).toEqual(["1"]);
+    expect(ids(await browser.tabs("lc-input"))).toEqual(["1"]);
+    expect(ids(await browser.tabs("lc-watch2"))).toEqual(["1"]);
+
+    // A watched tab is never idle; once the viewer leaves, it gets a full idle period from then.
+    clock += 600_000;
+    await browser.reapIdleTabs();
+    expect(ids(await browser.tabs("lc-watch2"))).toEqual(["1"]);
+    expect(ids(await browser.tabs("lc-busy"))).toEqual(["1z"]);
+    await browser.unsubscribe("lc-watch2", "w");
+    clock += 59_000;
+    await browser.reapIdleTabs();
+    expect(ids(await browser.tabs("lc-watch2"))).toEqual(["1"]);
+    clock += 1_000;
+    await browser.reapIdleTabs();
+    expect(ids(await browser.tabs("lc-watch2"))).toEqual(["1z"]);
+
+    // 0 means never; the setting is read on every sweep.
+    await browser.open("lc-off", `${base}/?lc-off`);
+    idleMs = 0;
+    clock += 3_600_000;
+    expect(await browser.reapIdleTabs()).toBe(0);
+    expect(ids(await browser.tabs("lc-off"))).toEqual(["1"]);
+    idleMs = 60_000;
+    expect(await browser.reapIdleTabs()).toBeGreaterThan(0);
+    expect(ids(await browser.tabs("lc-off"))).toEqual(["1z"]);
+  }, 30_000);
+
+  test("only the watched tab of a session keeps its page through the reaper", async () => {
+    idleMs = 60_000;
+    await browser.open("lc-two", `${base}/?lc-two-1`);
+    await browser.open("lc-two", `${base}/page2?lc-two-2`, { newTab: true });
+    await browser.subscribe("lc-two", "w", () => {}, () => {}, { tab: 2 });
+    clock += 120_000;
+    await browser.reapIdleTabs();
+    expect(ids(await browser.tabs("lc-two"))).toEqual(["1z", "2"]);
+    // Switching the viewer to a new tab starts tab 2's idle time at the switch (not the last sweep).
+    clock += 30_000;
+    await browser.input("lc-two", { type: "newTab" }, { subscriberId: "w" });
+    clock += 59_000;
+    await browser.reapIdleTabs();
+    expect(ids(await browser.tabs("lc-two"))).toEqual(["1z", "2", "3"]);
+    clock += 1_000;
+    await browser.reapIdleTabs();
+    expect(ids(await browser.tabs("lc-two"))).toEqual(["1z", "2z", "3"]);
+    await browser.unsubscribe("lc-two", "w");
+  }, 30_000);
+});
+
+withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
+  let server: Server<unknown>;
+  let base: string;
+
+  beforeAll(() => {
+    server = Bun.serve({ port: 0, fetch: fixtures });
+    base = `http://127.0.0.1:${server.port}`;
+  });
+  afterAll(() => void server?.stop(true));
+
+  test("tabs survive a restart from the store: listed suspended, reopened where they were, numbering carries on", async () => {
+    const store = memoryTabStore();
+    const first = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
+    try {
+      await first.open("rs", `${base}/?rs-1`);
+      await first.open("rs", `${base}/links?rs-2`, { newTab: true });
+      await first.click("rs", "#go", { tab: 2 });
+      await until(async () => (await first.state("rs", { tab: 2 }))?.title === "Page Two", "tab 2's link");
+      await until(() => store.rows.get("rs")?.tabs[1]?.title === "Page Two", "the link written");
+      // Changed right before stopping: only the flush on shutdown can write it.
+      await first.evaluate("rs", "document.title = 'Last words'", { tab: 1 });
+      await until(async () => (await first.tabs("rs"))[0]?.title === "Last words", "the new title");
+    } finally {
+      await first.shutdown(); // flushes the store
+    }
+    expect(store.rows.get("rs")).toEqual({
+      nextTabId: 3,
+      tabs: [
+        { id: 1, url: `${base}/?rs-1`, title: "Last words" },
+        { id: 2, url: `${base}/page2`, title: "Page Two" },
+      ],
+    });
+
+    const second = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
+    try {
+      expect(await second.tabs("rs")).toEqual([
+        { id: 1, url: `${base}/?rs-1`, title: "Last words", loading: false, suspended: true },
+        { id: 2, url: `${base}/page2`, title: "Page Two", loading: false, suspended: true },
+      ]);
+      expect(second.chromePid).toBeUndefined(); // listing them didn't start Chrome
+      expect(await second.content("rs", { selector: "h1", tab: 2 })).toBe("Second page");
+      expect((await second.open("rs", `${base}/?rs-3`, { newTab: true })).tabId).toBe(3);
+      expect(await second.tabs("nobody")).toEqual([]);
+      expect(await second.state("nobody")).toBeNull();
+    } finally {
+      await second.shutdown();
+    }
+  }, 60_000);
+
+  test("shutdown with a viewer watching leaves Chrome stopped (the watched tab isn't reopened)", async () => {
+    const store = memoryTabStore();
+    const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
+    await service.open("sd", `${base}/?sd`);
+    await service.subscribe("sd", "viewer", () => {}, () => {});
+    const pid = service.chromePid!;
+    await service.shutdown();
+    await Bun.sleep(500);
+    expect(isAlive(pid)).toBe(false);
+    expect(service.chromePid).toBeUndefined();
+    expect(store.rows.get("sd")?.tabs).toEqual([{ id: 1, url: `${base}/?sd`, title: "Home Page" }]);
+  }, 60_000);
+
+  test("Chrome stops once no tab has a page, and the next call relaunches it", async () => {
+    const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
+    try {
+      await service.open("st", `${base}/?st`);
+      expect(await service.stopChromeIfIdle()).toBe(false); // a live page
+      const pid = service.chromePid!;
+      await service.suspendTabs("st");
+      expect(await service.stopChromeIfIdle()).toBe(true);
+      expect(isAlive(pid)).toBe(false);
+      expect(service.chromePid).toBeUndefined();
+      expect(ids(await service.tabs("st"))).toEqual(["1z"]);
+      expect(await service.stopChromeIfIdle()).toBe(false); // nothing to stop
+
+      expect(await service.content("st", { selector: "h1" })).toBe("Welcome home");
+      expect(service.chromePid).toBeDefined();
+      expect(service.chromePid).not.toBe(pid);
+    } finally {
+      await service.shutdown();
+    }
+  }, 60_000);
 });
 
 withChrome("createBrowserService shutdown", () => {

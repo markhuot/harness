@@ -687,6 +687,10 @@ export interface DriverModels {
   fetchedAt: number;
 }
 
+/** Settings.browserIdleTabMinutes when unset, and its upper bound (a day). */
+export const DEFAULT_BROWSER_IDLE_TAB_MINUTES = 5;
+export const MAX_BROWSER_IDLE_TAB_MINUTES = 1440;
+
 export interface Settings {
   defaultDriver: string;
   maxConcurrentRuns: number;
@@ -724,6 +728,12 @@ export interface Settings {
    * (default { mode: "localhost" }); optional so clients tolerate an older service without it.
    */
   listen?: ListenSetting;
+  /**
+   * Minutes a session browser tab may go unused (no agent call, no viewer input) while nobody has
+   * it open in the app before the service suspends it (closes its page; it reloads when used). 0 = never. Integer 0–1440, default 5. The
+   * service always sends it; optional so clients tolerate an older service without it.
+   */
+  browserIdleTabMinutes?: number;
   /**
    * The user's prompt overrides (DESIGN.md "Prompt overrides"): prompt id → template text, or null
    * for the built-in prompt that ships with the service. The service sends every id; unset ones
@@ -934,6 +944,8 @@ export interface BrowserState {
   url: string;
   title: string;
   loading: boolean;
+  /** The tab's page is closed to save memory (unused for a while, or the ticket is done); it reloads its URL when opened. Absent: false. */
+  suspended?: boolean;
   tabs?: BrowserTab[];
 }
 
@@ -943,6 +955,8 @@ export interface BrowserTab {
   url: string;
   title: string;
   loading: boolean;
+  /** Its page is closed to save memory; watching it or an agent using it reloads its URL. Absent: false. */
+  suspended?: boolean;
 }
 
 // ---------------------------------------------------------------------------
