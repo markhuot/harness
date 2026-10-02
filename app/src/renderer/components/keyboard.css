@@ -13,6 +13,10 @@
 .tab:focus-visible {
   border-radius: var(--radius-sm);
 }
+/* The tab strip scrolls sideways (styles.css .tabs), which would cut a halo off. */
+.tabs .tab:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
 
 .inbox-item:focus-visible,
 .child-row:focus-visible {
