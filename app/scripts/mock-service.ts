@@ -70,7 +70,6 @@ const summaries: Summary[] = [];
 const attachmentFiles = new Map<string, { mimeType: string; bytes: () => Uint8Array }>();
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
 const watchers = new Map<string, Watcher>();
-const browserStates = new Map<string, BrowserState>();
 let triageSeq = 0;
 let idSeq = 0;
 
@@ -252,7 +251,8 @@ const newId = (prefix: string) => `${prefix}_${(++idSeq).toString(36)}${Math.ran
 // ---------------------------------------------------------------------------
 
 interface WsData {
-  subs: Set<string>;
+  /** Watched browsers: session id → the tab this socket is on (each socket watches one per session) */
+  subs: Map<string, number>;
 }
 const sockets = new Set<ServerWebSocket<WsData>>();
 
@@ -264,7 +264,8 @@ function broadcast(event: HarnessEvent) {
   const isBrowser = event.kind === "browser.frame" || event.kind === "browser.state";
   const payload = JSON.stringify({ type: "event", event } satisfies ServerMessage);
   for (const ws of sockets) {
-    if (isBrowser && !ws.data.subs.has(event.sessionId)) continue;
+    // Browser events go only to sockets watching that tab (see emitState / the frame loop).
+    if (isBrowser) continue;
     ws.send(payload);
   }
 }
@@ -1835,11 +1836,12 @@ async function route(req: Request, url: URL): Promise<Response> {
 
   // Browser
   if (a === "browser" && b) {
-    if (!c && method === "GET") return ok(browserStates.get(b) ?? null);
+    const tabParam = url.searchParams.get("tab");
+    if (!c && method === "GET") return ok(browsers.has(b) ? stateFor(b, tabParam === null ? undefined : Number(tabParam)) : null);
     if (c === "navigate" && method === "POST") {
       const body = await readBody(req);
-      const state = navigate(b, String(body.url ?? "about:blank"));
-      return ok(state);
+      const tab = navigate(b, typeof body.tabId === "number" ? body.tabId : undefined, String(body.url ?? "about:blank"));
+      return ok(stateFor(b, tab.id));
     }
   }
 
@@ -1850,9 +1852,13 @@ async function route(req: Request, url: URL): Promise<Response> {
 // Browser simulation (PNG frames; the app draws base64 via data URLs, which sniff content)
 // ---------------------------------------------------------------------------
 
-interface BrowserSim {
-  width: number;
-  height: number;
+// Like the service: a session's browser has tabs (ids count up from 1, never reused); each socket
+// watches one tab per session, and resize applies to every tab.
+interface TabSim {
+  id: number;
+  url: string;
+  title: string;
+  loading: boolean;
   mouseX: number;
   mouseY: number;
   clicks: { x: number; y: number }[];
@@ -1861,84 +1867,143 @@ interface BrowserSim {
   history: string[];
   index: number;
 }
-const sims = new Map<string, BrowserSim>();
+interface BrowserSim {
+  width: number;
+  height: number;
+  tabs: Map<number, TabSim>;
+  nextTab: number;
+}
+const browsers = new Map<string, BrowserSim>();
+
+const titleOf = (url: string) => (url === "about:blank" ? "" : url.replace(/^https?:\/\//, ""));
+
+function addTab(b: BrowserSim, url: string, title = titleOf(url)): TabSim {
+  const t: TabSim = { id: b.nextTab++, url, title, loading: false, mouseX: -1, mouseY: -1, clicks: [], scroll: 0, typed: "", history: [url], index: 0 };
+  b.tabs.set(t.id, t);
+  return t;
+}
 
 function sim(sessionId: string): BrowserSim {
-  let s = sims.get(sessionId);
-  if (!s) {
-    s = { width: 1280, height: 800, mouseX: -1, mouseY: -1, clicks: [], scroll: 0, typed: "", history: ["http://localhost:3000/"], index: 0 };
-    sims.set(sessionId, s);
-    browserStates.set(sessionId, { sessionId, url: s.history[0]!, title: "Local dev server", loading: false });
+  let b = browsers.get(sessionId);
+  if (!b) {
+    b = { width: 1280, height: 800, tabs: new Map(), nextTab: 1 };
+    browsers.set(sessionId, b);
+    addTab(b, "http://localhost:3000/", "Local dev server");
   }
-  return s;
+  return b;
 }
 
+/** The tab `tabId` names, else (omitted or closed) the lowest open one. */
+function tabOf(sessionId: string, tabId?: number): TabSim {
+  const b = sim(sessionId);
+  return (tabId !== undefined ? b.tabs.get(tabId) : undefined) ?? b.tabs.values().next().value!;
+}
+
+function stateFor(sessionId: string, tabId?: number): BrowserState {
+  const t = tabOf(sessionId, tabId);
+  const tabs = [...sim(sessionId).tabs.values()].map(({ id, url, title, loading }) => ({ id, url, title, loading }));
+  return { sessionId, tabId: t.id, url: t.url, title: t.title, loading: t.loading, tabs };
+}
+
+function sendEvent(ws: ServerWebSocket<WsData>, event: HarnessEvent) {
+  sendMsg(ws, { type: "event", event });
+}
+
+/** Every watcher of the session gets its own tab's state (the tab list changes for all of them). */
 function emitState(sessionId: string) {
-  const st = browserStates.get(sessionId);
-  if (st) broadcast({ kind: "browser.state", sessionId, state: st });
+  for (const ws of sockets) {
+    const tabId = ws.data.subs.get(sessionId);
+    if (tabId !== undefined) sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, tabId) });
+  }
 }
 
-function navigate(sessionId: string, url: string): BrowserState {
-  const s = sim(sessionId);
-  s.history = s.history.slice(0, s.index + 1);
-  s.history.push(url);
-  s.index = s.history.length - 1;
-  s.scroll = 0;
-  s.clicks = [];
-  const st: BrowserState = { sessionId, url, title: url.replace(/^https?:\/\//, ""), loading: true };
-  browserStates.set(sessionId, st);
+/** Point a socket at a tab (or the lowest open one) and send it that tab's state and a frame. */
+function watch(ws: ServerWebSocket<WsData>, sessionId: string, tabId?: number) {
+  const t = tabOf(sessionId, tabId);
+  ws.data.subs.set(sessionId, t.id);
+  sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, t.id) });
+  sendEvent(ws, { kind: "browser.frame", sessionId, tabId: t.id, ...renderFrame(sessionId, t.id, frameTick) });
+}
+
+function navigate(sessionId: string, tabId: number | undefined, url: string): TabSim {
+  const t = tabOf(sessionId, tabId);
+  t.history = t.history.slice(0, t.index + 1);
+  t.history.push(url);
+  t.index = t.history.length - 1;
+  t.scroll = 0;
+  t.clicks = [];
+  t.url = url;
+  t.title = titleOf(url);
+  t.loading = true;
   emitState(sessionId);
   setTimeout(() => {
-    st.loading = false;
+    t.loading = false;
     emitState(sessionId);
   }, 600);
-  return st;
+  return t;
 }
 
-function handleInput(sessionId: string, input: BrowserInput) {
-  const s = sim(sessionId);
-  if (!(input.type === "mouse" && input.action === "move")) console.log(`[browser.input ${sessionId}]`, JSON.stringify(input));
+function handleInput(ws: ServerWebSocket<WsData>, sessionId: string, tabId: number | undefined, input: BrowserInput) {
+  const b = sim(sessionId);
+  const t = tabOf(sessionId, tabId ?? ws.data.subs.get(sessionId));
+  if (!(input.type === "mouse" && input.action === "move")) console.log(`[browser.input ${sessionId}#${t.id}]`, JSON.stringify(input));
   switch (input.type) {
     case "mouse":
-      s.mouseX = input.x;
-      s.mouseY = input.y;
-      if (input.action === "down") s.clicks = [...s.clicks.slice(-9), { x: input.x, y: input.y }];
-      if (input.action === "wheel") s.scroll = Math.max(0, s.scroll + (input.deltaY ?? 0));
+      t.mouseX = input.x;
+      t.mouseY = input.y;
+      if (input.action === "down") t.clicks = [...t.clicks.slice(-9), { x: input.x, y: input.y }];
+      if (input.action === "wheel") t.scroll = Math.max(0, t.scroll + (input.deltaY ?? 0));
       break;
     case "key":
-      if (input.action === "down" && input.key === "Backspace") s.typed = s.typed.slice(0, -1);
-      else if (input.action === "down" && input.text) s.typed += input.text;
+      if (input.action === "down" && input.key === "Backspace") t.typed = t.typed.slice(0, -1);
+      else if (input.action === "down" && input.text) t.typed += input.text;
       break;
     case "text":
-      s.typed += input.text;
+      t.typed += input.text;
       break;
     case "resize":
-      s.width = Math.max(100, Math.min(2560, Math.round(input.width)));
-      s.height = Math.max(100, Math.min(1600, Math.round(input.height)));
+      b.width = Math.max(100, Math.min(2560, Math.round(input.width)));
+      b.height = Math.max(100, Math.min(1600, Math.round(input.height)));
       break;
     case "navigate":
-      navigate(sessionId, input.url);
+      navigate(sessionId, t.id, input.url);
       break;
     case "back":
     case "forward": {
-      const next = s.index + (input.type === "back" ? -1 : 1);
-      if (next >= 0 && next < s.history.length) {
-        s.index = next;
-        const st = browserStates.get(sessionId)!;
-        st.url = s.history[next]!;
-        st.title = st.url.replace(/^https?:\/\//, "");
+      const next = t.index + (input.type === "back" ? -1 : 1);
+      if (next >= 0 && next < t.history.length) {
+        t.index = next;
+        t.url = t.history[next]!;
+        t.title = titleOf(t.url);
         emitState(sessionId);
       }
       break;
     }
     case "reload": {
-      const st = browserStates.get(sessionId)!;
-      st.loading = true;
+      t.loading = true;
       emitState(sessionId);
       setTimeout(() => {
-        st.loading = false;
+        t.loading = false;
         emitState(sessionId);
       }, 400);
+      break;
+    }
+    case "newTab": {
+      // Opens the tab and moves this socket to it; the others just see the longer list.
+      const added = addTab(b, input.url ?? "about:blank");
+      if (input.url) navigate(sessionId, added.id, input.url);
+      ws.data.subs.set(sessionId, added.id);
+      emitState(sessionId);
+      break;
+    }
+    case "closeTab": {
+      b.tabs.delete(t.id);
+      if (!b.tabs.size) addTab(b, "about:blank");
+      // Sockets watching the closed tab move to the lowest open one, with its last frame.
+      for (const other of sockets) {
+        if (other.data.subs.get(sessionId) === t.id) watch(other, sessionId);
+      }
+      emitState(sessionId);
       break;
     }
   }
@@ -2032,9 +2097,9 @@ function mockVideo(name: string): SummaryAttachment[] {
   return [{ id, kind: "video", mimeType: "video/mp4", name, size: bytes.length }];
 }
 
-function renderFrame(sessionId: string, tick: number): { data: string; width: number; height: number } {
-  const s = sim(sessionId);
-  const { width: w, height: h } = s;
+function renderFrame(sessionId: string, tabId: number, tick: number): { data: string; width: number; height: number } {
+  const { width: w, height: h } = sim(sessionId);
+  const s = tabOf(sessionId, tabId);
   const px = new Uint8Array(w * h * 3);
   const rect = (x0: number, y0: number, rw: number, rh: number, r: number, g: number, b: number) => {
     const xa = Math.max(0, Math.floor(x0));
@@ -2051,11 +2116,13 @@ function renderFrame(sessionId: string, tick: number): { data: string; width: nu
     }
   };
   rect(0, 0, w, h, 250, 250, 252);
-  // Header bar with slowly shifting hue so frames are visibly live
-  const hue = (tick * 8) % 360;
+  // Header bar with slowly shifting hue so frames are visibly live (each tab starts elsewhere on the wheel)
+  const hue = (tick * 8 + (s.id - 1) * 110) % 360;
   const [hr, hg, hb] = hsl(hue, 0.55, 0.5);
   rect(0, 0, w, 64, hr, hg, hb);
   rect(24, 20, 160, 24, 255, 255, 255);
+  // The tab's id as that many white pips, so tabs are told apart at a glance
+  for (let i = 0; i < Math.min(s.id, 20); i++) rect(200 + i * 18, 26, 12, 12, 255, 255, 255);
   // Content blocks, offset by scroll
   const off = -(s.scroll % 2000);
   for (let i = 0; i < 12; i++) {
@@ -2089,13 +2156,23 @@ function hsl(hDeg: number, s: number, l: number): [number, number, number] {
 let frameTick = 0;
 setInterval(() => {
   frameTick++;
-  const subscribed = new Set<string>();
-  for (const ws of sockets) for (const id of ws.data.subs) subscribed.add(id);
-  for (const id of subscribed) {
-    const f = renderFrame(id, frameTick);
-    broadcast({ kind: "browser.frame", sessionId: id, ...f });
-    if (frameTick % 4 === 0) emitState(id);
+  // One render per watched tab, sent to the sockets on that tab.
+  const watched = new Map<string, ServerWebSocket<WsData>[]>();
+  for (const ws of sockets) {
+    for (const [id, tabId] of ws.data.subs) {
+      const key = `${id}\0${tabId}`;
+      watched.set(key, [...(watched.get(key) ?? []), ws]);
+    }
   }
+  const sessionsWatched = new Set<string>();
+  for (const [key, viewers] of watched) {
+    const [id, tab] = key.split("\0") as [string, string];
+    const tabId = Number(tab);
+    const f = renderFrame(id, tabId, frameTick);
+    for (const ws of viewers) sendEvent(ws, { kind: "browser.frame", sessionId: id, tabId, ...f });
+    sessionsWatched.add(id);
+  }
+  if (frameTick % 4 === 0) for (const id of sessionsWatched) emitState(id);
 }, 500);
 
 // ---------------------------------------------------------------------------
@@ -2163,7 +2240,7 @@ const server = Bun.serve<WsData>({
     if (url.pathname === "/health") return ok({ ok: true, version: "mock", pid: process.pid, ...serviceCode() });
     if (url.pathname === "/ws") {
       if (url.searchParams.get("token") !== TOKEN) return fail(401, "Unauthorized");
-      if (srv.upgrade(req, { data: { subs: new Set<string>() } })) return undefined as unknown as Response;
+      if (srv.upgrade(req, { data: { subs: new Map<string, number>() } })) return undefined as unknown as Response;
       return fail(400, "Expected a WebSocket upgrade");
     }
     // Like the service: attachments also take ?token=, since <img>/<video> can't send headers.
@@ -2203,15 +2280,13 @@ const server = Bun.serve<WsData>({
         case "hello":
           break;
         case "browser.subscribe":
-          ws.data.subs.add(msg.sessionId);
-          sim(msg.sessionId);
-          emitState(msg.sessionId);
+          watch(ws, msg.sessionId, msg.tabId);
           break;
         case "browser.unsubscribe":
           ws.data.subs.delete(msg.sessionId);
           break;
         case "browser.input":
-          handleInput(msg.sessionId, msg.input);
+          handleInput(ws, msg.sessionId, msg.tabId, msg.input);
           break;
       }
     },

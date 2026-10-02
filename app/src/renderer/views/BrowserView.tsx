@@ -1,12 +1,14 @@
-// Live view of a session's headless Chrome tab: screencast frames drawn onto a canvas,
-// with mouse/keyboard input forwarded back to the page over the WebSocket.
+// Live view of a session's headless Chrome: the screencast frames of one of its tabs drawn onto a
+// canvas, with mouse/keyboard input forwarded back to the page over the WebSocket. A strip above
+// the bar switches between the session's tabs once it has more than one.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { BrowserInput, BrowserState } from "@harness/shared";
+import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { isAppChord } from "../state/keys";
+import { confirmsClose, confirmsNewTab, confirmsSwitch, frameIsForView, tabLabel, type ViewTab } from "../state/browserTabs";
 import "./browser.css";
 
 function modifiersOf(e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
@@ -37,8 +39,23 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
   const decoding = useRef(false);
   const pending = useRef<{ data: string; width: number; height: number } | null>(null);
   const lastFrameAt = useRef(0);
+  /** Bumped whenever the canvas is cleared, so a frame still decoding from before is dropped. */
+  const frameGen = useRef(0);
+  /** The tab this view shows (see ViewTab); frames from any other tab are ignored. */
+  const viewTab = useRef<ViewTab>(undefined);
+  /** After switching, opening or closing a tab: the browser.state that confirms it. States still in
+   * flight from before (the old tab's) are dropped until it arrives, or for a few seconds at most. */
+  const expecting = useRef<{ accepts: (s: BrowserState) => boolean; until: number } | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
 
-  const send = useCallback((input: BrowserInput) => socket.send({ type: "browser.input", sessionId, input }), [socket, sessionId]);
+  const send = useCallback(
+    (input: BrowserInput) => {
+      const tab = viewTab.current;
+      socket.send(typeof tab === "number" ? { type: "browser.input", sessionId, tabId: tab, input } : { type: "browser.input", sessionId, input });
+    },
+    [socket, sessionId],
+  );
 
   // ------------------------------------------------------------------ drawing
 
@@ -69,12 +86,23 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     ctx.drawImage(bitmap, r.x, r.y, r.w, r.h);
   }, []);
 
+  /** Blank the canvas (a new session, or another tab) until that tab's first frame arrives. */
+  const clearFrame = useCallback(() => {
+    frameGen.current++;
+    pending.current = null;
+    frame.current.bitmap?.close();
+    frame.current = { bitmap: null, width: 0, height: 0 };
+    draw();
+    setHasFrame(false);
+  }, [draw]);
+
   const decode = useCallback(async () => {
     if (decoding.current) return;
     decoding.current = true;
     try {
       while (pending.current) {
         const next = pending.current;
+        const gen = frameGen.current;
         pending.current = null;
         const mime = next.data.startsWith("iVBOR") ? "image/png" : "image/jpeg";
         try {
@@ -84,6 +112,10 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
           img.src = `data:${mime};base64,${next.data}`;
           await img.decode();
           const bitmap = await createImageBitmap(img);
+          if (gen !== frameGen.current) {
+            bitmap.close();
+            continue;
+          }
           frame.current.bitmap?.close();
           frame.current = { bitmap, width: next.width, height: next.height };
           draw();
@@ -102,42 +134,65 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
 
   // ------------------------------------------------------------------ subscription
 
+  /** Take a browser.state for this view: a different tabId means the service moved this socket
+   * (a new tab, the shown one closed, a reconnect after it closed), so the old frame goes. */
+  const applyState = useCallback(
+    (s: BrowserState) => {
+      const want = expecting.current;
+      if (want) {
+        if (!want.accepts(s) && Date.now() < want.until) return;
+        expecting.current = null;
+      }
+      if (s.tabId !== undefined && viewTab.current !== s.tabId) {
+        if (viewTab.current !== undefined) clearFrame();
+        viewTab.current = s.tabId;
+      }
+      socket.noteBrowserTab(sessionId, s.tabId);
+      setState(s);
+    },
+    [socket, sessionId, clearFrame],
+  );
+
   useEffect(() => {
     setState(null);
-    setHasFrame(false);
-    frame.current.bitmap?.close();
-    frame.current = { bitmap: null, width: 0, height: 0 };
-    draw();
+    clearFrame();
+    viewTab.current = undefined;
+    expecting.current = null;
     socket.subscribeBrowser(sessionId);
     const off = onEvent((e) => {
       if (e.kind === "browser.frame" && e.sessionId === sessionId) {
+        if (!frameIsForView(e.tabId, viewTab.current)) return;
         debugStats.frames++;
         lastFrameAt.current = Date.now();
         setLive(true);
         pending.current = { data: e.data, width: e.width, height: e.height };
         void decode();
       } else if (e.kind === "browser.state" && e.sessionId === sessionId) {
-        setState(e.state);
+        applyState(e.state);
       }
     });
     return () => {
       off();
       socket.unsubscribeBrowser(sessionId);
     };
-  }, [sessionId, socket, onEvent, decode, draw]);
+  }, [sessionId, socket, onEvent, decode, clearFrame, applyState]);
 
   useEffect(() => {
     let cancelled = false;
+    const asked = viewTab.current;
     client
-      .browserState(sessionId)
+      .browserState(sessionId, typeof asked === "number" ? asked : undefined)
       .then((s) => {
-        if (!cancelled && s) setState(s);
+        // Only while it still describes the tab on screen (the socket may have moved meanwhile).
+        if (cancelled || !s) return;
+        const tab = viewTab.current;
+        if (s.tabId === undefined || tab === undefined || tab === s.tabId) applyState(s);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [client, sessionId, epoch]);
+  }, [client, sessionId, epoch, applyState]);
 
   useEffect(() => {
     if (!editingUrl.current) setUrlDraft(state?.url ?? "");
@@ -303,14 +358,96 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     setUrlDraft(url);
     editingUrl.current = false;
     (document.activeElement as HTMLElement | null)?.blur();
-    const next = await act(() => client.browserNavigate(sessionId, url));
-    if (next) setState(next);
+    const tab = viewTab.current;
+    const next = await act(() => client.browserNavigate(sessionId, url, typeof tab === "number" ? tab : undefined));
+    if (next && (next.tabId === undefined || viewTab.current === undefined || next.tabId === viewTab.current)) applyState(next);
+  };
+
+  // ------------------------------------------------------------------ tabs
+
+  const tabs = state?.tabs;
+  const expectState = (accepts: (s: BrowserState) => boolean) => {
+    expecting.current = { accepts, until: Date.now() + 3000 };
+  };
+
+  const switchTab = (tab: BrowserTab) => {
+    if (tab.id === viewTab.current) return;
+    clearFrame();
+    viewTab.current = tab.id;
+    expectState(confirmsSwitch(tab.id));
+    // Show the tab's url and title right away (over an edit in progress, which was the other
+    // tab's); its browser.state and last frame follow.
+    editingUrl.current = false;
+    setUrlDraft(tab.url);
+    setState((s) => s && { ...s, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading });
+    socket.subscribeBrowser(sessionId, tab.id);
+  };
+
+  const newTab = () => {
+    // The service moves this socket to the new tab; its id comes with the next browser.state.
+    clearFrame();
+    viewTab.current = "pending";
+    expectState(confirmsNewTab(tabs ?? []));
+    socket.send({ type: "browser.input", sessionId, input: { type: "newTab" } });
+    setUrlDraft("");
+    urlInputRef.current?.focus();
+  };
+
+  const closeTab = (tab: BrowserTab) => {
+    // Closing the shown tab moves this socket to the lowest open one (or a fresh blank tab).
+    if (tab.id === viewTab.current) {
+      clearFrame();
+      viewTab.current = "pending";
+      expectState(confirmsClose(tab.id));
+    }
+    setState((s) => s && { ...s, tabs: s.tabs?.filter((t) => t.id !== tab.id) });
+    socket.send({ type: "browser.input", sessionId, tabId: tab.id, input: { type: "closeTab" } });
+  };
+
+  /** Arrow keys move between tabs (and switch to them), like a native tab list. */
+  const onTabKey = (e: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!tabs) return;
+    const to = e.key === "ArrowLeft" ? index - 1 : e.key === "ArrowRight" ? index + 1 : e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : -1;
+    const tab = tabs[to];
+    if (!tab) return;
+    e.preventDefault();
+    switchTab(tab);
+    tabsRef.current?.querySelector<HTMLButtonElement>(`[data-tab-id="${tab.id}"]`)?.focus();
   };
 
   const empty = !hasFrame && !state;
 
   return (
     <div className="browser">
+      {tabs && tabs.length > 1 && (
+        <div className="browser-tabs" role="tablist" aria-label="Browser tabs" ref={tabsRef}>
+          {tabs.map((tab, i) => {
+            const label = tabLabel(tab);
+            const on = tab.id === state?.tabId;
+            return (
+              <div key={tab.id} className={`browser-tab ${on ? "on" : ""}`} role="presentation">
+                <button
+                  className="browser-tab-select"
+                  role="tab"
+                  aria-selected={on}
+                  tabIndex={on ? 0 : -1}
+                  data-tab-id={tab.id}
+                  title={tab.url && tab.url !== label ? `${label}\n${tab.url}` : label}
+                  onClick={() => switchTab(tab)}
+                  onAuxClick={(e) => e.button === 1 && closeTab(tab)}
+                  onKeyDown={(e) => onTabKey(e, i)}
+                >
+                  {tab.loading ? <span className="spinner browser-tab-spinner" /> : <Icon name="globe" size={11} className="browser-tab-icon" />}
+                  <span className="truncate">{label}</span>
+                </button>
+                <button className="browser-tab-close" title="Close tab" aria-label={`Close ${label}`} onClick={() => closeTab(tab)}>
+                  <Icon name="x" size={11} strokeWidth={2} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="browser-bar">
         <button className="btn btn-ghost btn-icon btn-sm" title="Back" disabled={empty} onClick={() => send({ type: "back" })}>
           <Icon name="chevronLeft" />
@@ -324,6 +461,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
         <div className="browser-url" title={state?.title || undefined}>
           <Icon name="globe" size={12} className="browser-url-icon" />
           <input
+            ref={urlInputRef}
             className="browser-url-input mono"
             value={urlDraft}
             placeholder="Enter a URL…"
@@ -347,6 +485,11 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
           />
           {state?.title && <span className="browser-title truncate">{state.title}</span>}
         </div>
+        {tabs && (
+          <button className="btn btn-ghost btn-icon btn-sm" title="New tab" aria-label="New tab" data-testid="browser-new-tab" onClick={newTab}>
+            <Icon name="plus" />
+          </button>
+        )}
         <span className={`browser-live ${live ? "on" : ""}`} title={live ? "Receiving frames" : "Idle"}>
           <span className="browser-live-dot" />
           {live ? "Live" : "Idle"}
