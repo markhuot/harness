@@ -359,7 +359,7 @@ feature needs something new here, add to it without changing what's there.
   | Link | Opens |
   | --- | --- |
   | `harness://board` (`/search` is an alias), `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
-  | `harness://ticket/<key>[?tab=summaries\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
+  | `harness://ticket/<key>[?tab=spec\|activity\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped, and an old `summaries` opens spec; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
   | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen |
@@ -787,13 +787,14 @@ native-pattern difference, not a missing feature.
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
 | Header menu: Copy key, Open external, Cancel run, Open PR, Mark done, Delete | screens/TicketDetail | TicketDetailScreen | done |
 | Hero: crumb, title (compact on Browser/plugin/sub-agent), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |
+| Hero progress across a conductor's children (waiting count); a tap opens the Tickets tab (HARNESS-201) | screens/TicketDetail | TicketDetailHero, ConductorProgressCard | done |
 | Start work, Approve (+ menu incl. clean up), Request changes, Complete (+ menu), agent review, Re-open, Cancel run | screens/TicketDetail, lib/approve, shared/completion | TicketDetailHero, TicketDetailSheets, HarnessKit Approve/Completion/TicketDetailLogic | done |
 | Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |
 | Hero collapse on scroll, back on tab change, news or a status-bar tap | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, HarnessKit HeroCollapse | done |
 | Tab strip: order, counts, live dots, plugin icons, sub-agent highlights Agents | screens/TicketDetail, shared/state/tabs | TicketDetailTabStrip, HarnessKit Tabs/ChangesTab | done |
 | Spec: the living spec, history bar (step, scrub, follow the newest, approved-plan tag), Show changes with the Changes rows, depends-on chips | (HARNESS-199) | TicketDetailSpecTab, HarnessKit SpecHistory/SpecScrubber | done |
 | Activity: typed timeline, blocked card, review round and commit, message/answer bubbles, stick to bottom | (HARNESS-199) | TicketDetailActivityTab, HarnessKit ActivityRows | done |
-| Tickets (children) tab: progress, waiting count, groups, rows with chips | screens/TicketTabs | TicketDetailChildrenTab | done |
+| Tickets (children) tab: groups, rows with chips (progress is in the hero's ConductorProgressCard) | screens/TicketTabs | TicketDetailChildrenTab | done |
 | Details: title, spec (Unsaved/Revert/Save, base revision, Reload/Overwrite on a conflict), ticket settings, links, runs, related | screens/TicketTabs, ui/TicketSettings | TicketDetailDetailsTab, Pickers/TicketSettingsForm | done |
 | Approval card: Allow once, Deny…, Always allow; announced to VoiceOver | screens/Approval | TicketDetailApprovalCard | done |
 | Composer: placeholder by status and where it shows (`log` from Spec/Activity), move switch while writing, @files, /commands, Send | screens/TicketDetail, ui/mentions, lib/mentionCaret | TicketDetailComposer, Pickers/MentionTextEditor | done |

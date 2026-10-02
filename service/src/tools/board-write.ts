@@ -1,7 +1,7 @@
 // Board tools (write): work and conductor runs change other cards the way a person does on the
 // board: create, edit, move and reorder, start, message, cancel and re-open. The orchestrator
-// enforces the guard rails (never the caller's own ticket, no way around a review or a tool
-// approval); see DESIGN.md "Board changes by agents".
+// enforces the guard rails (never the caller's own ticket, no way around a tool approval); a plan
+// run gets update_ticket for its own ticket only. See DESIGN.md "Board changes by agents".
 
 import { PERMISSION_MODES, TICKET_STATUSES, type PermissionMode, type TicketStatus } from "@harness/shared";
 import { defineTool, json, schema, ticketView } from "./util";
@@ -24,13 +24,13 @@ const branchProp = {
 const skipAgentReviewProp = {
   type: "boolean",
   description:
-    "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). Not while it skips the human review: one review has to check the work. Omitted on create: the project's default.",
+    "Skip the agent review when its agent submits, so it waits only on the human (or you, for a child). With skip_human_review too, its work lands as soon as it's submitted: only when the human asked for that. Omitted on create: the project's default.",
 };
 
 const skipHumanReviewProp = {
   type: "boolean",
   description:
-    "Skip the human review (yours, for a child), so the work lands as soon as its agent review approves it. Only when the human asked for it, and not while it skips the agent review: one review has to check the work. Omitted on create: the project's default.",
+    "Skip the human review (yours, for a child), so the work lands as soon as its agent review approves it (or as soon as it's submitted, when it skips the agent review too). Only when the human asked for it. Omitted on create: the project's default.",
 };
 
 const remoteIdProp = {
@@ -140,10 +140,10 @@ export const updateTicket = defineTool<{
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app: title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. A permission mode can be made stricter (auto → ask → read_only) but never looser. A ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app (in a planning run, your own ticket instead, and only yours: apply the settings the human asked for in the spec, with full access to every field): title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. On another ticket, a permission mode can be made stricter (auto → ask → read_only) but never looser, and a ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
-      key: keyProp,
+      key: { ...keyProp, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket, except in a planning run, where it's only your own." },
       title: { type: "string", minLength: 1, description: "New title." },
       spec: { type: "string", description: "The ticket's whole new spec (a new revision; its history keeps the old one). Needs base_revision." },
       base_revision: { type: "integer", minimum: 1, description: "Required with spec: the specRevision get_ticket showed. If the spec changed since, the call fails with the current revision." },

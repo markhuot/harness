@@ -2,7 +2,7 @@
 
 import { reviewPassed, type BrowserState, type CommandMatch, type DriverInfo, type ModelInfo } from "@harness/shared";
 import { onTempCleanup, tempDir } from "@harness/shared/testing";
-import type { Driver, DriverEvent, RunRequest } from "../drivers/types";
+import { executeTool, type Driver, type DriverEvent, type RunRequest } from "../drivers/types";
 import { outputKey, watcherProject, watcherTicket } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
 import { ensureHome } from "../config";
@@ -215,6 +215,13 @@ export class FakeDriver implements Driver {
           await this.hold(req);
           if (req.signal.aborted) return;
           yield* this.steered(req);
+        }
+        // "/set-ticket {json}" stands in for an agent reading settings off the brief: it calls the
+        // run's own update_ticket tool on this ticket, so the tool has to be offered to plan runs.
+        const settings = p.match(/^\/set-ticket (\{.*\})$/m)?.[1];
+        if (settings) {
+          const r = await executeTool(req.tools, "update_ticket", { key: ctx.ticket!.key, ...JSON.parse(settings) }, ctx);
+          yield { type: "text", text: `${r.isError ? "Refused: " : ""}${r.content.map((c) => (c.type === "text" ? c.text : "")).join("")}` };
         }
         yield { type: "text_delta", text: "Here's " };
         yield { type: "text", text: `Here's a plan for: ${p.split("\n")[0]}` };

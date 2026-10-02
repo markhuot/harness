@@ -276,4 +276,16 @@ describe("listInbox (board)", () => {
     const none = await listInbox.execute({ source: "nope" }, h.ctx("work", null));
     expect(none.content[0]).toEqual({ type: "text", text: "No Inbox items match." });
   });
+
+  test("key picks one item (case-insensitive), and get_ticket on an Inbox key points at list_inbox", async () => {
+    const h = await inbox();
+    const one = await h.orch.ops.listInbox(h.ctx("work", null), { key: h.b.key.toLowerCase() });
+    expect(one).toMatchObject({ total: 1, items: [{ key: h.b.key, outcome: "Assigned to someone else" }] });
+    expect((await h.orch.ops.listInbox(h.ctx("work", null), { key: "TRIAGE-999" })).total).toBe(0);
+
+    await expect(h.orch.ops.getTicket(h.ctx("work", null), h.a.key)).rejects.toThrow(
+      `${h.a.key} is an Inbox item (Dispatched as WEB-1), not a ticket. Read it with list_inbox { key: "${h.a.key}", include_output: true }.`,
+    );
+    await expect(h.orch.ops.getTicket(h.ctx("work", null), "TRIAGE-999")).rejects.toThrow("Unknown ticket: TRIAGE-999");
+  });
 });

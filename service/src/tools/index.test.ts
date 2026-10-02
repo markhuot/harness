@@ -29,7 +29,8 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
-    plan: ["post_note", ...SPEC, ...BOARD, ...CONFIG_READ, ...BROWSER],
+    // update_ticket edits only the plan run's own ticket (the orchestrator checks).
+    plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
     work: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     review: ["post_note", "read_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
     complete: ["post_note", ...SPEC, "record_pull_request", ...BOARD, ...CONFIG_READ],
@@ -83,7 +84,7 @@ describe("toolsForRun", () => {
     expect(who("dispatch_ticket")).toEqual(["triage"]);
     expect(who("browser_open")).toEqual(["plan", "work", "review", "conductor", "chat"]);
     for (const read of BOARD) expect(who(read)).toEqual(kinds);
-    for (const change of BOARD_WRITE) expect(who(change)).toEqual(["work", "conductor", "chat"]);
+    for (const change of BOARD_WRITE) expect(who(change)).toEqual(change === "update_ticket" ? ["plan", "work", "conductor", "chat"] : ["work", "conductor", "chat"]);
     for (const steer of CONDUCTOR) expect(who(steer)).toEqual(["work", "conductor", "chat"]);
     expect(who("update_branch")).toEqual(["work", "conductor", "chat"]);
   });

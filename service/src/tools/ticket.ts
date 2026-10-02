@@ -129,12 +129,12 @@ const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip
       skip_agent_review: {
         type: "boolean",
         description:
-          "Skip the independent agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or when the request was conversational and you changed no files (an answer in text leaves a reviewer nothing to check). Refused when the project doesn't require a human review, or when the ticket skips its human review. Omit it to keep the ticket's setting.",
+          "Skip the independent agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or when the request was conversational and you changed no files (an answer in text leaves a reviewer nothing to check). When the ticket skips its human review too, the work lands as soon as you submit, so pass true then only when the human asked for that. Omit it to keep the ticket's setting.",
       },
       skip_human_review: {
         type: "boolean",
         description:
-          "Skip the human review, so the work lands as soon as the agent review approves it. Pass true only when the human asked for that (for example \"merge it once the review passes\" or \"no need for me to look\"). Refused when the ticket skips its agent review: one review has to check the work. Omit it to keep the ticket's setting.",
+          "Skip the human review, so the work lands as soon as the agent review approves it. Pass true only when the human asked for that (for example \"merge it once the review passes\" or \"no need for me to look\"). When the ticket skips its agent review too, the work lands as soon as you submit. Omit it to keep the ticket's setting.",
       },
     },
     ["note"],

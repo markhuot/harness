@@ -562,17 +562,13 @@ describe("skipping the agent review", () => {
     expect(statuses(h, t.sessionId)).toContain("The agent turned off the agent review for this ticket");
   });
 
-  test("an agent can't skip the review when nobody else would review the ticket", async () => {
+  test("an agent can skip the agent review of a ticket that skips its human review, and it lands unreviewed", async () => {
     const h = setup({ skipHumanReview: true });
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "hello /skipreview" });
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
-    // The refused submit left it in progress; the run's end auto-submitted it for a normal review,
-    // whose approval completed it.
-    expect([cur.status, cur.agentReview, cur.skipAgentReview]).toEqual(["done", "approved", false]);
-    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
-    const text = h.store.transcript.list(t.sessionId).filter((e) => e.content.type === "text").map((e) => (e.content as { text: string }).text);
-    expect(text.some((x) => x.startsWith("Refused:") && x.includes(`${t.key} skips its human review`))).toBe(true);
+    expect([cur.status, cur.agentReview, cur.skipAgentReview, cur.skipHumanReview]).toEqual(["done", "skipped", true, true]);
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "complete:succeeded"]);
   });
 
   test("turning skipAgentReview on while the agent review runs stops it; turning it off starts one", async () => {
@@ -662,24 +658,19 @@ describe("skipping the human review", () => {
     expect(statuses(h, t.sessionId)).toContain("The agent turned off the human review for this ticket");
   });
 
-  test("an agent can't skip both reviews, nor the human review of a ticket that skips its agent review", async () => {
+  test("an agent can skip both reviews at submit, or the human review of a ticket that skips its agent review, and it lands", async () => {
     const h = setup();
     const both = await h.orch.createTicket({ projectId: h.project.id, spec: "ship it /skipreview /skiphuman" });
     const noBot = await h.orch.createTicket({ projectId: h.project.id, spec: "ship it /skiphuman", skipAgentReview: true });
     await h.orch.idle();
-    const refusals = (t: Ticket) =>
-      h.store.transcript
-        .list(t.sessionId)
-        .filter((e) => e.content.type === "text")
-        .map((e) => (e.content as { text: string }).text)
-        .filter((x) => x.startsWith("Refused:"));
-    // The refused submit stored nothing; the run's end auto-submitted it for the usual reviews.
-    let cur = h.orch.ticketDetail(both.key).ticket;
-    expect([cur.status, cur.agentReview, cur.humanReview, cur.skipAgentReview, cur.skipHumanReview]).toEqual(["review", "approved", "pending", false, false]);
-    expect(refusals(both)).toEqual([expect.stringContaining("can't skip both")]);
-    cur = h.orch.ticketDetail(noBot.key).ticket;
-    expect([cur.status, cur.agentReview, cur.humanReview, cur.skipHumanReview]).toEqual(["review", "skipped", "pending", false]);
-    expect(refusals(noBot)).toEqual([expect.stringContaining(`${noBot.key} skips its agent review`)]);
+    for (const t of [both, noBot]) {
+      const cur = h.orch.ticketDetail(t.key).ticket;
+      expect([cur.status, cur.agentReview, cur.humanReview, cur.skipAgentReview, cur.skipHumanReview]).toEqual(["done", "skipped", "approved", true, true]);
+      // No review run: the work went straight to completion.
+      expect(runKinds(h, t)).toEqual(["work:succeeded", "complete:succeeded"]);
+      expect(statuses(h, t.sessionId)).toContain("The agent turned off the human review for this ticket");
+    }
+    expect(statuses(h, both.sessionId)).toContain("The agent turned off the agent review for this ticket");
   });
 
   test("turning skipHumanReview on while the ticket waits on the human lands it", async () => {
@@ -1071,6 +1062,21 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     await h.orch.sendMessage(t.key, "what did you change?");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
+    expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
+  });
+
+  test("a done ticket chats from the checkout when its session still points at the removed worktree", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    // What a real worktree leaves behind: the ticket and its session both named it.
+    const gone = join(h.home, "worktrees", t.key);
+    h.store.tickets.update(t.id, { workdir: gone });
+    h.store.sessions.update(t.sessionId, { cwd: gone });
+    await h.orch.sendMessage(t.key, "what did you change?");
+    await h.orch.idle();
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
     expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
   });

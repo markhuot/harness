@@ -1,13 +1,13 @@
 // Conductor → "Tickets" tab: a live list of the conductor's child tickets, derived from the
-// store (ticket.upserted / activity.added keep it current; nothing polls).
+// store (ticket.upserted / activity.added keep it current; nothing polls). Their progress is in
+// the ticket detail's header (ConductorProgress), which opens this tab.
 
 import { useEffect, useMemo, useRef } from "react";
 import { keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, plainText, progressLabel, progressOf, workingTitle } from "@harness/shared/state";
+import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, plainText, workingTitle } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
-import { ProgressBar } from "../components/Conductor";
 import { useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
 import { keysArea } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
@@ -20,7 +20,6 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
   const { state, client, dispatch, epoch } = useStore();
   const openTicket = useOpenTicket();
   const children = useMemo(() => childrenOfTicket(state.tickets, ticket.id), [state.tickets, ticket.id]);
-  const progress = useMemo(() => progressOf(children), [children]);
   const groups = useMemo(() => groupChildren(children), [children]);
 
   // The store backfills Activity for moving tickets; fill in the rest (older done children).
@@ -59,19 +58,6 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 
   return (
     <div className="children-tab" ref={listRef} {...keysArea("list", owner)}>
-      <div className="children-progress card-surface">
-        <div className="children-progress-text" data-testid="children-progress">
-          {progressLabel(progress)}
-        </div>
-        <ProgressBar progress={progress} />
-        {progress.attention > 0 && (
-          <div className="children-attn">
-            <Icon name="alert" size={12} />
-            {progress.attention} ticket{progress.attention === 1 ? "" : "s"} waiting on you
-          </div>
-        )}
-      </div>
-
       {groups.map((g) => (
         <section key={g.status} className="children-group" data-status={g.status}>
           <div className="children-group-head">

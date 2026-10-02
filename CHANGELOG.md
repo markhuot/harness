@@ -64,6 +64,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Saved changes to the Summaries prompt in Settings → Prompts are dropped, since the new Spec and
   Activity prompt replaces it. If another saved prompt still mentions `update_plan` or
   `post_summary`, the service log says so at startup.
+- When a new ticket's text asks for ticket settings, such as dependencies, a branch or skipping
+  a review (`/depends: HARNESS-12`, `/branch: main`, `/skip-human-review`, or in plain words), the
+  planning agent now applies them to the ticket itself. They're already set when you read the spec
+  and press Start.
+- Agents can now turn off both of a ticket's reviews when you ask them to. The ticket then lands as
+  soon as it's submitted. Before, an agent could turn off only one of them.
+- A ticket with child tickets shows its progress bar at the top of the ticket, under the title,
+  on the Mac, iPhone and iPad, so you see it without opening the Tickets tab. (On iPhone and iPad
+  it's tucked away with the badges on the Browser, Changes and plugin tabs, where the top of the
+  ticket shrinks to its title.) It lists how many children are
+  done, in progress, blocked or in review, and how many are waiting on you. Click or tap it to
+  open the Tickets tab and see each child.
 - Project settings now have **Skip agent review** and **Skip human review** switches (on Mac and
   iPhone/iPad), in place of **Require human review**. They set where a new ticket's two review
   switches start, so one project can skip your review by default while another skips the agent's,
@@ -74,6 +86,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone, the board's New session button sits in its own glass again, beside the search field
+  instead of inside it.
+- When a watcher's update is meant for a ticket that's already done (new review comments on a pull
+  request whose ticket finished, say), triage now re-opens that ticket with the update. The ticket
+  gets its worktree back and goes through review again. Before, the update went to the done
+  ticket as a chat, which failed with "Working directory does not exist" once the ticket's
+  worktree had been cleaned up, while the Inbox still showed it as sent.
+- Messaging a done ticket whose worktree was cleaned up now answers from the project folder
+  instead of failing with "Working directory does not exist".
+- Agents that look up an Inbox key (`TRIAGE-12`) with `get_ticket` are now told it's an Inbox
+  item and pointed to `list_inbox`, which can now find a single item by its key.
 - Typing in a ticket's browser no longer freezes it or runs Chrome at 100% CPU. Pressing Shift (for
   a capital letter or a symbol like `+`), ⌘, ⌥, Escape or a function key used to set off a loop that
   kept Chrome busy until it was quit.

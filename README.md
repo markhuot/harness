@@ -123,11 +123,14 @@ you answer.
 - Tick **Skip agent review** in New session's Options (or on the ticket's Details tab) for tickets that
   don't need a reviewer agent, like a quick question. The ticket goes to Review and waits
   only on you. The agent can also skip its own review when you ask it to, or when it only
-  answered a question, as long as the ticket still gets your review.
+  answered a question.
 - Tick **Skip human review** for tickets you don't need to look at yourself. The ticket lands as
   soon as the agent review approves it, the way the Approve button's default would land it. With
-  both switches on, it lands as soon as it's submitted. Agents can turn it on when you ask them to,
-  but an agent can't skip both reviews: one of them always checks the work.
+  both switches on, it lands as soon as it's submitted. Agents can turn either one on, or both,
+  when you ask them to.
+- Settings you ask for in a new ticket's text, such as `/depends: HARNESS-12`, `/branch: main` or
+  `/skip-human-review` (plain words work too), are applied to the ticket by the planning agent,
+  so they're already set when you read the plan and press Start.
 - Both switches start from the project's **Skip agent review** and **Skip human review**
   settings (Project settings → Agents), so one project can skip your review by default while
   another skips the agent's. Changing them affects new tickets only.

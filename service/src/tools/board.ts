@@ -129,13 +129,14 @@ const TRIAGE_STATUSES = ["triaging", "dispatched", "declined", "failed"] as cons
 /** list_inbox page size when no limit is given (the ops cap it at 100). */
 export const LIST_INBOX_DEFAULT_LIMIT = 20;
 
-export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; limit?: number; include_output?: boolean }>({
+export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; key?: string; limit?: number; include_output?: boolean }>({
   name: "list_inbox",
   description:
-    "List the Inbox, newest first: one item per piece of watcher output, with the triage agent's decision. status is \"triaging\", \"dispatched\" (outcome names the ticket), \"declined\" (outcome says why) or \"failed\". Filter by status or by source (the watcher's name); include_output adds the output each item was triaged from (truncated). Use it to check that a watcher you set up is producing items and how they were handled.",
+    "List the Inbox, newest first: one item per piece of watcher output, with the triage agent's decision. status is \"triaging\", \"dispatched\" (outcome names the ticket), \"declined\" (outcome says why) or \"failed\". Filter by status, by source (the watcher's name) or by key for one item (e.g. \"TRIAGE-12\": Inbox keys aren't tickets, so get_ticket can't read them); include_output adds the output each item was triaged from (truncated). Use it to check that a watcher you set up is producing items and how they were handled.",
   inputSchema: schema({
     status: { type: "array", items: { type: "string", enum: [...TRIAGE_STATUSES] }, description: "Only items in these states." },
     source: { type: "string", minLength: 1, description: "Only items from this watcher (its name)." },
+    key: { type: "string", minLength: 1, description: "Only the item with this key, e.g. \"TRIAGE-12\"." },
     limit: { type: "integer", minimum: 1, maximum: 100, description: `Most items to return. Default ${LIST_INBOX_DEFAULT_LIMIT}.` },
     include_output: { type: "boolean", description: "Include each item's watcher output. Default false." },
   }),
@@ -143,10 +144,11 @@ export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; 
     const { items, total } = await ctx.ops.listInbox(ctx, {
       statuses: input.status,
       source: input.source,
+      key: input.key,
       limit: input.limit ?? LIST_INBOX_DEFAULT_LIMIT,
       output: input.include_output ?? false,
     });
-    if (items.length === 0) return input.status?.length || input.source ? "No Inbox items match." : "The Inbox is empty.";
+    if (items.length === 0) return input.status?.length || input.source || input.key ? "No Inbox items match." : "The Inbox is empty.";
     const out = json(
       items.map((i) => ({
         key: i.key,
@@ -159,6 +161,6 @@ export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; 
         created_at: new Date(i.createdAt).toISOString(),
       })),
     );
-    return items.length < total ? `Showing ${items.length} of ${total} items. Narrow with status or source, or raise limit.\n${out}` : out;
+    return items.length < total ? `Showing ${items.length} of ${total} items. Narrow with status, source or key, or raise limit.\n${out}` : out;
   },
 });

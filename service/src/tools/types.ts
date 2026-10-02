@@ -269,11 +269,11 @@ export interface HarnessOps {
   listProjects(ctx: ToolContext): Promise<ProjectView[]>;
   /**
    * Inbox items (triage sessions), newest first, capped at `limit` (default 20, max 100);
-   * `total` counts every match. `source` is a watcher name; `output` adds its text, truncated.
+   * `total` counts every match. `source` is a watcher name; `key` one item (TRIAGE-n); `output` adds its text, truncated.
    */
   listInbox(
     ctx: ToolContext,
-    filter: { statuses?: TriageStatus[]; source?: string; limit?: number; output?: boolean },
+    filter: { statuses?: TriageStatus[]; source?: string; key?: string; limit?: number; output?: boolean },
   ): Promise<{ items: InboxItem[]; total: number }>;
 
   // --- board (write): work and conductor runs ---

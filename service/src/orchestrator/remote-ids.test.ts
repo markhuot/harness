@@ -88,6 +88,30 @@ describe("triage with remote IDs", () => {
     expect(h.driver.calls.at(-1)!.prompt).toBe("Handle the update");
   });
 
+  test("ticket_key on a done ticket re-opens it with the update instead of chatting", async () => {
+    const h = await setup();
+    const t = await h.make("Landed work");
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    await h.orch.idle();
+    expect(h.byId(t).status).toBe("done");
+
+    const callsBefore = h.driver.calls.length;
+    const { outcome, errors } = await h.triage("MH-62 new review", [dispatch({ key: "MH-62", ticketKey: t.key })]);
+    expect(errors).toEqual([]);
+    expect(outcome).toBe(`Linked ${t.key} to MH-62 and re-opened it with the update`);
+    // A work run (not a chat) took the update, and the ticket went back through review.
+    const after = h.driver.calls.slice(callsBefore).filter((c) => c.kind !== "triage");
+    expect(after.map((c) => c.kind)).toEqual(["work", "review"]);
+    expect(after[0]!.prompt).toBe("Handle the update");
+    expect(h.byId(t)).toMatchObject({ status: "review", humanReview: "pending" });
+
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    await h.orch.idle();
+    expect((await h.triage("MH-62 another", [dispatch({ ticketKey: t.key })])).outcome).toBe(`Re-opened ${t.key} with the update`);
+  });
+
   test("ticket_key with key links an unlinked ticket; the same remote ID again is fine, a different one is refused", async () => {
     const h = await setup();
     const t = await h.make("Local work");
