@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261003.2235](https://github.com/markhuot/harness/releases/tag/app-20261003.2235) - 2026-10-03
+
 ### Added
 
 - On iPhone and iPad, swipe sideways on a ticket to move between its tabs, from Spec to Activity
