@@ -41,7 +41,7 @@ import { registerDraftCloser } from "../components/draftClose";
 import { focusPaneBy } from "../components/paneFocus";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
-import { isFileDrag, limitMessage, planFiles } from "../state/promptAttachmentFiles";
+import { isFileDrag, isLocalService, limitMessage, planFiles } from "../state/promptAttachmentFiles";
 import { forgetPreview, PaperclipIcon, PromptAttachmentStrip, rememberPreview, type PendingUpload } from "../components/PromptAttachments";
 
 const LAST_PROJECT = "harness.lastProject";
@@ -259,7 +259,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   const attachFiles = (files: File[], uploadAny: boolean): boolean => {
     const s = session;
     if (!s || !files.length) return false;
-    const plan = planFiles(files, (f) => window.harness?.pathForFile(f) ?? null, uploadAny);
+    const plan = planFiles(files, (f) => window.harness?.pathForFile(f) ?? null, { uploadAny, local: isLocalService(client.baseUrl) });
     if (!plan.byPath.length && !plan.uploads.length) return false;
     for (const { input, file } of plan.byPath) rememberPreview(input.path, file);
     // Room left once the files on disk are in (and the uploads already on their way): the rest isn't uploaded at all.

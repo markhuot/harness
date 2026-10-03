@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { attachmentSource, isFileDrag, limitMessage, planFiles } from "./promptAttachmentFiles";
+import { attachmentSource, isFileDrag, isLocalService, limitMessage, planFiles } from "./promptAttachmentFiles";
 
 type F = { name: string; type: string; path?: string };
 const pathOf = (f: F) => f.path ?? null;
+const paste = { uploadAny: false, local: true };
+const drop = { uploadAny: true, local: true };
 
 describe("planFiles", () => {
   const finder: F = { name: "notes.pdf", type: "application/pdf", path: "/Users/me/notes.pdf" };
@@ -11,13 +13,13 @@ describe("planFiles", () => {
   const blob: F = { name: "data.bin", type: "" };
 
   test("files on disk go in by path, any type, keeping their name", () => {
-    const plan = planFiles([finder], pathOf, false);
+    const plan = planFiles([finder], pathOf, paste);
     expect(plan.byPath.map((p) => p.input)).toEqual([{ path: "/Users/me/notes.pdf", name: "notes.pdf", source: "file" }]);
     expect(plan.uploads).toEqual([]);
   });
 
   test("pasted image data is uploaded as a pasted image; a named image from a browser keeps its name", () => {
-    const plan = planFiles([shot, browserImage], pathOf, false);
+    const plan = planFiles([shot, browserImage], pathOf, paste);
     expect(plan.uploads.map((u) => [u.name, u.mimeType])).toEqual([
       ["Pasted image.png", "image/png"],
       ["cat.jpg", "image/jpeg"],
@@ -25,8 +27,40 @@ describe("planFiles", () => {
   });
 
   test("a paste leaves pathless non-images alone (so it pastes as usual); a drop uploads them", () => {
-    expect(planFiles([blob], pathOf, false)).toMatchObject({ byPath: [], uploads: [], ignored: 1 });
-    expect(planFiles([blob], pathOf, true).uploads.map((u) => [u.name, u.mimeType])).toEqual([["data.bin", "application/octet-stream"]]);
+    expect(planFiles([blob], pathOf, paste)).toMatchObject({ byPath: [], uploads: [], ignored: 1 });
+    expect(planFiles([blob], pathOf, drop).uploads.map((u) => [u.name, u.mimeType])).toEqual([["data.bin", "application/octet-stream"]]);
+  });
+});
+
+describe("planFiles with a service on another machine", () => {
+  test("files on disk are uploaded under their real name instead of passing a path that doesn't exist there", () => {
+    const files: F[] = [
+      { name: "notes.pdf", type: "application/pdf", path: "/Users/me/notes.pdf" },
+      { name: "image.png", type: "image/png", path: "/Users/me/image.png" },
+      { name: "", type: "", path: "/Users/me/Makefile" },
+    ];
+    const plan = planFiles(files, pathOf, { uploadAny: true, local: false });
+    expect(plan.byPath).toEqual([]);
+    expect(plan.uploads.map((u) => [u.name, u.mimeType])).toEqual([
+      ["notes.pdf", "application/pdf"],
+      ["image.png", "image/png"],
+      ["Makefile", "application/octet-stream"],
+    ]);
+  });
+
+  test("a Finder copy pasted for a remote service is uploaded too, not left to paste as text", () => {
+    const plan = planFiles([{ name: "spec.txt", type: "text/plain", path: "/Users/me/spec.txt" }], pathOf, { uploadAny: false, local: false });
+    expect(plan.uploads.map((u) => u.name)).toEqual(["spec.txt"]);
+    expect(plan.ignored).toBe(0);
+  });
+});
+
+describe("isLocalService", () => {
+  test("loopback hosts are this Mac", () => {
+    for (const url of ["http://127.0.0.1:7717", "http://localhost:7717/", "http://[::1]:7717", "http://127.1.2.3:80"]) expect(isLocalService(url)).toBe(true);
+  });
+  test("anything else is another machine", () => {
+    for (const url of ["http://100.64.1.2:7717", "http://mac-mini.tail1234.ts.net:7717", "http://localhost.example.com", "http://127.0.0.1.evil.com", "not a url"]) expect(isLocalService(url)).toBe(false);
   });
 });
 

@@ -4,7 +4,7 @@
 // a browser) is uploaded to the service first. No React or DOM APIs beyond the File-like shape.
 
 import type { PromptAttachment, PromptAttachmentInput } from "@harness/shared";
-import { pastedImageName } from "@harness/shared/state";
+import { fileBaseName, pastedImageName } from "@harness/shared/state";
 
 /** What the editor knows about a File it was handed: its name, MIME type and (from the preload) path on disk. */
 export interface FileLike {
@@ -22,20 +22,27 @@ export interface FilePlan<F> {
 
 /**
  * Sort `files` by where they come from. `pathOf` is the preload's webUtils lookup (null for data
- * with no file behind it). A file with a path is attached by it. A pathless one is uploaded: always
- * for a drop (`uploadAny`), and only when it's an image for a paste, so a paste of rich text that
- * happens to carry other data still pastes as text.
+ * with no file behind it). With the service on this Mac (`local`), a file with a path is attached by
+ * it. With a service on another machine that path means nothing there, so the file's bytes are
+ * uploaded under its own name instead. A pathless one is uploaded: always for a drop or a pick
+ * (`uploadAny`), and only when it's an image for a paste, so a paste of rich text that happens to
+ * carry other data still pastes as text.
  */
-export function planFiles<F extends FileLike>(files: readonly F[], pathOf: (f: F) => string | null, uploadAny: boolean): FilePlan<F> {
+export function planFiles<F extends FileLike>(files: readonly F[], pathOf: (f: F) => string | null, opts: { uploadAny: boolean; local: boolean }): FilePlan<F> {
   const plan: FilePlan<F> = { byPath: [], uploads: [], ignored: 0 };
   for (const file of files) {
     const path = pathOf(file);
-    if (path) {
+    if (path && opts.local) {
       plan.byPath.push({ input: { path, name: file.name || undefined, source: "file" }, file });
       continue;
     }
+    if (path) {
+      // A file on this Mac, for a service elsewhere: its real name, whatever its type.
+      plan.uploads.push({ file, name: file.name || fileBaseName(path), mimeType: file.type || "application/octet-stream" });
+      continue;
+    }
     const image = file.type.toLowerCase().startsWith("image/");
-    if (!image && !uploadAny) {
+    if (!image && !opts.uploadAny) {
       plan.ignored++;
       continue;
     }
@@ -44,6 +51,17 @@ export function planFiles<F extends FileLike>(files: readonly F[], pathOf: (f: F
     plan.uploads.push({ file, name, mimeType: file.type || "application/octet-stream" });
   }
   return plan;
+}
+
+/** Whether the service at `baseUrl` runs on this Mac (a loopback host), so paths on disk mean the same there. */
+export function isLocalService(baseUrl: string): boolean {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return host === "localhost" || host === "[::1]" || host === "::1" || /^127(\.\d{1,3}){3}$/.test(host);
 }
 
 /** Whether a drag carries files from outside the page (Finder, a browser), not our own pane drags or text. */
