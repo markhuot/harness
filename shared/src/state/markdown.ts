@@ -1,6 +1,6 @@
 // Markdown-ish parsing for agent summaries and transcript text: paragraphs, headings, nested bullet /
-// numbered lists, fenced code, quotes, rules, GFM pipe tables, attachment images and videos, and
-// inline code / bold / italic / links / images. Pure: each
+// numbered lists, fenced code, quotes, rules, GFM pipe tables, attachment images and videos (as
+// captioned figures or rows of thumbnails), and inline code / bold / italic / links / images. Pure: each
 // client renders the blocks and tokens with its own primitives (DOM on desktop, <Text> on iOS), so
 // agent output can never inject markup.
 
@@ -16,8 +16,10 @@ export type Block =
   | { t: "quote"; text: string }
   | { t: "table"; align: Align[]; header: string[]; rows: string[][] }
   | { t: "hr" }
-  /** An `![alt](attachment:<id>)` alone on its line. */
-  | ({ t: "img" } & Media);
+  /** An `![alt](attachment:<id>)` alone on its line: a full-width figure, captioned with its alt text. */
+  | ({ t: "img" } & Media)
+  /** Lines holding only `![alt](attachment:<id> "thumb")` images: a row of small thumbnails. */
+  | { t: "thumbs"; items: Media[] };
 
 /** A list item: its text (continuation lines joined with spaces) and the lists nested under it. */
 export interface ListItem {
@@ -27,12 +29,14 @@ export interface ListItem {
 
 /**
  * An attachment shown inline. `video` comes from a .mp4/.webm/.mov id or alt text; renderers that
- * know the attachment's kind may use that instead.
+ * know the attachment's kind may use that instead. `thumb` is a `"thumb"` (or `"thumbnail"`) title:
+ * show it as a small square that opens full size.
  */
 export interface Media {
   alt: string;
   id: string;
   video: boolean;
+  thumb: boolean;
 }
 
 export type Align = "left" | "center" | "right" | null;
@@ -73,7 +77,7 @@ function delimiterRow(line: string): Align[] | null {
 }
 
 const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s+(.*)$/;
-const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/;
+const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\s*$/;
 
 /** Columns of a line's leading whitespace: a tab counts as 4, any other `\s` character as 1. */
 function indentOf(line: string): number {
@@ -123,6 +127,8 @@ export function parseBlocks(src: string): Block[] {
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   const blocks: Block[] = [];
   let para: string[] = [];
+  /** The last line of the latest thumbnail row. */
+  let thumbsEnd = -1;
   const flush = () => {
     if (para.length) blocks.push({ t: "p", text: para.join("\n") });
     para = [];
@@ -166,8 +172,18 @@ export function parseBlocks(src: string): Block[] {
       blocks.push({ t: "hr" });
       continue;
     }
+    const thumbs = thumbLine(line);
+    if (thumbs) {
+      flush();
+      const prev = blocks[blocks.length - 1];
+      // A thumbnail line right under another joins its row.
+      if (prev?.t === "thumbs" && thumbsEnd === i - 1) prev.items.push(...thumbs);
+      else blocks.push({ t: "thumbs", items: thumbs });
+      thumbsEnd = i;
+      continue;
+    }
     const img = IMAGE_LINE.exec(line);
-    const media = img && image(img[1]!, img[2]!);
+    const media = img && image(img[1]!, img[2]!, img[3]);
     if (media?.t === "img") {
       flush();
       blocks.push(media);
@@ -205,20 +221,23 @@ export type InlineToken =
 /** A ticket key, as a whole string: the bare-word pattern INLINE uses, anchored. */
 const TICKET_KEY = /^[A-Z][A-Z0-9]*-\d+$/;
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+\))/g;
+const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\))/g;
+const IMAGE_PARTS = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/;
 
 // Starts with a letter or digit, so `attachment:..` can't become `/attachments/..` (the service root, token attached).
 const ATTACHMENT_SRC = /^attachment:([A-Za-z0-9][A-Za-z0-9._-]*)$/;
 const VIDEO_NAME = /\.(mp4|webm|mov)$/i;
+const THUMB_TITLE = /^\s*thumb(nail)?\s*$/i;
 
 /**
- * What `![alt](src)` may show. `attachment:<id>` is an image (or video) the service serves; http(s)
- * and file sources become a link labelled with the alt text (remote images are never fetched, so
- * agent text can't load tracking pixels), and anything else keeps only the alt text.
+ * What `![alt](src "title")` may show. `attachment:<id>` is an image (or video) the service serves,
+ * a thumbnail when the title is "thumb"; http(s) and file sources become a link labelled with the alt
+ * text (remote images are never fetched, so agent text can't load tracking pixels), and anything
+ * else keeps only the alt text. Other titles are ignored.
  */
-function image(alt: string, src: string): InlineToken {
+function image(alt: string, src: string, title?: string): InlineToken {
   const a = ATTACHMENT_SRC.exec(src);
-  if (a) return { t: "img", alt, id: a[1]!, video: VIDEO_NAME.test(a[1]!) || VIDEO_NAME.test(alt) };
+  if (a) return { t: "img", alt, id: a[1]!, video: VIDEO_NAME.test(a[1]!) || VIDEO_NAME.test(alt), thumb: THUMB_TITLE.test(title ?? "") };
   if (/^https?:/.test(src) || parseFileLink(src)) return { t: "link", text: alt || src, url: src };
   return { t: "text", text: alt };
 }
@@ -252,13 +271,24 @@ export function inlineTokens(text: string): InlineToken[] {
     } else if (m[5]) out.push({ t: "link", text: s, url: s });
     else if (m[6]) out.push({ t: "ticket", key: s });
     else if (m[7]) {
-      const [, alt, src] = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(s) as unknown as [string, string, string];
-      out.push(image(alt, src));
+      const [, alt, src, title] = IMAGE_PARTS.exec(s) as unknown as [string, string, string, string | undefined];
+      out.push(image(alt, src, title));
     }
     last = idx + s.length;
   }
   if (last < text.length) out.push({ t: "text", text: text.slice(last) });
   return out;
+}
+
+/** The thumbnails of a line holding nothing but thumbnail attachments (and spaces), else null. */
+function thumbLine(line: string): Media[] | null {
+  if (!line.includes("![")) return null;
+  const out: Media[] = [];
+  for (const tok of inlineTokens(line)) {
+    if (tok.t === "img" && tok.thumb) out.push({ alt: tok.alt, id: tok.id, video: tok.video, thumb: true });
+    else if (tok.t !== "text" || tok.text.trim()) return null;
+  }
+  return out.length ? out : null;
 }
 
 /**
@@ -268,7 +298,7 @@ export function inlineTokens(text: string): InlineToken[] {
 export function mediaIn(blocks: Block[]): Media[] {
   const out = new Map<string, Media>();
   const add = (m: Media) => {
-    if (!out.has(m.id)) out.set(m.id, { alt: m.alt, id: m.id, video: m.video });
+    if (!out.has(m.id)) out.set(m.id, { alt: m.alt, id: m.id, video: m.video, thumb: m.thumb });
   };
   const text = (s: string) => {
     for (const line of s.split("\n")) for (const tok of inlineTokens(line)) if (tok.t === "img") add(tok);
@@ -276,6 +306,7 @@ export function mediaIn(blocks: Block[]): Media[] {
   const walk = (list: Block[]) => {
     for (const b of list) {
       if (b.t === "img") add(b);
+      else if (b.t === "thumbs") b.items.forEach(add);
       else if (b.t === "p" || b.t === "h" || b.t === "quote") text(b.text);
       else if (b.t === "ul" || b.t === "ol")
         for (const it of b.items) {

@@ -21,3 +21,17 @@ test("without a store there is no attachment URL, so an attachment image is its 
   expect(html).not.toContain("<img");
   expect(html).toContain("shot");
 });
+
+test("an image alone on its line is a figure captioned with its alt text; without a store the caption isn't repeated", () => {
+  const html = render("![The board after the fix](attachment:abc)");
+  expect(html).toContain('<figure class="md-figure" data-testid="md-figure"><figcaption>The board after the fix</figcaption></figure>');
+  expect(render("![](attachment:abc)")).not.toContain("<figcaption");
+});
+
+test('"thumb" images on a line form one row of thumbnails, each labelled with its alt text', () => {
+  const html = render('![Before](attachment:a "thumb") ![After](attachment:b "thumb")');
+  expect(html.match(/class="md-thumbs"/g)).toHaveLength(1);
+  expect(html.match(/class="md-thumb"/g)).toHaveLength(2);
+  expect(html).toContain('<figcaption title="After">After</figcaption>');
+  expect(html).not.toContain("md-figure");
+});

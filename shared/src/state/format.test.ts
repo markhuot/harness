@@ -28,20 +28,42 @@ test("a nested list ends at an unindented line, which becomes a paragraph", () =
 });
 
 test("images: attachments become media, remote and file sources only ever become links", () => {
-  expect(parseBlocks("![shot](attachment:abc)")).toEqual([{ t: "img", alt: "shot", id: "abc", video: false }]);
-  expect(parseBlocks("![demo.webm](attachment:x)")).toEqual([{ t: "img", alt: "demo.webm", id: "x", video: true }]);
+  expect(parseBlocks("![shot](attachment:abc)")).toEqual([{ t: "img", alt: "shot", id: "abc", video: false, thumb: false }]);
+  expect(parseBlocks("![demo.webm](attachment:x)")).toEqual([{ t: "img", alt: "demo.webm", id: "x", video: true, thumb: false }]);
   expect(parseBlocks("![p](https://t.example/p.gif)").map((b) => b.t)).toEqual(["p"]);
   expect(inlineTokens("![p](https://t.example/p.gif)")).toEqual([{ t: "link", text: "p", url: "https://t.example/p.gif" }]);
   expect(inlineTokens("![a](harness://file/a.png)")).toEqual([{ t: "link", text: "a", url: "harness://file/a.png" }]);
   expect(inlineTokens("x ![s](attachment:s) y")).toEqual([
     { t: "text", text: "x " },
-    { t: "img", alt: "s", id: "s", video: false },
+    { t: "img", alt: "s", id: "s", video: false, thumb: false },
     { t: "text", text: " y" },
   ]);
   expect(inlineTokens("![x](javascript:alert(1))")[0]).toEqual({ t: "text", text: "x" });
   // `/attachments/..` would resolve to the service root, with the token attached.
   expect(inlineTokens("![x](attachment:..)")).toEqual([{ t: "text", text: "x" }]);
   expect(inlineTokens("![x](attachment:.x)")).toEqual([{ t: "text", text: "x" }]);
+});
+
+test("a \"thumb\" title makes thumbnails; a line of them is a row, and adjacent lines join it", () => {
+  const thumb = (alt: string, id: string) => ({ alt, id, video: false, thumb: true });
+  expect(parseBlocks('![a](attachment:a "thumb")')).toEqual([{ t: "thumbs", items: [thumb("a", "a")] }]);
+  expect(parseBlocks('![a](attachment:a "thumb")  ![b](attachment:b "Thumbnail")\n![c](attachment:c "thumb")')).toEqual([
+    { t: "thumbs", items: [thumb("a", "a"), thumb("b", "b"), thumb("c", "c")] },
+  ]);
+  // A blank line starts a new row.
+  expect(parseBlocks('![a](attachment:a "thumb")\n\n![b](attachment:b "thumb")').map((b) => b.t)).toEqual(["thumbs", "thumbs"]);
+  // Text, or a full-size image, on the line keeps them inline in a paragraph.
+  expect(parseBlocks('see ![a](attachment:a "thumb")').map((b) => b.t)).toEqual(["p"]);
+  expect(parseBlocks('![a](attachment:a "thumb") ![b](attachment:b)').map((b) => b.t)).toEqual(["p"]);
+  expect(inlineTokens('x ![a](attachment:a "thumb")')[1]).toEqual({ t: "img", ...thumb("a", "a") });
+  // A remote "thumbnail" is still only a link.
+  expect(parseBlocks('![r](https://x.test/r.png "thumb")')).toEqual([{ t: "p", text: '![r](https://x.test/r.png "thumb")' }]);
+  expect(inlineTokens('![r](https://x.test/r.png "thumb")')).toEqual([{ t: "link", text: "r", url: "https://x.test/r.png" }]);
+});
+
+test("any other title leaves a full-size figure (titled images used to render as raw text)", () => {
+  expect(parseBlocks('![After the fix](attachment:a "Settings pane")')).toEqual([{ t: "img", alt: "After the fix", id: "a", video: false, thumb: false }]);
+  expect(parseBlocks('![a](attachment:a "thumbs")')[0]!.t).toEqual("img");
 });
 
 test("switching between bullets and numbers starts a new list; blank lines split paragraphs", () => {

@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Screenshots in a spec have a layout, on the Mac and on iPhone and iPad. An image on a line of its
+  own spans the full width with a caption underneath. Agents can also show small 100×100
+  thumbnails, side by side in a row, that open full size when you click or tap one.
+
 ### Changed
 
 - Messages you send on a ticket no longer go into its Activity. Once a message is sent, the ticket

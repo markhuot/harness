@@ -2,7 +2,7 @@ import Foundation
 
 // Port of shared/src/state/markdown.ts. Markdown-ish parsing for specs, Activity and transcript
 // text: paragraphs, headings, nested bullet / numbered lists, fenced code, quotes, rules, GFM pipe
-// tables, attachment images and videos, and inline code / bold / italic / links / images. Pure: each client renders the blocks and tokens with its
+// tables, attachment images and videos (as captioned figures or rows of thumbnails), and inline code / bold / italic / links / images. Pure: each client renders the blocks and tokens with its
 // own primitives (DOM on desktop, Text on iOS), so agent output can never inject markup.
 //
 // The TS regexes run through NSRegularExpression, which matches on UTF-16 like JS does. ICU's
@@ -30,16 +30,19 @@ public enum Markdown {
     }
 
     /// An attachment shown inline. `video` comes from a .mp4/.webm/.mov id or alt text; renderers
-    /// that know the attachment's kind may use that instead.
+    /// that know the attachment's kind may use that instead. `thumb` is a `"thumb"` (or
+    /// `"thumbnail"`) title: show it as a small square that opens full size.
     public struct Media: Codable, Equatable, Sendable {
         public var alt: String
         public var id: String
         public var video: Bool
+        public var thumb: Bool
 
-        public init(alt: String, id: String, video: Bool) {
+        public init(alt: String, id: String, video: Bool, thumb: Bool = false) {
             self.alt = alt
             self.id = id
             self.video = video
+            self.thumb = thumb
         }
     }
 
@@ -55,10 +58,12 @@ public enum Markdown {
         /// `align` has one entry per column; nil is a column without a `:` (no alignment).
         case table(align: [Align?], header: [String], rows: [[String]])
         case hr
-        /// An `![alt](attachment:<id>)` alone on its line.
+        /// An `![alt](attachment:<id>)` alone on its line: a full-width figure, captioned with its alt text.
         case img(Media)
+        /// Lines holding only `![alt](attachment:<id> "thumb")` images: a row of small thumbnails.
+        case thumbs([Media])
 
-        private enum CodingKeys: String, CodingKey { case t, text, level, items, start, lang, align, header, rows, alt, id, video }
+        private enum CodingKeys: String, CodingKey { case t, text, level, items, start, lang, align, header, rows, alt, id, video, thumb }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -77,8 +82,8 @@ public enum Markdown {
                     rows: try c.decode([[String]].self, forKey: .rows)
                 )
             case "hr": self = .hr
-            case "img":
-                self = .img(Media(alt: try c.decode(String.self, forKey: .alt), id: try c.decode(String.self, forKey: .id), video: try c.decode(Bool.self, forKey: .video)))
+            case "img": self = .img(try Media(from: decoder))
+            case "thumbs": self = .thumbs(try c.decode([Media].self, forKey: .items))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown block \(t)")
             }
         }
@@ -116,9 +121,10 @@ public enum Markdown {
                 try c.encode("hr", forKey: .t)
             case let .img(m):
                 try c.encode("img", forKey: .t)
-                try c.encode(m.alt, forKey: .alt)
-                try c.encode(m.id, forKey: .id)
-                try c.encode(m.video, forKey: .video)
+                try m.encode(to: encoder)
+            case let .thumbs(items):
+                try c.encode("thumbs", forKey: .t)
+                try c.encode(items, forKey: .items)
             }
         }
     }
@@ -134,7 +140,7 @@ public enum Markdown {
         case ticket(key: String, text: String? = nil)
         case img(Media)
 
-        private enum CodingKeys: String, CodingKey { case t, text, url, key, alt, id, video }
+        private enum CodingKeys: String, CodingKey { case t, text, url, key }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -146,8 +152,7 @@ public enum Markdown {
             case "em": self = .em(try c.decode(String.self, forKey: .text))
             case "link": self = .link(text: try c.decode(String.self, forKey: .text), url: try c.decode(String.self, forKey: .url))
             case "ticket": self = .ticket(key: try c.decode(String.self, forKey: .key), text: try c.decodeIfPresent(String.self, forKey: .text))
-            case "img":
-                self = .img(Media(alt: try c.decode(String.self, forKey: .alt), id: try c.decode(String.self, forKey: .id), video: try c.decode(Bool.self, forKey: .video)))
+            case "img": self = .img(try Media(from: decoder))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown inline token \(t)")
             }
         }
@@ -177,9 +182,7 @@ public enum Markdown {
                 try c.encodeIfPresent(text, forKey: .text)
             case let .img(m):
                 try c.encode("img", forKey: .t)
-                try c.encode(m.alt, forKey: .alt)
-                try c.encode(m.id, forKey: .id)
-                try c.encode(m.video, forKey: .video)
+                try m.encode(to: encoder)
             }
         }
     }
@@ -190,6 +193,8 @@ public enum Markdown {
         let lines = splitLines(src)
         var blocks: [Block] = []
         var para: [String] = []
+        /// The last line of the latest thumbnail row.
+        var thumbsEnd = -1
         func flush() {
             if !para.isEmpty { blocks.append(.p(text: para.joined(separator: "\n"))) }
             para = []
@@ -241,7 +246,18 @@ public enum Markdown {
                 blocks.append(.hr)
                 continue
             }
-            if let img = Pattern.imageLine.exec(line), case let .img(media) = image(alt: img[1]!, src: img[2]!) {
+            if let thumbs = thumbLine(line) {
+                flush()
+                // A thumbnail line right under another joins its row.
+                if case let .thumbs(prev)? = blocks.last, thumbsEnd == i - 1 {
+                    blocks[blocks.count - 1] = .thumbs(prev + thumbs)
+                } else {
+                    blocks.append(.thumbs(thumbs))
+                }
+                thumbsEnd = i
+                continue
+            }
+            if let img = Pattern.imageLine.exec(line), case let .img(media) = image(alt: img[1]!, src: img[2]!, title: img[3]) {
                 flush()
                 blocks.append(.img(media))
                 continue
@@ -317,13 +333,14 @@ public enum Markdown {
 
     // MARK: Inline
 
-    /// What `![alt](src)` may show. `attachment:<id>` is an image (or video) the service serves; http(s)
-    /// and file sources become a link labelled with the alt text (remote images are never fetched, so
-    /// agent text can't load tracking pixels), and anything else keeps only the alt text.
-    private static func image(alt: String, src: String) -> InlineToken {
+    /// What `![alt](src "title")` may show. `attachment:<id>` is an image (or video) the service
+    /// serves, a thumbnail when the title is "thumb"; http(s) and file sources become a link labelled
+    /// with the alt text (remote images are never fetched, so agent text can't load tracking pixels),
+    /// and anything else keeps only the alt text. Other titles are ignored.
+    private static func image(alt: String, src: String, title: String?) -> InlineToken {
         if let a = Pattern.attachmentSrc.exec(src) {
             let id = a[1]!
-            return .img(Media(alt: alt, id: id, video: Pattern.videoName.test(id) || Pattern.videoName.test(alt)))
+            return .img(Media(alt: alt, id: id, video: Pattern.videoName.test(id) || Pattern.videoName.test(alt), thumb: Pattern.thumbTitle.test(title ?? "")))
         }
         if Pattern.httpScheme.test(src) || FileLinks.parseFileLink(src) != nil { return .link(text: alt.isEmpty ? src : alt, url: src) }
         return .text(alt)
@@ -368,7 +385,7 @@ public enum Markdown {
                 out.append(.ticket(key: s))
             } else if participated(m, 7) {
                 let mm = Pattern.imageParts.exec(s)!
-                out.append(image(alt: mm[1]!, src: mm[2]!))
+                out.append(image(alt: mm[1]!, src: mm[2]!, title: mm[3]))
             }
             last = idx + len
         }
@@ -377,6 +394,20 @@ public enum Markdown {
     }
 
     // MARK: Media
+
+    /// The thumbnails of a line holding nothing but thumbnail attachments (and spaces), else nil.
+    private static func thumbLine(_ line: String) -> [Media]? {
+        guard line.unicodeScalars.contains("!") else { return nil }
+        var out: [Media] = []
+        for tok in inlineTokens(line) {
+            switch tok {
+            case let .img(m) where m.thumb: out.append(m)
+            case let .text(s) where JSCompat.trim(s).isEmpty: break
+            default: return nil
+            }
+        }
+        return out.isEmpty ? nil : out
+    }
 
     /// Every attachment in `blocks`, first appearance first, once per id: what a viewer steps through.
     /// Paragraph and quote text goes line by line, as the renderers split it.
@@ -396,6 +427,7 @@ public enum Markdown {
             for b in list {
                 switch b {
                 case let .img(m): add(m)
+                case let .thumbs(items): items.forEach(add)
                 case let .p(s), let .h(_, s), let .quote(s): text(s)
                 case let .ul(items), let .ol(_, items):
                     for it in items {
@@ -593,15 +625,17 @@ public enum Markdown {
         static let continuation = Pattern("^\(s){2,}\(notS)")
         /// `/^>\s?/` (no g flag, but it's anchored, so it can match only once)
         static let quotePrefix = Pattern("^>\(s)?")
-        /// `/^\s*!\[([^\]]*)\]\(([^)\s]+)\)\s*$/`
-        static let imageLine = Pattern("^\(s)*!\\[([^\\]]*)\\]\\(([^)\(ws)]+)\\)\(s)*\\z")
-        /// `/^!\[([^\]]*)\]\(([^)\s]+)\)$/`
-        static let imageParts = Pattern("^!\\[([^\\]]*)\\]\\(([^)\(ws)]+)\\)\\z")
+        /// `/^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\s*$/`
+        static let imageLine = Pattern("^\(s)*!\\[([^\\]]*)\\]\\(([^)\(ws)]+)(?:\(s)+\"([^\"]*)\")?\\)\(s)*\\z")
+        /// IMAGE_PARTS: `/^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/`
+        static let imageParts = Pattern("^!\\[([^\\]]*)\\]\\(([^)\(ws)]+)(?:\(s)+\"([^\"]*)\")?\\)\\z")
+        /// THUMB_TITLE: `/^\s*thumb(nail)?\s*$/i`
+        static let thumbTitle = Pattern("^\(s)*thumb(nail)?\(s)*\\z", options: .caseInsensitive)
         /// `/^attachment:([A-Za-z0-9][A-Za-z0-9._-]*)$/` (a leading letter or digit, so `attachment:..` isn't the service root)
         static let attachmentSrc = Pattern("^attachment:([A-Za-z0-9][A-Za-z0-9._-]*)\\z")
         /// `/\.(mp4|webm|mov)$/i`
         static let videoName = Pattern("\\.(mp4|webm|mov)\\z", options: .caseInsensitive)
-        /// INLINE: `` /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+\))/g ``
+        /// INLINE: `` /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\))/g ``
         static let inline = Pattern(
             "(`[^`]+`)"
                 + "|(\\*\\*[^*]+\\*\\*)"
@@ -609,7 +643,7 @@ public enum Markdown {
                 + "|(\\[[^\\]]+\\]\\([^)\(ws)]+\\))"
                 + "|(https?://[^\(ws))<>]+)"
                 + "|((?<![A-Za-z0-9_])[A-Z][A-Z0-9]*-[0-9]+(?![A-Za-z0-9_]))"
-                + "|(!\\[[^\\]]*\\]\\([^)\(ws)]+\\))"
+                + "|(!\\[[^\\]]*\\]\\([^)\(ws)]+(?:\(s)+\"[^\"]*\")?\\))"
         )
         /// `/^\[([^\]]+)\]\(([^)\s]+)\)$/`
         static let linkParts = Pattern("^\\[([^\\]]+)\\]\\(([^)\(ws)]+)\\)\\z")

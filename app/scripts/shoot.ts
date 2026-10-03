@@ -161,6 +161,8 @@ const scrollToEl = (sel: string) => `(async () => {
 const shots: { name: string; route: string; delay?: number; setup?: string }[] = [
   { name: "board", route: "#/board/all" },
   { name: "ticket", route: "#/board/all/ticket/NYTIMES-4" },
+  { name: "spec-media", route: "#/board/all/ticket/HARNESS-2", setup: `setTimeout(() => document.querySelector("[data-testid=md-thumbs]")?.scrollIntoView({ block: "end" }), 300)` },
+  { name: "spec-media-lightbox", route: "#/board/all/ticket/HARNESS-2", setup: `setTimeout(() => document.querySelector("[data-testid=md-thumbs] .md-media")?.click(), 300)` },
   { name: "plan", route: "#/board/all/ticket/NYTIMES-2" },
   { name: "transcript", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 4200 },
   { name: "blocked", route: "#/board/all/ticket/NYTIMES-3" },

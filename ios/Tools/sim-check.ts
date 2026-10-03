@@ -45,9 +45,10 @@
 //      lists its commands, a tap completes one, and the CLI gets the spec as typed; the toolbar's Plan
 //      first launches a draft in planning and lands on its Spec tab; mentions-*.png, new-session-toolbar*.png
 //
-//   --attachments (needs ffmpeg): a spec with a tall and a wide PNG and an H.264 clip inline (stored
-//      by update_spec), plus an attachment: reference to a file that doesn't exist; checks every
-//      inline image shows in the Spec tab, a tap opens the viewer on that attachment, swiping pages,
+//   --attachments (needs ffmpeg): a spec with a tall and a wide PNG as a row of "thumb" thumbnails
+//      and an H.264 clip as a captioned figure (stored by update_spec), plus an attachment: reference
+//      to a file that doesn't exist; checks every inline image shows in the Spec tab (the thumbnails
+//      as 100 pt squares, the figure across the width), a tap opens the viewer on that attachment, swiping pages,
 //      Close and swipe-down close it; attachments-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
@@ -1320,12 +1321,16 @@ async function seedAttachments() {
   const project = await api<Project>("POST", "/projects", { path: dir, name: "media", key: "MEDIA", defaultDriver: "dummy" });
   // In viewer order (1 of 4 … 4 of 4); the alt text is the file name, which the app's labels use.
   const stored = ["phone.png", "wide.png", "flow.mp4"];
+  // The two screenshots as a row of thumbnails, the recording as a captioned figure.
   const spec = [
     "Show the greeting screen",
     "",
     "Here's the new greeting screen, before and after, plus a recording of the flow.",
     "",
-    ...stored.flatMap((f) => [`![${f}](shots/${f})`, ""]),
+    `![phone.png](shots/phone.png "thumb") ![wide.png](shots/wide.png "thumb")`,
+    "",
+    "![flow.mp4](shots/flow.mp4)",
+    "",
     "![broken.png](attachment:att_missing)",
   ].join("\n");
   const call = { name: "update_spec", input: { spec, note: "Screenshots and a recording of the greeting screen", base_revision: 1 } };
@@ -1333,7 +1338,7 @@ async function seedAttachments() {
   // After the call, the dummy adds a Status section (edit_spec) and submits; the review approves.
   await settle(ticket.key, (t) => t.status === "review" && !t.busy);
   const d = await api<TicketDetail>("GET", `/tickets/${encodeURIComponent(ticket.key)}`);
-  const srcs = [...d.ticket.spec.matchAll(/!\[([^\]]*)\]\(attachment:([^)\s]+)\)/g)].map((m) => ({ alt: m[1]!, id: m[2]! }));
+  const srcs = [...d.ticket.spec.matchAll(/!\[([^\]]*)\]\(attachment:([^)\s]+)(?: "[^"]*")?\)/g)].map((m) => ({ alt: m[1]!, id: m[2]! }));
   const rewritten = srcs.filter((s) => stored.includes(s.alt) && s.id !== "att_missing");
   if (rewritten.length !== stored.length || !srcs.some((s) => s.alt === "broken.png" && s.id === "att_missing")) {
     throw new Error(`the spec doesn't show ${stored.length} stored attachments and the missing one: ${JSON.stringify(d.ticket.spec)}`);
@@ -1375,6 +1380,14 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     const missing = want.filter((w) => !w.split("|").some((x) => l.includes(x)));
     if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     return want.join(", ");
+  });
+  await check("thumbnails are 100 pt squares and the figure spans the width", async () => {
+    const thumbs = await Promise.all(["Image phone.png", "Image wide.png"].map((l) => findElement(udid, (x) => x === l)));
+    for (const t of thumbs) if (!t || Math.round(t.frame.width) !== 100 || Math.round(t.frame.height) !== 100) throw new Error(`thumbnail frame ${JSON.stringify(t?.frame)}`);
+    await scrollTo(udid, (l) => l === "Video flow.mp4");
+    const fig = await findElement(udid, (x) => x === "Video flow.mp4");
+    if (!fig || fig.frame.width < 300) throw new Error(`figure frame ${JSON.stringify(fig?.frame)}`);
+    return `thumbnails 100×100, figure ${Math.round(fig.frame.width)} pt wide`;
   });
   await shootBoth(udid, "attachments-inline");
   await check("tapping an inline image opens the viewer on it; swiping pages; Close closes", async () => {

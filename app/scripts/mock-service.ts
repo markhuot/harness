@@ -848,14 +848,18 @@ function seed() {
           "",
           "Board renders all five columns; drag and drop calls `updateTicket({ status })`. Screenshots of the board in both themes, the narrow layout, and a recording of a drag.",
           "",
+          // A figure (full width, its alt text the caption), then a row of thumbnails.
+          `![The board in the light theme, with all five columns](attachment:${mockScreenshot("board-light.png", 1440, 900, 215, false).id})`,
+          "",
           // deleted.png has no bytes: its attachment 404s, like one whose ticket was deleted.
-          ...[
-            mockScreenshot("board-light.png", 1440, 900, 215, false),
+          [
             mockScreenshot("board-dark.png", 1440, 900, 265, true),
             mockScreenshot("board-narrow.png", 390, 844, 150, false),
             ...mockVideo("drag.mp4"),
             { id: newId("att"), kind: "image", mimeType: "image/png", name: "deleted.png", size: 1024, width: 800, height: 600 } satisfies Attachment,
-          ].map((a) => `![${a.name}](attachment:${a.id})`),
+          ]
+            .map((a) => `![${a.name}](attachment:${a.id} "thumb")`)
+            .join(" "),
         ].join("\n"),
       ],
     ],
