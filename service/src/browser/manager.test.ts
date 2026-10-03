@@ -128,7 +128,7 @@ withChrome("BrowserManager (real Chrome)", () => {
   let browser: BrowserManager;
 
   beforeAll(() => {
-    server = Bun.serve({ port: 0, fetch: fixtures });
+    server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
     browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000 });
   });
@@ -153,7 +153,7 @@ withChrome("BrowserManager (real Chrome)", () => {
   }, 30_000);
 
   test("open surfaces network errors", async () => {
-    const dead = Bun.serve({ port: 0, fetch: () => new Response("") });
+    const dead = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
     const port = dead.port;
     await dead.stop(true);
     await expect(browser.open("s-open", `http://127.0.0.1:${port}/`)).rejects.toThrow(/ERR_CONNECTION_REFUSED/);
@@ -672,7 +672,7 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
   let idleMs = 60_000;
 
   beforeAll(() => {
-    server = Bun.serve({ port: 0, fetch: fixtures });
+    server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
     store = memoryTabStore();
     browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock, tabStore: store });
@@ -856,7 +856,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
   let base: string;
 
   beforeAll(() => {
-    server = Bun.serve({ port: 0, fetch: fixtures });
+    server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
   });
   afterAll(() => void server?.stop(true));

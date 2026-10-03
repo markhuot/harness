@@ -10,7 +10,7 @@ import { tempHome } from "./testing/fakes";
 describe("daemon", () => {
   test("boots with real drivers, writes service.json, serves the API and exits cleanly on SIGTERM", async () => {
     const home = tempHome("harness-daemon-");
-    const probe = Bun.serve({ port: 0, fetch: () => new Response() });
+    const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
     const port = probe.port!;
     probe.stop(true);
     const proc = Bun.spawn([process.execPath, join(import.meta.dir, "daemon.ts")], {
@@ -46,7 +46,7 @@ describe("daemon", () => {
 
 describe("daemon run by the app (HARNESS_SUPERVISOR_PID)", () => {
   function freePort() {
-    const probe = Bun.serve({ port: 0, fetch: () => new Response() });
+    const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
     const port = probe.port!;
     probe.stop(true);
     return port;
@@ -136,7 +136,7 @@ describe("daemon run by the app (HARNESS_SUPERVISOR_PID)", () => {
 describe("daemon under Harness.app's bundled plist (SMAppService)", () => {
   test("logs to the service log itself, since the plist has no StandardOutPath for this user", async () => {
     const home = tempHome("harness-daemon-");
-    const probe = Bun.serve({ port: 0, fetch: () => new Response() });
+    const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
     const port = probe.port!;
     probe.stop(true);
     const plist = join(home, "bundled.plist");
