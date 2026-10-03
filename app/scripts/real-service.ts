@@ -124,7 +124,7 @@ try {
   // --- 5b. Browser tabs: the agent opens three pages in tabs of their own; the strip shows and switches them.
   await checkBrowserTabs({ api, app, check, shot, project });
 
-  // --- 6. Git plugin: a worktree ticket edits files via /bash; the Changes tab (plugin iframe) shows them.
+  // --- 6. A worktree ticket edits files via /bash; the built-in Changes tab shows them.
   await checkChangesTab({ api, app, check, shot });
 
   // --- 7. Sub-agents: a /agents ticket's Agents tab, a sub-agent's transcript, the transcript links.

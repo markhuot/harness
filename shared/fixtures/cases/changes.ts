@@ -1,9 +1,9 @@
 // The native Changes tab (ios/HarnessKit: Protocol/Changes.swift, Logic/ChangesPatch.swift,
 // Logic/ChangesViewed.swift) against the git plugin it replaces: its payload types (plugins/git/git.ts),
-// @pierre/diffs' patch parser as the plugin's UI uses it, and the "viewed" marks (plugins/git/ui/viewed.ts).
+// @pierre/diffs' patch parser as the plugin's UI uses it, and the "viewed" marks (shared/src/state/changes.ts).
 import { parsePatchFiles } from "@pierre/diffs";
-import type { Changes, Commit } from "../../../plugins/git/git";
-import { fingerprint, hash, isCollapsed, MAX_FILES, MAX_TICKETS, prune, readViewed, saveViewed, VIEWED_KEY } from "../../../plugins/git/ui/viewed";
+import type { Changes, Commit } from "../../src/state/changes";
+import { fingerprint, hash, isCollapsed, MAX_FILES, MAX_TICKETS, prune, readViewed, saveViewed, VIEWED_KEY } from "../../src/state/changes";
 import { cases } from "../case";
 
 // --- payloads -----------------------------------------------------------------------------

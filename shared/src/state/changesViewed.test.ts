@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { parsePatchFiles } from "@pierre/diffs";
-import { fingerprint, isCollapsed, MAX_FILES, MAX_TICKETS, prune, readViewed, saveViewed, VIEWED_KEY, type Viewed } from "./viewed";
+import { fingerprint, isCollapsed, MAX_FILES, MAX_TICKETS, prune, readViewed, saveViewed, VIEWED_KEY, type Viewed } from "./changes";
 
 function memory(init: Record<string, string> = {}) {
   const m = new Map(Object.entries(init));

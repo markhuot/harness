@@ -2,7 +2,7 @@ import Foundation
 
 // The Changes tab's patch parser: a port of @pierre/diffs' parsePatchFiles (the part the git
 // plugin's Changes UI relies on) plus the rows the native tab draws. The plugin keys "viewed" marks
-// by a fingerprint of Pierre's parse (plugins/git/ui/viewed.ts), so every field the fingerprint
+// by a fingerprint of Pierre's parse (shared/src/state/changes.ts), so every field the fingerprint
 // reads (paths, change type, modes, hunk positions, and each side's lines as Pierre keeps them,
 // trailing newline included) must come out exactly as Pierre's do; shared/fixtures/cases/changes.ts
 // runs the real parser over a corpus of patches and ChangesPatchTests checks this one against it.

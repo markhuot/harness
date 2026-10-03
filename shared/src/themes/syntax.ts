@@ -17,3 +17,31 @@ export function syntaxThemeName(appearance: ThemeAppearance, syntaxTheme: string
 export function viewerThemes(appearance: ThemeAppearance, name: string): Record<ThemeAppearance, string> {
   return { ...PIERRE_DEFAULT, [appearance]: name };
 }
+
+/**
+ * Resolve a theme to @pierre/trees CSS variables, cached per name. When `name` fails to resolve it's
+ * added to `failed` and the appearance's Pierre default is used instead (whose own failure yields {}).
+ */
+export async function treeStylesFor(
+  appearance: ThemeAppearance,
+  name: string,
+  cache: Map<string, Record<string, string>>,
+  failed: Set<string>,
+  resolve: (name: string) => Promise<Record<string, string>>,
+): Promise<{ name: string; styles: Record<string, string> }> {
+  const hit = cache.get(name);
+  if (hit) return { name, styles: hit };
+  try {
+    const styles = await resolve(name);
+    cache.set(name, styles);
+    return { name, styles };
+  } catch {
+    const fallback = PIERRE_DEFAULT[appearance];
+    if (name === fallback) {
+      cache.set(name, {});
+      return { name, styles: {} };
+    }
+    failed.add(name);
+    return treeStylesFor(appearance, fallback, cache, failed, resolve);
+  }
+}

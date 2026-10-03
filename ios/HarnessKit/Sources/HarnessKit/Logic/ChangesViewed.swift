@@ -1,7 +1,7 @@
 import Foundation
 
 // "Viewed" marks on the Changes tab's diffs, like a GitHub PR review: a port of
-// plugins/git/ui/viewed.ts. A mark stores the file's diff fingerprint (ChangesPatch.fingerprint), so
+// shared/src/state/changes.ts. A mark stores the file's diff fingerprint (ChangesPatch.fingerprint), so
 // a file the agent changes again after you viewed it reads as unviewed. Marks live in UserDefaults
 // under one key, bounded per ticket (MAX_FILES) and in the number of tickets kept (MAX_TICKETS, the
 // least recently written go first). Storage that's missing or holds garbage reads as "nothing

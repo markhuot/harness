@@ -51,14 +51,21 @@ test("project settings route", () => {
 });
 
 test("plugin tabs round-trip as plugin:<id>:<tab>; malformed ones fall back to summaries", () => {
-  const r: Route = { view: "board", projectId: null, ticketKey: "HELLO-1", tab: pluginTabRoute("git", "changes") };
-  expect(formatRoute(r)).toBe("#/board/all/ticket/HELLO-1/plugin:git:changes");
+  const r: Route = { view: "board", projectId: null, ticketKey: "HELLO-1", tab: pluginTabRoute("notes", "list") };
+  expect(formatRoute(r)).toBe("#/board/all/ticket/HELLO-1/plugin:notes:list");
   expect(parseRoute(formatRoute(r))).toEqual(r);
   expect(parsePluginTab("plugin:git:changes")).toEqual({ pluginId: "git", tabId: "changes" });
   expect(parsePluginTab("details")).toBeNull();
   for (const bad of ["plugin:git", "plugin::x", "plugin:Git:changes", "plugin:git:changes:extra"]) {
     expect(parseRoute(`#/board/all/ticket/HELLO-1/${bad}`)).toMatchObject({ tab: "spec" });
   }
+});
+
+test("the built-in Changes tab is /changes, and the git plugin's old route opens it", () => {
+  const r: Route = { view: "board", projectId: null, ticketKey: "HELLO-1", tab: "changes" };
+  expect(formatRoute(r)).toBe("#/board/all/ticket/HELLO-1/changes");
+  expect(parseRoute(formatRoute(r))).toEqual(r);
+  expect(parseRoute("#/board/all/ticket/HELLO-1/plugin:git:changes")).toEqual(r);
 });
 
 test("a sub-agent's transcript round-trips as agent:<id>; the Agents list as agents", () => {

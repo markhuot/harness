@@ -7,43 +7,12 @@ import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, 
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import type { PluginExecOptions, PluginExecResult } from "@harness/plugin-sdk/server";
+import type { ChangedFile, Changes, Commit, FileStatus } from "@harness/shared/state";
+
+// The payloads the routes return (shared, since the apps' Changes tabs read them too).
+export type { ChangedFile, Changes, Commit, FileStatus };
 
 export type Exec = (cmd: string, args: string[], opts?: PluginExecOptions) => Promise<PluginExecResult>;
-
-export type FileStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
-
-export interface ChangedFile {
-  path: string;
-  oldPath?: string;
-  status: FileStatus;
-  additions: number;
-  deletions: number;
-  binary: boolean;
-}
-
-export interface Changes {
-  /**
-   * "branch": ticket branch vs the base branch; "workdir": uncommitted changes vs HEAD;
-   * "pinned": the worktree is gone, so the diff comes from the refs saved while it existed
-   */
-  mode: "branch" | "workdir" | "pinned";
-  /** Base ref name ("main", or "HEAD" in workdir mode); null when no base branch could be found */
-  base: string | null;
-  /** The commit the diff starts from (merge-base in branch mode, HEAD in workdir mode); null for an empty repo */
-  baseSha: string | null;
-  /** HEAD of the workdir (the pinned branch head in pinned mode); null for an unborn branch */
-  head: string | null;
-  /** The ticket's branch, or the workdir's current branch in workdir mode */
-  branch: string | null;
-  files: ChangedFile[];
-  /** Unified diff (git format), cut at a file boundary when truncated */
-  patch: string;
-  truncated: boolean;
-  additions: number;
-  deletions: number;
-  /** Pinned mode only: the commit holding the pinned uncommitted changes, when there were any */
-  worktree?: string | null;
-}
 
 /** A ticket's pinned diff: base..(worktree ?? head). All commit shas. */
 export interface Pin {
@@ -51,16 +20,6 @@ export interface Pin {
   head: string;
   /** Snapshot commit (parent: head) of changes that were never committed; null when the tree was clean */
   worktree: string | null;
-}
-
-export interface Commit {
-  sha: string;
-  shortSha: string;
-  subject: string;
-  author: string;
-  email: string;
-  /** epoch ms */
-  date: number;
 }
 
 export class GitError extends Error {

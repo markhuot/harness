@@ -9,7 +9,7 @@
 //   #/popout/<id>/<fromScope>   a pop-out window's one pane (components/PopoutWindow.tsx), which
 //                               goes back to the board of `fromScope` when popped back in
 
-import { ALL_SCOPE, scopeOf, ticketTabFrom, type TicketTab } from "@harness/shared/state";
+import { ALL_SCOPE, scopeOf, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
 
 // Ticket tabs are shared with the iOS app (@harness/shared/state "tabs").
 export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
@@ -38,8 +38,9 @@ export function parseRoute(hash: string): Route {
   let tab: TicketTab = "spec";
   if (rest[i] === "ticket" && rest[i + 1]) {
     ticketKey = rest[i + 1]!;
-    // Older links may name a renamed tab (".../summaries" is now the Spec).
-    tab = ticketTabFrom(rest[i + 2]) ?? "spec";
+    // Older links may name a renamed tab (".../summaries" is now the Spec, ".../plugin:git:changes"
+    // the built-in Changes).
+    tab = ticketTabWithChanges(rest[i + 2]) ?? "spec";
   }
   return { view: "board", projectId, ticketKey, tab };
 }

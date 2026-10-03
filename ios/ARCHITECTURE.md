@@ -599,7 +599,7 @@ Changes is built in (HARNESS-153), not the git plugin's page in a WebView:
   ticket events, a 4 s poll while the ticket is busy and the tab is on screen, viewed marks and
   collapse toggles, context expansion from `/file?side=new`), `ChangesRows` (rows, gaps, split
   pairing, highlight source, copy), `ChangesPatch` and `ChangesViewedStore` (fixture parity with
-  @pierre/diffs and plugins/git/ui/viewed.ts, so a file changed again after viewing reads as
+  @pierre/diffs and shared/src/state/changes.ts, so a file changed again after viewing reads as
   unviewed). Marks and the Unified/Split choice are in UserDefaults; split shows unified below
   560 pt but keeps the choice.
 - **Drawing.** One `LazyVStack` of rows (overview, file list, each file's header, gaps, lines), so

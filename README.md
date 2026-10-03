@@ -209,8 +209,9 @@ the pane (or sidebar) it's acting on has an accent outline, and clicking hides i
 ## Plugins
 
 Plugins add tabs to ticket panes, with optional server routes. The built-in **git** plugin
-adds a **Changes** tab that shows everything a ticket changed: its branch against the base branch,
-including uncommitted and untracked files. Drop your own plugins in `~/.harness/plugins/`. See
+serves the **Changes** tab, which shows everything a ticket changed: its branch against the base
+branch, including uncommitted and untracked files. The Mac and iPhone/iPad apps draw Changes
+themselves, as one of a ticket's own tabs. Drop your own plugins in `~/.harness/plugins/`. See
 [plugins/README.md](plugins/README.md) for how to write one. `bun run plugins:build` builds the
 built-in plugin UIs, and the service also builds them on start when they're missing.
 
@@ -227,7 +228,7 @@ cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
 cd app && bun run smoke   # drives the Electron UI against a mock service
 cd app && bun run real    # drives the Electron UI against a real daemon in a temp home
-cd app && bun run changes # git plugin Changes tab against a real daemon, light + dark screenshots
+cd app && bun run changes # the Changes tab against a real daemon, light + dark screenshots
 cd app && bun scripts/acceptance.ts [dummy|claude-code]   # installed app + launchd service, hello world → Done
 ```
 

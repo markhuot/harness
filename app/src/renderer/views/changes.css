@@ -1,0 +1,260 @@
+/* Changes tab (ChangesView.tsx): toolbar, commits, notices, then the file tree beside the diffs. */
+.changes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  font-size: 12.5px;
+}
+
+/* --- toolbar --------------------------------------------------------------------------- */
+.changes-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  row-gap: 6px;
+  min-height: 42px;
+  padding: 6px 10px 6px 8px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.changes-bar .segmented {
+  margin-left: auto; /* stays right-aligned when the bar wraps onto a second row */
+}
+.changes-files-toggle.on {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.changes-bar .btn.spinning svg {
+  animation: spin 0.9s linear infinite;
+}
+.changes-refs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-2);
+}
+.changes-refs .ref {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--bg-active);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.changes-refs .ref.base {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-2);
+}
+.changes-refs .arrow,
+.changes .muted {
+  color: var(--text-3);
+}
+.changes-pinned {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.changes-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: 999px;
+  padding: 2px 9px 2px 7px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.changes-chip:not(:disabled):hover,
+.changes-chip.on {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.changes-chip:disabled {
+  opacity: 0.7;
+}
+.changes-chip.on .changes-chevron {
+  transform: rotate(180deg);
+}
+.changes-stat {
+  display: inline-flex;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.changes-stat .add {
+  color: var(--diff-add);
+  font-weight: 600;
+}
+.changes-stat .del {
+  color: var(--diff-del);
+  font-weight: 600;
+}
+.changes-viewed-count {
+  color: var(--text-3);
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+/* --- commits + notices ----------------------------------------------------------------- */
+.changes-commits {
+  border-bottom: 1px solid var(--border);
+  max-height: 180px;
+  overflow: auto;
+  background: var(--bg-sunken);
+  flex: none;
+}
+.changes-commits ol {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+.changes-commits li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 14px;
+}
+.changes-commits .sha {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-size: 11.5px;
+}
+.changes-commits .subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.changes-notice {
+  padding: 6px 14px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.changes-notice div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* --- body ------------------------------------------------------------------------------ */
+.changes-state {
+  flex: 1;
+}
+.changes-state p {
+  margin: 0;
+  max-width: 360px;
+}
+.changes-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+.changes-files {
+  width: 260px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg-sunken);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.changes-tree {
+  flex: 1;
+  min-height: 0;
+}
+/* The diffs run edge to edge, on the pane's own background. */
+.changes-diffs {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
+  --diffs-font-family: var(--mono);
+}
+.changes.files-collapsed .changes-files {
+  display: none; /* the diffs take the freed width */
+}
+.changes.narrow .changes-files {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(300px, 85%);
+  transform: translateX(-102%);
+  transition: transform 0.16s ease;
+  box-shadow: var(--shadow-lg);
+}
+.changes.narrow.files-open .changes-files {
+  transform: none;
+}
+
+/* --- diff header controls (portaled into each file's header) ---------------------------- */
+.changes-disclosure {
+  border: 0;
+  background: none;
+  width: 20px;
+  height: 20px;
+  margin: 0 2px 0 -4px;
+  padding: 0;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-3);
+}
+.changes-disclosure:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.changes-disclosure svg {
+  transition: transform 0.12s ease;
+}
+.changes-disclosure[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.changes-viewed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 1px 8px 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: 12px/1.45 var(--font);
+  color: var(--text-2);
+  white-space: nowrap;
+  user-select: none;
+}
+.changes-viewed:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.changes-viewed.on {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.changes-viewed input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.changes-disclosure:focus-visible,
+.changes-viewed:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

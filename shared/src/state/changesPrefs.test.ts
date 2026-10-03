@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readSidebarCollapsed, readStyle, saveSidebarCollapsed, saveStyle, SIDEBAR_KEY, STYLE_KEY } from "./prefs";
+import { readSidebarCollapsed, readStyle, saveSidebarCollapsed, saveStyle, SIDEBAR_KEY, STYLE_KEY } from "./changes";
 
 function memory(init: Record<string, string> = {}) {
   const m = new Map(Object.entries(init));

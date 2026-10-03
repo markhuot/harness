@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { syntaxThemeName, treeStylesFor, viewerThemes } from "./theme";
+import { syntaxThemeName, treeStylesFor, viewerThemes } from "./syntax";
 
 test("uses the host's syntax theme, else Pierre's default for the appearance", () => {
   expect(syntaxThemeName("dark", "catppuccin-mocha")).toBe("catppuccin-mocha");

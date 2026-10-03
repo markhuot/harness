@@ -82,7 +82,7 @@ public enum ChangesTab {
     }
 }
 
-/// The unified/split preference (plugins/git/ui/prefs.ts), kept in UserDefaults so it carries over
+/// The unified/split preference (shared/src/state/changes.ts), kept in UserDefaults so it carries over
 /// from one ticket to the next.
 public enum ChangesDiffStyle: String, Sendable, Equatable, CaseIterable {
     case unified, split

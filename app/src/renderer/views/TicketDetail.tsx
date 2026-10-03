@@ -3,18 +3,21 @@ import { conductorManagedReason, isConductor, keyLabel, managingConductor, resol
 import { useAction, useStore } from "../state/store";
 import {
   AGENTS_LIVE_LABEL,
+  CHANGES_LABEL,
+  CHANGES_TAB,
   childrenOf,
   COMPOSER_PLACEHOLDER,
   composerHint,
-  effectiveTab,
+  effectiveTabWithChanges,
   hasCustomDriver,
   moveSwitchLabel,
   nextTab,
+  normalizeChangesTab,
+  otherPluginTabs,
   parsePluginTab,
   parseSubagentTab,
   pluginTabRoute,
   progressOf,
-  showsAgentsTab,
   isTask,
   subagentById,
   subagentsOf,
@@ -23,8 +26,7 @@ import {
   TAB_LABEL,
   tabStripTab,
   ticketByKey,
-  TICKET_TABS,
-  visibleTabs,
+  visibleTabsWithChanges,
   type TicketTab,
 } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
@@ -41,6 +43,7 @@ import { ActivityTab } from "./ActivityTab";
 import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
+import { ChangesTab } from "./ChangesTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
 import { ConductorProgress, ParentCrumb } from "../components/Conductor";
@@ -149,10 +152,13 @@ export function TicketDetail({
   const owner = `ticket:${paneId}`;
   const asideRef = useRef<HTMLElement>(null);
   const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
-  const tabs = ticket ? visibleTabs({ conductor: isConductor(ticket), subagents, pluginTabs }) : [];
+  // Changes is built in (ChangesTab.tsx), after Browser and ahead of Details; the git plugin's own
+  // tab never shows, and a saved "plugin:git:changes" opens the built-in one.
+  const tabs = ticket ? visibleTabsWithChanges({ conductor: isConductor(ticket), workdir: ticket.workdir, subagents, pluginTabs }) : [];
   // A plugin tab that doesn't apply (or no longer exists) falls back to the Spec once tabs are known.
-  // Likewise the conductor-only Tickets tab on a plain ticket, and Agents on a session without sub-agents.
-  const tab = ticket ? effectiveTab(paneTab, { conductor: isConductor(ticket), pluginTabs, subagents }) : paneTab;
+  // Likewise the conductor-only Tickets tab on a plain ticket, Agents on a session without sub-agents,
+  // and Changes on a ticket without a diff.
+  const tab = ticket ? effectiveTabWithChanges(paneTab, { conductor: isConductor(ticket), workdir: ticket.workdir, pluginTabs, subagents }) : normalizeChangesTab(paneTab);
   // A tab change from the keyboard keeps the focus on the strip when it was there.
   const refocusTab = useRef(false);
   const goTab = (t: TicketTab | null) => {
@@ -222,7 +228,7 @@ export function TicketDetail({
   // A draft is edited, not worked on: the New session editor instead of the tabs.
   if (ticket.draft) return <DraftEditor paneId={paneId} ticket={ticket} zoomed={zoomed} />;
 
-  const wantPlugin = parsePluginTab(paneTab);
+  const wantPlugin = parsePluginTab(normalizeChangesTab(paneTab));
   const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
   const openAgent = parseSubagentTab(tab);
   const openedTask = openAgent ? isTask(subagentById(state, ticket.sessionId, openAgent) ?? {}) : false;
@@ -245,9 +251,9 @@ export function TicketDetail({
     <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
       <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} onOpenChildren={() => setTab("children")} />
       <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
-        {TICKET_TABS.filter((t) => (t !== "children" || isConductor(ticket)) && (t !== "agents" || showsAgentsTab(subagents))).map((t) => (
+        {tabs.filter((t) => !parsePluginTab(t)).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
-            {TAB_LABEL[t]}
+            {t === CHANGES_TAB ? CHANGES_LABEL : TAB_LABEL[t as keyof typeof TAB_LABEL]}
             {t === "spec" && (ticket.specRevision ?? 1) > 1 && <span className="count" title="Revisions">{ticket.specRevision}</span>}
             {t === "activity" && (state.activity[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.activity[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
@@ -256,7 +262,7 @@ export function TicketDetail({
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
           </button>
         ))}
-        {pluginTabs?.map((p) => {
+        {otherPluginTabs(pluginTabs)?.map((p) => {
           const t = pluginTabRoute(p.pluginId, p.id);
           return (
             <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-plugin-tab={t} {...tabProps(tab === t, t)} title={`${p.title} (plugin: ${p.pluginId})`}>
@@ -280,6 +286,7 @@ export function TicketDetail({
             <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />
           ))}
         {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
+        {tab === CHANGES_TAB && <ChangesTab ticket={ticket} />}
         {tab === "details" && <TicketDetails ticket={ticket} related={related} />}
         {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}
         {wantPlugin && !pluginTabs && (
