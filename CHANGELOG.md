@@ -23,6 +23,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, the message field at the bottom of a ticket is now Liquid Glass and floats
   over the tab's content instead of sitting in a solid bar. The send button is a glass circle with
   an arrow, filled with your accent color while you're writing.
+- On iPhone and iPad, New session's Plan first button is now in the top bar, next to the paper
+  plane that starts the session. The Start session and Plan first buttons at the bottom of the
+  form are gone (Start session there was cut off at the top). The button you tap shows a spinner
+  while the session launches.
 
 ## [app-20261003.0051](https://github.com/markhuot/harness/releases/tag/app-20261003.0051) - 2026-10-03
 
