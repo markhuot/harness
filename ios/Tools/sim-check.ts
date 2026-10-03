@@ -1792,8 +1792,11 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await tapWhere(udid, "Send");
         const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
         // A sent message opens the Transcript, where it and the reply show (never in Activity): the
-        // ticket opened on its Spec, so the agent's reply on screen means the tab switched.
-        await until("the Transcript with the reply", async () => (await labels(udid)).some((l) => l.includes('You said: "Use Happy Cog')) || null, 10000);
+        // ticket opened on its Spec, so the transcript's run rows on screen mean the tab switched.
+        await until("the Transcript", async () => (await labels(udid)).some((l) => l.startsWith("Run started (")) || null, 10000).catch(async (e: Error) => {
+          await shot(udid, "composer-sent-transcript-failed");
+          throw new Error(`${e.message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
         await shot(udid, "composer-sent-transcript");
         return `${t.key} → ${t.status}, Transcript shown`;
       });
