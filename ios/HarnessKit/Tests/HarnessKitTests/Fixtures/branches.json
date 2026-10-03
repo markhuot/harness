@@ -867,6 +867,18 @@
           "completionInstructions": null,
           "pullRequestUrl": null,
           "draft": true,
+          "promptAttachments": [
+            {
+              "path": "/Users/mark/Desktop/login bug.png",
+              "name": "login bug.png",
+              "source": "file"
+            },
+            {
+              "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+              "name": "Pasted image.png",
+              "source": "upload"
+            }
+          ],
           "completedAt": null
         },
         "parent": {
@@ -1177,6 +1189,18 @@
         "completionInstructions": null,
         "pullRequestUrl": null,
         "draft": true,
+        "promptAttachments": [
+          {
+            "path": "/Users/mark/Desktop/login bug.png",
+            "name": "login bug.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ],
         "completedAt": null
       },
       "output": "harness/scratch-3"
@@ -1690,6 +1714,18 @@
           "completionInstructions": null,
           "pullRequestUrl": null,
           "draft": true,
+          "promptAttachments": [
+            {
+              "path": "/Users/mark/Desktop/login bug.png",
+              "name": "login bug.png",
+              "source": "file"
+            },
+            {
+              "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+              "name": "Pasted image.png",
+              "source": "upload"
+            }
+          ],
           "completedAt": null
         },
         "project": {

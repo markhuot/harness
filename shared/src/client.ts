@@ -7,6 +7,7 @@ import type {
   CompleteBody,
   CreateProjectBody,
   CreateTicketBody,
+  PromptAttachment,
   DriverInfo,
   DriverModels,
   FileDiff,
@@ -264,6 +265,28 @@ export class HarnessClient {
   /** Absolute URL of a ticket attachment (attachment:<id> in a spec), token in the query so <img>/<video> can load it. */
   attachmentUrl(id: string): string {
     return `${this.baseUrl}/attachments/${encodeURIComponent(id)}?token=${encodeURIComponent(this.opts.token)}`;
+  }
+  /**
+   * The file of a ticket's prompt attachment (Ticket.promptAttachments[index]), with the token in
+   * the query for <img> and HEAD probes. 404 once the file is gone.
+   */
+  promptAttachmentUrl(key: string, index: number): string {
+    return `${this.baseUrl}/tickets/${encodeURIComponent(key)}/prompt-attachments/${index}?token=${encodeURIComponent(this.opts.token)}`;
+  }
+  /**
+   * Store bytes (a pasted image, a file from another device) on the service's machine for a prompt
+   * attachment. Resolves with the attachment to add to a draft's promptAttachments.
+   */
+  async uploadPromptAttachment(data: Blob | ArrayBuffer | Uint8Array, name: string, mimeType?: string): Promise<PromptAttachment> {
+    const res = await fetch(`${this.baseUrl}/uploads?name=${encodeURIComponent(name)}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.opts.token}`, "content-type": mimeType || (data instanceof Blob && data.type) || "application/octet-stream" },
+      body: data as BodyInit,
+    });
+    const text = await res.text();
+    const json = text ? JSON.parse(text) : {};
+    if (!res.ok) throw new HarnessApiError(res.status, json.error ?? res.statusText, json.data);
+    return json.data as PromptAttachment;
   }
 
   // Sessions (ticket + triage) and transcripts

@@ -77,6 +77,8 @@ export const applyTicketPatchCases = cases(({ ticket, patch }: PatchInput) => ap
   "explicit values": { ticket: blank(), patch: { title: "T", spec: "D", permissionMode: "read_only", skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1", "WEB-2"], position: 3.5, useWorktree: true } },
   "false and empty values still apply": { ticket: full, patch: { skipAgentReview: false, skipHumanReview: false, dependsOn: [], title: "", spec: "" } },
   "status isn't applied locally": { ticket: blank(), patch: { status: "done" } },
+  "attachments: names default to the file's, source to file": { ticket: blank(), patch: { promptAttachments: [{ path: "/Users/me/a b/notes.pdf" }, { path: "/x/y.png", name: " " }, { path: "/Users/me/.harness/uploads/u1/Pasted image.png", name: "Pasted image.png", source: "upload" as const }] } },
+  "attachments cleared": { ticket: { ...blank(), promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] }, patch: { promptAttachments: [] } },
 });
 
 export const draftUsesWorktreeCases = cases(({ ticket, project }: { ticket: Ticket; project: Project | null }) => draftUsesWorktree(ticket, project), {
@@ -111,6 +113,9 @@ export const draftIsEmptyCases = cases(({ ticket, project, settings }: EmptyInpu
   "a skipping project's review turned back on": { ticket: { ...blank(skipping), skipAgentReview: false }, project: skipping, settings },
   "no project: a skip is an override": emptyCase({ skipHumanReview: true }, null),
   dependencies: emptyCase({ dependsOn: ["WEB-1"] }),
+  attachment: emptyCase({ promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] }),
+  "no attachments": emptyCase({ promptAttachments: [] }),
+  "attachments missing (older service)": { ticket: (({ promptAttachments: _p, ...rest }) => rest)(blank()) as Ticket, project: project(), settings },
   "no project: the settings' driver": emptyCase({}, null),
   "no project or settings: any driver is an override": emptyCase({}, null, null),
   "project's own driver": emptyCase({ driver: "codex" }, project({ defaultDriver: "codex" })),
@@ -130,6 +135,7 @@ export const draftCreateBodyCases = cases(({ ticket, project }: CreateInput) => 
   "skip flags missing are sent as false": { ticket: (({ skipAgentReview: _a, skipHumanReview: _h, ...rest }) => rest)(blank()) as Ticket, project: project() },
   "an empty driver is left out": { ticket: { ...blank(), driver: "" }, project: project() },
   "model, permission mode and kind": { ticket: { ...blank(), model: "sonnet", permissionMode: "read_only" as PermissionMode, kind: "conductor" as TicketKind }, project: project() },
+  "attachments go as path and name": { ticket: { ...blank(), promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }, { path: "/Users/me/.harness/uploads/u1/Pasted image.png", name: "Pasted image.png", source: "upload" as const }] }, project: project() },
 });
 
 type DiffInput = { prev: Ticket; next: Ticket };
@@ -158,6 +164,12 @@ export const draftPatchCases = cases(({ prev, next }: DiffInput) => draftPatch(p
   "a new project and kind": diff({ projectId: "p2", kind: "conductor" }),
   "the title isn't sent": diff({ title: "New title" }),
   "NFD spec differs from NFC": { prev: { ...prev, spec: nfc }, next: { ...prev, spec: nfd } },
+  "an attachment added sends the whole list": diff({ promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }, { path: "/Users/me/.harness/uploads/u1/Pasted image.png", name: "Pasted image.png", source: "upload" as const }] }, { ...prev, promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] }),
+  "attachments reordered": { prev: { ...prev, promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }, { path: "/Users/me/.harness/uploads/u1/Pasted image.png", name: "Pasted image.png", source: "upload" as const }] }, next: { ...prev, promptAttachments: [{ path: "/Users/me/.harness/uploads/u1/Pasted image.png", name: "Pasted image.png", source: "upload" as const }, { path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] } },
+  "same attachments": { prev: { ...prev, promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] }, next: { ...prev, promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] } },
+  "a renamed attachment": diff({ promptAttachments: [{ ...{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }, name: "after.png" }] }, { ...prev, promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] }),
+  "missing attachments equal none": { prev: (({ promptAttachments: _p, ...rest }) => rest)(prev) as Ticket, next: prev },
+  "all attachments removed": diff({ promptAttachments: [] }, { ...prev, promptAttachments: [{ path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file" as const }] }),
 });
 
 type RowsInput = { ticket: Ticket; project: Project | null };

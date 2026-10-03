@@ -7,6 +7,7 @@
 
 import { harnessBranch, resolveBaseBranch } from "../branches";
 import type { BranchInfo, CreateTicketBody, Project, PublicSettings, Ticket, UpdateTicketBody } from "../protocol";
+import { promptAttachmentFromInput, promptAttachmentInputs, samePromptAttachments } from "./promptAttachments";
 import { branchChoice, branchChoiceHint, canChangeBranch, ticketHasBranch, type BranchChoice } from "./branches";
 import { permissionModeLabel } from "./format";
 import { projectDriver, ticketChoice } from "./models";
@@ -66,6 +67,7 @@ export function blankDraftTicket(project: DraftProject, settings: DraftSettings 
     useWorktree: null,
     ...projectReviewSkips(project),
     draft: true,
+    promptAttachments: [],
     blockedReason: null,
     busy: false,
     pendingApproval: null,
@@ -104,6 +106,7 @@ export function applyTicketPatch(t: Ticket, patch: UpdateTicketBody): Ticket {
   if (patch.kind !== undefined) next.kind = patch.kind;
   if (patch.useWorktree !== undefined) next.useWorktree = patch.useWorktree;
   if (patch.projectId !== undefined) next.projectId = patch.projectId;
+  if (patch.promptAttachments !== undefined) next.promptAttachments = patch.promptAttachments.map(promptAttachmentFromInput);
   return next;
 }
 
@@ -113,7 +116,7 @@ export function draftUsesWorktree(t: Pick<Ticket, "useWorktree">, project: Pick<
 }
 
 /**
- * Nothing worth keeping: no spec, every setting still inherited and the review switches on the
+ * Nothing worth keeping: no spec or attachments, every setting still inherited and the review switches on the
  * project's defaults. A New session isn't saved until this turns false, and closing one that's
  * still empty doesn't ask.
  */
@@ -122,6 +125,7 @@ export function draftIsEmpty(t: Ticket, project: DraftProject | null | undefined
   const skips = projectReviewSkips(project);
   return (
     !t.spec.trim() &&
+    !t.promptAttachments?.length &&
     t.kind === "task" &&
     choice.driver === null &&
     t.permissionMode === null &&
@@ -155,6 +159,7 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
     skipAgentReview: !!t.skipAgentReview,
     skipHumanReview: !!t.skipHumanReview,
     ...(t.dependsOn.length ? { dependsOn: t.dependsOn } : {}),
+    ...(t.promptAttachments?.length ? { promptAttachments: promptAttachmentInputs(t.promptAttachments) } : {}),
   };
 }
 
@@ -179,6 +184,7 @@ export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null 
   if (!!next.skipAgentReview !== !!prev.skipAgentReview) p.skipAgentReview = !!next.skipAgentReview;
   if (!!next.skipHumanReview !== !!prev.skipHumanReview) p.skipHumanReview = !!next.skipHumanReview;
   if (!sameList(next.dependsOn, prev.dependsOn)) p.dependsOn = next.dependsOn;
+  if (!samePromptAttachments(next.promptAttachments ?? [], prev.promptAttachments ?? [])) p.promptAttachments = promptAttachmentInputs(next.promptAttachments ?? []);
   return Object.keys(p).length ? p : null;
 }
 

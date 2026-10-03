@@ -1,0 +1,700 @@
+{
+  "addPromptAttachmentsCases": [
+    {
+      "name": "appends in order",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "added": [
+          {
+            "path": "/Users/me/notes.pdf"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ]
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ],
+        "skipped": 0
+      }
+    },
+    {
+      "name": "a path already attached is skipped",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "added": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "again"
+          }
+        ]
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "skipped": 0
+      }
+    },
+    {
+      "name": "a path twice in one add is attached once",
+      "input": {
+        "list": [],
+        "added": [
+          {
+            "path": "/x.png"
+          },
+          {
+            "path": "/x.png"
+          }
+        ]
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/x.png",
+            "name": "x.png",
+            "source": "file"
+          }
+        ],
+        "skipped": 0
+      }
+    },
+    {
+      "name": "the limit leaves the rest out",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "added": [
+          {
+            "path": "/1.png"
+          },
+          {
+            "path": "/2.png"
+          },
+          {
+            "path": "/3.png"
+          }
+        ],
+        "max": 3
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          },
+          {
+            "path": "/1.png",
+            "name": "1.png",
+            "source": "file"
+          }
+        ],
+        "skipped": 2
+      }
+    },
+    {
+      "name": "a duplicate past the limit isn't counted as skipped",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "added": [
+          {
+            "path": "/Users/me/Desktop/shot.png"
+          },
+          {
+            "path": "/2.png"
+          }
+        ],
+        "max": 1
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "skipped": 1
+      }
+    },
+    {
+      "name": "nothing added",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "added": []
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "skipped": 0
+      }
+    }
+  ],
+  "fileBaseNameCases": [
+    {
+      "name": "a file",
+      "input": "/a/b/shot.png",
+      "output": "shot.png"
+    },
+    {
+      "name": "a trailing slash",
+      "input": "/a/b/folder/",
+      "output": "folder"
+    },
+    {
+      "name": "no slash",
+      "input": "shot.png",
+      "output": "shot.png"
+    },
+    {
+      "name": "root",
+      "input": "/",
+      "output": ""
+    },
+    {
+      "name": "spaces",
+      "input": "/Users/me/My Notes/a b.txt",
+      "output": "a b.txt"
+    }
+  ],
+  "pastedImageNameCases": [
+    {
+      "name": "png",
+      "input": "image/png",
+      "output": "Pasted image.png"
+    },
+    {
+      "name": "jpeg",
+      "input": "image/jpeg",
+      "output": "Pasted image.jpg"
+    },
+    {
+      "name": "upper case",
+      "input": "IMAGE/WEBP",
+      "output": "Pasted image.webp"
+    },
+    {
+      "name": "gif",
+      "input": "image/gif",
+      "output": "Pasted image.gif"
+    },
+    {
+      "name": "tiff",
+      "input": "image/tiff",
+      "output": "Pasted image.tiff"
+    },
+    {
+      "name": "unknown",
+      "input": "image/x-foo",
+      "output": "Pasted image.png"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "output": "Pasted image.png"
+    },
+    {
+      "name": "none",
+      "input": null,
+      "output": "Pasted image.png"
+    }
+  ],
+  "promptAttachmentFromInputCases": [
+    {
+      "name": "name from the path",
+      "input": {
+        "path": "/a/shot.png"
+      },
+      "output": {
+        "path": "/a/shot.png",
+        "name": "shot.png",
+        "source": "file"
+      }
+    },
+    {
+      "name": "a given name",
+      "input": {
+        "path": "/a/shot.png",
+        "name": "After"
+      },
+      "output": {
+        "path": "/a/shot.png",
+        "name": "After",
+        "source": "file"
+      }
+    },
+    {
+      "name": "a blank name falls back",
+      "input": {
+        "path": "/a/shot.png",
+        "name": "  "
+      },
+      "output": {
+        "path": "/a/shot.png",
+        "name": "shot.png",
+        "source": "file"
+      }
+    },
+    {
+      "name": "a name is trimmed",
+      "input": {
+        "path": "/a/shot.png",
+        "name": " After "
+      },
+      "output": {
+        "path": "/a/shot.png",
+        "name": "After",
+        "source": "file"
+      }
+    },
+    {
+      "name": "an upload keeps its source",
+      "input": {
+        "path": "/u/x.png",
+        "source": "upload"
+      },
+      "output": {
+        "path": "/u/x.png",
+        "name": "x.png",
+        "source": "upload"
+      }
+    }
+  ],
+  "promptAttachmentInputsCases": [
+    {
+      "name": "none",
+      "input": [],
+      "output": []
+    },
+    {
+      "name": "path and name only",
+      "input": [
+        {
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file"
+        },
+        {
+          "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+          "name": "Pasted image.png",
+          "source": "upload"
+        }
+      ],
+      "output": [
+        {
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png"
+        },
+        {
+          "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+          "name": "Pasted image.png"
+        }
+      ]
+    }
+  ],
+  "promptAttachmentIsImageCases": [
+    {
+      "name": "png",
+      "input": {
+        "name": "shot.png",
+        "path": "/a/shot.png"
+      },
+      "output": true
+    },
+    {
+      "name": "upper-case JPG",
+      "input": {
+        "name": "IMG.JPG",
+        "path": "/a/IMG.JPG"
+      },
+      "output": true
+    },
+    {
+      "name": "jpeg",
+      "input": {
+        "name": "a.jpeg",
+        "path": "/a/a.jpeg"
+      },
+      "output": true
+    },
+    {
+      "name": "webp",
+      "input": {
+        "name": "a.webp",
+        "path": "/a/a.webp"
+      },
+      "output": true
+    },
+    {
+      "name": "gif",
+      "input": {
+        "name": "a.gif",
+        "path": "/a/a.gif"
+      },
+      "output": true
+    },
+    {
+      "name": "bmp",
+      "input": {
+        "name": "a.bmp",
+        "path": "/a/a.bmp"
+      },
+      "output": true
+    },
+    {
+      "name": "pdf",
+      "input": {
+        "name": "notes.pdf",
+        "path": "/a/notes.pdf"
+      },
+      "output": false
+    },
+    {
+      "name": "heic",
+      "input": {
+        "name": "IMG.heic",
+        "path": "/a/IMG.heic"
+      },
+      "output": false
+    },
+    {
+      "name": "no extension",
+      "input": {
+        "name": "Makefile",
+        "path": "/a/Makefile"
+      },
+      "output": false
+    },
+    {
+      "name": "a name without one falls back to the path",
+      "input": {
+        "name": "After",
+        "path": "/a/shot.png"
+      },
+      "output": true
+    },
+    {
+      "name": "a dot folder isn't an extension",
+      "input": {
+        "name": "file",
+        "path": "/a.png/file"
+      },
+      "output": false
+    }
+  ],
+  "removePromptAttachmentCases": [
+    {
+      "name": "first",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ],
+        "index": 0
+      },
+      "output": [
+        {
+          "path": "/Users/me/notes.pdf",
+          "name": "notes.pdf",
+          "source": "file"
+        },
+        {
+          "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+          "name": "Pasted image.png",
+          "source": "upload"
+        }
+      ]
+    },
+    {
+      "name": "last",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ],
+        "index": 2
+      },
+      "output": [
+        {
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file"
+        },
+        {
+          "path": "/Users/me/notes.pdf",
+          "name": "notes.pdf",
+          "source": "file"
+        }
+      ]
+    },
+    {
+      "name": "out of range",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "index": 4
+      },
+      "output": [
+        {
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file"
+        }
+      ]
+    },
+    {
+      "name": "negative",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "index": -1
+      },
+      "output": [
+        {
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file"
+        }
+      ]
+    }
+  ],
+  "samePromptAttachmentsCases": [
+    {
+      "name": "both empty",
+      "input": {
+        "x": [],
+        "y": []
+      },
+      "output": true
+    },
+    {
+      "name": "same",
+      "input": {
+        "x": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ],
+        "y": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ]
+      },
+      "output": true
+    },
+    {
+      "name": "reordered",
+      "input": {
+        "x": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ],
+        "y": [
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          },
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ]
+      },
+      "output": false
+    },
+    {
+      "name": "renamed",
+      "input": {
+        "x": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "y": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "other.png",
+            "source": "file"
+          }
+        ]
+      },
+      "output": false
+    },
+    {
+      "name": "source alone doesn't count",
+      "input": {
+        "x": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "y": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "upload"
+          }
+        ]
+      },
+      "output": true
+    },
+    {
+      "name": "longer",
+      "input": {
+        "x": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "y": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload"
+          }
+        ]
+      },
+      "output": false
+    }
+  ]
+}

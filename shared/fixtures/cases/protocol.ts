@@ -192,6 +192,10 @@ export const Ticket: P.Ticket[] = [
     completionInstructions: null,
     pullRequestUrl: null,
     draft: true,
+    promptAttachments: [
+      { path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file" },
+      { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
+    ],
     completedAt: null,
     agentReview: "skipped",
     humanReview: "approved",
@@ -362,6 +366,13 @@ export const Attachment: P.Attachment[] = [
   { id: "att_1", kind: "image", mimeType: "image/png", name: "after.png", size: 48213, width: 1280, height: 800 },
   { id: "att_2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 2_400_118 },
 ];
+
+export const PromptAttachment: P.PromptAttachment[] = [
+  { path: "/Users/mark/Desktop/shot.png", name: "shot.png", source: "file" },
+  { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
+];
+
+export const PromptAttachmentInput: P.PromptAttachmentInput[] = [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }];
 
 export const ActivityMeta: P.ActivityMeta[] = [
   { question: "Should HarnessEvent decode unknown kinds or drop them?" },
@@ -826,6 +837,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     key: "IMPORT-1",
     externalRef,
     draft: false,
+    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }, { path: "/tmp/notes.pdf" }],
   },
   { projectId: "prj_8f2c1a", spec: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
   { projectId: "prj_8f2c1a", spec: "In the checkout", useWorktree: false },
@@ -837,6 +849,8 @@ export const UpdateTicketBody: P.UpdateTicketBody[] = [
   { model: "sonnet", permissionMode: "auto", baseBranch: "main", branch: "feature/x", externalRef: { key: "FOO-1", url: null }, useWorktree: true },
   { status: "done" },
   { spec: "Draft brief" },
+  { promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }] },
+  { promptAttachments: [] },
   {},
 ];
 
@@ -914,6 +928,7 @@ export const enums: Record<string, readonly string[]> = {
   ActivityKind: ACTIVITY_KINDS satisfies readonly P.ActivityKind[],
   SpecRevisionAuthor: all<P.SpecRevisionAuthor>({ agent: true, human: true, system: true }),
   AttachmentKind: all<P.AttachmentKind>({ image: true, video: true }),
+  PromptAttachmentSource: all<P.PromptAttachmentSource>({ file: true, upload: true }),
   WatcherMode: all<P.Watcher["mode"]>({ loop: true, interval: true }),
   WatcherLiveState: all<P.WatcherLive["state"]>({ running: true, waiting: true, stopped: true }),
   PromptId: PROMPT_IDS satisfies readonly P.PromptId[],
