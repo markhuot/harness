@@ -1,16 +1,14 @@
 import HarnessKit
 import SwiftUI
 
-/// The top of the ticket screen: the "Part of" crumb, the title, badges, the progress across
-/// a conductor's children, the approval card and the actions for the ticket's state. It scrolls on its own, up to
+/// The top of the ticket screen: the "Part of" crumb, the title, badges,
+/// the approval card and the actions for the ticket's state. It scrolls on its own, up to
 /// `maxHeight`. On the Browser, plugin and sub-agent tabs (`compactTab`) it shrinks to the title on
 /// one line, which expands it on tap.
 struct TicketDetailHero: View {
     let ticket: Ticket
     let compactTab: Bool
     let maxHeight: CGFloat
-    /// The progress card across the children opens the Tickets tab.
-    let onOpenChildren: () -> Void
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
@@ -66,13 +64,6 @@ struct TicketDetailHero: View {
                     ReviewMark(who: .human, state: ticket.humanReview)
                 }
             }
-        }
-        if !compact, ticket.isConductor {
-            ConductorProgressCard(
-                progress: Conductor.progressOf(Conductor.childrenOfTicket(state.tickets, conductorId: ticket.id)),
-                loading: state.childrenLoaded[ticket.id] != true,
-                onOpen: onOpenChildren
-            )
         }
         if let approval = ticket.pendingApproval {
             TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
