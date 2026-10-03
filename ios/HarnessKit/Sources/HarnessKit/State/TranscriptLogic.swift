@@ -89,6 +89,31 @@ public enum TranscriptLogic {
     /// shared/src/state/format.ts).
     public static let outputLimit = 12000
 
+    /// Lines per Text in a tool row's code box, and the longest line it shows unbroken. A Text past
+    /// the size iOS draws in one layer shows blank: a capped output can run to hundreds of lines, or
+    /// hold one line thousands of characters long (a spec as a JSON string).
+    public static let codeChunkLines = 80
+    public static let codeLineLimit = 500
+
+    /// `text` cut into runs of at most `lines` lines, each without its last newline, after breaking
+    /// any line longer than `width` characters into pieces of `width`. Joined with "\n" they give
+    /// `text` back when no line was broken. Empty text is one empty chunk.
+    public static func codeChunks(_ text: String, lines: Int = codeChunkLines, width: Int = codeLineLimit) -> [String] {
+        let width = max(width, 1), lines = max(lines, 1)
+        var all: [Substring] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            var rest = line
+            while rest.count > width {
+                all.append(rest.prefix(width))
+                rest = rest.dropFirst(width)
+            }
+            all.append(rest)
+        }
+        return stride(from: 0, to: all.count, by: lines).map {
+            all[$0..<min($0 + lines, all.count)].joined(separator: "\n")
+        }
+    }
+
     /// The tool row's trailing mark: running until the result arrives, then ✓ or ✗.
     public enum ToolState: Sendable, Equatable { case running, ok, failed }
 

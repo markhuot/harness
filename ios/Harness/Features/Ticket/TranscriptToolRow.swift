@@ -124,6 +124,7 @@ struct TranscriptCodeBox: View {
     @State private var height: CGFloat = 0
 
     static let maxHeight: CGFloat = 320
+    static let lineSpacing: CGFloat = 3
 
     var body: some View {
         Group {
@@ -141,9 +142,16 @@ struct TranscriptCodeBox: View {
 
     private var sideways: some View {
         ScrollView(.horizontal) {
-            Text(text).font(.mono(12)).lineSpacing(3).foregroundStyle(c.text).textSelection(.enabled)
-                .fixedSize()
-                .padding(8)
+            // A Text per run of lines, very long lines broken (TranscriptLogic.codeChunks): a Text
+            // hundreds of lines tall or thousands of characters wide shows blank.
+            let chunks = TranscriptLogic.codeChunks(text)
+            VStack(alignment: .leading, spacing: Self.lineSpacing) {
+                ForEach(chunks.indices, id: \.self) { i in
+                    Text(chunks[i]).font(.mono(12)).lineSpacing(Self.lineSpacing).foregroundStyle(c.text).textSelection(.enabled)
+                        .fixedSize()
+                }
+            }
+            .padding(8)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         }
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
