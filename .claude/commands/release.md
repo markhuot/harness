@@ -15,7 +15,7 @@ tag or `main`.
    in anything missing.
 3. `bun run release:prepare`, commit CHANGELOG.md as `Release app-…`, then
    `git tag -a app-… -m "Release app-…"` and `git push origin main app-…`.
-4. Run `bun run release:publish` through a login shell (`zsh -lc`) so `ASC_KEY_ID` and
+4. Run `bun run release:publish` through an interactive login shell (`zsh -lic`; plain `-lc` skips `.zshrc`) so `ASC_KEY_ID` and
    `ASC_ISSUER_ID` are set, publishing to GitHub, the Vercel install page and TestFlight. It takes
    a long while: run it in the background and check on it. If it fails partway, fix the cause and
    rerun it on the same tag, as long as no GitHub release exists for it yet.
