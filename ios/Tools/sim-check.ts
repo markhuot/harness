@@ -1316,12 +1316,14 @@ const SMALL = { width: 300, height: 652 };
  * ffmpeg's cropdetect over that band. The viewer's page is black, so on an image page that's the image.
  */
 async function litBox(file: string, top: number, bottom: number) {
-  const p = Bun.spawn(["ffmpeg", "-hide_banner", "-i", file, "-vf", `crop=iw:ih-${top + bottom}:0:${top},cropdetect=limit=24:round=1:reset=0`, "-frames:v", "1", "-f", "null", "-"], { stdout: "pipe", stderr: "pipe" });
+  // skip=0: cropdetect skips the first two frames by default, and a screenshot has one. Its x1…y2
+  // are the exact bounds (its crop= rounds them).
+  const p = Bun.spawn(["ffmpeg", "-hide_banner", "-i", file, "-vf", `crop=iw:ih-${top + bottom}:0:${top},cropdetect=limit=24:round=1:reset=0:skip=0`, "-frames:v", "1", "-f", "null", "-"], { stdout: "pipe", stderr: "pipe" });
   const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
-  const m = [...err.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)].at(-1);
+  const m = [...err.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].at(-1);
   if (code !== 0 || !m) throw new Error(`cropdetect on ${file} → ${code}\n${err.slice(-500)}`);
-  const [w, h, x, y] = m.slice(1).map(Number) as [number, number, number, number];
-  return { x, y: y + top, width: w, height: h };
+  const [x1, x2, y1, y2] = m.slice(1).map(Number) as [number, number, number, number];
+  return { x: x1, y: y1 + top, width: x2 - x1 + 1, height: y2 - y1 + 1 };
 }
 
 async function seedAttachments() {
