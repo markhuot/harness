@@ -268,7 +268,7 @@ const reach = (url: string, init?: RequestInit) => fetch(url, { ...init, signal:
 
 describe("listen setting over real sockets", () => {
   test.skipIf(!LAN)("PATCH listen rebinds live; remote requests need the token; MCP is loopback-only; switching back closes the address", async () => {
-    const { h, client } = await boot();
+    const { h, client } = await boot({ networkDrainMs: 400 });
     const remote = `http://${LAN}:${h.port}`;
     expect(await reach(`${remote}/health`)).toBe("down");
 
@@ -289,7 +289,7 @@ describe("listen setting over real sockets", () => {
 
     await client.updateSettings({ listen: { mode: "localhost" } });
     expect(await reach(`${remote}/health`)).toBe(503); // retired: turned away during the drain window
-    await Bun.sleep(1200);
+    await Bun.sleep(500);
     expect(await reach(`${remote}/health`, { keepalive: false })).toBe("down");
     expect(await client.health()).toMatchObject({ ok: true });
   });

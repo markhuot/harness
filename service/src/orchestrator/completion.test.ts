@@ -131,8 +131,7 @@ describe("choosing at approval", () => {
     const h = await setup();
     // Hold the agent review so the human approves first.
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x [hold-review]" });
-    await h.orch.idle().catch(() => {});
-    await Bun.sleep(50);
+    while (h.driver.holding === 0) await Bun.sleep(1);
     expect(h.get(t).agentReview).toBe("pending");
     h.orch.humanReview(t.key, { decision: "approve", action: "pr", instructions: "Label it design." });
     expect(h.get(t)).toMatchObject({ completionAction: "pr", completionInstructions: "Label it design.", humanReview: "approved" });

@@ -30,6 +30,8 @@ export interface CreateHarnessOptions {
   resolveHost?: NetworkDeps["resolveHost"];
   /** Retry interval for the configured listen mode after a boot fallback (default 30s). */
   networkRetryMs?: number;
+  /** How long a retired listener turns requests away before it closes (default 1s). */
+  networkDrainMs?: number;
   drivers?: Driver[];
   browser?: BrowserService;
   /** Override tool selection (tests); defaults to tools/index toolsForRun */
@@ -127,6 +129,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     localAddresses: opts.localAddresses,
     resolveHost: opts.resolveHost,
     retryMs: opts.networkRetryMs,
+    drainMs: opts.networkDrainMs,
     log,
     serve: (hostname, port) => Bun.serve<WsData>({ hostname, port, idleTimeout: 255, websocket: http.websocket, fetch: http.fetch as never }),
   });

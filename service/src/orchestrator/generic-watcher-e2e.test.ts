@@ -28,11 +28,22 @@ afterEach(async () => {
 });
 
 function setup() {
+  /** Every output the orchestrator has finished handling (deduped or triaged), in order */
+  const handled: string[] = [];
   const h = makeOrchestrator({
     drivers: [new DummyDriver({ delayMs: 0 })],
     tools: (kind, d) => toolsForRun(kind, d),
     // One event per loop pass, 500ms apart: a 150ms idle flush keeps each in its own Inbox item.
-    watchers: (handlers) => new WatcherRunner({ ...handlers, shell: SHELL, timing: { batchIdleMs: 150, batchMaxMs: 2000, restartDelayMs: 60_000, minIntervalMs: 60_000 } }),
+    watchers: (handlers) =>
+      new WatcherRunner({
+        ...handlers,
+        onOutput: async (w, output) => {
+          await handlers.onOutput(w, output);
+          handled.push(output.text);
+        },
+        shell: SHELL,
+        timing: { batchIdleMs: 150, batchMaxMs: 2000, restartDelayMs: 60_000, minIntervalMs: 60_000 },
+      }),
   });
   h.orch.updateSettings({ defaultDriver: "dummy" });
   stop = () => h.orch.stop();
@@ -42,7 +53,7 @@ function setup() {
   const infra = join(h.home, "infra");
   mkdirSync(infra);
   h.orch.createProject({ path: infra, key: "INFRA", useWorktrees: false });
-  return { ...h, shop };
+  return { ...h, shop, handled };
 }
 
 async function until(what: string, ok: () => boolean, timeoutMs = 20_000): Promise<void> {
@@ -117,9 +128,10 @@ describe("generic watcher, end to end", () => {
     expect(h.store.watchers.get(w!.id)!.lastRunAt).not.toBeNull();
 
     // The API "forgets" what it sent and re-prints the same events: none are triaged again
+    const before = h.handled.length;
     rmSync(state);
-    await until("the events to be re-printed", () => existsSync(state) && Bun.file(state).size > 0);
-    await Bun.sleep(2500);
+    const reprinted = () => h.handled.slice(before).join("\n");
+    await until("the events to be re-printed and handled", () => EVENTS.every((e) => reprinted().includes(JSON.stringify(e))));
     await h.orch.idle();
     expect(triage()).toHaveLength(3);
   }, 60_000);
