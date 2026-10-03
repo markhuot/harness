@@ -2048,18 +2048,26 @@ try {
   }
 
   // 6d. Transcript and Activity stay scrolled to the bottom until the user scrolls up, and pick
-  // it back up when they return. A short window makes a few messages overflow. The messages are
-  // logged (as from the Spec tab), so each one and its answer land in Activity too.
+  // it back up when they return. A short window makes a few messages overflow. Messages stay out
+  // of Activity, so Activity grows by sending the ticket back to work (move): each run submits,
+  // which is a new entry.
   {
     const { go } = app;
     await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 560, deviceScaleFactor: 1, mobile: false });
-    const say = (n: number) => api("POST", "/tickets/NYTIMES-1/messages", { text: `Stick check ${n}. ` + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10), log: true });
+    const say = (n: number) => api("POST", "/tickets/NYTIMES-1/messages", { text: `Stick check ${n}. ` + "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(10) });
     const metrics = (sel: string) =>
       js<{ top: number; gap: number; overflow: boolean }>(`(() => { const el = document.querySelector(${JSON.stringify(sel)});
         return { top: Math.round(el.scrollTop), gap: Math.round(el.scrollHeight - el.scrollTop - el.clientHeight), overflow: el.scrollHeight > el.clientHeight + 100 }; })()`);
     const scrollTo = (sel: string, top: string) => js(`(() => { const el = document.querySelector(${JSON.stringify(sel)}); el.scrollTop = ${top}; })()`);
     const shows = (sel: string, text: string) => js<boolean>(`!!document.querySelector(${JSON.stringify(sel)})?.textContent.includes(${JSON.stringify(text)})`);
     const entryCount = () => js<number>(`document.querySelectorAll(".activity .activity-entry").length`);
+    const entries = async () => ((await api("GET", "/tickets/NYTIMES-1/activity")) as unknown[]).length;
+    // Back to work with a message; the mock's run submits it again, adding an entry.
+    const rework = async (n: number) => {
+      const had = await entries();
+      await api("POST", "/tickets/NYTIMES-1/messages", { text: `Rework ${n}`, move: true });
+      await until(`entry for rework ${n}`, async () => (await entries()) > had, 8000);
+    };
 
     await go("#/board/all/ticket/NYTIMES-1/transcript");
     await until("transcript", () => exists(".transcript"));
@@ -2089,24 +2097,25 @@ try {
     const shrunk = await metrics(".transcript");
     check("a shorter window keeps a pinned transcript at the bottom", shrunk.gap <= 1, JSON.stringify(shrunk));
 
+    for (let i = 1; i <= 6; i++) await rework(i);
     await go("#/board/all/ticket/NYTIMES-1/activity");
     await until("activity", () => exists(".activity .activity-entry"));
-    await Bun.sleep(3000); // message 6's answer
+    await Bun.sleep(300);
     const opened = await metrics(".activity");
     check("Activity opens scrolled to the newest", opened.overflow && opened.gap <= 1, JSON.stringify(opened));
     await scrollTo(".activity", "20");
     await Bun.sleep(150);
     let before = await entryCount();
-    await say(7);
-    await until("entry for message 7", async () => (await entryCount()) > before, 6000);
+    await rework(7);
+    await until("entry for rework 7", async () => (await entryCount()) > before, 6000);
     await Bun.sleep(150);
     const sAway = await metrics(".activity");
     check("Activity stays put while the user is scrolled up", sAway.top === 20, JSON.stringify(sAway));
     await scrollTo(".activity", "el.scrollHeight");
     await Bun.sleep(150);
     before = await entryCount();
-    await say(8);
-    await until("entry for message 8", async () => (await entryCount()) > before, 6000);
+    await rework(8);
+    await until("entry for rework 8", async () => (await entryCount()) > before, 6000);
     await Bun.sleep(150);
     const sBack = await metrics(".activity");
     check("Activity follows a new entry once back at the bottom", sBack.gap <= 1, JSON.stringify(sBack));

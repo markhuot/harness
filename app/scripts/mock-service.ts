@@ -1361,12 +1361,10 @@ function completeRun(t: Ticket, instructions = t.completionInstructions ?? "") {
   });
 }
 
-/** `log`: the prompt was a message sent with log: true, so the agent's answer goes into Activity too. */
-function workRun(t: Ticket, prompt: string, log = false) {
+function workRun(t: Ticket, prompt: string) {
   appendEntry(t.sessionId, null, "user", { type: "text", text: prompt });
   const answer = `Hello from the mock driver! You said: "${prompt}"`;
   simulateRun(t, "work", prompt, answer, (cur) => {
-    if (log) addActivity(cur.sessionId, cur.id, "answer", "agent", answer);
     if (cur.status === "in_progress") submitForReview(cur);
   });
 }
@@ -1711,32 +1709,26 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
-          if (body.log !== undefined && typeof body.log !== "boolean") throw new HttpError(400, "log must be true or false");
-          // log: true (sent from the Spec or Activity tab): the message and the agent's final
-          // answer also go into Activity. Without it they're only in the transcript.
-          const log = body.log === true;
-          if (log) addActivity(t.sessionId, t.id, "message", "human", text);
-          const answered = (answer: string) => (cur: Ticket) => {
-            if (log) addActivity(cur.sessionId, cur.id, "answer", "agent", answer);
-          };
+          // Mirrors the service: the message and the agent's answer are in the transcript only
+          // (an older app's `log` is ignored).
           // Mirrors the service: planning → the plan run, in progress → the work, and blocked,
           // review and done stay put (a chat) unless `move` sends review/done back to work first.
           if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             const answer = `Updated the plan to account for: "${text}"`;
-            simulateRun(t, "plan", text, answer, answered(answer));
+            simulateRun(t, "plan", text, answer, () => {});
           } else if (t.status === "in_progress") {
-            workRun(t, text, log);
+            workRun(t, text);
           } else if (body.move === true && (t.status === "review" || t.status === "done")) {
             t.agentReview = "pending";
             t.humanReview = "pending";
             setStatus(t, "in_progress");
             t.blockedReason = null;
-            workRun(t, text, log);
+            workRun(t, text);
           } else {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             const answer = `Here's what I know about that: "${text}". The ticket stays where it is.`;
-            simulateRun(t, "chat", text, answer, answered(answer));
+            simulateRun(t, "chat", text, answer, () => {});
           }
           return ok(t);
         }
