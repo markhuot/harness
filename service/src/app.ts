@@ -46,6 +46,8 @@ export interface CreateHarnessOptions {
    * Omit to not track it (tests).
    */
   codeWatch?: { fingerprint: () => string; intervalMs: number };
+  /** The release /health reports (service/src/release.ts). Omit for null (tests). */
+  release?: () => string | null;
   /**
    * Exit so the supervisor (launchd) starts the service again: enables POST /service/restart and,
    * with codeWatch, restarting onto new code once idle.
@@ -152,6 +154,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     plugins,
     network,
     serviceStatus: codeWatch ? () => codeWatch.status() : undefined,
+    release: opts.release,
     restart: opts.restart,
     stopping: () => stopped,
   });

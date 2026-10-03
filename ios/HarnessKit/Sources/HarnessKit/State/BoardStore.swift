@@ -66,6 +66,10 @@ public final class BoardStore {
     /// subscriptions and its first connect doesn't bump `epoch`, so the Browser tab resubscribes on
     /// either.
     public private(set) var socketGeneration = 0
+    /// The service's /health from the last refresh that got one (nil until then).
+    public private(set) var health: Health?
+    /// The release mismatch the person closed: hidden until the service or the app changes.
+    public private(set) var dismissedMismatch: ReleaseMismatch?
 
     public let baseUrl: String
     @ObservationIgnored public let client: any BoardClient
@@ -313,9 +317,13 @@ public final class BoardStore {
     /// The full snapshot for the current scope. Returns once it's applied; the Activity backfill
     /// it starts runs on its own.
     public func refresh() async {
+        // /health is optional: a failure here leaves the last answer (the snapshot reports errors).
+        let client = client
+        async let health = try? await client.health()
         do {
             let snapshot = try await loadSnapshot(scope)
             guard !closed else { return }
+            if let h = await health { self.health = h }
             dispatch(.snapshot(snapshot))
             loader.legacy = snapshot.donePage == nil
             loader.snapshotApplied()
@@ -333,6 +341,19 @@ public final class BoardStore {
                 loadError = Connection.describeError(error, baseUrl: baseUrl)
             }
         }
+    }
+
+    // MARK: Release
+
+    /// This app and the service come from different releases (`appBuild`: the app's
+    /// CFBundleVersion), unless the person closed that notice.
+    public func releaseMismatch(appBuild: String?) -> ReleaseMismatch? {
+        let m = Releases.mismatch(appBuild: appBuild, serviceRelease: health?.release.optional)
+        return m == dismissedMismatch ? nil : m
+    }
+
+    public func dismissReleaseMismatch(_ m: ReleaseMismatch) {
+        dismissedMismatch = m
     }
 
     private func loadSnapshot(_ scope: String) async throws -> BoardSnapshot {

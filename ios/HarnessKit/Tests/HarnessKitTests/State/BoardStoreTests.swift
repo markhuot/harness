@@ -17,11 +17,18 @@ struct BoardStoreTests {
             var snapshotError: (any Error)?
             var activityHold: [String: Deferred<[ActivityEntry]>] = [:]
             var details: [String: TicketDetail] = [:]
+            var health: Health? = Health(version: "0.1.0", pid: 1)
         }
 
         let s = Mutex(State())
         let calls = CallLog<String>()
         let inFlightActivity = Mutex((now: 0, max: 0))
+
+        func health() async throws -> Health {
+            calls.append("health")
+            if let h = s.withLock({ $0.health }) { return h }
+            throw URLError(.cannotConnectToHost)
+        }
 
         func listProjects() async throws -> [Project] {
             calls.append("projects")
@@ -269,6 +276,40 @@ struct BoardStoreTests {
         await h.store.refresh()
         #expect(h.store.authError == nil)
         #expect(h.store.state.ready)
+    }
+
+    @Test func everyRefreshReadsTheServicesReleaseAndAFailedHealthKeepsTheLastOne() async {
+        let h = Harness()
+        h.client.s.withLock { $0.health = Health(version: "0.1.0", pid: 1, release: .value("app-20261003.1524")) }
+        await h.store.refresh()
+        #expect(h.store.releaseMismatch(appBuild: "202610031524") == nil)
+        #expect(h.store.releaseMismatch(appBuild: "202609271854") == .appOlder(app: "app-20260927.1854", service: "app-20261003.1524"))
+        // A development build (CFBundleVersion "1") belongs to no release.
+        #expect(h.store.releaseMismatch(appBuild: "1") == nil)
+
+        h.client.s.withLock { $0.health = nil }
+        await h.store.refresh()
+        #expect(h.store.health?.release == .value("app-20261003.1524"))
+
+        h.client.s.withLock { $0.health = Health(version: "0.1.0", pid: 1, release: .value("app-20261010.0900")) }
+        await h.store.refresh()
+        #expect(h.store.releaseMismatch(appBuild: "202610031524") == .appOlder(app: "app-20261003.1524", service: "app-20261010.0900"))
+    }
+
+    @Test func aDismissedMismatchStaysHiddenUntilTheServiceMovesToAnotherRelease() async {
+        let h = Harness()
+        h.client.s.withLock { $0.health = Health(version: "0.1.0", pid: 1, release: .value("app-20260927.1854")) }
+        await h.store.refresh()
+        let m = try! #require(h.store.releaseMismatch(appBuild: "202610031524"))
+        #expect(m == .appNewer(app: "app-20261003.1524", service: "app-20260927.1854"))
+        h.store.dismissReleaseMismatch(m)
+        #expect(h.store.releaseMismatch(appBuild: "202610031524") == nil)
+        await h.store.refresh()
+        #expect(h.store.releaseMismatch(appBuild: "202610031524") == nil)
+
+        h.client.s.withLock { $0.health = Health(version: "0.1.0", pid: 1, release: .value("app-20261001.0800")) }
+        await h.store.refresh()
+        #expect(h.store.releaseMismatch(appBuild: "202610031524") == .appNewer(app: "app-20261003.1524", service: "app-20261001.0800"))
     }
 
     @Test func otherFailuresAreLoadErrors() async {

@@ -11,6 +11,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { $ } from "bun";
+import { describeRelease } from "../src/release";
 import { SERVICE_EXECUTABLE } from "../src/runtime";
 
 const repoRoot = resolve(import.meta.dir, "..", "..");
@@ -24,7 +25,9 @@ export async function compileService(out: string): Promise<CompiledService> {
   const executable = join(out, "MacOS", SERVICE_EXECUTABLE);
   mkdirSync(join(out, "MacOS"), { recursive: true });
   const target = `bun-darwin-${process.arch === "arm64" ? "arm64" : "x64"}`;
-  await $`${process.execPath} build --compile --minify-syntax --target=${target} ${join(repoRoot, "service/src/bin.ts")} --outfile ${executable}`.cwd(repoRoot).quiet();
+  // The release /health reports (service/src/release.ts): the executable has no git to ask.
+  const release = `HARNESS_RELEASE=${JSON.stringify(describeRelease(repoRoot) ?? "")}`;
+  await $`${process.execPath} build --compile --minify-syntax --target=${target} --define ${release} ${join(repoRoot, "service/src/bin.ts")} --outfile ${executable}`.cwd(repoRoot).quiet();
 
   const pluginsOut = join(out, "Resources", "plugins");
   rmSync(pluginsOut, { recursive: true, force: true });
