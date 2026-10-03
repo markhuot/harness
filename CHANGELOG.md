@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The progress bar for a ticket's child tickets is back in its Tickets tab, on the Mac, iPhone and
+  iPad, and no longer sits at the top of the ticket under the title, which kept the top of every
+  ticket with children busier than it needed to be.
+
 ## [app-20261003.1227](https://github.com/markhuot/harness/releases/tag/app-20261003.1227) - 2026-10-03
 
 ### Fixed

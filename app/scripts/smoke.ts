@@ -1020,8 +1020,7 @@ try {
     const conductor = all.find((t) => t.key === "HARNESS-1")!;
     const hxId = conductor.projectId;
     const rowKeys = () => js<string[]>(`[...document.querySelectorAll(".child-row")].map(r => r.dataset.key)`);
-    // The progress is in the detail header (on every tab), not in the Tickets tab.
-    const progressText = () => js<string>(`document.querySelector("[data-testid=conductor-progress] .cond-progress-text")?.textContent ?? ""`);
+    const progressText = () => js<string>(`document.querySelector("[data-testid=children-progress]")?.textContent ?? ""`);
     const tabCount = () => js<string>(`document.querySelector(".tab[data-tab=children] .count")?.textContent ?? ""`);
 
     await js(`location.hash = "#/board/all/ticket/HARNESS-1/children"`);
@@ -1036,7 +1035,7 @@ try {
     );
     check("Tickets tab shows the progress header", (await progressText()) === "1/7 done · 1 in progress · 2 blocked · 2 review · 1 up next", await progressText());
     check("Tickets tab badge counts the children", (await tabCount()) === "7", await tabCount());
-    const waiting = await js<string>(`document.querySelector("[data-testid=conductor-progress] .cond-progress-attn")?.textContent ?? ""`);
+    const waiting = await js<string>(`document.querySelector(".children-attn")?.textContent ?? ""`);
     check("header counts blocked/approval children only (reviews are the conductor's)", waiting === "2 tickets waiting on you", waiting);
     const attnRows = await js<string[]>(`[...document.querySelectorAll(".child-row.attn")].map(r => r.dataset.key)`);
     check("only blocked/approval children get the attention edge", attnRows.join(",") === "HARNESS-7,HARNESS-8", attnRows.join(","));
@@ -1082,16 +1081,6 @@ try {
     );
     check("a child's status change regroups it live", regrouped);
     check("progress header follows live", (await until("progress 2/8", async () => (await progressText()).startsWith("2/8 done") && (await progressText()))) === "2/8 done · 1 in progress · 2 blocked · 2 review · 1 up next");
-
-    // The header's progress shows on the other tabs too, and clicking it opens the Tickets tab.
-    await js(`location.hash = "#/board/all/ticket/HARNESS-1/details"`);
-    const onDetails = await until("conductor details tab", async () => (await js<boolean>(`location.hash.endsWith("/HARNESS-1/details") && !!document.querySelector(".tab.on[data-tab=details]")`)) && (await progressText()));
-    check("the progress header shows on the Details tab", onDetails.startsWith("2/8 done"), onDetails);
-    await js(`document.querySelector("[data-testid=conductor-progress]").click()`);
-    const opened = await until("progress opens Tickets", () =>
-      js<boolean>(`location.hash.endsWith("/HARNESS-1/children") && !!document.querySelector(".tab.on[data-tab=children]") && document.querySelectorAll(".child-row").length === 8`),
-    );
-    check("clicking the progress header opens the Tickets tab", opened);
 
     // Row → child, in the same pane; the breadcrumb leads back to the conductor's Tickets tab.
     const conductorPane = await js<string>(`document.querySelector(".pane-ticket")?.dataset.paneId ?? ""`);
