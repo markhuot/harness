@@ -111,6 +111,8 @@ describe("migration 26: spec + Activity", () => {
 
   test("deleting a ticket takes its revisions and attachment rows with it", () => {
     const db = dbAt(26);
+    // The rest of the migrations, so today's TicketRepo can write its columns.
+    migrate(db);
     const store = new Store(db);
     db.exec(`INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'WEB', 'Web', '/tmp/web', 1, 1)`);
     const t = store.tickets.create({ key: "WEB-1", projectId: "p1", kind: "task", title: "t", spec: "v1", status: "planning", sessionId: "s1", driver: "fake", parentId: null, dependsOn: [], autoStart: false, externalRef: null, workdir: null });

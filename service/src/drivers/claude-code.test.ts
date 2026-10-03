@@ -1120,3 +1120,15 @@ describe("isClaudeAuthFailure", () => {
     }
   });
 });
+
+describe("userContent (prompt attachments)", () => {
+  test("the prompt alone stays a string; images follow it as base64 image blocks", async () => {
+    const { userContent } = await import("./claude-code");
+    expect(userContent("Fix it", undefined)).toBe("Fix it");
+    expect(userContent("Fix it", [])).toBe("Fix it");
+    expect(userContent("Fix it", [{ name: "a.png", path: "/a.png", mediaType: "image/png", data: "AAA=" }])).toEqual([
+      { type: "text", text: "Fix it" },
+      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAA=" } },
+    ]);
+  });
+});

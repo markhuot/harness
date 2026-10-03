@@ -79,6 +79,21 @@ function danglingToolResults(messages: Anthropic.MessageParam[]): Anthropic.Tool
     .map((b) => ({ type: "tool_result", tool_use_id: b.id, content: "The run was interrupted before this tool finished.", is_error: true }));
 }
 
+/** What stands in for an attached image in the saved conversation. */
+export const SAVED_IMAGE_PLACEHOLDER = "[An attached image was shown here. Its path is in the <attachments> list; open it with read_file to look again.]";
+
+/**
+ * The conversation as it's saved: attached images (base64, up to megabytes each) become a line
+ * of text, so the session row stays small. The run that sent them keeps them in memory.
+ */
+export function savedMessages(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  return messages.map((m) =>
+    typeof m.content === "string" || !m.content.some((b) => b.type === "image")
+      ? m
+      : { ...m, content: m.content.map((b) => (b.type === "image" ? { type: "text" as const, text: SAVED_IMAGE_PLACEHOLDER } : b)) },
+  );
+}
+
 function readState(state: unknown): Anthropic.MessageParam[] {
   const messages = (state as Partial<AnthropicApiState> | null)?.messages;
   return Array.isArray(messages) ? structuredClone(messages) : [];
@@ -172,7 +187,8 @@ export class AnthropicApiDriver implements Driver {
 
     const messages = readState(req.state);
     const pending = danglingToolResults(messages);
-    messages.push({ role: "user", content: [...pending, { type: "text", text: req.prompt }] });
+    const images = (req.images ?? []).map((i) => ({ type: "image" as const, source: { type: "base64" as const, media_type: i.mediaType, data: i.data } }));
+    messages.push({ role: "user", content: [...pending, { type: "text", text: req.prompt }, ...images] });
 
     let inputTokens = 0;
     let outputTokens = 0;
@@ -230,14 +246,14 @@ export class AnthropicApiDriver implements Driver {
       }
 
       if (message.stop_reason === "refusal") {
-        yield { type: "state", state: { messages } satisfies AnthropicApiState };
+        yield { type: "state", state: { messages: savedMessages(messages) } satisfies AnthropicApiState };
         yield usage();
         const text = "The model declined to continue (refusal).";
         yield { type: "error", message: text };
         throw new Error(text);
       }
       if (message.stop_reason === "pause_turn") {
-        yield { type: "state", state: { messages } satisfies AnthropicApiState };
+        yield { type: "state", state: { messages: savedMessages(messages) } satisfies AnthropicApiState };
         continue;
       }
       if (message.stop_reason !== "tool_use" || toolUses.length === 0) {
@@ -246,12 +262,12 @@ export class AnthropicApiDriver implements Driver {
         const steered = this.steering(req);
         if (steered.length) {
           messages.push({ role: "user", content: steered });
-          yield { type: "state", state: { messages } satisfies AnthropicApiState };
+          yield { type: "state", state: { messages: savedMessages(messages) } satisfies AnthropicApiState };
           continue;
         }
         // Checked and closed in one step: a message sent from here on is queued instead.
         req.input?.close();
-        yield { type: "state", state: { messages } satisfies AnthropicApiState };
+        yield { type: "state", state: { messages: savedMessages(messages) } satisfies AnthropicApiState };
         yield usage();
         return;
       }
@@ -259,7 +275,7 @@ export class AnthropicApiDriver implements Driver {
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const use of toolUses) {
         if (req.signal.aborted) {
-          yield { type: "state", state: { messages } satisfies AnthropicApiState };
+          yield { type: "state", state: { messages: savedMessages(messages) } satisfies AnthropicApiState };
           throw abortError();
         }
         yield { type: "tool_call", callId: use.id, name: use.name, input: use.input };
@@ -268,7 +284,7 @@ export class AnthropicApiDriver implements Driver {
         results.push(toToolResultBlock(use.id, result));
       }
       messages.push({ role: "user", content: [...results, ...this.steering(req)] });
-      yield { type: "state", state: { messages } satisfies AnthropicApiState };
+      yield { type: "state", state: { messages: savedMessages(messages) } satisfies AnthropicApiState };
     }
   }
 }

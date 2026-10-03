@@ -90,6 +90,8 @@ export interface BoardTicketDetail {
   activity: { kind: ActivityKind; author: string; body: string; meta: ActivityMeta; createdAt: number }[];
   /** The ticket's images and videos (attachment:<id> in the spec): path is the stored copy, readable with a file tool */
   attachments: { id: string; name: string; kind: "image" | "video"; path: string }[];
+  /** Files the human attached to the ticket's first message, where they are on disk; missing once moved or deleted */
+  promptAttachments: { name: string; path: string; missing: boolean }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
   transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
 }
@@ -149,6 +151,8 @@ export interface CreateTicketInput {
   remoteId?: string;
   /** Link to the remote item; needs remoteId. */
   remoteUrl?: string | null;
+  /** Files to attach to its first message (Ticket.promptAttachments); relative paths resolve against the caller's cwd. */
+  attachments?: string[];
 }
 
 export interface UpdateTicketInput {

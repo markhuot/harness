@@ -82,6 +82,7 @@ export interface RecordedCall {
   model: string | null;
   grants: RunRequest["grants"];
   permissionMode: RunRequest["permissionMode"];
+  images: RunRequest["images"];
 }
 
 /**
@@ -179,6 +180,7 @@ export class FakeDriver implements Driver {
       model: req.model,
       grants: req.grants,
       permissionMode: req.permissionMode,
+      images: req.images,
     });
     this.running++;
     this.maxRunning = Math.max(this.maxRunning, this.running);

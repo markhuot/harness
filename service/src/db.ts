@@ -616,6 +616,11 @@ export const MIGRATIONS: string[] = [
     updated_at INTEGER NOT NULL
   );
   `,
+  // 28: prompt attachments (DESIGN.md "Prompt attachments"): the files a New session attached,
+  //     as JSON [{ path, name, source }]. Referenced in place, never copied.
+  `
+  ALTER TABLE tickets ADD COLUMN prompt_attachments TEXT NOT NULL DEFAULT '[]';
+  `,
 ];
 
 /**

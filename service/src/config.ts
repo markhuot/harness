@@ -19,6 +19,8 @@ export interface HarnessPaths {
   serviceJsonPath: string;
   /** Summary attachments, stored as <id>.<ext> */
   attachmentsDir: string;
+  /** Prompt attachment uploads (pastes, files from other devices), stored as <id>/<name> */
+  uploadsDir: string;
   /** Per-session scratch folders (tmp/<sessionId>/) for files tools save, e.g. screenshots */
   scratchDir: string;
 }
@@ -55,6 +57,7 @@ export function harnessPaths(home: string): HarnessPaths {
     chromeProfileDir: join(home, "chrome-profile"),
     serviceJsonPath: join(home, "service.json"),
     attachmentsDir: join(home, "attachments"),
+    uploadsDir: join(home, "uploads"),
     scratchDir: join(home, "tmp"),
   };
 }
@@ -62,7 +65,7 @@ export function harnessPaths(home: string): HarnessPaths {
 /** Create HARNESS_HOME and its subdirectories. */
 export function ensureHome(home: string): HarnessPaths {
   const paths = harnessPaths(home);
-  for (const dir of [paths.home, paths.logsDir, paths.worktreesDir, paths.attachmentsDir]) mkdirSync(dir, { recursive: true });
+  for (const dir of [paths.home, paths.logsDir, paths.worktreesDir, paths.attachmentsDir, paths.uploadsDir]) mkdirSync(dir, { recursive: true });
   return paths;
 }
 

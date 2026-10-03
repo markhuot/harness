@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
-import type { Driver, DriverEvent, RunGrants, RunRequest } from "./types";
+import type { Driver, DriverEvent, RunGrants, RunImage, RunRequest } from "./types";
 
 export const MCP_SERVER_NAME = "harness";
 const MCP_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
@@ -168,6 +168,15 @@ export function carrySession(configDir: string, sessionId: string, cwd: string):
 
 export function displayToolName(name: string): string {
   return name.startsWith(MCP_PREFIX) ? name.slice(MCP_PREFIX.length) : name;
+}
+
+/**
+ * The first user message's content: the prompt alone, or with the ticket's attached images as
+ * image blocks after it (DESIGN.md "Prompt attachments"), the shape the Messages API takes.
+ */
+export function userContent(prompt: string, images: RunImage[] | undefined): string | unknown[] {
+  if (!images?.length) return prompt;
+  return [{ type: "text", text: prompt }, ...images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } }))];
 }
 
 /** Build the CLI argv (without the binary). The prompt is written to stdin as a stream-json user message. */
@@ -945,7 +954,7 @@ export class ClaudeCodeDriver implements Driver {
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
     /** Background tasks still running when the CLI had to be stopped after its run ended */
     let heldOpenBy: string[] | null = null;
-    const writeUser = (content: string, uuid: string) => {
+    const writeUser = (content: string | unknown[], uuid: string) => {
       try {
         proc.stdin.write(JSON.stringify({ type: "user", uuid, message: { role: "user", content } }) + "\n");
         void Promise.resolve(proc.stdin.flush()).catch(() => {});
@@ -980,7 +989,7 @@ export class ClaudeCodeDriver implements Driver {
     };
     const promptId = crypto.randomUUID();
     let promptTaken = false;
-    writeUser(req.prompt, promptId);
+    writeUser(userContent(req.prompt, req.images), promptId);
     // Messages written to a previous attempt (a failed --resume) that its CLI never took in.
     for (const m of req.input?.inFlight() ?? []) writeUser(m.text, m.id);
     writeInput();
