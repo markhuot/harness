@@ -1731,8 +1731,12 @@ ticket keeps working after one is moved or deleted.
   ×), a paperclip that opens a multi-select file input, drag and drop of files from anywhere, and
   image paste. A file with a path (`window.harness.pathForFile`, Electron's
   `webUtils.getPathForFile`) is attached by path. Pathless image data (a screenshot on the
-  clipboard, an image dragged out of a browser) is uploaded. A plain text paste stays text. The
-  Spec tab shows the same strip read-only. `app/scripts/attachments-check.ts` drives the whole flow
+  clipboard, an image dragged out of a browser) is uploaded. A plain text paste stays text. When
+  the service isn't on this Mac (`isLocalService(client.baseUrl)` is false: anything but
+  `localhost`, `::1` or `127.x`), every file is uploaded under its own name instead, since its path
+  means nothing there (`planFiles` in `state/promptAttachmentFiles.ts`). A window-level guard stops
+  a file dropped outside the draft pane from navigating the window to it. The Spec tab shows the
+  same strip read-only. `app/scripts/attachments-check.ts` drives the whole flow
   against the real service.
 - **iPhone and iPad.** The New session has the same strip, and an Attach menu with Photos, Files
   and Paste. iPad also takes drops. Everything is uploaded, and HEIC photos are converted to JPEG
