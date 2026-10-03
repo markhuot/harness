@@ -1451,9 +1451,17 @@ Old links and saved routes with `summaries` open the Spec, the default view that
 On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
 - The Spec tab's history bar shows one revision ("Rev 7 of 7 · Agent · 3m ago · *note*"), with ←/→
   and a slider. It follows the newest revision until the user steps back, and pins there until
-  they return to the newest (`state/specHistory.ts`). Bodies and diffs load lazily from
-  `/spec/revisions/:rev[?diff=]`; **Show changes** draws the diff from the previous revision in
-  the same `@pierre/diffs` viewer as chat diffs. The baseline revision is tagged "Approved plan".
+  they return to the newest (`state/specHistory.ts`). Bodies load lazily from
+  `/spec/revisions/:rev` into the store. **Show changes** keeps the rendered spec and marks what
+  the revision on show changed from the one before it (`MarkdownDiff` in
+  `components/Markdown.tsx`): `specDiff` (`shared/src/state/specDiff.ts`) parses both bodies with
+  `parseBlocks`, aligns the blocks with an LCS, pairs changed blocks of the same kind (paragraphs,
+  headings and quotes only when at least 40% of their words are shared) and diffs their words,
+  keeping each word's inline style, so added text is green and removed text red and struck
+  through, inside the same headings, lists, table cells and code blocks. Unpaired blocks show
+  whole, added or removed. Its output is plain JSON, pinned for HarnessKit by
+  `shared/fixtures/cases/specDiff.ts`; the file's header spells out the algorithm. The baseline
+  revision is tagged "Approved plan".
 - The Activity tab is a timeline styled per kind (`state/activity.ts`): `blocked` is an attention
   card, review decisions show their round and short commit, messages and answers are bubbles.
 - The composer sends `log` from `composerLog(tab)` and says where the message goes.

@@ -849,6 +849,93 @@ ol.md-list {
   border-bottom: 0;
 }
 
+/* Show changes (Markdown.tsx MarkdownDiff): the rendered spec with added words green and removed
+   ones red and struck through. Whole added or removed blocks get a tint and a bar in the gutter
+   (pulled left so their text stays aligned); no vertical padding, so their margins collapse as
+   they would without the wrapper and unchanged blocks keep their place. */
+.md ins {
+  background: var(--green-soft);
+  color: inherit;
+  text-decoration: none;
+  border-radius: 3px;
+}
+.md del {
+  background: var(--red-soft);
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--red) 70%, transparent);
+  border-radius: 3px;
+}
+.md-diff-block {
+  margin-left: -11px;
+  padding-left: 8px;
+  border-left: 3px solid var(--green);
+  background: var(--green-soft);
+  border-radius: 0 4px 4px 0;
+}
+.md-diff-block.is-del {
+  border-left-color: var(--red);
+  background: var(--red-soft);
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--red) 70%, transparent);
+}
+.md-diff-block.is-del .md-media {
+  opacity: 0.55;
+}
+.md > .md-diff-block:first-child > :first-child {
+  margin-top: 0;
+}
+.md > .md-diff-block:last-child > :last-child {
+  margin-bottom: 0;
+}
+.md li.md-diff-item.is-add {
+  background: var(--green-soft);
+  border-radius: 3px;
+}
+.md li.md-diff-item.is-del {
+  background: var(--red-soft);
+  border-radius: 3px;
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--red) 70%, transparent);
+}
+.md li.md-diff-item.is-add::marker {
+  color: var(--green);
+}
+.md li.md-diff-item.is-del::marker {
+  color: var(--red);
+}
+.md tr.md-diff-row.is-add td {
+  background: var(--green-soft);
+}
+.md tr.md-diff-row.is-del td {
+  background: var(--red-soft);
+  color: var(--text-2);
+  text-decoration: line-through;
+}
+.code-block-diff code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+.code-block-diff .code-line {
+  display: block;
+  min-height: 1.5em;
+  margin: 0 -11px;
+  padding: 0 11px;
+}
+.code-block-diff .code-line.is-add {
+  background: var(--green-soft);
+  box-shadow: inset 3px 0 var(--green);
+}
+.code-block-diff .code-line.is-del {
+  background: var(--red-soft);
+  box-shadow: inset 3px 0 var(--red);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--red) 70%, transparent);
+}
+
 /* ------------------------------------------------------------------ app shell */
 
 .app {

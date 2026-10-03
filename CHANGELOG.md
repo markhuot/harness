@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Show changes in the Spec tab keeps the formatted spec and highlights what was added and removed,
+  instead of switching to a raw diff. New words are green and removed words red and struck
+  through, right inside the headings, lists, tables and code blocks you see with it off.
+
 ## [app-20261003.0051](https://github.com/markhuot/harness/releases/tag/app-20261003.0051) - 2026-10-03
 
 ### Fixed

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { FOLLOW_LATEST, scrubTo, shownRevision, specDiffPatch, stepRevision } from "./specHistory";
+import { FOLLOW_LATEST, scrubTo, shownRevision, stepRevision } from "./specHistory";
 import { composerLog } from "./composer";
 
 describe("spec history", () => {
@@ -35,19 +35,6 @@ describe("spec history", () => {
 
   test("a pin past the newest (a stale list) shows the newest", () => {
     expect(shownRevision({ pinned: 9 }, 4)).toBe(4);
-  });
-});
-
-describe("specDiffPatch", () => {
-  test("names the file spec.md so the diff viewer reads it as markdown", () => {
-    const diff = "--- HARNESS-1 spec rev 1\n+++ HARNESS-1 spec rev 2\n@@ -1 +1 @@\n-a\n+b";
-    expect(specDiffPatch(diff).split("\n").slice(0, 3)).toEqual(["--- a/spec.md", "+++ b/spec.md", "@@ -1 +1 @@"]);
-  });
-
-  test("leaves a body line that only looks like a header alone", () => {
-    const diff = "@@ -1 +1 @@\n--- x\n+++ y";
-    expect(specDiffPatch(diff)).toBe(diff);
-    expect(specDiffPatch("")).toBe("");
   });
 });
 

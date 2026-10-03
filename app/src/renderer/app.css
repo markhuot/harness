@@ -626,8 +626,11 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   flex: 1;
   min-height: 0;
 }
-.spec-diff .section-title {
-  margin-bottom: 6px;
+.spec-diff-note {
+  flex: none;
+  margin-right: 8px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 .spec-conflict {
   display: flex;

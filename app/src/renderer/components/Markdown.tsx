@@ -14,11 +14,25 @@
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { parseFileLink, type AttachmentKind, type Attachment } from "@harness/shared";
-import { inlineTokens, mediaIn, parseBlocks, ticketByKey, ticketLinkable, type Block, type Media } from "@harness/shared/state";
+import {
+  inlineTokens,
+  mediaIn,
+  parseBlocks,
+  specDiff,
+  ticketByKey,
+  ticketLinkable,
+  type Block,
+  type DiffBlock,
+  type DiffItem,
+  type DiffRun,
+  type EditBlock,
+  type InlineToken,
+  type Media,
+} from "@harness/shared/state";
 import type { FileLinkContext } from "../state/fileOpen";
 import { useOptionalStore } from "../state/store";
 import { Lightbox, Missing } from "./Attachments";
-import { FencedCode } from "./Code";
+import { DiffCodeBlock, FencedCode } from "./Code";
 import { Icon } from "./Icon";
 import { PaneContext, PaneScopeContext, useOpenTicket } from "./paneContext";
 
@@ -78,53 +92,55 @@ function MdLink({ url, children }: { url: string; children: ReactNode }) {
 }
 
 export function inline(text: string, tickets?: TicketLinks, onLink?: (url: string) => void): ReactNode[] {
-  return inlineTokens(text).map((tok, k) => {
-    switch (tok.t) {
-      case "text":
-        return tok.text;
-      case "ticket": {
-        const title = tickets?.title(tok.key);
-        const label = tok.text ?? tok.key;
-        if (title == null) return label;
-        return (
-          <a
-            key={k}
-            href={`#${tok.key}`}
-            data-ticket-key={tok.key}
-            title={title || undefined}
-            onClick={(e) => {
-              e.preventDefault();
-              tickets!.open(tok.key);
-            }}
-          >
-            {label}
-          </a>
-        );
-      }
-      case "code":
-        return <code key={k}>{tok.text}</code>;
-      case "strong":
-        return <strong key={k}>{tok.text}</strong>;
-      case "em":
-        return <em key={k}>{tok.text}</em>;
-      case "img":
-        return <MdMedia key={k} media={tok} />;
-      case "link":
-        if (!onLink) return <MdLink key={k} url={tok.url}>{tok.text}</MdLink>;
-        return (
-          <a
-            key={k}
-            href={tok.url}
-            onClick={(e) => {
-              e.preventDefault();
-              onLink(tok.url);
-            }}
-          >
-            {tok.text}
-          </a>
-        );
+  return inlineTokens(text).map((tok, k) => inlineToken(tok, k, tickets, onLink));
+}
+
+function inlineToken(tok: InlineToken, k: number, tickets?: TicketLinks, onLink?: (url: string) => void): ReactNode {
+  switch (tok.t) {
+    case "text":
+      return tok.text;
+    case "ticket": {
+      const title = tickets?.title(tok.key);
+      const label = tok.text ?? tok.key;
+      if (title == null) return label;
+      return (
+        <a
+          key={k}
+          href={`#${tok.key}`}
+          data-ticket-key={tok.key}
+          title={title || undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            tickets!.open(tok.key);
+          }}
+        >
+          {label}
+        </a>
+      );
     }
-  });
+    case "code":
+      return <code key={k}>{tok.text}</code>;
+    case "strong":
+      return <strong key={k}>{tok.text}</strong>;
+    case "em":
+      return <em key={k}>{tok.text}</em>;
+    case "img":
+      return <MdMedia key={k} media={tok} />;
+    case "link":
+      if (!onLink) return <MdLink key={k} url={tok.url}>{tok.text}</MdLink>;
+      return (
+        <a
+          key={k}
+          href={tok.url}
+          onClick={(e) => {
+            e.preventDefault();
+            onLink(tok.url);
+          }}
+        >
+          {tok.text}
+        </a>
+      );
+  }
 }
 
 function withBreaks(text: string, tickets?: TicketLinks) {
@@ -279,10 +295,8 @@ function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: numbe
   }
 }
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
-  const blocks = useMemo(() => parseBlocks(text), [text]);
-  const media = useMemo(() => mediaIn(blocks), [blocks]);
-  const tickets = useTicketLinks();
+/** The lightbox for a piece of markdown's attachments, around its rendered blocks. */
+function MarkdownFrame({ media, className, children }: { media: Media[]; className?: string; children: ReactNode }) {
   const [learned, setLearned] = useState<Record<string, AttachmentKind>>({});
   const [open, setOpen] = useState<number | null>(null);
   const kind = useCallback((m: Media) => learned[m.id] ?? defaultKind(m), [learned]);
@@ -303,12 +317,156 @@ export function Markdown({ text, className }: { text: string; className?: string
   );
   return (
     <MediaScopeContext.Provider value={scope}>
-      <div className={`md selectable ${className ?? ""}`}>
-        {blocks.map((b, i) => (
-          <MdBlock key={i} block={b} tickets={tickets} />
-        ))}
-      </div>
+      <div className={`md selectable ${className ?? ""}`}>{children}</div>
       {open !== null && list.length > 0 && <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </MediaScopeContext.Provider>
+  );
+}
+
+export function Markdown({ text, className }: { text: string; className?: string }) {
+  const blocks = useMemo(() => parseBlocks(text), [text]);
+  const media = useMemo(() => mediaIn(blocks), [blocks]);
+  const tickets = useTicketLinks();
+  return (
+    <MarkdownFrame media={media} className={className}>
+      {blocks.map((b, i) => (
+        <MdBlock key={i} block={b} tickets={tickets} />
+      ))}
+    </MarkdownFrame>
+  );
+}
+
+// ---------------------------------------------------------------- changes
+
+/** Runs of a changed text: added words in <ins>, removed ones in <del>, "\n" as line breaks. */
+function diffRuns(runs: DiffRun[], tickets?: TicketLinks): ReactNode[] {
+  return runs.map((run, k) => {
+    const parts = run.t !== "ticket" && run.t !== "img" ? run.text.split("\n") : null;
+    const node = parts ? (
+      parts.map((p, i) => (
+        <Fragment key={i}>
+          {i > 0 && <br />}
+          {p && inlineToken({ ...run, text: p } as InlineToken, i, tickets)}
+        </Fragment>
+      ))
+    ) : (
+      inlineToken(run, 0, tickets)
+    );
+    if (run.change === "add") return <ins key={k}>{node}</ins>;
+    if (run.change === "del") return <del key={k}>{node}</del>;
+    return <Fragment key={k}>{node}</Fragment>;
+  });
+}
+
+function DiffListItem({ item, depth, tickets }: { item: DiffItem; depth: number; tickets?: TicketLinks }) {
+  if (item.change !== "edit")
+    return (
+      <li className={item.change === "same" ? undefined : `md-diff-item is-${item.change}`}>
+        {inline(item.item.text, tickets)}
+        {item.item.children.map((child, k) => (
+          <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
+        ))}
+      </li>
+    );
+  return (
+    <li>
+      {diffRuns(item.runs, tickets)}
+      {item.children.map((child, k) => (
+        <MdDiffBlock key={k} diff={child} depth={depth + 1} tickets={tickets} />
+      ))}
+    </li>
+  );
+}
+
+/** A block in both revisions with its changes marked, laid out like MdBlock lays out the Block. */
+function MdEditBlock({ block: b, depth, tickets }: { block: EditBlock; depth: number; tickets?: TicketLinks }) {
+  switch (b.t) {
+    case "p":
+      return <p>{diffRuns(b.runs, tickets)}</p>;
+    case "quote":
+      return <blockquote>{diffRuns(b.runs, tickets)}</blockquote>;
+    case "h": {
+      const H = `h${Math.min(b.level, 4)}` as "h1";
+      return <H>{diffRuns(b.runs, tickets)}</H>;
+    }
+    case "ul":
+    case "ol": {
+      const items = b.items.map((it, j) => <DiffListItem key={j} item={it} depth={depth} tickets={tickets} />);
+      const className = `md-list depth-${depth % 3}`;
+      return b.t === "ol" ? (
+        <ol className={className} start={b.start}>
+          {items}
+        </ol>
+      ) : (
+        <ul className={className}>{items}</ul>
+      );
+    }
+    case "code":
+      return <DiffCodeBlock lines={b.lines} lang={b.lang} />;
+    case "table":
+      return (
+        <div className="md-table">
+          <table>
+            <thead>
+              <tr>
+                {b.header.map((cell, j) => (
+                  <th key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                    {diffRuns(cell, tickets)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {b.rows.map((row, r) => (
+                <tr key={r} className={row.change === "add" || row.change === "del" ? `md-diff-row is-${row.change}` : undefined}>
+                  {row.change === "edit"
+                    ? row.cells.map((cell, j) => (
+                        <td key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                          {diffRuns(cell, tickets)}
+                        </td>
+                      ))
+                    : row.cells.map((cell, j) => (
+                        <td key={j} style={{ textAlign: b.align[j] ?? undefined }}>
+                          {inline(cell, tickets)}
+                        </td>
+                      ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+  }
+}
+
+function MdDiffBlock({ diff, depth = 0, tickets }: { diff: DiffBlock; depth?: number; tickets?: TicketLinks }) {
+  if (diff.change === "edit") return <MdEditBlock block={diff.block} depth={depth} tickets={tickets} />;
+  const block = <MdBlock block={diff.block} depth={depth} tickets={tickets} />;
+  if (diff.change === "same") return block;
+  return (
+    <div className={`md-diff-block is-${diff.change}`} data-diff={diff.change}>
+      {block}
+    </div>
+  );
+}
+
+/**
+ * Two revisions of a markdown text (older first) rendered as the newer one, with what changed
+ * marked in place (@harness/shared/state specDiff): added words and blocks green, removed ones red
+ * and struck through. Unchanged blocks render exactly as Markdown renders them.
+ */
+export function MarkdownDiff({ before, after, className }: { before: string; after: string; className?: string }) {
+  const diff = useMemo(() => specDiff(before, after), [before, after]);
+  const media = useMemo(() => {
+    const seen = new Set<string>();
+    return [...mediaIn(parseBlocks(after)), ...mediaIn(parseBlocks(before))].filter((m) => !seen.has(m.id) && seen.add(m.id));
+  }, [before, after]);
+  const tickets = useTicketLinks();
+  return (
+    <MarkdownFrame media={media} className={`md-diff ${className ?? ""}`}>
+      {diff.map((d, i) => (
+        <MdDiffBlock key={i} diff={d} tickets={tickets} />
+      ))}
+    </MarkdownFrame>
   );
 }

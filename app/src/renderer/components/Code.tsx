@@ -35,15 +35,16 @@ export function useNearViewport(ref: RefObject<Element | null>, margin = "600px"
 const FONT_STYLE = (style = 0): CSSProperties | undefined =>
   style ? { fontStyle: style & 1 ? "italic" : undefined, fontWeight: style & 2 ? 600 : undefined, textDecoration: style & 4 ? "underline" : undefined } : undefined;
 
-function Tokens({ lines }: { lines: Lines }) {
+/** Highlighted lines. With `classes` (one per line) each line is a block of its own (styles.css), so no newlines between them. */
+function Tokens({ lines, classes }: { lines: Lines; classes?: string[] }) {
   return lines.map((line, i) => (
-    <span key={i} className="code-line">
+    <span key={i} className={`code-line ${classes?.[i] ?? ""}`}>
       {line.map((t, j) => (
         <span key={j} style={t.color || t.style ? { color: t.color, ...FONT_STYLE(t.style) } : undefined}>
           {t.text}
         </span>
       ))}
-      {i < lines.length - 1 && "\n"}
+      {!classes && i < lines.length - 1 && "\n"}
     </span>
   ));
 }
@@ -81,6 +82,30 @@ export const CodeBlock = memo(function CodeBlock({ text, lang }: { text: string;
         <code>{lines ? <Tokens lines={lines} /> : text}</code>
       </pre>
       <CopyButton text={text} />
+    </div>
+  );
+});
+
+/**
+ * Code with each line marked added, removed or unchanged (the Spec tab's Show changes): the lines
+ * are highlighted together as one block, in the order shown, so the colors match the plain block.
+ */
+export const DiffCodeBlock = memo(function DiffCodeBlock({ lines: diff, lang }: { lines: { change: "same" | "add" | "del"; text: string }[]; lang: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const near = useNearViewport(ref);
+  const { name } = useSyntaxTheme();
+  const shiki = codeLanguage(lang);
+  const text = diff.map((l) => l.text).join("\n");
+  const lines = useHighlight(text, shiki, name, near && shiki !== "text");
+  const classes = diff.map((l) => (l.change === "same" ? "" : `is-${l.change}`));
+  return (
+    <div ref={ref} className="code-block code-block-diff" data-lang={shiki}>
+      <pre>
+        <code>
+          <Tokens lines={lines ?? diff.map((l) => [{ text: l.text }])} classes={classes} />
+        </code>
+      </pre>
+      <CopyButton text={diff.filter((l) => l.change !== "del").map((l) => l.text).join("\n")} />
     </div>
   );
 });
