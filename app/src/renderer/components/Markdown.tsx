@@ -8,9 +8,10 @@
 // Their path resolves in the ticket or project the text belongs to, which the view provides with
 // FileLinkScope; from inside a pane the file docks beside it. http(s) links open in the browser.
 //
-// `![alt](attachment:<id>)` shows the attachment, fitted to the width, and opens the lightbox on a
-// click (stepping through every image in the text). The parser turns remote and file images into
-// links, so nothing here loads a URL an agent wrote.
+// `![alt](attachment:<id>)` alone on its line is a figure: the attachment across the full width with
+// its alt text as the caption. `![alt](attachment:<id> "thumb")` is a 100×100 thumbnail, and a line of
+// them a row. Either opens the lightbox on a click (stepping through every image in the text). The
+// parser turns remote and file images into links, so nothing here loads a URL an agent wrote.
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { parseFileLink, type AttachmentKind, type Attachment } from "@harness/shared";
@@ -177,15 +178,17 @@ const MediaScopeContext = createContext<MediaScope | null>(null);
 const defaultKind = (m: Media): AttachmentKind => (m.video ? "video" : "image");
 
 /**
- * An attachment in markdown: the image fitted to the width, or a video's first frame with a play
- * badge, opening the lightbox when clicked. Without a store there's no URL to load, so it's the alt text.
+ * An attachment in markdown: the image (fitted to the width, across it in a figure, or cropped to a
+ * square as a thumbnail), or a video's first frame with a play badge, opening the lightbox when
+ * clicked. Without a store there's no URL to load, so it's the alt text (nothing when `captioned`:
+ * the caption beside it already shows it).
  */
-function MdMedia({ media, block }: { media: Media; block?: boolean }) {
+function MdMedia({ media, figure, captioned }: { media: Media; figure?: boolean; captioned?: boolean }) {
   const store = useOptionalStore();
   const scope = useContext(MediaScopeContext);
   const [own, setOwn] = useState<AttachmentKind | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  if (!store) return <>{media.alt}</>;
+  if (!store) return captioned ? null : <>{media.alt}</>;
   const url = store.client.attachmentUrl(media.id);
   const kind = own ?? scope?.kind(media) ?? defaultKind(media);
   const label = media.alt || (kind === "video" ? "Video" : "Image");
@@ -198,7 +201,7 @@ function MdMedia({ media, block }: { media: Media; block?: boolean }) {
   };
   return (
     <button
-      className={`md-media ${block ? "is-block" : ""} ${failed === url ? "is-missing" : ""}`}
+      className={`md-media ${figure ? "is-figure" : ""} ${media.thumb ? "is-thumb" : ""} ${failed === url ? "is-missing" : ""}`}
       title={media.alt || undefined}
       aria-label={`Open ${label}`}
       data-testid="md-media"
@@ -254,9 +257,21 @@ function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: numbe
       return <MdList block={b} depth={depth} tickets={tickets} />;
     case "img":
       return (
-        <p className="md-media-block">
-          <MdMedia media={b} block />
-        </p>
+        <figure className="md-figure" data-testid="md-figure">
+          <MdMedia media={b} figure captioned={!!b.alt} />
+          {b.alt && <figcaption>{b.alt}</figcaption>}
+        </figure>
+      );
+    case "thumbs":
+      return (
+        <div className="md-thumbs" data-testid="md-thumbs">
+          {b.items.map((m, k) => (
+            <figure key={k} className="md-thumb">
+              <MdMedia media={m} captioned={!!m.alt} />
+              {m.alt && <figcaption title={m.alt}>{m.alt}</figcaption>}
+            </figure>
+          ))}
+        </div>
       );
     case "code":
       return <FencedCode text={b.text} lang={b.lang} />;

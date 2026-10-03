@@ -714,6 +714,64 @@ ol.md-list {
   height: 90px;
   cursor: default;
 }
+/* A figure (an image alone on its line): across the full width, a tall one letterboxed, with its
+   alt text as the caption underneath. */
+.md-figure {
+  margin: 4px 0 12px;
+}
+.md-media.is-figure {
+  display: block;
+  width: 100%;
+}
+.md-media.is-figure img,
+.md-media.is-figure video {
+  width: 100%;
+  max-width: none;
+  max-height: 560px;
+  object-fit: contain;
+}
+.md-media.is-figure.is-missing {
+  height: 90px;
+}
+.md-figure figcaption {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border-strong);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+/* A thumbnail ("thumb" title): a 100×100 crop that opens full size. A line of them is a row. */
+.md-media.is-thumb,
+.md-media.is-thumb.is-missing {
+  width: 100px;
+  height: 100px;
+}
+.md-media.is-thumb img,
+.md-media.is-thumb video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+.md-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.md-thumb {
+  width: 100px;
+  margin: 0;
+}
+.md-thumb figcaption {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .md h1,
 .md h2,
 .md h3,
