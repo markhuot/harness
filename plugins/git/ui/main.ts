@@ -1,21 +1,37 @@
 import "./style.css";
-// Changes tab: file tree (@pierre/trees) + stacked, virtualized diffs (@pierre/diffs CodeView).
+// Changes tab: file tree (@pierre/trees) + stacked, virtualized diffs (@pierre/diffs CodeView). The
+// Harness apps draw this tab natively (app/src/renderer/views/ChangesTab.tsx, the iOS ChangesTabView);
+// this page is for other hosts of the plugin.
 import { CodeView, parsePatchFiles, resolveTheme, type CodeViewDiffItem, type FileDiffMetadata } from "@pierre/diffs";
 import { FileTree, themeToTreeStyles, type GitStatusEntry } from "@pierre/trees";
 import { connect, type HarnessPlugin } from "@harness/plugin-sdk";
 import type { Ticket } from "@harness/shared";
-import type { ChangedFile, Changes, Commit } from "../git";
-import { readSidebarCollapsed, readStyle, saveSidebarCollapsed, saveStyle, type DiffStyle } from "./prefs";
-import { PIERRE_DEFAULT, syntaxThemeName, treeStylesFor, viewerThemes } from "./theme";
-import { fingerprint, hash, isCollapsed, prune, readViewed, sameMarks, saveViewed, type Viewed } from "./viewed";
+import {
+  changesEmptyState,
+  changesNotices,
+  fileDecoration,
+  fingerprint,
+  hash,
+  isCollapsed,
+  plural,
+  prune,
+  readSidebarCollapsed,
+  readStyle,
+  readViewed,
+  relTime,
+  sameMarks,
+  saveSidebarCollapsed,
+  saveStyle,
+  saveViewed,
+  CHANGES_NARROW_WIDTH as NARROW,
+  type ChangedFile,
+  type Changes,
+  type ChangesLog as Log,
+  type DiffStyle,
+  type Viewed,
+} from "@harness/shared/state";
+import { PIERRE_DEFAULT, syntaxThemeName, treeStylesFor, viewerThemes } from "@harness/shared/themes";
 
-interface Log {
-  mode: Changes["mode"];
-  base: string | null;
-  commits: Commit[];
-}
-
-const NARROW = 720;
 const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...children: (Node | string | null | false)[]) {
@@ -47,32 +63,6 @@ function icon(name: keyof typeof ICONS, size = 14) {
   return svg;
 }
 
-function relTime(ms: number) {
-  const s = Math.round((Date.now() - ms) / 1000);
-  if (s < 60) return "just now";
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const hr = Math.round(m / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
-}
-
-/** A changed file's tree-row decoration: its line counts, or what kind of change it is when there are none. */
-function fileDecoration(f: ChangedFile): { text: string; title: string; parts?: { text: string; color?: string }[] } | null {
-  if (f.binary) return { text: "bin", title: "Binary file" };
-  if (f.status === "renamed" && !f.additions && !f.deletions) return f.oldPath ? { text: "moved", title: `Renamed from ${f.oldPath}` } : null;
-  return {
-    text: `+${f.additions} −${f.deletions}`,
-    title: `${f.additions} additions, ${f.deletions} deletions`,
-    parts: [
-      { text: `+${f.additions}`, color: "var(--add)" },
-      { text: " " },
-      { text: `−${f.deletions}`, color: "var(--del)" },
-    ],
-  };
-}
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const itemId = (path: string) => `diff:${path}`;
 
 class ChangesView {
@@ -249,13 +239,8 @@ class ChangesView {
     if (this.error && !c) return this.showState("alert", "Couldn't load changes", this.error);
     if (!c) return this.showState(null, "Loading changes…", "");
     if (!c.files.length) {
-      const detail =
-        c.mode === "branch"
-          ? `${c.branch ?? "This branch"} matches ${c.base ?? "its base"} and the worktree is clean. Changes appear here as the agent edits files.`
-          : c.mode === "pinned"
-            ? `${c.branch ?? "This branch"} didn't change anything before its worktree was removed.`
-            : "The working tree is clean. Changes appear here as the agent edits files.";
-      this.showState("check", c.mode === "pinned" ? "No changes" : "No changes yet", detail);
+      const empty = changesEmptyState(c);
+      this.showState("check", empty.title, empty.detail);
       this.lastPatchKey = "";
       this.items.clear();
       this.fps.clear();
@@ -370,9 +355,7 @@ class ChangesView {
   private renderNotice() {
     const n = $(".notice", this.root);
     const c = this.changes;
-    const msgs: string[] = [];
-    if (c?.truncated) msgs.push(`This diff is large, so only the first part is shown. ${plural(c.files.length, "file")} changed in total.`);
-    if (this.error && c) msgs.push(`Refresh failed: ${this.error}`);
+    const msgs = changesNotices(c, this.error);
     n.hidden = !msgs.length;
     n.replaceChildren(...msgs.map((m) => h("div", {}, icon("alert", 13), m)));
   }
@@ -392,7 +375,8 @@ class ChangesView {
         renderRowDecoration: ({ item }) => {
           const f = stats.get(item.path);
           if (!f || item.kind !== "file") return null;
-          const base = fileDecoration(f);
+          const deco = fileDecoration(f);
+          const base = deco && { ...deco, parts: deco.parts?.map(({ text, tone }) => ({ text, color: tone && `var(--${tone})` })) };
           if (!this.isViewed(item.path)) return base;
           const check = { text: "✓", color: "var(--accent)" };
           if (!base) return { text: "✓", title: "Viewed", parts: [check] };
@@ -588,8 +572,6 @@ class ChangesView {
 
 async function main() {
   const root = document.getElementById("app")!;
-  // The iOS app hosts this page in a WKWebView; the Mac app in an iframe. Layout differs per host.
-  document.documentElement.dataset.host = (window as { ReactNativeWebView?: unknown }).ReactNativeWebView ? "ios" : "desktop";
   try {
     const host = await connect();
     (window as unknown as { __gitPlugin: ChangesView }).__gitPlugin = new ChangesView(root, host);

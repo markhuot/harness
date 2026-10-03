@@ -9,6 +9,8 @@ export * from "./models";
 export * from "./projectKey";
 export * from "./pluginBridge";
 export * from "./tabs";
+export * from "./changesTab";
+export * from "./changes";
 export * from "./subagents";
 export * from "./format";
 export * from "./markdown";

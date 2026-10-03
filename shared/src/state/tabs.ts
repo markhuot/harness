@@ -10,8 +10,12 @@
  * are any.
  */
 export type BuiltinTicketTab = "spec" | "activity" | "children" | "transcript" | "agents" | "browser" | "details";
-/** Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>". */
-export type TicketTab = BuiltinTicketTab | `plugin:${string}:${string}` | `agent:${string}`;
+/**
+ * Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>".
+ * "changes" is the built-in Changes tab, which changesTab.ts layers on top of these functions (they,
+ * and the iOS port checked against them, don't list it).
+ */
+export type TicketTab = BuiltinTicketTab | "changes" | `plugin:${string}:${string}` | `agent:${string}`;
 export const TICKET_TABS: BuiltinTicketTab[] = ["spec", "activity", "children", "transcript", "agents", "browser", "details"];
 
 export const TAB_LABEL: Record<BuiltinTicketTab, string> = {

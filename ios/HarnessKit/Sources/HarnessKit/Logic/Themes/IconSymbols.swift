@@ -37,6 +37,7 @@ extension Icons {
         "link": "link",
         "external": "arrow.up.right.square",
         "branch": "arrow.triangle.branch",
+        "commit": "smallcircle.filled.circle",
         "conductor": "point.3.connected.trianglepath.dotted",
         "more": "ellipsis",
         "edit": "pencil",
