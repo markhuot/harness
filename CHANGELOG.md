@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261003.1524](https://github.com/markhuot/harness/releases/tag/app-20261003.1524) - 2026-10-03
+
 ### Added
 
 - Activity now lists each spec revision with its note, on the Mac and on iPhone and iPad. Planning,
