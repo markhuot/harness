@@ -733,6 +733,13 @@ export interface Settings {
   /** Stored API key for the anthropic-api driver (never sent back to clients in full) */
   anthropicApiKey: string | null;
   /**
+   * Long-lived Claude token (from `claude setup-token`) the claude-code driver passes to the CLI as
+   * CLAUDE_CODE_OAUTH_TOKEN, so runs don't depend on the login the CLI keeps in the Keychain, which
+   * a service started by launchd may not be able to read. null → the CLI's own login. Never sent
+   * back to clients (claudeOauthTokenSet instead); optional so clients tolerate an older service.
+   */
+  claudeOauthToken?: string | null;
+  /**
    * Default base branch (projects and tickets may override it): what completed tickets merge into
    * and new ticket branches start from. A valid git branch name; default "main". The service
    * always sends it; optional so clients tolerate an older service without it.
@@ -951,7 +958,11 @@ export interface Health extends Partial<ServiceStatus> {
   release?: string | null;
 }
 
-export type PublicSettings = Omit<Settings, "anthropicApiKey"> & { anthropicApiKeySet: boolean };
+export type PublicSettings = Omit<Settings, "anthropicApiKey" | "claudeOauthToken"> & {
+  anthropicApiKeySet: boolean;
+  /** Whether a claudeOauthToken is stored. Services from before it omit it. */
+  claudeOauthTokenSet?: boolean;
+};
 
 /**
  * A session's browser as one viewer (or tool call) sees it: the tab it is on (`tabId`, with that

@@ -719,7 +719,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, spec, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
-| `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet`, never the key; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
+| `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet` and `claudeOauthTokenSet`, never the secrets; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
 | `list_drivers` | all | `{}` → drivers with their models |
 | `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
@@ -848,7 +848,7 @@ as a CLI rule). The orchestrator ops also refuse anything but work and conductor
 tool reaches them. A conductor can't approve a child's config call either: a message to a ticket
 with a pending approval answers it with deny.
 
-Left out on purpose: setting `anthropicApiKey` (secrets don't pass through a model; the op
+Left out on purpose: setting `anthropicApiKey` or `claudeOauthToken` (secrets don't pass through a model; the op
 refuses it and `list_watchers` hides env values), device pairing and token rotation (they
 hand out access to the service itself), driver login (interactive OAuth in the user's browser),
 the network status readout (`GET /network`; `get_settings` has the listen setting), and the
@@ -877,7 +877,7 @@ client state, not service state.
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
-| Settings | Anthropic API key | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` |
+| Settings | Anthropic API key, long-lived Claude token | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` and `claudeOauthTokenSet` |
 | Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |
 | Drivers | list drivers and models, refresh models | `list_drivers` | |
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
@@ -940,6 +940,19 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   prompt the mode doesn't auto-allow goes to `--permission-prompt-tool
   mcp__harness__permission_prompt` → `requestApproval` → a human. The harness server entry sets
   `alwaysLoad: true` so its tools skip ToolSearch deferral.
+
+  **Sign-in.** A service started by launchd can't always read the login the CLI keeps in the
+  Keychain. The CLI then falls back to `~/.claude/.credentials.json`, whose refresh token a
+  terminal session may already have used up (refresh tokens are single-use), and every run fails
+  with "OAuth session expired and could not be refreshed" while `claude auth status` still says
+  `loggedIn` (HARNESS-230). Settings → Drivers → Claude Code takes a long-lived token from
+  `claude setup-token` (`claudeOauthToken`, write-only like `anthropicApiKey`; clients see
+  `claudeOauthTokenSet`). Every CLI call the service makes (runs, `auth status`, models and
+  commands, the claude-cli classifier, auto-mode rules) gets it as `CLAUDE_CODE_OAUTH_TOKEN`, over
+  one in the service's env; `auth login` still uses the CLI's own login. A run whose error is a
+  sign-in failure (`isClaudeAuthFailure`) fails with a message that says how to fix it, and the
+  driver's `info()` reports it signed out until a run gets through, a login finishes, or the stored
+  token changes.
 
   **Background tasks and stdin** (verified against claude 2.1.284). The prompt goes in as one
   stream-json `user` message and stdin stays open. Each turn ends in a `result`; the CLI exits

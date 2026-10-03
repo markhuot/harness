@@ -2202,6 +2202,33 @@ try {
     await js(`location.hash = "#/board/all"`);
   }
 
+  // 7z. Settings → Drivers → Claude Code: the long-lived token is write-only. Saving it reloads the
+  // driver list (the Status row shows what the service now reports); Clear PATCHes null.
+  {
+    type S = { claudeOauthTokenSet?: boolean; claudeOauthToken?: unknown };
+    const row = "[data-testid=driver-settings-claude-code] [data-testid=claude-oauth-token]";
+    const status = `document.querySelector("[data-testid=driver-settings-claude-code] .settings-row .settings-row-sub")?.textContent ?? ""`;
+    await js(`location.hash = "#/settings/drivers"`);
+    await until("claude-code driver row", () => exists('[data-driver-row="claude-code"]'));
+    if (!(await exists("[data-testid=driver-settings-claude-code]"))) await js(`document.querySelector('[data-driver-row="claude-code"]').click()`);
+    await until("token row", () => exists(`${row} input[type=password]`));
+    check("Claude Code offers a long-lived token field", (await js<string>(`document.querySelector(${JSON.stringify(row)}).textContent`)).includes("claude setup-token"));
+    check("Anthropic API's key row isn't on Claude Code", !(await exists("[data-testid=driver-settings-claude-code] [data-testid=anthropic-api-key]")));
+    await type(`${row} input[type=password]`, "sk-ant-oat01-smoke");
+    await clickText(`${row} button`, "Save");
+    const saved = await until("token stored", async () => (await api<S>("GET", "/settings")).claudeOauthTokenSet === true);
+    check("Save stores the token (and the service never echoes it)", saved && (await api<S>("GET", "/settings")).claudeOauthToken === undefined);
+    const reloaded = await until("status reloaded", () => js<string>(status).then((t) => t.includes("Long-lived token") && t));
+    check("saving reloads the driver's status", !!reloaded, reloaded);
+    await until("saved state", () => exists(`${row} .settings-key-saved`));
+    check("the field turns into Replace / Clear once saved", !(await exists(`${row} input`)));
+    await clickText(`${row} button`, "Clear");
+    const cleared = await until("token cleared", async () => (await api<S>("GET", "/settings")).claudeOauthTokenSet === false);
+    check("Clear removes the token", cleared);
+    const after = await until("status after clear", () => js<string>(status).then((t) => !t.includes("Long-lived token") && t));
+    check("clearing reloads the driver's status too", !!after, after);
+  }
+
   // 8. Settings → Network: listen modes, pairing QR, bad custom host, token rotation.
   // (Last: after rotation the smoke-token no longer works.)
   {

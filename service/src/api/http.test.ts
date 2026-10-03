@@ -294,6 +294,23 @@ describe("http api", () => {
     await expect(client.updateSettings({ defaultDriver: "nope" })).rejects.toMatchObject({ status: 400 });
   });
 
+  test("the long-lived Claude token is write-only: trimmed, never sent back, cleared by null or blank", async () => {
+    const { client, h } = await boot();
+    expect((await client.getSettings()).claudeOauthTokenSet).toBe(false);
+    const after = await client.updateSettings({ claudeOauthToken: "  sk-ant-oat01-secret \n" });
+    expect(after.claudeOauthTokenSet).toBe(true);
+    expect(JSON.stringify(await client.getSettings())).not.toContain("oat01-secret");
+    expect(h.orchestrator.settings().claudeOauthToken).toBe("sk-ant-oat01-secret");
+    // A client echoing PublicSettings back doesn't clear or set it.
+    await client.updateSettings({ ...(await client.getSettings()), maxConcurrentRuns: 3 });
+    expect(h.orchestrator.settings().claudeOauthToken).toBe("sk-ant-oat01-secret");
+    await expect(client.updateSettings({ claudeOauthToken: 42 as unknown as string })).rejects.toMatchObject({ status: 400 });
+    expect((await client.updateSettings({ claudeOauthToken: "  " })).claudeOauthTokenSet).toBe(false);
+    await client.updateSettings({ claudeOauthToken: "again" });
+    expect((await client.updateSettings({ claudeOauthToken: null })).claudeOauthTokenSet).toBe(false);
+    expect(h.orchestrator.settings().claudeOauthToken).toBeNull();
+  });
+
   test("GET /prompts lists every prompt; PATCH /settings { prompts } overrides, refuses typos, and resets", async () => {
     const { client } = await boot();
     const before = await client.listPrompts();

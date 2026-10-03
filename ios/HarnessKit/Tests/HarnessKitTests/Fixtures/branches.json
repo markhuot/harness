@@ -1535,6 +1535,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -1631,6 +1632,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -1723,6 +1725,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "trunk",
           "listen": {
             "mode": "tailscale"
@@ -1881,6 +1884,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -2053,6 +2057,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -2210,6 +2215,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"

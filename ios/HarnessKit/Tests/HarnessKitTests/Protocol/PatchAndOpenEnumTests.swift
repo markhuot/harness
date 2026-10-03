@@ -20,6 +20,7 @@ struct PatchAndOpenEnumTests {
     @Test func nullPatchIsSentAsNull() throws {
         #expect(try json(UpdateTicketBody(model: .null, externalRef: .null)) == #"{"externalRef":null,"model":null}"#)
         #expect(try json(SettingsPatch(anthropicApiKey: .null)) == #"{"anthropicApiKey":null}"#)
+        #expect(try json(SettingsPatch(claudeOauthToken: .null)) == #"{"claudeOauthToken":null}"#)
     }
 
     @Test func valuePatchIsSent() throws {

@@ -1,7 +1,7 @@
-// Settings → Drivers: each driver opens into its own settings (sign-in, review model, and the
-// Anthropic API key for anthropic-api), with the app's default driver + model below the list.
+// Settings → Drivers: each driver opens into its own settings (sign-in, review model, the
+// Anthropic API key for anthropic-api, and the long-lived token for claude-code), with the app's default driver + model below the list.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { DriverInfo, PublicSettings } from "@harness/shared";
 import { useAction, useStore } from "../../state/store";
 import { modelCacheFor, settingsChoice, settingsChoicePatch } from "@harness/shared/state";
@@ -108,6 +108,7 @@ function DriverPanel({ driver: d, settings }: { driver: DriverInfo; settings: Pu
         </Row>
       )}
       {d.id === "anthropic-api" && settings && <AnthropicKeyRow settings={settings} />}
+      {d.id === "claude-code" && settings && <ClaudeTokenRow settings={settings} />}
       {settings && (
         <Row title="Review model" sub="Model for agent review runs on this driver.">
           <div data-testid={`model-settings-${d.id}`}>
@@ -128,35 +129,101 @@ function DriverPanel({ driver: d, settings }: { driver: DriverInfo; settings: Pu
 
 function AnthropicKeyRow({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
+  return (
+    <SecretRow
+      testId="anthropic-api-key"
+      title="API key"
+      sub="Stored by the service; falls back to ANTHROPIC_API_KEY."
+      label="Anthropic API key"
+      placeholder="sk-ant-…"
+      savedLabel="Key saved"
+      isSet={settings.anthropicApiKeySet}
+      save={(v) => client.updateSettings({ anthropicApiKey: v })}
+      savedMessage="API key saved"
+      clearedMessage="API key cleared"
+    />
+  );
+}
+
+/**
+ * The long-lived token from `claude setup-token`. The service started by launchd can't always
+ * read the Claude login in the Keychain, so runs use this instead when it's set. Hidden for a
+ * service that predates the setting (claudeOauthTokenSet undefined).
+ */
+function ClaudeTokenRow({ settings }: { settings: PublicSettings }) {
+  const { client, dispatch } = useStore();
   const act = useAction();
-  const [apiKey, setApiKey] = useState("");
+  if (settings.claudeOauthTokenSet === undefined) return null;
+  const save = async (v: string | null) => {
+    const out = await client.updateSettings({ claudeOauthToken: v });
+    // The driver's sign-in status follows the token; refresh it so the badge updates.
+    const drivers = await act(() => client.listDrivers());
+    if (drivers) dispatch({ type: "drivers", drivers });
+    return out;
+  };
+  return (
+    <SecretRow
+      testId="claude-oauth-token"
+      title="Long-lived token"
+      sub={
+        <>
+          Run <code>claude setup-token</code> in a terminal and paste the token. Runs use it instead of the Claude login in your Keychain, which the service can't always read when it starts at login.
+        </>
+      }
+      label="Claude long-lived token"
+      placeholder="sk-ant-oat01-…"
+      savedLabel="Token saved"
+      isSet={settings.claudeOauthTokenSet}
+      save={save}
+      savedMessage="Token saved"
+      clearedMessage="Token cleared"
+    />
+  );
+}
+
+/** A write-only secret setting: a password field until one is stored, then Replace / Clear. */
+function SecretRow(props: {
+  testId: string;
+  title: string;
+  sub: ReactNode;
+  label: string;
+  placeholder: string;
+  savedLabel: string;
+  isSet: boolean;
+  /** PATCHes the setting: a string stores it, null clears it. */
+  save: (value: string | null) => Promise<unknown>;
+  savedMessage: string;
+  clearedMessage: string;
+}) {
+  const act = useAction();
+  const [value, setValue] = useState("");
   const [replacing, setReplacing] = useState(false);
 
-  const saveKey = async () => {
-    if (!apiKey.trim()) return;
-    const ok = await act(() => client.updateSettings({ anthropicApiKey: apiKey.trim() }), "API key saved");
+  const saveValue = async () => {
+    if (!value.trim()) return;
+    const ok = await act(() => props.save(value.trim()), props.savedMessage);
     if (ok) {
-      setApiKey("");
+      setValue("");
       setReplacing(false);
     }
   };
 
   return (
-    <div className="settings-row" data-testid="anthropic-api-key">
+    <div className="settings-row" data-testid={props.testId}>
       <div className="settings-row-main">
-        <div className="settings-row-title">API key</div>
-        <div className="settings-row-sub">Stored by the service; falls back to ANTHROPIC_API_KEY.</div>
+        <div className="settings-row-title">{props.title}</div>
+        <div className="settings-row-sub">{props.sub}</div>
       </div>
       <div className="settings-control" style={{ width: 320 }}>
-        {settings.anthropicApiKeySet && !replacing ? (
+        {props.isSet && !replacing ? (
           <>
             <span className="settings-key-saved grow">
-              <Icon name="checkCircle" size={13} /> Key saved
+              <Icon name="checkCircle" size={13} /> {props.savedLabel}
             </span>
             <button className="btn btn-sm" onClick={() => setReplacing(true)}>
               Replace
             </button>
-            <button className="btn btn-sm btn-danger" onClick={() => void act(() => client.updateSettings({ anthropicApiKey: null }), "API key cleared")}>
+            <button className="btn btn-sm btn-danger" onClick={() => void act(() => props.save(null), props.clearedMessage)}>
               Clear
             </button>
           </>
@@ -165,17 +232,17 @@ function AnthropicKeyRow({ settings }: { settings: PublicSettings }) {
             <input
               className="input mono"
               type="password"
-              placeholder="sk-ant-…"
-              aria-label="Anthropic API key"
-              value={apiKey}
+              placeholder={props.placeholder}
+              aria-label={props.label}
+              value={value}
               autoFocus={replacing}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => setValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void saveKey();
+                if (e.key === "Enter") void saveValue();
                 if (e.key === "Escape") setReplacing(false);
               }}
             />
-            <button className="btn btn-sm btn-primary" disabled={!apiKey.trim()} onClick={saveKey}>
+            <button className="btn btn-sm btn-primary" disabled={!value.trim()} onClick={saveValue}>
               Save
             </button>
             {replacing && (

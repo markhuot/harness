@@ -82,15 +82,45 @@ export function cleanClaudeEnv(env: Record<string, string | undefined>): Record<
 }
 
 /**
- * The environment for an agent run: cleanClaudeEnv plus MCP_CONNECTION_NONBLOCKING=0, unless the
+ * The environment for an agent run: claudeCliEnv plus MCP_CONNECTION_NONBLOCKING=0, unless the
  * user set it. With stream-json input the CLI starts the first turn while claude.ai connectors
  * (hc-jira, Rovo, ...) are still "pending", so a triage agent that answers in one turn never sees
  * their tools and reports the MCP as unavailable, or as needing auth, since a plugin's duplicate
  * of a connector is listed as unauthenticated until the connector list arrives. "0" holds the
  * first turn until the connectors connect (up to MCP_CONNECT_TIMEOUT_MS; about a second).
  */
-export function claudeRunEnv(env: Record<string, string | undefined>): Record<string, string> {
-  return { MCP_CONNECTION_NONBLOCKING: "0", ...cleanClaudeEnv(env) };
+export function claudeRunEnv(env: Record<string, string | undefined>, settings: Pick<Settings, "claudeOauthToken">): Record<string, string> {
+  return { MCP_CONNECTION_NONBLOCKING: "0", ...claudeCliEnv(env, settings) };
+}
+
+/**
+ * cleanClaudeEnv plus the long-lived token from Settings (claudeOauthToken, made with `claude
+ * setup-token`) as CLAUDE_CODE_OAUTH_TOKEN. Without one the CLI uses the login it keeps in the
+ * Keychain, which a service started by launchd can't always read: it then falls back to
+ * ~/.claude/.credentials.json, whose refresh token a terminal session may already have used up,
+ * and every run fails to sign in (HARNESS-230).
+ */
+export function claudeCliEnv(env: Record<string, string | undefined>, settings: Pick<Settings, "claudeOauthToken">): Record<string, string> {
+  const out = cleanClaudeEnv(env);
+  if (settings.claudeOauthToken) out.CLAUDE_CODE_OAUTH_TOKEN = settings.claudeOauthToken;
+  return out;
+}
+
+// What the CLI reports when a run couldn't sign in, as opposed to a model or tool error:
+// "Failed to authenticate: OAuth session expired and could not be refreshed",
+// "Failed to authenticate. API Error: 401 OAuth access token is invalid.", "Invalid API key · Please run /login".
+const AUTH_FAILURE = /Failed to authenticate|OAuth (session expired|refresh token is no longer valid|access token is invalid|token has expired)|Invalid API key|run \/login|Not logged in/i;
+
+export function isClaudeAuthFailure(message: string): boolean {
+  return AUTH_FAILURE.test(message);
+}
+
+/** A run's error (and the driver's status) once the CLI couldn't sign in, with what fixes it. */
+export function claudeAuthFailureMessage(cliMessage: string, tokenSet: boolean): string {
+  const why = cliMessage.trim().replace(/\.$/, "");
+  return tokenSet
+    ? `Claude Code couldn't sign in with the long-lived token from Settings (${why}). Make a new one with \`claude setup-token\` and paste it in Settings → Drivers → Claude Code.`
+    : `Claude Code couldn't sign in from the harness service (${why}). The service can't always use the Claude login in your Keychain: run \`claude setup-token\` in a terminal and paste the token in Settings → Drivers → Claude Code, or log in again there.`;
 }
 
 /** Claude Code's config folder: $CLAUDE_CONFIG_DIR, else ~/.claude. */
@@ -724,10 +754,26 @@ export class ClaudeCodeDriver implements Driver {
   readonly usesPermissionPromptTool = true;
   readonly supportsSteering = true;
 
+  /**
+   * The CLI message of the last run that couldn't sign in, and the stored token it ran with. info()
+   * reports the driver signed out while it stands: `claude auth status` still says loggedIn when the
+   * refresh token is dead. A run that gets through, a finished login or a different token clears it.
+   */
+  private authFailure: { cliMessage: string; token: string | null } | null = null;
+
   constructor(private readonly opts: ClaudeCodeDriverOptions) {}
 
   private get env(): Record<string, string | undefined> {
     return this.opts.env ?? process.env;
+  }
+
+  private token(): string | null {
+    return this.opts.settings().claudeOauthToken || null;
+  }
+
+  /** The environment for CLI calls: cleaned, with the stored token if there is one. */
+  private cliEnv(): Record<string, string> {
+    return claudeCliEnv(this.env, { claudeOauthToken: this.token() });
   }
 
   bin(): string {
@@ -741,7 +787,8 @@ export class ClaudeCodeDriver implements Driver {
       return { ...base, available: false, authenticated: false, detail: `claude CLI not found (looked for ${bin}; set HARNESS_CLAUDE_BIN)` };
     }
     try {
-      const proc = Bun.spawn([bin, "auth", "status", "--json"], { stdout: "pipe", stderr: "pipe", env: cleanClaudeEnv(this.env) });
+      const token = this.token();
+      const proc = Bun.spawn([bin, "auth", "status", "--json"], { stdout: "pipe", stderr: "pipe", env: this.cliEnv() });
       const timer = setTimeout(() => proc.kill(), 15_000);
       const [out] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
       clearTimeout(timer);
@@ -751,8 +798,12 @@ export class ClaudeCodeDriver implements Driver {
       if (!status?.loggedIn) {
         return { ...base, available: true, authenticated: false, detail: "Not logged in. Log in to use your Claude plan." };
       }
+      const failed = this.authFailure?.token === token ? this.authFailure : null;
+      if (failed) return { ...base, available: true, authenticated: false, detail: claudeAuthFailureMessage(failed.cliMessage, !!token) };
       const who = [status.email, status.orgName].filter(Boolean).join(" · ");
-      const detail = `${who || status.authMethod || "Logged in"}${status.subscriptionType ? ` (${status.subscriptionType})` : ""}`;
+      const account = `${who || status.authMethod || "Logged in"}${status.subscriptionType ? ` (${status.subscriptionType})` : ""}`;
+      // With a token the CLI doesn't know the account (authMethod "oauth_token"), only that it has one.
+      const detail = token ? `Long-lived token from Settings${who ? ` · ${account}` : ""}` : account;
       return { ...base, available: true, authenticated: true, detail };
     } catch (err) {
       return { ...base, available: true, authenticated: false, detail: `Could not read claude auth status: ${err instanceof Error ? err.message : String(err)}` };
@@ -761,7 +812,7 @@ export class ClaudeCodeDriver implements Driver {
 
   /** The models the CLI offers this account (org availableModels applied), via `initialize`. */
   async listModels(): Promise<ModelInfo[]> {
-    return queryClaudeModels({ bin: this.bin(), env: cleanClaudeEnv(this.env) });
+    return queryClaudeModels({ bin: this.bin(), env: this.cliEnv() });
   }
 
   /**
@@ -770,7 +821,7 @@ export class ClaudeCodeDriver implements Driver {
    * by the CLI itself, so the driver sends it as written.
    */
   async listCommands(cwd: string): Promise<CommandMatch[]> {
-    return parseClaudeCommands((await queryClaudeInitialize({ bin: this.bin(), env: cleanClaudeEnv(this.env), cwd }))?.commands);
+    return parseClaudeCommands((await queryClaudeInitialize({ bin: this.bin(), env: this.cliEnv(), cwd }))?.commands);
   }
 
   async login(): Promise<{ url: string | null; message: string }> {
@@ -794,7 +845,10 @@ export class ClaudeCodeDriver implements Driver {
     };
     void scan(proc.stdout).catch(() => {});
     void scan(proc.stderr).catch(() => {});
-    void proc.exited.then(() => resolveUrl(null));
+    void proc.exited.then((code) => {
+      if (code === 0) this.authFailure = null;
+      resolveUrl(null);
+    });
     const timer = setTimeout(() => resolveUrl(null), timeoutMs);
     const url = await found;
     clearTimeout(timer);
@@ -836,6 +890,14 @@ export class ClaudeCodeDriver implements Driver {
     }
   }
 
+  /** A failed run's error. A sign-in failure is remembered for info() and says what fixes it. */
+  private runFailure(message: string, settings: Settings): string {
+    if (!isClaudeAuthFailure(message)) return message;
+    const token = settings.claudeOauthToken || null;
+    this.authFailure = { cliMessage: message, token };
+    return claudeAuthFailureMessage(message, !!token);
+  }
+
   /** One CLI invocation. Returns "retry-fresh" when --resume failed before anything happened. */
   private async *attempt(req: RunRequest, resume: string | null): AsyncGenerator<DriverEvent, "done" | "retry-fresh"> {
     if (req.signal.aborted) throw abortError();
@@ -846,7 +908,7 @@ export class ClaudeCodeDriver implements Driver {
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
-      env: claudeRunEnv(this.env),
+      env: claudeRunEnv(this.env, settings),
     });
     // The CLI and everything it started: its background shells lead process groups of their own.
     const stopTree = () => {
@@ -994,16 +1056,17 @@ export class ClaudeCodeDriver implements Driver {
       }
 
       if (parser.result?.isError) {
-        const message = parser.result.message || `claude exited with code ${exitCode}`;
+        const message = this.runFailure(parser.result.message || `claude exited with code ${exitCode}`, settings);
         yield { type: "error", message };
         throw new Error(message);
       }
       if (!parser.result && exitCode !== 0) {
         const tail = stderr.trim().split("\n").filter((l) => !/extra certs/i.test(l)).slice(-5).join("\n");
-        const message = `claude exited with code ${exitCode}${tail ? `: ${tail}` : ""}`;
+        const message = this.runFailure(`claude exited with code ${exitCode}${tail ? `: ${tail}` : ""}`, settings);
         yield { type: "error", message };
         throw new Error(message);
       }
+      this.authFailure = null;
       if (waitedOut && waitMs !== undefined) {
         yield { type: "status", text: `Background tasks were still running after ${formatWait(waitMs)}, so the turn ended and they were stopped.` };
       }

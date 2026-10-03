@@ -974,7 +974,8 @@
           "system.intro": "You are {{agentName}}.",
           "run.review": null
         },
-        "anthropicApiKeySet": true
+        "anthropicApiKeySet": true,
+        "claudeOauthTokenSet": true
       }
     },
     {
@@ -1645,7 +1646,8 @@
         "system.intro": "You are {{agentName}}.",
         "run.review": null
       },
-      "anthropicApiKeySet": true
+      "anthropicApiKeySet": true,
+      "claudeOauthTokenSet": true
     },
     {
       "defaultDriver": "anthropic-api",
@@ -1682,7 +1684,8 @@
         "system.intro": "You are {{agentName}}.",
         "run.review": null
       },
-      "anthropicApiKeySet": true
+      "anthropicApiKeySet": true,
+      "claudeOauthTokenSet": false
     }
   ],
   "RelatedTicket": [
@@ -1963,6 +1966,7 @@
         "claude-code": null
       },
       "anthropicApiKey": "sk-ant-api03-redacted",
+      "claudeOauthToken": "sk-ant-oat01-redacted",
       "baseBranch": "main",
       "listen": {
         "mode": "tailscale"
@@ -2000,6 +2004,7 @@
         "claude-code": null
       },
       "anthropicApiKey": "sk-ant-api03-redacted",
+      "claudeOauthToken": "sk-ant-oat01-redacted",
       "baseBranch": "main",
       "listen": {
         "mode": "tailscale"
@@ -2017,6 +2022,12 @@
     },
     {
       "anthropicApiKey": "sk-ant-new"
+    },
+    {
+      "claudeOauthToken": null
+    },
+    {
+      "claudeOauthToken": "sk-ant-oat01-new"
     },
     {
       "prompts": {
@@ -3891,7 +3902,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": true
         }
       ]
     }

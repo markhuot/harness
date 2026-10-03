@@ -11,15 +11,28 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- iPhone and iPad warn you when the app and the harness service on your Mac come from different
-  releases. A banner at the top of the board, Inbox and Settings names both releases and says which
-  side to update: Harness from TestFlight, or Harness on the Mac. Close it to hide it until either
-  side changes.
 - On iPhone and iPad, swipe sideways on a ticket to move between its tabs, from Spec to Activity
   and on through Details. The next tab slides in under your finger as you drag, and the tab strip,
   header and message box stay where they are. A right swipe on Spec still goes back.
 
+## [app-20261003.2044](https://github.com/markhuot/harness/releases/tag/app-20261003.2044) - 2026-10-03
+
+### Added
+
+- iPhone and iPad warn you when the app and the harness service on your Mac come from different
+  releases. A banner at the top of the board, Inbox and Settings names both releases and says which
+  side to update: Harness from TestFlight, or Harness on the Mac. Close it to hide it until either
+  side changes.
+- Settings → Drivers → Claude Code takes a long-lived token, on the Mac and on iPhone and iPad.
+  Run `claude setup-token` in a terminal and paste the token there. Agents then sign in with it
+  instead of the Claude login in your Keychain, which the service can't always read when it
+  starts at login.
+
 ### Fixed
+
+- When an agent can't sign in to Claude, the ticket now says why and how to fix it, and Settings →
+  Drivers shows Claude Code as Not signed in. Before, the ticket only said "OAuth session expired
+  and could not be refreshed" and the driver still looked ready.
 
 - Words with underscores in them, like `spec_revised` or `snake_case_name`, keep their underscores in
   transcripts, specs and Activity on the Mac, iPhone and iPad. Before, the underscores disappeared
