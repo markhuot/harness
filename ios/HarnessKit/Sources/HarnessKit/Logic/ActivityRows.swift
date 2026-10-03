@@ -2,8 +2,8 @@ import Foundation
 
 // How the Activity tab draws each entry (DESIGN.md "Activity"): its icon, title and detail, and
 // which of a few looks it takes. Blocked entries are their own attention card, review decisions
-// carry their round and commit, logged messages and answers read as a conversation, and failures
-// and system notes stay muted.
+// carry their round and commit, an entry whose body is a summary can open its full text, messages and answers
+// logged by older services read as a conversation, and failures and system notes stay muted.
 
 public enum ActivityLook: Equatable, Sendable {
     /// A row in the timeline
@@ -110,6 +110,15 @@ public enum ActivityRows {
             return JSCompat.trim(e.body) == JSCompat.trim(question(e)) ? "" : e.body
         }
         return e.body
+    }
+
+    /// The full text behind a one-line body (meta.detail: a review's whole request-changes notes,
+    /// the calls the classifier denied), shown on demand under the summary; nil when there is none
+    /// (older services put the full text in the body) or it says no more than the body does.
+    public static func fullText(_ e: ActivityEntry) -> String? {
+        let text = JSCompat.trim(e.meta.detail ?? "")
+        guard !text.isEmpty, text != JSCompat.trim(e.body) else { return nil }
+        return text
     }
 
     /// Whether this is the newest blocked entry while the ticket is still blocked (its card stays
