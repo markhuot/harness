@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261003.2044](https://github.com/markhuot/harness/releases/tag/app-20261003.2044) - 2026-10-03
+
 ### Added
 
 - iPhone and iPad warn you when the app and the harness service on your Mac come from different
