@@ -138,6 +138,10 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     /// Save it as a draft (Ticket.draft): created in planning with no run, whatever `start` says.
     /// POST /tickets/:key/submit launches it later. The spec may be empty for a draft.
     public var draft: Bool?
+    /// Files to attach to the prompt (Ticket.promptAttachments): absolute paths on the service's
+    /// machine, each existing now (400 otherwise), at most `maxPromptAttachments`. Pastes and files
+    /// from another device go through POST /uploads first.
+    public var promptAttachments: [PromptAttachmentInput]?
 
     public init(
         projectId: String, spec: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
@@ -145,7 +149,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
         parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
-        draft: Bool? = nil
+        draft: Bool? = nil, promptAttachments: [PromptAttachmentInput]? = nil
     ) {
         self.projectId = projectId
         self.spec = spec
@@ -166,6 +170,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         self.key = key
         self.externalRef = externalRef
         self.draft = draft
+        self.promptAttachments = promptAttachments
     }
 }
 
@@ -210,13 +215,17 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     /// Drafts only (409 otherwise): move the draft to another project. It takes that project's next
     /// key; the old key is kept as an alias (like a project rename), so open panes follow it.
     public var projectId: String?
+    /// Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
+    /// ones the draft already had are kept as they are, even when their file has gone missing.
+    public var promptAttachments: [PromptAttachmentInput]?
 
     public init(
         title: String? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
         model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
-        kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil
+        kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil,
+        promptAttachments: [PromptAttachmentInput]? = nil
     ) {
         self.title = title
         self.spec = spec
@@ -236,6 +245,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         self.kind = kind
         self.useWorktree = useWorktree
         self.projectId = projectId
+        self.promptAttachments = promptAttachments
     }
 }
 

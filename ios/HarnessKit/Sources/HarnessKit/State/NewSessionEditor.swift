@@ -173,6 +173,27 @@ public final class NewSessionEditor {
         edit(UpdateTicketBody(spec: text))
     }
 
+    /// Attach uploaded files to the prompt (deduped by path, capped at `maxPromptAttachments`).
+    /// Returns how many the limit left out, so the screen can say so.
+    @discardableResult
+    public func addAttachments(_ added: [PromptAttachmentInput]) -> Int {
+        guard let local else { return added.count }
+        let current = local.promptAttachments ?? []
+        let result = PromptAttachments.add(current, added)
+        if !PromptAttachments.same(result.list, current) {
+            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list)))
+        }
+        return result.skipped
+    }
+
+    /// Take the attachment at `index` off the prompt.
+    public func removeAttachment(at index: Int) {
+        guard let local else { return }
+        let current = local.promptAttachments ?? []
+        guard current.indices.contains(index) else { return }
+        edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(PromptAttachments.remove(current, at: index))))
+    }
+
     /// Move the draft to another project: its branch picks start over, and a Default model and the
     /// review switches still on the old project's defaults keep following the project it's in.
     public func changeProject(_ id: String) {
