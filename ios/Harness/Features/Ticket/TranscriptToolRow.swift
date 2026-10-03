@@ -113,22 +113,40 @@ struct TranscriptLabel: View {
 }
 
 /// Mono text on the sunken surface, scrolling sideways, and down once it's taller than 320 pt.
+///
+/// Two single-axis scroll views, never one that scrolls both ways: a two-axis one has no
+/// direction lock, so a drag that starts on it takes the gesture from the transcript and slides
+/// the text sideways and down together. A sideways scroll view lets vertical drags through to the
+/// transcript, and the vertical one around it exists only when there's something to scroll.
 struct TranscriptCodeBox: View {
     let text: String
     @Environment(\.palette) private var c
     @State private var height: CGFloat = 0
 
+    static let maxHeight: CGFloat = 320
+
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
+        Group {
+            if height > Self.maxHeight {
+                ScrollView(.vertical) { sideways }
+            } else {
+                sideways
+            }
+        }
+        .frame(height: min(max(height, 1), Self.maxHeight))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(c.bgSunken, in: .rect(cornerRadius: 6))
+        .clipShape(.rect(cornerRadius: 6))
+    }
+
+    private var sideways: some View {
+        ScrollView(.horizontal) {
             Text(text).font(.mono(12)).lineSpacing(3).foregroundStyle(c.text).textSelection(.enabled)
                 .fixedSize()
                 .padding(8)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(height: min(max(height, 1), 320))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(c.bgSunken, in: .rect(cornerRadius: 6))
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
     }
 }
 

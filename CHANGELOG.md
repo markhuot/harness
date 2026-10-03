@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, the Transcript tab scrolls up and down again when your finger lands on an
+  expanded tool call. The call's Input or Output box used to take the drag and slide its text
+  sideways instead. The box still scrolls sideways when you swipe sideways, and scrolls down on its
+  own once its text is taller than the box.
+
 ## [app-20261003.1227](https://github.com/markhuot/harness/releases/tag/app-20261003.1227) - 2026-10-03
 
 ### Fixed
