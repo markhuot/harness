@@ -21,6 +21,7 @@
 //   FAKE_CLAUDE_MISSING_SESSION  when --resume equals this id, fail like the real CLI does
 //   FAKE_CLAUDE_AUTH     JSON printed by `auth status --json`
 //   FAKE_CLAUDE_LOGIN_URL URL printed by `auth login` (then it sleeps FAKE_CLAUDE_LOGIN_SLEEP ms)
+//   FAKE_CLAUDE_LOGIN_EXIT exit code of `auth login` (default 0: the login finished)
 import { appendFileSync } from "node:fs";
 
 const argv = process.argv.slice(2);
@@ -158,8 +159,9 @@ if (argv[0] === "auth" && argv[1] === "login") {
   process.stderr.write("Opening browser to sign in…\n");
   if (env.FAKE_CLAUDE_LOGIN_URL) out(`If the browser didn't open, visit: ${env.FAKE_CLAUDE_LOGIN_URL}`);
   await Bun.sleep(Number(env.FAKE_CLAUDE_LOGIN_SLEEP ?? 0));
-  out("Login successful.");
-  process.exit(0);
+  const code = Number(env.FAKE_CLAUDE_LOGIN_EXIT ?? 0);
+  out(code === 0 ? "Login successful." : "Login failed.");
+  process.exit(code);
 }
 
 const resumeIdx = argv.indexOf("--resume");

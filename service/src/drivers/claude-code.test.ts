@@ -4,7 +4,7 @@ import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync, realpa
 import { basename, join } from "node:path";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeContext } from "../tools/fakes";
-import { buildClaudeArgs, carrySession, claudeProjectDir, claudeTaskOutputPath, ClaudeCodeDriver, cleanClaudeEnv, StreamJsonParser } from "./claude-code";
+import { buildClaudeArgs, carrySession, claudeProjectDir, claudeTaskOutputPath, ClaudeCodeDriver, cleanClaudeEnv, isClaudeAuthFailure, StreamJsonParser } from "./claude-code";
 import { RunInput, type DriverEvent, type RunRequest } from "./types";
 import { tempDir } from "@harness/shared/testing";
 
@@ -1024,5 +1024,99 @@ describe("ClaudeCodeDriver.info / login", () => {
     const res = await s.driver.login();
     expect(res.url).toBeNull();
     expect(Date.now() - started).toBeLessThan(1500);
+  });
+});
+
+describe("ClaudeCodeDriver: long-lived token and sign-in failures (HARNESS-230)", () => {
+  const loggedIn = JSON.stringify({ loggedIn: true, email: "mark@example.com", orgName: "Happy Cog", subscriptionType: "team" });
+  const expired = "Failed to authenticate: OAuth session expired and could not be refreshed";
+  const authError = { type: "result", subtype: "success", is_error: true, result: expired, usage: {} };
+  const rescript = (s: Setup, script: unknown[]) => writeFileSync(join(s.dir, "script.ndjson"), script.map(line).join("\n") + "\n");
+
+  test("the stored token reaches every CLI call as CLAUDE_CODE_OAUTH_TOKEN, over one in the service's env", async () => {
+    const s = setup({ script: [init(), success()], settings: { claudeOauthToken: "sk-ant-oat01-stored" }, env: { CLAUDE_CODE_OAUTH_TOKEN: "from-env", FAKE_CLAUDE_AUTH: loggedIn } });
+    expect((await collect(s.driver.run(request()))).error).toBeNull();
+    await s.driver.info();
+    const [run, status] = s.invocations();
+    expect(run!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat01-stored");
+    expect(status!.argv).toEqual(["auth", "status", "--json"]);
+    expect(status!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("sk-ant-oat01-stored");
+  });
+
+  test("without a stored token the CLI keeps its own login (and a token from the env still passes through)", async () => {
+    const s = setup({ script: [init(), success()], env: { CLAUDE_CODE_OAUTH_TOKEN: "from-env" } });
+    await collect(s.driver.run(request()));
+    expect(s.invocations()[0]!.env.CLAUDE_CODE_OAUTH_TOKEN).toBe("from-env");
+    const bare = setup({ script: [init(), success()] });
+    await collect(bare.driver.run(request()));
+    expect(bare.invocations()[0]!.env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+  });
+
+  test("with a token, the status says so (the CLI doesn't know the account)", async () => {
+    const s = setup({ settings: { claudeOauthToken: "tok" }, env: { FAKE_CLAUDE_AUTH: JSON.stringify({ loggedIn: true, authMethod: "oauth_token" }) } });
+    expect(await s.driver.info()).toMatchObject({ authenticated: true, detail: "Long-lived token from Settings" });
+  });
+
+  test("a run that can't sign in says how to fix it, and the driver reports signed out until a run gets through", async () => {
+    const s = setup({ script: [init(), authError], env: { FAKE_CLAUDE_AUTH: loggedIn } });
+    const { events, error } = await collect(s.driver.run(request()));
+    const message = (error as Error).message;
+    expect(message).toStartWith("Claude Code couldn't sign in from the harness service (Failed to authenticate: OAuth session expired and could not be refreshed).");
+    expect(message).toContain("claude setup-token");
+    expect(events.at(-1)).toEqual({ type: "error", message });
+    // auth status still says loggedIn; the failed run wins.
+    expect(await s.driver.info()).toMatchObject({ authenticated: false, detail: message });
+
+    rescript(s, [init(), success()]);
+    expect((await collect(s.driver.run(request()))).error).toBeNull();
+    expect(await s.driver.info()).toMatchObject({ authenticated: true, detail: "mark@example.com · Happy Cog (team)" });
+  });
+
+  test("a sign-in failure stops counting once a different token is stored; a failing token says to make a new one", async () => {
+    const settings: Partial<Settings> = { claudeOauthToken: "old" };
+    const s = setup({ script: [init(), { ...authError, result: "Failed to authenticate. API Error: 401 OAuth access token is invalid." }], settings, env: { FAKE_CLAUDE_AUTH: loggedIn } });
+    const { error } = await collect(s.driver.run(request()));
+    expect((error as Error).message).toBe(
+      "Claude Code couldn't sign in with the long-lived token from Settings (Failed to authenticate. API Error: 401 OAuth access token is invalid). Make a new one with `claude setup-token` and paste it in Settings → Drivers → Claude Code.",
+    );
+    expect((await s.driver.info()).authenticated).toBe(false);
+    settings.claudeOauthToken = "new";
+    expect((await s.driver.info()).authenticated).toBe(true);
+    settings.claudeOauthToken = null;
+    expect((await s.driver.info()).authenticated).toBe(true);
+    settings.claudeOauthToken = "old";
+    expect((await s.driver.info()).authenticated).toBe(false);
+  });
+
+  test("a sign-in failure with no result (the CLI exits) is caught too", async () => {
+    const s = setup({ script: [{ __stderr: "Invalid API key · Please run /login" }, { __exit: 1 }], env: { FAKE_CLAUDE_AUTH: loggedIn } });
+    const { error } = await collect(s.driver.run(request()));
+    expect((error as Error).message).toStartWith("Claude Code couldn't sign in from the harness service (claude exited with code 1: Invalid API key · Please run /login)");
+    expect((await s.driver.info()).authenticated).toBe(false);
+  });
+
+  test("a finished login clears the failure; one that fails doesn't", async () => {
+    for (const [exit, authenticated] of [["1", false], ["0", true]] as const) {
+      const s = setup({ script: [init(), authError], env: { FAKE_CLAUDE_AUTH: loggedIn, FAKE_CLAUDE_LOGIN_URL: "https://claude.ai/oauth/authorize?x=1", FAKE_CLAUDE_LOGIN_EXIT: exit } });
+      await collect(s.driver.run(request()));
+      await s.driver.login();
+      await Bun.sleep(300); // the login child exits after printing its URL
+      expect([exit, (await s.driver.info()).authenticated]).toEqual([exit, authenticated]);
+    }
+  });
+});
+
+describe("isClaudeAuthFailure", () => {
+  test("sign-in messages match; model and tool errors don't", () => {
+    for (const m of [
+      "Failed to authenticate: OAuth session expired and could not be refreshed",
+      "OAuth refresh token is no longer valid; run /login to re-authenticate",
+      "Failed to authenticate. API Error: 401 OAuth access token is invalid.",
+      "Invalid API key · Please run /login",
+      "Not logged in · Please run /login",
+    ]) expect([m, isClaudeAuthFailure(m)]).toEqual([m, true]);
+    for (const m of ["API Error: 529 overloaded", "claude exited with code 3: Error: invalid --mcp-config", "Prompt is too long", "Credit balance is too low"]) {
+      expect([m, isClaudeAuthFailure(m)]).toEqual([m, false]);
+    }
   });
 });

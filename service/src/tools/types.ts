@@ -375,7 +375,7 @@ export interface HarnessOps {
   // validation (and throws the same errors) without changing anything, so a tool can reject a bad
   // call before it puts an approval card in front of the human.
   listWatchers(ctx: ToolContext): Promise<Watcher[]>;
-  /** Settings without secrets (anthropicApiKeySet instead of the key) */
+  /** Settings without secrets (anthropicApiKeySet and claudeOauthTokenSet instead of the values) */
   getSettings(ctx: ToolContext): Promise<PublicSettings>;
   /** GET /prompts: every overridable prompt with its built-in text and override */
   listPrompts(ctx: ToolContext): Promise<PromptEntry[]>;
@@ -390,7 +390,7 @@ export interface HarnessOps {
   updateProject(ctx: ToolContext, key: string, input: Partial<CreateProjectBody>, dryRun?: boolean): Promise<ProjectView | null>;
   /** Refuses the project of the run's own ticket */
   deleteProject(ctx: ToolContext, key: string, dryRun?: boolean): Promise<ProjectView>;
-  /** Same validation as PATCH /settings; anthropicApiKey is refused */
+  /** Same validation as PATCH /settings; anthropicApiKey and claudeOauthToken are refused */
   updateSettings(ctx: ToolContext, patch: Record<string, unknown>, dryRun?: boolean): Promise<PublicSettings>;
   /** Refuses the run's own ticket and its ancestors */
   deleteTicket(ctx: ToolContext, key: string, dryRun?: boolean): Promise<Ticket>;
