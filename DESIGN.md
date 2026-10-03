@@ -272,8 +272,12 @@ A round is an agent `review_approved` or `changes_requested` entry. `review_deci
 (`system.review`) judge the work against the Goal and acceptance criteria as approved and treat
 Status and notes as claims to verify. Two spec problems are grounds for `request_changes`: Goal or
 acceptance-criteria changes since the baseline that the human's messages, review notes or re-open
-notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Notes cover one round. Review runs get
-`read_spec` but no spec writes; `get_ticket` has the full Activity and each attachment's path.
+notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Notes cover one round, and their first line
+must state the outcome on its own ("Approved, with three open questions in the spec."), since that's
+all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (an open
+question for the human, a follow-up) under the spec's Open questions; `update_spec` is refused, and
+the Goal, Plan and Status stay the author's. `get_ticket` has the full Activity and each
+attachment's path.
 
 ### Skipping the agent review
 
@@ -675,15 +679,15 @@ Harness tools (always exposed, via MCP for claude-code):
 
 | Tool | Run kinds | Input |
 | --- | --- | --- |
-| `post_note` | all ticket kinds | `{ note }`: a `note` Activity entry. No attachments; one line of at most 400 characters, or it's refused (see "Activity") |
+| `post_note` | all ticket kinds | `{ note }`: a `note` Activity entry. No attachments; any length, though the prompt strongly recommends one line of 400 characters or less: Activity shows the first line (see "Activity") |
 | `read_spec` | plan, work, review, complete, conductor, chat | `{ revision? }` → `Revision N (current)…` (with the approved baseline when there is one), then the text with line numbers like Read; an earlier `revision` is for reference only |
-| `edit_spec` | plan, work, complete, conductor, chat | `{ base_revision, note, edits: [{ old_string, new_string, replace_all? } \| { start_line, end_line, new_text, expected? }] }`: atomic (one bad edit applies none), line numbers are the base revision's (an earlier edit in the call doesn't shift them; overlapping one is refused), `end_line = start_line - 1` inserts. A `base_revision` that isn't current, or a failed edit, errors with the current revision. Local images become attachments (see "Spec revisions and attachments") |
-| `update_spec` | ″ | `{ spec, note, base_revision, title? }`: replaces the whole spec as a new revision (planning writes the first full spec this way); same revision check and images as `edit_spec`; `title` retitles the ticket |
+| `edit_spec` | plan, work, review (Open questions only, per its prompt), complete, conductor, chat | `{ base_revision, note, edits: [{ old_string, new_string, replace_all? } \| { start_line, end_line, new_text, expected? }] }`: atomic (one bad edit applies none), line numbers are the base revision's (an earlier edit in the call doesn't shift them; overlapping one is refused), `end_line = start_line - 1` inserts. A `base_revision` that isn't current, or a failed edit, errors with the current revision. Local images become attachments (see "Spec revisions and attachments") |
+| `update_spec` | plan, work, complete, conductor, chat | `{ spec, note, base_revision, title? }`: replaces the whole spec as a new revision (planning writes the first full spec this way); same revision check and images as `edit_spec`; `title` retitles the ticket |
 | `block` | work, chat (not a conductor ticket's) | `{ question }` |
 | `unblock` | work, conductor, chat | `{ note? }`: blocked → in progress once the human's message resolves the block |
 | `resume_work` | work, conductor, chat | `{ note? }`: review → in progress before a chat changes the work again (both reviews start over) |
-| `submit_for_review` | work, conductor, chat | `{ note, spec_is_up_to_date, skip_agent_review?, skip_human_review? }`: `spec_is_up_to_date` is advertised as required and must be `true` (anything else is refused with a message saying to update the spec first); `note` covers this round only, in one line (see "Activity"). `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
-| `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }`: an approval's notes are one line (see "Activity"); request-changes notes can be long |
+| `submit_for_review` | work, conductor, chat | `{ note, spec_is_up_to_date, skip_agent_review?, skip_human_review? }`: `spec_is_up_to_date` is advertised as required and must be `true` (anything else is refused with a message saying to update the spec first); `note` covers this round only; Activity shows its first line (see "Activity"). `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
+| `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }`: any length; Activity shows the first line, which must state the outcome on its own (see "Activity") |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
 | `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
@@ -1438,19 +1442,25 @@ their `ActivityMeta`:
 | `system` | anything else the service records | |
 | `message`, `answer` | legacy: older services logged a human's message from the Spec or Activity tab and the agent's reply. Never written now; clients still render them | |
 
-**One line each.** Agents' notes are held to one line: `post_note`, the `submit_for_review` note
-and an approving `review_decision` or conductor `review_ticket` are refused (`oneLineError` in
-`service/src/activity.ts`) when they have a line break or run past `ACTIVITY_LINE_MAX` (400)
-characters, with an error that says to write one sentence and put the detail in the spec. Text
-the service records from longer sources (a reviewer's request-changes notes, run errors, approval
-reasons, the auto-submit, an unblock note) goes through `activityLine`: the first non-empty line,
-heading and list markers dropped, cut on a word at the cap, with the whole text in `meta.detail`.
-The next agent review reads earlier rounds' notes from `detail`, and the work run's prompt carries
-the full notes; human-written text (approvals, request-changes notes, re-open notes) is kept as
-written. The work prompts (`system.spec` with `submits`) ask for a note at each milestone and at
-least every 10 minutes ("Still running tests: 3 of 10 suites done"). That's an instruction, not a
-timer: a steered message still undelivered when a run ends becomes a queued run, so a service-side
-nudge could start runs on its own.
+**One line each.** Nothing is refused or cut. Every entry's body is the first line of what was
+written (`activityLine` in `service/src/activity.ts`: the first non-empty line, heading and list
+markers dropped, whitespace collapsed, never shortened), and when there's more, the whole text is
+in `meta.detail`. That covers agents' notes, submit notes, reviewer and conductor decisions, run
+errors, approval reasons, classifier denials, auto-submits and unblock notes; human-written text
+(approvals, request-changes notes, re-open notes) is kept as written. The prompts and tool
+descriptions strongly recommend one line of `ACTIVITY_LINE_MAX` (400) characters or less, and say
+the first line is all Activity shows: the rest sits behind Show details, which the human may never
+open, so the first line has to say what happened on its own ("Approved, with three open questions
+in the spec."). The next agent review reads earlier rounds' notes from `detail`, and the work run's
+prompt carries a reviewer's full notes. The work prompts (`system.spec` with `submits`) ask for a
+note at each milestone and at least every 10 minutes ("Still running tests: 3 of 10 suites done").
+That's an instruction, not a timer: a steered message still undelivered when a run ends becomes a
+queued run, so a service-side nudge could start runs on its own.
+
+**Show details.** Both apps offer Show details under an entry whose `detail` says more than its
+body, revealing `activityDetail(entry)` (`shared/src/state/activity.ts`, held for HarnessKit's
+`ActivityRows.fullText` by `activityDetailCases`): the detail after the line the body already
+shows, or all of it when it doesn't start with that line (a permission entry's classifier reason).
 
 **Every column change is in Activity.** `transition()` records each status change. An entry that
 moved the ticket itself carries `meta.from`/`meta.to` (`moveMeta`: submitted, blocked, unblocked,
@@ -1485,7 +1495,8 @@ On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
   revision is tagged "Approved plan".
 - The Activity tab is a timeline styled per kind (`state/activity.ts`): `blocked` is an attention
   card, review decisions show their round and short commit, an entry that moved the ticket ends
-  its heading with "→ <column>", and older services' messages and answers are bubbles.
+  its heading with "→ <column>", an entry with more than its line offers Show details, and older
+  services' messages and answers are bubbles.
 - The composer switches to the Transcript once a message is sent (`tabAfterSend`), from any tab.
 - The Details spec editor sends `baseRevision`; a 409 offers Reload (take the current spec) or
   Overwrite (resend against the new revision).
@@ -1535,7 +1546,8 @@ since its history lives in its revisions.
   numbers. `edit_spec` applies `old_string`/`new_string` or line-range edits atomically against
   the base revision's line numbers (`applySpecEdits`); `update_spec` replaces the whole text and
   can retitle the ticket. Plan, work, chat, conductor and complete runs get all three; review runs
-  get `read_spec` only (the ops refuse writes from review and triage); triage gets none.
+  get `read_spec` and `edit_spec`, to record what the review found under Open questions (the ops
+  refuse `update_spec` from review, and every write from triage); triage gets none.
   `submit_for_review` takes `spec_is_up_to_date`, which must be `true`, so a submit is a
   confirmation that the spec already describes the finished work. See "Tools".
 - **Prompts.** `system.spec` ("Spec and Activity", every ticket run) names the current revision

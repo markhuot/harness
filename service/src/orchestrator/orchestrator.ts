@@ -139,7 +139,7 @@ import {
 } from "./settings";
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
-import { activityLine, oneLineError } from "../activity";
+import { activityLine } from "../activity";
 import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../spec";
 import { confineOutputPath, readSnapshot, readTaskOutput, snapshotTaskOutput, unavailable } from "../task-output";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
@@ -415,8 +415,11 @@ export class Orchestrator {
   private tools: (kind: RunKind, driver: Driver, ticket: Ticket | null) => ToolDefinition[];
   private baseUrl: () => string;
   private log: (msg: string) => void;
-  /** Tickets whose next transition() is already in Activity (moveMeta on the entry), by the column it goes to */
-  private movesRecorded = new Map<string, TicketStatus>();
+  /**
+   * Tickets whose next transition() is already in Activity (moveMeta on the entry): the column it
+   * goes to and the entry, which only counts while it's still the ticket's newest.
+   */
+  private movesRecorded = new Map<string, { to: TicketStatus; entryId: string }>();
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
   /**
@@ -1680,14 +1683,15 @@ export class Orchestrator {
     choice: { action?: unknown; instructions?: unknown } = {},
   ): Ticket {
     if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
-    if (decision === "approve" && by === "conductor") this.requireOneLine("An approval's notes", notes);
     if (decision === "approve") ticket = this.storeCompletionChoice(ticket, choice);
     this.resetRejections(ticket);
     if (decision === "approve") {
       const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
       this.touchSession(t.sessionId);
       this.appendStatus(t.sessionId, null, by === "human" ? "Human review: approved" : "Conductor review: approved");
-      this.addActivity(t, "approved", by === "human" ? "human" : "agent", notes.trim() || "Approved.", { by });
+      // A human's approval is kept as written; a conductor's notes show their first line, like a reviewer's.
+      if (by === "human") this.addActivity(t, "approved", "human", notes.trim() || "Approved.", { by });
+      else this.addActivityLine(t, "approved", "agent", notes.trim() || "Approved.", { by });
       this.noteReady(t);
       return t;
     }
@@ -2106,8 +2110,7 @@ export class Orchestrator {
   async postNote(ctx: ToolContext, note: string): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (typeof note !== "string" || !note.trim()) throw new Error("note is empty");
-    this.requireOneLine("The note", note);
-    this.addActivity(t, "note", "agent", note.trim());
+    this.addActivityLine(t, "note", "agent", note);
   }
 
   async readSpec(ctx: ToolContext, revision?: number): Promise<string> {
@@ -2124,9 +2127,13 @@ export class Orchestrator {
 ${numberLines(r.body)}`;
   }
 
-  /** The spec tools are for the run's own ticket, in the run kinds toolsForRun gives them to. */
+  /**
+   * The spec tools are for the run's own ticket, in the run kinds toolsForRun gives them to. A
+   * review run may edit_spec (to record what it found) but not replace the spec whole.
+   */
   private specWriter(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind === "review" || ctx.runKind === "triage") throw new Error(`${tool} isn't available in ${ctx.runKind} runs: they don't change the spec`);
+    if (ctx.runKind === "triage") throw new Error(`${tool} isn't available in triage runs: they don't change the spec`);
+    if (ctx.runKind === "review" && tool !== "edit_spec") throw new Error(`${tool} isn't available in review runs: record what you found with edit_spec instead`);
     return this.ctxTicket(ctx);
   }
 
@@ -2278,7 +2285,6 @@ ${numberLines(r.body)}`;
     this.lifecycleFrom(t, "submit_for_review");
     // The spec is updated in its own, earlier call; the submit only confirms it.
     if (specIsUpToDate !== true) throw new Error(SPEC_NOT_UP_TO_DATE_MESSAGE);
-    if (typeof note === "string") this.requireOneLine("The submit note", note);
     // A parent in review (or done) would strand its children: their reviews and merges are its job.
     const open = this.store.tickets.list({ parentId: t.id }).filter((c) => c.status !== "done");
     if (open.length) {
@@ -2308,7 +2314,6 @@ ${numberLines(r.body)}`;
     if (t.status !== "review") throw new Error(`${t.key} is no longer in review`);
     if (t.agentReview === "skipped") throw new Error(`The agent review of ${t.key} was skipped; there is nothing to decide`);
     if (decision !== "approve" && decision !== "request_changes") throw new Error(`Invalid decision: ${decision}`);
-    if (decision === "approve" && typeof notes === "string") this.requireOneLine("An approval's notes", notes);
     const a = this.ctxActive(ctx);
     if (a?.decided) throw new Error("A review decision was already recorded for this run");
     if (a) a.decided = true;
@@ -2319,7 +2324,7 @@ ${numberLines(r.body)}`;
       const u = this.store.tickets.update(t.id, { agentReview: "approved" })!;
       this.touchSession(u.sessionId);
       this.appendStatus(u.sessionId, ctx.runId, "Agent review: approved");
-      this.addActivity(u, "review_approved", "agent", text || "Approved.", meta);
+      this.addActivityLine(u, "review_approved", "agent", text || "Approved.", meta);
       if (u.parentId) this.notifyConductor(u.parentId, { key: u.key, title: u.title, from: "review", to: "review", note: `Agent review approved. ${text}`.trim(), specRevision: u.specRevision });
       this.noteReady(u);
       return;
@@ -3512,8 +3517,9 @@ ${numberLines(r.body)}`;
    */
   private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string, move: { by?: ActivityAuthor; line?: string } = {}): Ticket {
     const from = ticket.status;
-    const recorded = this.movesRecorded.get(ticket.id) === to;
+    const pending = this.movesRecorded.get(ticket.id);
     this.movesRecorded.delete(ticket.id);
+    const recorded = pending?.to === to && this.store.activity.listBySession(ticket.sessionId).at(-1)?.id === pending.entryId;
     const t = this.store.tickets.update(ticket.id, { ...patch, status: to })!;
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
@@ -3566,7 +3572,7 @@ ${numberLines(r.body)}`;
     const humanSkipped = !!ticket.skipHumanReview;
     const humanReview = humanSkipped ? "approved" : "pending";
     const agentReview = ticket.skipAgentReview ? "skipped" : "pending";
-    this.addActivity(ticket, "submitted", author, note, { specRevision: ticket.specRevision ?? 1, ...this.moveMeta(ticket, "review") });
+    this.addActivityLine(ticket, "submitted", author, note, { specRevision: ticket.specRevision ?? 1, ...this.moveMeta(ticket, "review") });
     const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", note);
     if (agentReview === "skipped") this.appendStatus(t.sessionId, null, "Agent review: skipped");
     if (humanSkipped) this.appendStatus(t.sessionId, null, "Human review: skipped");
@@ -4096,7 +4102,7 @@ ${numberLines(r.body)}`;
   /**
    * The end of a run that did the ticket's work: a submit gets its review; a ticket still in
    * progress with nothing more queued blocks on the agent's trailing question, or is submitted
-   * with the first line of its last text once its children are done.
+   * with its last text (Activity shows the first line) once its children are done.
    */
   private finishWork(ticket: Ticket, run: Run, active: ActiveRun): void {
     if (active.submitted) {
@@ -4109,7 +4115,7 @@ ${numberLines(r.body)}`;
         this.addActivity(ticket, "blocked", "agent", question, { question, ...this.moveMeta(ticket, "blocked") });
         this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
       } else if (!moreWork && this.allChildrenDone(ticket)) {
-        this.submit(ticket, activityLine(active.lastText ?? "") || "Work finished.", "system");
+        this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
         this.enqueueReview(this.store.tickets.get(ticket.id)!);
       }
     }
@@ -4197,7 +4203,7 @@ ${numberLines(r.body)}`;
   private addActivity(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}): ActivityEntry {
     const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta });
     this.bus.emit({ kind: "activity.added", entry });
-    if (meta.to && kind !== "moved") this.movesRecorded.set(ticket.id, meta.to);
+    if (meta.to && kind !== "moved") this.movesRecorded.set(ticket.id, { to: meta.to, entryId: entry.id });
     return entry;
   }
 
@@ -4213,11 +4219,6 @@ ${numberLines(r.body)}`;
     return this.addActivity(ticket, kind, author, line, line === full ? meta : { ...meta, detail: full });
   }
 
-  /** An agent's note for Activity must be one short line: the error says how to fix it. */
-  private requireOneLine(what: string, text: string) {
-    const error = oneLineError(what, text);
-    if (error) throw new Error(error);
-  }
 
   /** The ticket's newest agent note or submit note (what search snippets and the conductor show). */
   private latestNote(t: Ticket): ActivityEntry | undefined {

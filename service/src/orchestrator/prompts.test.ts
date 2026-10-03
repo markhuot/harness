@@ -37,7 +37,7 @@ const SPEC = ["read_spec", "edit_spec", "update_spec"];
 const TOOLS: Record<RunKind, string[]> = {
   plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
   work: ["post_note", ...SPEC, "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
-  review: ["post_note", "read_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  review: ["post_note", "read_spec", "edit_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
   complete: ["post_note", ...SPEC, ...BOARD, ...CONFIG_READ],
   conductor: ["post_note", ...SPEC, "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
@@ -144,9 +144,10 @@ describe("systemPrompt tool references", () => {
       const s = specOf(sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree)));
       expect(s).not.toBeNull();
       expect(s).toContain("`read_spec`");
-      // review runs read the spec but get no edit tools or image guidance
-      expect(s!.includes("`edit_spec`")).toBe(kind !== "review");
-      expect(s!.includes("This run reads the spec but doesn't change it.")).toBe(kind === "review");
+      // every run can edit_spec; review runs only add findings under Open questions, never update_spec, and get no image guidance
+      expect(s).toContain("`edit_spec`");
+      expect(s!.includes("`update_spec`")).toBe(kind !== "review");
+      expect(s!.includes("it may only add what the review found")).toBe(kind === "review");
       // only plan runs are pointed at update_spec for the first full spec
       expect(s!.includes("use it to write the first full spec")).toBe(kind === "plan");
       // the submit note is named only where the run can call submit_for_review

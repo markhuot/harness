@@ -91,6 +91,8 @@ try {
         ],
       },
     },
+    // Longer than a line: Activity shows the first, the rest behind Show details.
+    { name: "post_note", input: { note: "Added the board screenshot to the spec.\n\nIt shows the card after the change, taken from the app itself." } },
   ];
   await api<Ticket>("POST", `/tickets/${key}/messages`, { text: `/tools ${JSON.stringify(tools)}`, move: true });
   await until("round 2 approved", async () => (await api<TicketDetail>("GET", `/tickets/${key}`)).activity.filter((e) => e.kind === "review_approved").length === 2, 30000);
@@ -155,12 +157,20 @@ try {
   check("the submit's heading names the column it moved to", await js<boolean>(`[...document.querySelectorAll('.activity-submitted')].some((e) => e.textContent.includes('→ Review'))`));
   check("Start is a Moved entry", await js<boolean>(`[...document.querySelectorAll('.activity-moved')].some((e) => e.textContent.includes('→ In progress'))`));
   await shot("3-activity-blocked");
+  // A note with more than one line: its first line, and the rest behind Show details.
+  const noteRow = `[...document.querySelectorAll('.activity-note')].find((e) => e.textContent.includes('Added the board screenshot'))`;
+  check("a long note shows its first line only", await js<boolean>(`(() => { const r = ${noteRow}; return !!r && !r.textContent.includes('taken from the app itself'); })()`));
+  await js(`${noteRow}.querySelector('.activity-details-toggle').click()`);
+  check("Show details reveals the rest", await until("details open", () => js<boolean>(`(() => { const r = ${noteRow}; return r.textContent.includes('taken from the app itself') && r.textContent.includes('Hide details'); })()`), 3000));
+  await js(`${noteRow}.scrollIntoView({ block: "center" })`);
+  await shot("3b-activity-show-details");
 
   const activity = async () => (await api<TicketDetail>("GET", `/tickets/${key}`)).activity as ActivityEntry[];
   const all = await activity();
   check("every Activity entry is one line", all.every((e) => !e.body.includes("\n")), all.filter((e) => e.body.includes("\n")).map((e) => e.kind).join(", "));
   const moves = all.filter((e) => e.meta.to).map((e) => `${e.kind}:${e.meta.from}→${e.meta.to}`);
   const expected = ["moved:planning→in_progress", "submitted:in_progress→review", "moved:review→in_progress", "submitted:in_progress→review", "moved:review→in_progress", "blocked:in_progress→blocked"];
+
   check("every column change is in Activity", moves.join(" ") === expected.join(" "), moves.join(" "));
   const selected = (tab: string) => js<boolean>(`document.querySelector('.tabs [data-tab=${tab}]')?.getAttribute('aria-selected') === 'true'`);
 

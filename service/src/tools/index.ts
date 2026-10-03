@@ -73,7 +73,11 @@ export const allTools: ToolDefinition[] = [
  * A chat (a human's message to a blocked, review or done ticket) gets its ticket's work tools:
  * see toolsForRun.
  */
-/** The spec tools (DESIGN.md "Spec revisions and attachments"): plan, work, chat, conductor and complete runs. Review runs only read it. */
+/**
+ * The spec tools (DESIGN.md "Spec revisions and attachments"): plan, work, chat, conductor and
+ * complete runs. Review runs read it and edit_spec it (to record what the review found), but never
+ * replace it whole.
+ */
 export const specTools: ToolDefinition[] = [readSpec, editSpec, updateSpec];
 
 const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
@@ -82,7 +86,7 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; n
     harness: [postNote, ...specTools, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "full",
   },
-  review: { harness: [postNote, readSpec, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  review: { harness: [postNote, readSpec, editSpec, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postNote, ...specTools, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
     harness: [postNote, ...specTools, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],

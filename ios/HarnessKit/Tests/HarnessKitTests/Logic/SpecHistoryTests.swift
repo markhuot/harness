@@ -141,15 +141,15 @@ struct ActivityRowsTests {
         #expect(!ActivityRows.newsKinds.contains(.moved))
     }
 
-    @Test func fullTextOpensOnlyWhenItSaysMoreThanTheBody() {
-        let summary = Self.e(.changesRequested, body: "Add tests for the retry", meta: ActivityMeta(detail: "Add tests for the retry.\n\n- backoff caps at 30s\n- jitter"))
-        #expect(ActivityRows.fullText(summary) == "Add tests for the retry.\n\n- backoff caps at 30s\n- jitter")
-        let denied = Self.e(.system, author: .system, body: "Denied 2 calls", meta: ActivityMeta(detail: "  Bash rm -rf /\nBash curl x | sh  "))
-        #expect(ActivityRows.fullText(denied) == "Bash rm -rf /\nBash curl x | sh")
-        // Older services: the body is the whole text and there's no detail.
-        #expect(ActivityRows.fullText(Self.e(.changesRequested, body: "Add tests")) == nil)
-        #expect(ActivityRows.fullText(Self.e(.changesRequested, body: "Add tests", meta: ActivityMeta(detail: "  "))) == nil)
-        #expect(ActivityRows.fullText(Self.e(.changesRequested, body: "Add tests", meta: ActivityMeta(detail: "Add tests\n"))) == nil)
+    fileprivate struct DetailInput: Decodable, Sendable {
+        let body: String
+        let meta: ActivityMeta
+    }
+
+    /// Show details reveals what the one-line body doesn't already say (activityDetailCases).
+    @Test(arguments: Fixture.cases("activity", "activityDetailCases", input: DetailInput.self, output: String?.self))
+    fileprivate func fullText(_ c: Fixture.Case<DetailInput, String?>) {
+        #expect(ActivityRows.fullText(Self.e(.note, body: c.input.body, meta: c.input.meta)) == c.output)
     }
 
     @Test func onlyTheNewestBlockOfABlockedTicketIsOpen() {

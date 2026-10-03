@@ -1,5 +1,5 @@
-// Activity as at-a-glance progress (DESIGN.md "Activity"): agents' notes are one line, long text
-// the service records is summarized with the whole of it in meta.detail, and every column change
+// Activity as at-a-glance progress (DESIGN.md "Activity"): every entry's body is the first line
+// of what was written, the whole of it in meta.detail when there's more, and every column change
 // has an entry.
 import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
@@ -17,41 +17,35 @@ function setup() {
 }
 
 const errorOf = (p: Promise<unknown>) => p.then(() => null, (e: Error) => e.message);
+const kinds = (h: ReturnType<typeof setup>, key: string) => h.orch.activity(key).map((e) => ({ kind: e.kind, body: e.body, detail: e.meta.detail }));
 
-describe("agents' notes are one short line", () => {
-  test("post_note, submit_for_review and an approval refuse two lines or an over-long line, and take a one-liner", async () => {
+describe("agents' notes show their first line", () => {
+  test("post_note, submit_for_review and an approval take any length: the first line in full, the rest in detail", async () => {
     const h = setup();
-    const refused: Record<string, string | null> = {};
+    const long = `Still running tests: ${"suite ".repeat(100)}done`;
     h.driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
       const { ops } = req.toolContext;
       const ctx = req.toolContext;
       if (req.kind === "work") {
-        refused.note = await errorOf(ops.postNote(ctx, "Ran the tests.\n\nAll green except the UI suite."));
-        refused.longNote = await errorOf(ops.postNote(ctx, "x".repeat(401)));
-        await ops.postNote(ctx, "Ran the tests; all green.");
-        refused.submit = await errorOf(ops.submitForReview(ctx, "## Summary\n- did it", true));
-        await ops.submitForReview(ctx, "Added the button because the brief asked for it.", true);
+        await ops.postNote(ctx, "Ran the tests.\n\nAll green except the UI suite.");
+        await ops.postNote(ctx, long);
+        await ops.submitForReview(ctx, "## Summary\n- did it", true);
       }
-      if (req.kind === "review") {
-        refused.approve = await errorOf(ops.reviewDecision(ctx, "approve", "Looks good.\n\nChecked:\n- tests"));
-        await ops.reviewDecision(ctx, "approve", "Confirmed the button and its test.");
-      }
+      if (req.kind === "review") await ops.reviewDecision(ctx, "approve", "Approved, with three open questions in the spec.\n\n- retry cap?\n- Safari?\n- README?");
     };
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
     await h.orch.idle();
-    expect(refused.note).toContain("this one is 2 lines");
-    expect(refused.longNote).toContain("this one is 401 characters");
-    expect(refused.submit).toContain("The submit note goes into the ticket's Activity");
-    expect(refused.approve).toContain("An approval's notes goes into the ticket's Activity");
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved" });
-    const bodies = h.orch.activity(t.key).map((e) => `${e.kind}: ${e.body}`);
-    expect(bodies).toContain("note: Ran the tests; all green.");
-    expect(bodies).toContain("submitted: Added the button because the brief asked for it.");
-    expect(bodies).toContain("review_approved: Confirmed the button and its test.");
+    const entries = kinds(h, t.key);
+    expect(entries).toContainEqual({ kind: "note", body: "Ran the tests.", detail: "Ran the tests.\n\nAll green except the UI suite." });
+    // Over the recommended 400 characters, but nothing is refused or cut.
+    expect(entries).toContainEqual({ kind: "note", body: long, detail: undefined });
+    expect(entries).toContainEqual({ kind: "submitted", body: "Summary", detail: "## Summary\n- did it" });
+    expect(entries.find((e) => e.kind === "review_approved")).toMatchObject({ body: "Approved, with three open questions in the spec.", detail: expect.stringContaining("- Safari?") });
     expect(h.orch.activity(t.key).every((e) => !e.body.includes("\n"))).toBe(true);
   });
 
-  test("a conductor's approval is held to one line too; a human's isn't", async () => {
+  test("a conductor's approval shows its first line too; a human's is kept as written", async () => {
     const h = setup();
     const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Goal", kind: "conductor", start: false });
     await h.orch.idle();
@@ -61,13 +55,38 @@ describe("agents' notes are one short line", () => {
     h.store.tickets.update(child.id, { status: "review", agentReview: "approved" });
     const p = h.store.tickets.get(parent.id)!;
     const ctx = fakeContext({ runKind: "conductor", ticket: p, session: fakeSession({ id: p.sessionId, key: p.key, ticketId: p.id }), ops: h.orch.ops });
-    expect(await errorOf(h.orch.ops.reviewTicket(ctx, child.key, "approve", "Fine.\nShip it."))).toContain("An approval's notes");
-    await h.orch.ops.reviewTicket(ctx, child.key, "approve", "Fine; ship it.");
+    await h.orch.ops.reviewTicket(ctx, child.key, "approve", "Fine; ship it.\nChecked the tests.");
+    expect(kinds(h, child.key).find((e) => e.kind === "approved")).toEqual({ kind: "approved", body: "Fine; ship it.", detail: "Fine; ship it.\nChecked the tests." });
 
     const solo = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a link" });
     await h.orch.idle();
     h.orch.humanReview(solo.key, { decision: "approve", notes: "Fine.\nShip it." });
     expect(h.orch.activity(solo.key).find((e) => e.kind === "approved")!.body).toBe("Fine.\nShip it.");
+  });
+});
+
+describe("review runs record findings in the spec", () => {
+  test("a reviewer can edit_spec but not replace the spec; triage can do neither", async () => {
+    const h = setup();
+    const results: Record<string, string | null> = {};
+    h.driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
+      const { ops } = req.toolContext;
+      const ctx = req.toolContext;
+      if (req.kind === "work") await ops.submitForReview(ctx, "Done.", true);
+      if (req.kind === "review") {
+        const rev = h.orch.ticketDetail(ctx.ticket!.key).ticket.specRevision ?? 1;
+        results.edit = await errorOf(ops.editSpec(ctx, { baseRevision: rev, note: "Review: open questions", edits: [{ old_string: "Add a button", new_string: "Add a button\n\n## Open questions\n- Which color?" }] }));
+        results.replace = await errorOf(ops.updateSpec(ctx, { spec: "gone", note: "x", baseRevision: rev + 1 }));
+        await ops.reviewDecision(ctx, "approve", "Approved, with one open question in the spec.");
+      }
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
+    await h.orch.idle();
+    expect(results.edit).toBeNull();
+    expect(results.replace).toContain("isn't available in review runs");
+    expect(h.orch.ticketDetail(t.key).ticket.spec).toContain("- Which color?");
+    const tc = fakeContext({ runKind: "triage", ticket: h.store.tickets.get(t.id)!, session: fakeSession({ id: t.sessionId, key: t.key, ticketId: t.id }), ops: h.orch.ops });
+    expect(await errorOf(h.orch.ops.editSpec(tc, { baseRevision: 1, note: "x", edits: [] }))).toContain("isn't available in triage runs");
   });
 });
 
@@ -95,7 +114,7 @@ describe("long text the service records is summarized", () => {
     expect(second.prompt).toContain("`a.ts:3`: the handler swallows errors");
   });
 
-  test("an auto-submit uses the first line of the agent's last message", async () => {
+  test("an auto-submit shows the first line of the agent's last message, with all of it in detail", async () => {
     const h = setup();
     h.driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
       if (req.kind === "work") yield { type: "text", text: "## Done\n\nAdded the button.\n\n- tests pass\n- docs updated" };
@@ -103,7 +122,7 @@ describe("long text the service records is summarized", () => {
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
     await h.orch.idle();
     const submitted = h.orch.activity(t.key).find((e) => e.kind === "submitted")!;
-    expect(submitted).toMatchObject({ author: "system", body: "Done" });
+    expect(submitted).toMatchObject({ author: "system", body: "Done", meta: { detail: "## Done\n\nAdded the button.\n\n- tests pass\n- docs updated" } });
   });
 
   test("a failed run's error is one line", async () => {

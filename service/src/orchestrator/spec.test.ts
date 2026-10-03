@@ -119,13 +119,13 @@ describe("edit_spec", () => {
     expect(h.fresh(t).spec).toBe(SPEC);
   });
 
-  test("review runs can read the spec but not change it", async () => {
+  test("review runs can edit the spec (to record findings) but not replace it", async () => {
     const h = await setup();
     const t = await h.make("review");
-    await expect(h.orch.ops.editSpec(h.ctx(t, "review"), { baseRevision: 1, note: "x", edits: [{ old_string: "Goal", new_string: "Aim" }] })).rejects.toThrow(
-      "edit_spec isn't available in review runs",
-    );
-    expect(await h.orch.ops.readSpec(h.ctx(t, "review"))).toContain("Revision 1 (current)");
+    await expect(h.orch.ops.updateSpec(h.ctx(t, "review"), { spec: "gone", note: "x", baseRevision: 1 })).rejects.toThrow("update_spec isn't available in review runs");
+    expect(h.fresh(t).spec).toBe(SPEC);
+    await h.orch.ops.editSpec(h.ctx(t, "review"), { baseRevision: 1, note: "Review: open question", edits: [{ old_string: "Goal", new_string: "Aim" }] });
+    expect(await h.orch.ops.readSpec(h.ctx(t, "review"))).toContain("Revision 2 (current)");
   });
 });
 
@@ -153,9 +153,9 @@ describe("update_ticket's spec", () => {
 
 describe("which runs get the spec tools", () => {
   const names = (kind: RunKind) => toolsForRun(kind, { hasBuiltinTools: true, usesPermissionPromptTool: false }).map((t) => t.name);
-  test("review runs get read_spec only; triage none; the others all three", () => {
+  test("review runs get read_spec and edit_spec; triage none; the others all three", () => {
     expect(names("review")).toContain("read_spec");
-    expect(names("review")).not.toContain("edit_spec");
+    expect(names("review")).toContain("edit_spec");
     expect(names("review")).not.toContain("update_spec");
     for (const n of ["read_spec", "edit_spec", "update_spec"]) expect(names("triage")).not.toContain(n);
     for (const kind of ["plan", "work", "chat", "conductor", "complete"] as RunKind[]) {

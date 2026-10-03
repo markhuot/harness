@@ -22,7 +22,11 @@ export const reviewTicket = defineTool<{ key: string; decision: "approve" | "req
     {
       key: keyProp,
       decision: { type: "string", enum: ["approve", "request_changes"], description: "Your verdict." },
-      notes: { type: "string", description: "Rationale, or specific changes to make." },
+      notes: {
+        type: "string",
+        description:
+          'Rationale, or specific changes to make. Activity shows only the first line, and the human may never open the rest, so the first line MUST say the outcome on its own (e.g. "Approved, with two open questions for the human." or "Changes requested: the retry test never fails."); detail goes on the lines after it.',
+      },
       action: { ...actionProp, description: `With approve: ${actionProp.description}` },
     },
     ["key", "decision", "notes"],

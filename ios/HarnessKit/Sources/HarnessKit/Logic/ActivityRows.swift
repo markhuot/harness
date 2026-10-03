@@ -127,13 +127,26 @@ public enum ActivityRows {
         return e.body
     }
 
-    /// The full text behind a one-line body (meta.detail: a review's whole request-changes notes,
-    /// the calls the classifier denied), shown on demand under the summary; nil when there is none
-    /// (older services put the full text in the body) or it says no more than the body does.
+    /// What Show details reveals (shared/src/state/activity.ts activityDetail, checked against
+    /// activityDetailCases): the rest of meta.detail after the line the body already shows, or the
+    /// whole detail when it doesn't start with that line; nil when there's nothing more to show
+    /// (older services put the full text in the body).
     public static func fullText(_ e: ActivityEntry) -> String? {
-        let text = JSCompat.trim(e.meta.detail ?? "")
-        guard !text.isEmpty, text != JSCompat.trim(e.body) else { return nil }
-        return text
+        let detail = JSCompat.trim(e.meta.detail ?? "")
+        guard !detail.isEmpty else { return nil }
+        let lines = detail.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" }).map { String($0).replacingOccurrences(of: "\r", with: "") }
+        var rest = detail
+        if let first = lines.firstIndex(where: { !JSCompat.trim($0).isEmpty }), bodyLine(lines[first]) == bodyLine(e.body) {
+            rest = JSCompat.trim(lines[(first + 1)...].joined(separator: "\n"))
+        }
+        return rest.isEmpty ? nil : rest
+    }
+
+    /// A line as an Activity body shows it (the service's activityLine): heading, list and quote
+    /// markers dropped, whitespace collapsed.
+    static func bodyLine(_ line: String) -> String {
+        let unmarked = line.replacingOccurrences(of: #"^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)+"#, with: "", options: .regularExpression)
+        return JSCompat.trim(unmarked.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression))
     }
 
     /// Whether this is the newest blocked entry while the ticket is still blocked (its card stays

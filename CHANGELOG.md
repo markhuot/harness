@@ -18,9 +18,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   submit, a question, a review that sent it back) ends its heading with the column it went to, for
   example "Submitted for review → Review", and a move with no other entry (dragging a card,
   pressing Start, a completed ticket) shows up as a new Moved entry.
-- Agents can only post one-line notes now. A note with a line break or more than 400 characters
-  goes back to the agent to shorten. Long review notes and run errors show their first line in
-  Activity, and on iPhone and iPad, Show details reveals the rest.
+- Each Activity entry shows one line. Agents are asked to keep notes to a single line of 400
+  characters or less, and when they write more, Activity shows the first line and Show details
+  reveals the rest, on the Mac and on iPhone and iPad. Long review notes, approvals and run errors
+  work the same way.
+- The agent reviewer can now add to a ticket's spec, so findings like open questions for you land
+  under Open questions instead of only in its notes.
 - During long work, agents post a progress note at least every 10 minutes (for example, how many
   test suites have finished), so a ticket's card and Activity don't go quiet while it runs.
 - Agents' Activity entries are one line each: what changed and why. The reasoning behind a change

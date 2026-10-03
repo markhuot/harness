@@ -1,10 +1,13 @@
 // The Activity tab: the ticket's typed timeline (DESIGN.md "Activity"), oldest first and stuck to
 // the bottom. Each kind has its own icon and look: a blocked entry is an attention card with the
 // question, review decisions show their round and commit, messages and answers read as a
-// conversation, and failures and system entries stay muted.
+// conversation, and failures and system entries stay muted. An entry whose one line summarizes a
+// longer text (meta.detail) offers Show details.
 
+import { useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
+import { activityDetail } from "@harness/shared/state";
 import { ACTIVITY_KIND as KIND, activityHeading, openQuestionId } from "../state/activity";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
@@ -25,7 +28,7 @@ export function ActivityTab({ ticket }: { ticket: Ticket }) {
         <div className="empty">
           <Icon name="clock" />
           <strong>No activity yet</strong>
-          Notes, review rounds, questions and the messages you send from Spec or Activity show up here.
+          Notes, review rounds, questions and every move between columns show up here, one line each.
         </div>
       ) : (
         <ol className="activity-list">
@@ -75,12 +78,27 @@ export function ActivityTab({ ticket }: { ticket: Ticket }) {
                     {time}
                   </div>
                   {e.body && <Markdown text={e.body} />}
+                  <Details text={activityDetail(e)} />
                 </div>
               </li>
             );
           })}
         </ol>
       )}
+    </div>
+  );
+}
+
+/** Show details / Hide details for the full text behind an entry's one line. */
+function Details({ text }: { text: string | undefined }) {
+  const [open, setOpen] = useState(false);
+  if (!text) return null;
+  return (
+    <div className="activity-details">
+      <button className="activity-details-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? "Hide details" : "Show details"}
+      </button>
+      {open && <Markdown text={text} />}
     </div>
   );
 }
