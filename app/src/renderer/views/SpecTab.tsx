@@ -45,10 +45,8 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
   useRevisionBody(ticket, shown, body === undefined && !bodyErrors[shown], fetchError(shown));
   useRevisionBody(ticket, shown - 1, comparing && prevBody === undefined && !bodyErrors[shown - 1], fetchError(shown - 1));
 
-  const unchanged = useMemo(
-    () => body !== undefined && prevBody !== undefined && diffUnchanged(specDiff(prevBody, body)),
-    [body, prevBody],
-  );
+  const diff = useMemo(() => (body !== undefined && prevBody !== undefined ? specDiff(prevBody, body) : undefined), [body, prevBody]);
+  const unchanged = diff !== undefined && diffUnchanged(diff);
   const bodyError = bodyErrors[shown] ?? (comparing ? bodyErrors[shown - 1] : undefined);
 
   const step = (delta: number) => setHistory((h) => stepRevision(h, latest, delta));
@@ -134,9 +132,9 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
               <div className="spinner" />
             </div>
           )
-        ) : comparing && prevBody !== undefined && (body.trim() || prevBody.trim()) ? (
+        ) : comparing && prevBody !== undefined && diff && (body.trim() || prevBody.trim()) ? (
           <section className="spec-doc" data-testid="spec-doc" data-changes={`${shown - 1}-${shown}`}>
-            <MarkdownDiff before={prevBody} after={body} />
+            <MarkdownDiff diff={diff} before={prevBody} after={body} />
           </section>
         ) : body.trim() ? (
           <section className="spec-doc" data-testid="spec-doc">

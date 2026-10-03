@@ -18,7 +18,6 @@ import {
   inlineTokens,
   mediaIn,
   parseBlocks,
-  specDiff,
   ticketByKey,
   ticketLinkable,
   type Block,
@@ -453,10 +452,10 @@ function MdDiffBlock({ diff, depth = 0, tickets }: { diff: DiffBlock; depth?: nu
 /**
  * Two revisions of a markdown text (older first) rendered as the newer one, with what changed
  * marked in place (@harness/shared/state specDiff): added words and blocks green, removed ones red
- * and struck through. Unchanged blocks render exactly as Markdown renders them.
+ * and struck through. Unchanged blocks render exactly as Markdown renders them. `diff` is
+ * specDiff(before, after), computed by the caller, which usually needs it too (diffUnchanged).
  */
-export function MarkdownDiff({ before, after, className }: { before: string; after: string; className?: string }) {
-  const diff = useMemo(() => specDiff(before, after), [before, after]);
+export function MarkdownDiff({ diff, before, after, className }: { diff: DiffBlock[]; before: string; after: string; className?: string }) {
   const media = useMemo(() => {
     const seen = new Set<string>();
     return [...mediaIn(parseBlocks(after)), ...mediaIn(parseBlocks(before))].filter((m) => !seen.has(m.id) && seen.add(m.id));
