@@ -792,7 +792,7 @@ native-pattern difference, not a missing feature.
 | Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |
 | Hero collapse on scroll, back on tab change, news or a status-bar tap | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, HarnessKit HeroCollapse | done |
 | Tab strip: order, counts, live dots, plugin icons, sub-agent highlights Agents | screens/TicketDetail, shared/state/tabs | TicketDetailTabStrip, HarnessKit Tabs/ChangesTab | done |
-| Spec: the living spec, history bar (step, scrub, follow the newest, approved-plan tag), Show changes with the Changes rows, depends-on chips | (HARNESS-199) | TicketDetailSpecTab, HarnessKit SpecHistory/SpecScrubber | done |
+| Spec: the living spec, history bar (step, scrub, follow the newest, approved-plan tag), Show changes marking edits in the rendered spec, depends-on chips | (HARNESS-199, HARNESS-211) | TicketDetailSpecTab, MarkdownView (`previous`), HarnessKit SpecHistory/SpecScrubber/MarkdownDiff | done |
 | Activity: typed timeline, blocked card, review round and commit, message/answer bubbles, stick to bottom | (HARNESS-199) | TicketDetailActivityTab, HarnessKit ActivityRows | done |
 | Tickets (children) tab: groups, rows with chips (progress is in the hero's ConductorProgressCard) | screens/TicketTabs | TicketDetailChildrenTab | done |
 | Details: title, spec (Unsaved/Revert/Save, base revision, Reload/Overwrite on a conflict), ticket settings, links, runs, related | screens/TicketTabs, ui/TicketSettings | TicketDetailDetailsTab, Pickers/TicketSettingsForm | done |

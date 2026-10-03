@@ -4,8 +4,9 @@ import SwiftUI
 /// The Spec tab, where a ticket opens: the ticket's living spec (markdown with nested lists and
 /// inline images), what it depends on, and a history bar over it. The bar steps and scrubs through
 /// the spec's revisions (loaded as they're needed), tags the approved plan, and follows the newest
-/// revision as it lands unless the user has stepped back (SpecScrubber). Show changes draws the
-/// shown revision's diff against the one before it, with the Changes tab's rows.
+/// revision as it lands unless the user has stepped back (SpecScrubber). Show changes keeps the
+/// rendered spec and marks what the shown revision changed from the one before it, in place
+/// (MarkdownView with `previous`).
 struct TicketDetailSpecTab: View {
     let ticket: Ticket
 
@@ -14,18 +15,17 @@ struct TicketDetailSpecTab: View {
     @Environment(\.palette) private var c
     @State private var scrubber = SpecScrubber()
     @State private var showChanges = false
-    /// Diffs fetched so far, by "from-to"; revisions never change, so neither do these
-    @State private var diffs: [String: String] = [:]
     @State private var failed: String?
-    /// Why the diff shown under Show changes couldn't load, by "from-to"
-    @State private var diffFailed: [String: String] = [:]
+    /// Why the revision Show changes compares with couldn't load
+    @State private var previousFailed: String?
 
     var body: some View {
         let state = store.state
         let latest = SpecHistory.latest(ticket)
         let rev = scrubber.shown(latest: latest)
-        let previous = SpecHistory.previous(rev)
+        let previous = showChanges ? SpecHistory.previous(rev) : nil
         let body = state.specBody(ticket.id, rev: rev)
+        let previousBody = previous.flatMap { state.specBody(ticket.id, rev: $0) }
         let deps = state.dependencyStates(ticket)
         VStack(spacing: 0) {
             SpecHistoryBar(ticket: ticket, scrubber: $scrubber, showChanges: $showChanges, latest: latest)
@@ -44,12 +44,17 @@ struct TicketDetailSpecTab: View {
                     if let failed {
                         Callout(tone: .red, icon: "alert", title: "Couldn't load this revision", message: failed)
                     }
-                    if showChanges, let previous {
-                        if let diff = diffs["\(previous)-\(rev)"] {
-                            SpecDiffView(diff: diff, text: body ?? "", from: previous, to: rev)
-                        } else if let error = diffFailed["\(previous)-\(rev)"] {
-                            Callout(tone: .red, icon: "alert", title: "Couldn't load the changes", message: error)
-                        } else {
+                    if let previous {
+                        if let body, let previousBody {
+                            if MarkdownDiff.unchanged(MarkdownCache.shared.diff(previousBody, body)) {
+                                EmptyState(icon: "check", title: "No changes", message: "Rev \(rev) has the same text as rev \(previous).")
+                                    .padding(.top, 20)
+                            } else {
+                                MarkdownView(text: body, previous: previousBody)
+                            }
+                        } else if let previousFailed {
+                            Callout(tone: .red, icon: "alert", title: "Couldn't load the changes", message: previousFailed)
+                        } else if failed == nil {
                             Spinner().frame(maxWidth: .infinity).padding(30)
                         }
                     } else if let body {
@@ -90,16 +95,16 @@ struct TicketDetailSpecTab: View {
                 if !Task.isCancelled { failed = errorMessage(error) }
             }
         }
-        .task(id: showChanges ? previous.map { "\(ticket.id)#\($0)-\(rev)" } : nil) {
-            guard showChanges, let previous, diffs["\(previous)-\(rev)"] == nil, let api = store.api else { return }
-            let key = "\(previous)-\(rev)"
-            diffFailed[key] = nil
+        // The revision Show changes compares with, the first time it's needed.
+        .task(id: previous.map { "\(ticket.id)#\($0)" }) {
+            previousFailed = nil
+            guard let previous, store.state.specBody(ticket.id, rev: previous) == nil, let api = store.api else { return }
             do {
-                let d = try await api.specDiff(ticket.key, from: previous, to: rev)
-                diffs[key] = d.diff
+                let r = try await api.specRevision(ticket.key, rev: previous)
+                store.dispatch(.specRevision(ticketId: ticket.id, revision: r))
             } catch is CancellationError {
             } catch {
-                if !Task.isCancelled { diffFailed[key] = errorMessage(error) }
+                if !Task.isCancelled { previousFailed = errorMessage(error) }
             }
         }
     }
@@ -208,46 +213,5 @@ private struct SpecHistoryBar: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         .accessibilityLabel(label)
-    }
-}
-
-/// One revision's changes against the one before, drawn with the Changes tab's line and gap rows.
-/// The unchanged runs between hunks expand from the newer revision's body.
-private struct SpecDiffView: View {
-    let diff: String
-    /// The newer revision's text
-    let text: String
-    let from: Int
-    let to: Int
-
-    @Environment(\.palette) private var c
-    @State private var expanded: Set<Int> = []
-
-    var body: some View {
-        if let file = SpecHistory.diff(diff) {
-            let rows = ChangesRows.rows(file, contents: ChangesRows.lines(of: text), expanded: expanded)
-            let gutter = CGFloat(String(max(1, ChangesRows.lines(of: text).count)).count) * 7.2 + 4
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Changes from rev \(from) to rev \(to)")
-                    .font(.scaled(size: 12.5, weight: .semibold))
-                    .foregroundStyle(c.text3)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                ForEach(rows.indices, id: \.self) { i in
-                    switch rows[i] {
-                    case let .gap(g):
-                        ChangesGapRow(gap: g, loading: false) { expanded.insert(g.index) }
-                    case let .line(l):
-                        ChangesLineRow(line: l, highlighted: nil, result: nil, gutter: gutter)
-                    }
-                }
-            }
-            .background(c.bgElev, in: .rect(cornerRadius: 10))
-            .clipShape(.rect(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c.border, lineWidth: 1 / 3))
-        } else {
-            EmptyState(icon: "check", title: "No changes", message: "Rev \(to) has the same text as rev \(from).")
-        }
     }
 }

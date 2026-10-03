@@ -1459,8 +1459,10 @@ On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
   headings and quotes only when at least 40% of their words are shared) and diffs their words,
   keeping each word's inline style, so added text is green and removed text red and struck
   through, inside the same headings, lists, table cells and code blocks. Unpaired blocks show
-  whole, added or removed. Its output is plain JSON, pinned for HarnessKit by
-  `shared/fixtures/cases/specDiff.ts`; the file's header spells out the algorithm. The baseline
+  whole, added or removed. Its output is plain JSON, pinned by `shared/fixtures/cases/specDiff.ts`
+  for HarnessKit's port (`MarkdownDiff` in `Logic/SpecDiff.swift`), which the iPhone/iPad Spec tab
+  draws the same way through `MarkdownView(text:previous:)`; the file's header spells out the
+  algorithm. The baseline
   revision is tagged "Approved plan".
 - The Activity tab is a timeline styled per kind (`state/activity.ts`): `blocked` is an attention
   card, review decisions show their round and short commit, messages and answers are bubbles.
