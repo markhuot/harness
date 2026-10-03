@@ -11,6 +11,7 @@ export * from "./tabs";
 export * from "./subagents";
 export * from "./format";
 export * from "./markdown";
+export * from "./specDiff";
 export * from "./icons";
 export * from "./stickToBottom";
 export * from "./watchers";
