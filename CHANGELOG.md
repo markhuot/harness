@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Agents' Activity entries are one line each: what changed and why. The reasoning behind a change
+  goes in the spec, not the ticket's timeline.
+
 ## [app-20261003.0051](https://github.com/markhuot/harness/releases/tag/app-20261003.0051) - 2026-10-03
 
 ### Fixed
