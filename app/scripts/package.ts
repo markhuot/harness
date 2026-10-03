@@ -8,7 +8,8 @@
 // The service ships inside the app (service/scripts/compile.ts): the compiled executable in
 // Contents/MacOS/harness-service and the prebuilt builtin plugins in Contents/Resources/plugins,
 // with resources/harness.json pointing the app at the executable. So the app runs on any Mac,
-// with no bun or checkout.
+// with no bun or checkout. Its login item ships as Contents/Library/LaunchAgents/<label>.plist,
+// which the app registers through SMAppService (DESIGN.md "Service supervision").
 //
 //   --checkout   keep build.ts's harness.json instead: the app runs the service from this
 //                checkout with bun, so a merge into it restarts the service onto the new code
@@ -18,6 +19,10 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { compileService } from "../../service/scripts/compile";
+import { BUNDLED_PLIST, buildBundledPlist } from "../../service/src/cli";
+import { SERVICE_EXECUTABLE } from "../../service/src/runtime";
+
+const APP_BUNDLE_ID = "com.markhuot.harness.app";
 
 const appDir = resolve(import.meta.dir, "..");
 const repoRoot = resolve(appDir, "..");
@@ -53,7 +58,7 @@ const paths = await packager({
   dir: appDir,
   name: "Harness",
   executableName: "Harness",
-  appBundleId: "com.markhuot.harness.app",
+  appBundleId: APP_BUNDLE_ID,
   appCategoryType: "public.app-category.developer-tools",
   platform: "darwin",
   arch: process.arch as "arm64" | "x64",
@@ -66,7 +71,7 @@ const paths = await packager({
       try {
         copyNodePty(buildPath);
         if (compiled) {
-          const json = { executable: "harness-service", builtAt: new Date().toISOString() };
+          const json = { executable: SERVICE_EXECUTABLE, builtAt: new Date().toISOString() };
           writeFileSync(join(buildPath, "resources", "harness.json"), JSON.stringify(json, null, 2) + "\n");
         }
         done();
@@ -83,7 +88,10 @@ const paths = await packager({
 for (const p of paths) {
   const bundle = join(p, "Harness.app", "Contents");
   if (compiled) {
-    cpSync(compiled.executable, join(bundle, "MacOS", "harness-service"));
+    cpSync(compiled.executable, join(bundle, "MacOS", SERVICE_EXECUTABLE));
+    const agents = join(bundle, "Library", "LaunchAgents");
+    mkdirSync(agents, { recursive: true });
+    writeFileSync(join(agents, BUNDLED_PLIST), buildBundledPlist({ appBundleId: APP_BUNDLE_ID, executable: SERVICE_EXECUTABLE }));
     const plugins = join(bundle, "Resources", "plugins");
     rmSync(plugins, { recursive: true, force: true });
     cpSync(join(serviceOut, "Resources", "plugins"), plugins, { recursive: true });

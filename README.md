@@ -22,10 +22,12 @@ it restarts the service onto the new code. `bun run install-app:bundled` install
 self-contained app the release ships instead (`bun run package` builds it).
 
 The app starts the service itself. By default it runs as the app's child process, so quitting
-the app stops it and its agents. **Settings → Service → Start at login** installs a launchd agent
-instead (`~/Library/LaunchAgents/com.markhuot.harness.plist`, the same as
-`bun service/src/cli.ts service ensure`): macOS starts the service at login and it keeps running
-after you quit. The app follows whichever is set up: with the plist installed it uses launchd.
+the app stops it and its agents. **Settings → Service → Start at login** makes it a launchd agent
+instead: macOS starts the service at login and it keeps running after you quit. The downloaded
+app registers the login item it ships in `Harness.app/Contents/Library/LaunchAgents` through
+SMAppService (macOS may ask you to allow it in System Settings → Login Items); a build that runs
+from this checkout writes `~/Library/LaunchAgents/com.markhuot.harness.plist` instead, the same as
+`bun service/src/cli.ts service ensure`. The app follows whichever is set up.
 
 Service management:
 

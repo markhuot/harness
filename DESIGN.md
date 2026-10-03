@@ -141,8 +141,10 @@ place of the key.
   `attachments/<id>.<ext>` (ticket attachments, see "Spec revisions and attachments"), `tmp/<sessionId>/`
   (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
-- launchd label `com.markhuot.harness`, plist `~/Library/LaunchAgents/com.markhuot.harness.plist`,
-  runs the daemon command (below), `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
+- launchd label `com.markhuot.harness`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
+  A checkout's plist is `~/Library/LaunchAgents/com.markhuot.harness.plist` (`service install`),
+  running the daemon command (below). A packaged app's is bundled instead (see "Service
+  supervision").
 - The service runs from one of two places (`service/src/runtime.ts`):
   - **A checkout**: `bun <repo>/service/src/daemon.ts`, builtin plugins from `<repo>/plugins`.
     Dev builds of the app (`bun run build`, `bun run install-app`) record the checkout and bun in
@@ -178,6 +180,23 @@ carries the mode (`app`, `login`, `external`).
   `service uninstall` (`launchctl bootout`, which waits for the job to exit), waits until the port
   stops answering, then starts the child. Either switch restarts the service, so the section
   confirms first when agents are running.
+- **Login in a packaged app (SMAppService).** A downloaded Harness.app is quarantined down to
+  `Contents/MacOS/harness-service`. launchd running that file from a plist of its own makes
+  Gatekeeper assess it apart from the app the user approved, and it waits at a prompt nobody
+  sees, before its first instruction, with nothing logged. So the packaged app ships its login
+  item in the bundle, `Contents/Library/LaunchAgents/com.markhuot.harness.plist`
+  (`buildBundledPlist`: `BundleProgram`, `AssociatedBundleIdentifiers`), and registers it with
+  `app.setLoginItemSettings({ type: "agentService" })`, which launchd attributes to the app. The
+  plist is the same for every user, so it holds no paths: it sets `HARNESS_LAUNCHD=bundle`, and the
+  daemon then puts the usual tool directories on PATH, runs from `$HARNESS_HOME` and appends its
+  output to `service.log` itself (`service/src/bundled-launchd.ts`). Connect follows SMAppService's
+  status: `enabled` is the login item; `requires-approval` (the user turned it off in Login Items)
+  runs the child. Install registers it, and when macOS wants the user's approval it opens System
+  Settings → Login Items and waits up to 2 minutes; not approved, or no /health, it unregisters and
+  starts the child again. Remove unregisters, which boots the job out. A plist in
+  `~/Library/LaunchAgents` from an older Harness.app is moved over at connect (`service
+  uninstall`, then register). The compiled CLI never writes that plist for the label: `service
+  install`, `ensure` and `start` refuse (`appManaged`), and `restart` only kickstarts the job.
 - The daemon counts as supervised when its parent is the supervisor: launchd (pid 1, with
   `XPC_SERVICE_NAME` set to the label) or the app (`HARNESS_SUPERVISOR_PID` is its ppid). Agents
   inherit both variables but not the parent. Only a supervised daemon restarts itself.

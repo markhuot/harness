@@ -165,6 +165,9 @@ if [[ $SKIP_MAC -eq 0 ]]; then
     || { echo "error: the Mac app doesn't contain the compiled service and its plugins" >&2; exit 1; }
   grep -q '"executable": "harness-service"' "$MAC_CONTENTS/Resources/app.asar" \
     || { echo "error: the Mac app's harness.json doesn't point at the bundled service" >&2; exit 1; }
+  # Start at login registers this through SMAppService; without it the toggle can't work.
+  plutil -lint -s "$MAC_CONTENTS/Library/LaunchAgents/com.markhuot.harness.plist" \
+    || { echo "error: the Mac app doesn't contain its login item plist (Contents/Library/LaunchAgents)" >&2; exit 1; }
   rm -rf "$CHECK"
 fi
 

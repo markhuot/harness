@@ -6,7 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, sc
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { nodePtySpawn } from "./pty";
-import { reloadToken, ServiceManager } from "./service";
+import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
 import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
 import { commandGoesToMain, parsePopoutOptions, POPOUT_MIN, popoutBounds } from "./popouts";
@@ -38,8 +38,18 @@ const debug = {
 if (process.env.HARNESS_USER_DATA) app.setPath("userData", process.env.HARNESS_USER_DATA);
 else if (debug.capture) app.setPath("userData", join(app.getPath("temp"), "harness-capture-profile"));
 
+// A packaged app's login item: the plist it ships in Contents/Library/LaunchAgents, through
+// SMAppService (service/src/cli.ts buildBundledPlist).
+const LOGIN_ITEM = { type: "agentService", serviceName: "com.markhuot.harness.plist" } as const;
+const loginItem: LoginItemAgent = {
+  status: () => app.getLoginItemSettings(LOGIN_ITEM).status ?? "not-found",
+  register: () => app.setLoginItemSettings({ ...LOGIN_ITEM, openAtLogin: true }),
+  unregister: () => app.setLoginItemSettings({ ...LOGIN_ITEM, openAtLogin: false }),
+  openSettings: () => void shell.openExternal("x-apple.systempreferences:com.apple.LoginItems-Settings.extension"),
+};
+
 // A packaged app keeps the compiled service next to its own executable, in Contents/MacOS.
-const service = new ServiceManager({ appRoot, exeDir: dirname(process.execPath) });
+const service = new ServiceManager({ appRoot, exeDir: dirname(process.execPath), loginItem });
 let connection: Promise<ConnectionResult> | null = null;
 function getConnection(force = false) {
   if (!connection || force) setConnection(service.connect());

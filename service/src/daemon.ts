@@ -3,6 +3,7 @@
 
 import { rmSync } from "node:fs";
 import { createHarness } from "./app";
+import { adoptBundledLaunchd } from "./bundled-launchd";
 import { readServiceJson, resolveHome, resolveHostOverride, resolvePort, writeServiceJson } from "./config";
 import { LAUNCHD_LABEL } from "./cli";
 import { executableFingerprint, sourceFingerprint } from "./code-watch";
@@ -19,6 +20,7 @@ let shuttingDown = false;
 async function main() {
   const home = resolveHome();
   const port = resolvePort();
+  adoptBundledLaunchd(process.env, home);
   // launchd (KeepAlive) starts the service again when it exits, and so does the app when the
   // service is its child (HARNESS_SUPERVISOR_PID, app/src/main/child.ts). Supervised, it can
   // restart itself: onto new code once idle, or on POST /service/restart. Run by hand, it only

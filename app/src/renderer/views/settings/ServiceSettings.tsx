@@ -1,6 +1,6 @@
 // Settings → Service: who runs the service. By default it's the app's child and stops when the app
-// quits; Start at login installs a launchd agent instead, so macOS starts it at login and agents
-// keep running without the app. App-side (the main process switches it), so only in the Mac app.
+// quits; Start at login makes it a launchd agent instead (the packaged app's bundled login item,
+// or a dev build's plist), so macOS starts it at login and agents keep running without the app. App-side (the main process switches it), so only in the Mac app.
 
 import { useEffect, useState } from "react";
 import type { ConnectionResult } from "../../../main/types";
@@ -8,7 +8,7 @@ import { useStore } from "../../state/store";
 import { Modal } from "../../components/bits";
 import { Row, Section } from "../Settings";
 
-const PLIST = "~/Library/LaunchAgents/com.markhuot.harness.plist";
+const LABEL = "launchd agent com.markhuot.harness";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function ServiceSection() {
@@ -60,10 +60,10 @@ export function ServiceSection() {
     <Section
       id="service"
       title="Service"
-      desc="The background service runs your agents. By default it runs inside the app. Start at login installs a launch agent instead, so macOS starts the service when you log in and it keeps running without the app."
+      desc="The background service runs your agents. By default it runs inside the app. Start at login makes it a login item instead, so macOS starts the service when you log in and it keeps running without the app. macOS may ask you to allow Harness in System Settings → Login Items."
     >
       <div className="card-surface settings-card" data-testid="service-section" data-mode={mode ?? "none"}>
-        <Row title="Start at login" sub={<span title={mode === "login" ? PLIST : undefined}>{sub}</span>}>
+        <Row title="Start at login" sub={<span title={mode === "login" ? LABEL : undefined}>{sub}</span>}>
           {action && (
             <button className="btn" data-testid="service-mode" disabled={switching} onClick={() => request(action.to)}>
               {switching && <span className="spinner" />}

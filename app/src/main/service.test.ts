@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
 import { ChildService, type ChildProcessHandle } from "./child";
-import { parseEnsureOutput, parseStatusOutput, reloadToken, resolveSource, ServiceManager } from "./service";
+import { parseEnsureOutput, parseStatusOutput, reloadToken, resolveSource, ServiceManager, type LoginItemAgent, type LoginItemStatus } from "./service";
 
 describe("parseEnsureOutput", () => {
   test("takes the last JSON line after log noise", () => {
@@ -383,5 +383,167 @@ describe("reloadToken", () => {
     expect("error" in reloadToken(null)).toBe(true);
     const failed = { error: "down", output: "" };
     expect(reloadToken(failed)).toBe(failed);
+  });
+});
+
+/**
+ * A packaged app (resources/harness.json → the compiled executable) with a fake SMAppService login
+ * item. "launchd" serves /health while the item is enabled; `legacy` is a plist an older
+ * Harness.app wrote, which `service uninstall` removes.
+ */
+function packaged(o: { item?: LoginItemStatus; legacy?: boolean; approveAfterChecks?: number; launchdDown?: boolean } = {}) {
+  const root = tempDir("harness-app-pkg-");
+  const app = join(root, "Resources/app");
+  mkdirSync(join(app, "resources"), { recursive: true });
+  writeFileSync(join(app, "resources/harness.json"), JSON.stringify({ executable: "harness-service" }));
+  mkdirSync(join(root, "MacOS"));
+  writeFileSync(join(root, "token"), "t\n");
+  writeFileSync(join(root, "log"), "line 1\nboom: launchd job crashed\n");
+  if (o.legacy) writeFileSync(join(root, "legacy"), "");
+  const exe = join(root, "MacOS/harness-service");
+  writeFileSync(
+    exe,
+    `#!/bin/sh
+echo "$@" >> ${root}/calls
+case "$*" in
+  "service status --json")
+    if [ -f ${root}/legacy ]; then installed=true; else installed=false; fi
+    echo "{\\"installed\\":$installed,\\"healthy\\":false,\\"pid\\":null,\\"url\\":\\"${URL}\\",\\"home\\":\\"${root}\\",\\"tokenPath\\":\\"${root}/token\\",\\"logPath\\":\\"${root}/log\\"}"
+    exit 3;;
+  "service uninstall --json") rm -f ${root}/legacy; echo '{"ok":true}';;
+  "service restart --json") echo '{"ok":true}';;
+  *) exit 2;;
+esac
+`,
+  );
+  chmodSync(exe, 0o755);
+  let item: LoginItemStatus = o.item ?? "not-registered";
+  let pendingChecks = o.approveAfterChecks ?? 0;
+  const events: string[] = [];
+  const loginItem: LoginItemAgent = {
+    status: () => {
+      if (item === "requires-approval" && o.approveAfterChecks && --pendingChecks <= 0) item = "enabled";
+      return item;
+    },
+    register: () => {
+      events.push("register");
+      if (item !== "requires-approval") item = o.approveAfterChecks !== undefined ? "requires-approval" : "enabled";
+    },
+    unregister: () => {
+      events.push("unregister");
+      item = "not-registered";
+    },
+    openSettings: () => void events.push("openSettings"),
+  };
+  const spawned: string[][] = [];
+  let childUp = false;
+  const child = new ChildService({
+    stopTimeoutMs: 1000,
+    spawn: (cmd) => {
+      childUp = true;
+      spawned.push(cmd);
+      let exit!: (c: number | null) => void;
+      return { pid: 7, exited: new Promise((r) => (exit = r)), kill: () => ((childUp = false), exit(null)) };
+    },
+  });
+  const fetch = (async () => {
+    if (childUp) return Response.json({ data: { pid: 7 } });
+    if (item === "enabled" && !o.launchdDown) return Response.json({ data: { pid: 55 } });
+    throw new Error("ECONNREFUSED");
+  }) as unknown as typeof globalThis.fetch;
+  const m = new ServiceManager({ appRoot: app, exeDir: join(root, "MacOS"), env: {}, child, fetch, healthTimeoutMs: 300, approvalTimeoutMs: 300, loginItem });
+  const calls = () => {
+    try {
+      return readFileSync(join(root, "calls"), "utf8").trim().split("\n");
+    } catch {
+      return [];
+    }
+  };
+  return { m, exe, events, spawned, calls, child, item: () => item, legacy: () => existsSync(join(root, "legacy")) };
+}
+
+describe("ServiceManager in a packaged app (SMAppService login item)", () => {
+  test("by default it still runs its own child, and registers nothing", async () => {
+    const p = packaged();
+    expect(await p.m.connect()).toMatchObject({ mode: "app", pid: 7 });
+    expect(p.spawned).toEqual([[p.exe, "daemon"]]);
+    expect(p.events).toEqual([]);
+  });
+
+  test("an enabled login item is launchd's service: no child, no plist written by the CLI", async () => {
+    const p = packaged({ item: "enabled" });
+    expect(await p.m.connect()).toMatchObject({ mode: "login", pid: 55, token: "t" });
+    expect(p.spawned).toEqual([]);
+    expect(p.calls()).toEqual(["service status --json"]);
+  });
+
+  test("a plist an older Harness.app installed moves to the bundled login item", async () => {
+    const p = packaged({ legacy: true });
+    expect(await p.m.connect()).toMatchObject({ mode: "login", pid: 55 });
+    expect(p.calls()).toEqual(["service status --json", "service uninstall --json"]);
+    expect(p.legacy()).toBe(false);
+    expect(p.events).toEqual(["register"]);
+    expect(p.spawned).toEqual([]);
+  });
+
+  test("a login item the user turned off in System Settings: the app runs its child and doesn't ask again", async () => {
+    const p = packaged({ item: "requires-approval" });
+    expect(await p.m.connect()).toMatchObject({ mode: "app" });
+    expect(p.events).toEqual([]);
+  });
+
+  test("Start at login: stops the child and registers; launchd's service takes over", async () => {
+    const p = packaged();
+    await p.m.connect();
+    const res = await p.m.setMode("login");
+    expect(res.error).toBeUndefined();
+    expect(res.connection).toMatchObject({ mode: "login", pid: 55 });
+    expect(p.child.running).toBe(false);
+    expect(p.events).toEqual(["register"]);
+  });
+
+  test("Start at login that macOS wants approved: opens Login Items and waits for the user", async () => {
+    const p = packaged({ approveAfterChecks: 2 });
+    await p.m.connect();
+    const res = await p.m.setMode("login");
+    expect(res.error).toBeUndefined();
+    expect(res.connection).toMatchObject({ mode: "login" });
+    expect(p.events).toEqual(["register", "openSettings"]);
+  });
+
+  test("Start at login never approved: unregistered again, and the app runs its child", async () => {
+    const p = packaged({ approveAfterChecks: 1_000_000 });
+    await p.m.connect();
+    const res = await p.m.setMode("login");
+    expect(res.error?.error).toContain("Login Items");
+    expect(res.connection).toMatchObject({ mode: "app" });
+    expect(p.events).toEqual(["register", "openSettings", "unregister"]);
+    expect(p.item()).toBe("not-registered");
+    expect(p.child.running).toBe(true);
+  });
+
+  test("a login item launchd never brings up is an error with the log tail, and the child comes back", async () => {
+    const p = packaged({ launchdDown: true });
+    await p.m.connect();
+    const res = await p.m.setMode("login");
+    expect(res.error?.error).toBe("The harness service didn't start.");
+    expect(res.error?.output).toContain("boom: launchd job crashed");
+    expect(p.events).toEqual(["register", "unregister"]);
+    expect(res.connection).toMatchObject({ mode: "app" });
+  });
+
+  test("back to the app: unregisters, then starts the child", async () => {
+    const p = packaged({ item: "enabled" });
+    await p.m.connect();
+    const res = await p.m.setMode("app");
+    expect(res.connection).toMatchObject({ mode: "app", pid: 7 });
+    expect(p.events).toEqual(["unregister"]);
+    expect(p.calls()).not.toContain("service uninstall --json");
+  });
+
+  test("restart of the login item goes through the CLI's kickstart", async () => {
+    const p = packaged({ item: "enabled" });
+    expect(await p.m.restart(await p.m.connect())).toEqual({ ok: true });
+    expect(p.calls().at(-1)).toBe("service restart --json");
   });
 });
