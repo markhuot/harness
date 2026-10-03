@@ -54,6 +54,7 @@ public enum ActivityRows {
         case .message: "user"
         case .answer: "sparkle"
         case .reopened: "refresh"
+        case .moved: "chevronRight"
         case .failed: "x"
         case .permission: "shield"
         case .system: "zap"
@@ -74,11 +75,25 @@ public enum ActivityRows {
         case .message: TicketDetailLogic.authorLabel(e.author)
         case .answer: "Agent"
         case .reopened: "Re-opened"
+        case .moved: "Moved"
         case .failed: "Run failed"
         case .permission: "Permission"
         case .system: "Harness"
         case .unknown: TicketDetailLogic.authorLabel(e.author)
         }
+    }
+
+    /// The heading as the row shows it: the title, then the column the entry moved the ticket to
+    /// when it moved it (meta.to), as the board labels it ("Submitted for review → Review",
+    /// "Moved → Done").
+    public static func heading(_ e: ActivityEntry) -> String {
+        withMove(title(e), e)
+    }
+
+    /// `text` with " → <column>" when the entry moved the ticket (meta.to); `text` as is otherwise.
+    public static func withMove(_ text: String, _ e: ActivityEntry) -> String {
+        guard let to = e.meta.to else { return text }
+        return "\(text) → \(Format.statusLabel[to] ?? to.rawValue)"
     }
 
     /// The small line after the title: a review's round and short commit ("Round 2 · 9f1c2ab"), a

@@ -272,16 +272,18 @@ public enum ActivityAuthor: OpenEnum {
 ///   wrote it (POST /messages no longer logs to Activity), kept so older tickets still decode
 /// - answer: legacy. The agent's final answer to such a message, written only by older services
 /// - reopened: a done ticket went back to work; the notes
+/// - moved: a column change no other entry records (a drag, Start, Completed); meta.from and
+///   meta.to, and a one-line body that may be empty
 /// - failed: a run failed
 /// - permission: a tool approval was asked for or answered
 /// - system: anything else the service records
 public enum ActivityKind: OpenEnum {
     case note, submitted, blocked, unblocked, reviewApproved, changesRequested, approved
-    case message, answer, reopened, failed, permission, system
+    case message, answer, reopened, moved, failed, permission, system
     case unknown(String)
     public static let allKnown: [Self] = [
         .note, .submitted, .blocked, .unblocked, .reviewApproved, .changesRequested, .approved,
-        .message, .answer, .reopened, .failed, .permission, .system,
+        .message, .answer, .reopened, .moved, .failed, .permission, .system,
     ]
     public var rawValue: String {
         switch self {
@@ -295,6 +297,7 @@ public enum ActivityKind: OpenEnum {
         case .message: "message"
         case .answer: "answer"
         case .reopened: "reopened"
+        case .moved: "moved"
         case .failed: "failed"
         case .permission: "permission"
         case .system: "system"

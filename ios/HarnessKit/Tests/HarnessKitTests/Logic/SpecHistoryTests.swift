@@ -128,6 +128,19 @@ struct ActivityRowsTests {
         #expect(ActivityRows.body(noMeta) == "")
     }
 
+    @Test func headingEndsWithTheColumnTheEntryMovedTheTicketTo() {
+        #expect(ActivityRows.heading(Self.e(.moved, author: .human, body: "", meta: ActivityMeta(from: .review, to: .done))) == "Moved → Done")
+        #expect(ActivityRows.heading(Self.e(.submitted, meta: ActivityMeta(specRevision: 5, from: .inProgress, to: .review))) == "Submitted for review → Review")
+        #expect(ActivityRows.heading(Self.e(.blocked, meta: ActivityMeta(to: .blocked))) == "Needs your answer → Blocked")
+        #expect(ActivityRows.heading(Self.e(.unblocked, meta: ActivityMeta(from: .blocked, to: .inProgress))) == "Picked back up → In progress")
+        // No `to` (a note, or an entry from an older service): the title alone, even with a `from`.
+        #expect(ActivityRows.heading(Self.e(.submitted)) == "Submitted for review")
+        #expect(ActivityRows.heading(Self.e(.note, meta: ActivityMeta(from: .review))) == "Agent")
+        #expect(ActivityRows.withMove("Asked you", Self.e(.blocked, meta: ActivityMeta(to: .blocked))) == "Asked you → Blocked")
+        // A bare move isn't news for the board card, which already shows the column.
+        #expect(!ActivityRows.newsKinds.contains(.moved))
+    }
+
     @Test func fullTextOpensOnlyWhenItSaysMoreThanTheBody() {
         let summary = Self.e(.changesRequested, body: "Add tests for the retry", meta: ActivityMeta(detail: "Add tests for the retry.\n\n- backoff caps at 30s\n- jitter"))
         #expect(ActivityRows.fullText(summary) == "Add tests for the retry.\n\n- backoff caps at 30s\n- jitter")

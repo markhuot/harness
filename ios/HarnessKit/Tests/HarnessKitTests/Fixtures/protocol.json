@@ -67,6 +67,19 @@
         "specRevision": 4
       },
       "createdAt": 1759190400003
+    },
+    {
+      "id": "act_7",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "moved",
+      "author": "human",
+      "body": "",
+      "meta": {
+        "from": "review",
+        "to": "done"
+      },
+      "createdAt": 1759190400004
     }
   ],
   "ActivityMeta": [
@@ -87,6 +100,11 @@
       "note": "The human answered",
       "specRevision": 4,
       "by": "human"
+    },
+    {
+      "specRevision": 5,
+      "from": "in_progress",
+      "to": "review"
     },
     {
       "round": 3,
@@ -2548,6 +2566,19 @@
             "specRevision": 4
           },
           "createdAt": 1759190400003
+        },
+        {
+          "id": "act_7",
+          "sessionId": "ses_31",
+          "ticketId": "tkt_31",
+          "kind": "moved",
+          "author": "human",
+          "body": "",
+          "meta": {
+            "from": "review",
+            "to": "done"
+          },
+          "createdAt": 1759190400004
         }
       ],
       "runs": [
@@ -3485,6 +3516,7 @@
       "message",
       "answer",
       "reopened",
+      "moved",
       "failed",
       "permission",
       "system"

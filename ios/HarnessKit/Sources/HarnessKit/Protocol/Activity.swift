@@ -45,10 +45,16 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
     /// request-changes notes, the list of calls the classifier denied. Absent when the body is the
     /// whole story, and on entries from older services, whose body held the full text.
     public var detail: String?
+    /// moved, and any entry that itself moved the ticket (submitted, blocked, unblocked,
+    /// changes_requested, reopened, a failure that blocked it…): the column it left
+    public var from: TicketStatus?
+    /// …and the column it went to
+    public var to: TicketStatus?
 
     public init(
         question: String? = nil, round: Int? = nil, commit: Patch<String> = .absent, by: String? = nil,
-        note: String? = nil, specRevision: Int? = nil, detail: String? = nil
+        note: String? = nil, specRevision: Int? = nil, detail: String? = nil,
+        from: TicketStatus? = nil, to: TicketStatus? = nil
     ) {
         self.question = question
         self.round = round
@@ -57,6 +63,8 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
         self.note = note
         self.specRevision = specRevision
         self.detail = detail
+        self.from = from
+        self.to = to
     }
 }
 

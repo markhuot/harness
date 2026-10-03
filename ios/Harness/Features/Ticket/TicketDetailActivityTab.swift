@@ -85,7 +85,7 @@ private struct ActivityRow: View {
     private func heading(_ color: Color) -> some View {
         let detail = ActivityRows.detail(entry)
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(ActivityRows.title(entry)).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(color)
+            Text(ActivityRows.heading(entry)).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(color)
             if !detail.isEmpty { Text(detail).font(.mono(12)).foregroundStyle(c.text2) }
             Text(time).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
         }
@@ -113,7 +113,7 @@ private struct ActivityRow: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Icon("alert", size: 14, weight: .semibold).foregroundStyle(tint)
-                Text(open ? ActivityRows.title(entry) : "Asked you").font(.scaled(size: 14, weight: .semibold)).foregroundStyle(tint)
+                Text(ActivityRows.withMove(open ? ActivityRows.title(entry) : "Asked you", entry)).font(.scaled(size: 14, weight: .semibold)).foregroundStyle(tint)
                 Spacer(minLength: 0)
                 Text(time).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
             }
@@ -134,7 +134,7 @@ private struct ActivityRow: View {
         VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
             HStack(spacing: 6) {
                 if !mine { Icon("sparkle", size: 11, weight: .semibold).foregroundStyle(c.accent) }
-                Text(ActivityRows.title(entry)).font(.scaled(size: 12.5, weight: .semibold)).foregroundStyle(c.text2)
+                Text(ActivityRows.heading(entry)).font(.scaled(size: 12.5, weight: .semibold)).foregroundStyle(c.text2)
                 Text(time).font(.scaled(size: 12)).foregroundStyle(c.text3)
             }
             MarkdownView(text: entry.body, size: 14.5)
@@ -154,7 +154,7 @@ private struct ActivityRow: View {
             Icon(ActivityRows.icon(entry), size: 11, weight: .semibold).foregroundStyle(entry.kind == .failed ? c.red.opacity(0.8) : c.text3)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(ActivityRows.title(entry)).font(.scaled(size: 12.5, weight: .semibold)).foregroundStyle(c.text3)
+                    Text(ActivityRows.heading(entry)).font(.scaled(size: 12.5, weight: .semibold)).foregroundStyle(c.text3)
                     Text(time).font(.scaled(size: 12)).foregroundStyle(c.text3)
                 }
                 if !TicketDetailLogic.trim(entry.body).isEmpty { MarkdownView(text: entry.body, size: 13, color: c.text3) }
