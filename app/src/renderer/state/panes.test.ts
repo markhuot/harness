@@ -675,17 +675,18 @@ describe("parsePanes / serializePanes", () => {
     expect(s.zoomedId).toBeNull();
   });
 
-  test("a pane saved on the old Summaries tab opens on the Spec; other tabs are kept", () => {
+  test("a pane saved on the old Summaries tab opens on the Spec, the git plugin's Changes on the built-in one; other tabs are kept", () => {
     const raw = JSON.stringify({
       root: {
         type: "split",
         id: "r",
         dir: "row",
-        sizes: [0.4, 0.3, 0.3],
+        sizes: [0.4, 0.2, 0.2, 0.2],
         children: [
           B,
           { type: "leaf", id: "A", content: { kind: "ticket", ticketKey: "A-1", tab: "summaries" } },
           { type: "leaf", id: "C", content: { kind: "ticket", ticketKey: "A-2", tab: "activity" } },
+          { type: "leaf", id: "D", content: { kind: "ticket", ticketKey: "A-3", tab: "plugin:git:changes" } },
         ],
       },
       focusedId: "A",
@@ -694,6 +695,8 @@ describe("parsePanes / serializePanes", () => {
     const s = valid(parsePanes(raw));
     expect(findLeaf(s.root, "A")!.content).toEqual({ kind: "ticket", ticketKey: "A-1", tab: "spec" });
     expect(findLeaf(s.root, "C")!.content).toEqual({ kind: "ticket", ticketKey: "A-2", tab: "activity" });
+    // The git plugin's Changes tab is built in now.
+    expect(findLeaf(s.root, "D")!.content).toEqual({ kind: "ticket", ticketKey: "A-3", tab: "changes" });
     expect(s.focusedId).toBe("A");
     // Saved again, it no longer says "summaries".
     expect(serializePanes(s)).not.toContain("summaries");

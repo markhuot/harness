@@ -17,7 +17,7 @@
 //   • focusedId/zoomedId name an existing leaf, or are null.
 
 import { useSyncExternalStore } from "react";
-import { ALL_SCOPE, ticketTabFrom, type TicketTab } from "@harness/shared/state";
+import { ALL_SCOPE, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
 
 /**
  * A shell in the main process (window.harness.terminal), started in `cwd` (`~` = home). `sessionId`
@@ -1114,8 +1114,9 @@ function parseContent(v: unknown): PaneContent | null {
   if (!isObject(v)) return null;
   if (v.kind === "board") return { kind: "board" };
   if (v.kind === "ticket" && typeof v.ticketKey === "string" && v.ticketKey) {
-    // Saved before a tab was renamed ("summaries" is now the Spec): ticketTabFrom maps it.
-    return { kind: "ticket", ticketKey: v.ticketKey, tab: (typeof v.tab === "string" && ticketTabFrom(v.tab)) || "spec" };
+    // Saved before a tab was renamed ("summaries" is now the Spec, "plugin:git:changes" the built-in
+    // Changes): ticketTabWithChanges maps it.
+    return { kind: "ticket", ticketKey: v.ticketKey, tab: (typeof v.tab === "string" && ticketTabWithChanges(v.tab)) || "spec" };
   }
   if (v.kind === "terminal" && typeof v.sessionId === "string" && SESSION_ID.test(v.sessionId) && typeof v.cwd === "string" && v.cwd) {
     const t: TerminalContent = { kind: "terminal", sessionId: v.sessionId, cwd: v.cwd };
