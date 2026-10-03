@@ -138,6 +138,14 @@ public enum Tabs {
         return isTicketTab(t) ? TicketTab(t) : nil
     }
 
+    /// The tab to show once the composer's send finished: the Transcript after a message went
+    /// through, from any tab, since that's where it and the agent's reply show (messages never go
+    /// into Activity); the same tab when the send failed, so the human stays where the error found
+    /// them.
+    public static func tabAfterSend(_ tab: TicketTab, sent: Bool) -> TicketTab {
+        sent ? .transcript : tab
+    }
+
     /// The live dot's label on the Agents & tasks tab.
     public static let agentsLiveLabel = "A sub-agent or task is running"
 

@@ -171,18 +171,6 @@ struct ComposerTests {
         review.status = .review
         #expect(TicketDetailLogic.composerPlaceholder(review) == "Ask about the work, or ask for a change…")
     }
-
-    static let tabs: [TicketTab] = [.spec, .activity, .transcript, .details, .children, .agents, .browser, .changes, TicketTab("agent:toolu_1"), TicketTab("plugin:notes:list")]
-
-    @Test(arguments: tabs)
-    func aSentMessageOpensTheTranscript(_ tab: TicketTab) {
-        #expect(TicketDetailLogic.tabAfterSend(tab, sent: true) == .transcript)
-    }
-
-    @Test(arguments: tabs)
-    func aFailedSendStaysOnTheTab(_ tab: TicketTab) {
-        #expect(TicketDetailLogic.tabAfterSend(tab, sent: false) == tab)
-    }
 }
 
 @Suite("Spec draft")

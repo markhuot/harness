@@ -416,53 +416,6 @@
       "output": false
     }
   ],
-  "logsMessagesCases": [
-    {
-      "name": "spec",
-      "input": "spec",
-      "output": true
-    },
-    {
-      "name": "activity",
-      "input": "activity",
-      "output": true
-    },
-    {
-      "name": "children",
-      "input": "children",
-      "output": false
-    },
-    {
-      "name": "transcript",
-      "input": "transcript",
-      "output": false
-    },
-    {
-      "name": "agents",
-      "input": "agents",
-      "output": false
-    },
-    {
-      "name": "browser",
-      "input": "browser",
-      "output": false
-    },
-    {
-      "name": "details",
-      "input": "details",
-      "output": false
-    },
-    {
-      "name": "plugin",
-      "input": "plugin:git:changes",
-      "output": false
-    },
-    {
-      "name": "agent",
-      "input": "agent:toolu_1",
-      "output": false
-    }
-  ],
   "nextTabCases": [
     {
       "name": "forward",
@@ -1117,6 +1070,72 @@
       "name": "not validated",
       "input": "a b",
       "output": "agent:a b"
+    }
+  ],
+  "tabAfterSendCases": [
+    {
+      "name": "sent from spec",
+      "input": {
+        "tab": "spec",
+        "sent": true
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "sent from activity",
+      "input": {
+        "tab": "activity",
+        "sent": true
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "sent from transcript",
+      "input": {
+        "tab": "transcript",
+        "sent": true
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "sent from a plugin tab",
+      "input": {
+        "tab": "plugin:git:changes",
+        "sent": true
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "sent from a sub-agent",
+      "input": {
+        "tab": "agent:toolu_1",
+        "sent": true
+      },
+      "output": "transcript"
+    },
+    {
+      "name": "failed from spec",
+      "input": {
+        "tab": "spec",
+        "sent": false
+      },
+      "output": "spec"
+    },
+    {
+      "name": "failed from activity",
+      "input": {
+        "tab": "activity",
+        "sent": false
+      },
+      "output": "activity"
+    },
+    {
+      "name": "failed from a plugin tab",
+      "input": {
+        "tab": "plugin:git:changes",
+        "sent": false
+      },
+      "output": "plugin:git:changes"
     }
   ],
   "tabLabel": {

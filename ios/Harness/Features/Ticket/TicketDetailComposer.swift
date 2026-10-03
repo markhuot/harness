@@ -6,7 +6,7 @@ import SwiftUI
 /// the ticket first and the hint about what a message does. The switch and hint show only while
 /// writing: once the field is focused, and after a blur only while it holds a message. A message
 /// goes to the agent and shows in the Transcript, never in Activity, so a send that goes through
-/// opens the Transcript from any tab (TicketDetailLogic.tabAfterSend). The field and send button
+/// opens the Transcript from any tab (Tabs.tabAfterSend). The field and send button
 /// are Liquid Glass floating over the tab, with no bar of their own.
 struct TicketDetailComposer: View {
     let ticket: Ticket
@@ -119,7 +119,7 @@ struct TicketDetailComposer: View {
                 text = ""
                 moveFirst = false
             }
-            let next = TicketDetailLogic.tabAfterSend(tab, sent: ok != nil)
+            let next = Tabs.tabAfterSend(tab, sent: ok != nil)
             if next != tab { onTab(next) }
         }
     }

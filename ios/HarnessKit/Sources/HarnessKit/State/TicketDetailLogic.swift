@@ -100,13 +100,6 @@ public enum TicketDetailLogic {
         Format.composerPlaceholder[t.status] ?? "Message the agent…"
     }
 
-    /// The tab to show once the composer's send finished: the Transcript after a message went
-    /// through, from any tab, since that's where it and the agent's reply show; the same tab when
-    /// the send failed, so the human stays where the error toast found them.
-    public static func tabAfterSend(_ tab: TicketTab, sent: Bool) -> TicketTab {
-        sent ? .transcript : tab
-    }
-
     /// "1 ticket waiting on you" / "3 tickets waiting on you".
     public static func waitingOnYou(_ n: Int) -> String {
         "\(n) ticket\(n == 1 ? "" : "s") waiting on you"

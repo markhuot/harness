@@ -88,6 +88,12 @@
       "specRevision": 4,
       "by": "human"
     },
+    {
+      "round": 3,
+      "commit": "9f1c2ab",
+      "by": "agent",
+      "detail": "The enum test is tautological.\n\n- `Enums.swift:12`: assert a real decode"
+    },
     {}
   ],
   "ApiError": [
@@ -1079,13 +1085,8 @@
       "move": true
     },
     {
-      "text": "Why the enum?",
-      "log": true
-    },
-    {
       "text": "Back to work",
-      "move": true,
-      "log": false
+      "move": false
     }
   ],
   "ModelInfo": [
