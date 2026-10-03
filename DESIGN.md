@@ -1442,6 +1442,7 @@ their `ActivityMeta`:
 | --- | --- | --- |
 | `note` | an agent calls `post_note` | |
 | `submitted` | the work goes to review (`submit_for_review`'s note, or the first line of the auto-submit's last text, author `system`) | `specRevision` |
+| `spec_revised` | a new spec revision after the first (`reviseSpec`: `update_spec`, `edit_spec`, `update_ticket`, a human's PATCH); the body is the revision's note, the author whoever wrote it | `specRevision` |
 | `blocked` | the agent blocks (`block`, or a run ending on a question), or the service does (too many rejections, a PR completion without a pull request, a cleanup that didn't finish) | `question` |
 | `unblocked` | the agent calls `unblock` | `note` when it gave one |
 | `review_approved` | the agent review approves | `by`, `round`, `commit` (see "Agent review") |
@@ -1468,6 +1469,14 @@ prompt carries a reviewer's full notes. The work prompts (`system.spec` with `su
 note at each milestone and at least every 10 minutes ("Still running tests: 3 of 10 suites done").
 That's an instruction, not a timer: a steered message still undelivered when a run ends becomes a
 queued run, so a service-side nudge could start runs on its own.
+
+**Spec revisions write their own entry.** A run that changes the spec has done something worth a
+line, and the revision's note is already mandatory, so `reviseSpec` records each revision as a
+`spec_revised` entry rather than relying on the agent to `post_note` it. This is what keeps
+planning runs, which never submit and aren't asked for progress notes, visible in Activity. The
+prompt and the `note` parameter of `update_spec`/`edit_spec` say the note is that Activity line and
+needn't be repeated with `post_note`. Each revision gets its own entry; nothing folds a run's
+revisions together, since Activity is append-only and clients have no update event for an entry.
 
 **Show details.** Both apps offer Show details under an entry whose `detail` says more than its
 body, revealing `activityDetail(entry)` (`shared/src/state/activity.ts`, held for HarnessKit's
@@ -1534,8 +1543,9 @@ since its history lives in its revisions.
   `PATCH /tickets/:key { spec, baseRevision }`, `update_spec`, `edit_spec` and
   `update_ticket { spec, base_revision }`, each naming the revision it replaces, so no write
   overwrites a concurrent one. It checks the base revision, adds the next revision
-  (none when the body didn't change), appends a `Spec revision N: <note>` status line and emits
-  `spec.revised`. A draft's spec has no history: its PATCH rewrites revision 1 in place
+  (none when the body didn't change), appends a `Spec revision N: <note>` status line, records a
+  `spec_revised` Activity entry (the note as its line, by the revision's author) and emits
+  `spec.revised`. Revision 1 adds no Activity entry: a new ticket isn't news. A draft's spec has no history: its PATCH rewrites revision 1 in place
   (`SpecRepo.replaceDraft`).
 - **Conflicts.** A spec write names the revision it started from. `PATCH` needs `baseRevision`
   with `spec` outside drafts (400 without it); `specNote` is the revision's note (default "Edited
@@ -1564,7 +1574,8 @@ since its history lives in its revisions.
   confirmation that the spec already describes the finished work. See "Tools".
 - **Prompts.** `system.spec` ("Spec and Activity", every ticket run) names the current revision
   and the baseline, asks to change only what changed, lists the sections, explains images, holds
-  Activity notes to one line without repeating the spec, asks work runs for a progress note at
+  Activity notes to one line without repeating the spec, says each spec revision's note becomes its
+  Activity line (so it isn't repeated with `post_note`), asks work runs for a progress note at
   least every 10 minutes, and ends with the last five Activity entries. `run.work_start`, `run.changes_requested` and `run.reopen` name the
   revision, and the latter two ask for edits to the parts this round changed.
 

@@ -278,17 +278,18 @@ public enum ActivityAuthor: OpenEnum {
 /// - permission: a tool approval was asked for or answered
 /// - system: anything else the service records
 public enum ActivityKind: OpenEnum {
-    case note, submitted, blocked, unblocked, reviewApproved, changesRequested, approved
+    case note, submitted, specRevised, blocked, unblocked, reviewApproved, changesRequested, approved
     case message, answer, reopened, moved, failed, permission, system
     case unknown(String)
     public static let allKnown: [Self] = [
-        .note, .submitted, .blocked, .unblocked, .reviewApproved, .changesRequested, .approved,
+        .note, .submitted, .specRevised, .blocked, .unblocked, .reviewApproved, .changesRequested, .approved,
         .message, .answer, .reopened, .moved, .failed, .permission, .system,
     ]
     public var rawValue: String {
         switch self {
         case .note: "note"
         case .submitted: "submitted"
+        case .specRevised: "spec_revised"
         case .blocked: "blocked"
         case .unblocked: "unblocked"
         case .reviewApproved: "review_approved"

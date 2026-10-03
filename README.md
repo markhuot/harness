@@ -118,7 +118,7 @@ you answer.
   requirements. The turn-by-turn story stays in Activity and the transcript. Every edit, yours or an agent's, is a revision, and pressing Start marks the one
   you approved, so the reviewer can see what changed since. **Activity** is the ticket's
   at-a-glance progress, one line per entry: agent notes (at least every 10 minutes on long work),
-  submits, questions, review decisions, approvals, and every column change. Messages you send go
+  each spec revision with its note, submits, questions, review decisions, approvals, and every column change. Messages you send go
   to the agent and the transcript, and the ticket switches to its Transcript once you send one.
 - New session's **Options** hold the same settings as a ticket's Details tab. To have the agent
   work right in the project folder instead of a worktree, pick the branch the folder already has

@@ -504,6 +504,8 @@ export interface Attachment {
  * What an Activity entry records (DESIGN.md "Activity"):
  * - note: an agent's short progress note (post_note)
  * - submitted: the work went to review (the submit note)
+ * - spec_revised: a new spec revision (revision 1, written with the ticket, adds none); the body is
+ *   the revision's note, meta.specRevision its number, the author who wrote it
  * - blocked: the agent (or a failure) asked the human something; meta.question
  * - unblocked: the agent picked a blocked ticket back up; meta.note when it gave one
  * - review_approved / changes_requested: an agent or conductor review decision; meta.round,
@@ -522,6 +524,7 @@ export interface Attachment {
 export const ACTIVITY_KINDS = [
   "note",
   "submitted",
+  "spec_revised",
   "blocked",
   "unblocked",
   "review_approved",
@@ -549,7 +552,7 @@ export interface ActivityMeta {
   by?: "agent" | "human" | "conductor";
   /** unblocked: what resolved it */
   note?: string;
-  /** submitted: the spec revision the work was submitted at */
+  /** submitted: the spec revision the work was submitted at; spec_revised: the revision it records */
   specRevision?: number;
   /**
    * The full text when the body is its one-line summary: a review's request-changes notes, the

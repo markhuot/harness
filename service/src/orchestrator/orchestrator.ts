@@ -2203,7 +2203,8 @@ ${numberLines(r.body)}`;
   /**
    * Every spec write goes through here (DESIGN.md "Spec revisions and attachments"): PATCH,
    * update_spec, edit_spec, update_ticket. Adds the next revision (none when the body didn't
-   * change), broadcasts spec.revised and the ticket. A stale `baseRevision` throws 409 carrying
+   * change), records it in Activity (spec_revised, the note as its line), broadcasts spec.revised
+   * and the ticket. A stale `baseRevision` throws 409 carrying
    * SpecConflict. Ticket creation (create_ticket, dispatch_ticket, triage, POST /tickets) writes
    * revision 1 with the ticket itself.
    */
@@ -2223,6 +2224,7 @@ ${numberLines(r.body)}`;
     if (!rev) return null;
     this.bus.emit({ kind: "spec.revised", ticketId: ticket.id, rev: rev.rev, author: rev.author, note: rev.note, runId: rev.runId, runKind: rev.runKind, createdAt: rev.createdAt });
     this.appendStatus(ticket.sessionId, w.runId ?? null, `Spec revision ${rev.rev}: ${rev.note}`);
+    this.addActivityLine(ticket, "spec_revised", rev.author, rev.note, { specRevision: rev.rev });
     this.touchTicket(ticket.id);
     return rev;
   }

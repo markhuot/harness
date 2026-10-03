@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Activity now lists each spec revision with its note, on the Mac and on iPhone and iPad. Planning,
+  your own spec edits and an agent's Status updates show up in the Activity tab and as the latest
+  line on a ticket's board card, where before a ticket could be planned and revised with nothing in
+  Activity.
+
 ### Changed
 
 - The progress bar for a ticket's child tickets is back in its Tickets tab, on the Mac, iPhone and

@@ -26,7 +26,7 @@ public enum ActivityRows {
     /// The kinds a board card or a conductor's child row shows as the ticket's latest news: what
     /// the agent said or did, not questions (the card shows the blocked reason itself), messages
     /// or the service's own notes.
-    public static let newsKinds: [ActivityKind] = [.note, .submitted, .reviewApproved, .changesRequested, .approved, .answer, .reopened, .failed]
+    public static let newsKinds: [ActivityKind] = [.note, .submitted, .specRevised, .reviewApproved, .changesRequested, .approved, .answer, .reopened, .failed]
 
     /// The look `kind` takes.
     public static func look(_ e: ActivityEntry) -> ActivityLook {
@@ -46,6 +46,7 @@ public enum ActivityRows {
         switch e.kind {
         case .note: "fileText"
         case .submitted: "send"
+        case .specRevised: "layers"
         case .blocked: "alert"
         case .unblocked: "play"
         case .reviewApproved: "checkCircle"
@@ -67,6 +68,7 @@ public enum ActivityRows {
         switch e.kind {
         case .note: TicketDetailLogic.authorLabel(e.author)
         case .submitted: "Submitted for review"
+        case .specRevised: e.author == .human ? "You revised the spec" : "Spec revised"
         case .blocked: "Needs your answer"
         case .unblocked: "Picked back up"
         case .reviewApproved: by(e) == "conductor" ? "Conductor approved the review" : "Review approved"
@@ -97,7 +99,7 @@ public enum ActivityRows {
     }
 
     /// The small line after the title: a review's round and short commit ("Round 2 · 9f1c2ab"), a
-    /// submit's spec revision ("at rev 4"); "" for the rest.
+    /// submit's spec revision ("at rev 4"), a spec revision's number ("Rev 3"); "" for the rest.
     public static func detail(_ e: ActivityEntry) -> String {
         switch e.kind {
         case .reviewApproved, .changesRequested:
@@ -107,6 +109,8 @@ public enum ActivityRows {
             return parts.joined(separator: " · ")
         case .submitted:
             return e.meta.specRevision.map { "at rev \($0)" } ?? ""
+        case .specRevised:
+            return e.meta.specRevision.map { "Rev \($0)" } ?? ""
         default:
             return ""
         }
