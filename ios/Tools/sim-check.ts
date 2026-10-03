@@ -27,8 +27,9 @@
 //      them), the Done column scrolls into older pages, and the board's search field finds the
 //      unloaded done ticket; paging-*.png
 //
-//   --stick: a ticket with a long spec, a long transcript and a long Activity feed (messages sent
-//      with log: true, so they and the agent's answers go into Activity); swipes the Transcript tab
+//   --stick: a ticket with a long spec, a long transcript and a long Activity feed (messages that
+//      have the dummy resume and resubmit the work, so each adds a submit and a review to Activity);
+//      swipes the Transcript tab
 //      and checks it follows new content at the bottom, stays put once scrolled up, and follows again
 //      after scrolling back down; the Activity tab opens at the bottom and follows; the ticket's hero
 //      scrolls away with the transcript and comes back on scrolling back or a tap on the tab
@@ -550,7 +551,7 @@ const TABLE_BRIEF = [
   "|---|---|---|",
   "| 21 screens, light and dark | about 300 s | Every shot is a `coldOpen`: terminate, cold launch (about 4 s), then wait for the accessibility tree to stay unchanged for 800 ms (each `describe-ui` takes about 0.4 s). Then a fixed 1 s sleep (3.5 s for browser, 2.5 s for changes), then `running()`. That's 42 cold launches. |",
   "| Seeding | tens of seconds | The dummy driver streams at 40 ms per word, about 3× its default. `settle(browse)` allows up to 90 s. `Bun.sleep(1500)` at the end. |",
-  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for the dummy's chat reply at 40 ms per word. Fixed sleeps of 1.5–3 s. Transcript and Activity test the same hook twice. |",
+  "| `--stick` | several minutes | 5 seed messages and 6 `sayStick` calls, each waiting for the dummy's chat reply at 40 ms per word (the seed's and Activity's also for a resubmit and its review run). Fixed sleeps of 1.5–3 s. Transcript and Activity test the same hook twice. |",
   "",
   "Measure with:",
   "```",
@@ -740,9 +741,9 @@ async function seed() {
 
   const [, ch] = await Promise.all([
     // Then a reply with a list: the user's bubble shrink-wraps, which once collapsed list text to nothing.
-    // Logged, as from the Spec or Activity tab, so it and the answer show in Activity too.
+    // Messages go to the transcript only, never into Activity.
     settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
-      .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n"), log: true }))
+      .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
       .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))),
     settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(approval.key, (t) => !!t.pendingApproval),
@@ -877,13 +878,26 @@ const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do e
 const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
 /** The line over the composer ("Stays in review unless…"), which isn't one of the list's rows. */
 const COMPOSER_HINTS = new Set((["planning", "in_progress", "blocked", "review", "done"] as const).flatMap((status) => [false, true].map((busy) => composerHint({ status, busy }))));
-async function sayStick(key: string, n: number) {
-  // Logged, like a message from the Spec or Activity tab: it and the agent's answer go into
-  // Activity (and the chat run into the transcript), so both tabs grow.
-  await api("POST", `/tickets/${key}/messages`, { text: stickText(n), log: true });
+/** The last Activity row after a `sayStick(…, { activity: true })`: the dummy reviewer's approval. */
+const STICK_REVIEWED = "The dummy reviewer approves.";
+/**
+ * Message `n` to the --stick ticket. A message only goes into the transcript (its chat run), so
+ * with `activity` it also has the dummy take the work out of review and submit it again, which adds
+ * a resume, a submit and a review decision to Activity (and their runs to the transcript).
+ */
+async function sayStick(key: string, n: number, { activity = false } = {}) {
+  const activityOf = () => api<ActivityEntry[]>("GET", `/tickets/${encodeURIComponent(key)}/activity`);
+  const reviews = activity ? (await activityOf()).filter((e) => e.kind === "review_approved").length : 0;
+  await api("POST", `/tickets/${key}/messages`, { text: activity ? `${stickText(n)} [dummy:resume] [dummy:submit]` : stickText(n) });
+  if (activity) {
+    // Settled once the resubmitted work's review approved it again.
+    await until(`${key} re-reviewed after message ${n}`, async () => (await activityOf()).filter((e) => e.kind === "review_approved").length > reviews || null, 60000, 100);
+    return settle(key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
+  }
   // The ticket stays in review, so it looks settled before the run starts: wait for the answer.
   const reply = `You said: "Stick ${n}:`;
-  await until(`${key} replies to message ${n}`, async () => (await api<ActivityEntry[]>("GET", `/tickets/${encodeURIComponent(key)}/activity`)).some((e) => e.kind === "answer" && e.body.includes(reply)), 60000, 100);
+  const sessionId = (await ticketOf(key)).sessionId;
+  await until(`${key} replies to message ${n}`, async () => (await api<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript`)).some((e) => "text" in e.content && e.content.text.includes(reply)) || null, 60000, 100);
   return settle(key, (t) => !t.busy);
 }
 /** A project with a few files and one ticket in review (its spec `spec`), for --stick, --keyboard and --mentions. */
@@ -902,7 +916,7 @@ async function seedTicket(key: string, spec: string, files: Record<string, strin
 }
 async function seedStick() {
   const s = await seedTicket("STICK", stickText(0, 14));
-  for (let n = 1; n <= 3; n++) await sayStick(s.ticket.key, n);
+  for (let n = 1; n <= 3; n++) await sayStick(s.ticket.key, n, { activity: true });
   return s;
 }
 
@@ -953,30 +967,40 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     }
     await Bun.sleep(flick ? 900 : 600); // a fling's momentum runs on after the finger lifts
   };
-  /** New content lands (another message and its runs) and the list has laid it out. */
-  const say = async (n: number, last: (l: string) => boolean) => {
-    await sayStick(key, n);
-    await until(`message ${n} on screen`, async () => (await labels(udid)).some((l) => l.includes(`Stick ${n}:`)) && (await labels(udid)).some(last), 8000).catch(() => {});
+  /**
+   * New content lands (another message and its runs) and the list has laid it out. With
+   * `activity`, the message has the work resubmitted, so Activity grows too (a message alone
+   * shows only in the transcript).
+   */
+  const say = async (n: number, last: (l: string) => boolean, activity = false) => {
+    const before = activity ? (await labels(udid)).filter(last).length : 0;
+    await sayStick(key, n, { activity });
+    const landed = activity
+      ? async () => (await labels(udid)).filter(last).length > before
+      : async () => (await labels(udid)).some((l) => l.includes(`Stick ${n}:`)) && (await labels(udid)).some(last);
+    await until(`message ${n}'s content on screen`, async () => (await landed()) || null, 8000).catch(() => {});
     await Bun.sleep(500);
   };
 
   let n = 3;
-  // Every message ends with its chat run (a message leaves the ticket in review, so no reviewer
-  // run follows): its last transcript row, and the agent's answer as the last Activity entry (the
-  // answer's bubble reads "Agent, <time>, (dummy chat) You said…").
+  // A plain message ends with its chat run (it leaves the ticket in review, so no reviewer run
+  // follows): its last transcript row. Activity only grows when the work is resubmitted, so its
+  // messages do that and its last entry is the re-review's approval. The seed's messages all
+  // resubmitted, so the transcript opens on a review run.
   // Transcript (a FlatList with estimated rows, where UIKit moves the offset by itself) gets every
   // check; Activity uses the same hook, whose gating is unit-tested, so it gets the first two.
-  const tabs: [string, (l: string) => boolean, boolean][] = [
-    ["transcript", (l) => l.startsWith("Run finished (chat)"), true],
-    ["activity", (l) => l.includes("(dummy chat) You said"), false],
+  const tabs: [string, (l: string) => boolean, (l: string) => boolean, boolean][] = [
+    ["transcript", (l) => l.startsWith("Run finished ("), (l) => l.startsWith("Run finished (chat)"), true],
+    ["activity", (l) => l.includes(STICK_REVIEWED), (l) => l.includes(STICK_REVIEWED), false],
   ];
-  for (const [tab, last, all] of tabs) {
+  for (const [tab, opening, last, all] of tabs) {
+    const activity = tab === "activity";
     await check(`${tab} opens at the bottom`, async () => {
       await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
-      return until("at the bottom", () => atBottom(last), 10000);
+      return until("at the bottom", () => atBottom(opening), 10000);
     });
     await check(`${tab} follows new content while at the bottom`, async () => {
-      await say(++n, last);
+      await say(++n, last, activity);
       return until("at the bottom", () => atBottom(last), 10000);
     });
     if (!all) continue;
@@ -1458,8 +1482,8 @@ function screens(s: Seeded): Screen[] {
         }
       : { name: "projects", url: "harness://projects" },
     { name: "ticket-spec", url: `harness://ticket/${k(s.hello)}?tab=spec` },
-    // The logged reply (seed) and the agent's answer read as a conversation under the notes and submits.
-    { name: "ticket-activity", url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("(dummy chat) You said")) },
+    // The notes, submits and review decisions; the seed's reply went to the transcript only.
+    { name: "ticket-activity", url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("The dummy reviewer approves")) },
     { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
     { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
     { name: "ticket-transcript-tables", url: `harness://ticket/${k(s.tables)}?tab=transcript`, ready: (l) => l.some((x) => x.startsWith("Run finished (review)")) },
@@ -1767,7 +1791,11 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await axe("type", "Use Happy Cog [dummy:unblock]", "--udid", udid);
         await tapWhere(udid, "Send");
         const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
-        return `${t.key} → ${t.status}`;
+        // A sent message opens the Transcript, where it and the reply show (never in Activity): the
+        // ticket opened on its Spec, so the agent's reply on screen means the tab switched.
+        await until("the Transcript with the reply", async () => (await labels(udid)).some((l) => l.includes('You said: "Use Happy Cog')) || null, 10000);
+        await shot(udid, "composer-sent-transcript");
+        return `${t.key} → ${t.status}, Transcript shown`;
       });
       await check("Start work moves a planning ticket to In progress", async () => {
         await goto(udid, `harness://ticket/${k(s.plan)}`, (l) => l.includes("Start work"));
