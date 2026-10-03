@@ -15,6 +15,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   releases. A banner at the top of the board, Inbox and Settings names both releases and says which
   side to update: Harness from TestFlight, or Harness on the Mac. Close it to hide it until either
   side changes.
+- On iPhone and iPad, swipe sideways on a ticket to move between its tabs, from Spec to Activity
+  and on through Details. The next tab slides in under your finger as you drag, and the tab strip,
+  header and message box stay where they are. A right swipe on Spec still goes back.
 
 ### Fixed
 

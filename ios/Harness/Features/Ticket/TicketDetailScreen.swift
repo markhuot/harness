@@ -126,9 +126,7 @@ private struct TicketDetailBody: View {
     var body: some View {
         let state = store.state
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
-        let agent = Tabs.parseSubagentTab(shown)
-        let plugin = Tabs.parsePluginTab(shown)
-        let compact = shown == .browser || shown == .changes || plugin != nil || agent != nil
+        let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
         VStack(spacing: 0) {
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
@@ -139,9 +137,7 @@ private struct TicketDetailBody: View {
                 hero.show()
                 onTab(t)
             }
-            tabBody(shown, agent: agent, plugin: plugin)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .environment(\.ticketDetailHero, hero)
+            pager(shown)
                 .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
                     hero.show()
                     onTab(t)
@@ -152,6 +148,34 @@ private struct TicketDetailBody: View {
             TicketDetailComposer(ticket: ticket, tab: shown, onTab: onTab).id(ticket.id)
         }
         .modifier(TicketDetailHeader(ticket: ticket))
+    }
+
+    /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the
+    /// neighbouring tab, showing its content as it comes in. The Agents page shows the sub-agent or
+    /// task open in it. Only the page on screen drives the hero, so a page coming into view (the
+    /// Transcript jumping to its bottom, say) can't hide or show it.
+    private func pager(_ shown: TicketTab) -> some View {
+        let strip = Tabs.tabStripTab(shown)
+        var pages = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: store.state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
+        // A plugin tab from a link, before the ticket's plugin tabs have loaded.
+        if !pages.contains(strip) { pages.append(strip) }
+        let selection = Binding<TicketTab>(get: { strip }, set: { t in
+            guard t != strip else { return }
+            haptic(.select)
+            hero.show()
+            onTab(t)
+        })
+        return TabView(selection: selection) {
+            ForEach(pages, id: \.self) { page in
+                let t = page == strip ? shown : page
+                tabBody(t, agent: Tabs.parseSubagentTab(t), plugin: Tabs.parsePluginTab(t))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .environment(\.ticketDetailHero, page == strip ? hero : nil)
+                    .background { PagerYieldsToBackSwipe() }
+                    .tag(page)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
     }
 
     @ViewBuilder private func tabBody(_ shown: TicketTab, agent: String?, plugin: Tabs.ParsedPluginTab?) -> some View {
@@ -183,6 +207,68 @@ private struct TicketDetailBody: View {
             default: TicketDetailSpecTab(ticket: ticket)
             }
         }
+    }
+}
+
+/// Keeps a right swipe on the first tab going back, as it did before the tabs paged: the TabView's
+/// paging scroll view would otherwise take it from the navigation controller's back swipe (iOS 26's,
+/// from anywhere on the content). The pager's pan waits for that back swipe to fail, and a gate on the
+/// pager, which won't run alongside the back swipe, begins for every swipe but a rightward one on the
+/// first page: it shuts the back swipe out, so the pager pages; on the first page it stays out of the
+/// way and the back swipe goes. A page's background, inside the paging scroll view; the gate only sees
+/// touches on the pager, so the back swipe elsewhere is untouched.
+private struct PagerYieldsToBackSwipe: UIViewRepresentable {
+    func makeUIView(context: Context) -> Probe {
+        let v = Probe()
+        v.isUserInteractionEnabled = false
+        return v
+    }
+
+    func updateUIView(_ uiView: Probe, context: Context) {}
+
+    final class Probe: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            // The navigation controller is in the responder chain once the page is laid out in it.
+            DispatchQueue.main.async { [weak self] in self?.hook() }
+        }
+
+        private func hook() {
+            guard let pager = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? UIScrollView }).first(where: \.isPagingEnabled),
+                  !(pager.gestureRecognizers ?? []).contains(where: { $0 is PagingGate }),
+                  let back = sequence(first: next, next: { $0?.next }).lazy.compactMap({ $0 as? UIViewController }).first?
+                      .navigationController?.interactiveContentPopGestureRecognizer
+            else { return }
+            let gate = PagingGate(pager: pager, back: back)
+            pager.addGestureRecognizer(gate)
+            pager.panGestureRecognizer.require(toFail: back)
+        }
+    }
+
+    /// Begins when a swipe on the pager is the pager's to take: anything but rightward on the first page.
+    final class PagingGate: UIPanGestureRecognizer, UIGestureRecognizerDelegate {
+        private weak var pager: UIScrollView?
+        private weak var back: UIGestureRecognizer?
+
+        init(pager: UIScrollView, back: UIGestureRecognizer) {
+            self.pager = pager
+            self.back = back
+            super.init(target: nil, action: nil)
+            delegate = self
+            cancelsTouchesInView = false
+            delaysTouchesBegan = false
+            delaysTouchesEnded = false
+        }
+
+        func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+            guard let pager else { return true }
+            let v = velocity(in: pager)
+            let first = pager.contentOffset.x <= -pager.adjustedContentInset.left + 1
+            return !(first && v.x > 0 && abs(v.x) > abs(v.y))
+        }
+
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { other !== back }
     }
 }
 
