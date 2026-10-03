@@ -4,7 +4,7 @@ import { ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES } from "../attachments";
 import { defineTool, schema } from "./util";
 
 /** What the spec tools say about images: the same files the attachments accept. */
-const IMAGES = `Images and videos: write them as markdown images pointing at local files, e.g. ![After](shots/after.png) (absolute, or relative to your working directory; ${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are.`;
+const IMAGES = `Images and videos: write them as markdown images pointing at local files, e.g. ![After](shots/after.png) (absolute, or relative to your working directory; ${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are. An image alone on its line shows full width, captioned with its alt text; the title "thumb" makes a small thumbnail that opens full size, and several on one line form a row: ![Before](shots/before.png "thumb") ![After](shots/after.png "thumb").`;
 
 export const postNote = defineTool<{ note: string }>({
   name: "post_note",

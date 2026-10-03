@@ -1529,6 +1529,16 @@ point at local files (`![After](shots/after.png)`, absolute or relative to the r
 `update_spec` / `edit_spec`. `browser_screenshot { save_to }` writes a screenshot to a file for
 that.
 
+- **Layout** (`parseBlocks` in `shared/src/state/markdown.ts`, ported to HarnessKit's
+  `Markdown.swift`). An attachment image alone on its line is an `img` block: a figure across the
+  full width (a tall one letterboxed), with its alt text as the caption. The title `"thumb"` (or
+  `"thumbnail"`, any case) makes it a thumbnail (`Media.thumb`), and a line holding only
+  thumbnails is a `thumbs` block: a wrapping row of 100×100 crops, each labelled with its alt
+  text. A thumbnail line right under another joins its row; a blank line starts a new one. Inside
+  text, a thumbnail is still a 100×100 square. Other titles are ignored. Any of them opens the
+  lightbox (Mac) or the full-screen viewer (iOS). The prompt (`system.spec`) and the spec tools'
+  descriptions teach agents both forms.
+
 - **Rewriting.** `localImageSources` finds each local src once; `attachment:`, `http(s):`,
   `data:` and `mailto:` srcs are left as written. The files are validated and copied
   (`prepareAttachments`, `storeAttachments`), each src becomes `attachment:<id>`

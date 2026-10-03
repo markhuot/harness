@@ -5,9 +5,11 @@ import SwiftUI
 /// shared parser; web links open in Safari, file links in the file viewer (ContentLinks), ticket
 /// keys open the ticket, and wide tables scroll sideways. Fenced code is syntax highlighted
 /// (CodeBlockView). Nothing is ever interpreted as markup. Lists nest, with bullets that change by
-/// depth (• ◦ ▪). `![alt](attachment:<id>)` shows the attachment fitted to the width (a video as its
-/// first frame) and opens the full-screen viewer on a tap, paging through every attachment in the
-/// text; the parser turns remote and file images into links, so nothing an agent wrote gets fetched.
+/// depth (• ◦ ▪). `![alt](attachment:<id>)` alone on its line is a figure: the attachment across the
+/// full width (a video as its first frame) with its alt text as the caption. `![alt](attachment:<id>
+/// "thumb")` is a 100 pt square thumbnail, and a line of them a wrapping row. A tap opens the
+/// full-screen viewer, paging through every attachment in the text; the parser turns remote and file
+/// images into links, so nothing an agent wrote gets fetched.
 ///
 /// `size` is the body text size; `color` overrides the text color (nil = palette text). File links
 /// resolve against `linkContext` when it names a ticket or project, else the nearest
@@ -355,7 +357,36 @@ private struct MarkdownBlockView: View {
         case let .ol(start, items):
             MarkdownListView(items: items, ordered: true, start: start, depth: depth, style: style)
         case let .img(media):
-            MarkdownMediaView(media: media, style: style)
+            VStack(alignment: .leading, spacing: 6) {
+                MarkdownMediaView(media: media, style: style, figure: true, captioned: !media.alt.isEmpty)
+                if !media.alt.isEmpty {
+                    Text(media.alt)
+                        .font(.scaled(size: style.size - 2))
+                        .foregroundStyle(c.text2)
+                        .strikethrough(style.removed, color: c.red.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .padding(.leading, 8)
+                        .overlay(alignment: .leading) { Rectangle().fill(c.borderStrong).frame(width: 2) }
+                }
+            }
+            .padding(.vertical, 2)
+        case let .thumbs(items):
+            FlowLayout(spacing: 10) {
+                ForEach(items.indices, id: \.self) { k in
+                    VStack(alignment: .leading, spacing: 4) {
+                        MarkdownMediaView(media: items[k], style: style, captioned: !items[k].alt.isEmpty)
+                        if !items[k].alt.isEmpty {
+                            Text(items[k].alt)
+                                .font(.scaled(size: 11))
+                                .foregroundStyle(c.text2)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    .frame(width: MarkdownMediaView.thumbSize, alignment: .topLeading)
+                }
+            }
         case let .code(lang, text):
             CodeBlockView(code: text, language: lang, struck: style.removed)
         case let .quote(text):
@@ -444,12 +475,18 @@ private struct MarkdownListRow<Content: View>: View {
     }
 }
 
-/// An attachment in the text: the image fitted to the width (never past its own size), or a
-/// video's first frame with a play badge; a tap opens the viewer. An image that won't decode is
-/// tried as a video before it shows "Couldn't load". Without a service to load from, the alt text.
+/// An attachment in the text: the image fitted to the width (never past its own size), across the
+/// full width in a figure, or cropped to a square as a thumbnail (`media.thumb`); a video shows its
+/// first frame with a play badge. A tap opens the viewer. An image that won't decode is tried as a
+/// video before it shows "Couldn't load". Without a service to load from, the alt text (nothing when
+/// `captioned`: the caption beside it already shows it).
 private struct MarkdownMediaView: View {
     let media: Markdown.Media
     let style: MarkdownStyle
+    var figure = false
+    var captioned = false
+
+    static let thumbSize: CGFloat = 100
 
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.displayScale) private var scale
@@ -474,18 +511,42 @@ private struct MarkdownMediaView: View {
             .accessibilityAddTraits([.isButton, .isImage])
             .opacity(style.removed ? 0.55 : 1)
             .task(id: "\(kind)|\(url)") { await load(url: url, kind: kind) }
-        } else {
+        } else if !captioned {
             style.paragraph(AttributedString(media.alt))
         }
     }
 
     private func content(url: String, kind: AttachmentKind) -> some View {
         ZStack {
+            let shown = failed ? nil : image ?? AttachmentMedia.shared.cached(url, poster: kind == .video)
             if failed {
                 AttachmentFailed(name: media.alt, compact: true)
-                    .frame(width: 160, height: 100)
+                    .frame(width: media.thumb ? Self.thumbSize : figure ? nil : 160, height: media.thumb ? Self.thumbSize : 100)
+                    .frame(maxWidth: figure ? .infinity : nil)
                     .background(c.bgActive)
-            } else if let shown = image ?? AttachmentMedia.shared.cached(url, poster: kind == .video) {
+            } else if media.thumb {
+                // Cropped to fill the square; the viewer shows the whole image.
+                Group {
+                    if let shown {
+                        Image(uiImage: shown).resizable().scaledToFill()
+                    } else {
+                        c.bgActive
+                    }
+                }
+                .frame(width: Self.thumbSize, height: Self.thumbSize)
+                .clipped()
+            } else if figure {
+                // Across the full width, a tall image letterboxed at 480 pt on the sunken background.
+                Group {
+                    if let shown {
+                        Image(uiImage: shown).resizable().aspectRatio(shown.size, contentMode: .fit)
+                    } else {
+                        c.bgActive.aspectRatio(16 / 10, contentMode: .fit)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: 480)
+                .background(c.bgSunken)
+            } else if let shown {
                 // Never wider than its own pixels, nor than keeps it 480 pt tall, so the frame
                 // (and its border) hugs the image instead of letterboxing it.
                 Image(uiImage: shown)
