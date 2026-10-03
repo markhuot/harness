@@ -13,7 +13,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On iPhone and iPad, the message field at the bottom of a ticket is now Liquid Glass and floats
   over the tab's content instead of sitting in a solid bar. The send button is a glass circle with
-  an arrow, filled with your accent color once there's a message to send.
+  an arrow, filled with your accent color while you're writing.
 
 ## [app-20261003.0051](https://github.com/markhuot/harness/releases/tag/app-20261003.0051) - 2026-10-03
 

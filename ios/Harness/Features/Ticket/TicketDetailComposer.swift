@@ -68,7 +68,7 @@ struct TicketDetailComposer: View {
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
                                                             glass: true))
-                sendButton(disabled: empty || sending) { send(move: move) }
+                sendButton(active: focused || !empty, disabled: empty || sending) { send(move: move) }
             }
         }
         .padding(.horizontal, 12)
@@ -76,9 +76,10 @@ struct TicketDetailComposer: View {
         .padding(.bottom, 8)
     }
 
-    /// Prominent accent glass while there's something to send. Disabled, a prominent glass button
-    /// still reads as enabled in dark mode, so it drops to plain glass and a dimmed arrow.
-    @ViewBuilder private func sendButton(disabled: Bool, action: @escaping () -> Void) -> some View {
+    /// Prominent accent glass while writing (focused, or holding a message), plain glass with a dimmed
+    /// arrow otherwise. Focused but empty it stays prominent and ignores taps rather than `.disabled`,
+    /// which would grey the glass out.
+    @ViewBuilder private func sendButton(active: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
         let label = Group {
             if sending {
                 ProgressView()
@@ -87,17 +88,18 @@ struct TicketDetailComposer: View {
             }
         }
         .frame(width: 30, height: 30)
-        if disabled {
+        if active {
+            Button { if !disabled { action() } } label: { label }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .tint(c.accent)
+                .accessibilityLabel("Send")
+                .accessibilityHint(disabled ? "Write a message first" : "")
+        } else {
             Button(action: action) { label.foregroundStyle(c.text3) }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .disabled(true)
-                .accessibilityLabel("Send")
-        } else {
-            Button(action: action) { label }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .tint(c.accent)
                 .accessibilityLabel("Send")
         }
     }
