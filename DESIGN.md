@@ -270,8 +270,8 @@ A round is an agent `review_approved` or `changes_requested` entry. `review_deci
 (null without one), which is how the next round finds the last reviewed commit. The instructions
 (`system.review`) judge the work against the Goal and acceptance criteria as approved and treat
 Status and notes as claims to verify. Two spec problems are grounds for `request_changes`: Goal or
-acceptance-criteria changes since the baseline that the human's messages didn't ask for (moved
-goalposts), and a Status that doesn't match the work. Notes cover one round. Review runs get
+acceptance-criteria changes since the baseline that the human's messages, review notes or re-open
+notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Notes cover one round. Review runs get
 `read_spec` but no spec writes; `get_ticket` has the full Activity and each attachment's path.
 
 ### Skipping the agent review

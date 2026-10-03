@@ -13,6 +13,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Agents' Activity entries are one line each: what changed and why. The reasoning behind a change
   goes in the spec, not the ticket's timeline.
+- Agents write the spec as a summary of the change, not a log of the work: what it is, why, and
+  which parts are implemented, citing commits instead of walking through the diff. Changes you ask
+  for in review or when re-opening a ticket go into its Goal as requirements.
 - Show changes in the Spec tab, on the Mac and on iPhone and iPad, keeps the formatted spec and
   highlights what was added and removed, instead of switching to a raw diff. New words are green
   and removed words red and struck through, right inside the headings, lists, tables and code

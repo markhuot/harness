@@ -113,7 +113,9 @@ you answer.
   approve. A draft is saved as you type and waits in Planning until you start it, and closing it
   asks whether to keep it.
 - Each ticket's **Spec** is a living document (Goal, Plan, Status, Open questions) that its agents
-  keep current. Every edit, yours or an agent's, is a revision, and pressing Start marks the one
+  keep current. It reads like a requirements doc: what the change is, why, and which parts are
+  implemented (with their commits). Requests you add later in review or a re-open become Goal
+  requirements. The turn-by-turn story stays in Activity and the transcript. Every edit, yours or an agent's, is a revision, and pressing Start marks the one
   you approved, so the reviewer can see what changed since. **Activity** is the ticket's short
   timeline: agent notes, submits, questions, review decisions and approvals. A message sent from
   the Spec or Activity tab goes into Activity along with the agent's answer.
