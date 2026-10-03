@@ -1,0 +1,2121 @@
+{
+  "specDiffCases": [
+    {
+      "name": "both empty",
+      "input": {
+        "before": "",
+        "after": ""
+      },
+      "output": []
+    },
+    {
+      "name": "empty before",
+      "input": {
+        "before": "",
+        "after": "# Goal\n\nShip it."
+      },
+      "output": [
+        {
+          "change": "add",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "Goal"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "p",
+            "text": "Ship it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "empty after",
+      "input": {
+        "before": "# Goal\n\nShip it.",
+        "after": ""
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "Goal"
+          }
+        },
+        {
+          "change": "del",
+          "block": {
+            "t": "p",
+            "text": "Ship it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "unchanged",
+      "input": {
+        "before": "# Goal\n\nDo **it**.\n\n- a\n  - b",
+        "after": "# Goal\n\nDo **it**.\n\n- a\n  - b"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "Goal"
+          }
+        },
+        {
+          "change": "same",
+          "block": {
+            "t": "p",
+            "text": "Do **it**."
+          }
+        },
+        {
+          "change": "same",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "text": "a",
+                "children": [
+                  {
+                    "t": "ul",
+                    "items": [
+                      {
+                        "text": "b",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "one-word edit",
+      "input": {
+        "before": "The quick fox jumps.",
+        "after": "The slow fox jumps."
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "The ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "quick",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "slow",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " fox jumps.",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "word appended",
+      "input": {
+        "before": "Write tests",
+        "after": "Write more tests now"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "Write ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "more ",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": "tests",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": " now",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "word removed",
+      "input": {
+        "before": "Write the unit tests",
+        "after": "Write the tests"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "Write the ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "unit ",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "tests",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "edit inside bold",
+      "input": {
+        "before": "Ship **the new build** today",
+        "after": "Ship **the old build** today"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "Ship ",
+                "change": "same"
+              },
+              {
+                "t": "strong",
+                "text": "the ",
+                "change": "same"
+              },
+              {
+                "t": "strong",
+                "text": "new",
+                "change": "del"
+              },
+              {
+                "t": "strong",
+                "text": "old",
+                "change": "add"
+              },
+              {
+                "t": "strong",
+                "text": " build",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": " today",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "edit inside em",
+      "input": {
+        "before": "*very slow* run",
+        "after": "*very fast* run"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "em",
+                "text": "very ",
+                "change": "same"
+              },
+              {
+                "t": "em",
+                "text": "slow",
+                "change": "del"
+              },
+              {
+                "t": "em",
+                "text": "fast",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " run",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "edit inside code",
+      "input": {
+        "before": "Run `bun test` here",
+        "after": "Run `bun typecheck` here"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "Run ",
+                "change": "same"
+              },
+              {
+                "t": "code",
+                "text": "bun ",
+                "change": "same"
+              },
+              {
+                "t": "code",
+                "text": "test",
+                "change": "del"
+              },
+              {
+                "t": "code",
+                "text": "typecheck",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " here",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "edit inside a link",
+      "input": {
+        "before": "See [the long docs](https://x.test/d) now",
+        "after": "See [the short docs](https://x.test/d) now"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "See ",
+                "change": "same"
+              },
+              {
+                "t": "link",
+                "text": "the ",
+                "url": "https://x.test/d",
+                "change": "same"
+              },
+              {
+                "t": "link",
+                "text": "long",
+                "url": "https://x.test/d",
+                "change": "del"
+              },
+              {
+                "t": "link",
+                "text": "short",
+                "url": "https://x.test/d",
+                "change": "add"
+              },
+              {
+                "t": "link",
+                "text": " docs",
+                "url": "https://x.test/d",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": " now",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "link target changed",
+      "input": {
+        "before": "[docs](https://a.test) here",
+        "after": "[docs](https://b.test) here"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "link",
+                "text": "docs",
+                "url": "https://a.test",
+                "change": "del"
+              },
+              {
+                "t": "link",
+                "text": "docs",
+                "url": "https://b.test",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " here",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ticket key changed",
+      "input": {
+        "before": "Blocked on HARNESS-1 today",
+        "after": "Blocked on HARNESS-2 today"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "Blocked on ",
+                "change": "same"
+              },
+              {
+                "t": "ticket",
+                "key": "HARNESS-1",
+                "change": "del"
+              },
+              {
+                "t": "ticket",
+                "key": "HARNESS-2",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " today",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ticket link label changed",
+      "input": {
+        "before": "See [FOO-1](HARNESS-3)",
+        "after": "See [FOO-2](HARNESS-3)"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "See ",
+                "change": "same"
+              },
+              {
+                "t": "ticket",
+                "key": "HARNESS-3",
+                "text": "FOO-1",
+                "change": "del"
+              },
+              {
+                "t": "ticket",
+                "key": "HARNESS-3",
+                "text": "FOO-2",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "inline image changed",
+      "input": {
+        "before": "Shot ![a](attachment:a) here",
+        "after": "Shot ![b](attachment:b) here"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "Shot ",
+                "change": "same"
+              },
+              {
+                "t": "img",
+                "alt": "a",
+                "id": "a",
+                "video": false,
+                "change": "del"
+              },
+              {
+                "t": "img",
+                "alt": "b",
+                "id": "b",
+                "video": false,
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " here",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "space between changes joins them",
+      "input": {
+        "before": "keep alpha beta keep",
+        "after": "keep gamma delta keep"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "keep ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "alpha beta",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "gamma delta",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " keep",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "multi-line paragraph",
+      "input": {
+        "before": "one\ntwo three\nfour",
+        "after": "one\ntwo five\nfour"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "one\ntwo ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "three",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "five",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": "\nfour",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "line added to a paragraph",
+      "input": {
+        "before": "one\ntwo",
+        "after": "one\nmid\ntwo"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "one\n",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "mid\n",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": "two",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "quote edit",
+      "input": {
+        "before": "> keep this note",
+        "after": "> keep that note"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "quote",
+            "runs": [
+              {
+                "t": "text",
+                "text": "keep ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "this",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "that",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " note",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "heading text edit",
+      "input": {
+        "before": "## Open questions",
+        "after": "## Closed questions"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "h",
+            "level": 2,
+            "runs": [
+              {
+                "t": "text",
+                "text": "Open",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "Closed",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": " questions",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "heading level change",
+      "input": {
+        "before": "## Status",
+        "after": "### Status"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "h",
+            "level": 2,
+            "text": "Status"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "h",
+            "level": 3,
+            "text": "Status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "paragraph became a list",
+      "input": {
+        "before": "# T\n\nalpha beta",
+        "after": "# T\n\n- alpha beta"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "T"
+          }
+        },
+        {
+          "change": "del",
+          "block": {
+            "t": "p",
+            "text": "alpha beta"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "text": "alpha beta",
+                "children": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "list item inserted",
+      "input": {
+        "before": "- a\n- c",
+        "after": "- a\n- b\n- c"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "same",
+                "item": {
+                  "text": "a",
+                  "children": []
+                }
+              },
+              {
+                "change": "add",
+                "item": {
+                  "text": "b",
+                  "children": []
+                }
+              },
+              {
+                "change": "same",
+                "item": {
+                  "text": "c",
+                  "children": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "list item removed",
+      "input": {
+        "before": "- a\n- b\n- c",
+        "after": "- a\n- c"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "same",
+                "item": {
+                  "text": "a",
+                  "children": []
+                }
+              },
+              {
+                "change": "del",
+                "item": {
+                  "text": "b",
+                  "children": []
+                }
+              },
+              {
+                "change": "same",
+                "item": {
+                  "text": "c",
+                  "children": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "list item edited",
+      "input": {
+        "before": "- write the tests\n- ship",
+        "after": "- write the unit tests\n- ship"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "edit",
+                "runs": [
+                  {
+                    "t": "text",
+                    "text": "write the ",
+                    "change": "same"
+                  },
+                  {
+                    "t": "text",
+                    "text": "unit ",
+                    "change": "add"
+                  },
+                  {
+                    "t": "text",
+                    "text": "tests",
+                    "change": "same"
+                  }
+                ],
+                "children": []
+              },
+              {
+                "change": "same",
+                "item": {
+                  "text": "ship",
+                  "children": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "list item replaced",
+      "input": {
+        "before": "- alpha beta gamma delta epsilon\n- keep",
+        "after": "- one two three four five\n- keep"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "del",
+                "item": {
+                  "text": "alpha beta gamma delta epsilon",
+                  "children": []
+                }
+              },
+              {
+                "change": "add",
+                "item": {
+                  "text": "one two three four five",
+                  "children": []
+                }
+              },
+              {
+                "change": "same",
+                "item": {
+                  "text": "keep",
+                  "children": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nested item inserted",
+      "input": {
+        "before": "- a\n  - x\n- b",
+        "after": "- a\n  - x\n  - y\n- b"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "edit",
+                "runs": [
+                  {
+                    "t": "text",
+                    "text": "a",
+                    "change": "same"
+                  }
+                ],
+                "children": [
+                  {
+                    "change": "edit",
+                    "block": {
+                      "t": "ul",
+                      "items": [
+                        {
+                          "change": "same",
+                          "item": {
+                            "text": "x",
+                            "children": []
+                          }
+                        },
+                        {
+                          "change": "add",
+                          "item": {
+                            "text": "y",
+                            "children": []
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "change": "same",
+                "item": {
+                  "text": "b",
+                  "children": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nested item edited two deep",
+      "input": {
+        "before": "- a\n  - b\n    - old leaf words",
+        "after": "- a\n  - b\n    - new leaf words"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "edit",
+                "runs": [
+                  {
+                    "t": "text",
+                    "text": "a",
+                    "change": "same"
+                  }
+                ],
+                "children": [
+                  {
+                    "change": "edit",
+                    "block": {
+                      "t": "ul",
+                      "items": [
+                        {
+                          "change": "edit",
+                          "runs": [
+                            {
+                              "t": "text",
+                              "text": "b",
+                              "change": "same"
+                            }
+                          ],
+                          "children": [
+                            {
+                              "change": "edit",
+                              "block": {
+                                "t": "ul",
+                                "items": [
+                                  {
+                                    "change": "edit",
+                                    "runs": [
+                                      {
+                                        "t": "text",
+                                        "text": "old",
+                                        "change": "del"
+                                      },
+                                      {
+                                        "t": "text",
+                                        "text": "new",
+                                        "change": "add"
+                                      },
+                                      {
+                                        "t": "text",
+                                        "text": " leaf words",
+                                        "change": "same"
+                                      }
+                                    ],
+                                    "children": []
+                                  }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ordered list renumbered",
+      "input": {
+        "before": "1. a\n2. b",
+        "after": "3. a\n4. b\n5. c"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "ol",
+            "start": 3,
+            "items": [
+              {
+                "change": "same",
+                "item": {
+                  "text": "a",
+                  "children": []
+                }
+              },
+              {
+                "change": "same",
+                "item": {
+                  "text": "b",
+                  "children": []
+                }
+              },
+              {
+                "change": "add",
+                "item": {
+                  "text": "c",
+                  "children": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "bullets became numbers",
+      "input": {
+        "before": "- a\n- b",
+        "after": "1. a\n2. b"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "text": "a",
+                "children": []
+              },
+              {
+                "text": "b",
+                "children": []
+              }
+            ]
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "ol",
+            "start": 1,
+            "items": [
+              {
+                "text": "a",
+                "children": []
+              },
+              {
+                "text": "b",
+                "children": []
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "table row added",
+      "input": {
+        "before": "| k | v |\n|---|---|\n| a | 1 |",
+        "after": "| k | v |\n|---|---|\n| a | 1 |\n| b | 2 |"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "table",
+            "align": [
+              null,
+              null
+            ],
+            "header": [
+              [
+                {
+                  "t": "text",
+                  "text": "k",
+                  "change": "same"
+                }
+              ],
+              [
+                {
+                  "t": "text",
+                  "text": "v",
+                  "change": "same"
+                }
+              ]
+            ],
+            "rows": [
+              {
+                "change": "same",
+                "cells": [
+                  "a",
+                  "1"
+                ]
+              },
+              {
+                "change": "add",
+                "cells": [
+                  "b",
+                  "2"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "table cell changed",
+      "input": {
+        "before": "| k | v |\n|---|---|\n| a | one two |\n| b | 2 |",
+        "after": "| k | v |\n|---|---|\n| a | one three |\n| b | 2 |"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "table",
+            "align": [
+              null,
+              null
+            ],
+            "header": [
+              [
+                {
+                  "t": "text",
+                  "text": "k",
+                  "change": "same"
+                }
+              ],
+              [
+                {
+                  "t": "text",
+                  "text": "v",
+                  "change": "same"
+                }
+              ]
+            ],
+            "rows": [
+              {
+                "change": "edit",
+                "cells": [
+                  [
+                    {
+                      "t": "text",
+                      "text": "a",
+                      "change": "same"
+                    }
+                  ],
+                  [
+                    {
+                      "t": "text",
+                      "text": "one ",
+                      "change": "same"
+                    },
+                    {
+                      "t": "text",
+                      "text": "two",
+                      "change": "del"
+                    },
+                    {
+                      "t": "text",
+                      "text": "three",
+                      "change": "add"
+                    }
+                  ]
+                ]
+              },
+              {
+                "change": "same",
+                "cells": [
+                  "b",
+                  "2"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "table header changed",
+      "input": {
+        "before": "| key | value |\n|---|---|\n| a | 1 |",
+        "after": "| key | amount |\n|---|---|\n| a | 1 |"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "table",
+            "align": [
+              null,
+              null
+            ],
+            "header": [
+              [
+                {
+                  "t": "text",
+                  "text": "key",
+                  "change": "same"
+                }
+              ],
+              [
+                {
+                  "t": "text",
+                  "text": "value",
+                  "change": "del"
+                },
+                {
+                  "t": "text",
+                  "text": "amount",
+                  "change": "add"
+                }
+              ]
+            ],
+            "rows": [
+              {
+                "change": "same",
+                "cells": [
+                  "a",
+                  "1"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "table row replaced",
+      "input": {
+        "before": "| k | v |\n|---|---|\n| apple | red |",
+        "after": "| k | v |\n|---|---|\n| banana | yellow |"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "table",
+            "align": [
+              null,
+              null
+            ],
+            "header": [
+              [
+                {
+                  "t": "text",
+                  "text": "k",
+                  "change": "same"
+                }
+              ],
+              [
+                {
+                  "t": "text",
+                  "text": "v",
+                  "change": "same"
+                }
+              ]
+            ],
+            "rows": [
+              {
+                "change": "del",
+                "cells": [
+                  "apple",
+                  "red"
+                ]
+              },
+              {
+                "change": "add",
+                "cells": [
+                  "banana",
+                  "yellow"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "table column added",
+      "input": {
+        "before": "| a |\n|---|\n| 1 |",
+        "after": "| a | b |\n|---|---|\n| 1 | 2 |"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "table",
+            "align": [
+              null
+            ],
+            "header": [
+              "a"
+            ],
+            "rows": [
+              [
+                "1"
+              ]
+            ]
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "table",
+            "align": [
+              null,
+              null
+            ],
+            "header": [
+              "a",
+              "b"
+            ],
+            "rows": [
+              [
+                "1",
+                "2"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "table alignment changed",
+      "input": {
+        "before": "| a |\n|---|\n| 1 |",
+        "after": "| a |\n|:-:|\n| 1 |"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "table",
+            "align": [
+              null
+            ],
+            "header": [
+              "a"
+            ],
+            "rows": [
+              [
+                "1"
+              ]
+            ]
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "table",
+            "align": [
+              "center"
+            ],
+            "header": [
+              "a"
+            ],
+            "rows": [
+              [
+                "1"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "code line changed",
+      "input": {
+        "before": "```ts\nconst a = 1;\nconst b = 2;\nrun();\n```",
+        "after": "```ts\nconst a = 1;\nconst b = 3;\nrun();\n```"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "code",
+            "lang": "ts",
+            "lines": [
+              {
+                "change": "same",
+                "text": "const a = 1;"
+              },
+              {
+                "change": "del",
+                "text": "const b = 2;"
+              },
+              {
+                "change": "add",
+                "text": "const b = 3;"
+              },
+              {
+                "change": "same",
+                "text": "run();"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "code line added at end",
+      "input": {
+        "before": "```sh\nbun test\n```",
+        "after": "```sh\nbun test\nbun run typecheck\n```"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "code",
+            "lang": "sh",
+            "lines": [
+              {
+                "change": "same",
+                "text": "bun test"
+              },
+              {
+                "change": "add",
+                "text": "bun run typecheck"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "code language changed",
+      "input": {
+        "before": "```ts\nx\n```",
+        "after": "```js\nx\n```"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "code",
+            "lang": "ts",
+            "text": "x"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "code",
+            "lang": "js",
+            "text": "x"
+          }
+        }
+      ]
+    },
+    {
+      "name": "image replaced",
+      "input": {
+        "before": "![a](attachment:a)",
+        "after": "![b](attachment:b)"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "img",
+            "alt": "a",
+            "id": "a",
+            "video": false
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "img",
+            "alt": "b",
+            "id": "b",
+            "video": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "image alt changed",
+      "input": {
+        "before": "![before](attachment:a)",
+        "after": "![after](attachment:a)"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "img",
+            "alt": "before",
+            "id": "a",
+            "video": false
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "img",
+            "alt": "after",
+            "id": "a",
+            "video": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "rule removed",
+      "input": {
+        "before": "x\n\n---",
+        "after": "x"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "p",
+            "text": "x"
+          }
+        },
+        {
+          "change": "del",
+          "block": {
+            "t": "hr"
+          }
+        }
+      ]
+    },
+    {
+      "name": "blocks moved apart",
+      "input": {
+        "before": "# T\n\nold words here",
+        "after": "# T\n\nbrand new intro\n\n- x\n\nold words there"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "T"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "p",
+            "text": "brand new intro"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "text": "x",
+                "children": []
+              }
+            ]
+          }
+        },
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "old words ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "here",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "there",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "guard at 0.4 pairs",
+      "input": {
+        "before": "a b c d e",
+        "after": "a b x y z"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "a b ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "c d e",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "x y z",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "guard at 0.2 splits",
+      "input": {
+        "before": "a b c d e",
+        "after": "a x y z w"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "p",
+            "text": "a b c d e"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "p",
+            "text": "a x y z w"
+          }
+        }
+      ]
+    },
+    {
+      "name": "guard uneven pairs",
+      "input": {
+        "before": "a b",
+        "after": "a x y"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "a ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "b",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "x y",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "guard uneven splits",
+      "input": {
+        "before": "a b",
+        "after": "a x y z"
+      },
+      "output": [
+        {
+          "change": "del",
+          "block": {
+            "t": "p",
+            "text": "a b"
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "p",
+            "text": "a x y z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "two edits in one gap pair in order",
+      "input": {
+        "before": "first para words\n\nsecond para words",
+        "after": "first para text\n\nsecond para text"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "first para ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "words",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "text",
+                "change": "add"
+              }
+            ]
+          }
+        },
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "second para ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "words",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "text",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "whitespace only paragraph change",
+      "input": {
+        "before": "a  b",
+        "after": "a b"
+      },
+      "output": [
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "a",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "  ",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": " ",
+                "change": "add"
+              },
+              {
+                "t": "text",
+                "text": "b",
+                "change": "same"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "emoji and accents",
+      "input": {
+        "before": "# 🎉 Party\n\ncafé ok",
+        "after": "# 🎉 Party\n\ncafé fine"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "🎉 Party"
+          }
+        },
+        {
+          "change": "edit",
+          "block": {
+            "t": "p",
+            "runs": [
+              {
+                "t": "text",
+                "text": "café ",
+                "change": "same"
+              },
+              {
+                "t": "text",
+                "text": "ok",
+                "change": "del"
+              },
+              {
+                "t": "text",
+                "text": "fine",
+                "change": "add"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "CRLF before, LF after",
+      "input": {
+        "before": "# T\r\n\r\nsame text",
+        "after": "# T\n\nsame text"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "T"
+          }
+        },
+        {
+          "change": "same",
+          "block": {
+            "t": "p",
+            "text": "same text"
+          }
+        }
+      ]
+    },
+    {
+      "name": "spec revision",
+      "input": {
+        "before": "# Goal\n\nShow changes as a raw diff.\n\n# Plan\n\n- Parse both revisions\n- Render the patch\n\n# Status\n\n| Step | State |\n|---|---|\n| Parse | done |\n| Render | todo |",
+        "after": "# Goal\n\nShow changes in the **rendered** spec.\n\n# Plan\n\n- Parse both revisions\n  - align blocks with an LCS\n- Render runs with `ins` and `del`\n- Write fixtures\n\n# Status\n\n| Step | State |\n|---|---|\n| Parse | done |\n| Render | done |\n| Fixtures | todo |\n\n```sh\nbun run test\n```"
+      },
+      "output": [
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "Goal"
+          }
+        },
+        {
+          "change": "del",
+          "block": {
+            "t": "p",
+            "text": "Show changes as a raw diff."
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "p",
+            "text": "Show changes in the **rendered** spec."
+          }
+        },
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "Plan"
+          }
+        },
+        {
+          "change": "edit",
+          "block": {
+            "t": "ul",
+            "items": [
+              {
+                "change": "edit",
+                "runs": [
+                  {
+                    "t": "text",
+                    "text": "Parse both revisions",
+                    "change": "same"
+                  }
+                ],
+                "children": [
+                  {
+                    "change": "add",
+                    "block": {
+                      "t": "ul",
+                      "items": [
+                        {
+                          "text": "align blocks with an LCS",
+                          "children": []
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "change": "del",
+                "item": {
+                  "text": "Render the patch",
+                  "children": []
+                }
+              },
+              {
+                "change": "add",
+                "item": {
+                  "text": "Render runs with `ins` and `del`",
+                  "children": []
+                }
+              },
+              {
+                "change": "add",
+                "item": {
+                  "text": "Write fixtures",
+                  "children": []
+                }
+              }
+            ]
+          }
+        },
+        {
+          "change": "same",
+          "block": {
+            "t": "h",
+            "level": 1,
+            "text": "Status"
+          }
+        },
+        {
+          "change": "edit",
+          "block": {
+            "t": "table",
+            "align": [
+              null,
+              null
+            ],
+            "header": [
+              [
+                {
+                  "t": "text",
+                  "text": "Step",
+                  "change": "same"
+                }
+              ],
+              [
+                {
+                  "t": "text",
+                  "text": "State",
+                  "change": "same"
+                }
+              ]
+            ],
+            "rows": [
+              {
+                "change": "same",
+                "cells": [
+                  "Parse",
+                  "done"
+                ]
+              },
+              {
+                "change": "edit",
+                "cells": [
+                  [
+                    {
+                      "t": "text",
+                      "text": "Render",
+                      "change": "same"
+                    }
+                  ],
+                  [
+                    {
+                      "t": "text",
+                      "text": "todo",
+                      "change": "del"
+                    },
+                    {
+                      "t": "text",
+                      "text": "done",
+                      "change": "add"
+                    }
+                  ]
+                ]
+              },
+              {
+                "change": "add",
+                "cells": [
+                  "Fixtures",
+                  "todo"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "change": "add",
+          "block": {
+            "t": "code",
+            "lang": "sh",
+            "text": "bun run test"
+          }
+        }
+      ]
+    }
+  ]
+}
