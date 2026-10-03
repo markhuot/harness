@@ -204,6 +204,39 @@ describe("rebase", () => {
     const out = rebase(server, sent, local);
     expect([out.id, out.key, out.title, out.spec, out.permissionMode]).toEqual(["t1", "WEB-4", "a", "ab", "ask"]);
   });
+
+  test("an attachment added while the request was out is kept; an unchanged list takes the service's copy", () => {
+    const shot = { path: "/u/shot.png", name: "shot.png", source: "file" as const };
+    const sent = { ...blank(), spec: "a", promptAttachments: [shot] };
+    const server = { ...sent, id: "t1", key: "WEB-4", promptAttachments: [{ ...shot, source: "upload" as const }] };
+    // Same files (new objects, as applyTicketPatch makes them): the service's copy, with its source.
+    expect(rebase(server, sent, { ...sent, promptAttachments: [{ ...shot }] }).promptAttachments).toEqual(server.promptAttachments);
+    const added = [shot, { path: "/u/notes.txt", name: "notes.txt", source: "file" as const }];
+    expect(rebase(server, sent, { ...sent, promptAttachments: added }).promptAttachments).toEqual(added);
+  });
+});
+
+describe("DraftSession: prompt attachments", () => {
+  test("attaching a file to an empty New session saves it, with the file in the create body", async () => {
+    const svc = fakeService();
+    const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
+    s.edit({ promptAttachments: [{ path: "/Users/me/shot.png", name: "shot.png" }] });
+    expect(svc.creates.length).toBe(1);
+    expect((svc.creates[0]!.body as CreateTicketBody).promptAttachments).toEqual([{ path: "/Users/me/shot.png", name: "shot.png" }]);
+  });
+
+  test("removing one PATCHes the whole remaining list", async () => {
+    const svc = fakeService(true);
+    const a = { path: "/a.png", name: "a.png" };
+    const b = { path: "/b.txt", name: "b.txt" };
+    const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
+    s.edit({ spec: "x", promptAttachments: [a, b] });
+    await tick(20);
+    s.edit({ promptAttachments: [b] });
+    await tick(20);
+    expect(svc.patches.map((p) => p.body)).toEqual([{ promptAttachments: [b] }]);
+    expect(s.unsent).toBe(false);
+  });
 });
 
 describe("paneDraftSession", () => {

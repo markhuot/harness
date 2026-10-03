@@ -1564,6 +1564,166 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--text-2);
 }
 
+/* Prompt attachments (components/PromptAttachments.tsx): thumbnails and file chips under a draft's
+   prompt, and read-only on the Spec tab. A missing file is a dimmed, dashed chip. */
+.prompt-attachments {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.prompt-attachment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  max-width: 260px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.prompt-attachment-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.prompt-attachment.chip-file:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+.prompt-attachment-name {
+  min-width: 0;
+}
+.prompt-attachment.thumb {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+.prompt-attachment.thumb .prompt-attachment-open,
+.prompt-attachment.thumb img {
+  width: 100%;
+  height: 100%;
+}
+.prompt-attachment.thumb img {
+  object-fit: cover;
+  display: block;
+}
+.prompt-attachment.missing {
+  height: auto;
+  min-height: 28px;
+  max-width: 340px;
+  padding: 4px 8px;
+  flex-wrap: wrap;
+  row-gap: 0;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0.85;
+}
+.prompt-attachment.missing .prompt-attachment-name {
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
+}
+.prompt-attachment-note {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.prompt-attachment.pending {
+  color: var(--text-3);
+}
+.prompt-attachment-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-right: -3px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.prompt-attachment-remove:hover {
+  background: var(--border);
+  color: var(--text);
+}
+/* On a thumbnail the × sits in the corner, over the image. */
+.prompt-attachment.thumb .prompt-attachment-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  margin: 0;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  opacity: 0;
+}
+.prompt-attachment.thumb:hover .prompt-attachment-remove,
+.prompt-attachment.thumb .prompt-attachment-remove:focus-visible {
+  opacity: 1;
+}
+.prompt-attachment.missing:has(.prompt-attachment-remove) {
+  padding-right: 26px;
+}
+.prompt-attachment.missing .prompt-attachment-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.prompt-attach-btn {
+  color: var(--text-3);
+  gap: 5px;
+}
+.prompt-attach-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+/* Files hovering over a draft pane. */
+.draft-pane.dropping::after {
+  border-style: solid;
+  border-width: 2px;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.draft-drop-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+}
+.spec-prompt-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* The ticket settings rows (components/TicketSettings.tsx), in Details and a draft's Options. */
 .props > .branch-hint {
   grid-column: 2;

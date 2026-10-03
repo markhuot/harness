@@ -11,6 +11,7 @@ import { FOLLOW_LATEST, scrubTo, shownRevision, stepRevision, type SpecHistory }
 import { Icon } from "../components/Icon";
 import { Markdown, MarkdownDiff } from "../components/Markdown";
 import { relativeTime, Switch, TicketKey, useNow } from "../components/bits";
+import { PromptAttachmentStrip } from "../components/PromptAttachments";
 
 const AUTHOR_LABEL: Record<SpecRevisionAuthor, string> = { agent: "Agent", human: "You", system: "Harness" };
 
@@ -123,6 +124,12 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
               </span>
             ))}
           </div>
+        )}
+        {!!ticket.promptAttachments?.length && (
+          <section className="spec-prompt-attachments" data-testid="spec-prompt-attachments">
+            <span className="section-title">Attached to the prompt</span>
+            <PromptAttachmentStrip items={ticket.promptAttachments} ticketKey={ticket.key} served={ticket.promptAttachments} />
+          </section>
         )}
         {body === undefined || (comparing && prevBody === undefined) ? (
           bodyError ? (

@@ -152,6 +152,12 @@ export interface HarnessBridge {
   openExternal(url: string): Promise<void>;
   /** Reveal a file or folder in Finder */
   revealInFinder(path: string): Promise<void>;
+  /**
+   * Where a File from a drop, a paste or a file input is on disk (webUtils.getPathForFile; Electron
+   * removed File.path). Null for one that isn't a file on disk (an image dragged out of a browser,
+   * pasted image data).
+   */
+  pathForFile(file: File): string | null;
   /** Pop up a native menu at the cursor; resolves with the chosen item id, or null when dismissed */
   showContextMenu(items: ContextMenuItem[]): Promise<string | null>;
   /** `viaKey`: the item's shortcut was pressed rather than the item clicked. */

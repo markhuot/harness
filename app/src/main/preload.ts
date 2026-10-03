@@ -1,6 +1,6 @@
 // Preload bridge: the renderer's only access to Electron. Exposed as window.harness.
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import type { ConnectionResult, HarnessBridge, MenuCommand, TerminalExit, ThemeState } from "./types";
 import { stampTheme } from "./theme";
 
@@ -18,6 +18,13 @@ const bridge: HarnessBridge = {
   pickDirectory: (opts) => ipcRenderer.invoke("harness:pickDirectory", opts),
   openExternal: (url) => ipcRenderer.invoke("harness:openExternal", url),
   revealInFinder: (path) => ipcRenderer.invoke("harness:revealInFinder", path),
+  pathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file) || null;
+    } catch {
+      return null;
+    }
+  },
   showContextMenu: (items) => ipcRenderer.invoke("harness:contextMenu", items),
   onMenu: (cb) => {
     const listener = (_e: IpcRendererEvent, cmd: MenuCommand, viaKey?: boolean) => cb(cmd, !!viaKey);

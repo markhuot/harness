@@ -11,7 +11,7 @@
 //   • one request at a time: edits made while one is out are sent after it, rebased on its answer.
 
 import type { CreateTicketBody, SubmitTicketBody, Ticket, UpdateTicketBody } from "@harness/shared";
-import { applyTicketPatch, draftCreateBody, draftIsEmpty, draftPatch } from "@harness/shared/state";
+import { applyTicketPatch, draftCreateBody, draftIsEmpty, draftPatch, samePromptAttachments } from "@harness/shared/state";
 
 type DraftProject = Parameters<typeof draftCreateBody>[1];
 type DraftSettings = Parameters<typeof draftIsEmpty>[2];
@@ -40,9 +40,14 @@ export interface DraftDeps {
 }
 
 /** The fields a draft editor changes. The rest (title, status, ids) are the service's. */
-const EDITABLE = ["projectId", "spec", "kind", "driver", "model", "permissionMode", "useWorktree", "requestedBranch", "baseBranch", "skipAgentReview", "skipHumanReview", "dependsOn"] as const;
+const EDITABLE = ["projectId", "spec", "kind", "driver", "model", "permissionMode", "useWorktree", "requestedBranch", "baseBranch", "skipAgentReview", "skipHumanReview", "dependsOn", "promptAttachments"] as const;
 
-const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ? a.length === b.length && a.every((v, i) => v === b[i]) : (a ?? null) === (b ?? null));
+const same = (f: (typeof EDITABLE)[number], a: unknown, b: unknown) =>
+  f === "promptAttachments"
+    ? samePromptAttachments((a as Ticket["promptAttachments"]) ?? [], (b as Ticket["promptAttachments"]) ?? [])
+    : Array.isArray(a) && Array.isArray(b)
+      ? a.length === b.length && a.every((v, i) => v === b[i])
+      : (a ?? null) === (b ?? null);
 
 /**
  * The service's answer `server` to a request sent from `sent`, with the edits made to `local`
@@ -51,7 +56,7 @@ const same = (a: unknown, b: unknown) => (Array.isArray(a) && Array.isArray(b) ?
  */
 export function rebase(server: Ticket, sent: Ticket, local: Ticket): Ticket {
   const out: Ticket = { ...server };
-  for (const f of EDITABLE) if (!same(local[f], sent[f])) (out as unknown as Record<string, unknown>)[f] = local[f];
+  for (const f of EDITABLE) if (!same(f, local[f], sent[f])) (out as unknown as Record<string, unknown>)[f] = local[f];
   return out;
 }
 
