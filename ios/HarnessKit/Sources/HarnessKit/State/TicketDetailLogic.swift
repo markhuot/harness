@@ -94,16 +94,17 @@ public enum TicketDetailLogic {
 
     // MARK: Composer
 
-    /// Whether a message sent while `tab` is on screen also goes into Activity (MessageBody.log):
-    /// from the Spec and Activity tabs only (Tabs.logsMessages).
-    public static func composerLogs(_ tab: TicketTab) -> Bool { Tabs.logsMessages(tab) }
+    /// The composer's placeholder: what a message does in the ticket's state ("Answer the agent…",
+    /// "Send a follow-up…").
+    public static func composerPlaceholder(_ t: Ticket) -> String {
+        Format.composerPlaceholder[t.status] ?? "Message the agent…"
+    }
 
-    /// The composer's placeholder: where the message shows, first so a narrow field never cuts it
-    /// off, then what a message does in the ticket's state ("In Activity · Answer the agent…",
-    /// "Transcript only · Send a follow-up…").
-    public static func composerPlaceholder(_ t: Ticket, tab: TicketTab) -> String {
-        let base = Format.composerPlaceholder[t.status] ?? "Message the agent…"
-        return "\(composerLogs(tab) ? "In Activity" : "Transcript only") · \(base)"
+    /// The tab to show once the composer's send finished: the Transcript after a message went
+    /// through, from any tab, since that's where it and the agent's reply show; the same tab when
+    /// the send failed, so the human stays where the error toast found them.
+    public static func tabAfterSend(_ tab: TicketTab, sent: Bool) -> TicketTab {
+        sent ? .transcript : tab
     }
 
     /// "1 ticket waiting on you" / "3 tickets waiting on you".

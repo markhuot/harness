@@ -152,7 +152,7 @@ private struct TicketDetailBody: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TicketDetailComposer(ticket: ticket, tab: shown).id(ticket.id)
+            TicketDetailComposer(ticket: ticket, tab: shown, onTab: onTab).id(ticket.id)
         }
         .modifier(TicketDetailHeader(ticket: ticket))
     }

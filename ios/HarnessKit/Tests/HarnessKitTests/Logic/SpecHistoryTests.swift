@@ -128,6 +128,17 @@ struct ActivityRowsTests {
         #expect(ActivityRows.body(noMeta) == "")
     }
 
+    @Test func fullTextOpensOnlyWhenItSaysMoreThanTheBody() {
+        let summary = Self.e(.changesRequested, body: "Add tests for the retry", meta: ActivityMeta(detail: "Add tests for the retry.\n\n- backoff caps at 30s\n- jitter"))
+        #expect(ActivityRows.fullText(summary) == "Add tests for the retry.\n\n- backoff caps at 30s\n- jitter")
+        let denied = Self.e(.system, author: .system, body: "Denied 2 calls", meta: ActivityMeta(detail: "  Bash rm -rf /\nBash curl x | sh  "))
+        #expect(ActivityRows.fullText(denied) == "Bash rm -rf /\nBash curl x | sh")
+        // Older services: the body is the whole text and there's no detail.
+        #expect(ActivityRows.fullText(Self.e(.changesRequested, body: "Add tests")) == nil)
+        #expect(ActivityRows.fullText(Self.e(.changesRequested, body: "Add tests", meta: ActivityMeta(detail: "  "))) == nil)
+        #expect(ActivityRows.fullText(Self.e(.changesRequested, body: "Add tests", meta: ActivityMeta(detail: "Add tests\n"))) == nil)
+    }
+
     @Test func onlyTheNewestBlockOfABlockedTicketIsOpen() {
         let old = Self.e(.blocked, id: "b1")
         let new = Self.e(.blocked, id: "b2")
@@ -150,24 +161,27 @@ struct ActivityRowsTests {
     }
 }
 
-@Suite("Composer log choice")
-struct ComposerLogTests {
+@Suite("Composer")
+struct ComposerTests {
     static let ticket = Ticket(id: "t", key: "T-1", projectId: "p", title: "t", spec: "", status: .blocked, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
 
-    @Test(arguments: [
-        (TicketTab.spec, true), (.activity, true), (.transcript, false), (.details, false), (.children, false),
-        (.agents, false), (.browser, false), (.changes, false), (TicketTab("agent:toolu_1"), false), (TicketTab("plugin:notes:list"), false),
-    ] as [(TicketTab, Bool)])
-    func logsFromSpecAndActivityOnly(_ tab: TicketTab, _ logs: Bool) {
-        #expect(TicketDetailLogic.composerLogs(tab) == logs)
-    }
-
-    @Test func placeholderSaysWhereTheMessageShows() {
-        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .spec) == "In Activity · Answer the agent…")
-        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .transcript) == "Transcript only · Answer the agent…")
+    @Test func placeholderSaysWhatAMessageDoes() {
+        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket) == "Answer the agent…")
         var review = Self.ticket
         review.status = .review
-        #expect(TicketDetailLogic.composerPlaceholder(review, tab: .activity) == "In Activity · Ask about the work, or ask for a change…")
+        #expect(TicketDetailLogic.composerPlaceholder(review) == "Ask about the work, or ask for a change…")
+    }
+
+    static let tabs: [TicketTab] = [.spec, .activity, .transcript, .details, .children, .agents, .browser, .changes, TicketTab("agent:toolu_1"), TicketTab("plugin:notes:list")]
+
+    @Test(arguments: tabs)
+    func aSentMessageOpensTheTranscript(_ tab: TicketTab) {
+        #expect(TicketDetailLogic.tabAfterSend(tab, sent: true) == .transcript)
+    }
+
+    @Test(arguments: tabs)
+    func aFailedSendStaysOnTheTab(_ tab: TicketTab) {
+        #expect(TicketDetailLogic.tabAfterSend(tab, sent: false) == tab)
     }
 }
 
