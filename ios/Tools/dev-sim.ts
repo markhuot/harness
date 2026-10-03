@@ -354,8 +354,19 @@ async function seed(d: Daemon): Promise<Seeded> {
     settle(planning, (t) => t.status === "planning" && !t.busy),
     settle(done, (t) => t.status === "done"),
   ]);
-  return { project, review: r, planning: p, blocked: b, done: dn };
+  // Two more revisions of the done ticket's spec, for the Spec tab's history and Show changes.
+  let revised = dn;
+  for (const spec of TIDY_REVISIONS) {
+    revised = await api<Ticket>("PATCH", `/tickets/${dn.key}`, { spec, baseRevision: revised.specRevision });
+  }
+  return { project, review: r, planning: p, blocked: b, done: revised };
 }
+
+/** Revisions 2 and 3 of GREET-4's spec: edited words, an added list item and table row, a changed code line, a removed paragraph. */
+const TIDY_REVISIONS = [
+  "# Goal\n\nTidy the README so new users can **install** it quickly.\n\n# Plan\n\n- Rewrite the intro\n- Add a usage section\n\n| Step | State |\n|---|---|\n| Intro | todo |\n| Usage | todo |\n\n```sh\nbun install\nbun run dev\n```\n\nAsk for a review before merging.",
+  "# Goal\n\nTidy the README so new users can **install and run** it in a minute.\n\n# Plan\n\n- Rewrite the intro\n- Add a usage section\n  - with a `bun run dev` example\n- Link the CHANGELOG\n\n| Step | State |\n|---|---|\n| Intro | done |\n| Usage | todo |\n| Links | todo |\n\n```sh\nbun install\nbun run start\n```",
+];
 
 function printSeeded(d: Daemon, s: Seeded) {
   log(`daemon:  ${d.base}`);

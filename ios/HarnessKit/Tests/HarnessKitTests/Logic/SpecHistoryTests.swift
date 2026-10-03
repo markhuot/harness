@@ -85,20 +85,6 @@ struct SpecHistoryTests {
         #expect(SpecHistory.info(s, ticketId: "t1", rev: 1)?.note == "Created")
         #expect(SpecHistory.info(s, ticketId: "t1", rev: 2) == nil)
     }
-
-    /// The service's diff (no `diff --git` header) parses into the Changes tab's rows.
-    @Test func serviceDiffParsesIntoChangesRows() throws {
-        let sample = try Fixture.value("protocol", "SpecDiff", as: [SpecDiff].self)
-        let d = try #require(SpecHistory.diff(sample[0].diff))
-        #expect(d.hunks.count == 1)
-        let lines: [ChangesLine] = ChangesRows.rows(d).compactMap { row -> ChangesLine? in if case let .line(l) = row { l } else { nil } }
-        #expect(lines == [ChangesLine(kind: .add, text: "## Goal", oldLine: nil, newLine: 1)])
-        #expect(SpecHistory.diff(sample[1].diff) == nil)
-        let change = "--- a/spec.md\n+++ b/spec.md\n@@ -1,3 +1,3 @@\n # Goal\n-old\n+new\n keep\n"
-        let rows = ChangesRows.rows(try #require(SpecHistory.diff(change)))
-        let kinds: [ChangesLineKind] = rows.compactMap { row -> ChangesLineKind? in if case let .line(l) = row { l.kind } else { nil } }
-        #expect(kinds == [.ctx, .del, .add, .ctx])
-    }
 }
 
 @Suite("Activity rows")

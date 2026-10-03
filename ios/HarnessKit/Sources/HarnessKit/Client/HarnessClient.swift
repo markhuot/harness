@@ -270,11 +270,6 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/tickets/\(key)/spec/revisions/\(rev)")
     }
 
-    /// The unified diff from revision `from` to `to` (`Diff.parse` reads it); "" when they're equal.
-    public func specDiff(_ key: String, from: Int, to: Int) async throws -> SpecDiff {
-        try await request("GET", "/tickets/\(key)/spec/revisions/\(to)\(Query.build([("diff", .int(from))]))")
-    }
-
     /// Absolute URL of a ticket attachment (attachment:<id> in a spec), token in the query so an image or video view can load it.
     public func attachmentUrl(_ id: String) -> String {
         "\(baseUrl)/attachments/\(URIComponent.encode(id))?token=\(URIComponent.encode(token))"

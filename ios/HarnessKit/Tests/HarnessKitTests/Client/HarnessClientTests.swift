@@ -170,9 +170,6 @@ struct HarnessClientRequestTests {
         let one = FakeTransport(status: 200, body: try envelope(protocolSample("SpecRevision")))
         _ = try await client(one).specRevision("NY-1", rev: 2)
         #expect(path(one) == "/tickets/NY-1/spec/revisions/2")
-        let diff = FakeTransport(status: 200, body: try envelope(protocolSample("SpecDiff")))
-        _ = try await client(diff).specDiff("NY-1", from: 1, to: 2)
-        #expect(path(diff) == "/tickets/NY-1/spec/revisions/2?diff=1")
     }
 
     @Test func specPatchSendsBaseRevision() async throws {
