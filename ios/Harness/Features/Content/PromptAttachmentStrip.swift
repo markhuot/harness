@@ -34,21 +34,31 @@ struct PromptAttachmentStrip: View {
     var onRemove: ((PromptAttachmentTile) -> Void)?
     var onOpen: ((PromptAttachmentTile) -> Void)?
 
+    private static let end = "end"
+
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 8) {
-                ForEach(tiles) { tile in
-                    PromptAttachmentTileView(tile: tile, onRemove: onRemove.map { remove in { remove(tile) } }, onOpen: onOpen.map { open in { open(tile) } })
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(tiles) { tile in
+                        PromptAttachmentTileView(tile: tile, onRemove: onRemove.map { remove in { remove(tile) } }, onOpen: onOpen.map { open in { open(tile) } })
+                    }
+                    ForEach(pending) { p in
+                        PromptAttachmentUploadingTile(name: p.name)
+                    }
+                    Color.clear.frame(width: 1, height: 1).id(Self.end)
                 }
-                ForEach(pending) { p in
-                    PromptAttachmentUploadingTile(name: p.name)
-                }
+                // Room for the remove buttons that sit over the tiles' corners.
+                .padding(.top, 6)
+                .padding(.trailing, 6)
             }
-            // Room for the remove buttons that sit over the tiles' corners.
-            .padding(.top, 6)
-            .padding(.trailing, 6)
+            .scrollClipDisabled()
+            // Something new (an upload starting or landing) scrolls into view.
+            .onChange(of: tiles.count + pending.count) { old, new in
+                guard new > old else { return }
+                withAnimation(.snappy) { proxy.scrollTo(Self.end, anchor: .trailing) }
+            }
         }
-        .scrollClipDisabled()
     }
 }
 
@@ -75,26 +85,26 @@ private struct PromptAttachmentTileView: View {
 
     var body: some View {
         let name = tile.attachment.name
+        let label = missing
+            ? "\(name), missing, was at \(tile.attachment.path)"
+            : "\(tile.isImage ? "Image" : "File") \(name)"
         Group {
-            if missing {
-                missingChip
-            } else if tile.isImage {
-                thumbnail
+            if let onOpen, !missing {
+                // A button, so a tap (and VoiceOver's activate) opens it even inside the scroll view.
+                Button {
+                    haptic(.tap)
+                    onOpen()
+                } label: {
+                    face.contentShape(.rect(cornerRadius: PromptAttachmentMetrics.radius))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(label)
             } else {
-                fileChip
+                face
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(label)
             }
         }
-        .contentShape(.rect(cornerRadius: PromptAttachmentMetrics.radius))
-        .onTapGesture {
-            guard !missing, let onOpen else { return }
-            haptic(.tap)
-            onOpen()
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(missing
-            ? "\(name), missing, was at \(tile.attachment.path)"
-            : "\(tile.isImage ? "Image" : "File") \(name)")
-        .accessibilityAddTraits(onOpen != nil && !missing ? .isButton : [])
         .overlay(alignment: .topTrailing) {
             if let onRemove {
                 Button {
@@ -119,6 +129,16 @@ private struct PromptAttachmentTileView: View {
     }
 
     // MARK: Tiles
+
+    @ViewBuilder private var face: some View {
+        if missing {
+            missingChip
+        } else if tile.isImage {
+            thumbnail
+        } else {
+            fileChip
+        }
+    }
 
     @ViewBuilder private var thumbnail: some View {
         let shape = RoundedRectangle(cornerRadius: PromptAttachmentMetrics.radius, style: .continuous)

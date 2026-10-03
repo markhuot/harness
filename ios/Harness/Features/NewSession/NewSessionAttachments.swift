@@ -31,6 +31,10 @@ final class PromptAttachmentUploader {
     }
 
     private(set) var pending: [PromptAttachmentPending] = []
+    /// The Attach menu asked for the photo picker or the file importer. They're presented from the
+    /// whole form (PromptAttachmentPickers): presented from a Form section, they'd attach to every row.
+    var pickingPhotos = false
+    var importing = false
     /// Thumbnails of images this device uploaded, by their path on the service's machine.
     private(set) var thumbnails: [String: UIImage] = [:]
 
@@ -161,9 +165,6 @@ struct NewSessionAttachmentsSection: View {
     @Environment(BoardStore.self) private var store
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
-    @State private var pickingPhotos = false
-    @State private var photos: [PhotosPickerItem] = []
-    @State private var importing = false
 
     var body: some View {
         let list = ticket.promptAttachments ?? []
@@ -179,8 +180,8 @@ struct NewSessionAttachmentsSection: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
             Menu {
-                Button("Photos", systemImage: "photo.on.rectangle") { pickingPhotos = true }
-                Button("Files", systemImage: "folder") { importing = true }
+                Button("Photos", systemImage: "photo.on.rectangle") { uploader.pickingPhotos = true }
+                Button("Files", systemImage: "folder") { uploader.importing = true }
                 Button("Paste", systemImage: "doc.on.clipboard") { paste() }
             } label: {
                 HStack(spacing: 8) {
@@ -208,18 +209,6 @@ struct NewSessionAttachmentsSection: View {
                 Text("Attachments")
             }
         }
-        .photosPicker(isPresented: $pickingPhotos, selection: $photos, maxSelectionCount: max(1, maxPromptAttachments - list.count), matching: .images)
-        .onChange(of: photos) { _, items in
-            guard !items.isEmpty else { return }
-            photos = []
-            upload(PromptAttachmentUploader.sources(items, startingAt: list.count + 1))
-        }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            switch result {
-            case let .success(urls): upload(PromptAttachmentUploader.sources(urls))
-            case let .failure(error): toasts.show("Couldn't open the file: \(localizedErrorMessage(error))", kind: .error)
-            }
-        }
     }
 
     /// The draft's attachments as tiles: this device's thumbnail when it has one, else the
@@ -245,6 +234,41 @@ struct NewSessionAttachmentsSection: View {
     private func upload(_ sources: [PromptAttachmentUploader.Source]) {
         guard !sources.isEmpty else { return }
         let client = store.api
+        Task { await uploader.upload(sources, client: client, editor: editor, toasts: toasts) }
+    }
+}
+
+/// The photo picker and file importer the Attach menu opens, presented from the whole form.
+struct PromptAttachmentPickers: ViewModifier {
+    let editor: NewSessionEditor?
+    @Bindable var uploader: PromptAttachmentUploader
+
+    @Environment(BoardStore.self) private var store
+    @Environment(ToastCenter.self) private var toasts
+    @State private var photos: [PhotosPickerItem] = []
+
+    func body(content: Content) -> some View {
+        let count = editor?.local?.promptAttachments?.count ?? 0
+        content
+            .photosPicker(isPresented: $uploader.pickingPhotos, selection: $photos, maxSelectionCount: max(1, maxPromptAttachments - count), matching: .images)
+            .onChange(of: photos) { _, items in
+                guard !items.isEmpty else { return }
+                photos = []
+                upload(PromptAttachmentUploader.sources(items, startingAt: count + 1))
+            }
+            .fileImporter(isPresented: $uploader.importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+                switch result {
+                case let .success(urls): upload(PromptAttachmentUploader.sources(urls))
+                case let .failure(error): toasts.show("Couldn't open the file: \(localizedErrorMessage(error))", kind: .error)
+                }
+            }
+    }
+
+    private func upload(_ sources: [PromptAttachmentUploader.Source]) {
+        guard let editor, !sources.isEmpty else { return }
+        let client = store.api
+        let toasts = toasts
+        let uploader = uploader
         Task { await uploader.upload(sources, client: client, editor: editor, toasts: toasts) }
     }
 }
