@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261003.0051](https://github.com/markhuot/harness/releases/tag/app-20261003.0051) - 2026-10-03
+
 ### Fixed
 
 - The downloaded Mac app opens again when Start at login is on. Before, the background service
