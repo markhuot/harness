@@ -512,6 +512,7 @@
                 "alt": "a",
                 "id": "a",
                 "video": false,
+                "thumb": false,
                 "change": "del"
               },
               {
@@ -519,6 +520,7 @@
                 "alt": "b",
                 "id": "b",
                 "video": false,
+                "thumb": false,
                 "change": "add"
               },
               {
@@ -1555,7 +1557,8 @@
             "t": "img",
             "alt": "a",
             "id": "a",
-            "video": false
+            "video": false,
+            "thumb": false
           }
         },
         {
@@ -1564,7 +1567,8 @@
             "t": "img",
             "alt": "b",
             "id": "b",
-            "video": false
+            "video": false,
+            "thumb": false
           }
         }
       ]
@@ -1582,7 +1586,8 @@
             "t": "img",
             "alt": "before",
             "id": "a",
-            "video": false
+            "video": false,
+            "thumb": false
           }
         },
         {
@@ -1591,7 +1596,8 @@
             "t": "img",
             "alt": "after",
             "id": "a",
-            "video": false
+            "video": false,
+            "thumb": false
           }
         }
       ]

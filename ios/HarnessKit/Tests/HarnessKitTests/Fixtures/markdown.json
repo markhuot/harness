@@ -1461,7 +1461,8 @@
           "t": "img",
           "alt": "shot",
           "id": "abc123",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "t": "text",
@@ -1481,7 +1482,8 @@
           "t": "img",
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "t": "text",
@@ -1501,7 +1503,8 @@
           "t": "img",
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "t": "text",
@@ -1517,7 +1520,8 @@
           "t": "img",
           "alt": "demo",
           "id": "v1.mp4",
-          "video": true
+          "video": true,
+          "thumb": false
         }
       ]
     },
@@ -1529,7 +1533,8 @@
           "t": "img",
           "alt": "flow.MOV",
           "id": "v2",
-          "video": true
+          "video": true,
+          "thumb": false
         }
       ]
     },
@@ -1663,7 +1668,8 @@
           "t": "img",
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -1675,7 +1681,8 @@
           "t": "img",
           "alt": "a",
           "id": "a",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "t": "text",
@@ -1685,7 +1692,8 @@
           "t": "img",
           "alt": "b",
           "id": "b",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -1697,7 +1705,8 @@
           "t": "img",
           "alt": "",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -1718,7 +1727,291 @@
           "t": "img",
           "alt": "i",
           "id": "i",
-          "video": false
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "titled image is a figure",
+      "input": "![After](attachment:a \"Settings pane\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "After",
+          "id": "a",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "thumbnail alone",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail title any case",
+      "input": "![a](attachment:a \" Thumbnail \")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail row",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b.mp4 \"thumb\")\t![c](attachment:c \"thumb\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "img",
+          "alt": "b",
+          "id": "b.mp4",
+          "video": true,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": "\t"
+        },
+        {
+          "t": "img",
+          "alt": "c",
+          "id": "c",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "adjacent thumbnail lines join",
+      "input": "![a](attachment:a \"thumb\")\n  ![b](attachment:b \"thumb\")\n![c](attachment:c)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": "\n  "
+        },
+        {
+          "t": "img",
+          "alt": "b",
+          "id": "b",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": "\n"
+        },
+        {
+          "t": "img",
+          "alt": "c",
+          "id": "c",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "blank line splits thumbnail rows",
+      "input": "![a](attachment:a \"thumb\")\n\n![b](attachment:b \"thumb\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": "\n\n"
+        },
+        {
+          "t": "img",
+          "alt": "b",
+          "id": "b",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail after paragraph",
+      "input": "intro\n![a](attachment:a \"thumb\")\nmore",
+      "output": [
+        {
+          "t": "text",
+          "text": "intro\n"
+        },
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": "\nmore"
+        }
+      ]
+    },
+    {
+      "name": "thumbnail with text is inline",
+      "input": "see ![a](attachment:a \"thumb\") here",
+      "output": [
+        {
+          "t": "text",
+          "text": "see "
+        },
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": " here"
+        }
+      ]
+    },
+    {
+      "name": "thumbnail and figure on one line",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b)",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "t": "text",
+          "text": " "
+        },
+        {
+          "t": "img",
+          "alt": "b",
+          "id": "b",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "remote thumbnail is a link",
+      "input": "![r](https://x.test/r.png \"thumb\")",
+      "output": [
+        {
+          "t": "link",
+          "text": "r",
+          "url": "https://x.test/r.png"
+        }
+      ]
+    },
+    {
+      "name": "bad attachment thumbnail",
+      "input": "![x](attachment:.. \"thumb\")",
+      "output": [
+        {
+          "t": "text",
+          "text": "x"
+        }
+      ]
+    },
+    {
+      "name": "thumbnail in a list",
+      "input": "- ![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "t": "text",
+          "text": "- "
+        },
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "single-quoted title is not a title",
+      "input": "![a](attachment:a 'thumb')",
+      "output": [
+        {
+          "t": "text",
+          "text": "![a](attachment:a 'thumb')"
+        }
+      ]
+    },
+    {
+      "name": "title without space",
+      "input": "![a](attachment:a\"thumb\")",
+      "output": [
+        {
+          "t": "text",
+          "text": "a"
+        }
+      ]
+    },
+    {
+      "name": "thumbs is not thumb",
+      "input": "![a](attachment:a \"thumbs\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "NBSP before title",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
         }
       ]
     },
@@ -2538,7 +2831,8 @@
         {
           "alt": "shot",
           "id": "abc123",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2549,7 +2843,8 @@
         {
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2560,7 +2855,8 @@
         {
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2571,7 +2867,8 @@
         {
           "alt": "demo",
           "id": "v1.mp4",
-          "video": true
+          "video": true,
+          "thumb": false
         }
       ]
     },
@@ -2582,7 +2879,8 @@
         {
           "alt": "flow.MOV",
           "id": "v2",
-          "video": true
+          "video": true,
+          "thumb": false
         }
       ]
     },
@@ -2648,7 +2946,8 @@
         {
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2659,12 +2958,14 @@
         {
           "alt": "a",
           "id": "a",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "alt": "b",
           "id": "b",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2675,7 +2976,8 @@
         {
           "alt": "",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2686,7 +2988,208 @@
         {
           "alt": "i",
           "id": "i",
-          "video": false
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "titled image is a figure",
+      "input": "![After](attachment:a \"Settings pane\")",
+      "output": [
+        {
+          "alt": "After",
+          "id": "a",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "thumbnail alone",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail title any case",
+      "input": "![a](attachment:a \" Thumbnail \")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail row",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b.mp4 \"thumb\")\t![c](attachment:c \"thumb\")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "alt": "b",
+          "id": "b.mp4",
+          "video": true,
+          "thumb": true
+        },
+        {
+          "alt": "c",
+          "id": "c",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "adjacent thumbnail lines join",
+      "input": "![a](attachment:a \"thumb\")\n  ![b](attachment:b \"thumb\")\n![c](attachment:c)",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "alt": "b",
+          "id": "b",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "alt": "c",
+          "id": "c",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "blank line splits thumbnail rows",
+      "input": "![a](attachment:a \"thumb\")\n\n![b](attachment:b \"thumb\")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "alt": "b",
+          "id": "b",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail after paragraph",
+      "input": "intro\n![a](attachment:a \"thumb\")\nmore",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail with text is inline",
+      "input": "see ![a](attachment:a \"thumb\") here",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "thumbnail and figure on one line",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b)",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        },
+        {
+          "alt": "b",
+          "id": "b",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "remote thumbnail is a link",
+      "input": "![r](https://x.test/r.png \"thumb\")",
+      "output": []
+    },
+    {
+      "name": "bad attachment thumbnail",
+      "input": "![x](attachment:.. \"thumb\")",
+      "output": []
+    },
+    {
+      "name": "thumbnail in a list",
+      "input": "- ![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
+        }
+      ]
+    },
+    {
+      "name": "single-quoted title is not a title",
+      "input": "![a](attachment:a 'thumb')",
+      "output": []
+    },
+    {
+      "name": "title without space",
+      "input": "![a](attachment:a\"thumb\")",
+      "output": []
+    },
+    {
+      "name": "thumbs is not thumb",
+      "input": "![a](attachment:a \"thumbs\")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "NBSP before title",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": true
         }
       ]
     },
@@ -2947,37 +3450,44 @@
         {
           "alt": "h",
           "id": "h",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "alt": "a",
           "id": "a",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "alt": "b",
           "id": "b",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "alt": "q",
           "id": "q.mov",
-          "video": true
+          "video": true,
+          "thumb": false
         },
         {
           "alt": "l",
           "id": "l",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "alt": "n",
           "id": "n",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "alt": "t",
           "id": "t",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -2988,7 +3498,8 @@
         {
           "alt": "first",
           "id": "x",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -3816,7 +4327,8 @@
           "t": "img",
           "alt": "shot",
           "id": "abc123",
-          "video": false
+          "video": false,
+          "thumb": false
         },
         {
           "t": "p",
@@ -3832,7 +4344,8 @@
           "t": "img",
           "alt": "shot",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -3854,7 +4367,8 @@
           "t": "img",
           "alt": "demo",
           "id": "v1.mp4",
-          "video": true
+          "video": true,
+          "thumb": false
         }
       ]
     },
@@ -3866,7 +4380,8 @@
           "t": "img",
           "alt": "flow.MOV",
           "id": "v2",
-          "video": true
+          "video": true,
+          "thumb": false
         }
       ]
     },
@@ -4013,7 +4528,8 @@
           "t": "img",
           "alt": "",
           "id": "abc",
-          "video": false
+          "video": false,
+          "thumb": false
         }
       ]
     },
@@ -4024,6 +4540,270 @@
         {
           "t": "p",
           "text": "[docs](https://x.y) ![i](attachment:i)"
+        }
+      ]
+    },
+    {
+      "name": "titled image is a figure",
+      "input": "![After](attachment:a \"Settings pane\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "After",
+          "id": "a",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "thumbnail alone",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thumbnail title any case",
+      "input": "![a](attachment:a \" Thumbnail \")",
+      "output": [
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thumbnail row",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b.mp4 \"thumb\")\t![c](attachment:c \"thumb\")",
+      "output": [
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            },
+            {
+              "alt": "b",
+              "id": "b.mp4",
+              "video": true,
+              "thumb": true
+            },
+            {
+              "alt": "c",
+              "id": "c",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "adjacent thumbnail lines join",
+      "input": "![a](attachment:a \"thumb\")\n  ![b](attachment:b \"thumb\")\n![c](attachment:c)",
+      "output": [
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            },
+            {
+              "alt": "b",
+              "id": "b",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        },
+        {
+          "t": "img",
+          "alt": "c",
+          "id": "c",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "blank line splits thumbnail rows",
+      "input": "![a](attachment:a \"thumb\")\n\n![b](attachment:b \"thumb\")",
+      "output": [
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        },
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "b",
+              "id": "b",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "thumbnail after paragraph",
+      "input": "intro\n![a](attachment:a \"thumb\")\nmore",
+      "output": [
+        {
+          "t": "p",
+          "text": "intro"
+        },
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            }
+          ]
+        },
+        {
+          "t": "p",
+          "text": "more"
+        }
+      ]
+    },
+    {
+      "name": "thumbnail with text is inline",
+      "input": "see ![a](attachment:a \"thumb\") here",
+      "output": [
+        {
+          "t": "p",
+          "text": "see ![a](attachment:a \"thumb\") here"
+        }
+      ]
+    },
+    {
+      "name": "thumbnail and figure on one line",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b)",
+      "output": [
+        {
+          "t": "p",
+          "text": "![a](attachment:a \"thumb\") ![b](attachment:b)"
+        }
+      ]
+    },
+    {
+      "name": "remote thumbnail is a link",
+      "input": "![r](https://x.test/r.png \"thumb\")",
+      "output": [
+        {
+          "t": "p",
+          "text": "![r](https://x.test/r.png \"thumb\")"
+        }
+      ]
+    },
+    {
+      "name": "bad attachment thumbnail",
+      "input": "![x](attachment:.. \"thumb\")",
+      "output": [
+        {
+          "t": "p",
+          "text": "![x](attachment:.. \"thumb\")"
+        }
+      ]
+    },
+    {
+      "name": "thumbnail in a list",
+      "input": "- ![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "![a](attachment:a \"thumb\")",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "single-quoted title is not a title",
+      "input": "![a](attachment:a 'thumb')",
+      "output": [
+        {
+          "t": "p",
+          "text": "![a](attachment:a 'thumb')"
+        }
+      ]
+    },
+    {
+      "name": "title without space",
+      "input": "![a](attachment:a\"thumb\")",
+      "output": [
+        {
+          "t": "p",
+          "text": "![a](attachment:a\"thumb\")"
+        }
+      ]
+    },
+    {
+      "name": "thumbs is not thumb",
+      "input": "![a](attachment:a \"thumbs\")",
+      "output": [
+        {
+          "t": "img",
+          "alt": "a",
+          "id": "a",
+          "video": false,
+          "thumb": false
+        }
+      ]
+    },
+    {
+      "name": "NBSP before title",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": [
+        {
+          "t": "thumbs",
+          "items": [
+            {
+              "alt": "a",
+              "id": "a",
+              "video": false,
+              "thumb": true
+            }
+          ]
         }
       ]
     },
@@ -5197,6 +5977,86 @@
       "name": "link next to image",
       "input": "[docs](https://x.y) ![i](attachment:i)",
       "output": "docs i"
+    },
+    {
+      "name": "titled image is a figure",
+      "input": "![After](attachment:a \"Settings pane\")",
+      "output": "After"
+    },
+    {
+      "name": "thumbnail alone",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": "a"
+    },
+    {
+      "name": "thumbnail title any case",
+      "input": "![a](attachment:a \" Thumbnail \")",
+      "output": "a"
+    },
+    {
+      "name": "thumbnail row",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b.mp4 \"thumb\")\t![c](attachment:c \"thumb\")",
+      "output": "a b c"
+    },
+    {
+      "name": "adjacent thumbnail lines join",
+      "input": "![a](attachment:a \"thumb\")\n  ![b](attachment:b \"thumb\")\n![c](attachment:c)",
+      "output": "a b c"
+    },
+    {
+      "name": "blank line splits thumbnail rows",
+      "input": "![a](attachment:a \"thumb\")\n\n![b](attachment:b \"thumb\")",
+      "output": "a b"
+    },
+    {
+      "name": "thumbnail after paragraph",
+      "input": "intro\n![a](attachment:a \"thumb\")\nmore",
+      "output": "intro a more"
+    },
+    {
+      "name": "thumbnail with text is inline",
+      "input": "see ![a](attachment:a \"thumb\") here",
+      "output": "see a here"
+    },
+    {
+      "name": "thumbnail and figure on one line",
+      "input": "![a](attachment:a \"thumb\") ![b](attachment:b)",
+      "output": "a b"
+    },
+    {
+      "name": "remote thumbnail is a link",
+      "input": "![r](https://x.test/r.png \"thumb\")",
+      "output": "r"
+    },
+    {
+      "name": "bad attachment thumbnail",
+      "input": "![x](attachment:.. \"thumb\")",
+      "output": "x"
+    },
+    {
+      "name": "thumbnail in a list",
+      "input": "- ![a](attachment:a \"thumb\")",
+      "output": "• a"
+    },
+    {
+      "name": "single-quoted title is not a title",
+      "input": "![a](attachment:a 'thumb')",
+      "output": "a"
+    },
+    {
+      "name": "title without space",
+      "input": "![a](attachment:a\"thumb\")",
+      "output": "a"
+    },
+    {
+      "name": "thumbs is not thumb",
+      "input": "![a](attachment:a \"thumbs\")",
+      "output": "a"
+    },
+    {
+      "name": "NBSP before title",
+      "input": "![a](attachment:a \"thumb\")",
+      "output": "a"
     },
     {
       "name": "hr dashes",
