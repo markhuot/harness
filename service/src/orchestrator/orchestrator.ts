@@ -147,7 +147,7 @@ import { CommandCatalog, type CommandCatalogOptions } from "../drivers/commands"
 import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
-import { cleanClaudeEnv, resolveClaudeBin } from "../drivers/claude-code";
+import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 
 export interface ConductorChange {
@@ -463,7 +463,7 @@ export class Orchestrator {
           const bin = resolveClaudeBin(process.env);
           return existsSync(bin) ? bin : null;
         },
-        env: () => cleanClaudeEnv(process.env),
+        env: () => claudeCliEnv(process.env, this.settings()),
         cachePath: join(opts.paths.home, "auto-mode-rules.json"),
       });
     this.gate = new PermissionGate({ classifier: () => this.classifier(), timeoutMs: opts.classifierTimeoutMs });
@@ -658,6 +658,7 @@ export class Orchestrator {
     const patch = validateSettingsPatch(body, [...this.drivers.keys()], current);
     this.store.settings.set(applySettingsPatch(current, patch));
     if (patch.anthropicApiKey !== undefined) this.modelCatalog.invalidate("anthropic-api");
+    if (patch.claudeOauthToken !== undefined) this.modelCatalog.invalidate("claude-code");
     const pub = this.publicSettings();
     this.bus.emit({ kind: "settings.updated", settings: pub });
     this.queue.pump();
@@ -3022,8 +3023,9 @@ ${numberLines(r.body)}`;
   async updateSettings_(ctx: ToolContext, patch: Record<string, unknown>, dryRun = false): Promise<PublicSettings> {
     this.configWriter(ctx);
     // Secrets never pass through a model; the legacy/echo keys aren't for tools either.
-    for (const k of ["anthropicApiKey", "anthropicApiKeySet", "claudePermissionMode"]) {
-      if (patch && k in patch) throw new Error(`${k} can't be changed with a tool${k === "anthropicApiKey" ? ": ask the human to enter it in Settings" : ""}.`);
+    const secrets = ["anthropicApiKey", "claudeOauthToken"];
+    for (const k of [...secrets, "anthropicApiKeySet", "claudeOauthTokenSet", "claudePermissionMode"]) {
+      if (patch && k in patch) throw new Error(`${k} can't be changed with a tool${secrets.includes(k) ? ": ask the human to enter it in Settings" : ""}.`);
     }
     return this.asToolError(() => {
       if (dryRun) return (validateSettingsPatch(patch, [...this.drivers.keys()], this.settings()), this.publicSettings());
@@ -3337,7 +3339,7 @@ ${numberLines(r.body)}`;
             model: () => this.settings().defaultModels["anthropic-api"] || DEFAULT_ANTHROPIC_MODEL,
             rules,
           })
-        : new ClaudeCliClassifier({ bin: () => resolveClaudeBin(process.env), env: () => cleanClaudeEnv(process.env), rules });
+        : new ClaudeCliClassifier({ bin: () => resolveClaudeBin(process.env), env: () => claudeCliEnv(process.env, this.settings()), rules });
     this.classifierCache = { key, classifier };
     return classifier;
   }

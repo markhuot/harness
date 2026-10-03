@@ -186,13 +186,17 @@ describe("config tools behind human approval", () => {
       await expect(req.toolContext.ops.updateSettings(req.toolContext, { anthropicApiKey: "sk-from-model" })).rejects.toThrow(
         "anthropicApiKey can't be changed with a tool: ask the human to enter it in Settings.",
       );
+      await expect(req.toolContext.ops.updateSettings(req.toolContext, { claudeOauthToken: "sk-ant-oat01-from-model" })).rejects.toThrow(
+        "claudeOauthToken can't be changed with a tool: ask the human to enter it in Settings.",
+      );
     });
-    h.orch.updateSettings({ anthropicApiKey: "sk-secret-123" });
+    h.orch.updateSettings({ anthropicApiKey: "sk-secret-123", claudeOauthToken: "sk-ant-oat01-secret-456" });
     await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     const [get, update] = h.results;
     expect(text(get!.result)).not.toContain("sk-secret");
-    expect(JSON.parse(text(get!.result))).toMatchObject({ anthropicApiKeySet: true, defaultDriver: "fake" });
+    expect(text(get!.result)).not.toContain("secret-456");
+    expect(JSON.parse(text(get!.result))).toMatchObject({ anthropicApiKeySet: true, claudeOauthTokenSet: true, defaultDriver: "fake" });
     expect([update!.result.isError, text(update!.result)]).toEqual([true, "Nothing to change: pass at least one setting."]);
     expect(h.orch.settings().anthropicApiKey).toBe("sk-secret-123");
   });

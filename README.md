@@ -93,7 +93,7 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
 
 | Driver | Auth | Notes |
 | --- | --- | --- |
-| `claude-code` | Your Claude team plan, via `claude auth login` (Settings → Drivers → Login) | Wraps the `claude` CLI. Harness tools are exposed over MCP. |
+| `claude-code` | Your Claude team plan, via `claude auth login` (Settings → Drivers → Login), or a long-lived token from `claude setup-token` (Settings → Drivers → Claude Code) | Wraps the `claude` CLI. Harness tools are exposed over MCP. When the service starts at login, use the token: launchd can't always read the CLI's Keychain login, and runs then fail with "OAuth session expired". |
 | `anthropic-api` | API key (Settings, or `ANTHROPIC_API_KEY`) | Calls the Messages API directly and runs the tool loop itself. |
 | `dummy` | none | Test-only: returns scripted responses with no network calls. The service offers it only when started with `HARNESS_DUMMY_DRIVER=1` (the test scripts set it; installs don't). See DESIGN.md for its `/block`, `/fail`, `/browse` and `/approve` directives. |
 

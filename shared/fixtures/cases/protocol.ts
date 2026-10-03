@@ -475,6 +475,7 @@ const settings: P.Settings = {
   watcherDriver: "anthropic-api",
   watcherModels: { "anthropic-api": "claude-haiku-4-5", "claude-code": null },
   anthropicApiKey: "sk-ant-api03-redacted",
+  claudeOauthToken: "sk-ant-oat01-redacted",
   baseBranch: "main",
   listen: { mode: "tailscale" },
   browserIdleTabMinutes: 5,
@@ -487,19 +488,21 @@ export const Settings: P.Settings[] = [
   { ...settings, watcherDriver: null, classifier: "anthropic-api", browserIdleTabMinutes: 0 },
 ];
 
-const { anthropicApiKey: _key, ...settingsWithoutKey } = settings;
-const publicSettings: P.PublicSettings = { ...settingsWithoutKey, anthropicApiKeySet: true };
+const { anthropicApiKey: _key, claudeOauthToken: _token, ...settingsWithoutKey } = settings;
+const publicSettings: P.PublicSettings = { ...settingsWithoutKey, anthropicApiKeySet: true, claudeOauthTokenSet: true };
 
 export const PublicSettings: P.PublicSettings[] = [
   publicSettings,
   { defaultDriver: "anthropic-api", maxConcurrentRuns: 1, permissionMode: "ask", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKeySet: false },
-  { ...publicSettings, watcherDriver: null },
+  { ...publicSettings, watcherDriver: null, claudeOauthTokenSet: false },
 ];
 
 /** PATCH /settings bodies (`Partial<Settings>`). */
 export const SettingsPatch: Partial<P.Settings>[] = [
   { anthropicApiKey: null },
   { anthropicApiKey: "sk-ant-new" },
+  { claudeOauthToken: null },
+  { claudeOauthToken: "sk-ant-oat01-new" },
   { prompts: { "system.intro": null, "run.work_start": "Begin {{ticketKey}}." } },
   { defaultModels: { "claude-code": null }, reviewModels: { "anthropic-api": "claude-opus-4-1" }, watcherModels: { "claude-code": null } },
   { watcherDriver: null, maxConcurrentRuns: 8, permissionMode: "ask", classifier: "anthropic-api", browserIdleTabMinutes: 30 },

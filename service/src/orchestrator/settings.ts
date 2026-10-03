@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS: Settings = {
   watcherDriver: null,
   watcherModels: {},
   anthropicApiKey: null,
+  claudeOauthToken: null,
   listen: { mode: "localhost" },
   baseBranch: DEFAULT_BASE_BRANCH,
   browserIdleTabMinutes: DEFAULT_BROWSER_IDLE_TAB_MINUTES,
@@ -50,8 +51,8 @@ export function legacyPermissionMode(value: unknown): Settings["permissionMode"]
 }
 
 export function toPublicSettings(s: Settings): PublicSettings {
-  const { anthropicApiKey, ...rest } = s;
-  return { ...rest, anthropicApiKeySet: !!anthropicApiKey };
+  const { anthropicApiKey, claudeOauthToken, ...rest } = s;
+  return { ...rest, anthropicApiKeySet: !!anthropicApiKey, claudeOauthTokenSet: !!claudeOauthToken };
 }
 
 /** Merge stored values over defaults, ignoring unknown/invalid stored keys. */
@@ -172,6 +173,10 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (value !== null && typeof value !== "string") throw badRequest("anthropicApiKey must be a string or null");
         out.anthropicApiKey = value ? (value as string).trim() || null : null;
         break;
+      case "claudeOauthToken":
+        if (value !== null && typeof value !== "string") throw badRequest("claudeOauthToken must be a string or null");
+        out.claudeOauthToken = value ? (value as string).trim() || null : null;
+        break;
       case "listen":
         out.listen = validateListen(value);
         break;
@@ -182,6 +187,7 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         out.prompts = validatePrompts(value, current?.prompts);
         break;
       case "anthropicApiKeySet":
+      case "claudeOauthTokenSet":
         break; // echoed back from PublicSettings; ignore
       default:
         throw badRequest(`Unknown setting: ${key}`);

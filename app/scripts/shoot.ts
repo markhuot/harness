@@ -194,9 +194,10 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "compose-review-defaults", route: "#/compose", setup: inDraft(`await pickProject("HARNESS"); await options();`) },
   { name: "permissions", route: "#/settings/permissions" },
   // Settings → Drivers: the driver list with the Default model under it, a driver opened into its
-  // own settings (Anthropic API carries the API key), and the Default model combobox open.
+  // own settings (Anthropic API carries the API key, Claude Code the long-lived token), and the Default model combobox open.
   { name: "settings-drivers", route: "#/settings/drivers" },
   { name: "settings-driver-open", route: "#/settings/drivers", setup: openDriver("anthropic-api") },
+  { name: "settings-driver-claude", route: "#/settings/drivers", setup: openDriver("claude-code") },
   { name: "settings-models-open", route: "#/settings/drivers", setup: openCombo("[data-testid=default-model]") },
   { name: "project-model-open", route: `#/project/${hello}/settings`, setup: openCombo("[data-testid=project-models]") },
   // Prompts: the list, a built-in prompt, a customized one, a draft that doesn't validate, the
