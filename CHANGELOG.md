@@ -11,6 +11,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On the Mac, the Changes tab is now one of a ticket's own tabs. It sits between Browser and
+  Details (where the iPhone and iPad already put it) and is drawn by the app itself instead of
+  loading a separate page, so it looks and follows your theme like the rest of the ticket.
+  It works the same way as before. Files you marked Viewed and your Unified/Split choice start
+  fresh once, since the app now keeps them itself.
+
 - Messages you send on a ticket no longer go into its Activity. Once a message is sent, the ticket
   switches to its Transcript, where your message and the agent's reply show up. The composer no
   longer labels where a message goes ("Shows in Activity" or "Transcript only").

@@ -64,11 +64,3 @@ export function visibleTabsWithChanges(opts: Omit<Opts, "pluginTabs"> & { plugin
   if (showsChangesTab(opts.workdir, opts.pluginTabs) && i >= 0) tabs.splice(i, 0, CHANGES_TAB);
   return tabs;
 }
-
-/** The git plugin's icon for the tab (plugins/git/plugin.json). */
-export const CHANGES_DEFAULT_ICON = "branch";
-
-/** The tab's icon: the one the service lists for git:changes, else the plugin's default. */
-export function changesTabIcon(pluginTabs: { pluginId: string; id: string; icon?: string | null }[] | null | undefined): string {
-  return pluginTabs?.find(isPluginChanges)?.icon || CHANGES_DEFAULT_ICON;
-}

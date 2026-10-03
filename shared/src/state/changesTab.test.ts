@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { changesTabIcon, effectiveTabWithChanges, otherPluginTabs, showsChangesTab, ticketTabWithChanges, visibleTabsWithChanges } from "./changesTab";
+import { effectiveTabWithChanges, otherPluginTabs, showsChangesTab, ticketTabWithChanges, visibleTabsWithChanges } from "./changesTab";
 import { changesEmptyState, changesNotices, effectiveStyle, fileDecoration, relTime } from "./changes";
 
 const git = { pluginId: "git", id: "changes" };
@@ -62,12 +62,6 @@ describe("effectiveTabWithChanges", () => {
     expect(effectiveTabWithChanges("plugin:notes:notes", { ...opts, pluginTabs: [git] })).toBe("spec");
     expect(effectiveTabWithChanges("children", { ...opts, pluginTabs: [git] })).toBe("spec");
   });
-});
-
-test("changesTabIcon uses the service's icon, else the plugin's default", () => {
-  expect(changesTabIcon([{ ...git, icon: "fileText" }])).toBe("fileText");
-  expect(changesTabIcon([{ ...git, icon: "" }])).toBe("branch");
-  expect(changesTabIcon(null)).toBe("branch");
 });
 
 test("fileDecoration: counts for text files, a kind for binaries and pure renames", () => {

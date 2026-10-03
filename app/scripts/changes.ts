@@ -1,4 +1,4 @@
-// Git plugin end-to-end against a REAL daemon (temp HARNESS_HOME, random port; never ~/.harness):
+// Changes tab end-to-end against a REAL daemon (temp HARNESS_HOME, random port; never ~/.harness):
 // a dummy ticket edits its worktree, the Changes tab shows it in light and dark, then refreshes live.
 //
 //   bun run build && bun scripts/changes.ts [screenshotDir]

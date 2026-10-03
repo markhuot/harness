@@ -5,7 +5,6 @@ import {
   AGENTS_LIVE_LABEL,
   CHANGES_LABEL,
   CHANGES_TAB,
-  changesTabIcon,
   childrenOf,
   COMPOSER_PLACEHOLDER,
   composerHint,
@@ -254,7 +253,7 @@ export function TicketDetail({
       <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
         {tabs.filter((t) => !parsePluginTab(t)).map((t) => (
           <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
-            {t === CHANGES_TAB ? <ChangesLabel pluginTabs={pluginTabs} /> : TAB_LABEL[t as keyof typeof TAB_LABEL]}
+            {t === CHANGES_TAB ? CHANGES_LABEL : TAB_LABEL[t as keyof typeof TAB_LABEL]}
             {t === "spec" && (ticket.specRevision ?? 1) > 1 && <span className="count" title="Revisions">{ticket.specRevision}</span>}
             {t === "activity" && (state.activity[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.activity[ticket.sessionId]!.length}</span>}
             {t === "children" && childCount > 0 && <span className="count">{childCount}</span>}
@@ -299,17 +298,6 @@ export function TicketDetail({
       </div>
       <MessageComposer ticket={ticket} key={ticket.id} onSent={() => setTab(tabAfterSend(tab, true))} />
     </aside>
-  );
-}
-
-/** The Changes tab's label, with the icon the service lists for the git plugin's tab. */
-function ChangesLabel({ pluginTabs }: { pluginTabs: { pluginId: string; id: string; icon?: string | null }[] | null }) {
-  const icon = changesTabIcon(pluginTabs);
-  return (
-    <>
-      {isIconName(icon) && <Icon name={icon} size={12} />}
-      {CHANGES_LABEL}
-    </>
   );
 }
 

@@ -40,7 +40,7 @@ outlives the app (see "Service supervision").
 | `ios/` | iPhone and iPad app (SwiftUI, XcodeGen `project.yml`): the `Harness` app target (views, navigation, platform glue) and the `HarnessKit` Swift package (protocol types, client, logic and state, `swift test`); build and simulator tooling in `ios/Tools/` |
 | `release/` | Release tooling: `release.ts` (prepare), `publish-install.sh` (build, GitHub release, TestFlight via `testflight.ts`), `install-page.ts` and the Vercel install site in `release/Install/` |
 | `plugins/sdk/` | Plugin API: `server.ts` (types, `definePlugin`) and `harness-plugin.ts` (iframe bridge, `connect()`) |
-| `plugins/git/` | Built-in git plugin: the ticket **Changes** tab |
+| `plugins/git/` | Built-in git plugin: the routes behind the ticket **Changes** tab (which the apps draw), and a web page of it for other hosts |
 
 ## Project keys
 
@@ -2017,15 +2017,28 @@ changed. The refs keep the commits reachable after a squash merge or `gc`. They 
 (best effort: the plugin needs to have seen the ticket since the service started, because the
 delete event only carries the id).
 
-The UI uses Pierre's [@pierre/trees](https://trees.software) for the changed-file tree (git status
+**The tab is built into the apps.** The Mac app (`app/src/renderer/views/ChangesView.tsx`) and the
+iPhone/iPad app (HarnessKit `Changes*`) draw Changes themselves from these routes, rather than
+hosting the plugin's page. The service still lists it as the plugin's `git:changes` tab, which is
+how the apps know a ticket has a diff. `shared/src/state/changesTab.ts` (and its Swift twin,
+`ChangesTab.swift`) layers the built-in `changes` tab on top of `tabs.ts`: `plugin:git:changes`
+normalizes to `changes`, git:changes leaves the plugin tabs, and the tab sits after Browser, ahead
+of Details, while the service lists it (or, before the tab list loads, while the ticket has a
+workdir). The payload types, Viewed marks (fingerprinted per file diff, so a file changed again
+reads as unviewed), the Unified/Split and sidebar preferences and the empty/notice text live in
+`shared/src/state/changes.ts`, which the plugin's page shares.
+
+The plugin's own page (`plugins/git/ui`, for other hosts) and the Mac tab look and behave the same.
+Both use Pierre's [@pierre/trees](https://trees.software) for the changed-file tree (git status
 colors plus `+a −d` decorations) and [@pierre/diffs](https://diffs.com) `CodeView` for the stacked,
-virtualized diffs with sticky headers and syntax highlighting. It offers unified/split view,
-expandable context, a commits dropdown, empty/error/truncated states, a "Saved" marker in pinned mode, and follows the host theme:
-the chrome uses the `--harness-*` tokens (Harness Light/Dark as fallbacks), and diffs and the tree
-use the app theme's `syntaxTheme`, falling back to pierre-light / pierre-dark when there is none or
-it fails to load.
-It refreshes on `harness:ticket` (debounced), polls every 4 s while the ticket is busy (file edits
-don't emit ticket events), and has a refresh button. Below 720 px the tree becomes a drawer.
+virtualized diffs with sticky headers and syntax highlighting (the Mac app through their React
+bindings, loaded lazily). They offer unified/split view, expandable context, a commits dropdown,
+empty/error/truncated states, a "Saved" marker in pinned mode, a Viewed checkbox and disclosure
+arrow on each file, and follow the app theme: the chrome uses its tokens (the page gets them as
+`--harness-*`), and diffs and the tree use the app theme's `syntaxTheme`, falling back to
+pierre-light / pierre-dark when there is none or it fails to load.
+They refresh on ticket events (debounced 600 ms), poll every 4 s while the ticket is busy (file
+edits don't emit ticket events), and have a refresh button. Below 720 px the tree becomes a drawer.
 
 ## Testing
 
@@ -2091,7 +2104,7 @@ Settings, project settings, or on the board route the pane workspace.
   the gutter, which updates the pane's range in place with `setFileView`). A file with
   uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, a
   `MultiFileDiff` of HEAD against the working tree (a `PatchDiff` of git's patch when a side is
-  binary or too big), with the Git tab's `lineDiffType` and hunk separators. Contents and diff
+  binary or too big), with the Changes tab's `lineDiffType` and hunk separators. Contents and diff
   refetch on window focus, reconnect, the ticket's workdir or branch changing, and the refresh
   button. File panes persist with the rest of the tree, follow a ticket rename, and close when
   their ticket is deleted. `scripts/file-pane-check.ts` drives the whole flow against the real
@@ -2206,8 +2219,8 @@ Settings, project settings, or on the board route the pane workspace.
     re-renders two cards. ⇧⌘Enter (`board.openSplit`) shares its chord with Maximize: the board's
     scope is innermost, so on the board it wins, and the dispatcher marks every command on a chord
     it handled for the menu de-dupe, so Maximize doesn't also run.
-  - *Ticket pane.* The tabs are a `role=tablist` over `visibleTabs` (built-in tabs, then plugin
-    tabs), with ⇧⌘[ / ⇧⌘] (`nextTab`, wrapping), 1–9 and ←/→ on a focused tab. j/k, Space and g/G
+  - *Ticket pane.* The tabs are a `role=tablist` over `visibleTabsWithChanges` (built-in tabs with
+    Changes ahead of Details, then plugin tabs), with ⇧⌘[ / ⇧⌘] (`nextTab`, wrapping), 1–9 and ←/→ on a focused tab. j/k, Space and g/G
     scroll the current tab's own scroller. `i` focuses the composer, and Escape there hands focus
     back to the current tab.
   - *Lists and overlays.* The sidebar, the Inbox and a conductor's Tickets tab are roving lists

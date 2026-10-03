@@ -134,5 +134,6 @@ while `ticket.busy` is true, as the git plugin does.
   Give the fake window a `ReactNativeWebView` to test the iOS transport. See
   `plugins/sdk/harness-plugin.test.ts`, and for the iOS host side, `PluginHostTests.swift` and
   `PluginBridgeTests.swift` in `ios/HarnessKit/Tests/HarnessKitTests/Logic/`.
-- In the app: `cd app && bun run changes` runs the git plugin against a real daemon and saves
-  screenshots. `app/scripts/lib/drive.ts`'s `frame(urlPart)` evaluates JavaScript inside a plugin iframe.
+- In the app: `app/scripts/lib/drive.ts`'s `frame(urlPart)` evaluates JavaScript inside a plugin
+  iframe. (The git plugin's Changes tab is drawn by the apps themselves; `cd app && bun run changes`
+  checks that against a real daemon.)
