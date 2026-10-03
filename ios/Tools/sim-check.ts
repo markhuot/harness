@@ -746,7 +746,16 @@ async function seed() {
     // Messages go to the transcript only, never into Activity.
     settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
       .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
-      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))),
+      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)))
+      // A commit on its branch, so it has something to land and the Approve menu offers "Approve
+      // and merge" (with nothing to land it leads with "Approve and clean up" and drops merge).
+      // Opening a ticket in review re-checks its worktree.
+      .then(async (t) => {
+        writeFileSync(join(t.workdir!, "HELLO.md"), "Hello, world.\n");
+        await git(t.workdir!, "add", "-A");
+        await git(t.workdir!, "commit", "-qm", "Say hello");
+        await until(`${hello.key} has changes to land`, async () => (await api<TicketDetail>("GET", `/tickets/${hello.key}`)).ticket.hasChanges === true, 10000, 200);
+      }),
     settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(approval.key, (t) => !!t.pendingApproval),
     settle(configApproval.key, (t) => !!t.pendingApproval),
