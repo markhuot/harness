@@ -2044,6 +2044,13 @@ driver is tested against a fake `claude` executable that replays stream-json. Br
 use the local Chrome and skip when it is missing. End-to-end tests boot the service on an
 ephemeral port with a temp `HARNESS_HOME` and drive it through `HarnessClient`.
 
+The service's `bun run test` runs one `bun test` process per file, several at once
+(`shared/src/testing/parallel.ts`), since its files mostly wait on git, Chrome and child
+daemons. So test files must not share fixed ports or paths. Test servers bind `127.0.0.1`, the
+address they're dialed on: a wildcard listener on an ephemeral port can be shadowed by another
+process holding `127.0.0.1` on the same port. Tests wait on the state they need (a held driver,
+a delivered output) rather than sleeping or waiting out `idle()`'s timeout.
+
 ## Desktop app (`app/`)
 
 Electron main (`app/src/main`) plus a React renderer (`app/src/renderer`). The left sidebar

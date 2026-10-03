@@ -12,7 +12,10 @@ const received: Msg[] = [];
 const clients: CdpClient[] = [];
 
 beforeAll(() => {
+  // On 127.0.0.1, the address the client dials: a wildcard listener can be shadowed by another
+  // process that binds 127.0.0.1 on the same port, and the client then talks to that one.
   server = Bun.serve({
+    hostname: "127.0.0.1",
     port: 0,
     fetch(req, srv) {
       if (srv.upgrade(req, { data: undefined })) return undefined;
@@ -181,7 +184,7 @@ describe("CdpClient", () => {
   });
 
   test("connect rejects when nothing is listening", async () => {
-    const probe = Bun.serve({ port: 0, fetch: () => new Response("") });
+    const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
     const port = probe.port;
     probe.stop(true);
     await expect(CdpClient.connect(`ws://127.0.0.1:${port}/`, { connectTimeoutMs: 2000 })).rejects.toThrow();

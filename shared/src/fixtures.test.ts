@@ -9,22 +9,25 @@ import { buildFixtures, frozenPaths, orphanedFixtures, staleFixtures } from "../
 const ROOT = resolve(import.meta.dir, "../..");
 const HINT = "run `bun shared/scripts/export-fixtures.ts` and commit the result";
 
-test("committed iOS fixtures match the TypeScript they were generated from", async () => {
-  const built = await buildFixtures();
+// One build for every test, at load time rather than in a test or hook. It takes about a second
+// alone, but the highlight corpus runs in a child bun with the regex JIT off, and on a busy Mac that
+// child outlived bun's 5s test timeout, which kills it (hooks can't raise their timeout in bun 1.2).
+const built = await buildFixtures();
+
+test("committed iOS fixtures match the TypeScript they were generated from", () => {
   expect(built.size).toBeGreaterThan(0);
   const stale = staleFixtures(built).map((p) => relative(ROOT, p));
   expect(stale, `Stale fixtures (${HINT})`).toEqual([]);
 });
 
-test("no generated fixture is left over from a deleted case file", async () => {
-  const orphans = orphanedFixtures(await buildFixtures()).map((p) => relative(ROOT, p));
+test("no generated fixture is left over from a deleted case file", () => {
+  const orphans = orphanedFixtures(built).map((p) => relative(ROOT, p));
   expect(orphans, `Orphaned fixtures (${HINT})`).toEqual([]);
 });
 
 // Frozen fixtures (see export-fixtures.ts) have no TS behind them, so these checks are all that
 // guards them on this side: Swift reads them, and a missing or garbled one would only show up there.
-test("every FROZEN fixture is committed, parses as an object, and has no case file", async () => {
-  const built = await buildFixtures();
+test("every FROZEN fixture is committed, parses as an object, and has no case file", () => {
   for (const path of frozenPaths()) {
     const name = relative(ROOT, path);
     expect(existsSync(path), `${name} is listed in FROZEN but missing`).toBe(true);
