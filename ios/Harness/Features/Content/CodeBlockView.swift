@@ -12,11 +12,17 @@ import UIKit
 ///
 /// `language` is the fence's tag as written ("ts", "yml", "diff") or a Shiki id; nil or empty for
 /// none. `highlightLines` is 1-based and inclusive (a file viewer's selected lines).
+///
+/// Show changes in the Spec tab passes `lineChanges`, one per line of `code`: added lines get a
+/// green tint and bar, removed ones red and struck through, and Copy leaves the removed lines out.
+/// `struck` strikes every line (a code block only in the older revision).
 struct CodeBlockView: View {
     let code: String
     var language: String?
     var showLineNumbers = false
     var highlightLines: ClosedRange<Int>?
+    var lineChanges: [MarkdownDiff.Change]?
+    var struck = false
 
     @Environment(\.palette) private var c
     @Environment(\.displayScale) private var scale
@@ -36,7 +42,7 @@ struct CodeBlockView: View {
 
     var body: some View {
         let fence = language ?? ""
-        let diff = Code.codeKind(fence: fence, text: code) == .diff
+        let diff = lineChanges == nil && Code.codeKind(fence: fence, text: code) == .diff
         // The app theme's Shiki theme, Pierre's when it names none. Every
         // registry theme's syntaxTheme is bundled (HighlighterTests.everyAppThemesSyntaxThemeIsBundled).
         let theme = c.syntaxTheme
@@ -45,12 +51,13 @@ struct CodeBlockView: View {
         let lines = hl?.lines ?? PlainLines.reuse(PlainLines.lines(code, diff: diff), last?.key.theme == key.theme ? last?.result?.lines : nil)
         let style = HighlightedText.style(hl, tokens: c.tokens, appearance: c.appearance)
         Group {
-            if diff || showLineNumbers || highlightLines != nil {
+            if diff || showLineNumbers || highlightLines != nil || lineChanges != nil {
                 rowed(lines, style: style, git: hl?.git ?? HighlightColors.gitColors(nil, c.appearance))
             } else {
                 ScrollView(.horizontal) {
                     // One Text, so Copy takes the whole block.
                     Text(HighlightedText.block(lines, style: style))
+                        .strikethrough(struck, color: c.red.opacity(0.7))
                         .font(HighlightedText.font)
                         .lineSpacing(Self.lineHeight - Self.fontSize * 1.2)
                         .fixedSize()
@@ -64,9 +71,23 @@ struct CodeBlockView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c.border, lineWidth: 1 / scale))
         .contentShape(.contextMenuPreview, .rect(cornerRadius: 8))
         .contextMenu {
-            Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = code }
+            Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = copyText }
         }
         .task(id: key) { await highlight(key) }
+    }
+
+    /// What Copy takes: the code, without the lines Show changes marks removed.
+    private var copyText: String {
+        guard let lineChanges else { return code }
+        let lines = code.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false)
+        return lines.indices.filter { $0 >= lineChanges.count || lineChanges[$0] != .del }
+            .map { String(String.UnicodeScalarView(lines[$0])) }
+            .joined(separator: "\n")
+    }
+
+    private func change(_ i: Int) -> MarkdownDiff.Change {
+        guard let lineChanges, i < lineChanges.count else { return .same }
+        return lineChanges[i]
     }
 
     /// The colors for `key`: what this view's last job returned, else the shared cache.
@@ -118,12 +139,16 @@ struct CodeBlockView: View {
                     ForEach(rows, id: \.offset) { i, line in
                         // An empty line still takes up its line.
                         Text(line.spans.allSatisfy(\.text.isEmpty) ? AttributedString(" ") : HighlightedText.line(line, style: style))
+                            .strikethrough(struck || change(i) == .del, color: c.red.opacity(0.7))
                             .font(HighlightedText.font)
                             .fixedSize()
                             .frame(height: Self.lineHeight)
                             .padding(.horizontal, Self.pad)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(rowBackground(line, i, tints), in: .rect)
+                            .overlay(alignment: .leading) {
+                                if change(i) != .same { Rectangle().fill(change(i) == .add ? c.green : c.red).frame(width: 3) }
+                            }
                     }
                 }
                 .frame(minWidth: viewport, alignment: .leading)
@@ -136,6 +161,11 @@ struct CodeBlockView: View {
 
     private func rowBackground(_ line: HighlightedLine, _ i: Int, _ tints: DiffTints?) -> Color {
         if let highlightLines, highlightLines.contains(i + 1) { return c.accentSoft }
+        switch change(i) {
+        case .add: return c.greenSoft
+        case .del: return c.redSoft
+        case .same: break
+        }
         switch line.kind {
         case .add: return tints.flatMap { Color(css: $0.add) } ?? .clear
         case .del: return tints.flatMap { Color(css: $0.del) } ?? .clear

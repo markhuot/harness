@@ -55,7 +55,7 @@ export interface PromptInfo {
   overrides?: PromptOverrides | null;
   /** The ticket's last few Activity entries, oldest first (system.spec shows them) */
   activity?: ActivityEntry[];
-  /** A human message logged to Activity started this run, so its answer is logged too (chat runs) */
+  /** A human message logged to Activity started this run, so its answer is logged too (chat and plan runs) */
   logged?: boolean;
 }
 
@@ -204,7 +204,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
   const { kind, ticket, project } = info;
   switch (kind) {
     case "plan":
-      return renderPrompt("system.plan", {}, o);
+      return renderPrompt("system.plan", { logged: !!info.logged }, o);
     case "work": {
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt(

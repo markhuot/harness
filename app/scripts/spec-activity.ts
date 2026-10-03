@@ -1,6 +1,7 @@
 // The Spec and Activity tabs against the REAL service (dummy driver, throwaway HARNESS_HOME):
 // a ticket whose spec has several revisions, a nested list and an inline image, and whose
-// Activity has a review round and a blocked question. Checks the history bar, Show changes, the
+// Activity has a review round and a blocked question. Checks the history bar, Show changes (the
+// rendered spec with edits marked in place), the
 // blocked card, that a message from the Spec tab is logged to Activity and one from the
 // Transcript isn't, and the Details editor's conflict prompt, with a screenshot of each.
 //
@@ -84,7 +85,10 @@ try {
       input: {
         base_revision: now,
         note: "Added the screenshot",
-        edits: [{ old_string: "## Status\n", new_string: "## Screenshot\n![The board after the change](shots/after.png)\n\n## Status\n" }],
+        edits: [
+          { old_string: "## Status\n", new_string: "## Screenshot\n![The board after the change](shots/after.png)\n\n## Status\n" },
+          { old_string: "with the other settings", new_string: "with the other preferences" },
+        ],
       },
     },
   ];
@@ -115,10 +119,21 @@ try {
   const toggleChanges = () => js(`[...document.querySelectorAll('.spec-history label')].find((e) => e.textContent.includes('Show changes'))?.click()`);
   await prev();
   await until("rev 5 shown", () => meta("Rev 5 of 6"), 5000);
+  // Where the first heading sits, to check Show changes keeps unchanged content in place.
+  const goalTop = () => js<number>(`[...document.querySelectorAll('.spec-doc h2')].find((h) => h.textContent === 'Goal')?.getBoundingClientRect().top ?? -1`);
+  await until("rev 5 body", () => exists(".spec-doc h2"), 5000);
+  const topBefore = await goalTop();
+  await shot("2-history");
   await toggleChanges();
-  await until("diff rendered", () => exists(".spec-diff"), 10000);
-  check("the diff shows the added screenshot", await js<boolean>(`document.querySelector('.spec-diff').textContent.includes('Changes from rev 4 to rev 5')`));
-  await Bun.sleep(1500); // the diff viewer loads lazily
+  await until("changes rendered", () => js<boolean>(`document.querySelector('.spec-doc')?.dataset.changes === '4-5'`), 10000);
+  check("Show changes keeps the rendered headings", await js<boolean>(`document.querySelectorAll('.spec-doc h2').length >= 4`));
+  check("Show changes keeps the nested list", await js<boolean>(`!!document.querySelector('.spec-doc li ul li ul li')`));
+  check("the edited word is marked removed", await js<boolean>(`[...document.querySelectorAll('.spec-doc del')].some((e) => e.textContent.includes('settings'))`));
+  check("the new word is marked added", await js<boolean>(`[...document.querySelectorAll('.spec-doc ins')].some((e) => e.textContent.includes('preferences'))`));
+  check("the added screenshot section is an added block", await js<boolean>(`[...document.querySelectorAll('.spec-doc .md-diff-block.is-add')].some((e) => e.textContent.includes('Screenshot')) && !!document.querySelector('.spec-doc .md-diff-block.is-add .md-media')`));
+  check("no raw diff view", !(await exists(".code-diff, .spec-diff")));
+  const topAfter = await goalTop();
+  check("unchanged content keeps its place", topBefore > 0 && topAfter === topBefore, `${topBefore} → ${topAfter}`);
   await shot("2-history-changes");
   await toggleChanges();
   await prev();

@@ -1,15 +1,15 @@
 // The Spec tab: the ticket's living document (DESIGN.md "Spec revisions and attachments"), with a
-// history bar to step back through its revisions and a Show changes toggle that draws the diff of
-// the revision on show against the one before it, in the same diff viewer chat diffs use.
+// history bar to step back through its revisions and a Show changes toggle that keeps the rendered
+// spec and marks what the revision on show changed from the one before it (MarkdownDiff): added
+// text green, removed text red and struck through, in place.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SpecRevisionAuthor, Ticket } from "@harness/shared";
-import { depChipTitle, dependencyStates, specBody } from "@harness/shared/state";
+import { depChipTitle, dependencyStates, diffUnchanged, specBody, specDiff } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { FOLLOW_LATEST, scrubTo, shownRevision, specDiffPatch, stepRevision, type SpecHistory } from "../state/specHistory";
+import { FOLLOW_LATEST, scrubTo, shownRevision, stepRevision, type SpecHistory } from "../state/specHistory";
 import { Icon } from "../components/Icon";
-import { Markdown } from "../components/Markdown";
-import { FencedCode } from "../components/Code";
+import { Markdown, MarkdownDiff } from "../components/Markdown";
 import { relativeTime, Switch, TicketKey, useNow } from "../components/bits";
 
 const AUTHOR_LABEL: Record<SpecRevisionAuthor, string> = { agent: "Agent", human: "You", system: "Harness" };
@@ -21,11 +21,12 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
   const revisions = state.specRevisions[ticket.id];
   const [history, setHistory] = useState<SpecHistory>(FOLLOW_LATEST);
   const [showChanges, setShowChanges] = useState(false);
-  /** Diffs fetched so far, by the revision they lead to (rev - 1 → rev); revisions never change */
-  const [diffs, setDiffs] = useState<Record<number, string | Error>>({});
   const [bodyErrors, setBodyErrors] = useState<Record<number, Error>>({});
   const shown = shownRevision(history, latest);
   const body = specBody(state, ticket.id, shown);
+  /** Show changes compares the revision on show with the one before it. */
+  const comparing = showChanges && shown > 1;
+  const prevBody = comparing ? specBody(state, ticket.id, shown - 1) : undefined;
   const info = revisions?.find((r) => r.rev === shown);
   const deps = dependencyStates(state, ticket);
 
@@ -39,27 +40,14 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
     return () => void (live = false);
   }, [client, dispatch, ticket.key, ticket.id, epoch]);
 
-  // An earlier revision's body, fetched when it's first shown.
-  useEffect(() => {
-    if (body !== undefined || bodyErrors[shown]) return;
-    let live = true;
-    client.specRevision(ticket.key, shown).then(
-      (revision) => live && dispatch({ type: "specRevision", ticketId: ticket.id, revision }),
-      (e) => live && setBodyErrors((m) => ({ ...m, [shown]: e instanceof Error ? e : new Error(String(e)) })),
-    );
-    return () => void (live = false);
-  }, [client, dispatch, ticket.key, ticket.id, shown, body, bodyErrors]);
+  // An earlier revision's body, fetched when it's first shown, and the one before it for Show changes.
+  const fetchError = (rev: number) => (e: unknown) => setBodyErrors((m) => ({ ...m, [rev]: e instanceof Error ? e : new Error(String(e)) }));
+  useRevisionBody(ticket, shown, body === undefined && !bodyErrors[shown], fetchError(shown));
+  useRevisionBody(ticket, shown - 1, comparing && prevBody === undefined && !bodyErrors[shown - 1], fetchError(shown - 1));
 
-  const diff = diffs[shown];
-  useEffect(() => {
-    if (!showChanges || shown < 2 || diff !== undefined) return;
-    let live = true;
-    client.specDiff(ticket.key, shown - 1, shown).then(
-      (d) => live && setDiffs((m) => ({ ...m, [shown]: d.diff })),
-      (e) => live && setDiffs((m) => ({ ...m, [shown]: e instanceof Error ? e : new Error(String(e)) })),
-    );
-    return () => void (live = false);
-  }, [client, ticket.key, shown, showChanges, diff]);
+  const diff = useMemo(() => (body !== undefined && prevBody !== undefined ? specDiff(prevBody, body) : undefined), [body, prevBody]);
+  const unchanged = diff !== undefined && diffUnchanged(diff);
+  const bodyError = bodyErrors[shown] ?? (comparing ? bodyErrors[shown - 1] : undefined);
 
   const step = (delta: number) => setHistory((h) => stepRevision(h, latest, delta));
 
@@ -107,6 +95,9 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
           </button>
         )}
         <div className="grow" />
+        {showChanges && latest > 1 && (shown === 1 || unchanged) && (
+          <span className="spec-diff-note">{shown === 1 ? "First revision: nothing to compare" : `No changes from rev ${shown - 1}`}</span>
+        )}
         {latest > 1 && <Switch checked={showChanges} onChange={setShowChanges} label="Show changes" />}
       </div>
       {latest > 1 && (
@@ -133,16 +124,18 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
             ))}
           </div>
         )}
-        {showChanges && latest > 1 ? (
-          <SpecChanges rev={shown} diff={diff} />
-        ) : body === undefined ? (
-          bodyErrors[shown] ? (
-            <div className="empty">Couldn't load this revision: {bodyErrors[shown].message}</div>
+        {body === undefined || (comparing && prevBody === undefined) ? (
+          bodyError ? (
+            <div className="empty">Couldn't load this revision: {bodyError.message}</div>
           ) : (
             <div className="empty">
               <div className="spinner" />
             </div>
           )
+        ) : comparing && prevBody !== undefined && diff && (body.trim() || prevBody.trim()) ? (
+          <section className="spec-doc" data-testid="spec-doc" data-changes={`${shown - 1}-${shown}`}>
+            <MarkdownDiff diff={diff} before={prevBody} after={body} />
+          </section>
         ) : body.trim() ? (
           <section className="spec-doc" data-testid="spec-doc">
             <Markdown text={body} />
@@ -159,22 +152,18 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
   );
 }
 
-function SpecChanges({ rev, diff }: { rev: number; diff: string | Error | undefined }) {
-  if (rev < 2) return <div className="empty">Revision 1 is the first: there's nothing before it to compare.</div>;
-  if (diff === undefined)
-    return (
-      <div className="empty">
-        <div className="spinner" />
-      </div>
+/** Fetch revision `rev`'s body into the store while `needed`; `onError` hears a failed fetch. */
+function useRevisionBody(ticket: Ticket, rev: number, needed: boolean, onError: (e: unknown) => void) {
+  const { client, dispatch } = useStore();
+  const report = useRef(onError);
+  report.current = onError;
+  useEffect(() => {
+    if (!needed) return;
+    let live = true;
+    client.specRevision(ticket.key, rev).then(
+      (revision) => live && dispatch({ type: "specRevision", ticketId: ticket.id, revision }),
+      (e) => live && report.current(e),
     );
-  if (diff instanceof Error) return <div className="empty">Couldn't load the changes: {diff.message}</div>;
-  if (!diff) return <div className="empty">Revision {rev} didn't change the text.</div>;
-  return (
-    <div className="spec-diff" data-testid="spec-diff">
-      <div className="section-title">
-        Changes from rev {rev - 1} to rev {rev}
-      </div>
-      <FencedCode text={specDiffPatch(diff)} lang="diff" />
-    </div>
-  );
+    return () => void (live = false);
+  }, [client, dispatch, ticket.key, ticket.id, rev, needed]);
 }

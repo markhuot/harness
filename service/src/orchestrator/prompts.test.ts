@@ -12,6 +12,7 @@ import {
   workStartPrompt,
 } from "./prompts";
 import type { ReviewContext } from "./prompts";
+import { promptTemplateError } from "./prompt-templates";
 import { nativeTools, readOnlyNativeTools } from "../tools";
 
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
@@ -192,6 +193,21 @@ describe("systemPrompt context and kind-specific rules", () => {
     const text = sys("work");
     expect(text).toContain("Do not commit");
     expect(text).not.toContain("Commit your work to this branch");
+  });
+
+  test("a plan run tells the agent its last message is the Activity answer only when the message was logged", () => {
+    const rule = "your last message goes there as your answer";
+    expect(sys("plan", ticket({ status: "planning" }), { logged: true })).toContain(rule);
+    expect(sys("plan", ticket({ status: "planning" }), { logged: false })).not.toContain(rule);
+    expect(sys("plan", ticket({ status: "planning" }))).not.toContain(rule);
+  });
+
+  test("a system.plan override may use {{logged}}, and renders it", () => {
+    const draft = "Plan.{{#if logged}} Answer in one line.{{/if}}";
+    expect(promptTemplateError("system.plan", draft)).toBeNull();
+    const overrides = { "system.plan": draft };
+    expect(sys("plan", ticket({ status: "planning" }), { logged: true, overrides })).toContain("Plan. Answer in one line.");
+    expect(sys("plan", ticket({ status: "planning" }), { logged: false, overrides })).not.toContain("Answer in one line.");
   });
 
   test("work runs forbid calling both block and submit_for_review", () => {

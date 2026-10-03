@@ -99,15 +99,6 @@ public enum SpecHistory {
         guard let list = state.specRevisions[ticketId] else { return true }
         return !list.contains { $0.rev == latest }
     }
-
-    /// A spec diff (SpecDiff.diff) as one file of the Changes tab's patch, so its rows draw the same
-    /// way. The service's diff starts at `---` with no `diff --git` line, which the patch parser
-    /// needs to find the file. Nil when the diff is empty.
-    public static func diff(_ unified: String) -> ChangesFileDiff? {
-        guard !JSCompat.trim(unified).isEmpty else { return nil }
-        let patch = unified.hasPrefix("diff --git") ? unified : "diff --git a/spec.md b/spec.md\n" + unified
-        return ChangesPatch.parse(patch).first
-    }
 }
 
 /// The history bar's copy for one revision.

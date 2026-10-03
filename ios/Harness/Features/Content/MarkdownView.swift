@@ -12,8 +12,14 @@ import SwiftUI
 /// `size` is the body text size; `color` overrides the text color (nil = palette text). File links
 /// resolve against `linkContext` when it names a ticket or project, else the nearest
 /// `.fileLinkScope(…)`.
+///
+/// With `previous` (an older revision of `text`, the Spec tab's Show changes) it draws `text` with
+/// what changed since marked in place (HarnessKit MarkdownDiff): added words on green, removed
+/// ones on red and struck through, inside the same headings, lists, tables and code; whole added or
+/// removed blocks get a tint and a bar in the gutter, and unchanged blocks draw as they always do.
 struct MarkdownView: View {
     let text: String
+    var previous: String?
     var size: CGFloat = 15
     var color: Color?
     /// Where relative file links open (the ticket's folder, else the project's).
@@ -32,12 +38,19 @@ struct MarkdownView: View {
     }
 
     var body: some View {
-        let blocks = MarkdownCache.shared.blocks(text)
-        let media = MarkdownCache.shared.media(text)
+        let media = previous.map { MarkdownCache.shared.media($0, text) } ?? MarkdownCache.shared.media(text)
         let style = MarkdownStyle(size: size, color: color ?? c.text, palette: c, linkable: linkable, media: mediaScope(media))
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(blocks.indices, id: \.self) { i in
-                MarkdownBlockView(block: blocks[i], style: style)
+            if let previous {
+                let diff = MarkdownCache.shared.diff(previous, text)
+                ForEach(diff.indices, id: \.self) { i in
+                    MarkdownDiffBlockView(diff: diff[i], style: style)
+                }
+            } else {
+                let blocks = MarkdownCache.shared.blocks(text)
+                ForEach(blocks.indices, id: \.self) { i in
+                    MarkdownBlockView(block: blocks[i], style: style)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -91,6 +104,16 @@ struct MarkdownStyle {
     let palette: Palette
     let linkable: (String) -> Bool
     let media: MarkdownMediaScope
+    /// Draws everything as removed (Show changes, a block only in the older revision): struck
+    /// through in text2, attachments faded.
+    var removed = false
+
+    /// This style, drawing everything as removed.
+    var struck: MarkdownStyle {
+        var s = self
+        s.removed = true
+        return s
+    }
 
     /// Bullets by nesting depth (repeating past the third level).
     static let bullets = ["•", "◦", "▪"]
@@ -138,7 +161,68 @@ struct MarkdownStyle {
             .textSelection(.enabled)
     }
 
-    private func run(_ token: Markdown.InlineToken, size: CGFloat? = nil, bold: Bool = false) -> AttributedString {
+    /// Changed text (Show changes) as one AttributedString, each run styled as `inline` styles its
+    /// token and marked by its change. A code span split into runs keeps its padding at its ends only.
+    func diffInline(_ runs: [MarkdownDiff.Run], size: CGFloat? = nil, bold: Bool = false) -> AttributedString {
+        var out = AttributedString()
+        for (i, r) in runs.enumerated() {
+            let lead = i == 0 || !Self.isCode(runs[i - 1].token)
+            let trail = i == runs.count - 1 || !Self.isCode(runs[i + 1].token)
+            out.append(mark(run(r.token, size: size, bold: bold, codeLead: lead, codeTrail: trail), r.change))
+        }
+        return out
+    }
+
+    /// Changed text cut at its attachments, like `runs`.
+    func diffRuns(_ runs: [MarkdownDiff.Run]) -> [MarkdownDiffPiece] {
+        var out: [MarkdownDiffPiece] = []
+        var cur: [MarkdownDiff.Run] = []
+        func flush() {
+            let s = diffInline(cur)
+            if !String(s.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out.append(.text(s)) }
+            cur = []
+        }
+        for r in runs {
+            if case let .img(m) = r.token {
+                flush()
+                out.append(.media(m, r.change))
+            } else {
+                cur.append(r)
+            }
+        }
+        flush()
+        return out.isEmpty ? [.text(AttributedString())] : out
+    }
+
+    /// Added text on greenSoft; removed text on redSoft, struck through, in text2.
+    func mark(_ s: AttributedString, _ change: MarkdownDiff.Change) -> AttributedString {
+        var s = s
+        switch change {
+        case .same: break
+        case .add: s.backgroundColor = palette.greenSoft
+        case .del:
+            s.backgroundColor = palette.redSoft
+            strike(&s)
+        }
+        return s
+    }
+
+    private func strike(_ s: inout AttributedString) {
+        s.swiftUI.strikethroughStyle = Text.LineStyle(pattern: .solid, color: palette.red.opacity(0.7))
+        s.foregroundColor = palette.text2
+    }
+
+    private static func isCode(_ t: Markdown.InlineToken) -> Bool {
+        if case .code = t { true } else { false }
+    }
+
+    private func run(_ token: Markdown.InlineToken, size: CGFloat? = nil, bold: Bool = false, codeLead: Bool = true, codeTrail: Bool = true) -> AttributedString {
+        var run = plainRun(token, size: size, bold: bold, codeLead: codeLead, codeTrail: codeTrail)
+        if removed { strike(&run) }
+        return run
+    }
+
+    private func plainRun(_ token: Markdown.InlineToken, size: CGFloat?, bold: Bool, codeLead: Bool, codeTrail: Bool) -> AttributedString {
         let size = size ?? self.size
         let base = Font.scaled(size: size, weight: bold ? .bold : .regular)
         var run: AttributedString
@@ -147,7 +231,7 @@ struct MarkdownStyle {
             run = AttributedString(s)
             run.font = base
         case let .code(s):
-            run = AttributedString(" \(s) ")
+            run = AttributedString((codeLead ? " " : "") + s + (codeTrail ? " " : ""))
             run.font = .mono(13)
             run.backgroundColor = palette.bgActive
             run.foregroundColor = palette.text
@@ -182,14 +266,28 @@ final class MarkdownCache {
     private var blocks = Bounded<[Markdown.Block]>(capacity: 400)
     private var inlines = Bounded<[Markdown.InlineToken]>(capacity: 2000)
     private var media = Bounded<[Markdown.Media]>(capacity: 400)
+    private var diffs = Bounded<[MarkdownDiff.DiffBlock]>(capacity: 16)
 
     func blocks(_ text: String) -> [Markdown.Block] {
         blocks.value(text) { Markdown.parseBlocks($0) }
     }
 
+    /// `after` compared with `before` (MarkdownDiff.specDiff).
+    func diff(_ before: String, _ after: String) -> [MarkdownDiff.DiffBlock] {
+        // Keyed by both texts, `before`'s length first so no two pairs share a key.
+        diffs.value("\(before.unicodeScalars.count):\(before)\(after)") { _ in MarkdownDiff.specDiff(before, after) }
+    }
+
     /// The attachments in `text`, in the order the viewer pages through them.
     func media(_ text: String) -> [Markdown.Media] {
         media.value(text) { [self] in Markdown.mediaIn(blocks($0)) }
+    }
+
+    /// The attachments of a diff of `before` to `after` (MarkdownDiff.media): `after`'s, then those
+    /// only `before` has, built from each text's cached list.
+    func media(_ before: String, _ after: String) -> [Markdown.Media] {
+        var seen = Set<String>()
+        return (media(after) + media(before)).filter { seen.insert($0.id).inserted }
     }
 
     func inline(_ text: String) -> [Markdown.InlineToken] {
@@ -231,6 +329,12 @@ enum MarkdownRun {
     case media(Markdown.Media)
 }
 
+/// Changed inline text cut at its attachments (MarkdownStyle.diffRuns), each attachment with its change.
+enum MarkdownDiffPiece {
+    case text(AttributedString)
+    case media(Markdown.Media, MarkdownDiff.Change)
+}
+
 private struct MarkdownBlockView: View {
     let block: Markdown.Block
     let style: MarkdownStyle
@@ -253,7 +357,7 @@ private struct MarkdownBlockView: View {
         case let .img(media):
             MarkdownMediaView(media: media, style: style)
         case let .code(lang, text):
-            CodeBlockView(code: text, language: lang)
+            CodeBlockView(code: text, language: lang, struck: style.removed)
         case let .quote(text):
             MarkdownRichText(text: text, style: style, color: c.text2)
                 .padding(.leading, 10)
@@ -261,7 +365,10 @@ private struct MarkdownBlockView: View {
                     Rectangle().fill(c.borderStrong).frame(width: 3)
                 }
         case let .table(align, header, rows):
-            MarkdownTableView(align: align, header: header, rows: rows, style: style)
+            let size = MarkdownTableView.fontSize(style)
+            MarkdownTableView(align: align, cells: ([header] + rows).enumerated().map { r, row in
+                row.map { style.inline($0, size: size, bold: r == 0) }
+            }, style: style)
         case .hr:
             HairlineRule(color: c.border).padding(.vertical, 4)
         }
@@ -303,22 +410,37 @@ private struct MarkdownListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(items.indices, id: \.self) { j in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(ordered ? "\(start + j)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
-                        .font(style.font)
-                        .foregroundStyle(style.palette.text3)
-                        .frame(minWidth: ordered ? 18 : 10, alignment: .trailing)
-                        .accessibilityHidden(!ordered)
-                    VStack(alignment: .leading, spacing: 4) {
-                        MarkdownRichText(text: items[j].text, style: style)
-                        ForEach(items[j].children.indices, id: \.self) { k in
-                            MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
-                        }
+                MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style) {
+                    MarkdownRichText(text: items[j].text, style: style)
+                    ForEach(items[j].children.indices, id: \.self) { k in
+                        MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
                     }
                 }
-                .padding(.trailing, 4)
             }
         }
+    }
+}
+
+/// One list item: its marker (a bullet by depth, or its number) beside its content. `marker`
+/// overrides the marker's color (Show changes: green for an added item, red for a removed one).
+private struct MarkdownListRow<Content: View>: View {
+    let ordered: Bool
+    let number: Int
+    let depth: Int
+    let style: MarkdownStyle
+    var marker: Color?
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(ordered ? "\(number)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
+                .font(style.font)
+                .foregroundStyle(marker ?? style.palette.text3)
+                .frame(minWidth: ordered ? 18 : 10, alignment: .trailing)
+                .accessibilityHidden(!ordered)
+            VStack(alignment: .leading, spacing: 4) { content }
+        }
+        .padding(.trailing, 4)
     }
 }
 
@@ -350,6 +472,7 @@ private struct MarkdownMediaView: View {
             .accessibilityLabel("\(kind == .video ? "Video" : "Image") \(media.alt)")
             .accessibilityHint("Opens full screen")
             .accessibilityAddTraits([.isButton, .isImage])
+            .opacity(style.removed ? 0.55 : 1)
             .task(id: "\(kind)|\(url)") { await load(url: url, kind: kind) }
         } else {
             style.paragraph(AttributedString(media.alt))
@@ -399,6 +522,173 @@ private struct MarkdownMediaView: View {
     }
 }
 
+// MARK: Show changes
+
+/// One block of a compared document: unchanged blocks as MarkdownBlockView draws them, whole added
+/// or removed ones tinted with a bar in the gutter, edited ones with their changes marked in place.
+private struct MarkdownDiffBlockView: View {
+    let diff: MarkdownDiff.DiffBlock
+    let style: MarkdownStyle
+    var depth = 0
+
+    var body: some View {
+        switch diff {
+        case let .plain(.same, block):
+            MarkdownBlockView(block: block, style: style, depth: depth)
+        case let .plain(change, block):
+            MarkdownBlockView(block: block, style: change == .del ? style.struck : style, depth: depth)
+                .modifier(MarkdownDiffMark(change: change, palette: style.palette))
+        case let .edit(block):
+            MarkdownEditBlockView(block: block, style: style, depth: depth)
+        }
+    }
+}
+
+/// A whole added (green) or removed (red) block: a soft tint with a 3pt bar, pulled into the
+/// gutter so the block's text stays where unchanged text sits.
+private struct MarkdownDiffMark: ViewModifier {
+    let change: MarkdownDiff.Change
+    let palette: Palette
+
+    func body(content: Content) -> some View {
+        let add = change == .add
+        content
+            .padding(.leading, 8)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(add ? palette.greenSoft : palette.redSoft, in: UnevenRoundedRectangle(bottomTrailingRadius: 4, topTrailingRadius: 4))
+            .overlay(alignment: .leading) { Rectangle().fill(add ? palette.green : palette.red).frame(width: 3) }
+            .padding(.leading, -11)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(add ? "Added" : "Removed")
+    }
+}
+
+/// A block in both revisions with its changes marked, laid out as MarkdownBlockView lays out the block.
+private struct MarkdownEditBlockView: View {
+    let block: MarkdownDiff.EditBlock
+    let style: MarkdownStyle
+    let depth: Int
+
+    private var c: Palette { style.palette }
+
+    var body: some View {
+        switch block {
+        case let .p(runs):
+            MarkdownDiffRichText(runs: runs, style: style)
+        case let .h(level, runs):
+            style.paragraph(style.diffInline(runs, size: level <= 2 ? style.size + 2 : style.size + 0.5, bold: true))
+                .padding(.top, 2)
+        case let .quote(runs):
+            MarkdownDiffRichText(runs: runs, style: style, color: c.text2)
+                .padding(.leading, 10)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(c.borderStrong).frame(width: 3)
+                }
+        case let .ul(items):
+            MarkdownDiffListView(items: items, ordered: false, start: 1, depth: depth, style: style)
+        case let .ol(start, items):
+            MarkdownDiffListView(items: items, ordered: true, start: start, depth: depth, style: style)
+        case let .code(lang, lines):
+            CodeBlockView(code: lines.map(\.text).joined(separator: "\n"), language: lang, lineChanges: lines.map(\.change))
+        case let .table(align, header, rows):
+            table(align: align, header: header, rows: rows)
+        }
+    }
+
+    private func table(align: [Markdown.Align?], header: [[MarkdownDiff.Run]], rows: [MarkdownDiff.Row]) -> some View {
+        let size = MarkdownTableView.fontSize(style)
+        var cells = [header.map { style.diffInline($0, size: size, bold: true) }]
+        var tints: [Color?] = [nil]
+        for row in rows {
+            switch row {
+            case let .plain(change, text):
+                let s = change == .del ? style.struck : style
+                cells.append(text.map { s.inline($0, size: size) })
+                tints.append(change == .add ? c.greenSoft : change == .del ? c.redSoft : nil)
+            case let .edit(runs):
+                cells.append(runs.map { style.diffInline($0, size: size) })
+                tints.append(nil)
+            }
+        }
+        return MarkdownTableView(align: align, cells: cells, tints: tints, style: style)
+    }
+}
+
+/// Changed paragraph text, with any attachments in it laid out between its lines (an added one
+/// outlined green, a removed one red and faded).
+private struct MarkdownDiffRichText: View {
+    let runs: [MarkdownDiff.Run]
+    let style: MarkdownStyle
+    var color: Color?
+
+    var body: some View {
+        let pieces = style.diffRuns(runs)
+        if pieces.count == 1, case let .text(s) = pieces[0] {
+            style.paragraph(s, color: color)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(pieces.indices, id: \.self) { i in
+                    switch pieces[i] {
+                    case let .text(s): style.paragraph(s, color: color)
+                    case let .media(m, change): media(m, change)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func media(_ m: Markdown.Media, _ change: MarkdownDiff.Change) -> some View {
+        if change == .same {
+            MarkdownMediaView(media: m, style: style)
+        } else {
+            MarkdownMediaView(media: m, style: change == .del ? style.struck : style)
+                .padding(3)
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(change == .add ? style.palette.green : style.palette.red, lineWidth: 2))
+        }
+    }
+}
+
+/// A list in both revisions: unchanged items as MarkdownListView draws them, added ones on green
+/// and removed ones on red (struck through), their markers colored to match, and edited ones with
+/// their text's changes marked and their nested lists compared.
+private struct MarkdownDiffListView: View {
+    let items: [MarkdownDiff.Item]
+    let ordered: Bool
+    let start: Int
+    let depth: Int
+    let style: MarkdownStyle
+
+    private var c: Palette { style.palette }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(items.indices, id: \.self) { j in
+                switch items[j] {
+                case let .plain(change, item):
+                    let s = change == .del ? style.struck : style
+                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style,
+                                    marker: change == .add ? c.green : change == .del ? c.red : nil) {
+                        MarkdownRichText(text: item.text, style: s)
+                        ForEach(item.children.indices, id: \.self) { k in
+                            MarkdownBlockView(block: item.children[k], style: s, depth: depth + 1)
+                        }
+                    }
+                    .background(change == .add ? c.greenSoft : change == .del ? c.redSoft : .clear, in: .rect(cornerRadius: 3))
+                case let .edit(runs, children):
+                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style) {
+                        MarkdownDiffRichText(runs: runs, style: style)
+                        ForEach(children.indices, id: \.self) { k in
+                            MarkdownDiffBlockView(diff: children[k], style: style, depth: depth + 1)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// A one-pixel line.
 struct HairlineRule: View {
     let color: Color
@@ -413,23 +703,27 @@ struct HairlineRule: View {
 
 /// A GFM table: columns as wide as their widest cell up to MarkdownTable.maxColumnWidth (longer
 /// cells wrap), rows as tall as their tallest cell, scrolling sideways when wider than the screen.
+/// `cells` are the rows' styled text, the header first (built at `fontSize`); `tints` optionally
+/// colors whole rows by the same index (Show changes' added and removed rows).
 private struct MarkdownTableView: View {
     let align: [Markdown.Align?]
-    let header: [String]
-    let rows: [[String]]
+    let cells: [[AttributedString]]
+    var tints: [Color?] = []
     let style: MarkdownStyle
 
     @Environment(\.displayScale) private var scale
     private var c: Palette { style.palette }
 
+    static func fontSize(_ style: MarkdownStyle) -> CGFloat { style.size - 1.5 }
+
     var body: some View {
-        let all = [header] + rows
-        let columns = header.count
+        let all = cells
+        let columns = all.first?.count ?? 0
         ScrollView(.horizontal) {
             MarkdownTableLayout(columns: columns) {
                 ForEach(all.indices, id: \.self) { r in
                     ForEach(0..<columns, id: \.self) { j in
-                        cell(j < all[r].count ? all[r][j] : "", row: r, column: j, last: r == all.count - 1)
+                        cell(j < all[r].count ? all[r][j] : AttributedString(), row: r, column: j, last: r == all.count - 1)
                     }
                 }
             }
@@ -440,10 +734,11 @@ private struct MarkdownTableView: View {
         .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
     }
 
-    private func cell(_ text: String, row: Int, column j: Int, last: Bool) -> some View {
-        let fontSize = style.size - 1.5
+    private func cell(_ text: AttributedString, row: Int, column j: Int, last: Bool) -> some View {
+        let fontSize = Self.fontSize(style)
         let a = j < align.count ? align[j] : nil
-        return Text(style.inline(text, size: fontSize, bold: row == 0))
+        let tint = row < tints.count ? tints[row] : nil
+        return Text(text)
             .foregroundStyle(style.color)
             .lineSpacing((fontSize * 1.4).rounded() - fontSize * 1.2)
             .multilineTextAlignment(a == .center ? .center : a == .right ? .trailing : .leading)
@@ -451,7 +746,7 @@ private struct MarkdownTableView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: a == .center ? .top : a == .right ? .topTrailing : .topLeading)
-            .background(row == 0 ? c.bgSunken : .clear, in: .rect)
+            .background(tint ?? (row == 0 ? c.bgSunken : .clear), in: .rect)
             .overlay(alignment: .leading) { if j > 0 { HairlineRule(color: c.border, vertical: true) } }
             .overlay(alignment: .bottom) { if !last { HairlineRule(color: c.border) } }
     }

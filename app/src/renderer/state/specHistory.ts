@@ -24,15 +24,3 @@ export function scrubTo(rev: number, latest: number): SpecHistory {
 export function stepRevision(h: SpecHistory, latest: number, delta: number): SpecHistory {
   return scrubTo(shownRevision(h, latest) + delta, latest);
 }
-
-/**
- * The service's diff headers name the ticket and revisions ("HARNESS-1 spec rev 2"); the diff
- * viewer takes the first two lines as a file name, so they become one markdown file it can
- * highlight.
- */
-export function specDiffPatch(diff: string): string {
-  if (!diff) return "";
-  const lines = diff.split("\n");
-  if (lines[0]?.startsWith("--- ") && lines[1]?.startsWith("+++ ")) lines.splice(0, 2, "--- a/spec.md", "+++ b/spec.md");
-  return lines.join("\n");
-}
