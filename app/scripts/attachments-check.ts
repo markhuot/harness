@@ -107,7 +107,8 @@ try {
   const chips = () =>
     js<{ path: string; kind: string | null; missing: boolean; label: string | null; img: boolean }[]>(`[...document.querySelectorAll('[data-testid="draft-pane"] [data-testid="prompt-attachment"]')].map(el => ({
       path: el.dataset.path, kind: el.dataset.kind ?? null, missing: el.dataset.missing === "true", label: el.getAttribute("aria-label"), img: !!el.querySelector("img") }))`);
-  const served = async () => (await api<Ticket>("GET", `/tickets/${draftKey}`)).promptAttachments ?? [];
+  const getTicket = async (key: string) => (await api<{ ticket: Ticket }>("GET", `/tickets/${key}`)).ticket;
+  const served = async () => (await getTicket(draftKey)).promptAttachments ?? [];
 
   // --- Drop from Finder: CDP's drag events carry real file paths, like a drag from Finder.
   const box = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector('[data-testid="draft-pane"] .draft-prompt').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
@@ -164,12 +165,12 @@ try {
   check("the pasted image is uploaded and shows a thumbnail", upload.img && !upload.path.startsWith(files), upload.path);
 
   // --- × removes one.
-  await js(`document.querySelector('[data-testid="draft-pane"] [data-path=${JSON.stringify(JSON.stringify(notes))}] [data-testid="prompt-attachment-remove"]').click()`);
+  await js(`document.querySelector('[data-testid="draft-pane"] [data-path=${JSON.stringify(notes)}] [data-testid="prompt-attachment-remove"]').click()`);
   await until("removed", async () => (await chips()).length === 4, 3000);
   const saved = await until("the service has the list", async () => {
     const s = await served();
     return s.length === 4 ? s : null;
-  }, 5000);
+  }, 5000).catch(async () => served());
   check(
     "the draft saved its attachments, files by path and the paste as an upload",
     saved.map((a) => a.path).join() === [diagram, gonePng, goneTxt, upload.path].join() && saved[3]!.source === "upload" && saved[0]!.source === "file",
@@ -179,7 +180,7 @@ try {
 
   // --- Launch it (Plan first), then lose two files on disk.
   await js(`document.querySelector('[data-testid="draft-plan"]').click()`);
-  await until("launched", async () => !(await api<Ticket>("GET", `/tickets/${draftKey}`)).draft, 10000);
+  await until("launched", async () => (await getTicket(draftKey)).draft === false, 10000);
   rmSync(gonePng);
   rmSync(goneTxt);
   check("the files are gone on disk", !existsSync(gonePng) && !existsSync(goneTxt));
@@ -204,7 +205,7 @@ try {
   await shot("spec-missing");
 
   // Clicking an image opens the lightbox on it.
-  await js(`document.querySelector('[data-testid="spec-prompt-attachments"] [data-path=${JSON.stringify(JSON.stringify(diagram))}] .prompt-attachment-open').click()`);
+  await js(`document.querySelector('[data-testid="spec-prompt-attachments"] [data-path=${JSON.stringify(diagram)}] .prompt-attachment-open').click()`);
   const lightbox = await until("lightbox", () => js<boolean>(`!!document.querySelector(".lightbox-stage img")`), 3000).catch(() => false);
   check("clicking a thumbnail opens the lightbox", lightbox);
   await shot("lightbox");
