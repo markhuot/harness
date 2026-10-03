@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, an attachment image smaller than the screen opens in the middle of the
+  viewer. Before, it opened with its top-left corner in the middle and the rest cut off at the
+  bottom right.
+
 ## [app-20261003.2044](https://github.com/markhuot/harness/releases/tag/app-20261003.2044) - 2026-10-03
 
 ### Added
