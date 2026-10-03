@@ -1,6 +1,6 @@
 // The files attached to a New session's prompt (Ticket.promptAttachments, DESIGN.md "Prompt
-// attachments"), as a strip of image thumbnails and file chips: editable in the draft editor (each
-// with ×), read-only on a ticket's Spec tab. A file can go missing after it was attached (moved or
+// attachments"): a strip of image thumbnails and file chips in the draft editor (each with ×), and a
+// read-only vertical list at the bottom of a ticket's Spec tab. A file can go missing after it was attached (moved or
 // deleted on disk): an image that won't load, or a file the service answers 404 for, shows as a
 // dashed chip saying where it was. Clicking an image opens the lightbox, clicking a file reveals it
 // in Finder.
@@ -132,14 +132,20 @@ export function PromptAttachmentStrip({
   );
 }
 
-function AttachmentItem({ a, source, onOpen, onRemove }: { a: PromptAttachment; source: { url: string; local: boolean } | null; onOpen?: () => void; onRemove?: () => void }) {
+type Source = { url: string; local: boolean } | null;
+
+/**
+ * Whether the attachment's file has gone missing: an image whose URL failed to load (call
+ * `failedAt` from its onError), or a file the service answers 404 for (probed with HEAD, since a
+ * file shows nothing to load).
+ */
+function useMissing(a: PromptAttachment, source: Source): { missing: boolean; failedAt: (url: string) => void } {
   const image = promptAttachmentIsImage(a);
   const url = source?.url ?? null;
   // Which URL failed (a new one, after a token rotation or a save, gets another try).
   const [failed, setFailed] = useState<string | null>(null);
   const [probed, setProbed] = useState<{ url: string; missing: boolean } | null>(null);
 
-  // A file chip has nothing to load, so ask the service whether its file is still there.
   useEffect(() => {
     if (image || !url || source?.local) return;
     let live = true;
@@ -150,7 +156,73 @@ function AttachmentItem({ a, source, onOpen, onRemove }: { a: PromptAttachment; 
     return () => void (live = false);
   }, [image, url, source?.local]);
 
-  const missing = (!!url && failed === url) || (!!url && probed?.url === url && probed.missing);
+  return { missing: (!!url && failed === url) || (!!url && probed?.url === url && probed.missing), failedAt: setFailed };
+}
+
+// ---------------------------------------------------------------------------
+// The list (a ticket's Spec tab)
+// ---------------------------------------------------------------------------
+
+/**
+ * The ticket's attachments, read-only, at the bottom of its Spec tab: one row each, a same-size
+ * square (the image's thumbnail, or a file icon) then the name, so the names line up. A missing
+ * file says where it was.
+ */
+export function PromptAttachmentList({ ticketKey, items }: { ticketKey: string; items: readonly PromptAttachment[] }) {
+  const { client } = useStore();
+  const [open, setOpen] = useState<number | null>(null);
+  const sourceOf = (a: PromptAttachment): Source => attachmentSource(a, previews.get(a.path), items, (i) => client.promptAttachmentUrl(ticketKey, i));
+  const images = items.map((a, i) => ({ a, i })).filter(({ a }) => promptAttachmentIsImage(a));
+  const lightboxList: Attachment[] = images.map(({ a }) => ({ id: a.path, kind: "image", mimeType: "", name: a.name, size: 0 }));
+  if (!items.length) return null;
+  return (
+    <ul className="prompt-attachment-list" data-testid="prompt-attachments" aria-label="Attachments">
+      {items.map((a, i) => (
+        <AttachmentRow key={a.path} a={a} source={sourceOf(a)} onOpen={promptAttachmentIsImage(a) ? () => setOpen(images.findIndex((x) => x.i === i)) : undefined} />
+      ))}
+      {open !== null && open >= 0 && lightboxList.length > 0 && (
+        <Lightbox
+          list={lightboxList}
+          index={Math.min(open, lightboxList.length - 1)}
+          onIndex={setOpen}
+          onClose={() => setOpen(null)}
+          urlOf={(_x, idx) => sourceOf(images[idx]!.a)!.url}
+        />
+      )}
+    </ul>
+  );
+}
+
+function AttachmentRow({ a, source, onOpen }: { a: PromptAttachment; source: Source; onOpen?: () => void }) {
+  const image = promptAttachmentIsImage(a);
+  const url = source?.url ?? null;
+  const { missing, failedAt } = useMissing(a, source);
+  const label = missing ? missingLabel(a) : null;
+  const icon = <Icon name={image ? "image" : "fileText"} size={16} />;
+  return (
+    <li className={`prompt-attachment-row${missing ? " missing" : ""}`} data-testid="prompt-attachment" data-path={a.path} data-kind={image ? "image" : "file"} data-missing={missing ? "true" : undefined}>
+      <button
+        type="button"
+        className="prompt-attachment-row-open"
+        disabled={missing}
+        title={label ?? a.path}
+        aria-label={label ? `${a.name}: ${label}` : image ? `Open ${a.name}` : `${a.name}, reveal in Finder`}
+        onClick={image && url ? onOpen : () => void window.harness?.revealInFinder(a.path)}
+      >
+        <span className="prompt-attachment-row-media">{image && url && !missing ? <img src={url} alt="" onError={() => failedAt(url)} draggable={false} /> : icon}</span>
+        <span className="prompt-attachment-row-text">
+          <span className="prompt-attachment-name truncate">{a.name}</span>
+          {label && <span className="prompt-attachment-note truncate">{label}</span>}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function AttachmentItem({ a, source, onOpen, onRemove }: { a: PromptAttachment; source: Source; onOpen?: () => void; onRemove?: () => void }) {
+  const image = promptAttachmentIsImage(a);
+  const url = source?.url ?? null;
+  const { missing, failedAt: setFailed } = useMissing(a, source);
   const remove = onRemove && (
     <button
       type="button"

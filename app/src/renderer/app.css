@@ -1722,6 +1722,73 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+/* The Spec tab's list: every row starts with the same 32px square (a thumbnail or a file icon), so
+   the names line up. */
+.prompt-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.prompt-attachment-row-open {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.prompt-attachment-row-open:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.prompt-attachment-row-open:disabled {
+  cursor: default;
+}
+.prompt-attachment-row-media {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+}
+.prompt-attachment-row-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.prompt-attachment-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.prompt-attachment-row.missing .prompt-attachment-row-media {
+  border-style: dashed;
+  background: transparent;
+}
+.prompt-attachment-row.missing .prompt-attachment-name {
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
 }
 
 /* The ticket settings rows (components/TicketSettings.tsx), in Details and a draft's Options. */

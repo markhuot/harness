@@ -11,7 +11,7 @@ import { FOLLOW_LATEST, scrubTo, shownRevision, stepRevision, type SpecHistory }
 import { Icon } from "../components/Icon";
 import { Markdown, MarkdownDiff } from "../components/Markdown";
 import { relativeTime, Switch, TicketKey, useNow } from "../components/bits";
-import { PromptAttachmentStrip } from "../components/PromptAttachments";
+import { PromptAttachmentList } from "../components/PromptAttachments";
 
 const AUTHOR_LABEL: Record<SpecRevisionAuthor, string> = { agent: "Agent", human: "You", system: "Harness" };
 
@@ -125,12 +125,6 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
             ))}
           </div>
         )}
-        {!!ticket.promptAttachments?.length && (
-          <section className="spec-prompt-attachments" data-testid="spec-prompt-attachments">
-            <span className="section-title">Attached to the prompt</span>
-            <PromptAttachmentStrip items={ticket.promptAttachments} ticketKey={ticket.key} served={ticket.promptAttachments} />
-          </section>
-        )}
         {body === undefined || (comparing && prevBody === undefined) ? (
           bodyError ? (
             <div className="empty">Couldn't load this revision: {bodyError.message}</div>
@@ -153,6 +147,12 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
             <strong>No spec yet</strong>
             {ticket.status === "planning" ? "The planning agent writes the plan here." : "Write one in Details, or ask the agent to."}
           </div>
+        )}
+        {!!ticket.promptAttachments?.length && (
+          <section className="spec-prompt-attachments" data-testid="spec-prompt-attachments">
+            <span className="section-title">Attachments</span>
+            <PromptAttachmentList ticketKey={ticket.key} items={ticket.promptAttachments} />
+          </section>
         )}
       </div>
     </div>

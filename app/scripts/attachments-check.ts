@@ -191,7 +191,7 @@ try {
   await until("Spec tab attachments", () => exists('[data-testid="spec-prompt-attachments"] [data-testid="prompt-attachment"]'), 10000);
   const specChips = () =>
     js<{ path: string; missing: boolean; label: string | null; title: string | null; img: boolean; remove: boolean }[]>(`[...document.querySelectorAll('[data-testid="spec-prompt-attachments"] [data-testid="prompt-attachment"]')].map(el => ({
-      path: el.dataset.path, missing: el.dataset.missing === "true", label: el.getAttribute("aria-label"), title: el.getAttribute("title"), img: !!el.querySelector("img") && el.querySelector("img").naturalWidth > 0, remove: !!el.querySelector('[data-testid="prompt-attachment-remove"]') }))`);
+      path: el.dataset.path, missing: el.dataset.missing === "true", label: el.querySelector("button")?.getAttribute("aria-label") ?? null, title: el.querySelector("button")?.getAttribute("title") ?? null, img: !!el.querySelector("img") && el.querySelector("img").naturalWidth > 0, remove: !!el.querySelector('[data-testid="prompt-attachment-remove"]') }))`);
   const spec = await until("missing files marked", async () => {
     const c = await specChips();
     return c.filter((x) => x.missing).length === 2 ? c : null;
@@ -202,10 +202,16 @@ try {
   check("a deleted file (HEAD 404) shows as missing", !!byPath(goneTxt)?.missing && byPath(goneTxt)!.title === `Missing — was at ${goneTxt}`);
   check("files still on disk load from the service", !!byPath(diagram)?.img && !byPath(diagram)!.missing && !!byPath(upload.path)?.img);
   check("the ticket still renders its spec", await exists('[data-testid="spec-doc"]'));
+  check(
+    "the attachments sit below the spec",
+    await js<boolean>(`(() => { const d = document.querySelector('[data-testid="spec-doc"]'), a = document.querySelector('[data-testid="spec-prompt-attachments"]'); return !!d && !!a && !!(d.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) && a.getBoundingClientRect().top >= d.getBoundingClientRect().bottom; })()`),
+  );
+  const rows = await js<{ w: number; h: number; nameLeft: number }[]>(`[...document.querySelectorAll('[data-testid="spec-prompt-attachments"] .prompt-attachment-row')].map(el => { const m = el.querySelector(".prompt-attachment-row-media").getBoundingClientRect(); return { w: m.width, h: m.height, nameLeft: Math.round(el.querySelector(".prompt-attachment-name").getBoundingClientRect().left) }; })`);
+  check("one row each, thumbnails and icons the same size, names in a straight line", rows.length === 4 && rows.every((r) => r.w === rows[0]!.w && r.h === rows[0]!.h && r.nameLeft === rows[0]!.nameLeft), JSON.stringify(rows));
   await shot("spec-missing");
 
   // Clicking an image opens the lightbox on it.
-  await js(`document.querySelector('[data-testid="spec-prompt-attachments"] [data-path=${JSON.stringify(diagram)}] .prompt-attachment-open').click()`);
+  await js(`document.querySelector('[data-testid="spec-prompt-attachments"] [data-path=${JSON.stringify(diagram)}] .prompt-attachment-row-open').click()`);
   const lightbox = await until("lightbox", () => js<boolean>(`!!document.querySelector(".lightbox-stage img")`), 3000).catch(() => false);
   check("clicking a thumbnail opens the lightbox", lightbox);
   await shot("lightbox");
