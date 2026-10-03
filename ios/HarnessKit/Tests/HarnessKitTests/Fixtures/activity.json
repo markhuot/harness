@@ -1,0 +1,82 @@
+{
+  "activityDetailCases": [
+    {
+      "name": "no detail",
+      "input": {
+        "body": "Fixed it.",
+        "meta": {}
+      },
+      "output": null
+    },
+    {
+      "name": "blank detail",
+      "input": {
+        "body": "Fixed it.",
+        "meta": {
+          "detail": "  \n "
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "detail is the body",
+      "input": {
+        "body": "Fixed it.",
+        "meta": {
+          "detail": " Fixed it.\n"
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "the rest after the first line",
+      "input": {
+        "body": "Two problems.",
+        "meta": {
+          "detail": "Two problems.\n\n- `a.ts:3`: rethrow\n- assert the error path"
+        }
+      },
+      "output": "- `a.ts:3`: rethrow\n- assert the error path"
+    },
+    {
+      "name": "first line was a heading",
+      "input": {
+        "body": "Summary",
+        "meta": {
+          "detail": "## Summary\n- did it"
+        }
+      },
+      "output": "- did it"
+    },
+    {
+      "name": "first line was a list item",
+      "input": {
+        "body": "Retry cap?",
+        "meta": {
+          "detail": "- Retry cap?\n- Safari?"
+        }
+      },
+      "output": "- Safari?"
+    },
+    {
+      "name": "blank lines before the first line",
+      "input": {
+        "body": "Done",
+        "meta": {
+          "detail": "\n\nDone\n\nAdded the button."
+        }
+      },
+      "output": "Added the button."
+    },
+    {
+      "name": "detail that doesn't start with the body",
+      "input": {
+        "body": "Permission needed: Bash — npm publish",
+        "meta": {
+          "detail": "Classifier: [Code from External]"
+        }
+      },
+      "output": "Classifier: [Code from External]"
+    }
+  ]
+}

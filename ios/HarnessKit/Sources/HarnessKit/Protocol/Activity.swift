@@ -41,10 +41,20 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
     public var note: String?
     /// submitted: the spec revision the work was submitted at
     public var specRevision: Int?
+    /// The full text when the entry's body is a one-line summary of it: a review's whole
+    /// request-changes notes, the list of calls the classifier denied. Absent when the body is the
+    /// whole story, and on entries from older services, whose body held the full text.
+    public var detail: String?
+    /// moved, and any entry that itself moved the ticket (submitted, blocked, unblocked,
+    /// changes_requested, reopened, a failure that blocked it…): the column it left
+    public var from: TicketStatus?
+    /// …and the column it went to
+    public var to: TicketStatus?
 
     public init(
         question: String? = nil, round: Int? = nil, commit: Patch<String> = .absent, by: String? = nil,
-        note: String? = nil, specRevision: Int? = nil
+        note: String? = nil, specRevision: Int? = nil, detail: String? = nil,
+        from: TicketStatus? = nil, to: TicketStatus? = nil
     ) {
         self.question = question
         self.round = round
@@ -52,11 +62,14 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
         self.by = by
         self.note = note
         self.specRevision = specRevision
+        self.detail = detail
+        self.from = from
+        self.to = to
     }
 }
 
-/// One entry of a ticket's Activity: a typed timeline of notes, submits, blocks, review decisions,
-/// logged messages and so on (DESIGN.md "Activity").
+/// One entry of a ticket's Activity: a typed timeline of notes, submits, blocks, review decisions
+/// and so on (older services also logged messages and answers) (DESIGN.md "Activity").
 public struct ActivityEntry: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     public var sessionId: String

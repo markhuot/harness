@@ -2,8 +2,8 @@ import Foundation
 
 // How the Activity tab draws each entry (DESIGN.md "Activity"): its icon, title and detail, and
 // which of a few looks it takes. Blocked entries are their own attention card, review decisions
-// carry their round and commit, logged messages and answers read as a conversation, and failures
-// and system notes stay muted.
+// carry their round and commit, an entry whose body is a summary can open its full text, messages and answers
+// logged by older services read as a conversation, and failures and system notes stay muted.
 
 public enum ActivityLook: Equatable, Sendable {
     /// A row in the timeline
@@ -54,6 +54,7 @@ public enum ActivityRows {
         case .message: "user"
         case .answer: "sparkle"
         case .reopened: "refresh"
+        case .moved: "chevronRight"
         case .failed: "x"
         case .permission: "shield"
         case .system: "zap"
@@ -74,11 +75,25 @@ public enum ActivityRows {
         case .message: TicketDetailLogic.authorLabel(e.author)
         case .answer: "Agent"
         case .reopened: "Re-opened"
+        case .moved: "Moved"
         case .failed: "Run failed"
         case .permission: "Permission"
         case .system: "Harness"
         case .unknown: TicketDetailLogic.authorLabel(e.author)
         }
+    }
+
+    /// The heading as the row shows it: the title, then the column the entry moved the ticket to
+    /// when it moved it (meta.to), as the board labels it ("Submitted for review → Review",
+    /// "Moved → Done").
+    public static func heading(_ e: ActivityEntry) -> String {
+        withMove(title(e), e)
+    }
+
+    /// `text` with " → <column>" when the entry moved the ticket (meta.to); `text` as is otherwise.
+    public static func withMove(_ text: String, _ e: ActivityEntry) -> String {
+        guard let to = e.meta.to else { return text }
+        return "\(text) → \(Format.statusLabel[to] ?? to.rawValue)"
     }
 
     /// The small line after the title: a review's round and short commit ("Round 2 · 9f1c2ab"), a
@@ -110,6 +125,28 @@ public enum ActivityRows {
             return JSCompat.trim(e.body) == JSCompat.trim(question(e)) ? "" : e.body
         }
         return e.body
+    }
+
+    /// What Show details reveals (shared/src/state/activity.ts activityDetail, checked against
+    /// activityDetailCases): the rest of meta.detail after the line the body already shows, or the
+    /// whole detail when it doesn't start with that line; nil when there's nothing more to show
+    /// (older services put the full text in the body).
+    public static func fullText(_ e: ActivityEntry) -> String? {
+        let detail = JSCompat.trim(e.meta.detail ?? "")
+        guard !detail.isEmpty else { return nil }
+        let lines = detail.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" }).map { String($0).replacingOccurrences(of: "\r", with: "") }
+        var rest = detail
+        if let first = lines.firstIndex(where: { !JSCompat.trim($0).isEmpty }), bodyLine(lines[first]) == bodyLine(e.body) {
+            rest = JSCompat.trim(lines[(first + 1)...].joined(separator: "\n"))
+        }
+        return rest.isEmpty ? nil : rest
+    }
+
+    /// A line as an Activity body shows it (the service's activityLine): heading, list and quote
+    /// markers dropped, whitespace collapsed.
+    static func bodyLine(_ line: String) -> String {
+        let unmarked = line.replacingOccurrences(of: #"^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+|>\s*)+"#, with: "", options: .regularExpression)
+        return JSCompat.trim(unmarked.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression))
     }
 
     /// Whether this is the newest blocked entry while the ticket is still blocked (its card stays

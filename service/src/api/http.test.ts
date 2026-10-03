@@ -625,17 +625,16 @@ describe("spec + Activity over http", () => {
     await expect(client.request("GET", `/tickets/${t.key}/spec/revisions/1?diff=x`)).rejects.toMatchObject({ status: 400 });
   });
 
-  test("POST /messages takes log as a boolean; log: true puts the message in Activity", async () => {
+  test("POST /messages ignores an older app's log flag: messages never go into Activity", async () => {
     const { client, dir, h } = await boot();
     const p = await client.createProject({ path: dir });
     const t = await client.createTicket({ projectId: p.id, spec: "x", start: false });
     await h.orchestrator.idle();
-    await expect(client.request("POST", `/tickets/${t.key}/messages`, { text: "hi", log: "yes" })).rejects.toMatchObject({ status: 400 });
-    await client.sendMessage(t.key, "not logged");
-    await client.sendMessage(t.key, "logged", { log: true });
+    await client.request("POST", `/tickets/${t.key}/messages`, { text: "logged by an old app", log: true });
+    await client.request("POST", `/tickets/${t.key}/messages`, { text: "odd flag", log: "yes" });
     await h.orchestrator.idle();
-    const messages = (await client.listActivity(t.key)).filter((e) => e.kind === "message").map((e) => [e.author, e.body]);
-    expect(messages).toEqual([["human", "logged"]]);
+    const activity = await client.listActivity(t.key);
+    expect(activity.filter((e) => e.kind === "message" || e.kind === "answer")).toEqual([]);
   });
 });
 

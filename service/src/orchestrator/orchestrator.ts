@@ -139,6 +139,7 @@ import {
 } from "./settings";
 import { resolveRunModel } from "./models";
 import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
+import { activityLine } from "../activity";
 import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../spec";
 import { confineOutputPath, readSnapshot, readTaskOutput, snapshotTaskOutput, unavailable } from "../task-output";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
@@ -228,11 +229,6 @@ interface ActiveRun {
   offeredGrants: number[];
   /** The agent recorded a pull request during this run (record_pull_request) */
   pullRequest?: boolean;
-  /**
-   * A human message logged to Activity (POST /messages log: true) started or steered this run:
-   * its final answer goes into Activity as an `answer` entry.
-   */
-  logAnswer: boolean;
   /** Human messages sent while the run is going (steering); null when the run can't take them */
   input: RunInput | null;
   /** The run's working directory, for @-mentions in steered messages */
@@ -419,6 +415,11 @@ export class Orchestrator {
   private tools: (kind: RunKind, driver: Driver, ticket: Ticket | null) => ToolDefinition[];
   private baseUrl: () => string;
   private log: (msg: string) => void;
+  /**
+   * Tickets whose next transition() is already in Activity (moveMeta on the entry): the column it
+   * goes to and the entry, which only counts while it's still the ticket's newest.
+   */
+  private movesRecorded = new Map<string, { to: TicketStatus; entryId: string }>();
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
   /**
@@ -429,8 +430,6 @@ export class Orchestrator {
   private ruleFailures = new Set<string>();
   /** ticketId → classifier denials retried in a row without a human (MAX_AUTO_RETRIES) */
   private autoRetries = new Map<string, number>();
-  /** Queued runs whose message was logged to Activity: their final answer is logged too (ActiveRun.logAnswer) */
-  private logAnswerRuns = new Set<string>();
   private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
   private conductorBuffer = new Map<string, ConductorChange[]>();
   private starting = new Set<string>();
@@ -1352,16 +1351,16 @@ export class Orchestrator {
           else await this.begin(ticket, this.prompts().workStartPrompt(ticket));
           break;
         case "done":
-          this.transition(ticket, "done", { blockedReason: null }, "Moved to done");
+          this.transition(ticket, "done", { blockedReason: null }, "Moved to done", undefined, { by: "human", line: "" });
           break;
         case "blocked":
-          this.transition(ticket, "blocked", {}, "Moved to blocked");
+          this.transition(ticket, "blocked", {}, "Moved to blocked", undefined, { by: "human", line: "" });
           break;
         case "review":
-          this.transition(ticket, "review", {}, "Moved to review");
+          this.transition(ticket, "review", {}, "Moved to review", undefined, { by: "human", line: "" });
           break;
         case "planning":
-          this.transition(ticket, "planning", { blockedReason: null }, "Moved to planning");
+          this.transition(ticket, "planning", { blockedReason: null }, "Moved to planning", undefined, { by: "human", line: "" });
           break;
       }
     }
@@ -1451,10 +1450,10 @@ export class Orchestrator {
    *  - blocked, review, done: a chat run with the ticket's work tools, whose agent moves the
    *    ticket itself (unblock once the block is resolved, resume_work before changing reviewed work, submit_for_review, block).
    * A message to a ticket waiting on a tool approval answers it as a deny.
-   * `log` (sent from the Spec and Activity tabs) also puts the message in Activity, and the run's
-   * final answer after it; otherwise it goes only to the agent and the transcript.
+   * The message goes to the agent and the transcript, never to Activity (older apps' `log` flag is
+   * ignored).
    */
-  async sendMessage(key: string, text: string, opts: { move?: boolean; log?: boolean } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean } = {}): Promise<Ticket> {
     if (typeof text !== "string" || !text.trim()) throw badRequest("text is required");
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "messaged (it has no agent yet)");
@@ -1462,18 +1461,16 @@ export class Orchestrator {
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
-    const log = opts.log === true;
-    if (log) this.addActivity(ticket, "message", "human", text.trim());
     switch (ticket.status) {
       case "planning":
-        await this.steerOrEnqueue(ticket.sessionId, "plan", text, log);
+        await this.steerOrEnqueue(ticket.sessionId, "plan", text);
         break;
       case "in_progress":
-        await this.steerOrEnqueue(ticket.sessionId, this.workKind(ticket), text, log);
+        await this.steerOrEnqueue(ticket.sessionId, this.workKind(ticket), text);
         break;
       case "review":
         if (!opts.move) {
-          await this.chat(ticket, text, log);
+          await this.chat(ticket, text);
           break;
         }
         this.transition(
@@ -1481,18 +1478,19 @@ export class Orchestrator {
           "in_progress",
           { agentReview: "pending", humanReview: "pending", blockedReason: null },
           `Moved back to in progress (human message)`,
+          undefined,
+          { by: "human", line: "Sent back to work with a message" },
         );
-        this.markLogged(this.enqueueRun(ticket.sessionId, this.workKind(ticket), text), log);
+        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text);
         break;
       case "done":
         if (opts.move) {
-          this.addActivity(ticket, "reopened", "human", "Re-opened by a message");
+          this.addActivity(ticket, "reopened", "human", "Re-opened by a message", this.moveMeta(ticket, "in_progress"));
           await this.reopen(ticket, text, "Re-opened by human message");
-          if (log) this.markLoggedLatest(ticket.sessionId);
-        } else await this.chat(ticket, text, log);
+        } else await this.chat(ticket, text);
         break;
       case "blocked":
-        await this.chat(ticket, text, log);
+        await this.chat(ticket, text);
         break;
     }
     return this.store.tickets.get(ticket.id)!;
@@ -1500,34 +1498,20 @@ export class Orchestrator {
 
   /**
    * The message goes to a chat run: the ticket's own agent, conversation and work tools, with its
-   * status unchanged. A logged message (sendMessage's `log`) gets the agent's answer in Activity too.
+   * status unchanged.
    * A blocked ticket that never got a worktree (or lost it) gets one first, so the agent can work.
    */
-  private async chat(ticket: Ticket, text: string, log = false) {
+  private async chat(ticket: Ticket, text: string) {
     if (ticket.status === "blocked" && (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir)))) {
       const error = await this.prepareWorkdir(ticket);
       if (error) {
-        this.addActivity(ticket, "failed", "system", error);
+        this.addActivityLine(ticket, "failed", "system", error);
         this.store.tickets.update(ticket.id, { blockedReason: error });
         this.touchSession(ticket.sessionId);
         return;
       }
     }
-    await this.steerOrEnqueue(ticket.sessionId, "chat", text, log);
-  }
-
-  /** The run's final answer goes into Activity (its message was logged). */
-  private markLogged(run: Run, log: boolean) {
-    if (log) this.logAnswerRuns.add(run.id);
-  }
-
-  /** markLogged for the session's newest run (the one begin() or reopen() just queued). */
-  private markLoggedLatest(sessionId: string) {
-    const run = this.store.runs.listBySession(sessionId).at(-1);
-    if (!run || (run.status !== "queued" && run.status !== "running")) return;
-    const active = this.active.get(run.id);
-    if (active) active.logAnswer = true;
-    else this.logAnswerRuns.add(run.id);
+    await this.steerOrEnqueue(ticket.sessionId, "chat", text);
   }
 
   /**
@@ -1546,10 +1530,10 @@ export class Orchestrator {
    * step. Otherwise it waits for a run of its own, queued behind the active one, with a
    * transcript note when there was a running agent it couldn't reach.
    */
-  private async steerOrEnqueue(sessionId: string, kind: RunKind, text: string, log = false): Promise<void> {
+  private async steerOrEnqueue(sessionId: string, kind: RunKind, text: string): Promise<void> {
     const active = [...this.active.values()].find((a) => a.run.sessionId === sessionId && !a.cancelled);
     if (!active) {
-      this.markLogged(this.enqueueRun(sessionId, kind, text), log);
+      this.enqueueRun(sessionId, kind, text);
       return;
     }
     const input = active.input;
@@ -1559,18 +1543,13 @@ export class Orchestrator {
       const withFiles = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
       const ticketId = this.store.sessions.get(sessionId)?.ticketId;
       const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null);
-      if (input.push(prompt, text)) {
-        if (log) active.logAnswer = true;
-        return;
-      }
+      if (input.push(prompt, text)) return;
       // The run stopped taking input while the mentions were read.
       const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true });
-      this.markLogged(run, log);
       this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
       return;
     }
     const run = this.enqueueRun(sessionId, kind, text);
-    this.markLogged(run, log);
     this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
   }
 
@@ -1581,7 +1560,7 @@ export class Orchestrator {
     if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
-    this.addActivity(ticket, "reopened", "human", notes);
+    this.addActivity(ticket, "reopened", "human", notes, this.moveMeta(ticket, "in_progress"));
     return this.reopen(ticket, this.prompts().reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch), "Re-opened by human");
   }
 
@@ -1673,7 +1652,7 @@ export class Orchestrator {
       prompt = `The human denied ${what}.${note ? ` ${note}.` : ""} Find another way or call block if you can't proceed.`;
     }
     if (note && decision !== "deny") prompt += ` Note from the human: ${note}.`;
-    this.addActivity(ticket, "permission", "human", `${decision === "deny" ? "Denied" : decision === "allow_tool" ? "Always allowed" : "Allowed once"}: ${what}`);
+    this.addActivityLine(ticket, "permission", "human", `${decision === "deny" ? "Denied" : decision === "allow_tool" ? "Always allowed" : "Allowed once"}: ${what}`);
     const asked = this.store.runs.get(pa.runId)?.kind;
     if (asked === "chat") {
       // The chat carries on where the ticket is; its question (if it's blocked) stays open.
@@ -1689,6 +1668,8 @@ export class Orchestrator {
       kind === "complete" ? "review" : "in_progress",
       { pendingApproval: null, blockedReason: null, allowedTools, reviewRejections: 0 },
       `Approval answered: ${decision}`,
+      undefined,
+      { by: "human" },
     );
     this.enqueueRun(t.sessionId, kind, prompt);
     return this.store.tickets.get(t.id)!;
@@ -1708,7 +1689,9 @@ export class Orchestrator {
       const t = this.store.tickets.update(ticket.id, { humanReview: "approved" })!;
       this.touchSession(t.sessionId);
       this.appendStatus(t.sessionId, null, by === "human" ? "Human review: approved" : "Conductor review: approved");
-      this.addActivity(t, "approved", by === "human" ? "human" : "agent", notes.trim() || "Approved.", { by });
+      // A human's approval is kept as written; a conductor's notes show their first line, like a reviewer's.
+      if (by === "human") this.addActivity(t, "approved", "human", notes.trim() || "Approved.", { by });
+      else this.addActivityLine(t, "approved", "agent", notes.trim() || "Approved.", { by });
       this.noteReady(t);
       return t;
     }
@@ -1725,9 +1708,9 @@ export class Orchestrator {
       // "Approve and take no action": no completion run. In review it counts as the approval.
       if (ticket.status === "review") {
         this.notCompleting(ticket, "marked done");
-        this.transition(ticket, "done", { blockedReason: null, humanReview: "approved" }, "Approved, no action taken");
+        this.transition(ticket, "done", { blockedReason: null, humanReview: "approved" }, "Approved, no action taken", undefined, { by: "human" });
       } else {
-        this.transition(ticket, "done", { blockedReason: null }, "Marked done");
+        this.transition(ticket, "done", { blockedReason: null }, "Marked done", undefined, { by: "human" });
       }
       return this.store.tickets.get(ticket.id)!;
     }
@@ -2127,7 +2110,7 @@ export class Orchestrator {
   async postNote(ctx: ToolContext, note: string): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (typeof note !== "string" || !note.trim()) throw new Error("note is empty");
-    this.addActivity(t, "note", "agent", note.trim());
+    this.addActivityLine(t, "note", "agent", note);
   }
 
   async readSpec(ctx: ToolContext, revision?: number): Promise<string> {
@@ -2144,9 +2127,13 @@ export class Orchestrator {
 ${numberLines(r.body)}`;
   }
 
-  /** The spec tools are for the run's own ticket, in the run kinds toolsForRun gives them to. */
+  /**
+   * The spec tools are for the run's own ticket, in the run kinds toolsForRun gives them to. A
+   * review run may edit_spec (to record what it found) but not replace the spec whole.
+   */
   private specWriter(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind === "review" || ctx.runKind === "triage") throw new Error(`${tool} isn't available in ${ctx.runKind} runs: they don't change the spec`);
+    if (ctx.runKind === "triage") throw new Error(`${tool} isn't available in triage runs: they don't change the spec`);
+    if (ctx.runKind === "review" && tool !== "edit_spec") throw new Error(`${tool} isn't available in review runs: record what you found with edit_spec instead`);
     return this.ctxTicket(ctx);
   }
 
@@ -2253,7 +2240,7 @@ ${numberLines(r.body)}`;
       await this.cancelReviewRuns(t.sessionId);
       Object.assign(patch, { agentReview: "pending", humanReview: "pending" });
     }
-    this.addActivity(t, "blocked", "agent", question.trim(), { question: question.trim() });
+    this.addActivity(t, "blocked", "agent", question.trim(), { question: question.trim(), ...this.moveMeta(t, "blocked") });
     this.transition(t, "blocked", patch, `Blocked: ${question.trim()}`, question.trim());
     const a = this.ctxActive(ctx);
     if (a) a.blocked = true;
@@ -2265,7 +2252,7 @@ ${numberLines(r.body)}`;
     if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can unblock it.`);
     if (t.status !== "blocked") throw new Error(`${t.key} is ${t.status}, not blocked: there's nothing to unblock.`);
     const why = typeof note === "string" ? note.trim() : "";
-    this.addActivity(t, "unblocked", "agent", why || "Unblocked: picking the work back up.", why ? { note: why } : {});
+    this.addActivityLine(t, "unblocked", "agent", why || "Unblocked: picking the work back up.", { ...(why ? { note: why } : {}), ...this.moveMeta(t, "in_progress") });
     this.transition(t, "in_progress", { blockedReason: null }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
   }
 
@@ -2280,7 +2267,7 @@ ${numberLines(r.body)}`;
     if (t.status !== "review") throw new Error(`${t.key} is ${t.status}, not in review: resume_work only takes a ticket out of review.`);
     await this.cancelReviewRuns(t.sessionId);
     const why = typeof note === "string" ? note.trim() : "";
-    this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`);
+    this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`, undefined, { by: "agent", line: why || "Changing the reviewed work" });
   }
 
   /**
@@ -2337,7 +2324,7 @@ ${numberLines(r.body)}`;
       const u = this.store.tickets.update(t.id, { agentReview: "approved" })!;
       this.touchSession(u.sessionId);
       this.appendStatus(u.sessionId, ctx.runId, "Agent review: approved");
-      this.addActivity(u, "review_approved", "agent", text || "Approved.", meta);
+      this.addActivityLine(u, "review_approved", "agent", text || "Approved.", meta);
       if (u.parentId) this.notifyConductor(u.parentId, { key: u.key, title: u.title, from: "review", to: "review", note: `Agent review approved. ${text}`.trim(), specRevision: u.specRevision });
       this.noteReady(u);
       return;
@@ -2345,8 +2332,8 @@ ${numberLines(r.body)}`;
     const n = this.store.tickets.reviewRejections(t.id) + 1;
     if (n >= MAX_AGENT_REJECTIONS) {
       const reason = `Agent review requested changes ${n} times — needs a human decision`;
-      this.addActivity(t, "changes_requested", "agent", text || "No notes.", meta);
-      this.addActivity(t, "blocked", "system", reason, { question: reason });
+      this.addActivityLine(t, "changes_requested", "agent", text || "No notes.", meta);
+      this.addActivity(t, "blocked", "system", reason, { question: reason, ...this.moveMeta(t, "blocked") });
       this.transition(t, "blocked", { reviewRejections: n, agentReview: "changes_requested", blockedReason: reason }, reason, notes);
     } else {
       this.store.tickets.update(t.id, { reviewRejections: n });
@@ -3114,8 +3101,13 @@ ${numberLines(r.body)}`;
     if (meta.summary) pending.summary = meta.summary;
     if (meta.onceOnly) pending.onceOnly = true;
     const reason = `Permission needed: ${toolName} — ${meta.summary ?? summarizeToolInput(input)}`;
-    this.addActivity(t, "permission", "system", meta.reason ? `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` : reason);
-    if (t.status === "blocked" || this.store.runs.get(runId)?.kind === "chat") {
+    // The approval card shows the classifier's or policy's reason; Activity gets the one line.
+    const stays = t.status === "blocked" || this.store.runs.get(runId)?.kind === "chat";
+    this.addActivityLine(t, "permission", "system", reason, {
+      ...(meta.reason ? { detail: `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` } : {}),
+      ...(stays ? {} : this.moveMeta(t, "blocked")),
+    });
+    if (stays) {
       this.store.tickets.update(t.id, { pendingApproval: pending });
       this.touchSession(t.sessionId);
       this.appendStatus(t.sessionId, null, reason);
@@ -3162,7 +3154,9 @@ ${numberLines(r.body)}`;
       // are on record for the reviewer and the human.
       const calls = [...new Map(active.denials.map((d) => [grantKey(d.toolName, d.input), d])).values()];
       const lines = calls.map((d) => `- ${d.toolName} (${summarizeToolInput(d.input)}): ${d.reason}`);
-      this.addActivity(t, "permission", "system", `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}:\n${lines.join("\n")}`);
+      const summary = `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}`;
+      this.addActivity(t, "permission", "system", `${summary}.`, { detail: `${summary}:\n${lines.join("\n")}` });
+      this.appendStatus(t.sessionId, run.id, `${summary}:\n${lines.join("\n")}`);
       return false;
     }
     // A chat's denial surfaces wherever the ticket is (its card leaves the column alone).
@@ -3456,7 +3450,7 @@ ${numberLines(r.body)}`;
     try {
       const dir = await this.workdirFor(ticket);
       if (typeof dir === "string") {
-        this.addActivity(ticket, "failed", "system", dir);
+        this.addActivityLine(ticket, "failed", "system", dir, this.moveMeta(ticket, "blocked"));
         this.transition(ticket, "blocked", { blockedReason: dir }, "Could not create worktree");
         return;
       }
@@ -3469,7 +3463,8 @@ ${numberLines(r.body)}`;
         fresh = this.store.tickets.get(fresh.id)!;
       }
       this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
-      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note);
+      const line = fresh.status === "planning" ? "Work started" : note === "Moved to in progress" ? "" : note;
+      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note, undefined, { line });
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt);
     } finally {
       this.starting.delete(ticket.id);
@@ -3515,12 +3510,21 @@ ${numberLines(r.body)}`;
    * Change a ticket's status (plus optional fields), record a status line, and fire
    * status-change hooks: parent conductor notification and dependency scheduling.
    */
-  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string): Ticket {
+  /**
+   * Move a ticket to another column (or update it in place). Every column change is in Activity:
+   * the entry the caller just added for it (moveMeta) carries from/to, otherwise a `moved` entry
+   * by `by` says why in one line (`line`, else the status text).
+   */
+  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string, move: { by?: ActivityAuthor; line?: string } = {}): Ticket {
     const from = ticket.status;
+    const pending = this.movesRecorded.get(ticket.id);
+    this.movesRecorded.delete(ticket.id);
+    const recorded = pending?.to === to && this.store.activity.listBySession(ticket.sessionId).at(-1)?.id === pending.entryId;
     const t = this.store.tickets.update(ticket.id, { ...patch, status: to })!;
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
     if (from !== to) {
+      if (!recorded) this.addActivityLine(t, "moved", move.by ?? "system", move.line ?? status ?? "", { from, to });
       if (t.parentId && !(from === "planning" && to === "in_progress")) {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
       }
@@ -3568,7 +3572,7 @@ ${numberLines(r.body)}`;
     const humanSkipped = !!ticket.skipHumanReview;
     const humanReview = humanSkipped ? "approved" : "pending";
     const agentReview = ticket.skipAgentReview ? "skipped" : "pending";
-    this.addActivity(ticket, "submitted", author, note, { specRevision: ticket.specRevision ?? 1 });
+    this.addActivityLine(ticket, "submitted", author, note, { specRevision: ticket.specRevision ?? 1, ...this.moveMeta(ticket, "review") });
     const t = this.transition(ticket, "review", { agentReview, humanReview, blockedReason: null }, "Moved to review", note);
     if (agentReview === "skipped") this.appendStatus(t.sessionId, null, "Agent review: skipped");
     if (humanSkipped) this.appendStatus(t.sessionId, null, "Human review: skipped");
@@ -3576,8 +3580,11 @@ ${numberLines(r.body)}`;
   }
 
   private requestChanges(ticket: Ticket, notes: string, by: "agent" | "human" | "conductor", meta: ActivityMeta = { by }): Ticket {
-    const author: ActivityAuthor = by === "human" ? "human" : "agent";
-    this.addActivity(ticket, "changes_requested", author, notes.trim() || "No notes.", meta);
+    // A reviewer agent's or conductor's notes can be long (the author needs the detail): Activity
+    // shows their first line, and the whole notes stay in meta.detail and the work run's prompt.
+    const moved = { ...meta, ...this.moveMeta(ticket, "in_progress") };
+    if (by === "human") this.addActivity(ticket, "changes_requested", "human", notes.trim() || "No notes.", moved);
+    else this.addActivityLine(ticket, "changes_requested", "agent", notes.trim() || "No notes.", moved);
     const t = this.transition(
       ticket,
       "in_progress",
@@ -3642,7 +3649,7 @@ ${numberLines(r.body)}`;
     const current = t.specRevision ?? 1;
     return {
       round: rounds.length + 1,
-      earlier: rounds.map((e) => ({ round: e.meta.round ?? 0, decision: e.kind === "review_approved" ? "approve" : "request_changes", notes: e.body, commit: e.meta.commit ?? null })),
+      earlier: rounds.map((e) => ({ round: e.meta.round ?? 0, decision: e.kind === "review_approved" ? "approve" : "request_changes", notes: e.meta.detail ?? e.body, commit: e.meta.commit ?? null })),
       baselineRevision: baseline?.rev ?? null,
       baselineDiff: baseline ? unifiedDiff(baseline.body, t.spec, `spec rev ${baseline.rev} (approved baseline)`, `spec rev ${current} (current)`) : "",
       activity: since.slice(-30),
@@ -3767,7 +3774,6 @@ ${numberLines(r.body)}`;
       calls: new Map(),
       appliedGrants: new Set(),
       offeredGrants: [],
-      logAnswer: this.logAnswerRuns.delete(run.id),
       // From the start, so a message sent while the run gets going is waiting when the driver starts.
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
       cwd: null,
@@ -3883,7 +3889,6 @@ ${numberLines(r.body)}`;
             builtinTools: driver.hasBuiltinTools,
             branches: ticket ? this.branchContext(ticket, project) : undefined,
             activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
-            logged: active.logAnswer,
           }),
           cwd,
           model,
@@ -4044,40 +4049,35 @@ ${numberLines(r.body)}`;
     if (run.status === "failed") {
       // A done ticket stays done: a run queued before it completed can only fail on the removed worktree.
       if (ticket.status === "done" && run.kind !== "complete") {
-        this.addActivity(ticket, "failed", "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
+        this.addActivityLine(ticket, "failed", "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
         return;
       }
       // A chat that unblocked the ticket was doing its work: it fails like a work run. Any other
       // failed chat leaves the ticket where it is.
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete" || (run.kind === "chat" && ticket.status === "in_progress")) {
-        this.addActivity(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
+        this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`, this.moveMeta(ticket, "blocked"));
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
       } else if (run.kind === "chat") {
-        this.addActivity(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
+        this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
       }
       return;
     }
-    // A logged message's answer (sendMessage's `log`): the agent's last words, unless the run
-    // ended with a submit or a question, which say it themselves.
-    const answer = active.logAnswer && !active.submitted && !active.blocked ? active.lastText?.trim() || null : null;
     switch (run.kind) {
       case "work":
       case "conductor":
-        if (!this.finishWork(ticket, run, active) && answer) this.addActivity(ticket, "answer", "agent", answer);
+        this.finishWork(ticket, run, active);
         break;
       case "chat":
         // A chat that moved the ticket (submit_for_review, block, unblock, resume_work) ends like a work run;
-        // one that left it where it was answers the human's message.
-        if (active.submitted || active.blocked || ticket.status === "in_progress") {
-          if (!this.finishWork(ticket, run, active) && answer) this.addActivity(ticket, "answer", "agent", answer);
-        } else if (answer) this.addActivity(ticket, "answer", "agent", answer);
+        // one that left it where it was answered the human's message in the transcript.
+        if (active.submitted || active.blocked || ticket.status === "in_progress") this.finishWork(ticket, run, active);
         break;
       case "complete":
         if (ticket.status === "done") break;
         if (ticket.completionAction === "pr" && !active.pullRequest) {
           // The PR completion's whole result is the pull request: without one, the work hasn't landed.
           const reason = "Completion ended without opening a pull request. Check the last Activity note for what went wrong (gh login, push access), then message the agent; once it's back in review, approve it again.";
-          this.addActivity(ticket, "blocked", "system", reason, { question: reason });
+          this.addActivity(ticket, "blocked", "system", reason, { question: reason, ...this.moveMeta(ticket, "blocked") });
           this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: no pull request");
           break;
         }
@@ -4086,7 +4086,7 @@ ${numberLines(r.body)}`;
           const left = await this.cleanupLeftovers(ticket);
           if (left.length) {
             const reason = `Cleanup didn't finish: ${left.join(" and ")} still ${left.length === 1 ? "exists" : "exist"}, which usually means unpushed or unmerged work. Check the last Activity note, then move the ticket back to In progress to deal with those commits.`;
-            this.addActivity(ticket, "blocked", "system", reason, { question: reason });
+            this.addActivity(ticket, "blocked", "system", reason, { question: reason, ...this.moveMeta(ticket, "blocked") });
             this.transition(ticket, "blocked", { blockedReason: reason }, "Blocked: cleanup didn't finish");
             break;
           }
@@ -4096,20 +4096,15 @@ ${numberLines(r.body)}`;
       case "review":
         if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
         break;
-      case "plan":
-        if (answer) this.addActivity(ticket, "answer", "agent", answer);
-        break;
     }
   }
 
   /**
    * The end of a run that did the ticket's work: a submit gets its review; a ticket still in
    * progress with nothing more queued blocks on the agent's trailing question, or is submitted
-   * with its last text once its children are done. Returns true when that used the last text
-   * (a question or the submit note), so it isn't posted again as an answer.
+   * with its last text (Activity shows the first line) once its children are done.
    */
-  private finishWork(ticket: Ticket, run: Run, active: ActiveRun): boolean {
-    let usedText = false;
+  private finishWork(ticket: Ticket, run: Run, active: ActiveRun): void {
     if (active.submitted) {
       if (ticket.status === "review") this.enqueueReview(ticket);
     } else if (ticket.status === "in_progress") {
@@ -4117,17 +4112,14 @@ ${numberLines(r.body)}`;
       if (!moreWork && run.kind !== "conductor" && endsWithQuestion(active.lastText)) {
         // The agent is asking the human something: block with its question instead of submitting.
         const question = active.lastText!.trim();
-        this.addActivity(ticket, "blocked", "agent", question, { question });
+        this.addActivity(ticket, "blocked", "agent", question, { question, ...this.moveMeta(ticket, "blocked") });
         this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
-        usedText = true;
       } else if (!moreWork && this.allChildrenDone(ticket)) {
         this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
         this.enqueueReview(this.store.tickets.get(ticket.id)!);
-        usedText = true;
       }
     }
     this.flushConductor(ticket.id);
-    return usedText;
   }
 
   /** HarnessOps facade handed to tools (maps conductor/triage op names onto internals). */
@@ -4211,8 +4203,22 @@ ${numberLines(r.body)}`;
   private addActivity(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}): ActivityEntry {
     const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta });
     this.bus.emit({ kind: "activity.added", entry });
+    if (meta.to && kind !== "moved") this.movesRecorded.set(ticket.id, { to: meta.to, entryId: entry.id });
     return entry;
   }
+
+  /** ActivityMeta for an entry that records the ticket's move to `to` (none when it's already there). */
+  private moveMeta(t: Pick<Ticket, "status">, to: TicketStatus): ActivityMeta {
+    return t.status === to ? {} : { from: t.status, to };
+  }
+
+  /** addActivity for text that can run long: the body is its first line, the whole text meta.detail. */
+  private addActivityLine(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, text: string, meta: ActivityMeta = {}): ActivityEntry {
+    const full = text.trim();
+    const line = activityLine(full);
+    return this.addActivity(ticket, kind, author, line, line === full ? meta : { ...meta, detail: full });
+  }
+
 
   /** The ticket's newest agent note or submit note (what search snippets and the conductor show). */
   private latestNote(t: Ticket): ActivityEntry | undefined {

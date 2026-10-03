@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, plainText, workingTitle } from "@harness/shared/state";
+import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, NEWS_KINDS, plainText, workingTitle } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
@@ -79,7 +79,7 @@ export function ChildrenTab({ ticket }: { ticket: Ticket }) {
 function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) => void }) {
   const { state } = useStore();
   const deps = depStates(state.tickets, c, state.keyAliases);
-  const latest = latestActivity(state, c.sessionId);
+  const latest = latestActivity(state, c.sessionId, NEWS_KINDS);
   const attention = attentionOf(c);
   const model = modelOf(c);
   const showDriver = hasCustomDriver(state, c);

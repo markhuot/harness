@@ -1,9 +1,9 @@
 // The Spec and Activity tabs against the REAL service (dummy driver, throwaway HARNESS_HOME):
 // a ticket whose spec has several revisions, a nested list and an inline image, and whose
 // Activity has a review round and a blocked question. Checks the history bar, Show changes (the
-// rendered spec with edits marked in place), the
-// blocked card, that a message from the Spec tab is logged to Activity and one from the
-// Transcript isn't, and the Details editor's conflict prompt, with a screenshot of each.
+// rendered spec with edits marked in place), the blocked card, that Activity records every column
+// move in one line per entry, that a message sent from Spec or Activity switches to the Transcript
+// and stays out of Activity, and the Details editor's conflict prompt, with a screenshot of each.
 //
 //   bun run build && bun scripts/spec-activity.ts [screenshotDir] [--theme=dark]
 import { mkdirSync, readFileSync } from "node:fs";
@@ -91,6 +91,8 @@ try {
         ],
       },
     },
+    // Longer than a line: Activity shows the first, the rest behind Show details.
+    { name: "post_note", input: { note: "Added the board screenshot to the spec.\n\nIt shows the card after the change, taken from the app itself." } },
   ];
   await api<Ticket>("POST", `/tickets/${key}/messages`, { text: `/tools ${JSON.stringify(tools)}`, move: true });
   await until("round 2 approved", async () => (await api<TicketDetail>("GET", `/tickets/${key}`)).activity.filter((e) => e.kind === "review_approved").length === 2, 30000);
@@ -152,37 +154,51 @@ try {
   await until("activity list", () => exists(".activity-list"), 5000);
   check("blocked entry is an open attention card", await exists(".activity-blocked.is-open .activity-card"));
   check("review round shows its round", await js<boolean>(`[...document.querySelectorAll('.activity-review_approved')].some((e) => e.textContent.includes('round 1'))`));
+  check("the submit's heading names the column it moved to", await js<boolean>(`[...document.querySelectorAll('.activity-submitted')].some((e) => e.textContent.includes('→ Review'))`));
+  check("Start is a Moved entry", await js<boolean>(`[...document.querySelectorAll('.activity-moved')].some((e) => e.textContent.includes('→ In progress'))`));
   await shot("3-activity-blocked");
+  // A note with more than one line: its first line, and the rest behind Show details.
+  const noteRow = `[...document.querySelectorAll('.activity-note')].find((e) => e.textContent.includes('Added the board screenshot'))`;
+  check("a long note shows its first line only", await js<boolean>(`(() => { const r = ${noteRow}; return !!r && !r.textContent.includes('taken from the app itself'); })()`));
+  await js(`${noteRow}.querySelector('.activity-details-toggle').click()`);
+  check("Show details reveals the rest", await until("details open", () => js<boolean>(`(() => { const r = ${noteRow}; return r.textContent.includes('taken from the app itself') && r.textContent.includes('Hide details'); })()`), 3000));
+  await js(`${noteRow}.scrollIntoView({ block: "center" })`);
+  await shot("3b-activity-show-details");
 
   const activity = async () => (await api<TicketDetail>("GET", `/tickets/${key}`)).activity as ActivityEntry[];
+  const all = await activity();
+  check("every Activity entry is one line", all.every((e) => !e.body.includes("\n")), all.filter((e) => e.body.includes("\n")).map((e) => e.kind).join(", "));
+  const moves = all.filter((e) => e.meta.to).map((e) => `${e.kind}:${e.meta.from}→${e.meta.to}`);
+  const expected = ["moved:planning→in_progress", "submitted:in_progress→review", "moved:review→in_progress", "submitted:in_progress→review", "moved:review→in_progress", "blocked:in_progress→blocked"];
 
-  // --- A message from the Spec tab is logged to Activity (with the agent's answer).
+  check("every column change is in Activity", moves.join(" ") === expected.join(" "), moves.join(" "));
+  const selected = (tab: string) => js<boolean>(`document.querySelector('.tabs [data-tab=${tab}]')?.getAttribute('aria-selected') === 'true'`);
+
+  // --- A message from the Spec tab switches to the Transcript, and stays out of Activity.
   await go(`#/board/${project.id}/ticket/${key}`);
   await until("spec tab", () => exists(".spec-doc"), 5000);
-  check("composer says Spec messages show in Activity", await js<boolean>(`document.querySelector('[data-testid=composer-hint]')?.textContent.includes('Shows in Activity')`));
+  check("the composer no longer says where the message goes", !(await js<boolean>(`/Shows in Activity|Transcript only/.test(document.querySelector('.composer')?.textContent ?? '')`)));
+  const entriesBefore = (await activity()).length;
   await type(".composer-input", "Keep System as the default.");
   await cmdEnter();
-  await until("message logged", async () => (await activity()).some((e) => e.kind === "message" && e.body.includes("Keep System")), 10000);
-  await until("answer logged", async () => (await activity()).some((e) => e.kind === "answer"), 15000);
+  check("sending from Spec opens the Transcript", await until("transcript selected", () => selected("transcript"), 5000));
+  await until("transcript shows the message", () => js<boolean>(`document.querySelector('.detail-body')?.textContent.includes('Keep System as the default.')`), 10000);
+  await until("the agent answered", () => js<boolean>(`document.querySelector('.detail-body')?.textContent.includes('(dummy chat) You said')`), 15000);
   await idle(key);
+  await shot("4-transcript-after-send");
 
-  // --- One from the Transcript isn't.
-  await go(`#/board/${project.id}/ticket/${key}/transcript`);
-  await until("transcript composer hint", () => js<boolean>(`document.querySelector('[data-testid=composer-hint]')?.textContent.includes('Transcript only')`), 5000);
-  await type(".composer-input", "Transcript-only aside: no need to log this.");
+  // --- And one from the Activity tab does the same.
+  await go(`#/board/${project.id}/ticket/${key}/activity`);
+  await until("activity list", () => exists(".activity-list"), 5000);
+  await type(".composer-input", "Ask again later about Light.");
   await cmdEnter();
-  await until("transcript shows it", () => js<boolean>(`document.querySelector('.detail-body')?.textContent.includes('Transcript-only aside')`), 10000);
+  check("sending from Activity opens the Transcript", await until("transcript selected", () => selected("transcript"), 5000));
   await idle(key);
   const after = await activity();
-  check("Spec message is in Activity", after.some((e) => e.kind === "message" && e.body.includes("Keep System")));
-  check("Transcript message is not in Activity", !after.some((e) => e.body.includes("Transcript-only aside")));
+  check("neither message nor any answer went into Activity", !after.some((e) => e.kind === "message" || e.kind === "answer" || e.body.includes("Keep System") || e.body.includes("Ask again")), `${entriesBefore} → ${after.length}`);
   await go(`#/board/${project.id}/ticket/${key}/activity`);
-  await until("message bubble", () => exists(".activity-message"), 5000);
-  check("Activity tab shows the message, not the aside", await js<boolean>(`(() => { const t = document.querySelector('.activity').textContent; return t.includes('Keep System') && !t.includes('Transcript-only aside'); })()`));
-  await shot("4-activity-messages");
-  await go(`#/board/${project.id}/ticket/${key}/transcript`);
-  await Bun.sleep(300);
-  await shot("5-transcript-aside");
+  await until("activity list", () => exists(".activity-list"), 5000);
+  await shot("5-activity-after");
 
   // --- Details: an edit that loses a race with another revision asks Reload / Overwrite.
   await go(`#/board/${project.id}/ticket/${key}/details`);

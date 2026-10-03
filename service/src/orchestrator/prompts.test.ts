@@ -37,7 +37,7 @@ const SPEC = ["read_spec", "edit_spec", "update_spec"];
 const TOOLS: Record<RunKind, string[]> = {
   plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
   work: ["post_note", ...SPEC, "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
-  review: ["post_note", "read_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
+  review: ["post_note", "read_spec", "edit_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
   complete: ["post_note", ...SPEC, ...BOARD, ...CONFIG_READ],
   conductor: ["post_note", ...SPEC, "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
@@ -144,9 +144,10 @@ describe("systemPrompt tool references", () => {
       const s = specOf(sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree)));
       expect(s).not.toBeNull();
       expect(s).toContain("`read_spec`");
-      // review runs read the spec but get no edit tools or image guidance
-      expect(s!.includes("`edit_spec`")).toBe(kind !== "review");
-      expect(s!.includes("This run reads the spec but doesn't change it.")).toBe(kind === "review");
+      // every run can edit_spec; review runs only add findings under Open questions, never update_spec, and get no image guidance
+      expect(s).toContain("`edit_spec`");
+      expect(s!.includes("`update_spec`")).toBe(kind !== "review");
+      expect(s!.includes("it may only add what the review found")).toBe(kind === "review");
       // only plan runs are pointed at update_spec for the first full spec
       expect(s!.includes("use it to write the first full spec")).toBe(kind === "plan");
       // the submit note is named only where the run can call submit_for_review
@@ -195,19 +196,16 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).not.toContain("Commit your work to this branch");
   });
 
-  test("a plan run tells the agent its last message is the Activity answer only when the message was logged", () => {
-    const rule = "your last message goes there as your answer";
-    expect(sys("plan", ticket({ status: "planning" }), { logged: true })).toContain(rule);
-    expect(sys("plan", ticket({ status: "planning" }), { logged: false })).not.toContain(rule);
-    expect(sys("plan", ticket({ status: "planning" }))).not.toContain(rule);
+  test("plan and chat runs say the answer stays in the transcript, never Activity", () => {
+    expect(sys("plan", ticket({ status: "planning" }))).not.toContain("your last message goes there as your answer");
+    const chat = sys("chat", ticket({ status: "blocked" }));
+    expect(chat).toContain("Their message is in the transcript, and so is your answer.");
+    expect(chat).not.toContain("in the ticket's Activity");
   });
 
-  test("a system.plan override may use {{logged}}, and renders it", () => {
-    const draft = "Plan.{{#if logged}} Answer in one line.{{/if}}";
-    expect(promptTemplateError("system.plan", draft)).toBeNull();
-    const overrides = { "system.plan": draft };
-    expect(sys("plan", ticket({ status: "planning" }), { logged: true, overrides })).toContain("Plan. Answer in one line.");
-    expect(sys("plan", ticket({ status: "planning" }), { logged: false, overrides })).not.toContain("Answer in one line.");
+  test("a system.plan or system.chat override that uses {{logged}} is refused: the variable is gone", () => {
+    expect(promptTemplateError("system.plan", "Plan.{{#if logged}} Answer in one line.{{/if}}")).not.toBeNull();
+    expect(promptTemplateError("system.chat", "Chat.{{#if logged}} In Activity.{{/if}}")).not.toBeNull();
   });
 
   test("work runs forbid calling both block and submit_for_review", () => {

@@ -199,7 +199,7 @@ describe("built-in system prompts", () => {
     });
   }
 
-  // The Spec and Activity section shows the last few entries; a chat says where its answer goes.
+  // The Spec and Activity section shows the last few entries (older services' message entries included).
   const recent: ActivityEntry[] = [
     { id: "a1", sessionId: "s1", ticketId: "t1", kind: "changes_requested", author: "agent", body: "Icon is\nwrong", meta: { by: "agent", round: 1, commit: "0123456789abcdef" }, createdAt: 0 },
     { id: "a2", sessionId: "s1", ticketId: "t1", kind: "message", author: "human", body: "Use the moon", meta: {}, createdAt: 0 },
@@ -207,11 +207,11 @@ describe("built-in system prompts", () => {
   test("work with recent activity", () => {
     expect(systemPrompt({ kind: "work", project, ticket: ticket(), session, activity: recent })).toMatchSnapshot();
   });
-  test("chat about a blocked ticket from the Activity tab (logged)", () => {
-    expect(systemPrompt({ kind: "chat", project, ticket: ticket({ status: "blocked" }), session, activity: recent, logged: true })).toMatchSnapshot();
+  test("chat about a blocked ticket with recent activity", () => {
+    expect(systemPrompt({ kind: "chat", project, ticket: ticket({ status: "blocked" }), session, activity: recent })).toMatchSnapshot();
   });
-  test("plan feedback from the Spec tab (logged)", () => {
-    expect(systemPrompt({ kind: "plan", project, ticket: ticket({ status: "planning" }), session, activity: recent, logged: true })).toMatchSnapshot();
+  test("plan feedback with recent activity", () => {
+    expect(systemPrompt({ kind: "plan", project, ticket: ticket({ status: "planning" }), session, activity: recent })).toMatchSnapshot();
   });
 
   test("chat without a ticket", () => {

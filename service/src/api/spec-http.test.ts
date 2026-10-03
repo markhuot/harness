@@ -84,7 +84,7 @@ describe("spec + Activity end to end (dummy driver)", () => {
 
     // Activity: typed entries, each review with its round and the commit it saw.
     const kinds = done.activity.map((e) => e.kind);
-    expect(kinds).toEqual(["note", "submitted", "changes_requested", "note", "submitted", "review_approved"]);
+    expect(kinds).toEqual(["moved", "note", "submitted", "changes_requested", "note", "submitted", "review_approved"]);
     const [round1, round2] = done.activity.filter((e) => e.kind === "changes_requested" || e.kind === "review_approved");
     expect(round1!.meta).toMatchObject({ by: "agent", round: 1 });
     expect(round2!.meta).toMatchObject({ by: "agent", round: 2 });
@@ -108,9 +108,10 @@ describe("spec + Activity end to end (dummy driver)", () => {
     // The human approves: it lands (no branch, so the completion only wraps up) and says so.
     await client.humanReview(t.key, { decision: "approve", notes: "" });
     const landed = await idle(client, t.key, (d) => d.ticket.status === "done");
-    expect(landed.activity.slice(-2).map((e) => [e.kind, e.body])).toEqual([
-      ["approved", "Approved."],
-      ["note", "Completed."],
+    expect(landed.activity.slice(-3).map((e) => [e.kind, e.body, e.meta.to])).toEqual([
+      ["approved", "Approved.", undefined],
+      ["note", "Completed.", undefined],
+      ["moved", "Completed", "done"],
     ]);
   }, 30_000);
 });
@@ -166,34 +167,14 @@ describe("spec endpoints", () => {
   });
 });
 
-describe("POST /tickets/:key/messages log", () => {
-  async function blocked() {
+describe("POST /tickets/:key/messages and Activity", () => {
+  test("an older app's log: true puts neither the message nor the agent's answer in Activity", async () => {
     const { client, project } = await boot();
     const t = await client.createTicket({ projectId: project.id, spec: "/block Which color?", title: "Ask", start: true });
     await idle(client, t.key, (d) => d.ticket.status === "blocked");
-    return { client, t };
-  }
-
-  test("log: true puts the message and the answer in Activity", async () => {
-    const { client, t } = await blocked();
-    await client.sendMessage(t.key, "Blue, please", { log: true });
-    const d = await idle(client, t.key, (x) => x.activity.some((e) => e.kind === "answer"));
-    expect(d.activity.slice(-2).map((e) => [e.kind, e.author, e.body])).toEqual([
-      ["message", "human", "Blue, please"],
-      ["answer", "agent", '(dummy chat) You said: "Blue, please"'],
-    ]);
-  });
-
-  test("without log, neither goes into Activity", async () => {
-    const { client, t } = await blocked();
     const before = (await client.getTicket(t.key)).activity.length;
-    await client.sendMessage(t.key, "Blue, please");
+    await client.request("POST", `/tickets/${t.key}/messages`, { text: "Blue, please", log: true });
     const d = await idle(client, t.key, (x) => x.runs.some((r) => r.kind === "chat" && r.status === "succeeded"));
     expect(d.activity).toHaveLength(before);
-  });
-
-  test("log must be a boolean", async () => {
-    const { client, t } = await blocked();
-    await expect(client.request("POST", `/tickets/${t.key}/messages`, { text: "hi", log: "yes" })).rejects.toMatchObject({ status: 400 });
   });
 });

@@ -22,6 +22,14 @@ const statuses = (h: ReturnType<typeof setup>, sessionId: string) =>
     .filter((e) => e.content.type === "status")
     .map((e) => (e.content as { text: string }).text);
 
+/** The agent's last text in the transcript: its answer to a message. */
+const lastText = (h: ReturnType<typeof setup>, sessionId: string) =>
+  h.store.transcript
+    .list(sessionId)
+    .filter((e) => e.role === "assistant" && e.content.type === "text")
+    .map((e) => (e.content as { text: string }).text)
+    .at(-1);
+
 const runKinds = (h: ReturnType<typeof setup>, t: Ticket) => h.store.runs.listBySession(t.sessionId).map((r) => `${r.kind}:${r.status}`);
 
 describe("ticket lifecycle", () => {
@@ -109,7 +117,7 @@ describe("ticket lifecycle", () => {
     const workTools = h.driver.calls[0]!.toolNames;
 
     // The message moves nothing: the agent decides.
-    cur = await h.orch.sendMessage(t.key, "Postgres /unblock /submit", { log: true });
+    cur = await h.orch.sendMessage(t.key, "Postgres /unblock /submit");
     expect(cur.status).toBe("blocked");
     await h.orch.idle();
     const chat = h.driver.calls[1]!;
@@ -127,8 +135,7 @@ describe("ticket lifecycle", () => {
     expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded", "review:succeeded"]);
     // One agent answer: the submit note, not the chat's last text as well (then the reviewer's).
     const after = h.orch.activity(t.key).map((s) => `${s.kind}:${s.author}:${s.body}`);
-    expect(after.slice(after.indexOf("message:human:Postgres /unblock /submit"))).toEqual([
-      "message:human:Postgres /unblock /submit",
+    expect(after.slice(after.indexOf("unblocked:agent:answered"))).toEqual([
       "unblocked:agent:answered",
       "submitted:agent:Done from chat.",
       "review_approved:agent:LGTM",
@@ -144,8 +151,8 @@ describe("ticket lifecycle", () => {
     await h.orch.idle();
     const d = h.orch.ticketDetail(t.key);
     expect(d.ticket.status).toBe("review");
-    const sys = d.activity.find((s) => s.author === "system")!;
-    expect(sys.body).toBe('Hello from fake! You said: "quiet /nosubmit"');
+    const sys = d.activity.find((s) => s.kind === "submitted")!;
+    expect(sys).toMatchObject({ author: "system", body: 'Hello from fake! You said: "quiet /nosubmit"' });
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded"]);
   });
 
@@ -157,7 +164,7 @@ describe("ticket lifecycle", () => {
     h.driver.release();
     await h.orch.idle();
     // Only the second run's end triggers the submit
-    const sys = h.orch.activity(t.key).filter((s) => s.author === "system");
+    const sys = h.orch.activity(t.key).filter((s) => s.author === "system" && s.kind === "submitted");
     expect(sys.map((s) => s.body)).toEqual(['Hello from fake! You said: "second /nosubmit"']);
     expect(runKinds(h, t)).toEqual(["work:succeeded", "work:succeeded", "review:succeeded"]);
   });
@@ -174,8 +181,11 @@ describe("ticket lifecycle", () => {
     const tb = h.orch.ticketDetail(b.key).ticket;
     expect(tb.blockedReason).toBe("kaboom");
     // The detail view has no blocked callout; Activity is where the reason shows.
-    expect(h.orch.activity(a.key).map((s) => [s.kind, s.author, s.body])).toEqual([["failed", "system", "Run failed: disk full"]]);
-    expect(h.orch.activity(b.key).map((s) => s.body)).toEqual(["Run failed: kaboom"]);
+    expect(h.orch.activity(a.key).map((s) => [s.kind, s.author, s.body, s.meta.to])).toEqual([
+      ["moved", "system", "Work started", "in_progress"],
+      ["failed", "system", "Run failed: disk full", "blocked"],
+    ]);
+    expect(h.orch.activity(b.key).map((s) => s.body)).toEqual(["Work started", "Run failed: kaboom"]);
     expect(h.store.transcript.list(a.sessionId).some((e) => e.content.type === "error" && e.content.text === "disk full")).toBe(true);
   });
 
@@ -791,7 +801,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     const before = h.orch.ticketDetail(t.key).ticket;
     expect(before).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
 
-    const cur = await h.orch.sendMessage(t.key, "why a button?", { log: true });
+    const cur = await h.orch.sendMessage(t.key, "why a button?");
     expect(cur.status).toBe("review");
     expect(cur.busy).toBe(true);
     await h.orch.idle();
@@ -809,8 +819,9 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
     expect(chat.toolNames).toEqual(h.driver.calls[0]!.toolNames);
     expect(h.orch.activity(t.key).some((s) => s.kind === "blocked")).toBe(false);
-    // The exchange reads in Activity: the question, then the agent's answer.
-    expect(h.orch.activity(t.key).slice(-2).map((s) => `${s.kind}:${s.author}:${s.body}`)).toEqual(["message:human:why a button?", "answer:agent:Chatting about: why a button?."]);
+    // The exchange is in the transcript only: neither the question nor the answer goes into Activity.
+    expect(h.orch.activity(t.key).filter((s) => s.kind === "message" || s.kind === "answer")).toEqual([]);
+    expect(lastText(h, t.sessionId)).toBe("Chatting about: why a button?.");
   });
 
   test("in review: a chat that changed the work submits again, and the reviews start over with one reviewer", async () => {
@@ -848,10 +859,10 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "Postgres /resume", { log: true });
+    await h.orch.sendMessage(t.key, "Postgres /resume");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
-    expect(h.orch.activity(t.key).at(-1)!.body).toContain(`Refused: ${t.key} is blocked, not in review`);
+    expect(lastText(h, t.sessionId)).toContain(`Refused: ${t.key} is blocked, not in review`);
   });
 
   test("in review: block asks the human and starts the reviews over", async () => {
@@ -869,12 +880,13 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "what are the options? /ask", { log: true });
+    await h.orch.sendMessage(t.key, "what are the options? /ask");
     await h.orch.idle();
     // No unblock: no auto-block on the trailing question and no auto-submit either.
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
     expect(runKinds(h, t)).toEqual(["work:succeeded", "chat:succeeded"]);
-    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "answer", author: "agent", body: "Which color should it be?" });
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "blocked", body: "Which database?" });
+    expect(lastText(h, t.sessionId)).toBe("Which color should it be?");
   });
 
   test("in blocked: once the agent unblocks, the chat ends like a work run (auto-submit, or block on a question)", async () => {
@@ -884,7 +896,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     await h.orch.sendMessage(a.key, "Postgres /unblock");
     await h.orch.idle();
     expect(h.orch.ticketDetail(a.key).ticket).toMatchObject({ status: "review", blockedReason: null });
-    expect(h.orch.activity(a.key).find((s) => s.author === "system")!.body).toBe("Chatting about: Postgres /unblock.");
+    expect(h.orch.activity(a.key).find((s) => s.kind === "submitted")).toMatchObject({ author: "system", body: "Chatting about: Postgres /unblock." });
 
     const b = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
@@ -903,10 +915,10 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
 
     const r = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
-    await h.orch.sendMessage(r.key, "looks good /unblock", { log: true });
+    await h.orch.sendMessage(r.key, "looks good /unblock");
     await h.orch.idle();
     expect(h.orch.ticketDetail(r.key).ticket.status).toBe("review");
-    expect(h.orch.activity(r.key).at(-1)!.body).toContain(`Refused: ${r.key} is review, not blocked`);
+    expect(lastText(h, r.sessionId)).toContain(`Refused: ${r.key} is review, not blocked`);
   });
 
   test("a blocked ticket without a worktree gets one before the chat; its status doesn't change", async () => {
@@ -960,10 +972,10 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     const d = await h.orch.createTicket({ projectId: h.project.id, spec: "y" });
     await h.orch.idle();
     await h.orch.completeTicket(d.key, { skipAgent: true });
-    await h.orch.sendMessage(d.key, "one more thing /submit", { log: true });
+    await h.orch.sendMessage(d.key, "one more thing /submit");
     await h.orch.idle();
     expect(h.orch.ticketDetail(d.key).ticket.status).toBe("done");
-    expect(h.orch.activity(d.key).at(-1)!.body).toContain(`Refused: ${d.key} is done: the human re-opens it`);
+    expect(lastText(h, d.sessionId)).toContain(`Refused: ${d.key} is done: the human re-opens it`);
   });
 
   test("in done: the ticket stays done; with move it re-opens", async () => {
@@ -974,7 +986,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect((await h.orch.sendMessage(t.key, "what did you change?")).status).toBe("done");
     await h.orch.idle();
     expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
-    // A message sent without log stays out of Activity, and so does the chat's answer to it.
+    // The message stays out of Activity, and so does the chat's answer to it.
     expect(h.orch.activity(t.key).filter((s) => s.kind === "message" || s.kind === "answer")).toEqual([]);
     const cur = await h.orch.sendMessage(t.key, "change it back", { move: true });
     expect(cur).toMatchObject({ status: "in_progress", agentReview: "pending", humanReview: "pending" });
@@ -989,11 +1001,11 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
       if (req.prompt.includes("/unblock")) await req.toolContext.ops.unblock(req.toolContext);
       yield { type: "error", message: "boom" };
     };
-    await h.orch.sendMessage(t.key, "hello", { log: true });
+    await h.orch.sendMessage(t.key, "hello");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:failed"]);
-    expect(h.orch.activity(t.key).slice(-2).map((s) => `${s.author}:${s.body}`)).toEqual(["human:hello", "system:Run failed: boom"]);
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ author: "system", kind: "failed", body: "Run failed: boom" });
 
     h.driver.script = null;
     const b = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
@@ -1072,13 +1084,13 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
       const edit = await req.toolContext.ops.checkPermission(req.toolContext, "Edit", { file_path: join(req.cwd, "a.ts"), old_string: "a", new_string: "b" });
       yield { type: "text", text: `edit:${edit.behavior}` };
     };
-    await h.orch.sendMessage(t.key, "can you clean dist?", { log: true });
+    await h.orch.sendMessage(t.key, "can you clean dist?");
     await h.orch.idle();
     const chat = h.driver.calls.at(-1)!;
     expect(chat.kind).toBe("chat");
     expect(chat.permissionMode).toBe("ask");
     expect(chat.grants).toEqual({ tools: ["WebFetch"], once: [{ toolName: "Bash", input: { command: "npm publish" } }] });
-    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "answer", author: "agent", body: "edit:allow" });
+    expect(lastText(h, t.sessionId)).toBe("edit:allow");
   });
 
   test("a read_only ticket's chat stays read-only", async () => {

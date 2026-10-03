@@ -269,15 +269,10 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
     /// (planning → the plan run; blocked, review, done → a chat run with the work tools).
     public var move: Bool?
-    /// true: the message also goes into the ticket's Activity, as a `message` entry, and the agent's
-    /// final answer follows as an `answer` entry. Clients send true from the Spec and Activity tabs
-    /// and false from every other tab (the Transcript shows the message either way). Default false.
-    public var log: Bool?
 
-    public init(text: String, move: Bool? = nil, log: Bool? = nil) {
+    public init(text: String, move: Bool? = nil) {
         self.text = text
         self.move = move
-        self.log = log
     }
 }
 

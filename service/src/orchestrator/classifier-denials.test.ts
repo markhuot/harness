@@ -95,7 +95,10 @@ describe("classifier denials → approval cards", () => {
     expect(cur.blockedReason).toBe("Permission needed: Bash — npx -y harness-check-pkg init");
     expect(cur.pendingApproval).toMatchObject({ toolName: "Bash", input: CALL, reason: REASON, source: "classifier", runId: work(h)[0]!.runId });
     expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work"]); // no review
-    expect(h.orch.activity(t.key).some((a) => a.kind === "permission" && a.author === "system" && a.body.endsWith(`Classifier: ${REASON}`))).toBe(true);
+    // Activity gets the one line; the classifier's reason is on the approval card and in meta.detail.
+    const asked = h.orch.activity(t.key).find((a) => a.kind === "permission" && a.author === "system")!;
+    expect(asked.body).toBe("Permission needed: Bash — npx -y harness-check-pkg init");
+    expect(asked.meta.detail).toEndWith(`Classifier: ${REASON}`);
   });
 
   test("when the agent blocked after the denial, the approval is attached to its block", async () => {
@@ -122,7 +125,11 @@ describe("classifier denials → approval cards", () => {
     expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work", "review"]);
     const bodies = h.orch.activity(t.key).map((a) => `${a.kind} ${a.author}: ${a.body}`);
     expect(bodies).toContain("submitted agent: Done without scaffolding.");
-    expect(bodies).toContain(`permission system: The classifier denied a call during this run, and the agent submitted without it:\n- Bash (npx -y harness-check-pkg init): ${REASON}`);
+    // One line in Activity; the denied calls are in meta.detail and the transcript.
+    expect(bodies).toContain("permission system: The classifier denied a call during this run, and the agent submitted without it.");
+    const list = `The classifier denied a call during this run, and the agent submitted without it:\n- Bash (npx -y harness-check-pkg init): ${REASON}`;
+    expect(h.orch.activity(t.key).find((a) => a.kind === "permission")!.meta.detail).toBe(list);
+    expect(h.store.transcript.list(t.sessionId).some((e) => e.content.type === "status" && e.content.text === list)).toBe(true);
   });
 
   test("no card when the denied call went through later in the same run", async () => {

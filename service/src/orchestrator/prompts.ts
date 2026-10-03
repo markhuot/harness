@@ -55,8 +55,6 @@ export interface PromptInfo {
   overrides?: PromptOverrides | null;
   /** The ticket's last few Activity entries, oldest first (system.spec shows them) */
   activity?: ActivityEntry[];
-  /** A human message logged to Activity started this run, so its answer is logged too (chat and plan runs) */
-  logged?: boolean;
 }
 
 /** What a review run reads (Orchestrator.reviewContext). */
@@ -128,7 +126,8 @@ function specOf(ticket: Ticket): string {
 export function activityLines(entries: readonly ActivityEntry[], max = 400): string {
   return entries
     .map((e) => {
-      const text = oneLine(e.body);
+      // A permission entry's detail (the calls the classifier denied) is on record for the reviewer.
+      const text = oneLine(e.kind === "permission" && e.meta.detail ? e.meta.detail : e.body);
       const extra = e.kind === "review_approved" || e.kind === "changes_requested" ? ` (round ${e.meta.round ?? "?"}${e.meta.commit ? `, commit ${e.meta.commit.slice(0, 12)}` : ""})` : "";
       return `* ${e.kind}${extra}, ${e.author}: ${text.length > max ? text.slice(0, max - 1) + "…" : text}`;
     })
@@ -204,7 +203,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
   const { kind, ticket, project } = info;
   switch (kind) {
     case "plan":
-      return renderPrompt("system.plan", { logged: !!info.logged }, o);
+      return renderPrompt("system.plan", {}, o);
     case "work": {
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt(
@@ -326,7 +325,6 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
           blockedReason: ticket?.blockedReason ?? "",
           review: status === "review",
           done: status === "done",
-          logged: !!info.logged,
         },
         o,
       );

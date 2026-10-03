@@ -2,6 +2,7 @@
 // (import from "@harness/shared/state"). Platform-independent: no React, DOM or native APIs.
 
 export * from "./reducer";
+export * from "./activity";
 export * from "./conductor";
 export * from "./paging";
 export * from "./models";

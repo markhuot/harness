@@ -28,3 +28,4 @@ describe("openQuestionId", () => {
     expect(openQuestionId(list.slice(1, 2), "blocked")).toBeUndefined();
   });
 });
+

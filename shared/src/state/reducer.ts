@@ -601,6 +601,13 @@ export function dependentsOf(state: State, ticket: Ticket): { key: string; ticke
   return [...out.values()].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
 }
 
+/**
+ * The Activity kinds a board card or a conductor's Tickets tab shows as the ticket's latest news
+ * (HarnessKit's ActivityRows.newsKinds): progress lines, not column moves (the card already shows
+ * its column), questions (the card shows those itself) or permission chatter.
+ */
+export const NEWS_KINDS: readonly ActivityEntry["kind"][] = ["note", "submitted", "review_approved", "changes_requested", "approved", "answer", "reopened", "failed"];
+
 /** The session's newest Activity entry, or with `kinds` the newest of those kinds. */
 export function latestActivity(state: State, sessionId: string, kinds?: readonly ActivityEntry["kind"][]): ActivityEntry | undefined {
   const list = state.activity[sessionId] ?? [];

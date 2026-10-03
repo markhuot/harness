@@ -716,6 +716,25 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 .activity-system .activity-main {
   font-size: 12px;
 }
+.activity-details-toggle {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: 2px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-text);
+  cursor: pointer;
+}
+.activity-details-toggle:hover {
+  text-decoration: underline;
+}
+.activity-details > :not(button) {
+  margin-top: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  color: var(--text-2);
+}
 .activity-card {
   flex: 1;
   min-width: 0;

@@ -509,9 +509,12 @@ export interface Attachment {
  * - review_approved / changes_requested: an agent or conductor review decision; meta.round,
  *   meta.commit (the HEAD it reviewed), meta.by
  * - approved: a human (or conductor) approved the ticket
- * - message: a human's message sent from the Spec or Activity tab (POST /messages log: true)
- * - answer: the agent's final answer to such a message
+ * - message, answer: legacy. Older services logged a human's message from the Spec or Activity
+ *   tab and the agent's reply; messages now go to the transcript only, and these are never written
  * - reopened: a done ticket went back to work; the notes
+ * - moved: the ticket changed columns and no other entry records it (a drag, Start, Completed);
+ *   meta.from / meta.to. Every column change is in Activity: an entry that records one itself
+ *   (submitted, blocked, unblocked, changes_requested, reopened, …) carries meta.from / meta.to too
  * - failed: a run failed
  * - permission: a tool approval was asked for or answered
  * - system: anything else the service records (a worktree that couldn't be made, …)
@@ -527,6 +530,7 @@ export const ACTIVITY_KINDS = [
   "message",
   "answer",
   "reopened",
+  "moved",
   "failed",
   "permission",
   "system",
@@ -547,6 +551,14 @@ export interface ActivityMeta {
   note?: string;
   /** submitted: the spec revision the work was submitted at */
   specRevision?: number;
+  /**
+   * The full text when the body is its one-line summary: a review's request-changes notes, the
+   * calls the classifier denied during a run
+   */
+  detail?: string;
+  /** The column move this entry records: where the ticket was, and where it went */
+  from?: TicketStatus;
+  to?: TicketStatus;
 }
 
 export interface ActivityEntry {
@@ -555,7 +567,7 @@ export interface ActivityEntry {
   ticketId: string | null;
   kind: ActivityKind;
   author: ActivityAuthor;
-  /** Short markdown, e.g. "Fixed the button color; tests pass" */
+  /** One short line of markdown, e.g. "Fixed the button color; tests pass" (older entries can be longer) */
   body: string;
   meta: ActivityMeta;
   createdAt: number;
@@ -1223,12 +1235,6 @@ export interface MessageBody {
    * (planning → the plan run; blocked, review, done → a chat run with the work tools).
    */
   move?: boolean;
-  /**
-   * true: the message also goes into the ticket's Activity, as a `message` entry, and the agent's
-   * final answer follows as an `answer` entry. Clients send true from the Spec and Activity tabs
-   * and false from every other tab (the Transcript shows the message either way). Default false.
-   */
-  log?: boolean;
 }
 
 /** The `data` of PATCH /tickets/:key's 409 when baseRevision isn't the current spec revision. */

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { FOLLOW_LATEST, scrubTo, shownRevision, stepRevision } from "./specHistory";
-import { composerLog } from "./composer";
 
 describe("spec history", () => {
   test("following shows the newest revision, and moves with a new one", () => {
@@ -35,16 +34,5 @@ describe("spec history", () => {
 
   test("a pin past the newest (a stale list) shows the newest", () => {
     expect(shownRevision({ pinned: 9 }, 4)).toBe(4);
-  });
-});
-
-describe("composerLog", () => {
-  test("Spec and Activity log the message; every other tab doesn't", () => {
-    expect(composerLog("spec").log).toBe(true);
-    expect(composerLog("activity").log).toBe(true);
-    for (const tab of ["transcript", "details", "children", "agents", "browser", "plugin:git:changes", "agent:toolu_1"] as const) {
-      expect(composerLog(tab).log).toBe(false);
-    }
-    expect(composerLog("spec").destination).not.toBe(composerLog("transcript").destination);
   });
 });

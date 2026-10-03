@@ -15,6 +15,7 @@ import {
   hasCustomDriver,
   hideOnBoard,
   latestActivity,
+  NEWS_KINDS,
   plainText,
   progressOf,
   scopeOf,
@@ -352,7 +353,7 @@ const TicketCard = memo(function TicketCard({
   const children = isConductor(t) ? childrenOf(state, t.id) : [];
   const progress = isConductor(t) ? progressOf(children) : null;
   const dim = dimOnBoard(t);
-  const latest = latestActivity(state, t.sessionId);
+  const latest = latestActivity(state, t.sessionId, NEWS_KINDS);
   const customDriver = hasCustomDriver(state, t);
   const project = state.projects[t.projectId];
   const parent = t.parentId ? state.tickets[t.parentId] : undefined;

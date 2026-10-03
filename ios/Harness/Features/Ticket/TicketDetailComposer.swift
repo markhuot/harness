@@ -2,17 +2,18 @@ import HarnessKit
 import SwiftUI
 
 /// The message composer under every tab: @file mentions and /commands,
-/// a placeholder for the ticket's state and where the message shows (red while it's blocked on the
-/// human), the switch that moves
+/// a placeholder for the ticket's state (red while it's blocked on the human), the switch that moves
 /// the ticket first and the hint about what a message does. The switch and hint show only while
 /// writing: once the field is focused, and after a blur only while it holds a message. A message
-/// sent from the Spec or Activity tab also goes into Activity (`log`); from any other tab it goes
-/// to the agent and the Transcript only. The field and send button are Liquid Glass floating over
-/// the tab, with no bar of their own.
+/// goes to the agent and shows in the Transcript, never in Activity, so a send that goes through
+/// opens the Transcript from any tab (Tabs.tabAfterSend). The field and send button
+/// are Liquid Glass floating over the tab, with no bar of their own.
 struct TicketDetailComposer: View {
     let ticket: Ticket
-    /// The tab on screen, which decides whether the message is logged
+    /// The tab on screen
     let tab: TicketTab
+    /// Shows a tab of the ticket: the Transcript once a message went through
+    let onTab: (TicketTab) -> Void
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
@@ -56,7 +57,7 @@ struct TicketDetailComposer: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 MentionTextEditor(text: $text,
-                                  placeholder: TicketDetailLogic.composerPlaceholder(ticket, tab: tab),
+                                  placeholder: TicketDetailLogic.composerPlaceholder(ticket),
                                   ticketKey: ticket.key,
                                   minHeight: 0,
                                   maxLines: 6,
@@ -108,17 +109,18 @@ struct TicketDetailComposer: View {
         let body = TicketDetailLogic.trim(text)
         guard !body.isEmpty, !sending else { return }
         let key = ticket.key
-        let log = TicketDetailLogic.composerLogs(tab)
         sending = true
         Task {
             // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
-            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move, log: log) }
+            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move) }
             sending = false
             if ok != nil {
                 haptic(.success)
                 text = ""
                 moveFirst = false
             }
+            let next = Tabs.tabAfterSend(tab, sent: ok != nil)
+            if next != tab { onTab(next) }
         }
     }
 }

@@ -70,12 +70,12 @@ export function ticketTabFrom(t: string | undefined | null): TicketTab | null {
 }
 
 /**
- * Whether a message sent from this tab also goes into Activity (MessageBody.log): only from the
- * Spec and Activity tabs, where the human is reading the ticket's record rather than the agent's
- * transcript.
+ * The tab to show once the composer sent a message: the Transcript, where the message and the
+ * agent's answer appear (messages never go into Activity). A send that failed stays put, with the
+ * draft still in the composer.
  */
-export function logsMessages(tab: TicketTab): boolean {
-  return tab === "spec" || tab === "activity";
+export function tabAfterSend(tab: TicketTab, sent: boolean): TicketTab {
+  return sent ? "transcript" : tab;
 }
 
 /** The live dot's tooltip on the Agents & tasks tab. */

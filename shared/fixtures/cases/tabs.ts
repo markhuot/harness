@@ -2,7 +2,6 @@
 import {
   effectiveTab,
   isTicketTab,
-  logsMessages,
   nextTab,
   openingTab,
   parsePluginTab,
@@ -11,6 +10,7 @@ import {
   RENAMED_TABS,
   showsAgentsTab,
   subagentTabRoute,
+  tabAfterSend,
   TAB_LABEL,
   TICKET_TABS,
   tabStripTab,
@@ -74,16 +74,15 @@ export const parseSubagentTabCases = cases(parseSubagentTab, tabStrings);
 export const tabStripTabCases = cases((t: string) => tabStripTab(t as TicketTab), tabStrings);
 export const isTicketTabCases = cases(isTicketTab, { ...tabStrings, null: null });
 export const ticketTabFromCases = cases(ticketTabFrom, { ...tabStrings, null: null, "renamed with trailing space": "summaries " });
-export const logsMessagesCases = cases((t: string) => logsMessages(t as TicketTab), {
-  spec: "spec",
-  activity: "activity",
-  children: "children",
-  transcript: "transcript",
-  agents: "agents",
-  browser: "browser",
-  details: "details",
-  plugin: "plugin:git:changes",
-  agent: "agent:toolu_1",
+export const tabAfterSendCases = cases(({ tab, sent }: { tab: string; sent: boolean }) => tabAfterSend(tab as TicketTab, sent), {
+  "sent from spec": { tab: "spec", sent: true },
+  "sent from activity": { tab: "activity", sent: true },
+  "sent from transcript": { tab: "transcript", sent: true },
+  "sent from a plugin tab": { tab: "plugin:git:changes", sent: true },
+  "sent from a sub-agent": { tab: "agent:toolu_1", sent: true },
+  "failed from spec": { tab: "spec", sent: false },
+  "failed from activity": { tab: "activity", sent: false },
+  "failed from a plugin tab": { tab: "plugin:git:changes", sent: false },
 });
 
 export const showsAgentsTabCases = cases(showsAgentsTab, {

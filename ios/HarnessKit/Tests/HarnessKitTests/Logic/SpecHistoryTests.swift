@@ -128,6 +128,30 @@ struct ActivityRowsTests {
         #expect(ActivityRows.body(noMeta) == "")
     }
 
+    @Test func headingEndsWithTheColumnTheEntryMovedTheTicketTo() {
+        #expect(ActivityRows.heading(Self.e(.moved, author: .human, body: "", meta: ActivityMeta(from: .review, to: .done))) == "Moved → Done")
+        #expect(ActivityRows.heading(Self.e(.submitted, meta: ActivityMeta(specRevision: 5, from: .inProgress, to: .review))) == "Submitted for review → Review")
+        #expect(ActivityRows.heading(Self.e(.blocked, meta: ActivityMeta(to: .blocked))) == "Needs your answer → Blocked")
+        #expect(ActivityRows.heading(Self.e(.unblocked, meta: ActivityMeta(from: .blocked, to: .inProgress))) == "Picked back up → In progress")
+        // No `to` (a note, or an entry from an older service): the title alone, even with a `from`.
+        #expect(ActivityRows.heading(Self.e(.submitted)) == "Submitted for review")
+        #expect(ActivityRows.heading(Self.e(.note, meta: ActivityMeta(from: .review))) == "Agent")
+        #expect(ActivityRows.withMove("Asked you", Self.e(.blocked, meta: ActivityMeta(to: .blocked))) == "Asked you → Blocked")
+        // A bare move isn't news for the board card, which already shows the column.
+        #expect(!ActivityRows.newsKinds.contains(.moved))
+    }
+
+    fileprivate struct DetailInput: Decodable, Sendable {
+        let body: String
+        let meta: ActivityMeta
+    }
+
+    /// Show details reveals what the one-line body doesn't already say (activityDetailCases).
+    @Test(arguments: Fixture.cases("activity", "activityDetailCases", input: DetailInput.self, output: String?.self))
+    fileprivate func fullText(_ c: Fixture.Case<DetailInput, String?>) {
+        #expect(ActivityRows.fullText(Self.e(.note, body: c.input.body, meta: c.input.meta)) == c.output)
+    }
+
     @Test func onlyTheNewestBlockOfABlockedTicketIsOpen() {
         let old = Self.e(.blocked, id: "b1")
         let new = Self.e(.blocked, id: "b2")
@@ -150,24 +174,15 @@ struct ActivityRowsTests {
     }
 }
 
-@Suite("Composer log choice")
-struct ComposerLogTests {
+@Suite("Composer")
+struct ComposerTests {
     static let ticket = Ticket(id: "t", key: "T-1", projectId: "p", title: "t", spec: "", status: .blocked, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
 
-    @Test(arguments: [
-        (TicketTab.spec, true), (.activity, true), (.transcript, false), (.details, false), (.children, false),
-        (.agents, false), (.browser, false), (.changes, false), (TicketTab("agent:toolu_1"), false), (TicketTab("plugin:notes:list"), false),
-    ] as [(TicketTab, Bool)])
-    func logsFromSpecAndActivityOnly(_ tab: TicketTab, _ logs: Bool) {
-        #expect(TicketDetailLogic.composerLogs(tab) == logs)
-    }
-
-    @Test func placeholderSaysWhereTheMessageShows() {
-        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .spec) == "In Activity · Answer the agent…")
-        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket, tab: .transcript) == "Transcript only · Answer the agent…")
+    @Test func placeholderSaysWhatAMessageDoes() {
+        #expect(TicketDetailLogic.composerPlaceholder(Self.ticket) == "Answer the agent…")
         var review = Self.ticket
         review.status = .review
-        #expect(TicketDetailLogic.composerPlaceholder(review, tab: .activity) == "In Activity · Ask about the work, or ask for a change…")
+        #expect(TicketDetailLogic.composerPlaceholder(review) == "Ask about the work, or ask for a change…")
     }
 }
 

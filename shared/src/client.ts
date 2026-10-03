@@ -207,9 +207,9 @@ export class HarnessClient {
   submitTicket(key: string, body: SubmitTicketBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
-  /** `log`: the message (and the agent's answer) also go into Activity: send true from the Spec and Activity tabs. */
-  sendMessage(key: string, text: string, opts: { move?: boolean; log?: boolean } = {}) {
-    const body: MessageBody = { text, ...(opts.move ? { move: true } : {}), ...(opts.log ? { log: true } : {}) };
+  /** The message goes to the agent and the transcript. */
+  sendMessage(key: string, text: string, opts: { move?: boolean } = {}) {
+    const body: MessageBody = { text, ...(opts.move ? { move: true } : {}) };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {

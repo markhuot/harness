@@ -31,6 +31,11 @@ private struct NextInput: Decodable, Sendable {
     let delta: Int
 }
 
+private struct AfterSendInput: Decodable, Sendable {
+    let tab: TicketTab
+    let sent: Bool
+}
+
 @Suite("tabs.ts parity")
 struct TabsTests {
     @Test func ticketTabsMatchTSOrder() throws {
@@ -93,9 +98,10 @@ struct TabsTests {
         #expect(Tabs.ticketTabFrom(c.input) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("tabs", "logsMessagesCases", input: TicketTab.self, output: Bool.self))
-    func logsMessages(_ c: Fixture.Case<TicketTab, Bool>) {
-        #expect(Tabs.logsMessages(c.input) == c.output)
+    /// A sent message opens the Transcript from any tab; a failed send stays put.
+    @Test(arguments: Fixture.cases("tabs", "tabAfterSendCases", input: AfterSendInput.self, output: TicketTab.self))
+    fileprivate func tabAfterSend(_ c: Fixture.Case<AfterSendInput, TicketTab>) {
+        #expect(Tabs.tabAfterSend(c.input.tab, sent: c.input.sent) == c.output)
     }
 
     @Test(arguments: Fixture.cases("tabs", "effectiveTabCases", input: EffectiveInput.self, output: TicketTab.self))

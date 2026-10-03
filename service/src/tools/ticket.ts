@@ -9,8 +9,11 @@ const IMAGES = `Images and videos: write them as markdown images pointing at loc
 export const postNote = defineTool<{ note: string }>({
   name: "post_note",
   description:
-    "Add a note to the ticket's Activity. It MUST be one short line: what you changed and why (\"I changed X because Y\"). It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning MUST go in the spec (keep it current with edit_spec) or stay in the transcript. Does not change the ticket status.",
-  inputSchema: schema({ note: { type: "string", minLength: 1, description: 'Markdown, one short line (MUST): what changed and why, e.g. "Fixed the retry backoff because runs hammered the API."' } }, ["note"]),
+    "Add a note to the ticket's Activity: what you changed and why (\"I changed X because Y\"), or where long work stands. Keep it to one short line, 400 characters or less, so it scans quickly. Activity shows only the first line; anything after it sits behind Show details, which the human may never open, so the first line MUST say what happened on its own. It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning goes in the spec (keep it current with edit_spec) or stays in the transcript. Does not change the ticket status.",
+  inputSchema: schema(
+    { note: { type: "string", minLength: 1, description: 'Markdown, ideally one line of 400 characters or less; the first line is all Activity shows. E.g. "Fixed the retry backoff because runs hammered the API."' } },
+    ["note"],
+  ),
   async run({ note }, ctx) {
     await ctx.ops.postNote(ctx, note);
     return "Note added to Activity.";
@@ -118,10 +121,14 @@ export const resumeWork = defineTool<{ note?: string }>({
 const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:
-    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, verification, screenshots). Moves the ticket to Review with a note on this round only: one short line (MUST) on what changed since the last submit and why, not a recap of the spec. Make no further changes after calling it.",
+    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, verification, screenshots). Moves the ticket to Review with a note on this round only: one short line (400 characters or less) on what changed since the last submit and why, not a recap of the spec. Activity shows only its first line, so that line MUST stand on its own. Make no further changes after calling it.",
   inputSchema: schema(
     {
-      note: { type: "string", minLength: 1, description: "This round only, one short line (MUST): what changed and why, e.g. \"Retried failed uploads because flaky networks dropped them; tests pass.\" Reasoning goes in the spec." },
+      note: {
+        type: "string",
+        minLength: 1,
+        description: "This round only, ideally one line of 400 characters or less (Activity shows only the first line): what changed and why, e.g. \"Retried failed uploads because flaky networks dropped them; tests pass.\" Reasoning goes in the spec.",
+      },
       spec_is_up_to_date: {
         type: "boolean",
         description: "Required, and must be true: the spec already describes the finished work (its Status, decisions, verification and screenshots). Bring it up to date with edit_spec or update_spec first.",
@@ -175,7 +182,11 @@ export const reviewDecision = defineTool<{ decision: "approve" | "request_change
   inputSchema: schema(
     {
       decision: { type: "string", enum: ["approve", "request_changes"], description: "Your verdict." },
-      notes: { type: "string", description: "Review notes. Required detail when requesting changes; when approving, one short line (MUST) on what this round confirmed." },
+      notes: {
+        type: "string",
+        description:
+          'Review notes for this round. Activity shows only the first line, and the human may never open the rest, so the first line MUST say the outcome on its own (e.g. "Approved, with three open questions in the spec." or "Changes requested: two bugs in the retry path."). Put the detail on the lines after it: each problem with file, line and the expected fix when requesting changes; what you confirmed and any nits when approving.',
+      },
     },
     ["decision", "notes"],
   ),

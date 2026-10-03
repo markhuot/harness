@@ -296,3 +296,24 @@ struct ProtocolRoundTripTests {
         }
     }
 }
+
+@Suite("Activity meta detail")
+struct ActivityMetaDetailTests {
+    func decode(_ json: String) throws -> ActivityMeta {
+        try JSONDecoder().decode(ActivityMeta.self, from: Data(json.utf8))
+    }
+
+    @Test func decodesTheFullTextWhenPresent() throws {
+        let m = try decode(#"{"round":2,"by":"agent","detail":"All the notes"}"#)
+        #expect(m.detail == "All the notes")
+        #expect(m.round == 2)
+        #expect(try jsonEqual(Data(#"{"round":2,"by":"agent","detail":"All the notes"}"#.utf8), JSONEncoder().encode(m)))
+    }
+
+    /// Entries from older services carry no detail, and must still decode and re-encode without one.
+    @Test func olderEntriesWithoutItStillDecode() throws {
+        let m = try decode(#"{"round":1,"commit":null}"#)
+        #expect(m.detail == nil)
+        #expect(try jsonEqual(Data(#"{"round":1,"commit":null}"#.utf8), JSONEncoder().encode(m)))
+    }
+}
