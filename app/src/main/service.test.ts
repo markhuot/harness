@@ -389,9 +389,10 @@ describe("reloadToken", () => {
 /**
  * A packaged app (resources/harness.json → the compiled executable) with a fake SMAppService login
  * item. "launchd" serves /health while the item is enabled; `legacy` is a plist an older
- * Harness.app wrote, which `service uninstall` removes.
+ * Harness.app wrote, which `service uninstall` removes. `held` is launchd holding the job's spawn
+ * (the gui domain in on-demand-only mode): it answers only once `service start` kickstarts it.
  */
-function packaged(o: { item?: LoginItemStatus; legacy?: boolean; approveAfterChecks?: number; launchdDown?: boolean } = {}) {
+function packaged(o: { item?: LoginItemStatus; legacy?: boolean; approveAfterChecks?: number; launchdDown?: boolean; held?: boolean } = {}) {
   const root = tempDir("harness-app-pkg-");
   const app = join(root, "Resources/app");
   mkdirSync(join(app, "resources"), { recursive: true });
@@ -412,6 +413,7 @@ case "$*" in
     exit 3;;
   "service uninstall --json") rm -f ${root}/legacy; echo '{"ok":true}';;
   "service restart --json") echo '{"ok":true}';;
+  "service start --json") touch ${root}/kickstarted; echo '{"ok":true}';;
   *) exit 2;;
 esac
 `,
@@ -448,7 +450,7 @@ esac
   });
   const fetch = (async () => {
     if (childUp) return Response.json({ data: { pid: 7 } });
-    if (item === "enabled" && !o.launchdDown) return Response.json({ data: { pid: 55 } });
+    if (item === "enabled" && !o.launchdDown && (!o.held || existsSync(join(root, "kickstarted")))) return Response.json({ data: { pid: 55 } });
     throw new Error("ECONNREFUSED");
   }) as unknown as typeof globalThis.fetch;
   const m = new ServiceManager({ appRoot: app, exeDir: join(root, "MacOS"), env: {}, child, fetch, healthTimeoutMs: 300, approvalTimeoutMs: 300, loginItem });
@@ -475,6 +477,23 @@ describe("ServiceManager in a packaged app (SMAppService login item)", () => {
     expect(await p.m.connect()).toMatchObject({ mode: "login", pid: 55, token: "t" });
     expect(p.spawned).toEqual([]);
     expect(p.calls()).toEqual(["service status --json"]);
+  });
+
+  test("an enabled login item launchd holds back (on-demand-only mode) is kickstarted, so Retry brings it up", async () => {
+    const p = packaged({ item: "enabled", held: true });
+    expect(await p.m.connect()).toMatchObject({ mode: "login", pid: 55 });
+    expect(p.calls()).toEqual(["service status --json", "service start --json"]);
+    expect(p.spawned).toEqual([]);
+  });
+
+  test("Start at login while launchd holds RunAtLoad: kickstarted after registering", async () => {
+    const p = packaged({ held: true });
+    await p.m.connect();
+    const res = await p.m.setMode("login");
+    expect(res.error).toBeUndefined();
+    expect(res.connection).toMatchObject({ mode: "login", pid: 55 });
+    expect(p.events).toEqual(["register"]);
+    expect(p.calls()).toContain("service start --json");
   });
 
   test("a plist an older Harness.app installed moves to the bundled login item", async () => {

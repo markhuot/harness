@@ -285,6 +285,10 @@ export class Cli {
     const r = await this.launchctl("bootstrap", this.domain, this.plistPath);
     // 5 / 37: already bootstrapped (races with KeepAlive); anything else is an error
     if (r.code !== 0 && !(await this.loaded()).loaded) throw new Error(`launchctl bootstrap failed: ${r.stderr.trim() || r.code}`);
+    // RunAtLoad isn't a demand: while the gui domain is in on-demand-only mode (left behind by a
+    // logout that was cancelled, an interrupted update restart) launchd holds it and the job never
+    // starts. A kickstart is a demand launchd always serves, and does nothing to a running job.
+    await this.launchctl("kickstart", `${this.domain}/${LAUNCHD_LABEL}`);
   }
 
   /**

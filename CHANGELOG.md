@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- With Start at login on, the service now comes back after you install an update. If an earlier
+  macOS update restart was interrupted, the service could stop to switch to the new version and
+  then stay stopped, and Retry couldn't start it again. Retry now starts it in that case too.
+
 ## [app-20261003.1100](https://github.com/markhuot/harness/releases/tag/app-20261003.1100) - 2026-10-03
 
 ### Added

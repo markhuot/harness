@@ -5,9 +5,9 @@ import { rmSync } from "node:fs";
 import { createHarness } from "./app";
 import { adoptBundledLaunchd } from "./bundled-launchd";
 import { readServiceJson, resolveHome, resolveHostOverride, resolvePort, writeServiceJson } from "./config";
-import { LAUNCHD_LABEL } from "./cli";
 import { executableFingerprint, sourceFingerprint } from "./code-watch";
 import { COMPILED } from "./runtime";
+import { findSupervisor, restartThrough } from "./supervisor";
 
 /** How often the service re-hashes its source to notice a merge into its checkout. */
 const CODE_WATCH_MS = 20_000;
@@ -21,14 +21,10 @@ async function main() {
   const home = resolveHome();
   const port = resolvePort();
   adoptBundledLaunchd(process.env, home);
-  // launchd (KeepAlive) starts the service again when it exits, and so does the app when the
-  // service is its child (HARNESS_SUPERVISOR_PID, app/src/main/child.ts). Supervised, it can
-  // restart itself: onto new code once idle, or on POST /service/restart. Run by hand, it only
-  // reports itself stale. Everything the service spawns (agents included) inherits the
-  // environment, so the parent has to be the supervisor itself too.
-  const appPid = Number(process.env.HARNESS_SUPERVISOR_PID) || null;
-  const byApp = appPid !== null && process.ppid === appPid;
-  const supervised = byApp || (process.env.XPC_SERVICE_NAME === LAUNCHD_LABEL && process.ppid === 1);
+  // launchd starts the service again, and so does the app when the service is its child
+  // (HARNESS_SUPERVISOR_PID, app/src/main/child.ts). Supervised, it can restart itself: onto new
+  // code once idle, or on POST /service/restart. Run by hand, it only reports itself stale.
+  const supervisor = findSupervisor(process.env, process.ppid, process.getuid?.() ?? 501);
   const fingerprint = COMPILED ? executableFingerprint(process.execPath) : () => sourceFingerprint();
   const harness = await createHarness({
     home,
@@ -36,7 +32,7 @@ async function main() {
     hostname: resolveHostOverride(),
     log: (m) => log(`[orchestrator] ${m}`),
     codeWatch: { fingerprint, intervalMs: CODE_WATCH_MS },
-    restart: supervised ? () => void shutdown("restart") : undefined,
+    restart: supervisor ? () => restartThrough(supervisor, { run, shutdown: (reason) => void shutdown(reason), log }) : undefined,
   });
   writeServiceJson(harness.paths, { port: harness.port, pid: process.pid, startedAt: Date.now() });
   log(`harness listening on ${harness.network.bound().map((b) => b.url).join(", ")} (home ${home}, pid ${process.pid})`);
@@ -61,7 +57,15 @@ async function main() {
   // The app stops its child on quit; if the app dies without doing so, the service goes with it
   // rather than living on unsupervised. (Bun caches process.ppid, so ask whether the app's pid
   // is still alive instead.)
-  if (byApp) setInterval(() => !alive(appPid) && void shutdown("the app exited"), PARENT_CHECK_MS).unref();
+  if (supervisor?.kind === "app") setInterval(() => !alive(supervisor.pid) && void shutdown("the app exited"), PARENT_CHECK_MS).unref();
+}
+
+async function run(cmd: string[]): Promise<number | null> {
+  try {
+    return await Bun.spawn(cmd, { stdin: "ignore", stdout: "ignore", stderr: "ignore" }).exited;
+  } catch {
+    return null;
+  }
 }
 
 function alive(pid: number) {

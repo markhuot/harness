@@ -259,10 +259,10 @@ export class ServiceManager {
       if (status.installed) {
         const { out, transcript } = await this.cli(src, ["service", "uninstall", "--json"]);
         if (out.code !== 0) return fail("Couldn't move the login item to this version of Harness.", transcript);
-        return this.ensureAgent(item, status, { waitForApproval: false });
+        return this.ensureAgent(src, item, status, { waitForApproval: false });
       }
       // requires-approval here means the user turned Harness off in Login Items: run the child.
-      if (item.status() === "enabled") return this.ensureAgent(item, status, { waitForApproval: false });
+      if (item.status() === "enabled") return this.ensureAgent(src, item, status, { waitForApproval: false });
     } else if (status.installed) return this.ensureLaunchd(src);
     if (status.healthy && !this.child.running) return this.connection(status, "external", status.pid);
     if (!this.child.running) {
@@ -287,7 +287,7 @@ export class ServiceManager {
    * user to allow it first (System Settings → Login Items); with `waitForApproval` that's opened
    * and waited for, otherwise it's an error.
    */
-  private async ensureAgent(item: LoginItemAgent, status: StatusOutput, o: { waitForApproval: boolean }): Promise<ConnectionResult> {
+  private async ensureAgent(src: ServiceSource, item: LoginItemAgent, status: StatusOutput, o: { waitForApproval: boolean }): Promise<ConnectionResult> {
     try {
       if (item.status() !== "enabled") item.register();
     } catch (e) {
@@ -306,8 +306,17 @@ export class ServiceManager {
       return fail("Allow Harness in Login Items to start it at login.", "Turn on Harness in System Settings → General → Login Items, then try again.");
     }
     if (state !== "enabled") return fail("Couldn't add Harness as a login item.", `macOS reports the login item as ${state}.`);
+    // Registering (RunAtLoad) and KeepAlive aren't demands, and launchd holds both while the gui
+    // domain is in on-demand-only mode, which a cancelled logout (an interrupted update restart)
+    // leaves behind. `service start` kickstarts the job, a demand launchd always serves, and does
+    // nothing to a running one: the same as `service ensure` does for a dev build's plist.
+    let started = "";
+    if (!(await this.health(status.url))) {
+      const { out, transcript } = await this.cli(src, ["service", "start", "--json"]);
+      if (out.code !== 0) started = `${transcript}\n\n`;
+    }
     const health = await this.waitHealthy(status.url, { child: false });
-    if (!health) return fail("The harness service didn't start.", `launchd didn't start it: nothing answered at ${status.url}/health.\n\n${logTail(status.logPath)}`.trim());
+    if (!health) return fail("The harness service didn't start.", `launchd didn't start it: nothing answered at ${status.url}/health.\n\n${started}${logTail(status.logPath)}`.trim());
     return this.connection(status, "login", health.pid);
   }
 
@@ -409,7 +418,7 @@ export class ServiceManager {
     if (mode === "login") {
       await this.child.stop();
       await this.waitStopped(status.url);
-      const connection = await this.ensureAgent(item, status, { waitForApproval: true });
+      const connection = await this.ensureAgent(src, item, status, { waitForApproval: true });
       if (!("error" in connection)) return { connection };
       // Not allowed, or launchd didn't start it: take it back so the app still has a service, and
       // so a login item allowed later doesn't fight the child for the port.

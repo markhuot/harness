@@ -84,9 +84,11 @@ describe("buildBundledPlist", () => {
 /**
  * Fake launchctl tracking loaded state; bootstrap/kickstart can boot an in-process harness. Like the
  * real one, bootout returns at once but the job stays (print finds it, bootstrap fails with 5) for
- * `lingerPrints` more prints while the daemon shuts down; then launchd removes it.
+ * `lingerPrints` more prints while the daemon shuts down; then launchd removes it. `onDemandOnly`
+ * is a gui domain a cancelled logout left in on-demand-only mode: bootstrap loads the job but holds
+ * its RunAtLoad, and only a kickstart starts it.
  */
-function fakeLaunchctl(onStart?: () => Promise<void>, o: { lingerPrints?: number } = {}) {
+function fakeLaunchctl(onStart?: () => Promise<void>, o: { lingerPrints?: number; onDemandOnly?: boolean } = {}) {
   const calls: string[][] = [];
   let loaded = false;
   let dying = 0;
@@ -100,7 +102,7 @@ function fakeLaunchctl(onStart?: () => Promise<void>, o: { lingerPrints?: number
     if (verb === "bootstrap") {
       if (dying > 0) return { code: 5, stdout: "", stderr: "Bootstrap failed: 5: Input/output error" };
       loaded = true;
-      await onStart?.();
+      if (!o.onDemandOnly) await onStart?.();
     }
     if (verb === "bootout") {
       if (o.lingerPrints) dying = o.lingerPrints + 1;
@@ -153,15 +155,15 @@ describe("Cli service commands", () => {
     expect((await cli.install()).changed).toBe(true);
     expect(existsSync(cli.plistPath)).toBe(true);
     expect(cli.plistPath.startsWith(d.userHome)).toBe(true);
-    expect(la.verbs()).toEqual(["print", "bootstrap"]);
+    expect(la.verbs()).toEqual(["print", "bootstrap", "kickstart"]);
     expect(la.calls[1]).toEqual(["launchctl", "bootstrap", "gui/501", cli.plistPath]);
 
     expect((await cli.install()).changed).toBe(false);
-    expect(la.verbs()).toEqual(["print", "bootstrap", "print"]);
+    expect(la.verbs()).toEqual(["print", "bootstrap", "kickstart", "print"]);
 
     const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
     expect((await moved.install()).changed).toBe(true);
-    expect(la.verbs().slice(3)).toEqual(["print", "bootout", "print", "bootstrap"]);
+    expect(la.verbs().slice(4)).toEqual(["print", "bootout", "print", "bootstrap", "kickstart"]);
     expect(readFileSync(cli.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");
     expect(existsSync(join(home, "token"))).toBe(true);
   });
@@ -174,7 +176,7 @@ describe("Cli service commands", () => {
     await new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] }).install();
     // bootstrapping while the old job was still shutting down failed with 5, and launchd then
     // removed the job, leaving nothing loaded and nothing to restart it.
-    expect(la.verbs().slice(before)).toEqual(["print", "bootout", "print", "print", "print", "print", "bootstrap"]);
+    expect(la.verbs().slice(before)).toEqual(["print", "bootout", "print", "print", "print", "print", "bootstrap", "kickstart"]);
     expect(la.loaded).toBe(true);
   });
 
@@ -189,7 +191,7 @@ describe("Cli service commands", () => {
     const moved = new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] });
     const mid = la.verbs().length;
     await moved.restart();
-    expect(la.verbs().slice(mid)).toEqual(["print", "print", "bootout", "print", "bootstrap"]);
+    expect(la.verbs().slice(mid)).toEqual(["print", "print", "bootout", "print", "bootstrap", "kickstart"]);
     expect(readFileSync(moved.plistPath, "utf8")).toContain("/elsewhere/daemon.ts");
   });
 
@@ -218,6 +220,24 @@ describe("Cli service commands", () => {
 
     expect((await new Cli(d).install()).changed).toBe(true);
     expect(readFileSync(withDummy.plistPath, "utf8")).toBe(plain);
+  });
+
+  test("ensure still starts the service while launchd holds RunAtLoad (gui domain in on-demand-only mode)", async () => {
+    const home = tempHome();
+    const port = await freePort();
+    const la = fakeLaunchctl(
+      async () => {
+        running ??= await createHarness({ home, port, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
+      },
+      { onDemandOnly: true },
+    );
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: home, HARNESS_PORT: String(port) } });
+    expect((await new Cli(d).ensure()).pid).toBe(process.pid);
+
+    // A changed plist reloads the job (bootout, bootstrap), which launchd holds the same way.
+    await running!.stop();
+    running = null;
+    expect((await new Cli({ ...d, program: ["/bin/bun", "/elsewhere/daemon.ts"] }).ensure({ force: true })).pid).toBe(process.pid);
   });
 
   test("ensure boots via launchd and waits for /health; prints JSON", async () => {

@@ -200,6 +200,18 @@ carries the mode (`app`, `login`, `external`).
 - The daemon counts as supervised when its parent is the supervisor: launchd (pid 1, with
   `XPC_SERVICE_NAME` set to the label) or the app (`HARNESS_SUPERVISOR_PID` is its ppid). Agents
   inherit both variables but not the parent. Only a supervised daemon restarts itself.
+- **launchd only serves demands for certain.** RunAtLoad and a KeepAlive respawn aren't demands.
+  When the gui domain is in on-demand-only mode, launchd holds them (`pending spawn, domain in
+  on-demand-only mode` in the system log), and nothing but a reboot or a completed logout clears
+  that mode. A logout that gets cancelled leaves the domain in it, an interrupted update restart for
+  example. A held job never starts, so every path that needs the service running asks for a
+  demand. Under launchd the daemon's own restart (new code, `POST /service/restart`) runs
+  `launchctl kickstart -k` on its label instead of exiting for KeepAlive (`service/src/supervisor.ts`).
+  launchd SIGTERMs it, which runs the normal shutdown, and starts it again. If launchctl fails, it
+  exits for KeepAlive as before. The CLI kickstarts after every `bootstrap`, and the app runs
+  `service start` (a kickstart) when an enabled bundled login item doesn't answer /health. Connect
+  and Retry then bring the service up, and so does Start at login. A kickstart does nothing to a job
+  that's already running.
 
 ## Ticket lifecycle
 
@@ -1766,7 +1778,8 @@ Routes the new app calls then 404 until the service restarts.
 - A stale supervised service (launchd's, or the app's child; see "Service supervision") restarts by itself once the
   new code is settled (the same hash two checks in a row, so a checkout still writing files isn't
   loaded half-done) and nothing is queued, running or starting (`Orchestrator.isIdle`). It exits
-  through the normal shutdown and its supervisor starts the new code. Run by hand, it only reports stale.
+  through the normal shutdown and its supervisor starts the new code (under launchd, through
+  `kickstart -k`; see "Service supervision"). Run by hand, it only reports stale.
 - `POST /service/restart` restarts right away. Running agents are stopped: their runs end
   cancelled and their tickets stay in their columns.
 - Tests and embedded services don't track their source: `/health` reports `build: null`,
