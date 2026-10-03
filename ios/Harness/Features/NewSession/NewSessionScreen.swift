@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// New session edits a draft ticket (DESIGN.md "Drafts"): the project
-/// with Task | Conductor, the prompt, and an Options disclosure holding the same TicketSettings rows
+/// with Task | Conductor, the prompt, its attachments (photos, files, pastes and drops, uploaded to
+/// the Mac: NewSessionAttachments), and an Options disclosure holding the same TicketSettings rows
 /// as ticket Details. The draft is saved lazily (DraftSync, through HarnessKit's NewSessionEditor):
 /// nothing until it has something worth keeping, then a POST and debounced PATCHes. The toolbar's
 /// Plan first and Start session launch it; Cancel asks whether to save or discard a non-empty
@@ -39,6 +40,7 @@ private struct NewSessionEditorView: View {
     @State private var adding = false
     @State private var newPath = ""
     @State private var releaseKey: (@MainActor () -> Void)?
+    @State private var uploader = PromptAttachmentUploader()
 
     var body: some View {
         let state = store.state
@@ -186,6 +188,7 @@ private struct NewSessionEditorView: View {
                     Text("Orchestrates child tickets.").font(.scaled(size: 13)).foregroundStyle(c.text3)
                 }
             }
+            NewSessionAttachmentsSection(editor: editor, ticket: t, uploader: uploader)
             Section {
                 Button {
                     haptic(.select)
@@ -218,6 +221,7 @@ private struct NewSessionEditorView: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        .modifier(PromptAttachmentDrop(editor: editor, uploader: uploader))
     }
 
     // MARK: Decisions (HarnessKit's NewSessionEditor makes them; these read the live state)
