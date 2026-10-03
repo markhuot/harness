@@ -281,7 +281,7 @@ export class HarnessClient {
     const res = await fetch(`${this.baseUrl}/uploads?name=${encodeURIComponent(name)}`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.opts.token}`, "content-type": mimeType || (data instanceof Blob && data.type) || "application/octet-stream" },
-      body: data as BodyInit,
+      body: data as Blob,
     });
     const text = await res.text();
     const json = text ? JSON.parse(text) : {};
