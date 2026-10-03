@@ -268,8 +268,9 @@ public enum ActivityAuthor: OpenEnum {
 /// - reviewApproved / changesRequested: an agent or conductor review decision; meta.round,
 ///   meta.commit (the HEAD it reviewed), meta.by
 /// - approved: a human (or conductor) approved the ticket
-/// - message: a human's message sent from the Spec or Activity tab (POST /messages log: true)
-/// - answer: the agent's final answer to such a message
+/// - message: legacy. A human's message logged from the Spec or Activity tab; only older services
+///   wrote it (POST /messages no longer logs to Activity), kept so older tickets still decode
+/// - answer: legacy. The agent's final answer to such a message, written only by older services
 /// - reopened: a done ticket went back to work; the notes
 /// - failed: a run failed
 /// - permission: a tool approval was asked for or answered

@@ -93,11 +93,6 @@ struct TabsTests {
         #expect(Tabs.ticketTabFrom(c.input) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("tabs", "logsMessagesCases", input: TicketTab.self, output: Bool.self))
-    func logsMessages(_ c: Fixture.Case<TicketTab, Bool>) {
-        #expect(Tabs.logsMessages(c.input) == c.output)
-    }
-
     @Test(arguments: Fixture.cases("tabs", "effectiveTabCases", input: EffectiveInput.self, output: TicketTab.self))
     fileprivate func effectiveTab(_ c: Fixture.Case<EffectiveInput, TicketTab>) {
         let o = c.input.opts

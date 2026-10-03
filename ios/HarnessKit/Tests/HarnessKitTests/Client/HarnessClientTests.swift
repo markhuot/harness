@@ -150,14 +150,13 @@ struct HarnessClientRequestTests {
         #expect(try bodyJSON(r) == json(#"{"projectId":"prj_1","spec":"Do it","start":false}"#))
     }
 
-    @Test func sendMessageSendsMoveAndLogOnlyWhenTrue() async throws {
+    /// `move` only when true, and never `log`: messages don't go into Activity any more.
+    @Test func sendMessageSendsMoveOnlyWhenTrueAndNeverLog() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
         _ = try await client(t).sendMessage("NY-1", text: "hi")
         #expect(try bodyJSON(t.last) == json(#"{"text":"hi"}"#))
         _ = try await client(t).sendMessage("NY-1", text: "hi", move: true)
         #expect(try bodyJSON(t.last) == json(#"{"text":"hi","move":true}"#))
-        _ = try await client(t).sendMessage("NY-1", text: "hi", log: true)
-        #expect(try bodyJSON(t.last) == json(#"{"text":"hi","log":true}"#))
         #expect(path(t) == "/tickets/NY-1/messages")
     }
 

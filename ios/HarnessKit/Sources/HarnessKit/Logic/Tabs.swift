@@ -138,13 +138,6 @@ public enum Tabs {
         return isTicketTab(t) ? TicketTab(t) : nil
     }
 
-    /// Whether a message sent from this tab also goes into Activity (MessageBody.log): only from the
-    /// Spec and Activity tabs, where the human is reading the ticket's record rather than the
-    /// agent's transcript.
-    public static func logsMessages(_ tab: TicketTab) -> Bool {
-        tab == .spec || tab == .activity
-    }
-
     /// The live dot's label on the Agents & tasks tab.
     public static let agentsLiveLabel = "A sub-agent or task is running"
 

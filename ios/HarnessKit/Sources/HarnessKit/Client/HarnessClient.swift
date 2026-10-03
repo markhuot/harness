@@ -199,10 +199,10 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/submit", body: body)
     }
 
-    /// `move` and `log` are only sent when true. `log`: the message (and the agent's answer) also go
-    /// into Activity; send true from the Spec and Activity tabs (`Tabs.logsMessages`).
-    public func sendMessage(_ key: String, text: String, move: Bool = false, log: Bool = false) async throws -> Ticket {
-        try await request("POST", "/tickets/\(key)/messages", body: MessageBody(text: text, move: move ? true : nil, log: log ? true : nil))
+    /// `move` is only sent when true. The message goes to the agent and shows in the Transcript; it
+    /// never goes into Activity.
+    public func sendMessage(_ key: String, text: String, move: Bool = false) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/messages", body: MessageBody(text: text, move: move ? true : nil))
     }
 
     public func humanReview(_ key: String, _ body: HumanReviewBody) async throws -> Ticket {
