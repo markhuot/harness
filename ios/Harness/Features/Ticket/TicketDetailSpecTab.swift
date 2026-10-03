@@ -42,9 +42,6 @@ struct TicketDetailSpecTab: View {
                             }
                         }
                     }
-                    if let list = ticket.promptAttachments, !list.isEmpty {
-                        TicketPromptAttachments(ticket: ticket, list: list)
-                    }
                     if let failed {
                         Callout(tone: .red, icon: "alert", title: "Couldn't load this revision", message: failed)
                     }
@@ -71,6 +68,10 @@ struct TicketDetailSpecTab: View {
                         }
                     } else {
                         Spinner().frame(maxWidth: .infinity).padding(30)
+                    }
+                    if let list = ticket.promptAttachments, !list.isEmpty {
+                        Divider().overlay(c.border).padding(.top, 4)
+                        TicketPromptAttachments(ticket: ticket, list: list)
                     }
                 }
                 .padding(14)
@@ -220,7 +221,8 @@ private struct SpecHistoryBar: View {
     }
 }
 
-/// The files the human attached to the ticket's New session, read-only: images open full screen,
+/// The files the human attached to the ticket's New session, read-only at the bottom of the spec as
+/// a vertical list: images open full screen,
 /// other files download into Quick Look. One that's gone from the Mac shows as missing.
 private struct TicketPromptAttachments: View {
     let ticket: Ticket
@@ -240,7 +242,7 @@ private struct TicketPromptAttachments: View {
                 SectionTitle("Attachments")
                 if downloading { ProgressView().controlSize(.mini) }
             }
-            PromptAttachmentStrip(tiles: tiles, onOpen: { tile in
+            PromptAttachmentList(tiles: tiles, onOpen: { tile in
                 if tile.isImage {
                     guard let i = images.firstIndex(where: { $0.index == tile.index }) else { return }
                     var t = Transaction()

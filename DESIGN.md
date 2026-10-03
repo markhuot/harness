@@ -1737,13 +1737,17 @@ ticket keeps working after one is moved or deleted.
   the service isn't on this Mac (`isLocalService(client.baseUrl)` is false: anything but
   `localhost`, `::1` or `127.x`), every file is uploaded under its own name instead, since its path
   means nothing there (`planFiles` in `state/promptAttachmentFiles.ts`). A window-level guard stops
-  a file dropped outside the draft pane from navigating the window to it. The Spec tab shows the
-  same strip read-only. `app/scripts/attachments-check.ts` drives the whole flow
+  a file dropped outside the draft pane from navigating the window to it. `app/scripts/attachments-check.ts` drives the whole flow
   against the real service.
 - **iPhone and iPad.** The New session has the same strip, and an Attach menu with Photos, Files
   and Paste. iPad also takes drops. Everything is uploaded, and HEIC photos are converted to JPEG
-  first, since the agent APIs don't take HEIC. The Spec tab shows the strip read-only and opens
-  images full screen and other files in Quick Look.
+  first, since the agent APIs don't take HEIC.
+- **The Spec tab** (both apps) lists a ticket's attachments read-only at the bottom of the spec,
+  under an Attachments heading: one row each, a square of the same size for every row (the image's
+  thumbnail, or a file icon) and then the name, so the names line up. A missing file's row is
+  dimmed, with a dashed square and "Missing — was at <path>" under the name. An image opens the
+  lightbox (Mac) or full-screen viewer (iOS); another file is revealed in Finder (Mac) or opens in
+  Quick Look (iOS).
 
 **File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
 mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path
