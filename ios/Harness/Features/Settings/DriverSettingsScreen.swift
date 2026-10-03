@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// One driver's settings, opened from Settings → Drivers: its status
-/// and sign-in, the review model, and the Anthropic API key for anthropic-api.
+/// and sign-in, the review model, the Anthropic API key for anthropic-api, and the long-lived
+/// Claude token for claude-code.
 struct DriverSettingsScreen: View {
     let driverId: String
 
@@ -70,6 +71,9 @@ private struct DriverSettingsForm: View {
             }
             if d.id == "anthropic-api", let settings {
                 DriverAnthropicKeySection(settings: settings)
+            }
+            if d.id == "claude-code", let settings {
+                DriverClaudeTokenSection(settings: settings)
             }
             if let settings {
                 Section {
@@ -187,6 +191,84 @@ private struct DriverAnthropicKeySection: View {
         Task {
             if await actions.run("API key cleared", { try await api.updateSettings(SettingsPatch(anthropicApiKey: .null)) }) != nil {
                 reloadModels()
+            }
+        }
+    }
+}
+
+/// The long-lived Claude token (`claude setup-token`) the service hands the claude CLI, for when it
+/// can't read the CLI's Keychain login: saved (Replace / Clear) or a field to enter one. Saving or
+/// clearing it can change whether the driver is signed in, so the driver list reloads.
+private struct DriverClaudeTokenSection: View {
+    let settings: PublicSettings
+
+    @Environment(BoardStore.self) private var store
+    @Environment(Actions.self) private var actions
+    @Environment(\.palette) private var c
+
+    @State private var token = ""
+    @State private var replacing = false
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Claude token").font(.scaled(size: 15)).foregroundStyle(c.text)
+                if settings.hasClaudeOauthToken && !replacing {
+                    HStack(spacing: 8) {
+                        Icon("checkCircle", size: 15).foregroundStyle(c.green)
+                        Text("Token saved").font(.scaled(size: 15)).foregroundStyle(c.green).frame(maxWidth: .infinity, alignment: .leading)
+                        HButton("Replace", small: true, fullWidth: false) { replacing = true }
+                        HButton("Clear", variant: .danger, small: true, fullWidth: false, action: clearToken)
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        SecureField("", text: $token, prompt: Text("sk-ant-oat01-…").foregroundStyle(c.text3))
+                            .font(.mono(14))
+                            .foregroundStyle(c.text)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .onSubmit(saveToken)
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 36)
+                            .background(c.bgSunken, in: .rect(cornerRadius: 8))
+                            .accessibilityLabel("Claude token")
+                        HButton("Save", variant: .primary, fullWidth: false, action: saveToken)
+                            .disabled(SettingsRules.apiKeyToSave(token) == nil)
+                        if replacing { HButton("Cancel", variant: .ghost, fullWidth: false) { replacing = false } }
+                    }
+                }
+            }
+            .settingsRowBackground(c)
+        } header: {
+            Text("Long-lived token")
+        } footer: {
+            Text("Run `claude setup-token` in a terminal on the Mac and paste the token here. Runs use it instead of the Claude login in the Mac's Keychain, which the service can't always read.")
+        }
+    }
+
+    /// GET /drivers again, so the status above reflects the new token.
+    private func reloadDrivers() async {
+        let client = store.client
+        if let drivers = await actions.run(nil, { try await client.listDrivers() }) { store.dispatch(.drivers(drivers)) }
+    }
+
+    private func saveToken() {
+        guard let value = SettingsRules.apiKeyToSave(token), let api = store.api else { return }
+        Task {
+            if await actions.run("Token saved", { try await api.updateSettings(SettingsPatch(claudeOauthToken: .value(value))) }) != nil {
+                token = ""
+                replacing = false
+                await reloadDrivers()
+            }
+        }
+    }
+
+    private func clearToken() {
+        guard let api = store.api else { return }
+        Task {
+            if await actions.run("Token cleared", { try await api.updateSettings(SettingsPatch(claudeOauthToken: .null)) }) != nil {
+                await reloadDrivers()
             }
         }
     }

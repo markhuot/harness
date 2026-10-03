@@ -88,6 +88,15 @@ struct SettingsRulesTests {
         #expect(off.idleTabMinutes == 0)
     }
 
+    @Test func claudeOauthTokenReadsAsUnsetForAnOlderService() throws {
+        let old = #"{"defaultDriver":"dummy","maxConcurrentRuns":2,"permissionMode":"auto","classifier":"off","defaultModels":{},"reviewModels":{},"anthropicApiKeySet":true}"#
+        let decoded = try JSONDecoder().decode(PublicSettings.self, from: Data(old.utf8))
+        #expect(decoded.claudeOauthTokenSet == nil)
+        #expect(!decoded.hasClaudeOauthToken)
+        let set = try JSONDecoder().decode(PublicSettings.self, from: Data((old.dropLast() + #","claudeOauthTokenSet":true}"#).utf8))
+        #expect(set.hasClaudeOauthToken)
+    }
+
     @Test func settingsBaseBranchFallsBackToMainAndSkipsUnchanged() {
         #expect(SettingsRules.settingsBaseBranchCommit("  ", current: "develop") == .save("main"))
         #expect(SettingsRules.settingsBaseBranchCommit("", current: "main") == .none)

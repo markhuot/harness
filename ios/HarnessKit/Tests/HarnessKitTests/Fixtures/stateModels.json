@@ -2795,6 +2795,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -2985,6 +2986,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -3098,7 +3100,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": true
         },
         "ticket": {
           "driver": "claude-code",
@@ -3288,7 +3291,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": false
         },
         "ticket": {
           "driver": "claude-code",
@@ -3370,6 +3374,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -3528,6 +3533,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -3625,7 +3631,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": true
         },
         "ticket": {
           "driver": "claude-code",
@@ -3783,7 +3790,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": false
         },
         "ticket": {
           "driver": "claude-code",
@@ -3876,6 +3884,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -4060,6 +4069,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -4170,7 +4180,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": true
         },
         "ticket": {
           "driver": "claude-code",
@@ -4354,7 +4365,8 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
-          "anthropicApiKeySet": true
+          "anthropicApiKeySet": true,
+          "claudeOauthTokenSet": false
         },
         "ticket": {
           "driver": "claude-code",
@@ -4422,6 +4434,7 @@
             "claude-code": null
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
+          "claudeOauthToken": "sk-ant-oat01-redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
