@@ -69,8 +69,14 @@ struct MentionTextEditor: View {
             .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))
             .background {
                 if let box = fieldBox {
-                    RoundedRectangle(cornerRadius: box.cornerRadius).fill(box.fill)
-                    RoundedRectangle(cornerRadius: box.cornerRadius).strokeBorder(box.border)
+                    if box.glass {
+                        Color.clear.glassEffect(.regular.interactive(), in: .rect(cornerRadius: box.cornerRadius))
+                    } else {
+                        RoundedRectangle(cornerRadius: box.cornerRadius).fill(box.fill)
+                    }
+                    if let border = box.border {
+                        RoundedRectangle(cornerRadius: box.cornerRadius).strokeBorder(border)
+                    }
                 } else if boxed {
                     RoundedRectangle(cornerRadius: 12).fill(c.bgElev)
                     RoundedRectangle(cornerRadius: 12).strokeBorder(c.border)
@@ -170,10 +176,13 @@ struct MentionTextEditor: View {
 
 /// The field's box when the caller draws its own (MentionTextEditor `fieldBox`).
 struct MentionFieldBox {
-    var fill: Color
-    var border: Color
+    var fill: Color = .clear
+    /// nil draws no border
+    var border: Color?
     var cornerRadius: CGFloat
     var padding: EdgeInsets
+    /// Liquid Glass in place of `fill`
+    var glass = false
 }
 
 /// One row of the list: icon, name, then the folder (cut at its start) or the command's description.

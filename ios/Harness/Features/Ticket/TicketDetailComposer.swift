@@ -7,7 +7,8 @@ import SwiftUI
 /// the ticket first and the hint about what a message does. The switch and hint show only while
 /// writing: once the field is focused, and after a blur only while it holds a message. A message
 /// sent from the Spec or Activity tab also goes into Activity (`log`); from any other tab it goes
-/// to the agent and the Transcript only.
+/// to the agent and the Transcript only. The field and send button are Liquid Glass floating over
+/// the tab, with no bar of their own.
 struct TicketDetailComposer: View {
     let ticket: Ticket
     /// The tab on screen, which decides whether the message is logged
@@ -64,29 +65,43 @@ struct TicketDetailComposer: View {
                                   fieldLabel: "Message the agent",
                                   placeholderColor: attention ? c.red : nil,
                                   onFocusChange: { focused = $0 },
-                                  fieldBox: MentionFieldBox(fill: c.bg, border: attention ? c.red : c.border, cornerRadius: 20,
-                                                            padding: EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14)))
-                Button { send(move: move) } label: {
-                    ZStack {
-                        Circle().fill(c.accent)
-                        if sending {
-                            ProgressView().tint(c.onAccent)
-                        } else {
-                            Image(systemName: "arrow.up").font(.system(size: 17, weight: .bold)).foregroundStyle(c.onAccent)
-                        }
-                    }
-                    .frame(width: 40, height: 40)
-                    .opacity(empty || sending ? 0.4 : 1)
-                }
-                .buttonStyle(.plain)
-                .disabled(empty || sending)
-                .accessibilityLabel("Send")
+                                  fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
+                                                            padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
+                                                            glass: true))
+                sendButton(active: focused || !empty, disabled: empty || sending) { send(move: move) }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(c.bgElev)
-        .overlay(alignment: .top) { Rectangle().fill(c.border).frame(height: 1 / 3) }
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
+    /// Prominent accent glass while writing (focused, or holding a message), plain glass with a dimmed
+    /// arrow otherwise. Focused but empty it stays prominent and ignores taps rather than `.disabled`,
+    /// which would grey the glass out.
+    @ViewBuilder private func sendButton(active: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
+        let label = Group {
+            if sending {
+                ProgressView()
+            } else {
+                Image(systemName: "arrow.up").font(.system(size: 17, weight: .bold))
+            }
+        }
+        .frame(width: 30, height: 30)
+        if active {
+            Button { if !disabled { action() } } label: { label }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .tint(c.accent)
+                .accessibilityLabel("Send")
+                .accessibilityHint(disabled ? "Write a message first" : "")
+        } else {
+            Button(action: action) { label.foregroundStyle(c.text3) }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .disabled(true)
+                .accessibilityLabel("Send")
+        }
     }
 
     private func send(move: Bool) {
