@@ -3,9 +3,9 @@ import SwiftUI
 
 /// The Activity tab: the ticket's timeline, oldest first, opening at the newest and following new
 /// entries until the user scrolls up. Each kind has its own icon and look (ActivityRows): a block is
-/// a card with the question, review decisions show their round and commit, messages sent from the
-/// Spec or Activity tab and the agent's answers read as a conversation, and failures and the
-/// service's notes stay quiet.
+/// a card with the question, review decisions show their round and commit, an entry whose body is a
+/// one-line summary can open its full text (meta.detail), messages and answers logged by older
+/// services read as a conversation, and failures and the service's notes stay quiet.
 struct TicketDetailActivityTab: View {
     let ticket: Ticket
 
@@ -16,7 +16,7 @@ struct TicketDetailActivityTab: View {
         ScrollView {
             if list.isEmpty {
                 EmptyState(icon: "clock", title: "No activity yet",
-                           message: "Notes, submits, questions and review decisions show here. So do messages you send from Spec or Activity.")
+                           message: "Notes, submits, questions and review decisions show here.")
                     .padding(.top, 30)
             } else {
                 NowReader { now in
@@ -43,6 +43,7 @@ private struct ActivityRow: View {
     let now: Double
 
     @Environment(\.palette) private var c
+    @State private var expanded = false
 
     var body: some View {
         switch ActivityRows.look(entry) {
@@ -53,6 +54,29 @@ private struct ActivityRow: View {
         case .approved: row(icon: c.green, fill: c.greenSoft, title: c.green)
         case .changes: row(icon: c.amber, fill: c.amberSoft, title: c.amber)
         case .plain: row(icon: c.accent, fill: c.accentSoft, title: c.text)
+        }
+    }
+
+    /// The full text behind a one-line body (ActivityRows.fullText), behind a Show/Hide button.
+    @ViewBuilder private var fullText: some View {
+        if let text = ActivityRows.fullText(entry) {
+            Button {
+                withAnimation(.snappy) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(expanded ? "Hide details" : "Show details")
+                    Icon("chevronDown", size: 10, weight: .semibold).rotationEffect(.degrees(expanded ? 180 : 0))
+                }
+                .font(.scaled(size: 12.5, weight: .medium))
+                .foregroundStyle(c.accent)
+            }
+            .buttonStyle(.plain)
+            if expanded {
+                MarkdownView(text: text, size: 13.5, color: c.text2)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(c.bgElev, in: .rect(cornerRadius: 10))
+            }
         }
     }
 
@@ -76,6 +100,7 @@ private struct ActivityRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 heading(title)
                 if !TicketDetailLogic.trim(entry.body).isEmpty { MarkdownView(text: entry.body, size: 14.5) }
+                fullText
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -95,7 +120,7 @@ private struct ActivityRow: View {
             MarkdownView(text: ActivityRows.question(entry), size: 15.5)
             if !TicketDetailLogic.trim(body).isEmpty { MarkdownView(text: body, size: 14, color: c.text2) }
             if open {
-                Text("Answer below. Your answer shows here too.").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
+                Text("Answer below. The conversation continues in the Transcript.").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
             }
         }
         .padding(12)
@@ -133,6 +158,7 @@ private struct ActivityRow: View {
                     Text(time).font(.scaled(size: 12)).foregroundStyle(c.text3)
                 }
                 if !TicketDetailLogic.trim(entry.body).isEmpty { MarkdownView(text: entry.body, size: 13, color: c.text3) }
+                fullText
             }
         }
         .padding(.leading, 7)
