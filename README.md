@@ -218,7 +218,7 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 
 ```sh
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
-cd service && bun test    # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI
+cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI; files in parallel
 cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
 cd ios/HarnessKit && swift test   # the iPhone app's protocol, client, logic and state, against the JSON fixtures
 cd ios && bun run test    # iOS build, simulator and highlighter tooling
@@ -230,3 +230,8 @@ cd app && bun run real    # drives the Electron UI against a real daemon in a te
 cd app && bun run changes # git plugin Changes tab against a real daemon, light + dark screenshots
 cd app && bun scripts/acceptance.ts [dummy|claude-code]   # installed app + launchd service, hello world → Done
 ```
+
+`bun run test` in `service` runs each test file in its own `bun test` process, several at once
+(`shared/src/testing/parallel.ts`), slowest first by the last run's times. Set
+`HARNESS_TEST_JOBS` to change how many run at once. A path or name filter
+(`bun run test src/api`) runs plain `bun test` instead, and so does `bun test` itself.
