@@ -210,6 +210,9 @@ describe("built-in system prompts", () => {
   test("chat about a blocked ticket from the Activity tab (logged)", () => {
     expect(systemPrompt({ kind: "chat", project, ticket: ticket({ status: "blocked" }), session, activity: recent, logged: true })).toMatchSnapshot();
   });
+  test("plan feedback from the Spec tab (logged)", () => {
+    expect(systemPrompt({ kind: "plan", project, ticket: ticket({ status: "planning" }), session, activity: recent, logged: true })).toMatchSnapshot();
+  });
 
   test("chat without a ticket", () => {
     expect(systemPrompt({ kind: "chat", project, ticket: null, session: { ...session, cwd: "/tmp/x" } })).toMatchSnapshot();

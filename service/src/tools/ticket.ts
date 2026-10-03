@@ -9,8 +9,8 @@ const IMAGES = `Images and videos: write them as markdown images pointing at loc
 export const postNote = defineTool<{ note: string }>({
   name: "post_note",
   description:
-    "Add a short note to the ticket's Activity: at most three short lines on what changed since your last note or submit, without repeating the spec or earlier activity. The spec holds the full current state; keep it current with edit_spec. Does not change the ticket status.",
-  inputSchema: schema({ note: { type: "string", minLength: 1, description: 'Markdown, at most three short lines, e.g. "Fixed the retry backoff; `bun test` passes."' } }, ["note"]),
+    "Add a note to the ticket's Activity. It MUST be one short line: what you changed and why (\"I changed X because Y\"). It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning MUST go in the spec (keep it current with edit_spec) or stay in the transcript. Does not change the ticket status.",
+  inputSchema: schema({ note: { type: "string", minLength: 1, description: 'Markdown, one short line (MUST): what changed and why, e.g. "Fixed the retry backoff because runs hammered the API."' } }, ["note"]),
   async run({ note }, ctx) {
     await ctx.ops.postNote(ctx, note);
     return "Note added to Activity.";
@@ -84,7 +84,7 @@ export const block = defineTool<{ question: string }>({
   description:
     "Stop and ask the human a question when you cannot continue without their input (missing requirements, credentials, a decision only they can make). Moves the ticket to the Blocked column with your question. The human's answer arrives as a new message in a later run; when it resolves the block, call unblock and carry on. Do not call this for things you can find out yourself.",
   inputSchema: schema(
-    { question: { type: "string", minLength: 1, description: "The specific question for the human, with enough context to answer it without reading the transcript." } },
+    { question: { type: "string", minLength: 1, description: "One short, specific question for the human, naming the options you see. Background goes under Open questions in the spec." } },
     ["question"],
   ),
   async run({ question }, ctx) {
@@ -118,10 +118,10 @@ export const resumeWork = defineTool<{ note?: string }>({
 const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:
-    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, verification, screenshots). Moves the ticket to Review with a short note on this round only: what changed since the last submit, not a recap of the spec. Make no further changes after calling it.",
+    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, verification, screenshots). Moves the ticket to Review with a note on this round only: one short line (MUST) on what changed since the last submit and why, not a recap of the spec. Make no further changes after calling it.",
   inputSchema: schema(
     {
-      note: { type: "string", minLength: 1, description: "This round only, at most three short lines: what changed and how you verified it." },
+      note: { type: "string", minLength: 1, description: "This round only, one short line (MUST): what changed and why, e.g. \"Retried failed uploads because flaky networks dropped them; tests pass.\" Reasoning goes in the spec." },
       spec_is_up_to_date: {
         type: "boolean",
         description: "Required, and must be true: the spec already describes the finished work (its Status, decisions, verification and screenshots). Bring it up to date with edit_spec or update_spec first.",
@@ -175,7 +175,7 @@ export const reviewDecision = defineTool<{ decision: "approve" | "request_change
   inputSchema: schema(
     {
       decision: { type: "string", enum: ["approve", "request_changes"], description: "Your verdict." },
-      notes: { type: "string", description: "Review notes. Required detail when requesting changes; a short rationale when approving." },
+      notes: { type: "string", description: "Review notes. Required detail when requesting changes; when approving, one short line (MUST) on what this round confirmed." },
     },
     ["decision", "notes"],
   ),
