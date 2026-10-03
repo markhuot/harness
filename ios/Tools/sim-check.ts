@@ -45,11 +45,12 @@
 //      lists its commands, a tap completes one, and the CLI gets the spec as typed; the toolbar's Plan
 //      first launches a draft in planning and lands on its Spec tab; mentions-*.png, new-session-toolbar*.png
 //
-//   --attachments (needs ffmpeg): a spec with a tall and a wide PNG as a row of "thumb" thumbnails
-//      and an H.264 clip as a captioned figure (stored by update_spec), plus an attachment: reference
-//      to a file that doesn't exist; checks every inline image shows in the Spec tab (the thumbnails
-//      as 100 pt squares, the figure across the width), a tap opens the viewer on that attachment, swiping pages,
-//      Close and swipe-down close it; attachments-*.png
+//   --attachments (needs ffmpeg): a spec with a tall, a wide and a small PNG as a row of "thumb"
+//      thumbnails and an H.264 clip as a captioned figure (stored by update_spec), plus an attachment:
+//      reference to a file that doesn't exist; checks every inline image shows in the Spec tab (the
+//      thumbnails as 100 pt squares, the figure across the width), a tap opens the viewer on that
+//      attachment, an image smaller than the screen opens centred, swiping pages, Close and
+//      swipe-down close it; attachments-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
 //      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
@@ -1307,27 +1308,47 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
  * extension, so the one that fails to load is an attachment: reference to an id that doesn't exist:
  * attachment: srcs are kept as written, and the viewer shows its failure page for it.
  */
+/** --attachments' small.png, in pixels: narrower and shorter than the viewer's page on an iPhone, so it shows at its own size (1 px = 1 pt). */
+const SMALL = { width: 300, height: 652 };
+
+/**
+ * Where a screenshot isn't black, in pixels, between `top` and `bottom` pixels from its edges:
+ * ffmpeg's cropdetect over that band. The viewer's page is black, so on an image page that's the image.
+ */
+async function litBox(file: string, top: number, bottom: number) {
+  // skip=0: cropdetect skips the first two frames by default, and a screenshot has one. Its x1…y2
+  // are the exact bounds (its crop= rounds them).
+  const p = Bun.spawn(["ffmpeg", "-hide_banner", "-i", file, "-vf", `crop=iw:ih-${top + bottom}:0:${top},cropdetect=limit=24:round=1:reset=0:skip=0`, "-frames:v", "1", "-f", "null", "-"], { stdout: "pipe", stderr: "pipe" });
+  const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
+  const m = [...err.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].at(-1);
+  if (code !== 0 || !m) throw new Error(`cropdetect on ${file} → ${code}\n${err.slice(-500)}`);
+  const [x1, x2, y1, y2] = m.slice(1).map(Number) as [number, number, number, number];
+  return { x: x1, y: y1 + top, width: x2 - x1 + 1, height: y2 - y1 + 1 };
+}
+
 async function seedAttachments() {
   await settings();
   const dir = join(scratch, "media");
   mkdirSync(join(dir, "shots"), { recursive: true });
   const ff = (...a: string[]) => sh(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", ...a], { cwd: dir });
-  // A tall phone screenshot, a wide one and a short H.264 clip.
+  // A tall phone screenshot, a wide one, one smaller than the screen both ways (a solid colour, so
+  // the viewer check can find its edges on the black page) and a short H.264 clip.
   await Promise.all([
     ff("-f", "lavfi", "-i", "testsrc2=size=1179x2556:rate=1", "-frames:v", "1", "shots/phone.png"),
     ff("-f", "lavfi", "-i", "smptehdbars=size=1600x900:rate=1", "-frames:v", "1", "shots/wide.png"),
+    ff("-f", "lavfi", "-i", `color=c=0x3478f6:size=${SMALL.width}x${SMALL.height}`, "-frames:v", "1", "shots/small.png"),
     ff("-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-t", "4", "-pix_fmt", "yuv420p", "-c:v", "libx264", "-movflags", "+faststart", "shots/flow.mp4"),
   ]);
   const project = await api<Project>("POST", "/projects", { path: dir, name: "media", key: "MEDIA", defaultDriver: "dummy" });
-  // In viewer order (1 of 4 … 4 of 4); the alt text is the file name, which the app's labels use.
-  const stored = ["phone.png", "wide.png", "flow.mp4"];
-  // The two screenshots as a row of thumbnails, the recording as a captioned figure.
+  // In viewer order (1 of 5 … 5 of 5); the alt text is the file name, which the app's labels use.
+  const stored = ["phone.png", "wide.png", "small.png", "flow.mp4"];
+  // The three screenshots as a row of thumbnails, the recording as a captioned figure.
   const spec = [
     "Show the greeting screen",
     "",
     "Here's the new greeting screen, before and after, plus a recording of the flow.",
     "",
-    `![phone.png](shots/phone.png "thumb") ![wide.png](shots/wide.png "thumb")`,
+    `![phone.png](shots/phone.png "thumb") ![wide.png](shots/wide.png "thumb") ![small.png](shots/small.png "thumb")`,
     "",
     "![flow.mp4](shots/flow.mp4)",
     "",
@@ -1350,8 +1371,8 @@ async function seedAttachments() {
 /** --attachments: inline images in the Spec tab, then the viewer (open, page, close, swipe down), in one visit. */
 async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedAttachments>>) {
   const has = async (pred: (l: string) => boolean) => (await labels(udid)).some(pred);
-  const counter = (n: number) => (l: string) => l.startsWith(`${n} of 4`);
-  const viewerOpen = () => has((l) => / of 4/.test(l));
+  const counter = (n: number) => (l: string) => l.startsWith(`${n} of 5`);
+  const viewerOpen = () => has((l) => / of 5/.test(l));
   const closed = () => until("viewer closed", async () => !(await viewerOpen()), 5000);
   const swipeLeft = () => axe("swipe", "--start-x", "340", "--start-y", "450", "--end-x", "40", "--end-y", "450", "--duration", "0.3", "--udid", udid);
   const swipeDown = () => axe("swipe", "--start-x", "200", "--start-y", "330", "--end-x", "205", "--end-y", "760", "--duration", "0.25", "--udid", udid);
@@ -1366,7 +1387,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     const el = await until(`element ${label}`, () => findElement(udid, (l) => l === label), 5000);
     const y = el.frame.y + Math.min(el.frame.height / 2, 60);
     await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(y)), "--udid", udid);
-    await until(`viewer on ${n} of 4`, () => has(counter(n)), 5000);
+    await until(`viewer on ${n} of 5`, () => has(counter(n)), 5000);
     await Bun.sleep(800);
   };
 
@@ -1375,14 +1396,14 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
   await check("every attachment shows inline in the spec", async () => {
     // An image that won't load is tried as a video before it shows "Couldn't load", so the missing
     // one may be labelled either way.
-    const want = ["Image phone.png", "Image wide.png", "Video flow.mp4", "Image broken.png|Video broken.png"];
+    const want = ["Image phone.png", "Image wide.png", "Image small.png", "Video flow.mp4", "Image broken.png|Video broken.png"];
     const l = await labels(udid);
     const missing = want.filter((w) => !w.split("|").some((x) => l.includes(x)));
     if (missing.length) throw new Error(`missing ${missing.join(", ")}`);
     return want.join(", ");
   });
   await check("thumbnails are 100 pt squares and the figure spans the width", async () => {
-    const thumbs = await Promise.all(["Image phone.png", "Image wide.png"].map((l) => findElement(udid, (x) => x === l)));
+    const thumbs = await Promise.all(["Image phone.png", "Image wide.png", "Image small.png"].map((l) => findElement(udid, (x) => x === l)));
     for (const t of thumbs) if (!t || Math.round(t.frame.width) !== 100 || Math.round(t.frame.height) !== 100) throw new Error(`thumbnail frame ${JSON.stringify(t?.frame)}`);
     await scrollTo(udid, (l) => l === "Video flow.mp4");
     const fig = await findElement(udid, (x) => x === "Video flow.mp4");
@@ -1397,16 +1418,37 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await shootBoth(udid, "attachments-viewer-image");
     await appearance(udid, "light");
     await swipeLeft();
-    await until("paged to 3 of 4", () => has(counter(3)), 5000);
+    await until("paged to 3 of 5", () => has(counter(3)), 5000);
+    await swipeLeft();
+    await until("paged to 4 of 5", () => has(counter(4)), 5000);
     await Bun.sleep(1500); // the video's first frames
     await shot(udid, "attachments-viewer-video-light");
     await swipeLeft();
-    await until("paged to 4 of 4", () => has(counter(4)), 5000);
+    await until("paged to 5 of 5", () => has(counter(5)), 5000);
     await Bun.sleep(800);
     await shot(udid, "attachments-viewer-failed-light");
     await tapWhere(udid, "Close");
     await closed();
-    return "2 of 4 → 3 of 4 → 4 of 4 → closed";
+    return "2 of 5 → 3 of 5 → 4 of 5 → 5 of 5 → closed";
+  });
+  await check("an image smaller than the screen opens centred at its own size", async () => {
+    // A 300 × 652 image used to open with its top-left corner in the middle of the page: it already
+    // had its fitted size, so its scroll view's content size was never set.
+    await open("Image small.png", 3);
+    await shot(udid, "attachments-viewer-small");
+    const file = join(shots, "attachments-viewer-small.png");
+    const screen = (await tree(udid))[0]!.frame;
+    const px = Number(await sh(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width", "-of", "csv=p=0", file]));
+    const scale = px / screen.width;
+    // Below the header (✕ and the file name) and above the home indicator, the page is black but for the image.
+    const box = await litBox(file, Math.round(130 * scale), Math.round(40 * scale));
+    const pt = { x: box.x / scale, y: box.y / scale, width: box.width / scale, height: box.height / scale };
+    const shown = `${Math.round(pt.width)}×${Math.round(pt.height)} at ${Math.round(pt.x)},${Math.round(pt.y)} on a ${screen.width}×${screen.height} screen`;
+    if (Math.abs(pt.width - SMALL.width) > 3 || Math.abs(pt.height - SMALL.height) > 3) throw new Error(`not at its own size (${SMALL.width}×${SMALL.height}): ${shown}`);
+    if (Math.abs(pt.x + pt.width / 2 - screen.width / 2) > 3) throw new Error(`not centred across: ${shown}`);
+    await tapWhere(udid, "Close");
+    await closed();
+    return shown;
   });
   await check("swiping down closes the viewer", async () => {
     await open("Image phone.png", 1);
@@ -1415,9 +1457,9 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     return "closed";
   });
   await check("the video page plays and swiping down closes it too", async () => {
-    await open("Image wide.png", 2);
+    await open("Image small.png", 3);
     await swipeLeft();
-    await until("on the video", () => has(counter(3)), 5000);
+    await until("on the video", () => has(counter(4)), 5000);
     await Bun.sleep(1000);
     await swipeDown();
     await closed();

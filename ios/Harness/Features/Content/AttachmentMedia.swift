@@ -191,10 +191,12 @@ final class AttachmentPageController: UIViewController, UIScrollViewDelegate {
         let box = view.bounds.inset(by: insets)
         switch content {
         case let .image(_, dims):
-            // A zoomed image keeps its frame (the zoom transform owns it).
+            // A zoomed image keeps its frame (the zoom transform owns it). The content size is checked
+            // too: an image smaller than the page fits at its own size, which UIImageView already
+            // has, and a content size left at zero would centre the image's corner instead.
             let fit = Attachments.fitSize(dims, in: AttachmentSize(width: Double(box.width), height: Double(box.height)))
             let fitted = CGSize(width: fit.width, height: fit.height)
-            guard let iv = zoomView, scroll.zoomScale == 1, iv.frame.size != fitted else { break }
+            guard let iv = zoomView, scroll.zoomScale == 1, iv.frame.size != fitted || scroll.contentSize != fitted else { break }
             iv.frame = CGRect(origin: .zero, size: fitted)
             scroll.contentSize = fitted
         case let .controller(child):
