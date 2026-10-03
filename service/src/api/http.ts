@@ -33,6 +33,8 @@ export interface HttpServerOptions {
   network?: NetworkManager;
   /** Build tracking for /health; absent → { build: null, stale: false }. */
   serviceStatus?: () => ServiceStatus;
+  /** The release for /health (service/src/release.ts); absent → null. */
+  release?: () => string | null;
   /** Enables POST /service/restart: exit so launchd starts the service again. */
   restart?: () => void;
   /** True once the service is shutting down: /health answers 503 so nobody connects to it. */
@@ -403,7 +405,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
       }
 
       if (req.method === "GET" && path === "/health" && opts.stopping?.()) return json({ error: "The service is shutting down" }, 503);
-      if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid, ...(opts.serviceStatus?.() ?? { build: null, stale: false }) } });
+      if (req.method === "GET" && path === "/health") return json({ data: { ok: true, version: VERSION, pid: process.pid, release: opts.release?.() ?? null, ...(opts.serviceStatus?.() ?? { build: null, stale: false }) } });
 
       // MCP: authenticated by the run-scoped token in the path. Only agents on this machine use it,
       // so it isn't offered to other hosts even when the service listens beyond loopback.

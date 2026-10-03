@@ -6,6 +6,7 @@ import { createHarness } from "./app";
 import { adoptBundledLaunchd } from "./bundled-launchd";
 import { readServiceJson, resolveHome, resolveHostOverride, resolvePort, writeServiceJson } from "./config";
 import { executableFingerprint, sourceFingerprint } from "./code-watch";
+import { BUNDLED_RELEASE, checkoutRelease } from "./release";
 import { COMPILED } from "./runtime";
 import { findSupervisor, restartThrough } from "./supervisor";
 
@@ -32,6 +33,7 @@ async function main() {
     hostname: resolveHostOverride(),
     log: (m) => log(`[orchestrator] ${m}`),
     codeWatch: { fingerprint, intervalMs: CODE_WATCH_MS },
+    release: COMPILED ? () => BUNDLED_RELEASE : checkoutRelease(),
     restart: supervisor ? () => restartThrough(supervisor, { run, shutdown: (reason) => void shutdown(reason), log }) : undefined,
   });
   writeServiceJson(harness.paths, { port: harness.port, pid: process.pid, startedAt: Date.now() });

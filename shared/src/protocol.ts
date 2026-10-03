@@ -939,11 +939,16 @@ export interface ServiceStatus {
   stale: boolean;
 }
 
-/** GET /health (unauthenticated). Services from before build tracking omit `build` and `stale`. */
+/**
+ * GET /health (unauthenticated). Services from before build tracking omit `build` and `stale`.
+ * `release`: the newest app-* release tag the service's code includes (null when it can't tell);
+ * services from before it omit it.
+ */
 export interface Health extends Partial<ServiceStatus> {
   ok: true;
   version: string;
   pid: number;
+  release?: string | null;
 }
 
 export type PublicSettings = Omit<Settings, "anthropicApiKey"> & { anthropicApiKeySet: boolean };
