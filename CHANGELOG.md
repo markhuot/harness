@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPhone and iPad, swipe sideways on a ticket to move between its tabs, from Spec to Activity
+  and on through Details. The next tab slides in under your finger as you drag, and the tab strip,
+  header and message box stay where they are. A right swipe on Spec still goes back.
+
 ### Fixed
 
 - On iPhone and iPad, an attachment image smaller than the screen opens in the middle of the

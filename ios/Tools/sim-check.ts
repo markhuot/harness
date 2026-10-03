@@ -32,7 +32,8 @@
 //      swipes the Transcript tab
 //      and checks it follows new content at the bottom, stays put once scrolled up, and follows again
 //      after scrolling back down; the Activity tab opens at the bottom and follows; the ticket's hero
-//      scrolls away with the transcript and comes back on scrolling back or a tap on the tab
+//      scrolls away with the transcript and comes back on scrolling back or a tap on the tab; a
+//      sideways swipe moves between the tabs, and a right swipe on the Spec still goes back
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
 //      prompt editor keeps its cursor above it as the text grows; keyboard-*.png. A headless simulator
@@ -746,7 +747,16 @@ async function seed() {
     // Messages go to the transcript only, never into Activity.
     settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
       .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
-      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))),
+      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)))
+      // A commit on its branch, so it has something to land and the Approve menu offers "Approve
+      // and merge" (with nothing to land it leads with "Approve and clean up" and drops merge).
+      // Opening a ticket in review re-checks its worktree.
+      .then(async (t) => {
+        writeFileSync(join(t.workdir!, "HELLO.md"), "Hello, world.\n");
+        await git(t.workdir!, "add", "-A");
+        await git(t.workdir!, "commit", "-qm", "Say hello");
+        await until(`${hello.key} has changes to land`, async () => (await api<TicketDetail>("GET", `/tickets/${hello.key}`)).ticket.hasChanges === true, 10000, 200);
+      }),
     settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(approval.key, (t) => !!t.pendingApproval),
     settle(configApproval.key, (t) => !!t.pendingApproval),
@@ -1048,6 +1058,37 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     await tapLabel(udid, "Transcript");
     await until("the hero after tapping the tab", async () => (await heroShown()) || null, 3000);
     return `tab strip ${Math.round(before)}→${Math.round(after)}; back on scrolling back and on a tap on the tab`;
+  });
+
+  // The tab bodies sit side by side in a pager: a sideways swipe moves to the neighbouring tab, and
+  // a right swipe on the first tab (the Spec) still goes back, as it did before they paged. A page
+  // counts as shown when its rows sit inside the screen (the neighbours are laid out beside it).
+  const W = (await tree(udid))[0]!.frame.width;
+  // Only rows below the tab strip: the title in the hero is the spec's first line too.
+  const shows = async (match: (l: string) => boolean) => {
+    const all = await nodes(udid);
+    const strip = all.find((n) => n.AXLabel === "Transcript");
+    const top = strip ? strip.frame.y + strip.frame.height : 0;
+    return all.some((n) => n.AXLabel && match(n.AXLabel) && n.frame.y >= top && n.frame.x >= 0 && n.frame.x < W - 20);
+  };
+  const spec = (l: string) => l.startsWith("Stick 0:");
+  const activityRow = (l: string) => l.includes(STICK_REVIEWED);
+  const sideways = (from: number, to: number) =>
+    axe("swipe", "--start-x", String(Math.round(W * from)), "--start-y", String(Math.round(H * 0.7)), "--end-x", String(Math.round(W * to)), "--end-y", String(Math.round(H * 0.7)), "--duration", "0.3", "--udid", udid);
+  await check("a sideways swipe changes tab, and on the Spec goes back", async () => {
+    // From the board, so going back lands there (ticket links push onto the screens before them).
+    await goto(udid, BOARD);
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=spec`, (l) => l.some(spec));
+    await until("the Spec", async () => (await shows(spec)) || null, 5000);
+    await sideways(0.85, 0.1);
+    await until("Activity after swiping left", async () => ((await shows(activityRow)) && !(await shows(spec))) || null, 5000);
+    await sideways(0.15, 0.9);
+    await until("the Spec after swiping right", async () => ((await shows(spec)) && !(await shows(activityRow))) || null, 5000);
+    await Bun.sleep(800); // the page settles: back only goes once the pager rests on the first page
+    await sideways(0.1, 0.9);
+    await until("the board after swiping right on the Spec", async () => onBoard(await labels(udid)) || null, 5000);
+    moved(udid);
+    return "Spec → Activity → Spec → back to the board";
   });
 
   // The blur half (the keyboard going down) is in --keyboard, which has the software keyboard.
