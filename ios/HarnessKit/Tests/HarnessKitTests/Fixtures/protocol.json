@@ -80,6 +80,18 @@
         "to": "done"
       },
       "createdAt": 1759190400004
+    },
+    {
+      "id": "act_8",
+      "sessionId": "ses_31",
+      "ticketId": "tkt_31",
+      "kind": "spec_revised",
+      "author": "human",
+      "body": "Edited by hand",
+      "meta": {
+        "specRevision": 6
+      },
+      "createdAt": 1759190400005
     }
   ],
   "ActivityMeta": [
@@ -2579,6 +2591,18 @@
             "to": "done"
           },
           "createdAt": 1759190400004
+        },
+        {
+          "id": "act_8",
+          "sessionId": "ses_31",
+          "ticketId": "tkt_31",
+          "kind": "spec_revised",
+          "author": "human",
+          "body": "Edited by hand",
+          "meta": {
+            "specRevision": 6
+          },
+          "createdAt": 1759190400005
         }
       ],
       "runs": [
@@ -3508,6 +3532,7 @@
     "ActivityKind": [
       "note",
       "submitted",
+      "spec_revised",
       "blocked",
       "unblocked",
       "review_approved",

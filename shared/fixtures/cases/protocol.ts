@@ -381,6 +381,7 @@ export const ActivityEntry: P.ActivityEntry[] = [
   { id: "act_5", sessionId: "ses_31", ticketId: "tkt_31", kind: "changes_requested", author: "agent", body: "The enum test is tautological", meta: ActivityMeta[1]!, createdAt: T0 + 2 },
   { id: "act_6", sessionId: "ses_31", ticketId: "tkt_31", kind: "submitted", author: "agent", body: "Ready", meta: { specRevision: 4 }, createdAt: T0 + 3 },
   { id: "act_7", sessionId: "ses_31", ticketId: "tkt_31", kind: "moved", author: "human", body: "", meta: { from: "review", to: "done" }, createdAt: T0 + 4 },
+  { id: "act_8", sessionId: "ses_31", ticketId: "tkt_31", kind: "spec_revised", author: "human", body: "Edited by hand", meta: { specRevision: 6 }, createdAt: T0 + 5 },
 ];
 
 export const SpecRevisionInfo: P.SpecRevisionInfo[] = [

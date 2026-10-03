@@ -39,7 +39,7 @@ Change only what changed: the spec's history keeps the earlier revisions. ${IMAG
   inputSchema: schema(
     {
       base_revision: { type: "integer", minimum: 1, description: "The revision your edits are based on (from read_spec)." },
-      note: { type: "string", minLength: 1, description: 'A few words on what changed, kept with the revision, e.g. "Status: retry fixed, tests pass".' },
+      note: { type: "string", minLength: 1, description: 'One line on what changed, kept with the revision and shown as its entry in the ticket\'s Activity, so it must say what happened on its own (400 characters or less), e.g. "Status: retry fixed, tests pass". No need to repeat it with post_note.' },
       edits: {
         type: "array",
         minItems: 1,
@@ -71,7 +71,7 @@ export const updateSpec = defineTool<{ spec: string; note: string; base_revision
   inputSchema: schema(
     {
       spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions." },
-      note: { type: "string", minLength: 1, description: 'A few words on what changed, kept with the revision, e.g. "Plan drafted".' },
+      note: { type: "string", minLength: 1, description: 'One line on what changed, kept with the revision and shown as its entry in the ticket\'s Activity, so it must say what happened on its own (400 characters or less), e.g. "Plan drafted: cache the feed per user". No need to repeat it with post_note.' },
       base_revision: { type: "integer", minimum: 1, description: "The revision you're replacing (from read_spec or the run's context)." },
       title: { type: "string", minLength: 1, description: "Optional new short ticket title (under ~80 characters)." },
     },

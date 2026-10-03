@@ -11,6 +11,12 @@ describe("activityHeading", () => {
     expect(activityHeading({ kind: "submitted", meta: { specRevision: 7 } })).toBe("Submitted for review · spec rev 7");
     expect(activityHeading({ kind: "note", meta: { round: 3, commit: "abcdef0" } })).toBe("Note");
   });
+
+  test("a spec revision shows its number, and says so when the human wrote it", () => {
+    expect(activityHeading({ kind: "spec_revised", author: "agent", meta: { specRevision: 3 } })).toBe("Spec revised · rev 3");
+    expect(activityHeading({ kind: "spec_revised", author: "human", meta: { specRevision: 4 } })).toBe("Spec revised · rev 4 · by you");
+    expect(activityHeading({ kind: "note", author: "human", meta: { specRevision: 4 } })).toBe("Note");
+  });
 });
 
 describe("openQuestionId", () => {

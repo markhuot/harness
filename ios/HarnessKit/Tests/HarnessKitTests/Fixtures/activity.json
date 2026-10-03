@@ -78,5 +78,16 @@
       },
       "output": "Classifier: [Code from External]"
     }
+  ],
+  "newsKinds": [
+    "note",
+    "submitted",
+    "spec_revised",
+    "review_approved",
+    "changes_requested",
+    "approved",
+    "answer",
+    "reopened",
+    "failed"
   ]
 }

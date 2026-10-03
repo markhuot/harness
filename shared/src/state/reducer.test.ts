@@ -272,6 +272,19 @@ describe("activity", () => {
     });
     expect(latestActivity(s, "s1", NEWS_KINDS)?.id).toBe("n");
   });
+
+  test("a spec revision is a card's news, and the move that follows it doesn't hide it", () => {
+    const s = apply(initialState, {
+      type: "activity",
+      sessionId: "s1",
+      activity: [
+        activity("n", 10),
+        activity("rev", 20, { kind: "spec_revised", meta: { specRevision: 3 } }),
+        activity("mv", 30, { kind: "moved", meta: { from: "planning", to: "in_progress" } }),
+      ],
+    });
+    expect(latestActivity(s, "s1", NEWS_KINDS)?.id).toBe("rev");
+  });
 });
 
 describe("spec revisions", () => {

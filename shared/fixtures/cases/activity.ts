@@ -1,5 +1,7 @@
-// Show details in the Activity tab (shared/src/state/activity.ts) for HarnessKit's ActivityRows.fullText.
+// Show details in the Activity tab (shared/src/state/activity.ts) for HarnessKit's ActivityRows.fullText,
+// and the kinds a board card shows as news (NEWS_KINDS) for ActivityRows.newsKinds.
 import { activityDetail } from "../../src/state/activity";
+import { NEWS_KINDS } from "../../src/state/reducer";
 import { cases } from "../case";
 
 export const activityDetailCases = cases(activityDetail, {
@@ -12,3 +14,5 @@ export const activityDetailCases = cases(activityDetail, {
   "blank lines before the first line": { body: "Done", meta: { detail: "\n\nDone\n\nAdded the button." } },
   "detail that doesn't start with the body": { body: "Permission needed: Bash — npm publish", meta: { detail: "Classifier: [Code from External]" } },
 });
+
+export const newsKinds = [...NEWS_KINDS];

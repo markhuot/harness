@@ -84,7 +84,13 @@ describe("spec + Activity end to end (dummy driver)", () => {
 
     // Activity: typed entries, each review with its round and the commit it saw.
     const kinds = done.activity.map((e) => e.kind);
-    expect(kinds).toEqual(["moved", "note", "submitted", "changes_requested", "note", "submitted", "review_approved"]);
+    // Each spec revision is in Activity too: the plan, then the dummy's Status edit before each submit.
+    expect(kinds).toEqual(["spec_revised", "moved", "note", "spec_revised", "submitted", "changes_requested", "note", "spec_revised", "submitted", "review_approved"]);
+    expect(done.activity.filter((e) => e.kind === "spec_revised").map((e) => [e.body, e.meta.specRevision])).toEqual([
+      ["Plan drafted", 2],
+      ["Status: The dummy driver finished the work.", 3],
+      ["Status: The dummy driver addressed the review notes.", 4],
+    ]);
     const [round1, round2] = done.activity.filter((e) => e.kind === "changes_requested" || e.kind === "review_approved");
     expect(round1!.meta).toMatchObject({ by: "agent", round: 1 });
     expect(round2!.meta).toMatchObject({ by: "agent", round: 2 });

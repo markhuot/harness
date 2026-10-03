@@ -6,6 +6,7 @@ import { STATUS_LABEL, type IconName } from "@harness/shared/state";
 export const ACTIVITY_KIND: Record<ActivityKind, { icon: IconName; label: string }> = {
   note: { icon: "sparkle", label: "Note" },
   submitted: { icon: "send", label: "Submitted for review" },
+  spec_revised: { icon: "layers", label: "Spec revised" },
   blocked: { icon: "alert", label: "Asked you" },
   unblocked: { icon: "play", label: "Picked back up" },
   review_approved: { icon: "checkCircle", label: "Review approved" },
@@ -24,9 +25,9 @@ const BY_LABEL = { agent: "agent", human: "you", conductor: "conductor" } as con
 
 /**
  * An entry's heading: "Review approved · round 2 · 1a2b3c4 · by agent", "Submitted for review ·
- * spec rev 7 → Review". An entry that moved the ticket ends with the column it went to.
+ * spec rev 7 → Review", "Spec revised · rev 3 · by you". An entry that moved the ticket ends with the column it went to.
  */
-export function activityHeading(e: Pick<ActivityEntry, "kind" | "meta">): string {
+export function activityHeading(e: Pick<ActivityEntry, "kind" | "meta"> & { author?: ActivityEntry["author"] }): string {
   const parts = [ACTIVITY_KIND[e.kind]?.label ?? e.kind];
   const m = e.meta ?? {};
   const review = e.kind === "review_approved" || e.kind === "changes_requested";
@@ -34,6 +35,8 @@ export function activityHeading(e: Pick<ActivityEntry, "kind" | "meta">): string
   if (review && m.commit) parts.push(m.commit.slice(0, 7));
   if ((review || e.kind === "approved") && m.by) parts.push(`by ${BY_LABEL[m.by]}`);
   if (e.kind === "submitted" && m.specRevision) parts.push(`spec rev ${m.specRevision}`);
+  if (e.kind === "spec_revised" && m.specRevision) parts.push(`rev ${m.specRevision}`);
+  if (e.kind === "spec_revised" && e.author === "human") parts.push("by you");
   const heading = parts.join(" · ");
   return m.to && STATUS_LABEL[m.to] ? `${heading} → ${STATUS_LABEL[m.to]}` : heading;
 }

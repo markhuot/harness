@@ -341,3 +341,40 @@ describe("messages and Activity", () => {
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "plan" });
   });
 });
+
+describe("spec revisions in Activity", () => {
+  const revised = (h: Awaited<ReturnType<typeof setup>>, t: Ticket) =>
+    h.orch
+      .activity(t.key)
+      .filter((e) => e.kind === "spec_revised")
+      .map(({ author, body, meta }) => ({ author, body, meta }));
+
+  test("each revision adds one entry with its note and number; creating the ticket adds none", async () => {
+    const h = await setup();
+    const t = await h.make("planning");
+    expect(h.orch.activity(t.key)).toEqual([]);
+    await tool("update_spec").execute({ spec: SPEC + "\n\n## Plan\n1. Wire it", note: "Plan drafted", base_revision: 1 }, h.ctx(t, "plan"));
+    await tool("edit_spec").execute({ base_revision: 2, note: "Plan: mobile too", edits: [{ old_string: "1. Wire it", new_string: "1. Wire it on mobile" }] }, h.ctx(h.fresh(t), "plan"));
+    expect(revised(h, t)).toEqual([
+      { author: "agent", body: "Plan drafted", meta: { specRevision: 2 } },
+      { author: "agent", body: "Plan: mobile too", meta: { specRevision: 3 } },
+    ]);
+  });
+
+  test("an unchanged body or a stale base revision adds nothing", async () => {
+    const h = await setup();
+    const t = await h.make();
+    const same = await tool("update_spec").execute({ spec: SPEC, note: "No change", base_revision: 1 }, h.ctx(t));
+    expect(text(same)).toContain("stays at revision 1");
+    await h.orch.updateTicket(t.key, { spec: "human text", baseRevision: 1 });
+    await expect(tool("edit_spec").execute({ base_revision: 1, note: "Late edit", edits: [{ old_string: "Not started", new_string: "Done" }] }, h.ctx(t))).rejects.toThrow("not 1");
+    expect(revised(h, t)).toEqual([{ author: "human", body: "Edited by hand", meta: { specRevision: 2 } }]);
+  });
+
+  test("a multi-line note becomes one line, with the whole note in detail", async () => {
+    const h = await setup();
+    const t = await h.make();
+    await tool("update_spec").execute({ spec: "# Goal\nNew", note: "## Rewrote the goal\nIt was about desktop only.", base_revision: 1 }, h.ctx(t));
+    expect(revised(h, t)).toEqual([{ author: "agent", body: "Rewrote the goal", meta: { specRevision: 2, detail: "## Rewrote the goal\nIt was about desktop only." } }]);
+  });
+});

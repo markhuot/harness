@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Activity now lists each spec revision with its note, on the Mac and on iPhone and iPad. Planning,
+  your own spec edits and an agent's Status updates show up in the Activity tab and as the latest
+  line on a ticket's board card, where before a ticket could be planned and revised with nothing in
+  Activity.
+
 ## [app-20261003.1227](https://github.com/markhuot/harness/releases/tag/app-20261003.1227) - 2026-10-03
 
 ### Fixed

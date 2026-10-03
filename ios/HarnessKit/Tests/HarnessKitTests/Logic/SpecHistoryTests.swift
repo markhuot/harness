@@ -117,6 +117,32 @@ struct ActivityRowsTests {
         #expect(ActivityRows.detail(Self.e(.note, meta: ActivityMeta(round: 3))) == "")
     }
 
+    @Test func specRevisionShowsItsNumberAndWhoWroteIt() {
+        let agent = Self.e(.specRevised, body: "Plan drafted", meta: ActivityMeta(specRevision: 3))
+        #expect(ActivityRows.title(agent) == "Spec revised")
+        #expect(ActivityRows.detail(agent) == "Rev 3")
+        #expect(ActivityRows.look(agent) == .plain)
+        #expect(ActivityRows.title(Self.e(.specRevised, author: .human, meta: ActivityMeta(specRevision: 4))) == "You revised the spec")
+        #expect(ActivityRows.detail(Self.e(.specRevised)) == "")
+    }
+
+    /// The board card's news kinds match the Mac's NEWS_KINDS, so a spec revision is the card's
+    /// latest line on both.
+    @Test func newsKindsMatchTheMac() throws {
+        let kinds = try Fixture.value("activity", "newsKinds", as: [String].self)
+        #expect(ActivityRows.newsKinds.map(\.rawValue) == kinds)
+        #expect(ActivityRows.newsKinds.contains(.specRevised))
+    }
+
+    /// A build that predates a kind still decodes the entry, as `.unknown`, so its Activity loads.
+    @Test func anUnknownKindStillDecodes() throws {
+        let json = #"{"id":"a","sessionId":"s","ticketId":"t","kind":"deployed","author":"system","body":"Shipped","meta":{"specRevision":2},"createdAt":1}"#
+        let entry = try JSONDecoder().decode(ActivityEntry.self, from: Data(json.utf8))
+        #expect(entry.kind == .unknown("deployed"))
+        #expect(entry.body == "Shipped")
+        #expect(ActivityRows.title(entry) == "Harness")
+    }
+
     @Test func blockedCardAsksTheQuestionOnce() {
         let same = Self.e(.blocked, body: "Which color?", meta: ActivityMeta(question: "Which color?"))
         #expect(ActivityRows.question(same) == "Which color?")
