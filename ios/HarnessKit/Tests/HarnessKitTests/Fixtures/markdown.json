@@ -388,15 +388,117 @@
       "output": [
         {
           "t": "text",
-          "text": "snake"
+          "text": "snake_case_name and more_words"
+        }
+      ]
+    },
+    {
+      "name": "intraword underscores stay literal",
+      "input": "adds a spec_revised Activity entry … with post_note.",
+      "output": [
+        {
+          "t": "text",
+          "text": "adds a spec_revised Activity entry … with post_note."
+        }
+      ]
+    },
+    {
+      "name": "trailing underscore inside a word",
+      "input": "foo_bar_",
+      "output": [
+        {
+          "t": "text",
+          "text": "foo_bar_"
+        }
+      ]
+    },
+    {
+      "name": "underscore em then intraword underscore",
+      "input": "_foo_bar",
+      "output": [
+        {
+          "t": "text",
+          "text": "_foo_bar"
+        }
+      ]
+    },
+    {
+      "name": "underscore em spanning an inner underscore",
+      "input": "_foo_bar_ baz",
+      "output": [
+        {
+          "t": "text",
+          "text": "_foo_bar_ baz"
+        }
+      ]
+    },
+    {
+      "name": "double underscores",
+      "input": "__init__ and a__b__c",
+      "output": [
+        {
+          "t": "text",
+          "text": "__init__ and a__b__c"
+        }
+      ]
+    },
+    {
+      "name": "underscore em inside punctuation",
+      "input": "(_x_) and _y_.",
+      "output": [
+        {
+          "t": "text",
+          "text": "("
         },
         {
           "t": "em",
-          "text": "case"
+          "text": "x"
         },
         {
           "t": "text",
-          "text": "name and more_words"
+          "text": ") and "
+        },
+        {
+          "t": "em",
+          "text": "y"
+        },
+        {
+          "t": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "name": "underscore after a non-ASCII letter",
+      "input": "naïve_a_b",
+      "output": [
+        {
+          "t": "text",
+          "text": "naïve_a_b"
+        }
+      ]
+    },
+    {
+      "name": "underscore em after a digit",
+      "input": "1_a_ and _b_2",
+      "output": [
+        {
+          "t": "text",
+          "text": "1_a_ and _b_2"
+        }
+      ]
+    },
+    {
+      "name": "star em inside a word",
+      "input": "*a*b",
+      "output": [
+        {
+          "t": "em",
+          "text": "a"
+        },
+        {
+          "t": "text",
+          "text": "b"
         }
       ]
     },
@@ -6457,6 +6559,51 @@
       "name": "snake_case words",
       "input": "snake_case_name and more_words",
       "output": "snake_case_name and more_words"
+    },
+    {
+      "name": "intraword underscores stay literal",
+      "input": "adds a spec_revised Activity entry … with post_note.",
+      "output": "adds a spec_revised Activity entry … with post_note."
+    },
+    {
+      "name": "trailing underscore inside a word",
+      "input": "foo_bar_",
+      "output": "foo_bar_"
+    },
+    {
+      "name": "underscore em then intraword underscore",
+      "input": "_foo_bar",
+      "output": "_foo_bar"
+    },
+    {
+      "name": "underscore em spanning an inner underscore",
+      "input": "_foo_bar_ baz",
+      "output": "_foo_bar_ baz"
+    },
+    {
+      "name": "double underscores",
+      "input": "__init__ and a__b__c",
+      "output": "__init__ and a__b__c"
+    },
+    {
+      "name": "underscore em inside punctuation",
+      "input": "(_x_) and _y_.",
+      "output": "(_x_) and _y_."
+    },
+    {
+      "name": "underscore after a non-ASCII letter",
+      "input": "naïve_a_b",
+      "output": "naïve_a_b"
+    },
+    {
+      "name": "underscore em after a digit",
+      "input": "1_a_ and _b_2",
+      "output": "1_a_ and _b_2"
+    },
+    {
+      "name": "star em inside a word",
+      "input": "*a*b",
+      "output": "*a*b"
     },
     {
       "name": "lone star",

@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Words with underscores in them, like `spec_revised` or `snake_case_name`, keep their underscores in
+  transcripts, specs and Activity on the Mac, iPhone and iPad. Before, the underscores disappeared
+  and the text between two of them turned italic. `_Underscores_` around a whole word still italicize.
+
 ## [app-20261003.1524](https://github.com/markhuot/harness/releases/tag/app-20261003.1524) - 2026-10-03
 
 ### Added

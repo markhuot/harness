@@ -46,6 +46,33 @@ describe("inlineTokens: ticket keys", () => {
   });
 });
 
+describe("inlineTokens: underscore emphasis", () => {
+  test("underscores inside words stay literal instead of italicizing the text between them", () => {
+    const line = "adds a spec_revised Activity entry with post_note.";
+    expect(inlineTokens(line)).toEqual([{ t: "text", text: line }]);
+    for (const s of ["snake_case_name", "foo_bar_", "_foo_bar", "__init__", "na\u00efve_a_b", "1_a_", "_b_2"]) {
+      expect(inlineTokens(s)).toEqual([{ t: "text", text: s }]);
+    }
+  });
+
+  test("underscores at word boundaries, punctuation included, still italicize", () => {
+    expect(inlineTokens("_it_ and (_x_).")).toEqual([
+      { t: "em", text: "it" },
+      { t: "text", text: " and (" },
+      { t: "em", text: "x" },
+      { t: "text", text: ")." },
+    ]);
+  });
+
+  test("stars still italicize inside a word", () => {
+    expect(inlineTokens("a*b*c")).toEqual([
+      { t: "text", text: "a" },
+      { t: "em", text: "b" },
+      { t: "text", text: "c" },
+    ]);
+  });
+});
+
 describe("ticketLinkable", () => {
   const project = (id: string, key: string) => ({ id, key }) as Project;
   const ticket = (id: string, key: string) => ({ id, key, projectId: "p1", title: id }) as Ticket;

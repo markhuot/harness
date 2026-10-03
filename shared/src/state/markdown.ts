@@ -221,7 +221,9 @@ export type InlineToken =
 /** A ticket key, as a whole string: the bare-word pattern INLINE uses, anchored. */
 const TICKET_KEY = /^[A-Z][A-Z0-9]*-\d+$/;
 
-const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\))/g;
+// `_` emphasis opens and closes only at a word boundary, as in CommonMark, so snake_case_names keep
+// their underscores; `*` may sit inside a word (a*b*c). The u flag is for \p{L}/\p{N}.
+const INLINE = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|(?<![\p{L}\p{N}_])_[^_\s][^_]*_(?![\p{L}\p{N}_]))|(\[[^\]]+\]\([^)\s]+\))|(https?:\/\/[^\s)<>]+)|(\b[A-Z][A-Z0-9]*-\d+\b)|(!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\))/gu;
 const IMAGE_PARTS = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/;
 
 // Starts with a letter or digit, so `attachment:..` can't become `/attachments/..` (the service root, token attached).

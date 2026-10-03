@@ -40,6 +40,13 @@ struct MarkdownTests {
         #expect(got.unicodeScalars.elementsEqual(c.output.unicodeScalars), "\(got.debugDescription) vs \(c.output.debugDescription)")
     }
 
+    /// The line from HARNESS-220's review prompt that rendered as "specrevised … postnote".
+    @Test func intrawordUnderscoresStayLiteral() {
+        let line = "adds a spec_revised Activity entry with post_note."
+        #expect(Markdown.inlineTokens(line) == [.text(line)])
+        #expect(Markdown.inlineTokens("_it_ and na\u{EF}ve_a_b") == [.em("it"), .text(" and na\u{EF}ve_a_b")])
+    }
+
     @Test func unknownBlockKindThrows() {
         #expect(throws: DecodingError.self) { try JSONDecoder().decode(Markdown.Block.self, from: Data(#"{"t":"video"}"#.utf8)) }
         #expect(throws: DecodingError.self) { try JSONDecoder().decode(Markdown.InlineToken.self, from: Data(#"{"t":"image","text":"x"}"#.utf8)) }
