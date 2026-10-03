@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261003.1100](https://github.com/markhuot/harness/releases/tag/app-20261003.1100) - 2026-10-03
+
 ### Added
 
 - Screenshots in a spec have a layout, on the Mac and on iPhone and iPad. An image on a line of its
