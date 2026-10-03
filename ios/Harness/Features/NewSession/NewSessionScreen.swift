@@ -4,9 +4,10 @@ import SwiftUI
 /// New session edits a draft ticket (DESIGN.md "Drafts"): the project
 /// with Task | Conductor, the prompt, and an Options disclosure holding the same TicketSettings rows
 /// as ticket Details. The draft is saved lazily (DraftSync, through HarnessKit's NewSessionEditor):
-/// nothing until it has something worth keeping, then a POST and debounced PATCHes. Start session /
-/// Plan first launch it; Cancel asks whether to save or discard a non-empty draft, and a swipe down
-/// saves it. `key` reopens a saved draft (a draft card on the board, or /ticket/<key> for one).
+/// nothing until it has something worth keeping, then a POST and debounced PATCHes. The toolbar's
+/// Plan first and Start session launch it; Cancel asks whether to save or discard a non-empty
+/// draft, and a swipe down saves it. `key` reopens a saved draft (a draft card on the board, or
+/// /ticket/<key> for one).
 struct NewSessionScreen: View {
     let projectId: String?
     let key: String?
@@ -51,8 +52,14 @@ private struct NewSessionEditorView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") { cancel() }
                 }
+                // Plan first and Start session each get their own glass; Start is the prominent one.
+                ToolbarItem(placement: .topBarTrailing) {
+                    launchButton("Plan first", systemImage: "doc.text", busy: editor?.busy == .plan) { submit(start: false) }
+                        .disabled(!canSubmit(view))
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start", systemImage: "paperplane.fill") { submit(start: true) }
+                    launchButton("Start session", systemImage: "paperplane.fill", busy: editor?.busy == .start) { submit(start: true) }
                         .primaryToolbarItem(c)
                         .disabled(!canSubmit(view))
                 }
@@ -95,6 +102,18 @@ private struct NewSessionEditorView: View {
             }
     }
 
+    /// A toolbar launch button: its icon turns into a spinner while its launch is in flight.
+    private func launchButton(_ title: String, systemImage: String, busy: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label {
+                Text(title)
+            } icon: {
+                if busy { ProgressView().controlSize(.small) } else { Image(systemName: systemImage) }
+            }
+        }
+        .accessibilityLabel(title)
+    }
+
     // MARK: Content
 
     @ViewBuilder private func content(_ state: BoardState, _ view: Ticket?) -> some View {
@@ -122,8 +141,6 @@ private struct NewSessionEditorView: View {
             ))
         } ?? []
         let needsLook = attention(t)
-        let enabled = canSubmit(t)
-        let busy = editor.busy
 
         return Form {
             Section {
@@ -197,16 +214,6 @@ private struct NewSessionEditorView: View {
                 if optionsOpen {
                     TicketSettingsForm(ticket: t, branches: branches) { editor.edit($0) }
                 }
-            }
-            Section {
-                VStack(spacing: 8) {
-                    HButton("Start session", icon: "play", variant: .primary, loading: busy == .start, haptic: nil) { submit(start: true) }
-                        .disabled(!enabled)
-                    HButton("Plan first", icon: "fileText", variant: .ghost, loading: busy == .plan, haptic: nil) { submit(start: false) }
-                        .disabled(!enabled)
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
             }
         }
         .scrollContentBackground(.hidden)

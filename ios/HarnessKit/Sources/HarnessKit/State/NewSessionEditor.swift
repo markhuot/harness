@@ -199,7 +199,7 @@ public final class NewSessionEditor {
         return Models.ticketChoice(local, ModelProject(p), s.settings.map(ModelSettings.init)).driver
     }
 
-    /// Start session / Plan first (and the toolbar's Start) are enabled: a spec, a project,
+    /// The toolbar's Start session and Plan first are enabled: a spec, a project,
     /// nothing in flight, and a branch pick that isn't an error.
     public func canSubmit(_ s: BoardState, hint: BranchHint?) -> Bool {
         guard let local, project(s) != nil, busy == nil else { return false }

@@ -33,16 +33,16 @@
 //      after scrolling back down; the Activity tab opens at the bottom and follows; the ticket's hero
 //      scrolls away with the transcript and comes back on scrolling back or a tap on the tab
 //
-//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, the
-//      prompt editor keeps its cursor above it as the text grows, and the
-//      New session sheet scrolls to its last button above it; keyboard-*.png. A headless simulator
+//   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
+//      prompt editor keeps its cursor above it as the text grows; keyboard-*.png. A headless simulator
 //      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
 //      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
 //   --mentions: in New session's Spec field and the ticket composer, typing `@…` lists the project's
 //      files, tapping one completes it, and the run the spec starts gets the file attached ("Attached
 //      @…" in the transcript); typing `/co` in New session on a claude-code project (the fake CLI)
-//      lists its commands, a tap completes one, and the CLI gets the spec as typed; mentions-*.png
+//      lists its commands, a tap completes one, and the CLI gets the spec as typed; the toolbar's Plan
+//      first launches a draft in planning and lands on its Spec tab; mentions-*.png, new-session-toolbar*.png
 //
 //   --attachments (needs ffmpeg): a spec with a tall and a wide PNG and an H.264 clip inline (stored
 //      by update_spec), plus an attachment: reference to a file that doesn't exist; checks every
@@ -1128,25 +1128,6 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     return `field ends ${gap}pt above the keyboard`;
   });
 
-  await check("New session scrolls to its last button above the keyboard", async () => {
-    await goto(udid, "harness://new");
-    const top = await until("keyboard up", keyboardTop, 8000);
-    await Bun.sleep(600);
-    for (let i = 0; i < 3; i++) {
-      await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 30)), "--end-x", "200", "--end-y", "160", "--duration", "0.3", "--udid", udid);
-      await Bun.sleep(500);
-    }
-    await Bun.sleep(600);
-    await shot(udid, "keyboard-new-session");
-    // Plan first sits under Start session: the last thing on the sheet.
-    const all = await nodes(udid);
-    const button = all.find((n) => n.AXLabel === "Plan first") ?? all.find((n) => n.AXLabel === "Start session");
-    if (!button) throw new Error("no Start session / Plan first button");
-    const gap = Math.round(top - bottomOf(button));
-    if (gap < 0) throw new Error(`the last button ends ${-gap}pt behind the keyboard (button ends at ${Math.round(bottomOf(button))}, keyboard at ${Math.round(top)})`);
-    return `"${button.AXLabel}" ends ${gap}pt above the keyboard`;
-  });
-
   // The editor is a growing multiline field inside a scroll view; typing at its end has to keep
   // scrolling the view so the cursor (the field's last line) stays above the keyboard.
   await check("prompt editor follows the cursor above the keyboard as the text grows", async () => {
@@ -1191,6 +1172,12 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     const d = await api<TicketDetail>("GET", `/tickets/${key}`);
     return (await api<TranscriptEntry[]>("GET", `/sessions/${d.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
   };
+  // AXe doesn't list the sheet's navigation bar items, so New session's Start session (the last
+  // one) and Plan first (left of it) are tapped where they sit.
+  const tapToolbar = async (fromRight: 0 | 1) => {
+    const width = (await tree(udid))[0]!.frame.width;
+    await axe("tap", "-x", String(Math.round(width - 38 - fromRight * 56)), "-y", "100", "--udid", udid);
+  };
   /** The spec as typed in New session: revision 1 (the dummy's run adds a Status section after it). */
   const typed = async (key: string) => (await api<SpecRevision>("GET", `/tickets/${encodeURIComponent(key)}/spec/revisions/1`)).body;
 
@@ -1204,7 +1191,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await shootBoth(udid, "mentions-new-session");
     await tapWhere(udid, "README.md");
     await until("list closed", async () => !(await has("README.md")), 4000);
-    await tapWhere(udid, "Start session");
+    await tapToolbar(0);
     moved(udid);
     // The draft is saved while it's typed; wait for it to launch.
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key && !x.draft), 10000);
@@ -1212,6 +1199,25 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     if (spec !== "Summarize @README.md") throw new Error(`spec is ${JSON.stringify(spec)}`);
     await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
     return `${t.key}: ${spec}`;
+  });
+
+  await check("New session: the toolbar's Plan first launches the draft in planning, on its Spec tab", async () => {
+    const before = new Set((await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).map((x) => x.key));
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some((x) => x.startsWith("Spec")));
+    await shootBoth(udid, "new-session-toolbar-empty");
+    await tapWhere(udid, (l) => l.startsWith("Spec"));
+    await axe("type", "Plan the readme", "--udid", udid);
+    await Bun.sleep(300);
+    await shootBoth(udid, "new-session-toolbar");
+    await tapToolbar(1);
+    moved(udid);
+    const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => !before.has(x.key) && !x.draft), 10000);
+    if (t.status !== "planning") throw new Error(`${t.key} launched in ${t.status}, not planning`);
+    // The Spec tab's revision bar ("Show changes") is on no other tab.
+    await until(`${t.key}'s Spec tab`, async () => (await labels(udid)).includes("Show changes"), 8000).catch(async (e) => {
+      throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).join(" | ")}`);
+    });
+    return `${t.key} in planning, on its Spec tab`;
   });
 
   await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
@@ -1247,7 +1253,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await until("list closed", async () => !(await has("/code-walk")), 4000);
     await axe("type", "this branch", "--udid", udid);
     await Bun.sleep(300);
-    await tapWhere(udid, "Start session");
+    await tapToolbar(0);
     moved(udid);
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.slash.id}`)).find((x) => !x.draft), 10000);
     const spec = await typed(t.key);
