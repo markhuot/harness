@@ -123,7 +123,10 @@ describe("getTicket (board)", () => {
     expect(d.ticket.projectKey).toBe("API");
     expect(d.ticket.blockedReason).toBe("Which DB?");
     expect(d.parent).toBe(conductor.key);
-    expect(d.activity.map((a) => [a.kind, a.body])).toEqual([["note", "tried sqlite"]]);
+    expect(d.activity.map((a) => [a.kind, a.body])).toEqual([
+      ["moved", "Work started"],
+      ["note", "tried sqlite"],
+    ]);
     expect(d.transcript).toBeUndefined();
     expect(d.resolvedFrom).toBeNull();
 

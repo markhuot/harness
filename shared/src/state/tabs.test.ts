@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { effectiveTab, isTicketTab, logsMessages, nextTab, openingTab, TICKET_TABS, ticketTabFrom, visibleTabs, type TicketTab } from "./tabs";
+import { effectiveTab, isTicketTab, nextTab, openingTab, tabAfterSend, TICKET_TABS, ticketTabFrom, visibleTabs, type TicketTab } from "./tabs";
 
 describe("openingTab", () => {
   test("every ticket opens on its Spec", () => {
@@ -25,10 +25,12 @@ describe("ticketTabFrom", () => {
   });
 });
 
-describe("logsMessages", () => {
-  test("only the Spec and Activity tabs log a message into Activity", () => {
-    const logging = ([...TICKET_TABS, "plugin:git:changes", "agent:a"] as TicketTab[]).filter(logsMessages);
-    expect(logging).toEqual(["spec", "activity"]);
+describe("tabAfterSend", () => {
+  test("a sent message shows the Transcript, from every tab", () => {
+    for (const tab of [...TICKET_TABS, "plugin:git:changes", "agent:a"] as TicketTab[]) expect(tabAfterSend(tab, true)).toBe("transcript");
+  });
+  test("a failed send stays on its tab", () => {
+    for (const tab of [...TICKET_TABS, "plugin:git:changes"] as TicketTab[]) expect(tabAfterSend(tab, false)).toBe(tab);
   });
 });
 

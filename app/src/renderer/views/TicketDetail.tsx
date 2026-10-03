@@ -19,6 +19,7 @@ import {
   subagentById,
   subagentsOf,
   subagentTabRoute,
+  tabAfterSend,
   TAB_LABEL,
   tabStripTab,
   ticketByKey,
@@ -37,7 +38,6 @@ import { BrowserView } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
 import { SpecTab } from "./SpecTab";
 import { ActivityTab } from "./ActivityTab";
-import { composerLog } from "../state/composer";
 import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
 import { PluginFrame, usePluginTabs } from "./PluginTab";
@@ -289,7 +289,7 @@ export function TicketDetail({
         )}
         </FileLinkScope>
       </div>
-      <MessageComposer ticket={ticket} tab={tab} key={ticket.id} />
+      <MessageComposer ticket={ticket} key={ticket.id} onSent={() => setTab(tabAfterSend(tab, true))} />
     </aside>
   );
 }
@@ -619,7 +619,8 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
   );
 }
 
-function MessageComposer({ ticket, tab }: { ticket: Ticket; tab: TicketTab }) {
+/** The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the answer appear. */
+function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => void }) {
   const { client } = useStore();
   const act = useAction();
   const [text, setText] = useState("");
@@ -631,8 +632,6 @@ function MessageComposer({ ticket, tab }: { ticket: Ticket; tab: TicketTab }) {
   const [moveFirst, setMoveFirst] = useState(false);
   const switchLabel = moveSwitchLabel(ticket);
   const move = !!switchLabel && moveFirst;
-  // From Spec and Activity the message is logged to Activity; elsewhere it's transcript only.
-  const { log, destination } = composerLog(tab);
   const hint = composerHint(ticket, move);
 
   useEffect(() => {
@@ -651,11 +650,12 @@ function MessageComposer({ ticket, tab }: { ticket: Ticket; tab: TicketTab }) {
     const body = text.trim();
     if (!body || sending) return;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { move, log }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move }));
     setSending(false);
     if (ok) {
       setText("");
       setMoveFirst(false);
+      onSent();
     }
   };
 
@@ -684,9 +684,11 @@ function MessageComposer({ ticket, tab }: { ticket: Ticket; tab: TicketTab }) {
       />
       <div className="composer-bar">
         {switchLabel && <Switch checked={move} onChange={setMoveFirst} label={switchLabel} />}
-        <span className="muted" data-testid="composer-hint">
-          {hint ? `${hint} · ${destination}` : destination}
-        </span>
+        {hint && (
+          <span className="muted" data-testid="composer-hint">
+            {hint}
+          </span>
+        )}
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
         <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">

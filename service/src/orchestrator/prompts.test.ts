@@ -195,19 +195,16 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).not.toContain("Commit your work to this branch");
   });
 
-  test("a plan run tells the agent its last message is the Activity answer only when the message was logged", () => {
-    const rule = "your last message goes there as your answer";
-    expect(sys("plan", ticket({ status: "planning" }), { logged: true })).toContain(rule);
-    expect(sys("plan", ticket({ status: "planning" }), { logged: false })).not.toContain(rule);
-    expect(sys("plan", ticket({ status: "planning" }))).not.toContain(rule);
+  test("plan and chat runs say the answer stays in the transcript, never Activity", () => {
+    expect(sys("plan", ticket({ status: "planning" }))).not.toContain("your last message goes there as your answer");
+    const chat = sys("chat", ticket({ status: "blocked" }));
+    expect(chat).toContain("Their message is in the transcript, and so is your answer.");
+    expect(chat).not.toContain("in the ticket's Activity");
   });
 
-  test("a system.plan override may use {{logged}}, and renders it", () => {
-    const draft = "Plan.{{#if logged}} Answer in one line.{{/if}}";
-    expect(promptTemplateError("system.plan", draft)).toBeNull();
-    const overrides = { "system.plan": draft };
-    expect(sys("plan", ticket({ status: "planning" }), { logged: true, overrides })).toContain("Plan. Answer in one line.");
-    expect(sys("plan", ticket({ status: "planning" }), { logged: false, overrides })).not.toContain("Answer in one line.");
+  test("a system.plan or system.chat override that uses {{logged}} is refused: the variable is gone", () => {
+    expect(promptTemplateError("system.plan", "Plan.{{#if logged}} Answer in one line.{{/if}}")).not.toBeNull();
+    expect(promptTemplateError("system.chat", "Chat.{{#if logged}} In Activity.{{/if}}")).not.toBeNull();
   });
 
   test("work runs forbid calling both block and submit_for_review", () => {

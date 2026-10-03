@@ -320,17 +320,7 @@ describe("messages and Activity", () => {
     return { h, t };
   }
 
-  test("log: true adds the message and the agent's answer", async () => {
-    const { h, t } = await chatSetup();
-    await h.orch.sendMessage(t.key, "What's the answer?", { log: true });
-    await h.orch.idle();
-    expect(h.orch.activity(t.key).map((e) => [e.kind, e.author, e.body])).toEqual([
-      ["message", "human", "What's the answer?"],
-      ["answer", "agent", "The answer is 42."],
-    ]);
-  });
-
-  test("log: false adds neither; the message still reaches the agent", async () => {
+  test("a message and the agent's answer stay out of Activity; the message still reaches the agent", async () => {
     const { h, t } = await chatSetup();
     await h.orch.sendMessage(t.key, "What's the answer?");
     await h.orch.idle();
@@ -339,14 +329,15 @@ describe("messages and Activity", () => {
     expect(h.driver.calls.at(-1)!.prompt).toContain("What's the answer?");
   });
 
-  test("a logged message to a planning ticket gets the plan run's answer", async () => {
+  test("a message to a planning ticket gets its answer in the transcript, not Activity", async () => {
     const h = await setup();
     h.driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
       if (req.kind === "plan") yield { type: "text", text: "Revised the plan." };
     };
     const t = await h.make("planning");
-    await h.orch.sendMessage(t.key, "Plan for mobile too", { log: true });
+    await h.orch.sendMessage(t.key, "Plan for mobile too");
     await h.orch.idle();
-    expect(h.orch.activity(t.key).map((e) => e.kind)).toEqual(["message", "answer"]);
+    expect(h.orch.activity(t.key)).toEqual([]);
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "plan" });
   });
 });

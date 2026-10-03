@@ -14,6 +14,7 @@
 
 import type { PromptGroup, PromptId, TemplateNode, TemplateVars } from "@harness/shared";
 import { parseTemplate, renderTemplate, templateError } from "@harness/shared";
+import { ACTIVITY_LINE_MAX } from "../activity";
 
 export interface PromptDef {
   group: PromptGroup;
@@ -100,17 +101,14 @@ Tickets move planning → in_progress → blocked → review → done.
     group: "system",
     label: "Planning run instructions",
     description: "Planning runs: investigate read-only, apply the ticket settings the request asks for with update_ticket, and write the spec's plan with update_spec.",
-    variables: {
-      logged: "True when a human message sent from the Spec or Activity tab started this run, so your last message becomes its answer in Activity",
-    },
+    variables: {},
     template: `## This run: planning
 The ticket is in planning. Turn its spec, which for now is the human's request, into a spec a human can approve.
 1. Investigate read-only: read files, search, run non-destructive commands. Do not create, modify or delete files, and do not commit.
 2. Write the spec in markdown with the sections below (see Spec and Activity): the Goal (the human's request, kept in their words), the Plan (the approach, the files or areas to change, risks, and how the result will be verified: tests, builds, manual or browser checks), Status ("Not started"), and Open questions.
 3. When the request asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the spec what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
 4. Call \`update_spec\` { spec, note, base_revision } with the complete spec. It replaces the text, so include everything worth keeping from the request. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, revise only what their feedback changes with \`edit_spec\`, or \`update_spec\` for a rewrite (and \`update_ticket\` when they change a setting). Put unresolved questions under Open questions instead of guessing. Do not start the work: the human approves the spec on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the spec is saved.{{#if logged}}
-The human's message is in the ticket's Activity, and your last message goes there as your answer, next to theirs. It MUST be one short line: what you changed in the spec and why, e.g. "Added a pixel check of the button corners to the plan; a height assertion can't fail." When they asked a question and nothing changed, it MUST be one direct line that answers it; detail worth keeping goes in the spec. It MUST NOT explain, list options or repeat the spec.{{/if}}`,
+When the human replies with feedback, revise only what their feedback changes with \`edit_spec\`, or \`update_spec\` for a rewrite (and \`update_ticket\` when they change a setting). Put unresolved questions under Open questions instead of guessing. Do not start the work: the human approves the spec on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the spec is saved.`,
   },
 
   "system.work": {
@@ -310,12 +308,11 @@ When every child is done and the goal is met, bring the spec up to date, then ca
       blockedReason: "What the ticket is blocked on (the agent's question, or why a run failed), or empty",
       review: "True when the ticket is in review",
       done: "True when the ticket is done",
-      logged: "True when the human sent the message from the Spec or Activity tab, so it's in Activity and your answer goes there too",
     },
     template: `## This run: a message about the ticket
 The human sent a message about this ticket{{#if status}}, which is in {{status}}{{/if}}. Nothing moved the ticket first: it stays where it is unless you move it. You have a work run's tools and the ticket's usual permissions: read files, search, run commands and the tests, change files and commit to the ticket's branch the way a work run would.
 {{#if blocked}}The ticket is blocked{{#if blockedReason}} on: {{blockedReason}}{{/if}}. If their message resolves that, call \`unblock\` { note? } before you continue, so the board shows the ticket in progress while you work. Then do the work and end the way a work run does: bring the spec up to date, then \`submit_for_review\` { note, spec_is_up_to_date: true } when it's done, or \`block\` { question } when you need them again. If the message doesn't resolve the block (a side question, say), answer it and leave the ticket blocked.{{else if review}}The work is in review. Answer their message, and make the changes they ask for. When their message has you changing the work beyond investigating or answering (editing code, fixing a bug, adding to what was submitted), call \`resume_work\` { note? } first, so the board shows the ticket in progress while you work and the reviewers don't judge work that's about to change. That's your call: a question answered or something looked into leaves the ticket in review. When you changed the work, commit it, update the parts of the spec it changed, and call \`submit_for_review\` { note, spec_is_up_to_date: true } again, which starts both reviews over; when you only answered, leave the ticket in review. Call \`block\` { question } only when you can't go on without them.{{else if done}}The work has landed and the ticket is done, so the working directory may be the project's main checkout: change files only when they ask for it outright. A done ticket stays done: when they want the work picked back up, they turn on the composer's "Re-open and move to in progress" switch and send the message again, which re-opens the ticket.{{/if}}
-{{#if logged}}Their message is in the ticket's Activity, and when you leave the ticket where it is your last message goes there as your answer, next to theirs. Like every Activity entry, it MUST be one short line: what you changed and why ("I changed X because Y"), or a direct answer when they asked a question and nothing changed. It MUST NOT explain, list options or repeat the spec; reasoning MUST go in the spec or stay in the transcript.{{else}}Their message is in the transcript only, and so is your answer.{{/if}} When the answer changes what the spec says (a decision, or a new requirement the human asked for, which goes in the Goal), update the spec with \`edit_spec\` too.`,
+Their message is in the transcript, and so is your answer. When the answer changes what the spec says (a decision, or a new requirement the human asked for, which goes in the Goal), update the spec with \`edit_spec\` too.`,
   },
 
   "system.triage": {
@@ -415,7 +412,7 @@ The ticket's spec is the document a human reads to know what the change is, why 
   * Open questions.
 * Show your work in the spec: markdown images of local files, such as ![After](shots/after.png) (png, jpg, gif, webp, mp4, webm, mov; absolute or relative to your working directory), are stored when you write them and their src becomes attachment:<id>. When the work has a visible result, such as a UI change, rendered output or a browser flow, capture it {{#if browser}}(\`browser_screenshot\` with \`save_to\` writes the page to a file{{#if readOnly}}; a relative path goes to this run's scratch folder, and the result gives the full path{{else}} inside your working directory, or this run's scratch folder when the ticket is read-only; the result gives the full path{{/if}}; a simulator or app screenshot or a short screen recording works too){{else}}(a simulator or app screenshot or a short screen recording){{/if}} and put it in Status.
 {{else}}* This run reads the spec but doesn't change it.
-{{/if}}* Activity is the ticket's short timeline next to the spec. A note there (\`post_note\`{{#if submits}}, and the note you submit with{{/if}}) covers what changed since your last note or submit. Each Activity entry MUST be one short line: what you changed and why ("I changed X because Y"). It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning MUST go in the spec or stay in the transcript.{{#if activity}}
+{{/if}}* Activity is the ticket's at-a-glance progress: one line per entry, shown on its board card, in a conductor's Tickets tab, in search and in its Activity tab. A note there (\`post_note\`{{#if submits}}, and the note you submit with{{/if}}) covers what changed since your last note or submit. Each Activity entry MUST be one short line: what you changed and why ("I changed X because Y"); a note with line breaks or over ${ACTIVITY_LINE_MAX} characters is refused. It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning MUST go in the spec or stay in the transcript.{{#if submits}} While you work, keep it from going stale: post a note at each milestone and at least every 10 minutes (check the time with \`date\` when unsure), saying where things stand, e.g. "Still running tests: 3 of 10 suites done; the UI suites are the slowest so far."{{/if}}{{#if activity}}
 Recent activity, oldest first:
 {{activity}}{{/if}}`,
   },

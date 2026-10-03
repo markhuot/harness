@@ -233,9 +233,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/start", ({ params }) => o.startTicket(params.key!));
   add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
+    // Older apps still send `log`; messages go to the transcript only, so it's ignored.
     const b = await body();
-    if (b?.log !== undefined && typeof b.log !== "boolean") throw new HarnessError(400, "log must be true or false");
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, log: b?.log === true });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true });
   });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();

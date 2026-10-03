@@ -7,6 +7,7 @@ import {
   initialState,
   isReady,
   latestActivity,
+  NEWS_KINDS,
   liveDelta,
   mergeById,
   reducer,
@@ -256,6 +257,20 @@ describe("activity", () => {
     expect(latestActivity(s, "s1", ["submitted", "blocked"])?.id).toBe("sub");
     expect(latestActivity(s, "s1", ["failed"])).toBeUndefined();
     expect(latestActivity(s, "nope")).toBeUndefined();
+  });
+
+  test("a card's news skips column moves, questions and permission entries after the latest note", () => {
+    const s = apply(initialState, {
+      type: "activity",
+      sessionId: "s1",
+      activity: [
+        activity("n", 10),
+        activity("mv", 20, { kind: "moved", meta: { from: "review", to: "done" } }),
+        activity("perm", 30, { kind: "permission", author: "system" }),
+        activity("q", 40, { kind: "blocked" }),
+      ],
+    });
+    expect(latestActivity(s, "s1", NEWS_KINDS)?.id).toBe("n");
   });
 });
 

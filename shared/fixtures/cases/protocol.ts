@@ -368,6 +368,8 @@ export const ActivityMeta: P.ActivityMeta[] = [
   { round: 2, commit: "9f1c2ab", by: "agent" },
   { round: 1, commit: null, by: "conductor" },
   { note: "The human answered", specRevision: 4, by: "human" },
+  { specRevision: 5, from: "in_progress", to: "review" },
+  { round: 3, commit: "9f1c2ab", by: "agent", detail: "The enum test is tautological.\n\n- `Enums.swift:12`: assert a real decode" },
   {},
 ];
 
@@ -378,6 +380,7 @@ export const ActivityEntry: P.ActivityEntry[] = [
   { id: "act_4", sessionId: "ses_31", ticketId: "tkt_31", kind: "blocked", author: "agent", body: "Should HarnessEvent decode unknown kinds or drop them?", meta: ActivityMeta[0]!, createdAt: T0 + 1 },
   { id: "act_5", sessionId: "ses_31", ticketId: "tkt_31", kind: "changes_requested", author: "agent", body: "The enum test is tautological", meta: ActivityMeta[1]!, createdAt: T0 + 2 },
   { id: "act_6", sessionId: "ses_31", ticketId: "tkt_31", kind: "submitted", author: "agent", body: "Ready", meta: { specRevision: 4 }, createdAt: T0 + 3 },
+  { id: "act_7", sessionId: "ses_31", ticketId: "tkt_31", kind: "moved", author: "human", body: "", meta: { from: "review", to: "done" }, createdAt: T0 + 4 },
 ];
 
 export const SpecRevisionInfo: P.SpecRevisionInfo[] = [
@@ -842,8 +845,7 @@ export const HumanReviewBody: P.HumanReviewBody[] = [
 export const MessageBody: P.MessageBody[] = [
   { text: "Use Double for timestamps" },
   { text: "Re-open please", move: true },
-  { text: "Why the enum?", log: true },
-  { text: "Back to work", move: true, log: false },
+  { text: "Back to work", move: false },
 ];
 
 export const ReopenBody: P.ReopenBody[] = [{ notes: "The enum test is tautological" }];
