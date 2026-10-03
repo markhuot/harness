@@ -22,6 +22,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   iPad, and no longer sits at the top of the ticket under the title, which kept the top of every
   ticket with children busier than it needed to be.
 
+### Fixed
+
+- On iPhone and iPad, the Transcript tab scrolls up and down again when your finger lands on an
+  expanded tool call. The call's Input or Output box used to take the drag and slide its text
+  sideways instead. The box still scrolls sideways when you swipe sideways, and scrolls down on its
+  own once its text is taller than the box.
+- On iPhone and iPad, a tool call's Output box no longer shows up empty when the output is very
+  long or has a very long line, like a `get_ticket` result with the whole spec in it. Lines longer
+  than 500 characters wrap onto the next line.
+
 ## [app-20261003.1227](https://github.com/markhuot/harness/releases/tag/app-20261003.1227) - 2026-10-03
 
 ### Fixed

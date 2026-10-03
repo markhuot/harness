@@ -97,6 +97,37 @@ struct TranscriptLogicTests {
         #expect(TranscriptLogic.agent(for: Self.entry("t", .text(text: "k1")), in: agents) == nil)
     }
 
+    @Test("a code box's text is cut into runs of lines that join back to the text")
+    func codeChunks() {
+        let lines = (1...5).map { "line \($0)" }
+        // Cut at the boundary, the remainder in its own chunk, and nothing lost or added.
+        #expect(TranscriptLogic.codeChunks(lines.joined(separator: "\n"), lines: 2) == ["line 1\nline 2", "line 3\nline 4", "line 5"])
+        #expect(TranscriptLogic.codeChunks(lines.prefix(4).joined(separator: "\n"), lines: 2) == ["line 1\nline 2", "line 3\nline 4"])
+        // Blank lines (and a trailing newline) survive the round trip.
+        let blanks = "a\n\n\nb\n"
+        #expect(TranscriptLogic.codeChunks(blanks, lines: 2).joined(separator: "\n") == blanks)
+        #expect(TranscriptLogic.codeChunks(blanks, lines: 2) == ["a\n", "\nb", ""])
+        #expect(TranscriptLogic.codeChunks("") == [""])
+        #expect(TranscriptLogic.codeChunks("one", lines: 0) == ["one"])
+    }
+
+    @Test("a line past the width is broken into pieces, which count toward the chunk's lines")
+    func codeChunksBreakLongLines() {
+        #expect(TranscriptLogic.codeChunks("abcdefg\nhi", lines: 10, width: 3) == ["abc\ndef\ng\nhi"])
+        #expect(TranscriptLogic.codeChunks("abcdef", lines: 10, width: 3) == ["abc\ndef"])
+        #expect(TranscriptLogic.codeChunks("abc", lines: 10, width: 3) == ["abc"])
+        #expect(TranscriptLogic.codeChunks("abcdefg\nhi", lines: 2, width: 3) == ["abc\ndef", "g\nhi"])
+        // A capped tool output with a spec on one line: no chunk is past the limits.
+        let output = "{\n  \"spec\": \"" + String(repeating: "x", count: 9500) + "\"\n}"
+        let chunks = TranscriptLogic.codeChunks(output)
+        #expect(chunks.joined().filter { $0 == "x" }.count == 9500)
+        for chunk in chunks {
+            let rows = chunk.split(separator: "\n", omittingEmptySubsequences: false)
+            #expect(rows.count <= TranscriptLogic.codeChunkLines)
+            #expect(rows.allSatisfy { $0.count <= TranscriptLogic.codeLineLimit })
+        }
+    }
+
     @Test("the Input block is JSON.stringify(input, null, 2)")
     func inputJSON() {
         #expect(TranscriptLogic.inputJSON(.object(["command": .string("ls -la")])) == "{\n  \"command\": \"ls -la\"\n}")
