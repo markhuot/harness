@@ -89,6 +89,36 @@ public enum PromptAttachments {
         "Pasted image.\(pasteExtensions[Mentions.JS.lowercase(mimeType ?? "")] ?? "png")"
     }
 
+    // MARK: Phone-only (uploads from the iPhone/iPad)
+
+    /// HEIC/HEIF photos go up as JPEG: the agent APIs don't take HEIC images.
+    public static func needsJPEG(mimeType: String?, name: String) -> Bool {
+        let type = Mentions.JS.lowercase(mimeType ?? "")
+        if ["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"].contains(type) { return true }
+        guard let ext = fileExtension(name).map(Mentions.JS.lowercase) else { return false }
+        return ext == "heic" || ext == "heif"
+    }
+
+    /// `name` with its extension swapped for .jpg ("IMG_1.HEIC" → "IMG_1.jpg"; "photo" → "photo.jpg").
+    public static func jpegName(_ name: String) -> String {
+        let scalars = Array(name.unicodeScalars)
+        if fileExtension(name) != nil, let dot = scalars.lastIndex(of: "."), dot > 0 {
+            return string(scalars[..<dot]) + ".jpg"
+        }
+        return name + ".jpg"
+    }
+
+    /// How many of `incoming` new files fit next to `current` attachments and `pending` uploads,
+    /// so the phone doesn't upload what the limit would leave out.
+    public static func room(current: Int, pending: Int, incoming: Int, max: Int = maxPromptAttachments) -> Int {
+        Swift.max(0, Swift.min(incoming, max - current - pending))
+    }
+
+    /// The toast when the limit left files out.
+    public static func limitMessage(skipped: Int, max: Int = maxPromptAttachments) -> String {
+        "A session takes up to \(max) attachments: \(skipped) \(skipped == 1 ? "file was" : "files were") left out."
+    }
+
     // MARK: Helpers
 
     /// `/\.([^./]+)$/.exec(s)?.[1]`: what follows the last dot, when it's non-empty and has no slash.

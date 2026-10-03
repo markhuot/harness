@@ -97,3 +97,35 @@ struct PromptAttachmentsTests {
         Ticket(id: "t", key: "A-1", projectId: "p", title: "", spec: "", status: .planning, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
     }
 }
+
+@Suite("PromptAttachments phone-only upload rules")
+struct PromptAttachmentUploadRulesTests {
+    @Test func heicAndHeifConvertByTypeOrExtension() {
+        #expect(PromptAttachments.needsJPEG(mimeType: "image/HEIC", name: "x"))
+        #expect(PromptAttachments.needsJPEG(mimeType: "image/heif", name: "x.png"))
+        #expect(PromptAttachments.needsJPEG(mimeType: nil, name: "IMG_1.HEIC"))
+        #expect(PromptAttachments.needsJPEG(mimeType: "application/octet-stream", name: "a.heif"))
+        #expect(!PromptAttachments.needsJPEG(mimeType: "image/png", name: "a.png"))
+        #expect(!PromptAttachments.needsJPEG(mimeType: nil, name: "heic"))
+        #expect(!PromptAttachments.needsJPEG(mimeType: nil, name: "/a.heic/file"))
+    }
+
+    @Test func jpegNameSwapsOnlyARealExtension() {
+        #expect(PromptAttachments.jpegName("IMG_1.HEIC") == "IMG_1.jpg")
+        #expect(PromptAttachments.jpegName("a.b.heic") == "a.b.jpg")
+        #expect(PromptAttachments.jpegName("photo") == "photo.jpg")
+        #expect(PromptAttachments.jpegName(".heic") == ".heic.jpg")
+    }
+
+    @Test func roomStopsAtTheLimit() {
+        #expect(PromptAttachments.room(current: 0, pending: 0, incoming: 3) == 3)
+        #expect(PromptAttachments.room(current: 17, pending: 1, incoming: 5) == 2)
+        #expect(PromptAttachments.room(current: 20, pending: 0, incoming: 1) == 0)
+        #expect(PromptAttachments.room(current: 19, pending: 3, incoming: 1) == 0)
+    }
+
+    @Test func limitMessageCountsFiles() {
+        #expect(PromptAttachments.limitMessage(skipped: 1) == "A session takes up to 20 attachments: 1 file was left out.")
+        #expect(PromptAttachments.limitMessage(skipped: 3, max: 5) == "A session takes up to 5 attachments: 3 files were left out.")
+    }
+}
