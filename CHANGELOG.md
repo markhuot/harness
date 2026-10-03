@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- iPhone and iPad warn you when the app and the harness service on your Mac come from different
+  releases. A banner at the top of the board, Inbox and Settings names both releases and says which
+  side to update: Harness from TestFlight, or Harness on the Mac. Close it to hide it until either
+  side changes.
+
 ## [app-20261003.1524](https://github.com/markhuot/harness/releases/tag/app-20261003.1524) - 2026-10-03
 
 ### Added

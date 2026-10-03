@@ -96,18 +96,22 @@ public struct ServiceStatus: Codable, Sendable, Equatable {
 }
 
 /// GET /health (unauthenticated). Services from before build tracking omit `build` and `stale`.
+/// `release`: the newest app-* release tag the service's code includes (null when it can't tell);
+/// services from before it omit it.
 public struct Health: Codable, Sendable, Equatable {
     /// Always true
     public var ok: Bool
     public var version: String
     public var pid: Int
+    public var release: Patch<String>
     public var build: Patch<String>
     public var stale: Bool?
 
-    public init(ok: Bool = true, version: String, pid: Int, build: Patch<String> = .absent, stale: Bool? = nil) {
+    public init(ok: Bool = true, version: String, pid: Int, release: Patch<String> = .absent, build: Patch<String> = .absent, stale: Bool? = nil) {
         self.ok = ok
         self.version = version
         self.pid = pid
+        self.release = release
         self.build = build
         self.stale = stale
     }

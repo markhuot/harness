@@ -575,6 +575,8 @@ export const Health: P.Health[] = [
   { ok: true, version: "0.9.0", pid: 4242, build: "bebc4d8", stale: false },
   { ok: true, version: "0.8.1", pid: 311 },
   { ok: true, version: "0.9.0", pid: 4242, build: null, stale: true },
+  { ok: true, version: "0.1.0", pid: 77, release: "app-20261003.1524", build: "bebc4d8", stale: false },
+  { ok: true, version: "0.1.0", pid: 77, release: null, build: null, stale: false },
 ];
 
 export const BrowserState: P.BrowserState[] = [

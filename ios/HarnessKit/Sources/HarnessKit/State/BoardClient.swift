@@ -16,6 +16,7 @@ public protocol DetailClient: Sendable {
 
 /// Everything BoardStore needs for snapshots and backfills.
 public protocol BoardClient: LoaderClient, DetailClient {
+    func health() async throws -> Health
     func listProjects() async throws -> [Project]
     func listTickets(projectId: String?, status: [TicketStatus]) async throws -> [Ticket]
     func listSessions(kind: SessionKind?) async throws -> [Session]

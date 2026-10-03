@@ -49,6 +49,31 @@ struct ConnectionBanner: View {
             .buttonStyle(.plain)
             .padding(.horizontal, 12)
             .padding(.top, 6)
+        } else if let mismatch = store.releaseMismatch(appBuild: Self.appBuild) {
+            HStack(alignment: .top, spacing: 8) {
+                Icon("alert", size: 14, weight: .semibold).foregroundStyle(c.amber).padding(.top, 1)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(mismatch.title).font(.scaled(size: 13.5, weight: .semibold)).foregroundStyle(c.amber)
+                    Text(mismatch.detail).font(.scaled(size: 12.5)).foregroundStyle(c.text2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button { store.dismissReleaseMismatch(mismatch) } label: {
+                    Icon("x", size: 13, weight: .semibold).foregroundStyle(c.text2).frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Dismiss")
+                .padding(.vertical, -6)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(c.amberSoft, in: .rect(cornerRadius: 10))
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("release-mismatch")
         }
     }
+
+    /// This build's CFBundleVersion: a release's tag digits, or "1" for a development build.
+    static let appBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
 }
