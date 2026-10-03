@@ -92,6 +92,55 @@ ${envXml}
 `;
 }
 
+/** The bundled plist's file name in Harness.app/Contents/Library/LaunchAgents (SMAppService's serviceName). */
+export const BUNDLED_PLIST = `${LAUNCHD_LABEL}.plist`;
+/** EnvironmentVariables marker: launchd started the daemon from the app's bundled plist. */
+export const BUNDLED_ENV = "HARNESS_LAUNCHD";
+
+/**
+ * Pure: the plist a packaged Harness.app ships in Contents/Library/LaunchAgents, which the app
+ * registers through SMAppService (Start at login). launchd then attributes the job to the app the
+ * user approved, so Gatekeeper doesn't evaluate the quarantined service binary on its own (a
+ * prompt nobody sees, and the service hangs before its first instruction). It's the same for
+ * every user, so it holds no paths: the daemon works out PATH, its working directory and its log
+ * file itself (daemon.ts, BUNDLED_ENV).
+ */
+export function buildBundledPlist(o: { appBundleId: string; executable: string }): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>${esc(LAUNCHD_LABEL)}</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/${esc(o.executable)}</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>${esc(o.executable)}</string>
+      <string>daemon</string>
+    </array>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+      <string>${esc(o.appBundleId)}</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>${BUNDLED_ENV}</key>
+      <string>bundle</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>ExitTimeOut</key>
+    <integer>${EXIT_TIMEOUT_S}</integer>
+  </dict>
+</plist>
+`;
+}
+
 export interface ExecResult {
   code: number;
   stdout: string;
@@ -120,7 +169,16 @@ export interface CliDeps {
   sleep: (ms: number) => Promise<void>;
   /** How long `ensure` polls /health */
   healthTimeoutMs: number;
+  /**
+   * The compiled service inside Harness.app, whose login item the app registers through
+   * SMAppService from the bundled plist. This CLI then never writes a plist of its own for the
+   * label (install, ensure and start refuse), and restart only kickstarts the job launchd has.
+   */
+  appManaged: boolean;
 }
+
+const APP_MANAGED =
+  "Harness.app runs this service: turn on Settings → Service → Start at login in the app to keep it running after you quit.";
 
 export function defaultDeps(): CliDeps {
   return {
@@ -137,6 +195,7 @@ export function defaultDeps(): CliDeps {
     fetch: globalThis.fetch,
     sleep: (ms) => Bun.sleep(ms),
     healthTimeoutMs: 15_000,
+    appManaged: COMPILED,
   };
 }
 
@@ -199,6 +258,7 @@ export class Cli {
   }
 
   async install(): Promise<{ changed: boolean }> {
+    if (this.d.appManaged) throw new Error(APP_MANAGED);
     ensureToken(ensureHome(this.home));
     const changed = this.writePlist();
     const state = await this.loaded();
@@ -227,12 +287,23 @@ export class Cli {
     if (r.code !== 0 && !(await this.loaded()).loaded) throw new Error(`launchctl bootstrap failed: ${r.stderr.trim() || r.code}`);
   }
 
+  /**
+   * Remove the plist this CLI wrote. App-managed, that's only a plist from before the app
+   * registered its login item through SMAppService (the app migrates it); the app's own job is
+   * left to the app.
+   */
   async uninstall() {
+    if (this.d.appManaged && !existsSync(this.plistPath)) return;
     await this.bootout();
     if (existsSync(this.plistPath)) unlinkSync(this.plistPath);
   }
 
   async start() {
+    if (this.d.appManaged) {
+      if (!(await this.loaded()).loaded) throw new Error(APP_MANAGED);
+      await this.launchctl("kickstart", `${this.domain}/${LAUNCHD_LABEL}`);
+      return { changed: false };
+    }
     if (this.plistChanged()) return this.install();
     if (!(await this.loaded()).loaded) await this.bootstrap();
     else await this.launchctl("kickstart", `${this.domain}/${LAUNCHD_LABEL}`);
@@ -245,6 +316,7 @@ export class Cli {
 
   async restart() {
     if (!(await this.loaded()).loaded) return this.start();
+    if (this.d.appManaged) return void (await this.launchctl("kickstart", "-k", `${this.domain}/${LAUNCHD_LABEL}`));
     // launchd relaunches the definition it loaded, so a plist that changed since (an ensure that
     // was deferred) is reloaded instead.
     if (this.plistChanged()) return this.install();
@@ -309,6 +381,7 @@ export class Cli {
    * service is left alone and `deferred` says why, until an ensure with `force` or a `restart`.
    */
   async ensure(opts: { force?: boolean } = {}): Promise<{ url: string; tokenPath: string; home: string; pid: number; deferred?: { busy: number } }> {
+    if (this.d.appManaged) throw new Error(APP_MANAGED);
     if (!opts.force && existsSync(this.plistPath) && this.plistChanged() && (await this.loaded()).loaded) {
       const running = await this.health();
       const busy = running ? await this.busyAgents() : 0;

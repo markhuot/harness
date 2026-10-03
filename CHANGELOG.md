@@ -11,6 +11,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- The downloaded Mac app opens again when Start at login is on. Before, the background service
+  could hang at a hidden "downloaded from the Internet" prompt after you installed a new version,
+  and Harness sat waiting for it with no window. Start at login now uses a macOS login item that
+  belongs to Harness itself, and turning it on may ask you to allow Harness in System Settings
+  (General, then Login Items), which Harness opens for you. If Start at login was already on, Harness
+  switches it over the first time it opens.
 - A ticket no longer gets stuck after its agent submits it for review or blocks while a
   background task, such as a log monitor, is still running. Before, the ticket sat in Review
   looking busy, its agent review never started, and messages you sent it were queued with no

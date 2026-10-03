@@ -6,6 +6,10 @@
 // Where the service comes from (resources/harness.json):
 //   { executable: "harness-service" }   a packaged app: the compiled service in Contents/MacOS
 //   { repoRoot, bunPath }               a dev build: bun runs service/src from the checkout
+//
+// A packaged app's login item is the plist it ships in Contents/Library/LaunchAgents, registered
+// through SMAppService (LoginItemAgent), so launchd runs the service as part of the app the user
+// approved. A dev build's is the plist `service install` writes to ~/Library/LaunchAgents.
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -166,6 +170,18 @@ function run(cmd: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs: num
   });
 }
 
+/** SMAppService's state for the bundled login item (Electron's getLoginItemSettings `status`). */
+export type LoginItemStatus = "not-registered" | "enabled" | "requires-approval" | "not-found";
+
+/** The packaged app's login item: Contents/Library/LaunchAgents/com.markhuot.harness.plist through SMAppService. */
+export interface LoginItemAgent {
+  status(): LoginItemStatus;
+  register(): void;
+  unregister(): void;
+  /** System Settings → General → Login Items, where macOS asks the user to allow it */
+  openSettings(): void;
+}
+
 export interface ServiceManagerOptions {
   /** The app root (package.json, resources/, dist/) */
   appRoot: string;
@@ -178,6 +194,10 @@ export interface ServiceManagerOptions {
   healthTimeoutMs?: number;
   /** The app's pid, which the child service watches (HARNESS_SUPERVISOR_PID) */
   pid?: number;
+  /** A packaged app's login item; without one, a packaged app only runs its child */
+  loginItem?: LoginItemAgent;
+  /** How long Start at login waits for the user to allow the login item in System Settings */
+  approvalTimeoutMs?: number;
 }
 
 /**
@@ -231,7 +251,19 @@ export class ServiceManager {
     if ("error" in src) return src;
     const status = await this.status(src);
     if ("error" in status) return status;
-    if (status.installed) return this.ensureLaunchd(src);
+    const item = this.loginItem(src);
+    if (item) {
+      // A plist an older Harness.app wrote to ~/Library/LaunchAgents: the user had Start at login
+      // on, so move it to the bundled login item. launchd runs that plist's binary on its own, and
+      // Gatekeeper holds a downloaded copy at a prompt nobody sees.
+      if (status.installed) {
+        const { out, transcript } = await this.cli(src, ["service", "uninstall", "--json"]);
+        if (out.code !== 0) return fail("Couldn't move the login item to this version of Harness.", transcript);
+        return this.ensureAgent(item, status, { waitForApproval: false });
+      }
+      // requires-approval here means the user turned Harness off in Login Items: run the child.
+      if (item.status() === "enabled") return this.ensureAgent(item, status, { waitForApproval: false });
+    } else if (status.installed) return this.ensureLaunchd(src);
     if (status.healthy && !this.child.running) return this.connection(status, "external", status.pid);
     if (!this.child.running) {
       const childEnv = { ...env, PATH: augmentedPath(src.kind === "checkout" ? src.bunPath : null), HARNESS_SUPERVISOR_PID: String(this.o.pid ?? process.pid) };
@@ -243,6 +275,40 @@ export class ServiceManager {
       return fail("The harness service didn't start.", `${detail}\n\n${logTail(status.logPath)}`.trim());
     }
     return this.connection(status, "app", health.pid);
+  }
+
+  /** A packaged app's login item; a dev build's goes through the CLI's plist instead. */
+  private loginItem(src: ServiceSource): LoginItemAgent | null {
+    return src.kind === "executable" ? (this.o.loginItem ?? null) : null;
+  }
+
+  /**
+   * Register the bundled login item and wait for launchd's service to answer. macOS can ask the
+   * user to allow it first (System Settings → Login Items); with `waitForApproval` that's opened
+   * and waited for, otherwise it's an error.
+   */
+  private async ensureAgent(item: LoginItemAgent, status: StatusOutput, o: { waitForApproval: boolean }): Promise<ConnectionResult> {
+    try {
+      if (item.status() !== "enabled") item.register();
+    } catch (e) {
+      return fail("Couldn't add Harness as a login item.", (e as Error).message);
+    }
+    let state = item.status();
+    if (state === "requires-approval" && o.waitForApproval) {
+      item.openSettings();
+      const deadline = Date.now() + (this.o.approvalTimeoutMs ?? 120_000);
+      while (state === "requires-approval" && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 500));
+        state = item.status();
+      }
+    }
+    if (state === "requires-approval") {
+      return fail("Allow Harness in Login Items to start it at login.", "Turn on Harness in System Settings → General → Login Items, then try again.");
+    }
+    if (state !== "enabled") return fail("Couldn't add Harness as a login item.", `macOS reports the login item as ${state}.`);
+    const health = await this.waitHealthy(status.url, { child: false });
+    if (!health) return fail("The harness service didn't start.", `launchd didn't start it: nothing answered at ${status.url}/health.\n\n${logTail(status.logPath)}`.trim());
+    return this.connection(status, "login", health.pid);
   }
 
   private async ensureLaunchd(src: ServiceSource): Promise<ConnectionResult> {
@@ -283,13 +349,16 @@ export class ServiceManager {
     return null;
   }
 
-  /** Poll /health until it answers; null on timeout, or once a child that gave up can't answer. */
-  private async waitHealthy(url: string): Promise<{ pid: number } | null> {
+  /**
+   * Poll /health until it answers; null on timeout, or once a child that gave up can't answer
+   * (`child: false` when launchd runs it, so there's no child to give up).
+   */
+  private async waitHealthy(url: string, o: { child: boolean } = { child: true }): Promise<{ pid: number } | null> {
     const deadline = Date.now() + (this.o.healthTimeoutMs ?? 20_000);
     for (;;) {
       const health = await this.health(url);
       if (health) return health;
-      if (Date.now() >= deadline || !this.child.running) return null;
+      if (Date.now() >= deadline || (o.child && !this.child.running)) return null;
       await new Promise((r) => setTimeout(r, 200));
     }
   }
@@ -312,6 +381,8 @@ export class ServiceManager {
     }
     const src = this.source();
     if ("error" in src) return { connection: src, error: src };
+    const item = this.loginItem(src);
+    if (item) return this.setAgentMode(src, item, mode);
     if (mode === "login") {
       await this.child.stop();
       const connection = await this.ensureLaunchd(src);
@@ -329,6 +400,35 @@ export class ServiceManager {
     await this.waitStopped(status.url);
     const connection = await this.connect();
     return "error" in connection ? { connection, error: connection } : { connection };
+  }
+
+  /** setMode for a packaged app: the bundled login item through SMAppService. */
+  private async setAgentMode(src: ServiceSource, item: LoginItemAgent, mode: "app" | "login"): Promise<{ connection: ConnectionResult; error?: ConnectionError }> {
+    const status = await this.status(src);
+    if ("error" in status) return { connection: status, error: status };
+    if (mode === "login") {
+      await this.child.stop();
+      await this.waitStopped(status.url);
+      const connection = await this.ensureAgent(item, status, { waitForApproval: true });
+      if (!("error" in connection)) return { connection };
+      // Not allowed, or launchd didn't start it: take it back so the app still has a service, and
+      // so a login item allowed later doesn't fight the child for the port.
+      this.unregister(item);
+      await this.waitStopped(status.url);
+      return { connection: await this.connect(), error: connection };
+    }
+    if (item.status() === "not-registered" || item.status() === "not-found") return { connection: await this.connect() }; // already the app's
+    this.unregister(item);
+    // Unregistering boots the job out; let the port go quiet before starting the child on it.
+    await this.waitStopped(status.url);
+    const connection = await this.connect();
+    return "error" in connection ? { connection, error: connection } : { connection };
+  }
+
+  private unregister(item: LoginItemAgent) {
+    try {
+      item.unregister();
+    } catch {}
   }
 
   /**

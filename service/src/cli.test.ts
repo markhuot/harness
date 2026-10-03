@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessClient } from "@harness/shared";
-import { buildPlist, Cli, LAUNCHD_LABEL, type CliDeps, type Exec } from "./cli";
+import { BUNDLED_ENV, buildBundledPlist, buildPlist, Cli, LAUNCHD_LABEL, type CliDeps, type Exec } from "./cli";
 import { createHarness, type Harness } from "./app";
 import { DummyDriver } from "./drivers/dummy";
 import { stubBrowser, tempHome } from "./testing/fakes";
@@ -61,6 +61,26 @@ describe("buildPlist", () => {
   });
 });
 
+describe("buildBundledPlist", () => {
+  test("runs the bundle's service for any user: BundleProgram, the app's bundle id, and no paths", async () => {
+    const xml = buildBundledPlist({ appBundleId: "com.markhuot.harness.app", executable: "harness-service" });
+    expect(xml).not.toContain("/Users/");
+    expect(xml).not.toMatch(/StandardOutPath|WorkingDirectory|<key>PATH<\/key>/);
+    if (!Bun.which("plutil")) return;
+    const file = join(tempHome("harness-bundled-plist-"), `${LAUNCHD_LABEL}.plist`);
+    writeFileSync(file, xml);
+    expect(Bun.spawnSync(["plutil", "-lint", file]).exitCode).toBe(0);
+    const j = JSON.parse(new TextDecoder().decode(Bun.spawnSync(["plutil", "-convert", "json", "-o", "-", file]).stdout));
+    expect(j.Label).toBe(LAUNCHD_LABEL);
+    expect(j.BundleProgram).toBe("Contents/MacOS/harness-service");
+    expect(j.ProgramArguments).toEqual(["harness-service", "daemon"]);
+    expect(j.AssociatedBundleIdentifiers).toEqual(["com.markhuot.harness.app"]);
+    expect(j.EnvironmentVariables).toEqual({ [BUNDLED_ENV]: "bundle" });
+    expect(j.KeepAlive).toBe(true);
+    expect(j.ExitTimeOut).toBeGreaterThan(25);
+  });
+});
+
 /**
  * Fake launchctl tracking loaded state; bootstrap/kickstart can boot an in-process harness. Like the
  * real one, bootout returns at once but the job stays (print finds it, bootstrap fails with 5) for
@@ -106,6 +126,7 @@ function deps(over: Partial<CliDeps>): CliDeps {
     fetch: globalThis.fetch,
     sleep: (ms) => Bun.sleep(Math.min(ms, 10)),
     healthTimeoutMs: 300,
+    appManaged: false,
     ...over,
   };
 }
@@ -284,6 +305,53 @@ describe("Cli service commands", () => {
     await cli.uninstall();
     expect(existsSync(cli.plistPath)).toBe(false);
     expect(la.verbs().slice(-2)).toEqual(["bootout", "print"]);
+  });
+
+  test("app-managed (the compiled service in Harness.app): install, ensure and start never write a plist for the label", async () => {
+    const la = fakeLaunchctl();
+    const out: string[] = [];
+    const cli = new Cli(deps({ exec: la.exec, env: { HARNESS_HOME: tempHome() }, appManaged: true, out: (s) => out.push(s) }));
+    for (const sub of ["install", "ensure", "start"]) {
+      expect(await cli.run(["service", sub, "--json"])).toBe(1);
+      expect(JSON.parse(out.pop()!).error).toMatch(/Start at login/);
+    }
+    expect(existsSync(cli.plistPath)).toBe(false);
+    expect(la.verbs()).not.toContain("bootstrap");
+  });
+
+  test("app-managed restart and start kickstart the job SMAppService loaded, without reloading a plist", async () => {
+    const la = fakeLaunchctl();
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: tempHome() } });
+    await new Cli(d).install(); // stands in for the job SMAppService registered
+    unlinkSync(new Cli(d).plistPath);
+    const cli = new Cli({ ...d, appManaged: true });
+    const before = la.calls.length;
+    await cli.restart();
+    await cli.start();
+    expect(la.calls.slice(before).map((c) => c.slice(1).join(" "))).toEqual([
+      `print gui/501/${LAUNCHD_LABEL}`,
+      `kickstart -k gui/501/${LAUNCHD_LABEL}`,
+      `print gui/501/${LAUNCHD_LABEL}`,
+      `kickstart gui/501/${LAUNCHD_LABEL}`,
+    ]);
+    expect(existsSync(cli.plistPath)).toBe(false);
+  });
+
+  test("app-managed uninstall removes a plist from before SMAppService, and leaves the app's own job alone", async () => {
+    const la = fakeLaunchctl();
+    const d = deps({ exec: la.exec, env: { HARNESS_HOME: tempHome() } });
+    const cli = new Cli({ ...d, appManaged: true });
+    await new Cli(d).install(); // an older Harness.app wrote this
+    await cli.uninstall();
+    expect(existsSync(cli.plistPath)).toBe(false);
+    expect(la.loaded).toBe(false);
+
+    await new Cli(d).install();
+    unlinkSync(cli.plistPath); // only the SMAppService job is left
+    const before = la.verbs().length;
+    await cli.uninstall();
+    expect(la.verbs().slice(before)).toEqual([]);
+    expect(la.loaded).toBe(true);
   });
 
   test("unknown commands print usage and exit 2", async () => {
