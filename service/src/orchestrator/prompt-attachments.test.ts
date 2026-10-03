@@ -113,6 +113,18 @@ describe("uploads", () => {
     expect(existsSync(up.path)).toBe(false);
     expect(existsSync(shot)).toBe(true);
   });
+
+  test("an upload another ticket also uses stays when one of them is deleted, and goes with the last", async () => {
+    const h = setup();
+    const up = h.orch.uploadPromptAttachment(png(1, 1), "Pasted image.png", "image/png");
+    const parent = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", draft: true, promptAttachments: [{ path: up.path }] });
+    const child = await h.orch.createTicket({ projectId: h.web.id, spec: "child", draft: true, promptAttachments: [{ path: up.path }] });
+    expect(child.promptAttachments![0]!.source).toBe("upload");
+    await h.orch.deleteTicket(child.key);
+    expect(existsSync(up.path)).toBe(true);
+    await h.orch.deleteTicket(parent.key);
+    expect(existsSync(up.path)).toBe(false);
+  });
 });
 
 describe("agent tools", () => {

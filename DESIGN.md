@@ -1704,7 +1704,9 @@ ticket keeps working after one is moved or deleted.
   bigger a 413). The service writes `$HARNESS_HOME/uploads/<uuid>/<name>`, with the name cut down
   to one safe path component (`safeUploadName`, adding the MIME type's extension when there's
   none), and answers the `PromptAttachment`. `HarnessClient.uploadPromptAttachment` wraps it.
-  Deleting a ticket deletes its upload folders, and never a `file` attachment. When the service
+  Deleting a ticket deletes its upload folders, except one another ticket still lists (a conductor
+  can pass a pasted screenshot's path on to a child with `create_ticket`), and never a `file`
+  attachment. When the service
   starts, `sweepUploads` removes upload folders over a day old that no ticket refers to, such as a
   paste taken back out of a draft.
 - **Serving and missing files.** `GET`/`HEAD /tickets/:key/prompt-attachments/:index` streams the

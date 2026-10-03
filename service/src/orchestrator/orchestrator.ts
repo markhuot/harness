@@ -1113,11 +1113,20 @@ export class Orchestrator {
    * pastes taken back out of a draft. Runs when the service starts.
    */
   sweepUploads(): string[] {
-    const referenced = new Set<string>();
-    for (const t of this.store.tickets.list({})) for (const a of t.promptAttachments ?? []) referenced.add(a.path);
-    const removed = sweepUploads(this.paths.uploadsDir, referenced);
+    const removed = sweepUploads(this.paths.uploadsDir, this.referencedUploadPaths());
     if (removed.length) this.log(`removed ${removed.length} unused upload${removed.length === 1 ? "" : "s"}`);
     return removed;
+  }
+
+  /**
+   * Every prompt attachment path some ticket (drafts included) refers to, but `except`'s. Two
+   * tickets can share an upload: a conductor passes a pasted screenshot on to a child with
+   * create_ticket, so an upload folder is only removed once no ticket names it.
+   */
+  private referencedUploadPaths(except?: string): Set<string> {
+    const referenced = new Set<string>();
+    for (const t of this.store.tickets.list({})) if (t.id !== except) for (const a of t.promptAttachments ?? []) referenced.add(a.path);
+    return referenced;
   }
 
   /** Where an attachment's stored copy lives (agents read it from there). */
@@ -1461,7 +1470,9 @@ export class Orchestrator {
     this.conductorBuffer.delete(ticket.id);
     await this.browser.close(ticket.sessionId).catch(() => {});
     const files = this.store.attachments.listByTicket(ticket.id).map((a) => attachmentPath(this.paths.attachmentsDir, a));
-    const uploads = uploadDirs(this.paths.uploadsDir, ticket.promptAttachments ?? []);
+    // Its upload folders, except any another ticket still uses.
+    const stillUsed = new Set(uploadDirs(this.paths.uploadsDir, [...this.referencedUploadPaths(ticket.id)].map((path) => ({ path, name: "", source: "upload" as const }))));
+    const uploads = uploadDirs(this.paths.uploadsDir, ticket.promptAttachments ?? []).filter((d) => !stillUsed.has(d));
     this.store.transaction(() => {
       this.store.tickets.delete(ticket.id);
       this.store.sessions.delete(ticket.sessionId);
