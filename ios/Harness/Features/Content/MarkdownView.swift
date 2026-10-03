@@ -38,7 +38,7 @@ struct MarkdownView: View {
     }
 
     var body: some View {
-        let media = previous.map { MarkdownDiff.media($0, text) } ?? MarkdownCache.shared.media(text)
+        let media = previous.map { MarkdownCache.shared.media($0, text) } ?? MarkdownCache.shared.media(text)
         let style = MarkdownStyle(size: size, color: color ?? c.text, palette: c, linkable: linkable, media: mediaScope(media))
         VStack(alignment: .leading, spacing: 8) {
             if let previous {
@@ -281,6 +281,13 @@ final class MarkdownCache {
     /// The attachments in `text`, in the order the viewer pages through them.
     func media(_ text: String) -> [Markdown.Media] {
         media.value(text) { [self] in Markdown.mediaIn(blocks($0)) }
+    }
+
+    /// The attachments of a diff of `before` to `after` (MarkdownDiff.media): `after`'s, then those
+    /// only `before` has, built from each text's cached list.
+    func media(_ before: String, _ after: String) -> [Markdown.Media] {
+        var seen = Set<String>()
+        return (media(after) + media(before)).filter { seen.insert($0.id).inserted }
     }
 
     func inline(_ text: String) -> [Markdown.InlineToken] {
