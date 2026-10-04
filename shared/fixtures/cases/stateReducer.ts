@@ -203,14 +203,14 @@ export const scenarios = [
     // Equal or newer snapshot data wins.
     { actions: [snapshot([ticket("t1", { status: "done", updatedAt: 20 })])] },
   ]),
-  scenario("snapshot keeps transcripts, activity, runs and deltas; prefers newer projects and sessions", [
+  scenario("snapshot keeps transcripts, activity, runs and a busy session's deltas; prefers newer projects and sessions", [
     {
       actions: [
         appended("a", 1),
         ev({ kind: "activity.added", entry: activity("x", 1) }),
         delta("streaming"),
         ev({ kind: "project.upserted", project: project("p1", "LIVE", { updatedAt: 50 }) }),
-        ev({ kind: "session.upserted", session: session("s1", { title: "live", updatedAt: 50 }) }),
+        ev({ kind: "session.upserted", session: session("s1", { title: "live", busy: true, updatedAt: 50 }) }),
         ev({ kind: "watcher.upserted", watcher: watcher("w-old") }),
         { type: "missingKeys", keys: ["gone-1"] },
       ],
@@ -224,6 +224,32 @@ export const scenarios = [
           settings,
         }),
       ],
+    },
+  ]),
+
+  scenario("snapshot drops the deltas of idle sessions (their end was missed, e.g. while suspended)", [
+    { actions: [delta("half a plan"), delta("live", "r2", "s2"), delta("unknown", "r3", "s3")] },
+    {
+      actions: [snapshot([], undefined, { sessions: [session("s1", { busy: false }), session("s2", { busy: true })] })],
+      probes: [["liveDelta", "s1"], ["liveDelta", "s2"], ["liveDelta", "s3"]],
+    },
+  ]),
+  scenario("snapshot keeps a delta when a newer live session says it's busy", [
+    { actions: [ev({ kind: "session.upserted", session: session("s1", { busy: true, updatedAt: 9 }) }), delta("live")] },
+    { actions: [snapshot([], undefined, { sessions: [session("s1", { busy: false, updatedAt: 1 })] })], probes: [["liveDelta", "s1"]] },
+  ]),
+  scenario("detail drops the deltas of runs it reports ended and keeps the running one's", [
+    { actions: [delta("stale plan", "r-plan", "s-t"), delta("streaming", "r-work", "s-t"), delta("other", "r-x", "s2")] },
+    {
+      actions: [
+        {
+          type: "detail",
+          detail: detail(ticket("t", { sessionId: "s-t" }), {
+            runs: [run("r-plan", "succeeded", { sessionId: "s-t" }), run("r-work", "running", { sessionId: "s-t" }), run("r-x", "queued", { sessionId: "s2" })],
+          }),
+        },
+      ],
+      probes: [["liveDelta", "s-t"], ["liveDelta", "s2"]],
     },
   ]),
 

@@ -204,6 +204,42 @@ describe("streaming deltas", () => {
     expect(s.deltas.s1).toBeUndefined();
     expect(s.runs.r1!.status).toBe("cancelled");
   });
+
+  // A client suspended mid-stream misses the text entry and run end that clear a delta; the
+  // refetch after it wakes has to drop it, or the half-streamed text sits under the transcript.
+  const sess = (id: string, busy: boolean, updatedAt = 0): Session => ({
+    id, key: id.toUpperCase(), kind: "ticket", ticketId: null, driver: "dummy", cwd: "/", title: "",
+    triageStatus: null, outcome: null, busy, createdAt: 0, updatedAt,
+  });
+  const snap = (sessions: Session[]): Action => ({
+    type: "snapshot",
+    snapshot: { projects: [], tickets: [], sessions, watchers: [], settings: null, drivers: [] },
+  });
+
+  test("a snapshot drops the deltas of idle sessions and keeps busy or unknown ones", () => {
+    const s = apply(initialState, delta("half a plan"), delta("live", "r2", "s2"), delta("?", "r3", "s3"), snap([sess("s1", false), sess("s2", true)]));
+    expect(s.deltas).toEqual({ s2: { r2: "live" }, s3: { r3: "?" } });
+  });
+
+  test("a snapshot keeps the delta when a newer live session says it's busy", () => {
+    const s = apply(initialState, ev({ kind: "session.upserted", session: sess("s1", true, 9) }), delta("live"), snap([sess("s1", false, 1)]));
+    expect(s.deltas.s1).toEqual({ r1: "live" });
+  });
+
+  test("a detail drops the deltas of runs it reports ended, even while the session is busy", () => {
+    const s = apply(initialState, delta("stale plan", "plan"), delta("streaming", "work"), {
+      type: "detail",
+      detail: {
+        ticket: ticket("t1", { sessionId: "s1" }),
+        session: sess("s1", true),
+        activity: [],
+        runs: [run("plan", "succeeded"), run("work", "running")],
+        dependents: [],
+        children: [],
+      },
+    });
+    expect(liveDelta(s, "s1")).toEqual([{ runId: "work", text: "streaming" }]);
+  });
 });
 
 describe("activity", () => {

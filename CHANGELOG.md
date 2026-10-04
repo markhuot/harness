@@ -25,6 +25,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, a ticket's tabs (Spec, Activity, Transcript and the rest) scroll under the
   message box again, so you can see the content through its glass. The last line still scrolls up
   clear of the message box.
+- A Transcript no longer shows an agent's reply, half written and as raw text, under the newest
+  message. This happened when the app was in the background or offline while the agent was
+  writing. The Transcript now drops it as soon as the app catches up.
 
 ## [app-20261004.0031](https://github.com/markhuot/harness/releases/tag/app-20261004.0031) - 2026-10-04
 
