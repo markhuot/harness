@@ -9,7 +9,7 @@
 // also survives a restart), and watching or using it reloads the URL. Only closing a tab, or
 // deleting its session, removes it.
 
-import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
+import type { BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
   sessionId: string;
@@ -63,6 +63,12 @@ export interface BrowserService {
   evaluate(sessionId: string, expression: string, opts?: TabOption): Promise<string>;
   /** PNG screenshot as base64 */
   screenshot(sessionId: string, opts?: TabOption): Promise<string>;
+  /**
+   * A PNG of the tab's viewport (not the full page) with what's needed to map its pixels back onto
+   * the page: the PNG's size, the viewport in CSS pixels, the device scale, and the tab's
+   * number, URL and title (GET /browser/:sessionId/screenshot, for annotating).
+   */
+  capture(sessionId: string, opts?: TabOption): Promise<BrowserScreenshot>;
   /** Close one tab (live or suspended) for good. Viewers on it move to the lowest open tab; when it was the last one and someone is watching, a blank tab replaces it. */
   closeTab(sessionId: string, tab: number): Promise<void>;
   /**

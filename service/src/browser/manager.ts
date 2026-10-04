@@ -1,6 +1,7 @@
 // BrowserService implementation: one Chrome, numbered tabs (page targets) per harness session.
 
-import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
+import type { BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
+import { imageSize } from "../attachments.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
 import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
@@ -368,6 +369,31 @@ export class BrowserManager implements BrowserService {
     const tab = await this.agentTab(sessionId, opts.tab);
     const res = await tab.session.send("Page.captureScreenshot", { format: "png" });
     return res.data as string;
+  }
+
+  async capture(sessionId: string, opts: TabOption = {}): Promise<BrowserScreenshot> {
+    const tab = await this.agentTab(sessionId, opts.tab);
+    const [shot, page] = await Promise.all([
+      tab.session.send("Page.captureScreenshot", { format: "png" }),
+      this.evalValue(tab, "[window.innerWidth, window.innerHeight]") as Promise<[number, number] | undefined>,
+    ]);
+    const data = shot.data as string;
+    const size = imageSize("image/png", Buffer.from(data.slice(0, 64), "base64"));
+    if (!size) throw new Error("The screenshot isn't a PNG");
+    // The viewport as the page sees it (window.innerWidth/Height, scrollbars included, which the
+    // screenshot also covers); the emulated size when the page can't say.
+    const [w, h] = page && page[0] > 0 && page[1] > 0 ? page : [tab.viewport.width, tab.viewport.height];
+    await this.refreshTarget(tab);
+    return {
+      data,
+      width: size.width,
+      height: size.height,
+      viewport: { width: w, height: h },
+      scale: Math.round((size.width / w) * 1000) / 1000,
+      tabId: tab.id,
+      url: tab.url,
+      title: tab.title,
+    };
   }
 
   async closeTab(sessionId: string, id: number): Promise<void> {
@@ -1361,3 +1387,4 @@ function safeCall(fn: () => void): void {
     console.error("[browser] subscriber callback threw:", e);
   }
 }
+

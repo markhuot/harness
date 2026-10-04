@@ -238,7 +238,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     // Older apps still send `log`; messages go to the transcript only, so it's ignored.
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments, annotations: b?.annotations });
   });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();
@@ -349,6 +349,14 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/browser/:sessionId", ({ params, url }) =>
     browser.state(o.getSession(params.sessionId!).id, { tab: tabNumber(url.searchParams.get("tab")) }),
   );
+  // A PNG of the tab's viewport with its CSS size and scale, for the apps to annotate.
+  add("GET", "/browser/:sessionId/screenshot", async ({ params, url }) => {
+    const sessionId = o.getSession(params.sessionId!).id;
+    const tab = tabNumber(url.searchParams.get("tab"));
+    const tabs = await browser.tabs(sessionId);
+    if (tab !== undefined ? !tabs.some((t) => t.id === tab) : !tabs.length) throw new HarnessError(404, tab !== undefined ? `No browser tab ${tab}` : "This session has no browser tab");
+    return browser.capture(sessionId, { tab });
+  });
   add("POST", "/browser/:sessionId/navigate", async ({ params, body }) => {
     const b = await body();
     if (typeof b?.url !== "string" || !b.url) throw new HarnessError(400, "url is required");

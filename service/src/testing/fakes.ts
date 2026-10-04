@@ -6,6 +6,7 @@ import { executeTool, type Driver, type DriverEvent, type RunRequest, type Steer
 import { outputKey, watcherProject, watcherTicket } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
 import { ensureHome } from "../config";
+import { png } from "./media";
 import { openDb } from "../db";
 import { Store } from "../store";
 import { EventBus } from "../events";
@@ -52,6 +53,12 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     },
     async screenshot() {
       return "";
+    },
+    /** A 1280×800 CSS px viewport on a 2× screen. */
+    async capture(sessionId) {
+      const s = states.get(sessionId);
+      if (!s) throw new Error("This session has no open tabs.");
+      return { data: png(2560, 1600).toString("base64"), width: 2560, height: 1600, viewport: { width: 1280, height: 800 }, scale: 2, tabId: 1, url: s.url, title: s.title };
     },
     async input() {},
     async subscribe(sessionId, subscriberId, onFrame, onState, opts) {
