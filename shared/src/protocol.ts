@@ -384,6 +384,11 @@ export interface Run {
   status: RunStatus;
   driver: string;
   prompt: string;
+  /**
+   * Files the human attached to the message this run answers (MessageBody.attachments), sent
+   * with its prompt. Optional so clients tolerate an older service.
+   */
+  attachments?: PromptAttachment[];
   error: string | null;
   createdAt: number;
   startedAt: number | null;
@@ -393,7 +398,11 @@ export interface Run {
 export type TranscriptRole = "user" | "assistant" | "tool" | "system";
 
 export type TranscriptContent =
-  | { type: "text"; text: string }
+  /**
+   * `attachments`: on a human message (role "user"), the files sent with it. Their files are
+   * served at GET /transcript/:entryId/attachments/:index (404 once one is gone).
+   */
+  | { type: "text"; text: string; attachments?: PromptAttachment[] }
   | { type: "thinking"; text: string }
   | { type: "tool_call"; callId: string; name: string; input: unknown }
   | { type: "tool_result"; callId: string; name: string; output: ToolResultContent[]; isError: boolean }
@@ -1297,7 +1306,15 @@ export interface HumanReviewBody {
 
 /** POST /tickets/:key/messages */
 export interface MessageBody {
+  /** May be empty when the message carries attachments. */
   text: string;
+  /**
+   * Files sent with the message (at most MAX_PROMPT_ATTACHMENTS), like a New session's
+   * promptAttachments: absolute paths on the service's machine, or what POST /uploads returned.
+   * The agent gets their paths, and images inline. Not allowed while a tool approval waits (a
+   * message then answers it as a deny).
+   */
+  attachments?: PromptAttachmentInput[];
   /**
    * true: move the ticket before its agent gets the message: a review ticket back to in
    * progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it

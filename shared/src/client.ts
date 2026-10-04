@@ -8,6 +8,7 @@ import type {
   CreateProjectBody,
   CreateTicketBody,
   PromptAttachment,
+  PromptAttachmentInput,
   DriverInfo,
   DriverModels,
   FileDiff,
@@ -208,9 +209,9 @@ export class HarnessClient {
   submitTicket(key: string, body: SubmitTicketBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
-  /** The message goes to the agent and the transcript. */
-  sendMessage(key: string, text: string, opts: { move?: boolean } = {}) {
-    const body: MessageBody = { text, ...(opts.move ? { move: true } : {}) };
+  /** The message goes to the agent and the transcript, with any attachments (uploaded first when they aren't on the service's machine). */
+  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: PromptAttachmentInput[] } = {}) {
+    const body: MessageBody = { text, ...(opts.move ? { move: true } : {}), ...(opts.attachments?.length ? { attachments: opts.attachments } : {}) };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
@@ -272,6 +273,13 @@ export class HarnessClient {
    */
   promptAttachmentUrl(key: string, index: number): string {
     return `${this.baseUrl}/tickets/${encodeURIComponent(key)}/prompt-attachments/${index}?token=${encodeURIComponent(this.opts.token)}`;
+  }
+  /**
+   * The file of an attachment sent with a message (TranscriptContent text `attachments[index]` of
+   * transcript entry `entryId`), token in the query like promptAttachmentUrl. 404 once it's gone.
+   */
+  messageAttachmentUrl(entryId: string, index: number): string {
+    return `${this.baseUrl}/transcript/${encodeURIComponent(entryId)}/attachments/${index}?token=${encodeURIComponent(this.opts.token)}`;
   }
   /**
    * Store bytes (a pasted image, a file from another device) on the service's machine for a prompt
