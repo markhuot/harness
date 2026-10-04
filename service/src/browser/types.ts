@@ -9,7 +9,7 @@
 // also survives a restart), and watching or using it reloads the URL. Only closing a tab, or
 // deleting its session, removes it.
 
-import type { BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
+import type { BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
   sessionId: string;
@@ -69,6 +69,13 @@ export interface BrowserService {
    * number, URL and title (GET /browser/:sessionId/screenshot, for annotating).
    */
   capture(sessionId: string, opts?: TabOption): Promise<BrowserScreenshot>;
+  /**
+   * The element under (x, y) CSS px of tab `query.tabId` (POST /browser/:sessionId/element): a
+   * selector for it and its text, or null when nothing is there or the tab has moved on from the
+   * screenshot (another URL, or scrolled). Reads the page only; it never scrolls or changes it.
+   * Throws when the session has no such tab.
+   */
+  elementAt(sessionId: string, query: BrowserElementQuery): Promise<BrowserElement | null>;
   /** Close one tab (live or suspended) for good. Viewers on it move to the lowest open tab; when it was the last one and someone is watching, a blank tab replaces it. */
   closeTab(sessionId: string, tab: number): Promise<void>;
   /**

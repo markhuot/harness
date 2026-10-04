@@ -76,6 +76,18 @@ function fixtures(req: Request): Response {
          <script>let n = 0; setInterval(() => { document.getElementById('box').style.background = 'hsl(' + (n++ * 37 % 360) + ',80%,50%)'; }, 30);</script>`,
         "Anim",
       );
+    case "/elements":
+      return html(
+        `<style>body{margin:0} p,button,em,span{display:block;height:30px;margin:0;padding:0;border:0}</style>
+         <div id="login"><form><button>One</button><button id="dup">Two</button><button>  Sign
+           in   </button></form></div>
+         <div id="dup"><span>Not unique</span></div>
+         <section><p>First</p><p>Second para</p></section>
+         <div id="a:b.c"><em>Escaped</em></div>
+         <p id="long">${LONG}</p>
+         <div style="height:3000px"></div>`,
+        "Elements",
+      );
     default:
       return new Response("not found", { status: 404 });
   }
@@ -288,6 +300,53 @@ withChrome("BrowserManager (real Chrome)", () => {
     expect(await browser.state("iso-a")).toBeNull();
     expect((await browser.state("iso-b"))?.title).toBe("Page Two");
   }, 30_000);
+
+  describe("elementAt", () => {
+    const centre = async (selector: string) =>
+      JSON.parse(await browser.evaluate("s-el", `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`)) as {
+        x: number;
+        y: number;
+      };
+
+    beforeAll(async () => {
+      await browser.open("s-el", `${base}/elements`);
+    });
+
+    test("names the element under a point: a unique id, nth-of-type steps, escaping, and its text", async () => {
+      const shot = await browser.capture("s-el");
+      expect(shot.scroll).toEqual({ x: 0, y: 0 });
+      const at = async (selector: string) => browser.elementAt("s-el", { tabId: shot.tabId, ...(await centre(selector)), url: shot.url, scroll: shot.scroll });
+      // The third button: two siblings share its tag; form is the only one of its kind.
+      expect(await at("#login button:nth-of-type(3)")).toEqual({ path: "#login > form > button:nth-of-type(3)", text: "Sign in" });
+      // "dup" is on two elements, so it isn't an anchor: the chain goes up to body.
+      expect(await at("div#dup span")).toEqual({ path: "body > div:nth-of-type(2) > span", text: "Not unique" });
+      expect(await at("button#dup")).toEqual({ path: "#login > form > button:nth-of-type(2)", text: "Two" });
+      expect(await at("section p:nth-of-type(2)")).toEqual({ path: "body > section > p:nth-of-type(2)", text: "Second para" });
+      const escaped = await at("em");
+      expect(escaped).toEqual({ path: "#a\\:b\\.c > em", text: "Escaped" });
+      // The selector finds the same element in the page.
+      expect(await browser.evaluate("s-el", `document.querySelector(${JSON.stringify(escaped!.path)}).textContent`)).toBe('"Escaped"');
+      // The element itself can be the anchor; its text is cut to MAX_ANNOTATION_TEXT.
+      expect(await at("#long")).toEqual({ path: "#long", text: LONG.slice(0, 200) });
+    }, 30_000);
+
+    test("answers null once the tab scrolled or navigated since the screenshot, and never scrolls it", async () => {
+      await browser.open("s-el", `${base}/elements`);
+      const shot = await browser.capture("s-el");
+      const point = await centre("em");
+      await browser.evaluate("s-el", "window.scrollTo(0, 120)");
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: shot.url, scroll: shot.scroll })).toBeNull();
+      expect(await browser.evaluate("s-el", "window.scrollY")).toBe("120");
+      // A screenshot taken there matches again (and reports the scroll).
+      const scrolled = await browser.capture("s-el");
+      expect(scrolled.scroll).toEqual({ x: 0, y: 120 });
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, x: point.x, y: point.y - 120, url: scrolled.url, scroll: scrolled.scroll })).toEqual({ path: "#a\\:b\\.c > em", text: "Escaped" });
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: scrolled.url, scroll: { x: 0, y: 120.6 } })).not.toBeNull();
+      await browser.open("s-el", `${base}/page2`);
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: shot.url, scroll: { x: 0, y: 0 } })).toBeNull();
+      await expect(browser.elementAt("s-el", { tabId: 9, ...point, url: shot.url, scroll: shot.scroll })).rejects.toThrow();
+    }, 30_000);
+  });
 
   describe("tabs", () => {
     test("new tabs count up; calls without a tab use the lowest open one; each tab keeps its own page", async () => {

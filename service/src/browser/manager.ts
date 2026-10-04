@@ -1,7 +1,8 @@
 // BrowserService implementation: one Chrome, numbered tabs (page targets) per harness session.
 
-import type { BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
+import type { BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
 import { imageSize } from "../attachments.ts";
+import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
 import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
@@ -375,14 +376,14 @@ export class BrowserManager implements BrowserService {
     const tab = await this.agentTab(sessionId, opts.tab);
     const [shot, page] = await Promise.all([
       tab.session.send("Page.captureScreenshot", { format: "png" }),
-      this.evalValue(tab, "[window.innerWidth, window.innerHeight]") as Promise<[number, number] | undefined>,
+      this.evalValue(tab, "[window.innerWidth, window.innerHeight, window.scrollX, window.scrollY]") as Promise<[number, number, number, number] | undefined>,
     ]);
     const data = shot.data as string;
     const size = imageSize("image/png", Buffer.from(data.slice(0, 64), "base64"));
     if (!size) throw new Error("The screenshot isn't a PNG");
     // The viewport as the page sees it (window.innerWidth/Height, scrollbars included, which the
     // screenshot also covers); the emulated size when the page can't say.
-    const [w, h] = page && page[0] > 0 && page[1] > 0 ? page : [tab.viewport.width, tab.viewport.height];
+    const [w, h] = page && page[0] > 0 && page[1] > 0 ? [page[0], page[1]] : [tab.viewport.width, tab.viewport.height];
     await this.refreshTarget(tab);
     return {
       data,
@@ -393,7 +394,19 @@ export class BrowserManager implements BrowserService {
       tabId: tab.id,
       url: tab.url,
       title: tab.title,
+      scroll: { x: page?.[2] ?? 0, y: page?.[3] ?? 0 },
     };
+  }
+
+  async elementAt(sessionId: string, query: BrowserElementQuery): Promise<BrowserElement | null> {
+    const entry = this.peek(sessionId);
+    if (!entry || !hasTab(entry, query.tabId)) throw new Error(noTabMessage(entry, query.tabId));
+    // A suspended tab's page is closed: reopening it would be a fresh load, not what was captured.
+    const tab = liveTab(entry, query.tabId);
+    if (!tab) return null;
+    await this.refreshTarget(tab);
+    const report = (await this.evalValue(tab, findElementExpression(query.x, query.y))) as PageElementReport | undefined;
+    return report ? sameView(report, tab.url, query) : null;
   }
 
   async closeTab(sessionId: string, id: number): Promise<void> {

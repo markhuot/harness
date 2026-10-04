@@ -359,6 +359,20 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     if (tab !== undefined ? !tabs.some((t) => t.id === tab) : !tabs.length) throw new HarnessError(404, tab !== undefined ? `No browser tab ${tab}` : "This session has no browser tab");
     return browser.capture(sessionId, { tab });
   });
+  // The element under a point of a screenshot, for an annotation's mark (null once the tab moved on).
+  add("POST", "/browser/:sessionId/element", async ({ params, body }) => {
+    const b = await body();
+    const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    if (!b || typeof b !== "object") throw new HarnessError(400, "body is required: { tabId, x, y, url, scroll }");
+    const tab = tabNumber(b.tabId);
+    if (tab === undefined) throw new HarnessError(400, "tabId is required");
+    if (!finite(b.x) || !finite(b.y) || b.x < 0 || b.y < 0) throw new HarnessError(400, "x and y must be the point in the page's CSS pixels");
+    if (typeof b.url !== "string" || !b.url) throw new HarnessError(400, "url is required: the screenshot's");
+    if (!b.scroll || typeof b.scroll !== "object" || !finite(b.scroll.x) || !finite(b.scroll.y)) throw new HarnessError(400, "scroll must be the screenshot's { x, y }");
+    const sessionId = o.getSession(params.sessionId!).id;
+    if (!(await browser.tabs(sessionId)).some((t) => t.id === tab)) throw new HarnessError(404, `No browser tab ${tab}`);
+    return browser.elementAt(sessionId, { tabId: tab, x: b.x, y: b.y, url: b.url, scroll: { x: b.scroll.x, y: b.scroll.y } });
+  });
   add("POST", "/browser/:sessionId/navigate", async ({ params, body }) => {
     const b = await body();
     if (typeof b?.url !== "string" || !b.url) throw new HarnessError(400, "url is required");

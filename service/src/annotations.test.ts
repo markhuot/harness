@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type Attachment } from "@harness/shared";
+import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, MAX_ANNOTATION_PATH, MAX_ANNOTATION_TEXT, type Attachment } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { annotationLines, compactNotes, normalizeAnnotation } from "./annotations";
 import { resolveAttachments, runAttachments } from "./attachment-lists";
@@ -112,6 +112,21 @@ describe("normalizeAnnotation", () => {
     expect(normalizeAnnotation(withMark({ message: ` ${"x".repeat(MAX_ANNOTATION_MESSAGE)} ` }), "a").marks[0]!.message).toHaveLength(MAX_ANNOTATION_MESSAGE);
   });
 
+  test("a mark's element (path, text) is kept on a browser screenshot, within its limits, and refused anywhere else", () => {
+    const onPage = (patch: Record<string, unknown>) => ({ ...withMark(patch), page });
+    const kept = normalizeAnnotation(onPage({ path: "#login > button", text: "Sign in" }), "a").marks[0]!;
+    expect([kept.path, kept.text]).toEqual(["#login > button", "Sign in"]);
+    expect(normalizeAnnotation(onPage({ path: "x".repeat(MAX_ANNOTATION_PATH), text: "y".repeat(MAX_ANNOTATION_TEXT) }), "a").marks[0]!.text).toHaveLength(MAX_ANNOTATION_TEXT);
+    // Unknown fields still don't pass through, and a mark without an element has none.
+    expect(normalizeAnnotation({ ...good(), page }, "a").marks[0]).not.toHaveProperty("path");
+    rejects(onPage({ path: "x".repeat(MAX_ANNOTATION_PATH + 1) }), /path is over 1000 characters/);
+    rejects(onPage({ text: "y".repeat(MAX_ANNOTATION_TEXT + 1) }), /text is over 200 characters/);
+    rejects(onPage({ path: 5 }), /path must be a string/);
+    rejects(onPage({ text: ["Sign in"] }), /text must be a string/);
+    rejects(withMark({ path: "#login" }), /path is only for a browser screenshot/);
+    rejects(withMark({ text: "Sign in" }), /text is only for a browser screenshot/);
+  });
+
   test("refuses a malformed page", () => {
     const bad: unknown[] = [
       "http://x",
@@ -151,6 +166,27 @@ describe("annotationLines", () => {
     // 41 / 1.5 = 27.33 → 27; a click has no arrow.
     expect(lines[1]).toBe("1. (41, 30) px = (27, 20) CSS px, 21% across, 30% down: (no note)");
     expect(lines[2]).toBe("2. (100, 50) px = (67, 33) CSS px, 50% across, 50% down, arrow from (181, 9) px = (121, 6) CSS px: Wrong colour\n   should be blue");
+  });
+
+  test("a mark's element follows its position, set apart from the note", () => {
+    const a = normalizeAnnotation(
+      {
+        width: 980,
+        height: 360,
+        page: { ...page, viewport: { width: 980, height: 360 } },
+        marks: [
+          { n: 1, x: 490, y: 180, tailX: 600, tailY: 300, path: "#login > form > button:nth-of-type(2)", text: 'Sign "in"', message: "Make this smaller" },
+          { n: 2, x: 10, y: 10, path: "body > main", message: "" },
+          { n: 3, x: 20, y: 20, text: "Hello", message: "Here" },
+        ],
+      },
+      "a",
+    );
+    const lines = annotationLines(a);
+    expect(lines[1]).toBe('1. (490, 180) px = (490, 180) CSS px, 50% across, 50% down, arrow from (600, 300) px = (600, 300) CSS px: element `#login > form > button:nth-of-type(2)` "Sign \\"in\\"": Make this smaller');
+    expect(lines[2]).toBe("2. (10, 10) px = (10, 10) CSS px, 1% across, 3% down: element `body > main`: (no note)");
+    expect(lines[3]).toBe('3. (20, 20) px = (20, 20) CSS px, 2% across, 6% down: element "Hello": Here');
+    expect(compactNotes(a)[0]).toBe('1. (490, 180) px: element `#login > form > button:nth-of-type(2)` "Sign \\"in\\"": Make this smaller');
   });
 
   test("get_ticket's compact form", () => {

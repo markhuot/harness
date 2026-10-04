@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
-import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
+import { FakeDriver, makeOrchestrator, STUB_ELEMENT, stubBrowser, tempHome } from "../testing/fakes";
 import { png } from "../testing/media";
 
 function setup(steering = false) {
@@ -88,6 +88,17 @@ describe("a message's annotated attachment", () => {
     ];
     expect(h.userEntries(t).at(-1)!.content).toEqual({ type: "text", text: "Fix these", attachments: files });
     expect(h.store.runs.listBySession(t.sessionId).at(-1)!.attachments).toEqual(files);
+  });
+
+  test("a browser screenshot's mark names its element in the answering run's prompt", async () => {
+    const h = setup();
+    const t = await blocked(h);
+    const shot = h.file("page.png", png(40, 20));
+    const page = { url: "http://localhost:3000/login", title: "Sign in", tabId: 1, viewport: { width: 40, height: 20 }, scale: 1 };
+    const annotation: AttachmentAnnotation = { width: 40, height: 20, page, marks: [{ n: 1, x: 10, y: 5, message: "Smaller", path: "#login > button", text: "Sign in" }] };
+    await h.orch.sendMessage(t.key, "Fix", { attachments: [{ path: shot, annotation }] });
+    await h.orch.idle();
+    expect(under(h.driver.calls.at(-1)!.prompt, shot)[1]).toBe('  1. (10, 5) px = (10, 5) CSS px, 25% across, 25% down: element `#login > button` "Sign in": Smaller');
   });
 
   test("a later run doesn't get the notes again", async () => {
@@ -230,5 +241,47 @@ describe("over HTTP", () => {
     const bad = await client.sendMessage(t.key, "x", { attachments: [{ id: up.id, annotation: { ...annotation, marks: [{ n: 1, x: 3000, y: 1, message: "" }] } }] }).catch((e) => e);
     expect((bad as HarnessApiError).status).toBe(400);
     expect((bad as HarnessApiError).message).toMatch(/inside the 1280×800 image/);
+  });
+
+  test("POST /browser/:sessionId/element names what's under a screenshot's point until the tab moves on; a mark carries it to the agent", async () => {
+    const home = tempHome("harness-element-http-");
+    const browser = stubBrowser();
+    harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser, watchers: null, log: () => {} });
+    const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
+    await client.updateSettings({ defaultDriver: "dummy" });
+    const dir = join(home, "work", "web");
+    mkdirSync(dir, { recursive: true });
+    const project = await client.createProject({ path: dir, key: "WEB" });
+    const t = await client.createTicket({ projectId: project.id, spec: "Plan it", start: false });
+    await client.browserNavigate(t.sessionId, "http://localhost:3000/login");
+    const shot = await client.browserScreenshot(t.sessionId);
+    expect(shot.scroll).toEqual({ x: 0, y: 0 });
+    const query = { tabId: shot.tabId, x: 490, y: 180, url: shot.url, scroll: shot.scroll };
+    expect(await client.browserElementAt(t.sessionId, query)).toEqual(STUB_ELEMENT);
+
+    // Scrolled since the screenshot: null, not whatever is there now.
+    browser.scrolls.set(t.sessionId, { x: 0, y: 300 });
+    expect(await client.browserElementAt(t.sessionId, query)).toBeNull();
+    expect(await client.browserElementAt(t.sessionId, { ...query, scroll: { x: 0, y: 300 } })).toEqual(STUB_ELEMENT);
+    // Navigated since: null too.
+    await client.browserNavigate(t.sessionId, "http://localhost:3000/home");
+    expect(await client.browserElementAt(t.sessionId, { ...query, scroll: { x: 0, y: 300 } })).toBeNull();
+
+    const status = async (body: unknown) => ((await client.browserElementAt(t.sessionId, body as typeof query).catch((e) => e)) as HarnessApiError).status;
+    expect(await status({ ...query, tabId: 7 })).toBe(404);
+    expect(await status({ ...query, x: "490" })).toBe(400);
+    expect(await status({ ...query, url: "" })).toBe(400);
+    expect(await status({ ...query, scroll: undefined })).toBe(400);
+
+    // The element rides on the mark into the agent's prompt.
+    const up = await client.uploadAttachment(new Blob([Buffer.from(shot.data, "base64")], { type: "image/png" }), "Browser.png", "image/png");
+    const page = { url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale };
+    const annotation: AttachmentAnnotation = { width: shot.width, height: shot.height, page, marks: [{ n: 1, x: 490, y: 180, message: "Make this smaller", ...STUB_ELEMENT }] };
+    await client.sendMessage(t.key, "Fix it", { attachments: [{ id: up.id, annotation }] });
+    const entry = (await client.transcript(t.sessionId)).find((e) => e.role === "user" && e.content.type === "text" && e.content.text === "Fix it");
+    expect(entry?.content).toMatchObject({ attachments: [{ annotation }] });
+    const bad = await client.sendMessage(t.key, "x", { attachments: [{ id: up.id, annotation: { ...annotation, page: undefined } }] }).catch((e) => e);
+    expect((bad as HarnessApiError).status).toBe(400);
+    expect((bad as HarnessApiError).message).toMatch(/path is only for a browser screenshot/);
   });
 });
