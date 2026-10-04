@@ -181,17 +181,39 @@ public final class NewSessionEditor {
         let current = local.promptAttachments ?? []
         let result = PromptAttachments.add(current, added)
         if !PromptAttachments.same(result.list, current) {
-            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list)))
+            // The notes go along, or the patch would clear them.
+            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list), promptAnnotations: local.promptAnnotations ?? []))
         }
         return result.skipped
     }
 
-    /// Take the attachment at `index` off the prompt.
+    /// Take the attachment at `index` off the prompt, with its notes; later notes move up with their files.
     public func removeAttachment(at index: Int) {
         guard let local else { return }
         let current = local.promptAttachments ?? []
         guard current.indices.contains(index) else { return }
-        edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(PromptAttachments.remove(current, at: index))))
+        edit(UpdateTicketBody(
+            promptAttachments: PromptAttachments.inputsKeepingSource(PromptAttachments.remove(current, at: index)),
+            promptAnnotations: Annotations.without(local.promptAnnotations ?? [], at: index)
+        ))
+    }
+
+    /// Put `replacement` in place of the attachment at `index` (an image annotated in the New
+    /// session), with its notes (nil: none).
+    public func replaceAttachment(at index: Int, with replacement: PromptAttachmentInput, annotation: MessageAnnotation?) {
+        guard let local else { return }
+        var list = local.promptAttachments ?? []
+        guard list.indices.contains(index) else { return }
+        list[index] = PromptAttachments.fromInput(replacement)
+        edit(UpdateTicketBody(
+            promptAttachments: PromptAttachments.inputsKeepingSource(list),
+            promptAnnotations: Annotations.with(local.promptAnnotations ?? [], at: index, annotation)
+        ))
+    }
+
+    /// The notes on the prompt's attachment at `index`, if it has any.
+    public func annotation(at index: Int) -> MessageAnnotation? {
+        Annotations.annotation(for: index, in: local?.promptAnnotations ?? [])
     }
 
     /// Move the draft to another project: its branch picks start over, and a Default model and the

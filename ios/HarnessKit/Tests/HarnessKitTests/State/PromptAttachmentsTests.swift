@@ -166,6 +166,38 @@ struct MessageAttachmentsTests {
         #expect(m.isEmpty)
     }
 
+    static func note(_ name: String) -> MessageAnnotation {
+        MessageAnnotation(attachment: 0, source: .file(name: name), width: 10, height: 10, marks: [AnnotationMark(n: 1, x: 1, y: 1, message: name)])
+    }
+
+    @Test func notesStayOnTheirImagesAsTheListChanges() {
+        let m = MessageAttachments()
+        m.add([Self.input("/u/a.png"), Self.input("/u/b.png")])
+        #expect(m.addAnnotated(Self.input("/u/annotated-x.png"), annotation: Self.note("x.png")))
+        #expect(m.annotation(at: 2)?.source == .file(name: "x.png"))
+        // The same file again isn't added twice.
+        #expect(!m.addAnnotated(Self.input("/u/annotated-x.png"), annotation: Self.note("x.png")))
+        m.replace(at: 0, with: Self.input("/u/annotated-a.png"), annotation: Self.note("a.png"))
+        #expect(m.list.map(\.path) == ["/u/annotated-a.png", "/u/b.png", "/u/annotated-x.png"])
+        #expect(m.annotations.map(\.attachment) == [0, 2])
+        // Removing one without notes moves the later notes up with their files.
+        m.remove(at: 1)
+        #expect(m.outgoingAnnotations.map(\.attachment) == [0, 1])
+        #expect(m.annotation(at: 1)?.source == .file(name: "x.png"))
+        // Removing an annotated one drops its notes.
+        m.remove(at: 0)
+        #expect(m.outgoingAnnotations.map(\.attachment) == [0])
+        m.clear()
+        #expect(m.annotations.isEmpty)
+    }
+
+    @Test func aFullListTakesNoAnnotatedImage() {
+        let m = MessageAttachments()
+        m.add((0..<maxPromptAttachments).map { Self.input("/u/\($0).png") })
+        #expect(!m.addAnnotated(Self.input("/u/annotated.png"), annotation: Self.note("a.png")))
+        #expect(m.annotations.isEmpty)
+    }
+
     /// The body leaves `source` to the service, which decides it from the path.
     @Test func inputsDropSource() {
         let m = MessageAttachments([PromptAttachment(path: "/u/up/a.png", name: "a.png", source: .upload)])
