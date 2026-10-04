@@ -118,4 +118,31 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.authorLabel(.unknown("bot")) == "Harness")
         #expect(TicketDetailLogic.authorLabel(.agent) == "Agent")
     }
+
+    // MARK: Message attachments
+
+    @Test func attachingIsOffOnlyWhileAnApprovalWaits() {
+        var t = Self.ticket(.inProgress)
+        #expect(TicketDetailLogic.acceptsMessageAttachments(t))
+        t.pendingApproval = PendingApproval(id: "a1", runId: "r1", toolName: "Bash", input: .null, requestedAt: 1)
+        #expect(!TicketDetailLogic.acceptsMessageAttachments(t))
+    }
+
+    @Test("Send needs text or an attachment, no upload in flight, no send in flight", arguments: [
+        // text, attachments, uploading, sending, approval, can send
+        ("hi", 0, 0, false, false, true),
+        ("  \n ", 0, 0, false, false, false),
+        ("", 1, 0, false, false, true),
+        ("  ", 2, 0, false, false, true),
+        ("hi", 1, 1, false, false, false),
+        ("", 1, 1, false, false, false),
+        ("hi", 0, 0, true, false, false),
+        ("", 1, 0, true, false, false),
+        // A waiting approval: a text answer goes, attachments with it don't.
+        ("no, use bun", 0, 0, false, true, true),
+        ("no, use bun", 1, 0, false, true, false),
+    ])
+    func canSend(_ text: String, _ attachments: Int, _ uploading: Int, _ sending: Bool, _ approval: Bool, _ expected: Bool) {
+        #expect(TicketDetailLogic.canSendMessage(text: text, attachments: attachments, uploading: uploading, sending: sending, approvalPending: approval) == expected)
+    }
 }

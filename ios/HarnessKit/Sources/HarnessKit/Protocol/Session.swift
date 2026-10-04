@@ -45,6 +45,9 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
     public var status: RunStatus
     public var driver: String
     public var prompt: String
+    /// Files the human attached to the message this run answers (MessageBody.attachments), sent
+    /// with its prompt. Optional so clients tolerate an older service.
+    public var attachments: [PromptAttachment]?
     @Nullable public var error: String?
     public var createdAt: Timestamp
     @Nullable public var startedAt: Timestamp?
@@ -52,6 +55,7 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
 
     public init(
         id: String, sessionId: String, kind: RunKind, status: RunStatus, driver: String, prompt: String,
+        attachments: [PromptAttachment]? = nil,
         error: String? = nil, createdAt: Timestamp, startedAt: Timestamp? = nil, endedAt: Timestamp? = nil
     ) {
         self.id = id
@@ -60,6 +64,7 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
         self.status = status
         self.driver = driver
         self.prompt = prompt
+        self.attachments = attachments
         self.error = error
         self.createdAt = createdAt
         self.startedAt = startedAt
@@ -70,7 +75,10 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
 /// One block of a transcript entry, discriminated by `type`. An unknown `type` decodes to
 /// `.unknown(type:raw:)` and re-encodes `raw` unchanged.
 public enum TranscriptContent: Codable, Sendable, Equatable {
-    case text(text: String)
+    /// `attachments`: on a human message (role user), the files sent with it, served at
+    /// GET /transcript/:entryId/attachments/:index (HarnessClient.messageAttachmentUrl). nil when
+    /// the message had none (or an older service sent it).
+    case text(text: String, attachments: [PromptAttachment]? = nil)
     case thinking(text: String)
     case toolCall(callId: String, name: String, input: JSONValue)
     case toolResult(callId: String, name: String, output: [ToolResultContent], isError: Bool)
@@ -97,7 +105,11 @@ public enum TranscriptContent: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: AnyCodingKey.self)
         let type = try c.decode(String.self, forKey: "type")
         switch type {
-        case "text": self = .text(text: try c.decode(String.self, forKey: "text"))
+        case "text":
+            self = .text(
+                text: try c.decode(String.self, forKey: "text"),
+                attachments: try c.decodeIfPresent([PromptAttachment].self, forKey: "attachments")
+            )
         case "thinking": self = .thinking(text: try c.decode(String.self, forKey: "text"))
         case "tool_call":
             self = .toolCall(
@@ -127,7 +139,10 @@ public enum TranscriptContent: Codable, Sendable, Equatable {
         var c = encoder.container(keyedBy: AnyCodingKey.self)
         try c.encode(type, forKey: "type")
         switch self {
-        case let .text(text), let .thinking(text), let .error(text):
+        case let .text(text, attachments):
+            try c.encode(text, forKey: "text")
+            try c.encodeIfPresent(attachments, forKey: "attachments")
+        case let .thinking(text), let .error(text):
             try c.encode(text, forKey: "text")
         case let .toolCall(callId, name, input):
             try c.encode(callId, forKey: "callId")

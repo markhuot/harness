@@ -199,10 +199,11 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/submit", body: body)
     }
 
-    /// `move` is only sent when true. The message goes to the agent and shows in the Transcript; it
-    /// never goes into Activity.
-    public func sendMessage(_ key: String, text: String, move: Bool = false) async throws -> Ticket {
-        try await request("POST", "/tickets/\(key)/messages", body: MessageBody(text: text, move: move ? true : nil))
+    /// `move` is only sent when true, `attachments` only when there are some. The message goes to
+    /// the agent and shows in the Transcript (with its attachments); it never goes into Activity.
+    public func sendMessage(_ key: String, text: String, move: Bool = false, attachments: [PromptAttachmentInput] = []) async throws -> Ticket {
+        let body = MessageBody(text: text, move: move ? true : nil, attachments: attachments.isEmpty ? nil : attachments)
+        return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
 
     public func humanReview(_ key: String, _ body: HumanReviewBody) async throws -> Ticket {
@@ -286,7 +287,21 @@ public final class HarnessClient: Sendable {
     /// the service couldn't say (another status, or the request failed), so a flaky network doesn't
     /// mark files missing.
     public func promptAttachmentExists(key: String, index: Int) async -> Bool? {
-        guard let url = URL(string: promptAttachmentUrl(key: key, index: index)) else { return nil }
+        await fileExists(promptAttachmentUrl(key: key, index: index))
+    }
+
+    /// The file of an attachment sent with a message (TranscriptContent.text `attachments[index]`
+    /// of transcript entry `entryId`), token in the query like `promptAttachmentUrl`. 404 once
+    /// it's gone.
+    public func messageAttachmentUrl(entryId: String, index: Int) -> String {
+        "\(baseUrl)/transcript/\(URIComponent.encode(entryId))/attachments/\(index)?token=\(URIComponent.encode(token))"
+    }
+
+    /// A HEAD of one of this service's file URLs (`promptAttachmentUrl`, `messageAttachmentUrl`):
+    /// true when it's there, false on 404, nil when the service couldn't say (another status, or
+    /// the request failed), so a flaky network doesn't mark files missing.
+    public func fileExists(_ urlString: String) async -> Bool? {
+        guard let url = URL(string: urlString) else { return nil }
         guard let res = try? await transport.send(HTTPRequest(method: "HEAD", url: url)) else { return nil }
         if res.ok { return true }
         return res.status == 404 ? false : nil

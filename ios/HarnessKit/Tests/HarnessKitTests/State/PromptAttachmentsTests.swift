@@ -128,4 +128,47 @@ struct PromptAttachmentUploadRulesTests {
         #expect(PromptAttachments.limitMessage(skipped: 1) == "A session takes up to 20 attachments: 1 file was left out.")
         #expect(PromptAttachments.limitMessage(skipped: 3, max: 5) == "A session takes up to 5 attachments: 3 files were left out.")
     }
+
+    @Test func limitMessageNamesAMessage() {
+        #expect(PromptAttachments.limitMessage(skipped: 2, holder: .message) == "A message takes up to 20 attachments: 2 files were left out.")
+    }
+}
+
+@Suite("Message attachments (the composer's list)")
+@MainActor
+struct MessageAttachmentsTests {
+    static func input(_ path: String, _ name: String? = nil) -> PromptAttachmentInput { PromptAttachmentInput(path: path, name: name) }
+
+    @Test func addDedupesByPathAndNamesFromThePath() {
+        let m = MessageAttachments()
+        #expect(m.add([Self.input("/u/a/shot.png"), Self.input("/u/b/notes.pdf", "Notes"), Self.input("/u/a/shot.png")]) == 0)
+        #expect(m.list.map(\.name) == ["shot.png", "Notes"])
+        #expect(m.add([Self.input("/u/b/notes.pdf")]) == 0)
+        #expect(m.count == 2)
+    }
+
+    @Test func addStopsAtTheLimitAndCountsWhatWasLeftOut() {
+        let m = MessageAttachments()
+        _ = m.add((0..<19).map { Self.input("/u/\($0).png") })
+        #expect(m.add([Self.input("/u/x.png"), Self.input("/u/y.png"), Self.input("/u/z.png")]) == 2)
+        #expect(m.count == maxPromptAttachments)
+        #expect(m.list.last?.path == "/u/x.png")
+    }
+
+    @Test func removeTakesOutOnlyThatIndexAndClearEmpties() {
+        let m = MessageAttachments()
+        _ = m.add([Self.input("/u/a.png"), Self.input("/u/b.png"), Self.input("/u/c.png")])
+        m.remove(at: 1)
+        #expect(m.list.map(\.path) == ["/u/a.png", "/u/c.png"])
+        m.remove(at: 7)
+        #expect(m.count == 2)
+        m.clear()
+        #expect(m.isEmpty)
+    }
+
+    /// The body leaves `source` to the service, which decides it from the path.
+    @Test func inputsDropSource() {
+        let m = MessageAttachments([PromptAttachment(path: "/u/up/a.png", name: "a.png", source: .upload)])
+        #expect(m.inputs == [PromptAttachmentInput(path: "/u/up/a.png", name: "a.png")])
+    }
 }
