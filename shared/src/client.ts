@@ -43,6 +43,8 @@ import type {
   Watcher,
   WatcherBody,
   BrowserState,
+  BrowserScreenshot,
+  MessageAnnotation,
   PluginInfo,
   PluginTab,
   NetworkStatus,
@@ -210,8 +212,13 @@ export class HarnessClient {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
   /** The message goes to the agent and the transcript, with any attachments (uploaded first when they aren't on the service's machine). */
-  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: PromptAttachmentInput[] } = {}) {
-    const body: MessageBody = { text, ...(opts.move ? { move: true } : {}), ...(opts.attachments?.length ? { attachments: opts.attachments } : {}) };
+  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: PromptAttachmentInput[]; annotations?: MessageAnnotation[] } = {}) {
+    const body: MessageBody = {
+      text,
+      ...(opts.move ? { move: true } : {}),
+      ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
+      ...(opts.annotations?.length ? { annotations: opts.annotations } : {}),
+    };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
@@ -386,6 +393,10 @@ export class HarnessClient {
   /** `tabId` omitted: the lowest open tab. */
   browserState(sessionId: string, tabId?: number) {
     return this.request<BrowserState | null>("GET", `/browser/${sessionId}${tabId === undefined ? "" : `?tab=${tabId}`}`);
+  }
+  /** A PNG of the tab's viewport (`tabId` omitted: the lowest open tab), to annotate. */
+  browserScreenshot(sessionId: string, tabId?: number) {
+    return this.request<BrowserScreenshot>("GET", `/browser/${sessionId}/screenshot${tabId === undefined ? "" : `?tab=${tabId}`}`);
   }
   browserNavigate(sessionId: string, url: string, tabId?: number) {
     return this.request<BrowserState>("POST", `/browser/${sessionId}/navigate`, tabId === undefined ? { url } : { url, tabId });

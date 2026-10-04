@@ -389,6 +389,8 @@ export interface Run {
    * with its prompt. Optional so clients tolerate an older service.
    */
   attachments?: PromptAttachment[];
+  /** Numbered notes on images among `attachments` (MessageBody.annotations), listed in its prompt. */
+  annotations?: MessageAnnotation[];
   error: string | null;
   createdAt: number;
   startedAt: number | null;
@@ -401,8 +403,9 @@ export type TranscriptContent =
   /**
    * `attachments`: on a human message (role "user"), the files sent with it. Their files are
    * served at GET /transcript/:entryId/attachments/:index (404 once one is gone).
+   * `annotations`: the human's numbered notes on some of those images (MessageBody.annotations).
    */
-  | { type: "text"; text: string; attachments?: PromptAttachment[] }
+  | { type: "text"; text: string; attachments?: PromptAttachment[]; annotations?: MessageAnnotation[] }
   | { type: "thinking"; text: string }
   | { type: "tool_call"; callId: string; name: string; input: unknown }
   | { type: "tool_result"; callId: string; name: string; output: ToolResultContent[]; isError: boolean }
@@ -1038,6 +1041,67 @@ export interface BrowserTab {
   suspended?: boolean;
 }
 
+/**
+ * GET /browser/:sessionId/screenshot?tab=: a PNG of the tab's viewport, to annotate. `width` and
+ * `height` are the PNG's pixels; the page's CSS pixels are those divided by `scale`.
+ */
+export interface BrowserScreenshot {
+  /** base64 PNG */
+  data: string;
+  width: number;
+  height: number;
+  /** The page's viewport in CSS pixels. */
+  viewport: { width: number; height: number };
+  /** Device pixels per CSS pixel. */
+  scale: number;
+  tabId: number;
+  url: string;
+  title: string;
+}
+
+// ---------------------------------------------------------------------------
+// Annotations (DESIGN.md "Annotations")
+// ---------------------------------------------------------------------------
+
+/** Where an annotated image came from. */
+export type AnnotationSource =
+  /** An image in the ticket's spec (`attachment:<id>`). */
+  | { kind: "attachment"; id: string; name: string }
+  /** One of the ticket's prompt attachments (Ticket.promptAttachments[index]). */
+  | { kind: "prompt-attachment"; index: number; name: string }
+  /** A file sent with an earlier message (that transcript entry's attachments[index]). */
+  | { kind: "message-attachment"; entryId: string; index: number; name: string }
+  /** A screenshot of a session browser tab (BrowserScreenshot). */
+  | { kind: "browser"; url: string; title: string; tabId: number; viewport: { width: number; height: number }; scale: number };
+
+/**
+ * One numbered note. `x`/`y` is the anchor the arrow points at, `tailX`/`tailY` where the arrow
+ * starts (where the number sits); both in the annotated image's pixels. No tail: a plain click,
+ * with the number on the anchor.
+ */
+export interface AnnotationMark {
+  n: number;
+  x: number;
+  y: number;
+  tailX?: number;
+  tailY?: number;
+  message: string;
+}
+
+/** Numbered notes on one image sent with a message: MessageBody.attachments[attachment]. */
+export interface MessageAnnotation {
+  attachment: number;
+  source: AnnotationSource;
+  /** The annotated image's size in pixels. */
+  width: number;
+  height: number;
+  /** Numbered 1…n in order. */
+  marks: AnnotationMark[];
+}
+
+export const MAX_ANNOTATION_MARKS = 50;
+export const MAX_ANNOTATION_MESSAGE = 2000;
+
 // ---------------------------------------------------------------------------
 // WebSocket messages
 // ---------------------------------------------------------------------------
@@ -1315,6 +1379,13 @@ export interface MessageBody {
    * message then answers it as a deny).
    */
   attachments?: PromptAttachmentInput[];
+  /**
+   * Numbered notes on images among `attachments` (DESIGN.md "Annotations"), at most one per
+   * attachment. The service writes them into the agent's prompt as a numbered list, and the
+   * transcript entry keeps them. 400 when an entry names no image attachment or its marks are
+   * malformed.
+   */
+  annotations?: MessageAnnotation[];
   /**
    * true: move the ticket before its agent gets the message: a review ticket back to in
    * progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
