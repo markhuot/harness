@@ -14,8 +14,8 @@ import { formatFileLink, type FileDiff, type FileView } from "@harness/shared";
 import { ticketByKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
-import { usePaneScope } from "../components/paneContext";
-import { MovePaneItems, PaneGrip } from "../components/paneHeader";
+import { usePaneScope, usePopout } from "../components/paneContext";
+import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
 import { closePane, fileRootTicket, paneLabel, setFileView, toggleZoom, updatePanes, type FileContent, type FileTab } from "../state/panes";
 import { useStore } from "../state/store";
@@ -121,6 +121,8 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   // --- actions -------------------------------------------------------------------------------
   const close = () => updatePanes(scope, (s) => closePane(s, paneId));
   const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
+  // A pop-out window holds just this pane: nothing to maximize over.
+  const popout = usePopout();
   const setTab = (t: FileTab) => {
     if (t === "file" && selected) pendingScroll.current = selected;
     updatePanes(scope, (s) => setFileView(s, paneId, { tab: t }));
@@ -192,16 +194,19 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
             </>
           )}
         </MenuButton>
-        <button
-          className="btn btn-ghost btn-icon"
-          data-testid="pane-zoom"
-          aria-pressed={zoomed}
-          onClick={zoom}
-          title={zoomed ? "Restore pane" : "Maximize pane"}
-          aria-label={zoomed ? "Restore pane" : "Maximize pane"}
-        >
-          <Icon name={zoomed ? "shrink" : "expand"} />
-        </button>
+        <PaneWindowButton paneId={paneId} />
+        {!popout && (
+          <button
+            className="btn btn-ghost btn-icon"
+            data-testid="pane-zoom"
+            aria-pressed={zoomed}
+            onClick={zoom}
+            title={zoomed ? "Restore pane" : "Maximize pane"}
+            aria-label={zoomed ? "Restore pane" : "Maximize pane"}
+          >
+            <Icon name={zoomed ? "shrink" : "expand"} />
+          </button>
+        )}
         <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={close} title="Close file" aria-label="Close pane">
           <Icon name="x" />
         </button>
