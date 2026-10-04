@@ -16,8 +16,8 @@
 //   • a split's sizes are positive fractions that sum to 1;
 //   • focusedId/zoomedId name an existing leaf, or are null.
 
-import { useSyncExternalStore } from "react";
-import { ALL_SCOPE, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
+import { useMemo, useSyncExternalStore } from "react";
+import { ALL_SCOPE, parsePluginTab, parseSubagentTab, TAB_LABEL, tabStripTab, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
 
 /**
  * A shell in the main process (window.harness.terminal), started in `cwd` (`~` = home). `sessionId`
@@ -59,8 +59,25 @@ export interface FileContent {
   /** Which tab shows; the Diff tab only exists while the file has uncommitted changes. Default "file". */
   tab?: FileTab;
 }
+/** The composer, torn off like a tab (it isn't in the strip, but it drags and docks like one). */
+export const COMPOSER_TAB = "composer";
+/** What a ticket can tear off into a pane of its own: any of its tabs, or its composer. */
+export type TornTab = TicketTab | typeof COMPOSER_TAB;
+/**
+ * One of a ticket's tabs (or its composer) torn off into a pane of its own (views/TicketTabPane.tsx),
+ * fully working, as it does in the ticket pane. `browserTab` pins a Browser pane to one tab of the
+ * session's browser (no chip strip); without it a torn-off Browser keeps its strip. At most one
+ * pane per ticket and tab, and per ticket and browser tab (tornKey), across a board and its pop-outs.
+ * The ticket pane keeps the tab in its strip, with a Return to this window placeholder for it.
+ */
+export interface TicketTabContent {
+  kind: "ticketTab";
+  ticketKey: string;
+  tab: TornTab;
+  browserTab?: number;
+}
 /** What a pane shows. */
-export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TerminalContent | ComposeContent | FileContent;
+export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TicketTabContent | TerminalContent | ComposeContent | FileContent;
 export interface PaneLeaf {
   type: "leaf";
   id: string;
@@ -151,13 +168,38 @@ export const fileLeafByKey = (root: PaneNode, key: string): PaneLeaf | null => l
 /** A file pane's root ticket, if it's resolved in a ticket's workdir. */
 export const fileRootTicket = (c: FileContent): string | null => ("ticketKey" in c.root ? c.root.ticketKey : null);
 
-/** The leaf already showing `content`'s one-of-a-kind thing (the board, a ticket, a terminal session, a New session), if any. */
+/**
+ * Which torn-off tab a pane is, within its ticket: "browser:<n>" for a pinned browser tab, else the
+ * tab's strip entry (a sub-agent's transcript is the Agents tab's), or "composer".
+ */
+export function tornId(c: Pick<TicketTabContent, "tab" | "browserTab">): string {
+  if (c.browserTab !== undefined) return `browser:${c.browserTab}`;
+  return c.tab === COMPOSER_TAB ? COMPOSER_TAB : tabStripTab(c.tab);
+}
+/** What makes two torn-off panes the same: the ticket and the tornId. */
+export const tornKey = (c: Pick<TicketTabContent, "ticketKey" | "tab" | "browserTab">): string => `${c.ticketKey}\u0000${tornId(c)}`;
+export const tornLeafByKey = (root: PaneNode, key: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "ticketTab" && tornKey(l.content) === key) ?? null;
+
+/** A torn-off tab's name: "Transcript", "Composer", "Changes", a plugin tab's id… (views have the live titles). */
+export function tornTabLabel(c: Pick<TicketTabContent, "tab" | "browserTab">): string {
+  if (c.tab === COMPOSER_TAB) return "Composer";
+  if (c.tab === "changes") return "Changes";
+  if (c.browserTab !== undefined) return "Browser tab";
+  if (Object.hasOwn(TAB_LABEL, c.tab)) return TAB_LABEL[c.tab as keyof typeof TAB_LABEL];
+  const plugin = parsePluginTab(c.tab);
+  if (plugin) return plugin.tabId;
+  return parseSubagentTab(c.tab) ? "Agent" : c.tab;
+}
+
+/** The leaf already showing `content`'s one-of-a-kind thing (the board, a ticket, a torn-off tab, a terminal session, a New session), if any. */
 function leafShowing(root: PaneNode, content: PaneContent): PaneLeaf | null {
   switch (content.kind) {
     case "board":
       return boardLeaf(root);
     case "ticket":
       return ticketLeafByKey(root, content.ticketKey);
+    case "ticketTab":
+      return tornLeafByKey(root, tornKey(content));
     case "terminal":
       return terminalLeafBySession(root, content.sessionId);
     case "compose":
@@ -174,6 +216,8 @@ export function paneLabel(content: PaneContent): string {
       return "the board";
     case "ticket":
       return content.ticketKey;
+    case "ticketTab":
+      return `${content.ticketKey} · ${tornTabLabel(content)}`;
     case "compose":
       return "New session";
     case "file":
@@ -297,6 +341,7 @@ export function normalize(
   const sessions = new Set<string>();
   const composes = new Set<string>();
   const files = new Set<string>();
+  const torn = new Set<string>();
   const once = (seen: Set<string>, id: string) => !seen.has(id) && !!seen.add(id);
   let root =
     s.root &&
@@ -312,6 +357,8 @@ export function normalize(
           return !claimedSessions.has(l.content.sessionId) && once(sessions, l.content.sessionId);
         case "ticket":
           return once(keys, l.content.ticketKey);
+        case "ticketTab":
+          return once(torn, tornKey(l.content));
       }
     });
   for (const id of sessions) claimedSessions.add(id);
@@ -336,7 +383,13 @@ export function checkPanes(state: PaneState): string[] {
   const sessions = new Set<string>();
   const composes = new Set<string>();
   const files = new Set<string>();
+  const torn = new Set<string>();
   for (const l of all) {
+    if (l.content.kind === "ticketTab") {
+      const k = tornKey(l.content);
+      if (torn.has(k)) errors.push(`${paneLabel(l.content)} is torn off twice`);
+      torn.add(k);
+    }
     if (l.content.kind === "file") {
       const k = fileKey(l.content);
       if (files.has(k)) errors.push(`file ${l.content.path} is open twice`);
@@ -694,18 +747,29 @@ export function closePane(state: PaneState, leafId: string): PaneState {
 }
 
 /**
- * Escape ends a zoom, or else closes the focused ticket, file or New session pane (never the board,
+ * Escape ends a zoom, or else closes the focused ticket, torn-off tab, file or New session pane (never the board,
  * nor a terminal: Escape is the shell's). A draft's pane asks first (components/draftClose.ts), before this.
  */
 export function escapePanes(s: PaneState): PaneState {
   if (s.zoomedId) return toggleZoom(s, s.zoomedId);
   const kind = s.focusedId ? findLeaf(s.root, s.focusedId)?.content.kind : null;
-  return kind === "ticket" || kind === "compose" || kind === "file" ? closePane(s, s.focusedId!) : s;
+  return kind === "ticket" || kind === "ticketTab" || kind === "compose" || kind === "file" ? closePane(s, s.focusedId!) : s;
 }
 
 export function setTab(state: PaneState, leafId: string, tab: TicketTab): PaneState {
   const leaf = findLeaf(state.root, leafId);
   if (!leaf || leaf.content.kind !== "ticket" || leaf.content.tab === tab) return state;
+  return { ...state, root: setLeafContent(state.root, leafId, { ...leaf.content, tab }) };
+}
+
+/**
+ * Navigate inside a torn-off tab without changing which tab it is: a torn-off Agents pane opening
+ * one sub-agent's transcript (and back). Anything that would make it another tab is a no-op.
+ */
+export function setTornTab(state: PaneState, leafId: string, tab: TicketTab): PaneState {
+  const leaf = findLeaf(state.root, leafId);
+  if (!leaf || leaf.content.kind !== "ticketTab" || leaf.content.tab === tab || leaf.content.browserTab !== undefined) return state;
+  if (tornId({ tab }) !== tornId(leaf.content)) return state;
   return { ...state, root: setLeafContent(state.root, leafId, { ...leaf.content, tab }) };
 }
 
@@ -753,15 +817,20 @@ export function setSizes(state: PaneState, splitId: string, sizes: number[]): Pa
 
 /**
  * A ticket's key changed (a project rename): follow it, or close the pane if the new key is already
- * open. File panes resolved in that ticket's workdir follow it too (the same way).
+ * open. Its torn-off tabs and the file panes resolved in its workdir follow it too (the same way).
  */
 export function renameTicketKey(state: PaneState, oldKey: string, newKey: string): PaneState {
   if (oldKey === newKey) return state;
   let next = state;
   for (const l of leaves(state.root)) {
-    if (l.content.kind !== "file" || fileRootTicket(l.content) !== oldKey) continue;
-    const moved: FileContent = { ...l.content, root: { ticketKey: newKey } };
-    const other = fileLeafByKey(next.root, fileKey(moved));
+    const moved: PaneContent | null =
+      l.content.kind === "file" && fileRootTicket(l.content) === oldKey
+        ? { ...l.content, root: { ticketKey: newKey } }
+        : l.content.kind === "ticketTab" && l.content.ticketKey === oldKey
+          ? { ...l.content, ticketKey: newKey }
+          : null;
+    if (!moved) continue;
+    const other = leafShowing(next.root, moved);
     if (other) {
       const closed = closePane(next, l.id);
       next = next.focusedId === l.id ? { ...closed, focusedId: other.id } : closed;
@@ -777,19 +846,32 @@ export function renameTicketKey(state: PaneState, oldKey: string, newKey: string
   return { ...next, root: setLeafContent(next.root, leaf.id, { ...leaf.content, ticketKey: newKey }) };
 }
 
-/** Close every ticket pane whose ticket no longer exists, and every file pane resolved in one. */
+/** The ticket a pane belongs to: a ticket pane's, a torn-off tab's, or the one a file pane is resolved in. */
+export function paneTicket(c: PaneContent): string | null {
+  return c.kind === "ticket" || c.kind === "ticketTab" ? c.ticketKey : c.kind === "file" ? fileRootTicket(c) : null;
+}
+
+/** Close every ticket pane whose ticket no longer exists, with its torn-off tabs and every file pane resolved in one. */
 export function pruneTickets(state: PaneState, exists: (key: string) => boolean): PaneState {
   let next = state;
   for (const l of leaves(state.root)) {
-    const key = l.content.kind === "ticket" ? l.content.ticketKey : l.content.kind === "file" ? fileRootTicket(l.content) : null;
+    const key = paneTicket(l.content);
     if (key !== null && !exists(key)) next = closePane(next, l.id);
   }
   return next;
 }
 
-/** The ticket in the focused pane (what the URL hash mirrors), or null when no ticket pane is focused. */
+/**
+ * The ticket in the focused pane (what the URL hash mirrors), or null when no ticket pane is focused.
+ * A torn-off tab stands for its ticket: the tab its ticket pane shows, or the Spec with no ticket
+ * pane (a reload opening the ticket shouldn't open it on a tab that's torn off).
+ */
 export function focusedTicket(state: PaneState): { ticketKey: string; tab: TicketTab } | null {
   const leaf = state.focusedId ? findLeaf(state.root, state.focusedId) : null;
+  if (leaf?.content.kind === "ticketTab") {
+    const pane = ticketLeafByKey(state.root, leaf.content.ticketKey);
+    return { ticketKey: leaf.content.ticketKey, tab: pane?.content.kind === "ticket" ? pane.content.tab : "spec" };
+  }
   return leaf?.content.kind === "ticket" ? { ticketKey: leaf.content.ticketKey, tab: leaf.content.tab } : null;
 }
 
@@ -925,8 +1007,31 @@ export function clampSizes(sizes: readonly number[], mins: readonly number[], to
 // Drag and drop
 // ---------------------------------------------------------------------------
 
-/** What's being dragged onto the workspace: a ticket (a board card or child row), or a pane by its header. */
-export type DragSource = { kind: "ticket"; ticketKey: string } | { kind: "pane"; leafId: string };
+/** A ticket's tab (a tab button, a browser chip with `browserTab`, the composer's grip) being dragged off into a pane of its own. */
+export interface TabDrag {
+  kind: "tab";
+  ticketKey: string;
+  tab: TornTab;
+  browserTab?: number;
+}
+/** What's being dragged onto the workspace: a ticket (a board card or child row), a ticket's tab, or a pane by its header. */
+export type DragSource = { kind: "ticket"; ticketKey: string } | TabDrag | { kind: "pane"; leafId: string };
+
+/** A torn-off pane's content for a tab (a browserTab only goes with the Browser tab). */
+export function tabContent(t: Pick<TabDrag, "ticketKey" | "tab" | "browserTab">): TicketTabContent {
+  return { kind: "ticketTab", ticketKey: t.ticketKey, tab: t.tab, ...(t.tab === "browser" && t.browserTab !== undefined ? { browserTab: t.browserTab } : {}) };
+}
+
+/**
+ * What dropping (or popping out) `source` shows: a pane's own content; for a ticket or a tab, the
+ * pane already showing it if there's one (so it moves keeping its tab), else a new one (a ticket on
+ * its Spec). Null for a pane that isn't there.
+ */
+export function sourceContent(state: PaneState, source: DragSource): PaneContent | null {
+  if (source.kind === "pane") return findLeaf(state.root, source.leafId)?.content ?? null;
+  const content: PaneContent = source.kind === "ticket" ? { kind: "ticket", ticketKey: source.ticketKey, tab: "spec" } : tabContent(source);
+  return leafShowing(state.root, content)?.content ?? content;
+}
 
 /** Ties go to the earlier zone, so the exact centre (and a row/column tie on a diagonal) splits side by side. */
 const ZONE_ORDER: readonly DropZone[] = ["right", "left", "bottom", "top"];
@@ -960,14 +1065,14 @@ export function dropTargetAt(layout: PaneLayout, x: number, y: number): { leafId
 
 /**
  * Drop `source` on the `zone` half of the pane `targetLeafId`. A ticket that's already open moves
- * with its pane (keeping its tab) instead of opening twice; a new one opens on the Spec. Returns
- * `state` itself when the drop would do nothing (a pane dropped on itself, a missing pane), which
- * is also how the drag preview knows not to show.
+ * with its pane (keeping its tab) instead of opening twice; a new one opens on the Spec. A tab
+ * makes a torn-off pane, or moves the one it already has. Returns `state` itself when the drop
+ * would do nothing (a pane dropped on itself, a missing pane), which is also how the drag preview
+ * knows not to show.
  */
 export function applyDrop(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone): PaneState {
   if (source.kind === "pane") return movePane(state, source.leafId, targetLeafId, zone);
-  const open = ticketLeafByKey(state.root, source.ticketKey);
-  return dropContent(state, targetLeafId, zone, open?.content ?? { kind: "ticket", ticketKey: source.ticketKey, tab: "spec" });
+  return dropContent(state, targetLeafId, zone, sourceContent(state, source)!);
 }
 
 /**
@@ -1001,8 +1106,8 @@ export function splitTarget(state: PaneState, fromLeafId: string | null = null, 
 // ---------------------------------------------------------------------------
 
 /** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns, a file ~40 columns past its line numbers. */
-export const PANE_MIN_WIDTH = { board: 320, ticket: 360, terminal: 320, compose: 360, file: 360 } as const;
-/** The shortest any pane may get in a column split. */
+export const PANE_MIN_WIDTH = { board: 320, ticket: 360, ticketTab: 360, terminal: 320, compose: 360, file: 360 } as const;
+/** The shortest any pane may get in a column split (a torn-off composer included: its input, attachments and send bar). */
 export const PANE_MIN_HEIGHT = 200;
 
 /**
@@ -1117,6 +1222,14 @@ function parseContent(v: unknown): PaneContent | null {
     // Saved before a tab was renamed ("summaries" is now the Spec, "plugin:git:changes" the built-in
     // Changes): ticketTabWithChanges maps it.
     return { kind: "ticket", ticketKey: v.ticketKey, tab: (typeof v.tab === "string" && ticketTabWithChanges(v.tab)) || "spec" };
+  }
+  if (v.kind === "ticketTab" && typeof v.ticketKey === "string" && v.ticketKey && typeof v.tab === "string") {
+    // A tab that isn't one (any more) has nothing to show: the pane goes, rather than turn into the Spec.
+    const tab: TornTab | null = v.tab === COMPOSER_TAB ? COMPOSER_TAB : ticketTabWithChanges(v.tab);
+    if (!tab) return null;
+    const t: TicketTabContent = { kind: "ticketTab", ticketKey: v.ticketKey, tab };
+    if (tab === "browser" && typeof v.browserTab === "number" && Number.isInteger(v.browserTab) && v.browserTab >= 0) t.browserTab = v.browserTab;
+    return t;
   }
   if (v.kind === "terminal" && typeof v.sessionId === "string" && SESSION_ID.test(v.sessionId) && typeof v.cwd === "string" && v.cwd) {
     const t: TerminalContent = { kind: "terminal", sessionId: v.sessionId, cwd: v.cwd };
@@ -1241,8 +1354,11 @@ export const isPopoutScope = (scope: string) => scope.startsWith(POPOUT_PREFIX);
 export const popoutScope = (id: string) => `${POPOUT_PREFIX}${id}`;
 export const popoutIdOf = (scope: string) => scope.slice(POPOUT_PREFIX.length);
 
-/** What can pop out: tickets and terminals. The board stays put, and a New session isn't stored. */
-export const canPopOut = (content: PaneContent) => content.kind === "ticket" || content.kind === "terminal";
+/**
+ * What can pop out: every pane but the board, which stays put. A New session can't either: it isn't
+ * stored, and a pop-out window reads its pane from the store (it pops out once it's a draft ticket).
+ */
+export const canPopOut = (content: PaneContent) => content.kind !== "board" && content.kind !== "compose";
 
 /**
  * A pop-out scope's tree after an operation: the pane on its own. Operations keep a board in every
@@ -1290,6 +1406,141 @@ export function popIn(store: PaneStore, id: string, toScope: string): PaneStore 
   const open = leafShowing(target.root, leaf.content);
   const next = open ? focusPane(target, open.id) : dock(target, null, splitTarget(target), "right", leaf.content);
   return withScope(rest, toScope, next);
+}
+
+// ---------------------------------------------------------------------------
+// Across a window's scopes: torn-off tabs, drops and drags out to a window
+// ---------------------------------------------------------------------------
+//
+// What one board shows is its own scope's tree plus every pop-out window, so "is this ticket (or
+// this tab) open somewhere?" is asked across those scopes. Another board's tree doesn't count:
+// it isn't on screen.
+
+/** The scopes a board's window can show: `boardScope` itself first, then every pop-out. */
+function windowScopes(store: PaneStore, boardScope: string): string[] {
+  return [...(store.scopes[boardScope] && !isPopoutScope(boardScope) ? [boardScope] : []), ...Object.keys(store.scopes).filter(isPopoutScope)];
+}
+
+/** Where a torn-off tab is: its scope and pane, and whether that's a pop-out window. */
+export interface TornOff {
+  scope: string;
+  leafId: string;
+  content: TicketTabContent;
+  window: boolean;
+}
+
+/**
+ * Which of `ticketKey`'s tabs are torn off, by tornId ("transcript", "composer", "browser:3"…), as
+ * board `boardScope` sees them: in its own tree or in a pop-out window. Read from the shared store,
+ * so the main window and the pop-outs agree.
+ */
+export function tornOffTabs(store: PaneStore, ticketKey: string, boardScope: string): Map<string, TornOff> {
+  const out = new Map<string, TornOff>();
+  for (const scope of windowScopes(store, boardScope)) {
+    for (const l of leaves(store.scopes[scope]!.root)) {
+      if (l.content.kind !== "ticketTab" || l.content.ticketKey !== ticketKey) continue;
+      const id = tornId(l.content);
+      if (!out.has(id)) out.set(id, { scope, leafId: l.id, content: l.content, window: isPopoutScope(scope) });
+    }
+  }
+  return out;
+}
+
+/** The pop-out window already showing `content`'s one-of-a-kind thing (a ticket, a torn-off tab…), if any. */
+export function popoutShowing(store: PaneStore, content: PaneContent): { scope: string; leaf: PaneLeaf } | null {
+  if (content.kind === "board") return null;
+  for (const scope of Object.keys(store.scopes).filter(isPopoutScope)) {
+    const leaf = leafShowing(store.scopes[scope]!.root, content);
+    if (leaf) return { scope, leaf };
+  }
+  return null;
+}
+
+/** The tabs a ticket pane falls back to when the one it shows is torn off: the first one that isn't. */
+const FALLBACK_TABS: TicketTab[] = ["spec", "activity", "transcript", "details"];
+
+/**
+ * `torn` was just torn off: a ticket pane of its ticket showing that tab (in the board or a pop-out)
+ * moves to another one rather than sit on its placeholder, so tearing Transcript off a ticket on
+ * the Transcript leaves the two side by side. The composer and a browser tab have no tab to leave.
+ */
+function leaveTornTab(store: PaneStore, boardScope: string, torn: TicketTabContent): PaneStore {
+  if (torn.tab === COMPOSER_TAB || torn.browserTab !== undefined) return store;
+  const gone = tornOffTabs(store, torn.ticketKey, boardScope);
+  const to = FALLBACK_TABS.find((t) => !gone.has(t));
+  if (!to) return store;
+  let next = store;
+  for (const scope of windowScopes(store, boardScope)) {
+    const s = next.scopes[scope]!;
+    const pane = ticketLeafByKey(s.root, torn.ticketKey);
+    if (pane?.content.kind === "ticket" && tabStripTab(pane.content.tab) === tornId(torn)) next = withScope(next, scope, setTab(s, pane.id, to));
+  }
+  return next;
+}
+
+/**
+ * A drop on board `scope` (the workspace's drop layer): applyDrop, across the window. A ticket or
+ * tab whose pane is in a pop-out window comes back from it (the window closes), keeping its tab,
+ * rather than open twice; a tab torn off moves its ticket pane off it (leaveTornTab). The same
+ * store when the drop does nothing.
+ */
+export function dropInStore(store: PaneStore, scope: string, source: DragSource, targetLeafId: string, zone: DropZone): PaneStore {
+  if (isPopoutScope(scope)) return store;
+  const s = store.scopes[scope] ?? defaultPanes(bareBoardId(scope));
+  const here = sourceContent(s, source);
+  if (!here) return store;
+  if (source.kind === "pane") {
+    const next = movePane(s, source.leafId, targetLeafId, zone);
+    return next === s ? store : withScope(store, scope, next);
+  }
+  const popped = leafShowing(s.root, here) ? null : popoutShowing(store, here);
+  const content = popped?.leaf.content ?? here;
+  const next = dropContent(s, targetLeafId, zone, content);
+  if (next === s) return store;
+  const out = withScope(popped ? withScope(store, popped.scope, null) : store, scope, next);
+  return content.kind === "ticketTab" ? leaveTornTab(out, scope, content) : out;
+}
+
+/**
+ * Open `content` in a new pop-out window `popoutScope(id)` (dragging something out of the window,
+ * Open in New Window), deduped the way dropContent is: content already open on board `boardScope`
+ * moves out with its pane (popOut), and content that's already in a window of its own stays there
+ * (popoutShowing names it, for bringing it forward). Otherwise a new pane opens in the window; a
+ * tab torn off this way moves its ticket pane off it. The same store when nothing pops out (the
+ * board, a New session, content already in a window, a taken id).
+ */
+export function popOutContent(store: PaneStore, boardScope: string, content: PaneContent, id: string): PaneStore {
+  if (!canPopOut(content) || isPopoutScope(boardScope) || store.scopes[popoutScope(id)] || popoutShowing(store, content)) return store;
+  const s = store.scopes[boardScope];
+  const open = s && leafShowing(s.root, content);
+  if (open) return popOut(store, boardScope, open.id, id);
+  const taken = new Set<string>();
+  for (const st of Object.values(store.scopes)) allIds(st.root, taken);
+  const leaf: PaneLeaf = { type: "leaf", id: freshId(taken), content };
+  const out = withScope(store, popoutScope(id), { root: leaf, focusedId: leaf.id, zoomedId: null });
+  return content.kind === "ticketTab" ? leaveTornTab(out, boardScope, content) : out;
+}
+
+/**
+ * Return to this window: close the torn-off tab `id` of `ticketKey` (its pane, or its pop-out
+ * window) and show the tab in the ticket's pane again, focused (a browser tab shows the Browser
+ * tab; the composer has no tab to show). The same store when it isn't torn off.
+ */
+export function returnTab(store: PaneStore, boardScope: string, ticketKey: string, id: string): PaneStore {
+  const torn = tornOffTabs(store, ticketKey, boardScope).get(id);
+  if (!torn) return store;
+  let next = withScope(store, torn.scope, torn.window ? null : closePane(store.scopes[torn.scope]!, torn.leafId));
+  const c = torn.content;
+  const tab: TicketTab | null = c.tab === COMPOSER_TAB ? null : c.browserTab !== undefined ? "browser" : c.tab;
+  if (!tab) return next;
+  for (const scope of windowScopes(next, boardScope)) {
+    const s = next.scopes[scope]!;
+    const pane = ticketLeafByKey(s.root, ticketKey);
+    if (!pane) continue;
+    next = withScope(next, scope, focusPane(setTab(s, pane.id, tab), pane.id));
+    break;
+  }
+  return next;
 }
 
 /** `store` without the pop-outs `keep` rejects (their windows are gone); the same object when none go. */
@@ -1386,6 +1637,34 @@ export function popOutPane(scope: string, leafId: string, id: string): boolean {
   const before = getStore();
   commit(popOut(before, scope, leafId, id));
   return getStore() !== before;
+}
+
+/** A drop on board `scope` (see dropInStore). */
+export function dropOnBoard(scope: string, source: DragSource, targetLeafId: string, zone: DropZone) {
+  commit(dropInStore(getStore(), scope, source, targetLeafId, zone));
+}
+
+/** Open `content` in the pop-out `id` (see popOutContent); false when it didn't. */
+export function popOutContentPane(boardScope: string, content: PaneContent, id: string): boolean {
+  const before = getStore();
+  commit(popOutContent(before, boardScope, content, id));
+  return getStore() !== before;
+}
+
+/** Return to this window (see returnTab). */
+export function returnTabPane(boardScope: string, ticketKey: string, id: string) {
+  commit(returnTab(getStore(), boardScope, ticketKey, id));
+}
+
+/** The whole store, as a React value (re-renders on every change). */
+export function usePaneStore(): PaneStore {
+  return useSyncExternalStore(subscribe, getStore);
+}
+
+/** Which of `ticketKey`'s tabs are torn off, as board `boardScope` sees them (see tornOffTabs). */
+export function useTornOffTabs(ticketKey: string, boardScope: string): Map<string, TornOff> {
+  const store = usePaneStore();
+  return useMemo(() => tornOffTabs(store, ticketKey, boardScope), [store, ticketKey, boardScope]);
 }
 
 /** Put a popped-out pane back on `toScope`'s board (see popIn). */

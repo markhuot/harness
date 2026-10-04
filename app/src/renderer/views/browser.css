@@ -206,3 +206,13 @@
   max-width: 340px;
   margin: auto;
 }
+/* The shown tab is torn off into a pane of its own: the canvas is covered by the way back. */
+.browser-empty.browser-torn {
+  display: flex;
+  max-width: none;
+  pointer-events: auto;
+  background: var(--bg);
+}
+.browser-tab.torn .browser-tab-select {
+  opacity: 0.75;
+}

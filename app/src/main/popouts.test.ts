@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { commandGoesToMain, parsePopoutOptions, POPOUT_OFFSET, POPOUT_START, popoutBounds } from "./popouts";
+import { commandGoesToMain, parsePopoutOptions, POPOUT_GRAB, POPOUT_OFFSET, POPOUT_START, popoutBounds } from "./popouts";
 
 const work = { x: 0, y: 25, width: 1440, height: 875 };
 
@@ -7,6 +7,12 @@ describe("parsePopoutOptions", () => {
   test("takes a plain id with its own pop-out route, and numeric bounds", () => {
     const bounds = { x: 10, y: 20, width: 600, height: 400 };
     expect(parsePopoutOptions({ id: "a1-b2", route: "#/popout/a1-b2/*", bounds })).toEqual({ id: "a1-b2", route: "#/popout/a1-b2/*", bounds });
+  });
+
+  test("takes a screen point, dropping one that isn't numbers", () => {
+    expect(parsePopoutOptions({ id: "a1", route: "#/popout/a1/*", at: { x: 5, y: -20, junk: 1 } })).toEqual({ id: "a1", route: "#/popout/a1/*", at: { x: 5, y: -20 } });
+    expect(parsePopoutOptions({ id: "a1", route: "#/popout/a1/*", at: { x: "5", y: 1 } })).toEqual({ id: "a1", route: "#/popout/a1/*" });
+    expect(parsePopoutOptions({ id: "a1", route: "#/popout/a1/*", at: { x: Infinity, y: 1 } })).toEqual({ id: "a1", route: "#/popout/a1/*" });
   });
 
   test("refuses ids that aren't plain, and routes that aren't this pop-out's", () => {
@@ -36,6 +42,13 @@ describe("popoutBounds", () => {
   test("stays inside the work area, shrinking to fit when it's bigger", () => {
     expect(popoutBounds({ x: 1200, y: 700, width: 600, height: 500 }, work)).toEqual({ x: 1440 - 600, y: 25 + 875 - 500, width: 600, height: 500 });
     expect(popoutBounds({ x: -300, y: 0, width: 2000, height: 1200 }, work)).toEqual({ x: 0, y: 25, width: 1440, height: 875 });
+  });
+
+  test("under a point (a drag let go outside the window), the pointer holds it by its title bar, at the pane's size", () => {
+    expect(popoutBounds({ x: 10, y: 10, width: 620, height: 700 }, work, { x: 700, y: 120 })).toEqual({ x: 700 - POPOUT_GRAB.x, y: 120 - POPOUT_GRAB.y, width: 620, height: 700 });
+    expect(popoutBounds(undefined, work, { x: 700, y: 120 })).toEqual({ x: 700 - POPOUT_GRAB.x, y: 120 - POPOUT_GRAB.y, width: POPOUT_START.width, height: POPOUT_START.height });
+    // Near the screen's edge it's kept on screen.
+    expect(popoutBounds(undefined, work, { x: 1430, y: 5 })).toEqual({ x: 1440 - POPOUT_START.width, y: 25, width: POPOUT_START.width, height: POPOUT_START.height });
   });
 
   test("without the pane's spot it's centered (in whole pixels)", () => {

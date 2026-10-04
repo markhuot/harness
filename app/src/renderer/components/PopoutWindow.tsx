@@ -13,7 +13,7 @@ import { useStore } from "../state/store";
 import { GLOBAL_OWNER, commandOrigin, useCommands, useKeyboardDispatcher } from "./commands";
 import { requestClosePane } from "./draftClose";
 import { PopoutContext, PaneScopeContext, type PopoutInfo } from "./paneContext";
-import { popBackIn } from "./paneHeader";
+import { popBackIn } from "./popoutOpen";
 import { Pane } from "./PaneWorkspace";
 import { CommandPalette } from "../views/CommandPalette";
 import { ShortcutsOverlay } from "../views/Shortcuts";

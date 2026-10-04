@@ -2,43 +2,13 @@
 // views/TerminalPane.tsx): the drag grip, the More menu's "Move pane" rows, and the button that
 // pops a pane out into its own window (or, in that window, puts it back on the board).
 
-import type { Project } from "@harness/shared";
-import { ALL_SCOPE, scopeProject } from "@harness/shared/state";
-import { canPopOut, findLeaf, getPanes, isPopoutScope, leaves, movePane, paneLabel, popInPane, popOutPane, updatePanes, usePanes, type DropZone } from "../state/panes";
-import { formatRoute } from "../state/route";
+import { canPopOut, findLeaf, leaves, movePane, paneLabel, updatePanes, usePanes, type DropZone } from "../state/panes";
 import { commandKeys } from "../state/keys";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
-import { usePaneScope, usePopout, type PopoutInfo } from "./paneContext";
+import { useBoardScope, usePaneScope, usePopout } from "./paneContext";
 import { dragProps } from "./paneDrag";
-import { paneElement } from "./paneFocus";
-
-/**
- * Pop the pane `paneId` of `scope` out into a window of its own, opened over the spot the pane
- * had. False when there's nothing to pop out (the board, a New session, no desktop app).
- */
-export function popOutToWindow(scope: string, paneId: string): boolean {
-  const bridge = window.harness?.popout;
-  const leaf = findLeaf(getPanes(scope).root, paneId);
-  if (!bridge || !leaf || !canPopOut(leaf.content) || isPopoutScope(scope)) return false;
-  const r = paneElement(paneId)?.getBoundingClientRect();
-  const id = crypto.randomUUID();
-  if (!popOutPane(scope, paneId, id)) return false;
-  const bounds = r && { x: Math.round(window.screenX + r.left), y: Math.round(window.screenY + r.top), width: Math.round(r.width), height: Math.round(r.height) };
-  // No window came up: put the pane back where it was, rather than leave it nowhere.
-  bridge.open({ id, route: formatRoute({ view: "popout", id, fromScope: scope }), bounds }).catch(() => popInPane(id, scope));
-  return true;
-}
-
-/**
- * Put a pop-out's pane back on the board it came from (All projects if that project is gone), and
- * bring the main window forward on that board. The pop-out window closes once its pane is gone.
- */
-export function popBackIn({ id, fromScope }: PopoutInfo, projects: Readonly<Record<string, Project>>) {
-  const to = fromScope === ALL_SCOPE || projects[fromScope] ? fromScope : ALL_SCOPE;
-  popInPane(id, to);
-  void window.harness?.popout.showMain(formatRoute({ view: "board", projectId: scopeProject(to) ?? null, ticketKey: null, tab: "spec" }));
-}
+import { popBackIn, popOutToWindow } from "./popoutOpen";
 
 const keyHint = (id: string) => {
   const keys = commandKeys(id);
@@ -47,7 +17,7 @@ const keyHint = (id: string) => {
 
 /**
  * The header button beside Maximize: "Pop out" opens the pane in its own window; in a pop-out
- * window it's "Put back on the board". Only tickets and terminals pop out, and only in the app.
+ * window it's "Put back on the board". Every pane but the board pops out (canPopOut), only in the app.
  */
 export function PaneWindowButton({ paneId }: { paneId: string }) {
   const scope = usePaneScope();
@@ -115,10 +85,17 @@ export function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () =
 
 /** Drag a pane by this onto a half of another pane to move it there. `chip`/`title` label the drag image. */
 export function PaneGrip({ paneId, chip, title, label = chip }: { paneId: string; chip: string; title: string; /** The drag image's key text, when it isn't `chip` */ label?: string }) {
+  const boardScope = useBoardScope();
   // A pop-out window's pane has nowhere to be dragged to.
   if (usePopout()) return null;
   return (
-    <span className="pane-grip" data-testid="pane-grip" title="Drag onto another pane to move this one (or use More → Move pane)" aria-hidden {...dragProps(chip, title, paneId, label)}>
+    <span
+      className="pane-grip"
+      data-testid="pane-grip"
+      title="Drag onto another pane to move this one, or out of the window to pop it out (or use More → Move pane)"
+      aria-hidden
+      {...dragProps({ kind: "pane", leafId: paneId }, { chip: label, title }, boardScope)}
+    >
       <Icon name="grip" size={13} />
     </span>
   );
