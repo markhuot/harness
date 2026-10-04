@@ -1,5 +1,4 @@
 import HarnessKit
-import QuickLook
 import SwiftUI
 
 /// The Spec tab, where a ticket opens: the ticket's living spec (markdown with nested lists and
@@ -228,68 +227,16 @@ private struct TicketPromptAttachments: View {
     let ticket: Ticket
     let list: [PromptAttachment]
 
-    @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
-    @State private var viewing: AttachmentViewerStart?
-    @State private var preview: URL?
     @State private var downloading = false
 
     var body: some View {
-        let tiles = list.enumerated().map { i, a in PromptAttachmentTile(attachment: a, index: i, remote: (key: ticket.key, index: i)) }
-        let images = tiles.filter(\.isImage)
+        let tiles = list.enumerated().map { i, a in PromptAttachmentTile(attachment: a, index: i, remote: .prompt(key: ticket.key, index: i)) }
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 SectionTitle("Attachments")
                 if downloading { ProgressView().controlSize(.mini) }
             }
-            PromptAttachmentList(tiles: tiles, onOpen: { tile in
-                if tile.isImage {
-                    guard let i = images.firstIndex(where: { $0.index == tile.index }) else { return }
-                    var t = Transaction()
-                    t.disablesAnimations = true
-                    withTransaction(t) { viewing = AttachmentViewerStart(index: i) }
-                } else {
-                    open(tile)
-                }
-            })
-        }
-        .fullScreenCover(item: $viewing) { start in
-            let key = ticket.key
-            let api = store.api
-            AttachmentViewer(
-                attachments: images.map { Attachment(id: String($0.index), kind: .image, mimeType: "", name: $0.attachment.name, size: 0) },
-                start: start.index,
-                url: { a in Int(a.id).flatMap { api?.promptAttachmentUrl(key: key, index: $0) } }
-            ) {
-                var t = Transaction()
-                t.disablesAnimations = true
-                withTransaction(t) { viewing = nil }
-            }
-        }
-        .quickLookPreview($preview)
-    }
-
-    /// Download a file into a temporary folder under its own name, then show it in Quick Look.
-    private func open(_ tile: PromptAttachmentTile) {
-        guard !downloading, let api = store.api, let url = URL(string: api.promptAttachmentUrl(key: ticket.key, index: tile.index)) else { return }
-        downloading = true
-        let name = tile.attachment.name
-        Task {
-            defer { downloading = false }
-            do {
-                let (temp, response) = try await URLSession.shared.download(from: url)
-                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                    throw HarnessAPIError(status: http.statusCode, message: http.statusCode == 404 ? "The file is gone from the Mac." : HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
-                }
-                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("prompt-attachments/\(UUID().uuidString)", isDirectory: true)
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                let dest = dir.appendingPathComponent(name.isEmpty ? "file" : name)
-                try FileManager.default.moveItem(at: temp, to: dest)
-                preview = dest
-            } catch {
-                haptic(.error)
-                toasts.show("Couldn't open \(name): \(localizedErrorMessage(error))", kind: .error)
-            }
+            OpenablePromptAttachmentList(tiles: tiles, downloading: $downloading)
         }
     }
 }
