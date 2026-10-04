@@ -1,5 +1,5 @@
 // Annotations (DESIGN.md "Annotations"): numbered notes a human draws on an image attachment.
-// They're metadata on the attachment (PromptAttachment.annotation); the image file is never
+// They're metadata on the attachment (Attachment.annotation); the image file is never
 // changed. The service checks their shape here and writes what the agent reads about them, so it
 // reads each note next to the exact pixel it points at.
 

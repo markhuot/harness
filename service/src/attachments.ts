@@ -36,9 +36,9 @@ const BY_MIME: Record<string, FileType> = Object.fromEntries(Object.values(BY_EX
 
 export const ALLOWED_EXTENSIONS = Object.keys(BY_EXT);
 
-/** A validated file, ready to copy in. `id` is the attachment's id and stored file name. */
-export interface PreparedAttachment extends Attachment {
-  source: string;
+/** A validated file, ready to copy in. `id` is the attachment's id and stored file name; `from` is the file to copy. */
+export interface PreparedAttachment extends Omit<Attachment, "path" | "source"> {
+  from: string;
 }
 
 /** Where an attachment's copy lives. */
@@ -139,12 +139,15 @@ export function prepareAttachments(paths: unknown, cwd: string): PreparedAttachm
       name: basename(source),
       size,
       ...(dims && dims.width > 0 && dims.height > 0 ? dims : {}),
-      source,
+      from: source,
     };
   });
 }
 
-/** Copy prepared files into `dir`. On a failure the copies made so far are removed. */
+/**
+ * Copy prepared files into `dir`, as spec media (source "spec", `path` the stored copy). On a
+ * failure the copies made so far are removed.
+ */
 export function storeAttachments(dir: string, prepared: PreparedAttachment[]): Attachment[] {
   if (prepared.length === 0) return [];
   mkdirSync(dir, { recursive: true });
@@ -152,14 +155,54 @@ export function storeAttachments(dir: string, prepared: PreparedAttachment[]): A
   try {
     for (const p of prepared) {
       const dest = attachmentPath(dir, p);
-      copyFileSync(p.source, dest);
+      copyFileSync(p.from, dest);
       done.push(dest);
     }
   } catch (err) {
     removeAttachmentFiles(done);
     throw err;
   }
-  return prepared.map(({ source: _source, ...a }) => a);
+  return prepared.map(({ from: _from, ...a }) => ({ ...a, path: attachmentPath(dir, a), source: "spec" as const }));
+}
+
+/** What a file is, for registering it: a PNG, JPEG, GIF or WebP image or an MP4, WebM or QuickTime video by its first bytes, else a "file". */
+export interface FileDescription {
+  kind: AttachmentKind;
+  mimeType: string;
+  size: number;
+  width?: number;
+  height?: number;
+}
+
+const IMAGE_TYPES = [PNG, JPEG, GIF, WEBP];
+
+/**
+ * Describe a file on disk (null when it isn't a regular file, or can't be read). Images are
+ * recognized by their first bytes whatever their name; videos need a video extension too, since
+ * an ftyp box also opens HEIC images. Anything else is a "file" with the MIME type its name
+ * suggests ("" when it suggests none).
+ */
+export function describeFile(path: string): FileDescription | null {
+  let size: number;
+  let head: Buffer;
+  try {
+    const st = statSync(path);
+    if (!st.isFile()) return null;
+    size = st.size;
+    head = readHead(path, HEAD_BYTES);
+  } catch {
+    return null;
+  }
+  const image = IMAGE_TYPES.find((t) => t.magic(head));
+  if (image) {
+    const dims = imageSize(image.mimeType, head);
+    return { kind: "image", mimeType: image.mimeType, size, ...(dims && dims.width > 0 && dims.height > 0 ? dims : {}) };
+  }
+  const ext = extname(path).slice(1).toLowerCase();
+  const video = ext === "m4v" ? MP4 : BY_EXT[ext];
+  if (video?.kind === "video" && video.magic(head)) return { kind: "video", mimeType: video.mimeType, size };
+  const guessed = Bun.file(path).type.split(";")[0]!.trim();
+  return { kind: "file", mimeType: guessed === "application/octet-stream" ? "" : guessed, size };
 }
 
 /** Best-effort removal of stored attachment files. */

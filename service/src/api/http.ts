@@ -8,7 +8,7 @@ import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
 import { createWsHandlers, type WsData } from "./ws";
-import { MAX_UPLOAD_BYTES } from "../prompt-attachments";
+import { MAX_UPLOAD_BYTES } from "../attachment-lists";
 import type { PluginHost } from "../plugins/host";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
@@ -258,13 +258,15 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/tickets/:key/file", ({ params, url }) => o.ticketFile(params.key!, url.searchParams.get("path") ?? ""));
   add("GET", "/tickets/:key/file/diff", ({ params, url }) => o.ticketFileDiff(params.key!, url.searchParams.get("path") ?? ""));
 
-  // Prompt attachment uploads: the raw bytes as the body, the file name in ?name=.
+  // Attachment uploads: the raw bytes as the body, the file name in ?name=. Answers the registered Attachment.
   add("POST", "/uploads", async ({ req, url }) => {
     const length = Number(req.headers.get("content-length") ?? "0");
     if (length > MAX_UPLOAD_BYTES) throw new HarnessError(413, `The upload is over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
     const bytes = new Uint8Array(await req.arrayBuffer());
-    return o.uploadPromptAttachment(bytes, url.searchParams.get("name"), req.headers.get("content-type"));
+    return o.uploadAttachment(bytes, url.searchParams.get("name"), req.headers.get("content-type"));
   });
+  // Register a file already on the service's machine ({ path, name? }), referenced in place.
+  add("POST", "/attachments", async ({ body }) => o.registerAttachment((await body()) ?? {}));
 
   // Sessions
   add("GET", "/sessions", ({ url }) => {
@@ -442,19 +444,25 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         return json({ error: "WebSocket upgrade required" }, 400);
       }
 
-      // Ticket attachments: the bearer token or ?token=, since <img> and <video> can't set headers.
-      // No other route takes the token from the query.
+      // Any attachment's file (DESIGN.md "Attachments"): the bearer token or ?token=, since <img>
+      // and <video> can't set headers. Only these GETs take the token from the query. A file that
+      // has gone missing is a 404. Spec media never change, so they're cached for good; other
+      // files are referenced in place and can change or go, so they're revalidated.
       const attachment = /^\/attachments\/([^/]+)$/.exec(path);
       if (attachment && (req.method === "GET" || req.method === "HEAD")) {
         const token = opts.tokens.get();
         if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
         const found = opts.orchestrator.attachmentFile(decodeURIComponent(attachment[1]!));
         if (!found) return json({ error: "Not found" }, 404);
-        return serveFile(req, found.path, found.attachment.mimeType);
+        try {
+          return await serveFile(req, found.path, found.mimeType, found.attachment.source === "spec" ? undefined : "no-cache");
+        } catch {
+          return json({ error: "Not found" }, 404);
+        }
       }
 
-      // A ticket's prompt attachments, the same way: the apps load previews with <img> and probe
-      // other files with HEAD. A file that has gone missing is a 404.
+      // Legacy (iPhone apps before GET /attachments/:id served every attachment): a ticket's
+      // prompt attachments by index, the same way. A file that has gone missing is a 404.
       const promptFile = /^\/tickets\/([^/]+)\/prompt-attachments\/([^/]+)$/.exec(path);
       if (promptFile && (req.method === "GET" || req.method === "HEAD")) {
         const token = opts.tokens.get();
@@ -469,7 +477,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         }
       }
 
-      // Files sent with a message (a transcript entry's attachments), the same way.
+      // Legacy too: files sent with a message (a transcript entry's attachments) by index.
       const messageFile = /^\/transcript\/([^/]+)\/attachments\/([^/]+)$/.exec(path);
       if (messageFile && (req.method === "GET" || req.method === "HEAD")) {
         const token = opts.tokens.get();

@@ -435,7 +435,7 @@ export class FakeDriver implements Driver {
 export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?: FakeDriver; dbPath?: string } = {}) {
   const home = opts.paths?.home ?? tempHome();
   const paths = ensureHome(home);
-  const store = opts.store ?? new Store(openDb(opts.dbPath ?? ":memory:"));
+  const store = opts.store ?? new Store(openDb(opts.dbPath ?? ":memory:", { attachmentsDir: paths.attachmentsDir, uploadsDir: paths.uploadsDir }));
   const bus = opts.bus ?? new EventBus();
   const driver = opts.driver ?? new FakeDriver();
   const browser = opts.browser ?? stubBrowser();

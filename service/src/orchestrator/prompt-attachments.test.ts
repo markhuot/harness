@@ -3,7 +3,7 @@
 // cleanup, and the agent tools.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type Ticket } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
@@ -34,12 +34,16 @@ describe("creating and editing", () => {
   test("a ticket keeps its attachments where they are, and the source comes from the service", async () => {
     const h = setup();
     const shot = h.file("shot.png", png(2, 2));
-    const up = h.orch.uploadPromptAttachment(png(1, 1), "Pasted image.png", "image/png");
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: shot }, { path: up.path }] });
+    const up = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
+    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: shot }, { id: up.id }] });
     expect(t.promptAttachments).toEqual([
-      { path: shot, name: "shot.png", source: "file" },
-      { path: up.path, name: "Pasted image.png", source: "upload" },
+      { id: expect.any(String), path: shot, name: "shot.png", source: "file", kind: "image", mimeType: "image/png", size: png(2, 2).length, width: 2, height: 2 },
+      up,
     ]);
+    // By path, an upload is the same registered attachment.
+    const again = await h.orch.createTicket({ projectId: h.web.id, spec: "Again", draft: true, promptAttachments: [{ path: up.path }, { path: shot }] });
+    expect(again.promptAttachments!.map((a) => a.id)).toEqual([up.id, t.promptAttachments![0]!.id]);
+    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ id: "nope" }] })).rejects.toMatchObject({ status: 400 });
     expect(up.path.startsWith(h.paths.uploadsDir)).toBe(true);
     await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: join(h.home, "nope.png") }] })).rejects.toMatchObject({ status: 400 });
   });
@@ -50,7 +54,7 @@ describe("creating and editing", () => {
     const b = h.file("b.txt");
     const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: a }] });
     rmSync(a);
-    const t = await h.orch.updateTicket(d.key, { promptAttachments: [{ path: a }, { path: b }] });
+    const t = await h.orch.updateTicket(d.key, { promptAttachments: [{ id: d.promptAttachments![0]!.id }, { path: b }] });
     expect(t.promptAttachments!.map((x) => x.path)).toEqual([a, b]);
     const launched = await h.orch.submitTicket(d.key, { start: false });
     await expect(h.orch.updateTicket(launched.key, { promptAttachments: [] })).rejects.toMatchObject({ status: 409 });
@@ -107,23 +111,46 @@ describe("uploads", () => {
   test("deleting the ticket deletes its uploads, not the files it referenced elsewhere", async () => {
     const h = setup();
     const shot = h.file("shot.png");
-    const up = h.orch.uploadPromptAttachment(png(1, 1), "Pasted image.png", "image/png");
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: shot }, { path: up.path }] });
+    const up = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
+    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: shot }, { id: up.id }] });
+    const shotId = t.promptAttachments![0]!.id;
     await h.orch.deleteTicket(t.key);
     expect(existsSync(up.path)).toBe(false);
+    expect(h.store.attachments.get(up.id)).toBeNull();
+    // A file referenced in place is never deleted.
     expect(existsSync(shot)).toBe(true);
+    expect(h.store.attachments.get(shotId)).not.toBeNull();
   });
 
   test("an upload another ticket also uses stays when one of them is deleted, and goes with the last", async () => {
     const h = setup();
-    const up = h.orch.uploadPromptAttachment(png(1, 1), "Pasted image.png", "image/png");
-    const parent = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", draft: true, promptAttachments: [{ path: up.path }] });
+    const up = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
+    const parent = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", draft: true, promptAttachments: [{ id: up.id }] });
     const child = await h.orch.createTicket({ projectId: h.web.id, spec: "child", draft: true, promptAttachments: [{ path: up.path }] });
-    expect(child.promptAttachments![0]!.source).toBe("upload");
+    expect(child.promptAttachments![0]).toMatchObject({ id: up.id, source: "upload" });
     await h.orch.deleteTicket(child.key);
     expect(existsSync(up.path)).toBe(true);
+    expect(h.store.attachments.get(up.id)).not.toBeNull();
     await h.orch.deleteTicket(parent.key);
     expect(existsSync(up.path)).toBe(false);
+    expect(h.store.attachments.get(up.id)).toBeNull();
+  });
+
+  test("the startup sweep forgets registry rows whose files are gone or that nothing uses, and keeps what a ticket uses", async () => {
+    const h = setup();
+    const used = h.orch.uploadAttachment(png(1, 1), "used.png", "image/png");
+    const orphan = h.orch.uploadAttachment(png(1, 1), "orphan.png", "image/png");
+    const young = h.orch.uploadAttachment(png(1, 1), "young.png", "image/png");
+    const vanished = h.orch.registerAttachment({ path: h.file("vanished.txt") });
+    const loose = h.orch.registerAttachment({ path: h.file("loose.txt") });
+    await h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ id: used.id }] });
+    rmSync(vanished.path);
+    const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    for (const a of [used, orphan]) utimesSync(join(a.path, ".."), old, old);
+    h.store.db.query("UPDATE attachments SET created_at = $t WHERE id <> $young").run({ t: old.getTime(), young: young.id });
+    h.orch.sweepUploads();
+    expect([used, orphan, young, vanished, loose].map((a) => !!h.store.attachments.get(a.id))).toEqual([true, false, true, false, false]);
+    expect([existsSync(used.path), existsSync(orphan.path), existsSync(young.path), existsSync(loose.path)]).toEqual([true, false, true, true]);
   });
 });
 
@@ -145,8 +172,8 @@ describe("agent tools", () => {
     const got = await run("get_ticket", { key });
     const detail = JSON.parse(got.content.map((c) => (c.type === "text" ? c.text : "")).join(""));
     expect(detail.promptAttachments).toEqual([
-      { name: "shot.png", path: join(cwd, "shot.png"), missing: false },
-      { name: "gone.png", path: join(cwd, "gone.png"), missing: true },
+      { id: expect.any(String), name: "shot.png", path: join(cwd, "shot.png"), missing: false },
+      { id: expect.any(String), name: "gone.png", path: join(cwd, "gone.png"), missing: true },
     ]);
     await h.orch.idle();
   });
@@ -159,7 +186,7 @@ describe("over HTTP", () => {
     harness = null;
   });
 
-  test("POST /uploads stores a paste; the file is served by index with ?token=, and 404s once it's gone", async () => {
+  test("POST /uploads registers a paste; GET /attachments/:id serves it with ?token=, the legacy index route too, and 404s once it's gone", async () => {
     const home = tempHome("harness-prompt-att-http-");
     harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
     const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
@@ -167,26 +194,39 @@ describe("over HTTP", () => {
     const dir = join(home, "work", "web");
     mkdirSync(dir, { recursive: true });
     const project = await client.createProject({ path: dir, key: "WEB" });
-    const up = await client.uploadPromptAttachment(new Blob([png(2, 2)], { type: "image/png" }), "Pasted image", "image/png");
-    expect(up).toMatchObject({ name: "Pasted image.png", source: "upload" });
+    const up = await client.uploadAttachment(new Blob([png(2, 2)], { type: "image/png" }), "Pasted image", "image/png");
+    expect(typeof up.id).toBe("string"); // (toMatchObject with expect.any would write the matcher into `up`)
+    expect(up).toMatchObject({ name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 2, height: 2 });
     const other = join(home, "notes.txt");
     writeFileSync(other, "hello");
-    const t = await client.createTicket({ projectId: project.id, spec: "Look", draft: true, promptAttachments: [{ path: up.path }, { path: other }] });
+    const notes = await client.registerAttachment(other, "Notes");
+    expect(notes).toMatchObject({ path: other, name: "Notes", source: "file", kind: "file", mimeType: "text/plain", size: 5 });
+    expect((await client.registerAttachment(other)).id).toBe(notes.id);
+    for (const bad of [{ path: "notes.txt" }, { path: join(home, "nope.txt") }, {}]) {
+      const res = await fetch(`${harness.url}/attachments`, { method: "POST", headers: { authorization: `Bearer ${harness.token}`, "content-type": "application/json" }, body: JSON.stringify(bad) });
+      expect(res.status).toBe(400);
+    }
+    const t = await client.createTicket({ projectId: project.id, spec: "Look", draft: true, promptAttachments: [{ id: up.id }, { id: notes.id }] });
 
-    const img = await fetch(client.promptAttachmentUrl(t.key, 0));
+    const img = await fetch(client.attachmentUrl(up.id));
     expect([img.status, img.headers.get("content-type"), img.headers.get("cache-control")]).toEqual([200, "image/png", "no-cache"]);
     expect(Buffer.from(await img.arrayBuffer()).equals(png(2, 2))).toBe(true);
-    const head = await fetch(client.promptAttachmentUrl(t.key, 1), { method: "HEAD" });
-    expect(head.status).toBe(200);
+    expect((await fetch(client.attachmentUrl(notes.id), { method: "HEAD" })).headers.get("content-type")).toBe("text/plain");
+    // Legacy: by index, for iPhone apps from before the registry.
+    const legacy = (i: number) => `${harness!.url}/tickets/${t.key}/prompt-attachments/${i}?token=${harness!.token}`;
+    expect((await fetch(legacy(0))).status).toBe(200);
+    expect((await fetch(legacy(1), { method: "HEAD" })).status).toBe(200);
 
     rmSync(other);
-    expect((await fetch(client.promptAttachmentUrl(t.key, 1), { method: "HEAD" })).status).toBe(404);
-    expect((await fetch(client.promptAttachmentUrl(t.key, 7))).status).toBe(404);
-    expect((await fetch(client.promptAttachmentUrl(t.key, 0).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
+    expect((await fetch(client.attachmentUrl(notes.id), { method: "HEAD" })).status).toBe(404);
+    expect((await fetch(legacy(1), { method: "HEAD" })).status).toBe(404);
+    expect((await fetch(legacy(7))).status).toBe(404);
+    expect((await fetch(client.attachmentUrl("nope"))).status).toBe(404);
+    expect((await fetch(client.attachmentUrl(up.id).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
     // The ticket itself still loads with its missing file listed.
     expect((await client.getTicket(t.key)).ticket.promptAttachments).toHaveLength(2);
 
-    const empty = await client.uploadPromptAttachment(new Uint8Array(), "a.png", "image/png").catch((e) => e);
+    const empty = await client.uploadAttachment(new Uint8Array(), "a.png", "image/png").catch((e) => e);
     expect(empty).toBeInstanceOf(HarnessApiError);
     expect((empty as HarnessApiError).status).toBe(400);
   });

@@ -11,6 +11,7 @@ import { tempDir } from "@harness/shared/testing";
 import { attachmentPath } from "./attachments";
 import { ensureSearchIndex, migrate, MIGRATIONS, SCHEMA_VERSION } from "./db";
 import { Store } from "./store";
+import { png } from "./testing/media";
 
 /** The FTS index as services before migration 26 built it (over description and summary). */
 const OLD_SEARCH_INDEX = `
@@ -70,7 +71,7 @@ describe("migration 26: spec + Activity", () => {
     mkdirSync(dir, { recursive: true });
     for (const a of [{ id: "a1", mimeType: "image/png" }, { id: "a2", mimeType: "video/mp4" }]) writeFileSync(attachmentPath(dir, a), "bytes");
 
-    migrate(db);
+    migrate(db, { attachmentsDir: dir });
     expect((db.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(SCHEMA_VERSION);
     const store = new Store(db);
 
@@ -93,7 +94,8 @@ describe("migration 26: spec + Activity", () => {
     expect(store.attachments.listByTicket("t1").map((a) => a.id)).toEqual(["a1", "a2"]);
     const a1 = store.attachments.get("a1")!;
     expect(a1).toMatchObject({ kind: "image", mimeType: "image/png", name: "after.png", width: 800, height: 600 });
-    expect(existsSync(attachmentPath(dir, a1))).toBe(true);
+    expect(a1.path).toBe(attachmentPath(dir, a1));
+    expect(existsSync(a1.path)).toBe(true);
     expect(db.query("SELECT name FROM sqlite_master WHERE name IN ('summaries', 'summary_attachments')").all()).toEqual([]);
 
     // Search reads the renamed columns: the spec, and the latest note.
@@ -117,9 +119,84 @@ describe("migration 26: spec + Activity", () => {
     db.exec(`INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'WEB', 'Web', '/tmp/web', 1, 1)`);
     const t = store.tickets.create({ key: "WEB-1", projectId: "p1", kind: "task", title: "t", spec: "v1", status: "planning", sessionId: "s1", driver: "fake", parentId: null, dependsOn: [], autoStart: false, externalRef: null, workdir: null });
     store.specs.revise(t.id, { body: "v2", author: "human", note: "edit", baseRevision: 1 });
-    store.attachments.add(t.id, [{ id: "x1", kind: "image", mimeType: "image/png", name: "a.png", size: 1 }]);
+    store.attachments.add(t.id, [{ id: "x1", path: "/h/attachments/x1.png", name: "a.png", source: "spec", kind: "image", mimeType: "image/png", size: 1 }]);
     store.tickets.delete(t.id);
     expect(db.query("SELECT COUNT(*) AS n FROM spec_revisions").get()).toEqual({ n: 0 });
     expect(store.attachments.get("x1")).toBeNull();
+  });
+});
+
+describe("migration 30: one attachment registry", () => {
+  test("spec media get their stored path; every listed file is registered once and its lists hold full records", () => {
+    const db = dbAt(29);
+    const home = tempDir("harness-migrate30-");
+    const attachmentsDir = join(home, "attachments");
+    const uploadsDir = join(home, "uploads");
+    mkdirSync(join(uploadsDir, "u1"), { recursive: true });
+    mkdirSync(attachmentsDir, { recursive: true });
+    const upload = join(uploadsDir, "u1", "Pasted image.png");
+    writeFileSync(upload, png(6, 4));
+    const notes = join(home, "notes.txt");
+    writeFileSync(notes, "hello");
+    const gone = join(home, "gone.png");
+    const specFile = attachmentPath(attachmentsDir, { id: "s1img", mimeType: "image/png" });
+    writeFileSync(specFile, png(2, 2));
+    const note = { width: 6, height: 4, marks: [{ n: 1, x: 1, y: 1, message: "here" }] };
+    const t0 = 1_700_000_000_000;
+    db.exec(`
+      INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'WEB', 'Web', '/tmp/web', ${t0}, ${t0});
+      INSERT INTO sessions (id, key, kind, ticket_id, driver, cwd, created_at, updated_at) VALUES ('s1', 'WEB-1', 'ticket', 't1', 'fake', '/tmp/web', ${t0}, ${t0});
+      INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, created_at, updated_at)
+        VALUES ('t1', 'WEB-1', 'p1', 'task', 'Shots', 'x', 'planning', 's1', 'fake', ${t0}, ${t0});
+      INSERT INTO ticket_attachments (id, ticket_id, kind, mime_type, name, size, width, height, created_at)
+        VALUES ('s1img', 't1', 'image', 'image/png', 'after.png', 10, 2, 2, ${t0});
+    `);
+    db.query("UPDATE tickets SET prompt_attachments = $list WHERE id = 't1'").run({
+      list: JSON.stringify([
+        { path: upload, name: "Pasted image.png", source: "upload", annotation: note },
+        { path: gone, name: "gone.png", source: "file" },
+        // Round 3 stored a spec image by its stored path, as a "file".
+        { path: specFile, name: "after.png", source: "file", annotation: note },
+      ]),
+    });
+    db.query("INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, created_at) VALUES ('r1', 's1', 'chat', 'succeeded', 'fake', 'look', $list, $t)").run({
+      list: JSON.stringify([{ path: upload, name: "again.png", source: "upload" }, { path: notes, name: "Notes", source: "file" }]),
+      t: t0,
+    });
+    db.query("INSERT INTO transcript (id, session_id, run_id, seq, role, content, created_at) VALUES ('e1', 's1', 'r1', 1, 'user', $content, $t)").run({
+      content: JSON.stringify({ type: "text", text: "look", attachments: [{ path: notes, name: "Notes", source: "file" }] }),
+      t: t0,
+    });
+    db.query("INSERT INTO transcript (id, session_id, run_id, seq, role, content, created_at) VALUES ('e2', 's1', 'r1', 2, 'assistant', $content, $t)").run({
+      content: JSON.stringify({ type: "text", text: "ok" }),
+      t: t0,
+    });
+
+    migrate(db, { attachmentsDir, uploadsDir });
+    const store = new Store(db);
+    expect(store.attachments.get("s1img")).toEqual({ id: "s1img", path: specFile, name: "after.png", source: "spec", kind: "image", mimeType: "image/png", size: 10, width: 2, height: 2 });
+    expect(db.query("SELECT name FROM sqlite_master WHERE name = 'ticket_attachments'").all()).toEqual([]);
+
+    const [up, missing, spec] = store.tickets.get("t1")!.promptAttachments!;
+    expect(up).toMatchObject({ path: upload, name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", size: png(6, 4).length, width: 6, height: 4, annotation: note });
+    expect(missing).toMatchObject({ path: gone, name: "gone.png", source: "file", kind: "file", mimeType: "" });
+    expect(missing!.size).toBeUndefined();
+    // The spec image is that spec attachment, keeping its notes.
+    expect(spec).toMatchObject({ id: "s1img", source: "spec", annotation: note });
+    for (const a of [up!, missing!]) expect(store.attachments.get(a.id)).toMatchObject({ path: a.path, source: a.source });
+
+    // The same file in another list is the same attachment, with that list's name.
+    const run = store.runs.get("r1")!;
+    expect(run.attachments!.map((a) => [a.id, a.name])).toEqual([
+      [up!.id, "again.png"],
+      [expect.any(String), "Notes"],
+    ]);
+    const notesId = run.attachments![1]!.id;
+    expect(store.attachments.get(notesId)).toMatchObject({ path: notes, source: "file", kind: "file", mimeType: "text/plain", size: 5 });
+    const entry = store.transcript.get("e1")!.content;
+    expect(entry).toEqual({ type: "text", text: "look", attachments: [{ id: notesId, path: notes, name: "Notes", source: "file", kind: "file", mimeType: "text/plain", size: 5 }] });
+    expect(store.transcript.get("e2")!.content).toEqual({ type: "text", text: "ok" });
+    // One row per file: the upload, the missing file, the notes, and the spec image.
+    expect(db.query("SELECT COUNT(*) AS n FROM attachments").get()).toEqual({ n: 4 });
   });
 });

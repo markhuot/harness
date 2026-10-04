@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type PromptAttachment } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { annotationLines, compactNotes, normalizeAnnotation } from "./annotations";
-import { normalizePromptAttachments, runAttachments } from "./prompt-attachments";
+import { normalizePromptAttachments, runAttachments } from "./attachment-lists";
 import { png } from "./testing/media";
 
 const dir = tempDir("harness-annotations-");

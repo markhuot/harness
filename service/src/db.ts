@@ -1,6 +1,11 @@
 // SQLite schema + migrations (tracked with PRAGMA user_version).
 
 import { Database } from "bun:sqlite";
+import { randomUUID } from "node:crypto";
+import { basename, dirname, join } from "node:path";
+import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
+import { attachmentPath, describeFile } from "./attachments";
+import { isUploadPath } from "./attachment-lists";
 
 export const MIGRATIONS: string[] = [
   // 1: initial schema
@@ -627,7 +632,143 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE runs ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
   `,
+  // 30: one attachment registry (DESIGN.md "Attachments"). ticket_attachments becomes attachments:
+  //     every file attached anywhere gets a row with its path, source ("spec", "file", "upload")
+  //     and kind. Spec media keep their ticket (ticket_id, ON DELETE CASCADE); uploads and
+  //     registered files have none. The SQL copies the spec media; MIGRATION_CODE[30] fills in
+  //     their paths and registers the files already in prompt_attachments, runs.attachments and
+  //     the transcript, rewriting those lists with full records.
+  `
+  CREATE TABLE attachments (
+    id TEXT PRIMARY KEY,
+    ticket_id TEXT REFERENCES tickets(id) ON DELETE CASCADE,
+    path TEXT NOT NULL,
+    name TEXT NOT NULL,
+    source TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    size INTEGER,
+    width INTEGER,
+    height INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX attachments_ticket ON attachments(ticket_id, created_at);
+  CREATE INDEX attachments_path ON attachments(path, source);
+  INSERT INTO attachments (id, ticket_id, path, name, source, kind, mime_type, size, width, height, created_at)
+  SELECT id, ticket_id, '', name, 'spec', kind, mime_type, size, width, height, created_at FROM ticket_attachments ORDER BY created_at, rowid;
+  DROP TABLE ticket_attachments;
+  `,
 ];
+
+/** Where the files migrations look at live (HarnessPaths); by default next to the database file. */
+export interface MigrationPaths {
+  attachmentsDir?: string;
+  uploadsDir?: string;
+}
+
+/**
+ * Migrations that need code after their SQL (keyed by the migration's number), run in the same
+ * transaction. They take the folders the service keeps files in.
+ */
+export const MIGRATION_CODE: Record<number, (db: Database, paths: Required<MigrationPaths>) => void> = {
+  30: backfillAttachments,
+};
+
+/** An attachment as rounds before migration 30 stored it in a list. */
+interface OldListAttachment {
+  path?: unknown;
+  name?: unknown;
+  source?: unknown;
+  annotation?: unknown;
+  id?: unknown;
+}
+
+/**
+ * Migration 30's code: the spec media rows get the path of their stored copy, and every file in a
+ * ticket's prompt_attachments, a run's attachments or a human message's transcript entry is
+ * registered (one row per path and source, shared by every list that names it), its list entry
+ * rewritten as the full record with that entry's name and annotation. A spec image a list named
+ * by its stored path is that spec attachment. Kind, MIME type, size and pixel size come from the
+ * file; a file that's gone is a "file" with an unknown MIME type.
+ */
+function backfillAttachments(db: Database, paths: Required<MigrationPaths>) {
+  const specRows = db.query("SELECT id, mime_type FROM attachments WHERE source = 'spec'").all() as { id: string; mime_type: string }[];
+  const setPath = db.query("UPDATE attachments SET path = $path WHERE id = $id");
+  for (const r of specRows) setPath.run({ id: r.id, path: attachmentPath(paths.attachmentsDir, { id: r.id, mimeType: r.mime_type }) });
+
+  const findByPath = db.query("SELECT * FROM attachments WHERE path = $path AND source = $source ORDER BY created_at, rowid LIMIT 1");
+  const insert = db.query(
+    `INSERT INTO attachments (id, ticket_id, path, name, source, kind, mime_type, size, width, height, created_at)
+     VALUES ($id, NULL, $path, $name, $source, $kind, $mimeType, $size, $width, $height, $t)`,
+  );
+  const t = Date.now();
+  type Row = { id: string; path: string; name: string; source: string; kind: string; mime_type: string; size: number | null; width: number | null; height: number | null };
+  const record = (r: Row): Attachment => ({
+    id: r.id,
+    path: r.path,
+    name: r.name,
+    source: r.source as AttachmentSource,
+    kind: r.kind as AttachmentKind,
+    mimeType: r.mime_type,
+    ...(r.size !== null ? { size: r.size } : {}),
+    ...(r.width !== null && r.height !== null ? { width: r.width, height: r.height } : {}),
+  });
+  const register = (old: OldListAttachment): Attachment | null => {
+    if (!old || typeof old !== "object" || typeof old.path !== "string" || !old.path) return null;
+    const path = old.path;
+    const spec = findByPath.get({ path, source: "spec" }) as Row | null;
+    const source: AttachmentSource = spec ? "spec" : old.source === "upload" || isUploadPath(paths.uploadsDir, path) ? "upload" : "file";
+    let row = spec ?? (findByPath.get({ path, source }) as Row | null);
+    if (!row) {
+      const d = describeFile(path) ?? { kind: "file" as const, mimeType: "" };
+      row = {
+        id: randomUUID(),
+        path,
+        name: basename(path),
+        source,
+        kind: d.kind,
+        mime_type: d.mimeType,
+        size: "size" in d ? d.size : null,
+        width: "width" in d ? (d.width ?? null) : null,
+        height: "height" in d ? (d.height ?? null) : null,
+      };
+      insert.run({ id: row.id, path, name: row.name, source, kind: row.kind, mimeType: row.mime_type, size: row.size, width: row.width, height: row.height, t });
+    }
+    const name = typeof old.name === "string" && old.name.trim() ? old.name : row.name;
+    return { ...record(row), name, ...(old.annotation && typeof old.annotation === "object" ? { annotation: old.annotation as Attachment["annotation"] } : {}) };
+  };
+  const convert = (list: unknown): Attachment[] | null => {
+    if (!Array.isArray(list)) return null;
+    return list.map((a) => register(a as OldListAttachment)).filter((a): a is Attachment => !!a);
+  };
+  const parse = (text: string | null): unknown => {
+    try {
+      return text ? JSON.parse(text) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const tickets = db.query("SELECT id, prompt_attachments FROM tickets WHERE prompt_attachments <> '[]'").all() as { id: string; prompt_attachments: string }[];
+  const setTicket = db.query("UPDATE tickets SET prompt_attachments = $list WHERE id = $id");
+  for (const r of tickets) {
+    const list = convert(parse(r.prompt_attachments));
+    if (list) setTicket.run({ id: r.id, list: JSON.stringify(list) });
+  }
+  const runs = db.query("SELECT id, attachments FROM runs WHERE attachments <> '[]'").all() as { id: string; attachments: string }[];
+  const setRun = db.query("UPDATE runs SET attachments = $list WHERE id = $id");
+  for (const r of runs) {
+    const list = convert(parse(r.attachments));
+    if (list) setRun.run({ id: r.id, list: JSON.stringify(list) });
+  }
+  const entries = db.query("SELECT id, content FROM transcript WHERE role = 'user' AND json_valid(content) AND json_extract(content, '$.attachments') IS NOT NULL").all() as { id: string; content: string }[];
+  const setEntry = db.query("UPDATE transcript SET content = $content WHERE id = $id");
+  for (const r of entries) {
+    const content = parse(r.content) as { attachments?: unknown } | null;
+    const list = content ? convert(content.attachments) : null;
+    if (content && list) setEntry.run({ id: r.id, content: JSON.stringify({ ...content, attachments: list }) });
+  }
+}
 
 /**
  * The FTS5 index over ticket_search (external content, so it stores only the index). It's
@@ -675,16 +816,23 @@ export function hasSearchIndex(db: Database): boolean {
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
-export function openDb(path: string): Database {
+export function openDb(path: string, paths: MigrationPaths = {}): Database {
   const db = new Database(path, { create: true, strict: true });
   if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA busy_timeout = 5000;");
-  migrate(db);
+  migrate(db, paths);
   return db;
 }
 
-export function migrate(db: Database) {
+/** The folders a migration's code looks in: the given ones, else HARNESS_HOME's, next to the database file. */
+function migrationPaths(db: Database, given: MigrationPaths): Required<MigrationPaths> {
+  const file = (db.query("PRAGMA database_list").all() as { name: string; file: string }[]).find((d) => d.name === "main")?.file ?? "";
+  const home = file ? dirname(file) : process.cwd();
+  return { attachmentsDir: given.attachmentsDir ?? join(home, "attachments"), uploadsDir: given.uploadsDir ?? join(home, "uploads") };
+}
+
+export function migrate(db: Database, paths: MigrationPaths = {}) {
   const row = db.query("PRAGMA user_version").get() as { user_version: number };
   const current = row.user_version;
   if (current > MIGRATIONS.length) {
@@ -693,6 +841,7 @@ export function migrate(db: Database) {
   for (let v = current; v < MIGRATIONS.length; v++) {
     db.transaction(() => {
       db.exec(MIGRATIONS[v]!);
+      MIGRATION_CODE[v + 1]?.(db, migrationPaths(db, paths));
       db.exec(`PRAGMA user_version = ${v + 1}`);
     })();
   }
