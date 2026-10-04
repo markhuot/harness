@@ -2538,8 +2538,18 @@ the conventions, and ios/README.md the build and test commands.
   them.
 - **iPad.** One universal build (device family `1,2`) that allows all four orientations, which
   iPad multitasking (Split View, Stage Manager) needs, so the window can be any size. The screens
-  are the phone's, laid out at the window's width. One scene only: the app has a single Router
-  and AppModel. `sim-check --ipad` shoots the walk-through's screens on iPad simulators.
+  are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
+  and store, a Router per window): at regular width a ticket opens in a window of its own. Any
+  ticket tab, any single browser tab and the composer tear off into a pinned window of their own:
+  dragged out of the window (the drag carries the window's NSUserActivity, so iPadOS opens it) or
+  from the thing's context menu (Open in New Window). A pinned window shows only that one tab,
+  fully working, under the ticket's title line. The ticket's other windows show **Return to this
+  window** in its place, which closes the pinned window; closing it any other way also brings the
+  tab back. Board cards drag out into a full ticket window; the board has no drop target, so a
+  drag never moves a card between columns (that's the card's Move to … menu). Two browser views
+  of one session stream side by side because each is its own viewer (`viewerId`, "Browser
+  tabs"). iPhone and compact width have none of this. `sim-check --ipad` shoots the
+  walk-through's screens on iPad simulators. See ios/ARCHITECTURE.md § Windows.
 - **Connection.** `harness://pair?url=…&token=…` (the desktop QR code) opens the app through its
   URL scheme, or the in-app scanner reads it; the app probes `GET /health`, then an authenticated
   request, before saving. Tokens live in the Keychain, one per saved Mac, readable after first
@@ -2568,7 +2578,10 @@ the conventions, and ios/README.md the build and test commands.
   a mouse drag (HarnessKit `BrowserInput`). A hidden text field carries the keyboard (diffed into
   text inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
   only on real changes. A + button opens a tab (`newTab`); with more than one tab a strip of chips
-  switches (resubscribing with its `tabId`) and closes them. See "Browser tabs".
+  switches (resubscribing with its `tabId`) and closes them. Each Browser view subscribes with
+  a viewer id of its own (one UUID per `BrowserTabModel`) and keeps only the frames and states
+  for it (`isBrowserEvent`, the port of `isBrowserEventFor`), so a torn-off browser tab and the
+  ticket's Browser tab stream at once. See "Browser tabs".
 - **Spec and Activity.** The app renders spec images inline, loading each `attachment:<id>` from
   `client.attachmentUrl(id)` (the query token, since the image loader and AVPlayer fetch on their
   own), and shows the Activity tab next to the Spec tab; the children of HARNESS-194 implement
