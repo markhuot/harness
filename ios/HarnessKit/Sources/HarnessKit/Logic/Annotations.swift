@@ -43,6 +43,15 @@ public enum Annotations {
         public var outline: Double
         public var headLength: Double
         public var headHalfWidth: Double
+
+        public init(badgeRadius: Double, fontSize: Double, lineWidth: Double, outline: Double, headLength: Double, headHalfWidth: Double) {
+            self.badgeRadius = badgeRadius
+            self.fontSize = fontSize
+            self.lineWidth = lineWidth
+            self.outline = outline
+            self.headLength = headLength
+            self.headHalfWidth = headHalfWidth
+        }
     }
 
     /// The style for a surface of `width`×`height` pixels. It grows with the image's long side, so
@@ -233,5 +242,13 @@ public enum Annotations {
     public static func pushHistory<T>(_ history: [T], _ snapshot: T) -> [T] {
         let next = history + [snapshot]
         return next.count > historyLimit ? Array(next.suffix(historyLimit)) : next
+    }
+
+    /// A browser page's name for its screenshot (uploaded as `<name>.png`): the host, else the
+    /// title, else "page". The Mac app's browserShotName.
+    public static func browserShotName(url: String, title: String) -> String {
+        if let host = URL(string: url)?.host(percentEncoded: false), !host.isEmpty { return host.lowercased() }
+        let t = JSCompat.trim(title)
+        return t.isEmpty ? "page" : t
     }
 }

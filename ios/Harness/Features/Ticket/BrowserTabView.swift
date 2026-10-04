@@ -205,7 +205,9 @@ struct BrowserTabView: View {
                 toasts.show("Couldn't read the page's screenshot.", kind: .error)
                 return
             }
-            openAnnotator?(sink.request(shot.source, image: image))
+            // The screenshot as it is, uploaded on Add (closed without notes, it leaves nothing behind).
+            let name = "\(Annotations.browserShotName(url: shot.url, title: shot.title)).png"
+            openAnnotator?(sink.request(.upload(data: data, name: name, mimeType: "image/png"), image: image, page: shot.page))
         }
     }
 

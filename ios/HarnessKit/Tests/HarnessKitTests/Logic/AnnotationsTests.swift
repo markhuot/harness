@@ -109,6 +109,14 @@ struct AnnotationsTests {
         #expect(Annotations.clampMessage(crossing) == String(repeating: "a", count: maxAnnotationMessage - 1))
     }
 
+    /// app/src/renderer/state/annotator.test.ts: a browser screenshot is named by its page.
+    @Test func aBrowserPageIsNamedByItsHostElseItsTitle() {
+        #expect(Annotations.browserShotName(url: "http://127.0.0.1:5173/settings", title: "Settings") == "127.0.0.1")
+        #expect(Annotations.browserShotName(url: "HTTP://Example.COM/x", title: "") == "example.com")
+        #expect(Annotations.browserShotName(url: "about:blank", title: "Blank") == "Blank")
+        #expect(Annotations.browserShotName(url: "not a url", title: "  ") == "page")
+    }
+
     @Test func historyKeepsTheNewestHundred() {
         var h: [Int] = []
         for i in 0..<(Annotations.historyLimit + 5) { h = Annotations.pushHistory(h, i) }

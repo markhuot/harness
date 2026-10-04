@@ -9,20 +9,21 @@ enum PromptAttachmentRemote: Equatable {
     case prompt(key: String, index: Int)
     /// A file sent with a message: GET /transcript/:entryId/attachments/:index
     case message(entryId: String, index: Int)
+    /// One of the ticket's spec images, waiting in a composer or New session as `attachment:<id>`
+    /// (the service resolves it when the message is sent): GET /attachments/:id
+    case spec(id: String)
 
     func url(_ api: HarnessClient) -> String {
         switch self {
         case let .prompt(key, index): api.promptAttachmentUrl(key: key, index: index)
         case let .message(entryId, index): api.messageAttachmentUrl(entryId: entryId, index: index)
+        case let .spec(id): api.attachmentUrl(id)
         }
     }
 
-    /// Where an annotated copy of it came from (MessageAnnotation.source).
-    func annotationSource(name: String) -> AnnotationSource {
-        switch self {
-        case let .prompt(_, index): .promptAttachment(index: index, name: name)
-        case let .message(entryId, index): .messageAttachment(entryId: entryId, index: index, name: name)
-        }
+    /// A waiting attachment that refers to a spec image by `attachment:<id>`.
+    static func waiting(_ a: PromptAttachment) -> PromptAttachmentRemote? {
+        PromptAttachments.specAttachmentId(of: a.path).map { .spec(id: $0) }
     }
 }
 
@@ -39,6 +40,10 @@ struct PromptAttachmentTile: Identifiable {
 
     var id: String { attachment.path }
     var isImage: Bool { PromptAttachments.isImage(attachment) }
+    /// The human's notes on it (drawn over its thumbnail, listed under its row)
+    var annotation: AttachmentAnnotation? { attachment.annotation.flatMap { $0.marks.isEmpty ? nil : $0 } }
+    /// The file as a message or New session sends it, for annotating it.
+    var input: PromptAttachmentInput { PromptAttachmentInput(path: attachment.path, name: attachment.name) }
 }
 
 /// A file being uploaded for the list (a spinner row until it's attached).
@@ -79,8 +84,9 @@ enum PromptAttachmentCheck {
 
 /// Attachments as a vertical list, the same in the New session and the message composer (editable),
 /// and at the bottom of the Spec tab and under a sent message in the Transcript (read-only): one row each, a same-size square (the image's thumbnail, or a file
-/// icon) then the name, so the names line up. Each saved one is checked against the service: an
-/// image whose file 404s, or a file whose HEAD 404s, shows dimmed with the path it was at.
+/// icon) then the name, so the names line up. An annotated image draws its marks over the
+/// thumbnail and has an "N notes" disclosure under its row. Each saved one is checked against the
+/// service: an image whose file 404s, or a file whose HEAD 404s, shows dimmed with the path it was at.
 /// `onRemove` adds a remove button to each row, `pending` adds a spinner row per upload in flight,
 /// and `onOpen` opens a row that isn't missing.
 struct PromptAttachmentList: View {
@@ -124,7 +130,24 @@ private struct PromptAttachmentRow: View {
 
     var body: some View {
         let name = tile.attachment.name
-        let label = missing ? "\(name), missing, was at \(tile.attachment.path)" : "\(tile.isImage ? "Image" : "File") \(name)"
+        let notes = tile.annotation.map { ", \(Annotations.notesLabel($0.marks.count))" } ?? ""
+        let label = missing ? "\(name), missing, was at \(tile.attachment.path)" : "\(tile.isImage ? "Image" : "File") \(name)\(notes)"
+        VStack(alignment: .leading, spacing: 0) {
+            row(name: name, label: label)
+            if let annotation = tile.annotation {
+                AttachmentAnnotationNotes(annotation: annotation)
+                    .padding(.leading, PromptAttachmentRowMetrics.side + 12)
+            }
+        }
+        .task(id: url) {
+            guard let result = await PromptAttachmentCheck.run(tile, url: url, api: store?.api) else { return }
+            if let i = result.image { image = i }
+            if let m = result.missing { missing = m }
+            if result.failed { failed = true }
+        }
+    }
+
+    private func row(name: String, label: String) -> some View {
         HStack(spacing: 8) {
             Group {
                 if let onOpen, !missing {
@@ -156,12 +179,6 @@ private struct PromptAttachmentRow: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove \(name)")
             }
-        }
-        .task(id: url) {
-            guard let result = await PromptAttachmentCheck.run(tile, url: url, api: store?.api) else { return }
-            if let i = result.image { image = i }
-            if let m = result.missing { missing = m }
-            if result.failed { failed = true }
         }
     }
 
@@ -198,6 +215,9 @@ private struct PromptAttachmentRow: View {
             } else if tile.isImage, let shown = tile.local ?? image ?? url.flatMap({ AttachmentMedia.shared.cached($0) }) {
                 c.bgSunken
                 Image(uiImage: shown).resizable().scaledToFill()
+                if let annotation = tile.annotation {
+                    AnnotationThumbnailOverlay(annotation: annotation, accent: c.accent)
+                }
             } else if tile.isImage, !failed, url != nil {
                 c.bgSunken
                 ProgressView().controlSize(.mini)
@@ -239,9 +259,10 @@ private struct PromptAttachmentUploadingRow: View {
 }
 
 /// A read-only list whose rows open: images in the full-screen viewer (paging through the list's
-/// images), other files downloaded into Quick Look. The Spec tab's prompt attachments and a sent
-/// message's attachments in the Transcript, whose images the viewer offers to annotate into the
-/// ticket's composer (`\.annotationSink`).
+/// images, with their marks drawn over them), other files downloaded into Quick Look. The Spec
+/// tab's prompt attachments and a sent message's attachments in the Transcript, whose images the
+/// viewer offers to annotate into the ticket's composer (`\.annotationSink`): the notes go on that
+/// same file, starting from the ones it already has.
 /// `downloading` is on while a file is being fetched.
 struct OpenablePromptAttachmentList: View {
     let tiles: [PromptAttachmentTile]
@@ -267,17 +288,17 @@ struct OpenablePromptAttachmentList: View {
         })
         .fullScreenCover(item: $viewing) { start in
             let api = store.api
-            let remotes = images.map(\.remote)
             AttachmentViewer(
                 attachments: images.enumerated().map { i, tile in Attachment(id: String(i), kind: .image, mimeType: "", name: tile.attachment.name, size: 0) },
                 start: start.index,
                 url: { a in
-                    guard let api, let i = Int(a.id), remotes.indices.contains(i) else { return nil }
-                    return remotes[i]?.url(api)
+                    guard let api, let i = Int(a.id), images.indices.contains(i) else { return nil }
+                    return images[i].remote?.url(api)
                 },
+                annotation: { a in Int(a.id).flatMap { images.indices.contains($0) ? images[$0].annotation : nil } },
                 annotate: sink.map { sink in { a, image in
-                    guard let i = Int(a.id), remotes.indices.contains(i), let source = remotes[i]?.annotationSource(name: a.name) else { return nil }
-                    return sink.request(source, image: image)
+                    guard let i = Int(a.id), images.indices.contains(i) else { return nil }
+                    return sink.request(.existing(images[i].input), image: image, annotation: images[i].annotation)
                 } }
             ) {
                 var t = Transaction()
@@ -313,57 +334,95 @@ struct OpenablePromptAttachmentList: View {
     }
 }
 
-/// The numbered notes on annotated attachments, under their list: a "3 notes" disclosure per
-/// annotated image (named when the list has several files), as the Transcript shows them.
-struct PromptAttachmentNotes: View {
-    let list: [PromptAttachment]
-    let annotations: [MessageAnnotation]
+/// "3 notes" under an annotated attachment's row; tapping it lists each number with its note.
+struct AttachmentAnnotationNotes: View {
+    let annotation: AttachmentAnnotation
+
+    @Environment(\.palette) private var c
+    @State private var open = false
 
     var body: some View {
-        let notes = Annotations.byAttachment(annotations, attachments: list.count).sorted { $0.key < $1.key }
-        ForEach(notes, id: \.key) { index, annotation in
-            TranscriptAnnotationNotes(name: list[index].name, annotation: annotation, named: list.count > 1)
+        let label = Annotations.notesLabel(annotation.marks.count)
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                haptic(.select)
+                withAnimation(.easeOut(duration: 0.18)) { open.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                    Image(systemName: "pencil.and.scribble").font(.system(size: 11, weight: .semibold))
+                    Text(label)
+                        .font(.scaled(size: 12.5, weight: .semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(c.accentText)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+            .accessibilityValue(open ? "Expanded" : "Collapsed")
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(annotation.marks, id: \.n) { m in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(m.n)")
+                                .font(.scaled(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 20, height: 20)
+                                .background(c.accent, in: .circle)
+                                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                            Text(m.message.isEmpty ? "(no note)" : m.message)
+                                .font(.scaled(size: 13.5))
+                                .foregroundStyle(m.message.isEmpty ? c.text3 : c.text)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
         }
     }
 }
 
 /// An editable list (a composer's or a New session's attachments): rows with remove buttons and
-/// upload spinners, "N notes" under it for annotated images, and images opening full screen with
-/// Annotate. Annotate reopens an image's original and marks while this device holds them
-/// (PromptAttachmentUploader.annotated); an image annotated elsewhere (a reopened draft) doesn't
-/// offer it, and any other image is annotated as it is, as a `file`. Add replaces the row in place
-/// (`onAnnotated`).
+/// upload spinners, marks over annotated thumbnails with "N notes" under them, and images opening
+/// full screen with Annotate. Annotate works on any image there (a reopened draft's too): the notes
+/// go on that same attachment, starting from the ones it has (`onAnnotate` sets them in place).
 struct EditablePromptAttachmentList: View {
     let tiles: [PromptAttachmentTile]
     let pending: [PromptAttachmentPending]
-    let annotations: [MessageAnnotation]
     let uploader: PromptAttachmentUploader
     var onRemove: ((PromptAttachmentTile) -> Void)?
-    /// Replace the attachment at `path` with the annotated image.
-    let onAnnotated: @MainActor (_ path: String, AnnotatedImage) -> Void
+    /// Set the notes on the attachment `input` names.
+    let onAnnotate: @MainActor (PromptAttachmentInput, AttachmentAnnotation) -> Void
 
     @Environment(BoardStore.self) private var store
     @State private var viewing: AttachmentViewerStart?
 
     var body: some View {
         let images = tiles.filter { $0.isImage && url($0) != nil }
-        VStack(alignment: .leading, spacing: 2) {
-            PromptAttachmentList(tiles: tiles, pending: pending, onRemove: onRemove, onOpen: { tile in
-                guard let i = images.firstIndex(where: { $0.index == tile.index }) else { return }
-                var t = Transaction()
-                t.disablesAnimations = true
-                withTransaction(t) { viewing = AttachmentViewerStart(index: i) }
-            })
-            PromptAttachmentNotes(list: tiles.map(\.attachment), annotations: annotations)
-        }
+        PromptAttachmentList(tiles: tiles, pending: pending, onRemove: onRemove, onOpen: { tile in
+            guard let i = images.firstIndex(where: { $0.index == tile.index }) else { return }
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { viewing = AttachmentViewerStart(index: i) }
+        })
         .fullScreenCover(item: $viewing) { start in
+            let add = onAnnotate
             AttachmentViewer(
                 attachments: images.enumerated().map { i, tile in Attachment(id: String(i), kind: .image, mimeType: "", name: tile.attachment.name, size: 0) },
                 start: start.index,
                 url: { a in Int(a.id).flatMap { images.indices.contains($0) ? url(images[$0]) : nil } },
+                annotation: { a in Int(a.id).flatMap { images.indices.contains($0) ? images[$0].annotation : nil } },
                 annotate: { a, image in
                     guard let i = Int(a.id), images.indices.contains(i) else { return nil }
-                    return request(images[i], image: image)
+                    return AnnotationRequest(file: .existing(images[i].input), image: image, annotation: images[i].annotation) { add($0.input, $0.annotation) }
                 }
             ) {
                 var t = Transaction()
@@ -373,21 +432,9 @@ struct EditablePromptAttachmentList: View {
         }
     }
 
-    /// This device's copy, else the service's once it has the file.
+    /// This device's copy, else the service's once it has the file (a spec image's right away).
     private func url(_ tile: PromptAttachmentTile) -> String? {
         if let local = uploader.localFiles[tile.attachment.path] { return local.absoluteString }
         return tile.remote.flatMap { remote in store.api.map(remote.url) }
-    }
-
-    private func request(_ tile: PromptAttachmentTile, image: UIImage) -> AnnotationRequest? {
-        let path = tile.attachment.path
-        let add = onAnnotated
-        if let held = uploader.annotated[path] {
-            return AnnotationRequest(source: held.source, image: held.original, marks: held.marks) { add(path, $0) }
-        }
-        // Annotated, but its original isn't on this device: annotating the marked-up copy would
-        // burn its numbers in twice.
-        if Annotations.annotation(for: tile.index, in: annotations) != nil { return nil }
-        return AnnotationRequest(source: .file(name: tile.attachment.name), image: image) { add(path, $0) }
     }
 }

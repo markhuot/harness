@@ -65,15 +65,6 @@ final class PromptAttachmentUploader {
     /// Copies of the images this device uploaded, in a temporary folder, by their path on the
     /// service's machine: the viewer shows them before (or without) the service serving them.
     private(set) var localFiles: [String: URL] = [:]
-    /// Annotated images' originals and marks, by the annotated file's path, so Annotate reopens
-    /// them. Memory only: a reopened draft's annotated rows can't be annotated again.
-    private(set) var annotated: [String: AnnotatedOriginal] = [:]
-
-    struct AnnotatedOriginal {
-        let source: AnnotationSource
-        let original: UIImage
-        let marks: [Annotations.DraftMark]
-    }
 
     private nonisolated let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attachment-uploads/\(UUID().uuidString)", isDirectory: true)
 
@@ -81,13 +72,11 @@ final class PromptAttachmentUploader {
         try? FileManager.default.removeItem(at: folder)
     }
 
-    /// Hold on to an annotated image Add uploaded: its thumbnail, a copy to view, and its original
-    /// with the marks.
-    func remember(_ added: AnnotatedImage) async {
-        let path = added.attachment.path
-        annotated[path] = AnnotatedOriginal(source: added.annotation.source, original: added.original, marks: added.marks)
-        if let thumb = await Self.thumbnail(added.data) { thumbnails[path] = thumb }
-        await keep(added.data, name: added.attachment.name, path: path)
+    /// Hold on to an image uploaded elsewhere (the annotator's browser screenshot): its thumbnail
+    /// and a copy to view.
+    func keepUploaded(_ data: Data, at path: String, name: String) async {
+        if let thumb = await Self.thumbnail(data) { thumbnails[path] = thumb }
+        await keep(data, name: name, path: path)
     }
 
     /// Write an uploaded image's bytes to the temporary folder for the viewer.

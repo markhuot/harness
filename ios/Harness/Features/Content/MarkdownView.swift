@@ -63,7 +63,9 @@ struct MarkdownView: View {
         .modifier(ContentLinkHandling(override: linkContext))
         .fullScreenCover(item: $open) { start in
             AttachmentViewer(attachments: media.map(attachment), start: start.index,
-                             annotate: annotatable ? sink.map { sink in { a, image in sink.request(.attachment(id: a.id, name: a.name), image: image) } } : nil) {
+                             annotate: annotatable ? sink.map { sink in { a, image in
+                                 sink.request(.existing(PromptAttachmentInput(path: PromptAttachments.specAttachmentPath(a.id), name: a.name)), image: image)
+                             } } : nil) {
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { open = nil }

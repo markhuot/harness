@@ -6,7 +6,8 @@ import SwiftUI
 // (Content/PromptAttachmentUploader.swift), with NewSessionEditor as the target.
 
 /// The New session's Attachments section: the same list as the Spec tab (with remove buttons) and the Attach menu
-/// (Photos, Files, Paste).
+/// (Photos, Files, Paste). Its images open full screen with Annotate: the notes go on that
+/// attachment, saved with the draft.
 struct NewSessionAttachmentsSection: View {
     let editor: NewSessionEditor
     let ticket: Ticket
@@ -20,10 +21,12 @@ struct NewSessionAttachmentsSection: View {
         let full = list.count + uploader.pending.count >= maxPromptAttachments
         Section {
             if !list.isEmpty || !uploader.pending.isEmpty {
-                PromptAttachmentList(
+                EditablePromptAttachmentList(
                     tiles: tiles(list),
                     pending: uploader.pending,
-                    onRemove: { editor.removeAttachment(at: $0.index) }
+                    uploader: uploader,
+                    onRemove: { editor.removeAttachment(at: $0.index) },
+                    onAnnotate: { input, annotation in editor.annotateAttachment(input, annotation: annotation) }
                 )
                 .listRowBackground(c.bgElev)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))

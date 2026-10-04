@@ -58,13 +58,18 @@ extension EnvironmentValues {
     @Entry var openAnnotator: AnnotatorOpener?
 }
 
-/// Takes an annotated image into the ticket's composer.
+/// Takes an annotated image into the ticket's composer (the message being written), never
+/// sending anything itself.
 struct AnnotationSink: Sendable {
-    let add: @MainActor @Sendable (AnnotatedImage) -> Void
+    /// The notes the composer already holds on a file, so annotating it again edits them.
+    let current: @MainActor @Sendable (_ path: String) -> AttachmentAnnotation?
+    let add: @MainActor @Sendable (AnnotatedAttachment) -> Void
 
-    /// Annotate `image` from `source`, the result going to the composer.
-    @MainActor func request(_ source: AnnotationSource, image: UIImage) -> AnnotationRequest {
-        AnnotationRequest(source: source, image: image, add: add)
+    /// Annotate `image`, the notes going on `file` in the composer. Starts from the composer's notes
+    /// on that file, else `annotation` (the notes it was sent with), so they can be edited.
+    @MainActor func request(_ file: AnnotationImage, image: UIImage, page: AnnotationPage? = nil, annotation: AttachmentAnnotation? = nil) -> AnnotationRequest {
+        let existing: AttachmentAnnotation? = if case let .existing(input) = file { current(input.path) } else { nil }
+        return AnnotationRequest(file: file, image: image, page: page, annotation: existing ?? annotation, add: add)
     }
 }
 

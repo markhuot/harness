@@ -166,23 +166,25 @@ private struct TicketDetailBody: View {
         .annotator($annotating) { hero.show() }
     }
 
-    /// Annotated images join the next message (with their notes), never sent on their own; the
-    /// field takes focus so the human can say why.
+    /// Annotated images join the next message, their notes on the attachment itself (a file already
+    /// waiting there is edited in place), never sent on their own; the field takes focus so the
+    /// human can say why.
     private var sink: AnnotationSink {
         let outgoing = outgoing
         let uploader = uploader
         let toasts = toasts
         let focus = { focusComposer += 1 }
-        return AnnotationSink { added in
-            let input = PromptAttachmentInput(path: added.attachment.path, name: added.attachment.name, source: added.attachment.source)
-            guard outgoing.addAnnotated(input, annotation: added.annotation) else {
+        return AnnotationSink(current: { path in
+            outgoing.list.first { $0.path == path }?.annotation
+        }, add: { added in
+            guard outgoing.annotate(added.input, annotation: added.annotation) else {
                 haptic(.warning)
                 toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
                 return
             }
-            Task { await uploader.remember(added) }
+            if let data = added.uploaded { Task { await uploader.keepUploaded(data, at: added.input.path, name: added.input.name ?? "") } }
             focus()
-        }
+        })
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the

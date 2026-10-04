@@ -2,28 +2,51 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// An image to annotate, where it came from, and what takes the result: the ticket's composer, or
-/// the New session or composer row it replaces. `marks` reopens earlier notes over `image` (the
-/// original) to edit them.
-struct AnnotationRequest: Identifiable {
-    let id = UUID()
-    let source: AnnotationSource
-    let image: UIImage
-    var marks: [Annotations.DraftMark] = []
-    /// Takes the annotated image once Add has uploaded it.
-    let add: @MainActor (AnnotatedImage) -> Void
+/// The file an annotation goes on: one the service already has (a spec image as
+/// `attachment:<id>`, a prompt or message attachment, a file waiting in a composer or New session),
+/// or a browser screenshot, uploaded as it is once Add is pressed.
+enum AnnotationImage {
+    case existing(PromptAttachmentInput)
+    case upload(data: Data, name: String, mimeType: String)
+
+    /// The header's file name.
+    var name: String {
+        switch self {
+        case let .existing(input): input.name ?? PromptAttachments.fileBaseName(input.path)
+        case let .upload(_, name, _): name
+        }
+    }
 }
 
-/// What Add hands back: the uploaded picture with the marks burned in, its notes (`attachment` 0:
-/// whoever takes it sets the index), and the original with the marks, so Annotate can reopen them
-/// while this device still holds them.
-struct AnnotatedImage {
-    let attachment: PromptAttachment
-    let annotation: MessageAnnotation
-    let original: UIImage
-    let marks: [Annotations.DraftMark]
-    /// The uploaded picture's bytes, for its thumbnail and the viewer.
-    let data: Data
+/// An image to annotate, which file the notes go on, and what takes them: the ticket's composer, or
+/// a New session. `marks` reopens an earlier annotation to edit it (the image is never changed, so
+/// they sit where they were drawn).
+struct AnnotationRequest: Identifiable {
+    let id = UUID()
+    let file: AnnotationImage
+    let image: UIImage
+    /// The page a browser screenshot shows (AttachmentAnnotation.page).
+    var page: AnnotationPage?
+    var marks: [Annotations.DraftMark] = []
+    /// Takes the file and its notes once Add has them.
+    let add: @MainActor (AnnotatedAttachment) -> Void
+
+    init(file: AnnotationImage, image: UIImage, page: AnnotationPage? = nil, annotation: AttachmentAnnotation? = nil,
+         add: @escaping @MainActor (AnnotatedAttachment) -> Void) {
+        self.file = file
+        self.image = image
+        self.page = page
+        self.marks = annotation.map(Annotations.draftMarks(from:)) ?? []
+        self.add = add
+    }
+}
+
+/// What Add hands back: the file (as a message or a New session sends it) and its notes, with the
+/// bytes it uploaded (a browser screenshot) so the list can draw them before the service serves them.
+struct AnnotatedAttachment {
+    let input: PromptAttachmentInput
+    let annotation: AttachmentAnnotation
+    var uploaded: Data?
 }
 
 /// Full-screen annotator (DESIGN.md "Annotations"). The image is fitted at the top (iPhone) or on
@@ -32,13 +55,14 @@ struct AnnotatedImage {
 /// numbered anchor. Pressing a badge (or an arrow's head) drags that mark instead. Only the arrows
 /// and badges draw over the image: each number's note is a field in the list below it (iPhone) or
 /// beside it (iPad), never on top, with × to delete it (the ones after it renumber). Undo takes back
-/// the last add, move or delete. Annotations never message the agent themselves: Add uploads the
-/// image with the marks burned in and hands it back (AnnotationRequest.add) to wait in a composer or
-/// a New session beside the human's own words. Cancel asks before throwing away changed marks.
+/// the last add, move or delete. Annotations never message the agent themselves, and never change
+/// the image: Add hands the file back with its notes as metadata (AttachmentAnnotation, in the
+/// image's pixels), to wait in a composer or a New session beside the human's own words. Only a
+/// browser screenshot is uploaded then, as it is. Cancel asks before throwing away changed marks.
 struct AnnotatorView: View {
     let request: AnnotationRequest
-    /// Closes the annotator, with the annotated image once Add went through (nil: cancelled).
-    let onClose: (_ added: AnnotatedImage?) -> Void
+    /// Closes the annotator, with the file and its notes once Add went through (nil: cancelled).
+    let onClose: (_ added: AnnotatedAttachment?) -> Void
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
@@ -52,7 +76,7 @@ struct AnnotatorView: View {
     @State private var gesture: AnnotatorGesture?
     @FocusState private var focused: Int?
 
-    init(request: AnnotationRequest, onClose: @escaping (_ added: AnnotatedImage?) -> Void) {
+    init(request: AnnotationRequest, onClose: @escaping (_ added: AnnotatedAttachment?) -> Void) {
         self.request = request
         self.onClose = onClose
         _marks = State(initialValue: request.marks)
@@ -107,7 +131,7 @@ struct AnnotatorView: View {
                 .disabled(adding)
             VStack(spacing: 1) {
                 Text("Annotate").font(.scaled(size: 15, weight: .semibold)).foregroundStyle(c.text)
-                Text(request.source.displayName)
+                Text(request.file.name)
                     .font(.scaled(size: 12))
                     .foregroundStyle(c.text3)
                     .lineLimit(1)
@@ -344,27 +368,28 @@ struct AnnotatorView: View {
         }
     }
 
-    /// Burn the marks in, upload the picture and hand it back. Nothing is sent to the agent.
+    /// Hand the file back with its notes, in the image's pixels. A browser screenshot is uploaded
+    /// first, as it is. Nothing is sent to the agent.
     private func add() {
         guard !marks.isEmpty, !adding else { return }
         focused = nil
         adding = true
-        let source = request.source
-        let image = request.image
-        let drafts = marks
-        let accent = UIColor(c.accent)
+        let file = request.file
+        let px = AnnotationDrawing.pixelSize(request.image)
+        let annotation = AttachmentAnnotation(
+            width: px.width, height: px.height,
+            marks: Annotations.marksForMessage(marks, width: px.width, height: px.height),
+            page: request.page
+        )
         Task {
-            let result = await actions.run { () async throws -> AnnotatedImage in
-                guard let composite = AnnotationDrawing.composite(image, marks: drafts, accent: accent) else {
-                    throw HarnessAPIError(status: 0, message: "Couldn't draw the notes onto the image.", data: nil)
+            let result = await actions.run { () async throws -> AnnotatedAttachment in
+                switch file {
+                case let .existing(input):
+                    return AnnotatedAttachment(input: input, annotation: annotation)
+                case let .upload(data, name, mimeType):
+                    let a = try await store.connectedAPI().uploadPromptAttachment(data: data, name: name, mimeType: mimeType)
+                    return AnnotatedAttachment(input: PromptAttachmentInput(path: a.path, name: a.name, source: a.source), annotation: annotation, uploaded: data)
                 }
-                let name = Annotations.annotatedName(source, jpeg: composite.jpeg)
-                let uploaded = try await store.connectedAPI().uploadPromptAttachment(data: composite.data, name: name, mimeType: composite.jpeg ? "image/jpeg" : "image/png")
-                let annotation = MessageAnnotation(
-                    attachment: 0, source: source, width: composite.width, height: composite.height,
-                    marks: Annotations.marksForMessage(drafts, width: composite.width, height: composite.height)
-                )
-                return AnnotatedImage(attachment: uploaded, annotation: annotation, original: image, marks: drafts, data: composite.data)
             }
             adding = false
             if let result {
@@ -388,7 +413,7 @@ private enum AnnotatorGesture {
     case moving(Annotations.MarkHit, start: CGPoint, current: [Annotations.DraftMark])
 }
 
-/// Presents the annotator. On Add the request's `add` takes the annotated image, then `then` runs
+/// Presents the annotator. On Add the request's `add` takes the file and its notes, then `then` runs
 /// (e.g. to close the viewer it was opened from).
 struct AnnotatorPresenter: ViewModifier {
     @Binding var request: AnnotationRequest?
