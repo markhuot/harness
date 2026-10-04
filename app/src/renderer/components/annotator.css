@@ -131,8 +131,7 @@
   box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
-.annotator-message,
-.annotator-note textarea {
+.annotator-message {
   flex: 1;
   min-width: 0;
   resize: vertical;
@@ -143,8 +142,7 @@
   font-size: 12.5px;
   line-height: 1.4;
 }
-.annotator-message:focus,
-.annotator-note textarea:focus {
+.annotator-message:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--focus);
@@ -166,18 +164,6 @@
   background: var(--bg-hover);
   color: var(--text);
 }
-.annotator-note {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text-2);
-}
-.annotator-note textarea {
-  color: var(--text);
-}
 .annotator-foot {
   display: flex;
   flex-direction: column;
@@ -195,9 +181,16 @@
   gap: 8px;
 }
 
-/* The Transcript's "N notes" under an annotated image sent with a message. */
+/* "N notes" under an annotated image in an attachment list (components/PromptAttachments.tsx): sent
+   with a message in the Transcript, waiting in the composer or a New session, on the Spec tab. The
+   row wraps so the notes sit under it, lined up with the name (6px padding + 32px square + 10px gap). */
+.prompt-attachment-row.annotated {
+  flex-wrap: wrap;
+}
 .t-annotations {
-  margin-top: 4px;
+  flex-basis: 100%;
+  min-width: 0;
+  padding: 0 6px 4px 44px;
   font-size: 12px;
 }
 .t-annotations-toggle {

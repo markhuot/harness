@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, resolveBaseBranch, type CompletionAction, type PromptAttachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type CompletionAction, type MessageAnnotation, type PromptAttachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   AGENTS_LIVE_LABEL,
+  annotationsWithin,
   CHANGES_LABEL,
   CHANGES_TAB,
   childrenOf,
@@ -31,6 +32,7 @@ import {
 import { Icon, isIconName } from "../components/Icon";
 import { FileLinkScope } from "../components/Markdown";
 import { AnnotateScope } from "../components/Annotator";
+import { carryAnnotations, pendingSource, withAnnotatedImage, type AnnotatedImage, type AnnotatedList, type AnnotatedOriginal } from "../state/annotator";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, Switch, TicketKey } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
@@ -154,6 +156,8 @@ export function TicketDetail({
   // order; the scroll keys move whichever scroller the current tab has.
   const owner = `ticket:${paneId}`;
   const asideRef = useRef<HTMLElement>(null);
+  /** The composer's Add to message, for annotated pictures from anywhere in the ticket. */
+  const composerRef = useRef<((image: AnnotatedImage) => void) | null>(null);
   const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
   // Changes is built in (ChangesTab.tsx), after Browser and ahead of Details; the git plugin's own
   // tab never shows, and a saved "plugin:git:changes" opens the built-in one.
@@ -275,9 +279,11 @@ export function TicketDetail({
           );
         })}
       </nav>
+      {/* Annotate anywhere in the ticket (a spec image, a prompt attachment, a message's file, the
+          browser) adds the picture to the composer's message; the composer's own files are replaced in place. */}
+      <AnnotateScope onAdd={(image) => composerRef.current?.(image)}>
       <div className="detail-body">
         <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
-        <AnnotateScope ticket={ticket} onSent={() => setTab(tabAfterSend(tab, true))}>
         {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
         {tab === "activity" && <ActivityTab ticket={ticket} />}
         {tab === "children" && <ChildrenTab ticket={ticket} />}
@@ -298,10 +304,10 @@ export function TicketDetail({
             <div className="spinner" />
           </div>
         )}
-        </AnnotateScope>
         </FileLinkScope>
       </div>
-      <MessageComposer ticket={ticket} key={ticket.id} onSent={() => setTab(tabAfterSend(tab, true))} />
+      <MessageComposer ticket={ticket} key={ticket.id} annotateRef={composerRef} onSent={() => setTab(tabAfterSend(tab, true))} />
+      </AnnotateScope>
     </aside>
   );
 }
@@ -630,16 +636,21 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
  * The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the
  * answer appear. (+) attaches files the way a New session does (pick, or paste an image; drops and
  * ⌘V of files work too); they show above the input until the message goes, and go with it.
+ * Annotate (anywhere in the ticket) adds the annotated picture here with its notes, and focuses
+ * the input for the human to say why; a waiting image can be annotated (again) in place.
  */
-function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => void }) {
+function MessageComposer({ ticket, onSent, annotateRef }: { ticket: Ticket; onSent: () => void; annotateRef: { current: ((image: AnnotatedImage) => void) | null } }) {
   const { client } = useStore();
   const act = useAction();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [attachments, setAttachments] = useState<PromptAttachment[]>([]);
+  const [list, setListState] = useState<AnnotatedList>({ attachments: [], annotations: [] });
+  const { attachments, annotations } = list;
   // Uploads finish after their render: they read and write the latest list.
-  const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
+  const listRef = useRef(list);
+  listRef.current = list;
+  /** What each annotated picture was made from (by its path), to reopen it with its marks. */
+  const originals = useRef(new Map<string, AnnotatedOriginal>());
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
@@ -649,12 +660,25 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
   const move = !!switchLabel && moveFirst;
   // A message while a tool approval waits answers it (as a deny), and the service won't take files with it.
   const approvalPending = !!ticket.pendingApproval;
-  const setList = (list: PromptAttachment[]) => {
-    attachmentsRef.current = list;
-    setAttachments(list);
+  const update = (next: AnnotatedList) => {
+    listRef.current = next;
+    setListState(next);
+    for (const path of originals.current.keys()) if (!next.attachments.some((a) => a.path === path)) originals.current.delete(path);
   };
+  /** A new list of files (added, removed, sent): the notes stay on their pictures. */
+  const setList = (attachments: PromptAttachment[]) => update({ attachments, annotations: carryAnnotations(listRef.current.attachments, attachments, listRef.current.annotations) });
+  /** An annotated picture: in place of the file at `replacePath`, or at the end. */
+  const addAnnotated = (image: AnnotatedImage, replacePath: string | null) => {
+    const next = withAnnotatedImage(listRef.current, image, replacePath, MAX_PROMPT_ATTACHMENTS);
+    if (!next) throw new Error(`a message takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
+    originals.current.set(image.attachment.path, image.original);
+    update(next);
+    // Before the annotator closes, so the focus stays here: the human writes why.
+    ref.current?.focus();
+  };
+  annotateRef.current = (image) => addAnnotated(image, null);
   const attach = usePromptAttachmentInput({
-    target: { get: () => attachmentsRef.current, set: setList },
+    target: { get: () => listRef.current.attachments, set: setList },
     enabled: !approvalPending,
     what: "a message",
   });
@@ -677,13 +701,14 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
     if (!canSend) return;
     const body = text.trim();
     const files = attachments;
+    const notes = annotationsWithin(annotations, files.length);
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { move, ...(files.length ? { attachments: files } : {}) }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move, ...(files.length ? { attachments: files } : {}), ...(notes.length ? { annotations: notes } : {}) }));
     setSending(false);
     if (ok) {
       setText("");
       // Only what went: anything attached while it was sending stays for the next message.
-      setList(attachmentsRef.current.filter((a) => !files.includes(a)));
+      setList(listRef.current.attachments.filter((a) => !files.includes(a)));
       setMoveFirst(false);
       onSent();
     }
@@ -695,7 +720,18 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
       data-testid="composer"
       {...attach.dropProps}
     >
-      <PromptAttachmentList items={attachments} ticketKey={null} onRemove={attach.remove} pending={attach.pending} />
+      <PromptAttachmentList
+        items={attachments}
+        ticketKey={null}
+        onRemove={attach.remove}
+        pending={attach.pending}
+        annotations={annotations}
+        annotate={(index, a) => ({
+          source: pendingSource(annotations, index, a),
+          original: originals.current.get(a.path),
+          onAdd: (image) => addAnnotated(image, a.path),
+        })}
+      />
       <div className="composer-row">
         {!approvalPending && (
           <MenuButton

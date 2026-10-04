@@ -514,7 +514,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
           <button
             className="btn btn-ghost btn-sm"
             data-testid="browser-annotate"
-            title="Freeze this page and number spots on it to send to the agent"
+            title="Freeze this page and number spots on it for your message"
             disabled={!hasFrame || shooting || viewTab.current === "pending"}
             onClick={() => void annotatePage()}
           >

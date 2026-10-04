@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { MessageAnnotation, PromptAttachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { annotationNotesLabel, formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -116,46 +116,20 @@ export function Transcript({
 
 /**
  * The files sent with a message, under its bubble: read-only, served from the transcript entry.
- * Their images can be annotated again; an annotated one lists its numbered notes behind "N notes".
+ * Their images can be annotated again (for the next message); an annotated one lists its numbered
+ * notes behind "N notes".
  */
 function MessageAttachments({ entryId, items, annotations }: { entryId: string; items: PromptAttachment[]; annotations?: MessageAnnotation[] }) {
   const { client } = useStore();
-  const notes = (annotations ?? []).filter((a) => a.marks.length > 0 && items[a.attachment]);
   return (
     <div className="t-attachments" data-testid="message-attachments">
       <PromptAttachmentList
         items={items}
         ticketKey={null}
         urlOf={(i) => client.messageAttachmentUrl(entryId, i)}
-        annotate={(index, a) => ({ kind: "message-attachment", entryId, index, name: a.name })}
+        annotations={annotations}
+        annotate={(index, a) => ({ source: { kind: "message-attachment", entryId, index, name: a.name } })}
       />
-      {notes.map((a) => (
-        <AnnotationNotes key={a.attachment} annotation={a} name={items.length > 1 ? items[a.attachment]!.name : null} />
-      ))}
-    </div>
-  );
-}
-
-/** "N notes" under an annotated image; opens to the numbered list that went to the agent. */
-function AnnotationNotes({ annotation, name }: { annotation: MessageAnnotation; name: string | null }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="t-annotations" data-testid="annotation-notes" data-attachment={annotation.attachment}>
-      <button type="button" className="t-annotations-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
-        {annotationNotesLabel(annotation.marks.length)}
-        {name && <span className="muted truncate">on {name}</span>}
-      </button>
-      {open && (
-        <ol className="t-annotations-list selectable" data-testid="annotation-notes-list">
-          {annotation.marks.map((m) => (
-            <li key={m.n}>
-              <span className="t-annotations-n">{m.n}</span>
-              {m.message ? <span>{m.message}</span> : <span className="empty-message">No message</span>}
-            </li>
-          ))}
-        </ol>
-      )}
     </div>
   );
 }

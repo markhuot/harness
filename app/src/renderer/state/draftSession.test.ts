@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { CreateTicketBody, Project, Ticket, UpdateTicketBody } from "@harness/shared";
-import { applyTicketPatch, blankDraftTicket } from "@harness/shared/state";
+import type { CreateTicketBody, MessageAnnotation, Project, Ticket, UpdateTicketBody } from "@harness/shared";
+import { applyTicketPatch, blankDraftTicket, promptAttachmentFromInput } from "@harness/shared/state";
+import { carryAnnotations } from "./annotator";
 import { DraftSession, dropDraftSession, paneDraftSession, rebase, releaseDraftSession, unloadDraftSessions, type DraftDeps } from "./draftSession";
 
 const projects: Record<string, Project> = {
@@ -35,7 +36,7 @@ function fakeService(auto = false) {
       list.push(p);
       if (auto) queueMicrotask(() => p.resolve(answer()));
     });
-  const createAnswer = (body: CreateTicketBody): Ticket => (server = { ...blank(), id: "t1", key: `${projects[body.projectId]!.key}-${seq}`, spec: body.spec, kind: body.kind ?? "task", model: body.model ?? null, draft: true });
+  const createAnswer = (body: CreateTicketBody): Ticket => (server = { ...blank(), id: "t1", key: `${projects[body.projectId]!.key}-${seq}`, spec: body.spec, kind: body.kind ?? "task", model: body.model ?? null, draft: true, promptAttachments: body.promptAttachments?.map(promptAttachmentFromInput), promptAnnotations: body.promptAnnotations });
   const patchAnswer = (key: string, body: UpdateTicketBody): Ticket => {
     let t = applyTicketPatch(server!, body);
     if (body.projectId && body.projectId !== server!.projectId) t = { ...t, key: `${projects[body.projectId]!.key}-${++seq}` };
@@ -234,8 +235,25 @@ describe("DraftSession: prompt attachments", () => {
     await tick(20);
     s.edit({ promptAttachments: [b] });
     await tick(20);
-    expect(svc.patches.map((p) => p.body)).toEqual([{ promptAttachments: [b] }]);
+    // With its (empty) notes: a new list without them would clear them anyway.
+    expect(svc.patches.map((p) => p.body)).toEqual([{ promptAttachments: [b], promptAnnotations: [] }]);
     expect(s.unsent).toBe(false);
+  });
+
+  test("an annotated picture keeps its notes when a file before it is removed (as the editor carries them)", async () => {
+    const svc = fakeService(true);
+    const a = { path: "/a.png", name: "a.png", source: "file" as const };
+    const b = { path: "/annotated-b.png", name: "annotated-b.png", source: "upload" as const };
+    const onB: MessageAnnotation = { attachment: 1, source: { kind: "file", name: "b.png" }, width: 10, height: 10, marks: [{ n: 1, x: 1, y: 1, message: "here" }] };
+    const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
+    s.edit({ spec: "x", promptAttachments: [a, b], promptAnnotations: [onB] });
+    await tick(20);
+    expect((svc.creates[0]!.body as CreateTicketBody).promptAnnotations).toEqual([onB]);
+    const after = [b];
+    s.edit({ promptAttachments: after, promptAnnotations: carryAnnotations(s.local.promptAttachments ?? [], after, s.local.promptAnnotations ?? []) });
+    await tick(20);
+    expect(svc.patches.map((p) => p.body)).toEqual([{ promptAttachments: [{ path: b.path, name: b.name }], promptAnnotations: [{ ...onB, attachment: 0 }] }]);
+    expect(s.local.promptAnnotations).toEqual([{ ...onB, attachment: 0 }]);
   });
 });
 

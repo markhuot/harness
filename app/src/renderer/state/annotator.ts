@@ -1,8 +1,10 @@
 // The annotator's pure rules (components/Annotator.tsx, DESIGN.md "Annotations"): its undo history,
 // how the annotated picture is encoded so it can go to the agent inline, what the file is called,
-// and which lightbox items offer Annotate. No React or DOM, so they're tested on their own.
+// which lightbox items offer Annotate, and how an annotated picture takes its place in a message's
+// (or a New session's) attachments. No React or DOM, so they're tested on their own.
 
-import type { DraftMark } from "@harness/shared/state";
+import type { AnnotationSource, MessageAnnotation, PromptAttachment } from "@harness/shared";
+import { withAnnotation, type DraftMark } from "@harness/shared/state";
 
 // ---------------------------------------------------------------------------
 // Undo
@@ -10,7 +12,6 @@ import type { DraftMark } from "@harness/shared/state";
 
 export interface AnnotatorSnapshot {
   marks: DraftMark[];
-  note: string;
 }
 
 /**
@@ -47,9 +48,12 @@ export function undo(h: AnnotatorHistory): { state: AnnotatorSnapshot; history: 
   return { state, history: { past: h.past.slice(0, -1), key: null } };
 }
 
-/** Whether closing loses work, so Cancel and Esc ask first. */
-export function hasAnnotatorWork(s: AnnotatorSnapshot): boolean {
-  return s.marks.length > 0 || s.note.trim() !== "";
+/**
+ * Whether closing loses work, so Cancel and Esc ask first: there are marks, and they aren't the
+ * ones the annotator opened with (reopening a picture to edit and closing it untouched loses nothing).
+ */
+export function hasAnnotatorWork(marks: readonly DraftMark[], initial: readonly DraftMark[] = []): boolean {
+  return marks.length > 0 && JSON.stringify(marks) !== JSON.stringify(initial);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +100,11 @@ export function annotatedName(base: string, mimeType: string): string {
   return `annotated-${safe || "image"}.${ext}`;
 }
 
+/** The base of the annotated picture's name for what it came from (re-annotating keeps the first one's). */
+export function sourceBaseName(source: AnnotationSource): string {
+  return source.kind === "browser" ? browserShotName(source.url, source.title) : stripExtension(source.name);
+}
+
 /** A browser page's name for its picture: the host, else the title, else "page". */
 export function browserShotName(url: string, title: string): string {
   try {
@@ -110,10 +119,72 @@ export function browserShotName(url: string, title: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Whether the lightbox offers Annotate for the item it shows: only inside a ticket that can take
- * messages (`scoped`), for an image (not a video) that loaded, and only where the caller says
- * where it came from.
+ * Whether the lightbox offers Annotate for the item it shows: only where there's a message to add
+ * the picture to (`scoped`: a ticket's composer, a New session), for an image (not a video) that
+ * loaded, and only where the caller offers it (says where it came from).
  */
-export function offersAnnotate(o: { scoped: boolean; kind: "image" | "video"; failed: boolean; hasSource: boolean }): boolean {
-  return o.scoped && o.kind === "image" && !o.failed && o.hasSource;
+export function offersAnnotate(o: { scoped: boolean; kind: "image" | "video"; failed: boolean; offered: boolean }): boolean {
+  return o.scoped && o.kind === "image" && !o.failed && o.offered;
+}
+
+// ---------------------------------------------------------------------------
+// The annotated picture in a message
+// ---------------------------------------------------------------------------
+
+/** What was annotated, kept in memory so the picture can be reopened with its marks to edit them. */
+export interface AnnotatedOriginal {
+  /** The image before any marks were burned in. */
+  blob: Blob;
+  marks: DraftMark[];
+}
+
+/** What Add to message hands its target: the uploaded picture, its notes, and what it was made from. */
+export interface AnnotatedImage {
+  attachment: PromptAttachment;
+  annotation: Omit<MessageAnnotation, "attachment">;
+  original: AnnotatedOriginal;
+}
+
+/** A list of attachments with the notes on its images (a message waiting in the composer, a New session). */
+export interface AnnotatedList {
+  attachments: PromptAttachment[];
+  annotations: MessageAnnotation[];
+}
+
+/**
+ * The notes of `before` for the files that are still in `after`, re-pointed at their new places
+ * (files are told apart by path, which a list never has twice). Whatever changed the list (a
+ * removal, a send that took some of the files, files added at the end), the notes stay on their
+ * pictures, and the notes of a file that left go with it.
+ */
+export function carryAnnotations(before: readonly PromptAttachment[], after: readonly PromptAttachment[], annotations: readonly MessageAnnotation[]): MessageAnnotation[] {
+  const at = new Map(after.map((a, i) => [a.path, i]));
+  const out: MessageAnnotation[] = [];
+  for (const a of annotations) {
+    const file = before[a.attachment];
+    const i = file ? at.get(file.path) : undefined;
+    if (i !== undefined) out.push({ ...a, attachment: i });
+  }
+  return out.sort((x, y) => x.attachment - y.attachment);
+}
+
+/**
+ * `list` with an annotated picture in it: in the place of the file at `replacePath` (re-annotating a
+ * picture that was waiting there), or at the end when there's no such file (any more). Null when
+ * it would go at the end of a list that already has `max` files.
+ */
+export function withAnnotatedImage(list: AnnotatedList, image: Pick<AnnotatedImage, "attachment" | "annotation">, replacePath: string | null, max: number): AnnotatedList | null {
+  const at = replacePath === null ? -1 : list.attachments.findIndex((a) => a.path === replacePath);
+  if (at < 0) {
+    if (list.attachments.length >= max) return null;
+    const attachments = [...list.attachments, image.attachment];
+    return { attachments, annotations: withAnnotation(list.annotations, attachments.length - 1, image.annotation) };
+  }
+  const attachments = list.attachments.map((a, i) => (i === at ? image.attachment : a));
+  return { attachments, annotations: withAnnotation(list.annotations, at, image.annotation) };
+}
+
+/** Where a file waiting in a message came from, for its notes: the first annotation's source when it was annotated already, else the file itself. */
+export function pendingSource(annotations: readonly MessageAnnotation[], index: number, file: Pick<PromptAttachment, "name">): AnnotationSource {
+  return annotations.find((a) => a.attachment === index)?.source ?? { kind: "file", name: file.name };
 }

@@ -4,11 +4,11 @@
 // token swaps them for working ones.
 
 import { useEffect, useState } from "react";
-import type { AnnotationSource, Attachment } from "@harness/shared";
+import type { Attachment } from "@harness/shared";
 import { stepAttachment } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { offersAnnotate } from "../state/annotator";
-import { urlTarget, useAnnotate } from "./Annotator";
+import { offerTarget, useAnnotate, type AnnotateOffer } from "./Annotator";
 import { Icon } from "./Icon";
 import { Modal } from "./bits";
 
@@ -25,8 +25,9 @@ export function Missing({ name }: { name: string }) {
 /**
  * One attachment at a time over the app. ← and → (or the side buttons) step through the list (the
  * images in a piece of markdown); Esc or the backdrop closes. `urlOf` reads one from somewhere other
- * than the spec's attachments (a prompt attachment). Inside a ticket (AnnotateScope), `annotate`
- * says where an image came from, and the bar offers Annotate for it.
+ * than the spec's attachments (a prompt attachment). Inside an AnnotateScope, `annotate` offers
+ * an image for annotating (where it came from, and where the annotated picture goes), and the bar
+ * offers Annotate for it.
  */
 export function Lightbox({
   list,
@@ -41,7 +42,7 @@ export function Lightbox({
   onIndex: (i: number) => void;
   onClose: () => void;
   urlOf?: (a: Attachment, index: number) => string;
-  annotate?: (a: Attachment, index: number) => AnnotationSource | null;
+  annotate?: (a: Attachment, index: number) => AnnotateOffer | null;
 }) {
   const { client } = useStore();
   // Callers render this only with a non-empty list.
@@ -51,8 +52,8 @@ export function Lightbox({
   const [failed, setFailed] = useState<string | null>(null);
   const many = list.length > 1;
   const annotator = useAnnotate();
-  const source = annotate?.(a, at) ?? null;
-  const canAnnotate = offersAnnotate({ scoped: !!annotator, kind: a.kind, failed: failed === url, hasSource: !!source });
+  const offer = annotate?.(a, at) ?? null;
+  const canAnnotate = offersAnnotate({ scoped: !!annotator, kind: a.kind, failed: failed === url, offered: !!offer });
   const step = (delta: number) => onIndex(stepAttachment(index, delta, list.length));
 
   useEffect(() => {
@@ -103,10 +104,10 @@ export function Lightbox({
           <button
             className="btn btn-ghost btn-sm"
             data-testid="lightbox-annotate"
-            title="Number spots on this image and send notes on them to the agent"
+            title="Number spots on this image and add it to your message with a note on each"
             onClick={() => {
               onClose();
-              annotator!.open(urlTarget(url, a.name, source!));
+              annotator!.open(offerTarget(url, a.name, offer!));
             }}
           >
             <Icon name="edit" /> Annotate

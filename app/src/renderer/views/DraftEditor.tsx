@@ -9,8 +9,9 @@
 // (⇧⌘↩) and Start session (⌘↩).
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent } from "react";
-import { type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
+import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
 import {
+  annotationFor,
   blankDraftTicket,
   composerProject,
   draftReviewSkipsPatch,
@@ -41,6 +42,8 @@ import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
 import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
+import { AnnotateScope, type AnnotateOffer } from "../components/Annotator";
+import { carryAnnotations, pendingSource, withAnnotatedImage, type AnnotatedImage } from "../state/annotator";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -241,9 +244,34 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   };
 
   // Prompt attachments: the draft's promptAttachments, added to by the paperclip, drops and pastes.
+  // Their notes (promptAnnotations) stay on their pictures as the list changes.
   const attach = usePromptAttachmentInput({
-    target: session && { get: () => session.local.promptAttachments ?? [], set: (list) => session.edit({ promptAttachments: list }) },
+    target: session && {
+      get: () => session.local.promptAttachments ?? [],
+      set: (list) => session.edit({ promptAttachments: list, promptAnnotations: carryAnnotations(session.local.promptAttachments ?? [], list, session.local.promptAnnotations ?? []) }),
+    },
   });
+  /**
+   * Annotate on an image waiting in the draft: the annotated picture takes its place, with its notes.
+   * One annotated earlier reopens with its marks while this editor still has its original; a draft
+   * opened again later shows the notes but doesn't offer to edit them (the original isn't kept).
+   */
+  const annotateOffer = (index: number, a: PromptAttachment): AnnotateOffer | null => {
+    if (!session) return null;
+    const annotations = session.local.promptAnnotations ?? [];
+    const original = session.annotationOriginals.get(a.path);
+    if (annotationFor(annotations, index) && !original) return null;
+    return {
+      source: pendingSource(annotations, index, a),
+      original,
+      onAdd: (image: AnnotatedImage) => {
+        const next = withAnnotatedImage({ attachments: session.local.promptAttachments ?? [], annotations: session.local.promptAnnotations ?? [] }, image, a.path, MAX_PROMPT_ATTACHMENTS);
+        if (!next) throw new Error(`a session takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
+        session.annotationOriginals.set(image.attachment.path, image.original);
+        session.edit({ promptAttachments: next.attachments, promptAnnotations: next.annotations });
+      },
+    };
+  };
   const { pending, dropping } = attach;
 
   const owner = `draft:${paneId}`;
@@ -377,7 +405,16 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           onPaste={attach.onPaste}
         />
 
-        <PromptAttachmentList items={view?.promptAttachments ?? []} ticketKey={session?.saved?.key ?? null} served={session?.saved?.promptAttachments} onRemove={attach.remove} pending={pending}>
+        <AnnotateScope>
+        <PromptAttachmentList
+          items={view?.promptAttachments ?? []}
+          ticketKey={session?.saved?.key ?? null}
+          served={session?.saved?.promptAttachments}
+          onRemove={attach.remove}
+          pending={pending}
+          annotations={view?.promptAnnotations}
+          annotate={annotateOffer}
+        >
           <button
             type="button"
             className="btn btn-ghost btn-sm prompt-attach-btn"
@@ -398,6 +435,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
             onChange={attach.onFilesPicked}
           />
         </PromptAttachmentList>
+        </AnnotateScope>
 
         {view && project && (
           <div className={`draft-options ${optionsOpen ? "open" : ""}`}>
