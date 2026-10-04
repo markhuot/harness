@@ -979,8 +979,9 @@ export type HarnessEvent =
   | { kind: "watcher.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
   /** `tabId`: the tab the frame is from (services before browser tabs omit it) */
-  | { kind: "browser.frame"; sessionId: string; tabId?: number; data: string; width: number; height: number }
-  | { kind: "browser.state"; sessionId: string; state: BrowserState }
+  /** `viewerId`: the viewer the frame/state is for, echoed from its `browser.subscribe` (absent when it sent none). */
+  | { kind: "browser.frame"; sessionId: string; tabId?: number; data: string; width: number; height: number; viewerId?: string }
+  | { kind: "browser.state"; sessionId: string; state: BrowserState; viewerId?: string }
   /** The service's code on disk changed since it started (or changed back) */
   | { kind: "service.status"; status: ServiceStatus };
 
@@ -1047,12 +1048,15 @@ export type ClientMessage =
   | { type: "hello"; client: string }
   /**
    * Watch a session's browser. `tabId` picks the tab (omitted, or a tab that has closed: the
-   * lowest open one); subscribing again with another `tabId` switches this socket to that tab.
+   * lowest open one); subscribing again with another `tabId` switches this viewer to that tab.
+   * `viewerId` names one viewer on this socket (up to 64 of `[A-Za-z0-9_.:-]`), so one socket
+   * can watch several tabs of a session at once; without it the socket is a single viewer.
+   * Frames and state for the viewer carry its `viewerId`.
    */
-  | { type: "browser.subscribe"; sessionId: string; tabId?: number }
-  | { type: "browser.unsubscribe"; sessionId: string }
-  /** `tabId`: the tab the input is for (omitted: the tab this socket watches). */
-  | { type: "browser.input"; sessionId: string; tabId?: number; input: BrowserInput }
+  | { type: "browser.subscribe"; sessionId: string; tabId?: number; viewerId?: string }
+  | { type: "browser.unsubscribe"; sessionId: string; viewerId?: string }
+  /** `tabId`: the tab the input is for (omitted: the tab this viewer watches). */
+  | { type: "browser.input"; sessionId: string; tabId?: number; input: BrowserInput; viewerId?: string }
   | { type: "ping" };
 
 export type BrowserInput =
