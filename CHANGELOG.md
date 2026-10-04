@@ -33,6 +33,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, the "Move to in progress" switch over the message box stays at the left when
+  you turn it on, instead of jumping to the middle.
 - On iPhone and iPad, a ticket's tabs (Spec, Activity, Transcript and the rest) scroll under the
   message box again, so you can see the content through its glass. The last line still scrolls up
   clear of the message box.

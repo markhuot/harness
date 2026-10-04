@@ -65,6 +65,8 @@ struct TicketDetailComposer: View {
                             .frame(maxWidth: .infinity, alignment: switchLabel != nil ? .trailing : .leading)
                     }
                 }
+                // With the switch on there's no hint to fill the row, so pin it left rather than centering.
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 6)
             }
             HStack(alignment: .bottom, spacing: 8) {
