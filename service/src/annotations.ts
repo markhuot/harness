@@ -56,6 +56,8 @@ function source(raw: unknown, at: string): AnnotationSource {
       if (typeof raw.entryId !== "string" || !raw.entryId) throw badRequest(`${at}: a message-attachment source needs its entryId`);
       if (!indexInt(raw.index)) throw badRequest(`${at}: a message-attachment source needs its index`);
       return { kind: "message-attachment", entryId: raw.entryId, index: raw.index, name: name() };
+    case "file":
+      return { kind: "file", name: name() };
     case "browser": {
       if (typeof raw.url !== "string" || !raw.url) throw badRequest(`${at}: a browser source needs its url`);
       if (typeof raw.title !== "string") throw badRequest(`${at}: a browser source's title must be a string`);
@@ -66,7 +68,7 @@ function source(raw: unknown, at: string): AnnotationSource {
       return { kind: "browser", url: raw.url, title: raw.title, tabId: raw.tabId, viewport: { width: vp.width, height: vp.height }, scale: raw.scale };
     }
     default:
-      throw badRequest(`${at}: source.kind must be attachment, prompt-attachment, message-attachment or browser`);
+      throw badRequest(`${at}: source.kind must be attachment, prompt-attachment, message-attachment, file or browser`);
   }
 }
 
@@ -99,8 +101,11 @@ function mark(raw: unknown, i: number, width: number, height: number, at: string
  * and return a clean copy (known fields only, messages trimmed). Throws a 400 on anything
  * malformed: each entry names one image among `attachments`, at most once, with 1…MAX marks
  * numbered in order, every point inside the image.
+ *
+ * `keptImages` are paths already accepted as annotated images (a draft's, saved earlier): those
+ * aren't sniffed again, so a kept file that has since gone missing doesn't fail the save.
  */
-export function normalizeAnnotations(raw: unknown, attachments: readonly PromptAttachment[]): MessageAnnotation[] {
+export function normalizeAnnotations(raw: unknown, attachments: readonly PromptAttachment[], keptImages: ReadonlySet<string> = new Set()): MessageAnnotation[] {
   if (!Array.isArray(raw)) throw badRequest("annotations must be a list");
   const seen = new Set<number>();
   return raw.map((item, k): MessageAnnotation => {
@@ -111,7 +116,7 @@ export function normalizeAnnotations(raw: unknown, attachments: readonly PromptA
     if (seen.has(index)) throw badRequest(`${at}: attachment ${index} is annotated twice`);
     seen.add(index);
     const file = attachments[index]!;
-    if (!isImage(file)) throw badRequest(`${at}: ${file.name} isn't a PNG, JPEG, GIF or WebP image`);
+    if (!keptImages.has(file.path) && !isImage(file)) throw badRequest(`${at}: ${file.name} isn't a PNG, JPEG, GIF or WebP image`);
     const { width, height } = item;
     if (!positiveInt(width) || !positiveInt(height)) throw badRequest(`${at}: width and height must be positive whole numbers of pixels`);
     if (!Array.isArray(item.marks) || item.marks.length === 0) throw badRequest(`${at}: marks must list at least one note`);
@@ -138,6 +143,8 @@ function origin(s: AnnotationSource): string {
       return `the ticket's attached file "${s.name}"`;
     case "message-attachment":
       return `the file "${s.name}" sent with an earlier message`;
+    case "file":
+      return `the attached image "${s.name}"`;
     case "browser":
       return `a screenshot of browser tab ${s.tabId}, "${s.title}" at ${s.url} (viewport ${fmt(s.viewport.width)}×${fmt(s.viewport.height)} CSS px at ${fmt(s.scale)}× scale)`;
   }

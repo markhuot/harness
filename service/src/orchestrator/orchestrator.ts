@@ -1191,6 +1191,7 @@ export class Orchestrator {
     if (requestedBranch && project.isGit === false) throw badRequest(`branch ${requestedBranch} needs a git repository; ${project.path} isn't one`);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     const promptAttachments = body.promptAttachments === undefined ? [] : normalizePromptAttachments(body.promptAttachments, [], this.paths.uploadsDir);
+    const promptAnnotations = body.promptAnnotations === undefined ? [] : normalizeAnnotations(body.promptAnnotations, promptAttachments);
     let parentId: string | null = null;
     if (body.parentId) {
       const parent = this.store.tickets.get(body.parentId) ?? this.store.tickets.getByKey(body.parentId);
@@ -1236,6 +1237,7 @@ export class Orchestrator {
         skipHumanReview,
         draft,
         promptAttachments,
+        promptAnnotations,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -1309,7 +1311,7 @@ export class Orchestrator {
   async updateTicket(key: string, body: UpdateTicketBody, as: SpecAuthorship = { author: "human" }): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     let ticket = this.requireTicket(key);
-    for (const field of ["kind", "useWorktree", "projectId", "promptAttachments"] as const) {
+    for (const field of ["kind", "useWorktree", "projectId", "promptAttachments", "promptAnnotations"] as const) {
       if (body[field] !== undefined && !ticket.draft) throw conflict(`${ticket.key} isn't a draft: its ${field} is fixed once it has launched`);
     }
     if (ticket.draft && body.status !== undefined && body.status !== ticket.status) {
@@ -1341,6 +1343,18 @@ export class Orchestrator {
     }
     if (body.kind !== undefined && body.kind !== ticket.kind) patch.kind = body.kind;
     if (body.promptAttachments !== undefined) patch.promptAttachments = normalizePromptAttachments(body.promptAttachments, ticket.promptAttachments ?? [], this.paths.uploadsDir);
+    if (body.promptAnnotations !== undefined) {
+      // Checked against the list this PATCH leaves. A file the draft already had annotated (same
+      // path) isn't sniffed again, like normalizePromptAttachments keeps paths without re-checking
+      // them: a kept file that has gone missing since mustn't make the save fail. A new
+      // annotation, or one now on another file, is checked in full.
+      const before = ticket.promptAttachments ?? [];
+      const kept = new Set((ticket.promptAnnotations ?? []).flatMap((a) => (before[a.attachment] ? [before[a.attachment]!.path] : [])));
+      patch.promptAnnotations = normalizeAnnotations(body.promptAnnotations, patch.promptAttachments ?? before, kept);
+    } else if (body.promptAttachments !== undefined) {
+      // New attachments without their annotations clear them, so none is left on another file.
+      patch.promptAnnotations = [];
+    }
     if (useWorktree !== undefined) {
       patch.useWorktree = useWorktree;
       // Without a worktree there's no branch to ask for; drop it so the draft stays valid.
@@ -4003,9 +4017,18 @@ ${numberLines(r.body)}`;
         // The ticket's attachments go with its first run that gets through (the agent's
         // conversation keeps them after that).
         const firstRun = !this.store.runs.listBySession(session.id).some((r) => r.id !== run.id && r.status === "succeeded" && MENTION_RUN_KINDS.has(r.kind));
-        const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...(ticket && firstRun ? (ticket.promptAttachments ?? []) : []), ...(run.attachments ?? [])]) : null;
+        const ticketFiles = ticket && firstRun ? (ticket.promptAttachments ?? []) : [];
+        const runFiles = run.attachments ?? [];
+        const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...ticketFiles, ...runFiles]) : null;
+        // The notes on those files, in one block before them: the ticket's (its first message's)
+        // index its prompt attachments and the run's index its message's, so the run's move past
+        // the ticket's to name the right file in the combined list.
+        const noteList = [
+          ...(ticket && firstRun ? (ticket.promptAnnotations ?? []) : []),
+          ...(run.annotations ?? []).map((a) => ({ ...a, attachment: a.attachment + ticketFiles.length })),
+        ];
         // The transcript keeps the human's words; the agent also reads when to unblock.
-        const notes = MENTION_RUN_KINDS.has(run.kind) ? formatAnnotations(run.annotations, run.attachments ?? []) : "";
+        const notes = MENTION_RUN_KINDS.has(run.kind) ? formatAnnotations(noteList, [...ticketFiles, ...runFiles]) : "";
         const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + notes + (attached?.block ?? "");
         active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
