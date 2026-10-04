@@ -68,6 +68,7 @@ describe("normalizeAnnotations", () => {
     const sources = [
       { kind: "prompt-attachment", index: 0, name: "a.png" },
       { kind: "message-attachment", entryId: "e1", index: 2, name: "b.png" },
+      { kind: "file", name: "c.png" },
       { kind: "browser", url: "http://x.test/", title: "X", tabId: 2, viewport: { width: 100, height: 50 }, scale: 2 },
     ];
     for (const source of sources) expect(normalizeAnnotations([{ ...good(), source }], files)[0]!.source).toEqual(source as MessageAnnotation["source"]);
@@ -89,6 +90,12 @@ describe("normalizeAnnotations", () => {
   test("refuses a file that isn't an image, by its bytes", () => {
     rejects([{ ...good(), attachment: 1 }], /notes\.md isn't a PNG/);
     rejects([{ ...good(), attachment: 2 }], /fake\.png isn't a PNG/);
+  });
+
+  test("a kept image isn't sniffed again, but any other file still is", () => {
+    // A draft's kept file may have gone missing since it was saved: its path says it was checked.
+    expect(normalizeAnnotations([{ ...good(), attachment: 2 }], files, new Set([fake.path]))[0]!.attachment).toBe(2);
+    expect(() => normalizeAnnotations([{ ...good(), attachment: 2 }], files, new Set([shot.path]))).toThrow(/fake\.png isn't a PNG/);
   });
 
   test("refuses a size that isn't positive whole pixels", () => {
@@ -141,6 +148,8 @@ describe("normalizeAnnotations", () => {
       { kind: "prompt-attachment", index: -1, name: "a" },
       { kind: "message-attachment", index: 0, name: "a" },
       { kind: "message-attachment", entryId: "e", index: 1.5, name: "a" },
+      { kind: "file" },
+      { kind: "file", name: 3 },
       { kind: "browser", title: "t", tabId: 1, viewport: { width: 1, height: 1 }, scale: 1 },
       { kind: "browser", url: "u", title: "t", tabId: 0, viewport: { width: 1, height: 1 }, scale: 1 },
       { kind: "browser", url: "u", title: "t", tabId: 1, viewport: { width: 1 }, scale: 1 },
@@ -187,5 +196,6 @@ describe("formatAnnotations", () => {
     const of = (source: unknown) => formatAnnotations(normalizeAnnotations([{ ...good(), source }], files), files);
     expect(of({ kind: "prompt-attachment", index: 0, name: "brief.png" })).toContain(`is the ticket's attached file "brief.png"`);
     expect(of({ kind: "message-attachment", entryId: "e", index: 0, name: "old.png" })).toContain(`is the file "old.png" sent with an earlier message`);
+    expect(of({ kind: "file", name: "Screenshot 1.png" })).toContain(`${shot.path} (200×100 px) is the attached image "Screenshot 1.png". The human drew`);
   });
 });

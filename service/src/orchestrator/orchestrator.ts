@@ -2547,7 +2547,11 @@ ${numberLines(r.body)}`;
       specBaselineRevision: t.specBaselineRevision ?? null,
       activity: this.store.activity.listBySession(t.sessionId).map((e) => ({ kind: e.kind, author: e.author, body: e.body, meta: e.meta, createdAt: e.createdAt })),
       attachments: this.store.attachments.listByTicket(t.id).map((a) => ({ id: a.id, name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
-      promptAttachments: (t.promptAttachments ?? []).map((a) => ({ name: a.name, path: a.path, missing: !promptAttachmentFile(a) })),
+      promptAttachments: (t.promptAttachments ?? []).map((a, i) => {
+        // The human's numbered notes on it (Ticket.promptAnnotations), one line each with the pixel it marks.
+        const notes = (t.promptAnnotations ?? []).find((n) => n.attachment === i)?.marks.map((m) => `${m.n}. (${Math.round(m.x)}, ${Math.round(m.y)}) px: ${m.message || "(no note)"}`);
+        return { name: a.name, path: a.path, missing: !promptAttachmentFile(a), ...(notes?.length ? { notes } : {}) };
+      }),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
     if (n > 0) {
