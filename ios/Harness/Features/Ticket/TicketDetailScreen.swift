@@ -126,6 +126,10 @@ private struct TicketDetailBody: View {
     /// so a drop anywhere on the ticket attaches.
     @State private var outgoing = MessageAttachments()
     @State private var uploader = PromptAttachmentUploader()
+    /// Where the composer starts and the tab's page ends, on screen: the pages run on under the
+    /// composer's glass, so their content gets the overlap as a bottom inset instead.
+    @State private var composerTop: CGFloat = 0
+    @State private var pageBottom: CGFloat = 0
 
     var body: some View {
         let state = store.state
@@ -151,6 +155,7 @@ private struct TicketDetailBody: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, onTab: onTab).id(ticket.id)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerTop = $0 }
         }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
@@ -176,13 +181,20 @@ private struct TicketDetailBody: View {
             ForEach(pages, id: \.self) { page in
                 let t = page == strip ? shown : page
                 tabBody(t, agent: Tabs.parseSubagentTab(t), plugin: Tabs.parsePluginTab(t))
+                    .safeAreaPadding(.bottom, max(0, pageBottom - composerTop))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // A page's frame, not the pager's: the pager reports its frame before it reached
+                    // under the composer, and a page keeps the home indicator's inset of its own.
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { if page == strip { pageBottom = $0 } }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .background { PagerYieldsToBackSwipe() }
                     .tag(page)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // Down to the bottom of the screen, under the composer, so its glass shows the tab through
+        // it (the page TabView clips its pages to its own frame).
+        .ignoresSafeArea(.container, edges: .bottom)
     }
 
     @ViewBuilder private func tabBody(_ shown: TicketTab, agent: String?, plugin: Tabs.ParsedPluginTab?) -> some View {
