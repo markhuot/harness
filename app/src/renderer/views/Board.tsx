@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardE
 import { isConductor, keyLabel, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
+  autoStartTitle,
+  autoStartWaitingOn,
   boardColumns,
   canLoadMoreSearch,
   childrenOf,
@@ -361,6 +363,7 @@ const TicketCard = memo(function TicketCard({
   const draft = !!t.draft;
   const discard = () => onDiscard(t);
   const working = isWorking(state.tickets, t);
+  const waitingToStart = autoStartWaitingOn(t, deps);
 
   return (
     <article
@@ -404,6 +407,11 @@ const TicketCard = memo(function TicketCard({
           </span>
         )}
         {working && <span className="spinner" title={workingTitle(t)} />}
+        {!working && waitingToStart.length > 0 && (
+          <span className="card-autostart" data-testid="card-autostart" title={autoStartTitle(waitingToStart)} aria-label={autoStartTitle(waitingToStart)}>
+            <Icon name="clock" size={12} />
+          </span>
+        )}
         {t.status === "done" && t.pullRequestUrl && (
           <span className="badge badge-outline card-pr" data-testid="card-pr" title={t.pullRequestUrl}>
             <Icon name="branch" />

@@ -38,6 +38,11 @@ struct DepStatesInput: Decodable, Sendable {
     let aliases: [String: String]?
 }
 
+struct AutoStartOutput: Decodable, Sendable, Equatable {
+    let waitingOn: [String]
+    let title: String?
+}
+
 struct DepStatesOutput: Decodable, Sendable, Equatable {
     struct Dep: Decodable, Sendable, Equatable {
         let key: String
@@ -128,6 +133,17 @@ struct ConductorTests {
     @Test(arguments: Fixture.cases("stateConductor", "waitingOnCases", input: [DepState].self, output: [String].self))
     func waitingOn(_ c: Fixture.Case<[DepState], [String]>) {
         #expect(Conductor.waitingOn(c.input) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("stateConductor", "autoStartCases", input: DepStatesInput.self, output: AutoStartOutput.self))
+    func autoStart(_ c: Fixture.Case<DepStatesInput, AutoStartOutput>) {
+        let keys = Conductor.autoStartWaitingOn(c.input.ticket, Conductor.depStates(c.input.tickets, c.input.ticket))
+        #expect(AutoStartOutput(waitingOn: keys, title: keys.isEmpty ? nil : Conductor.autoStartTitle(keys)) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("stateConductor", "autoStartTitleCases", input: [String].self, output: String.self))
+    func autoStartTitle(_ c: Fixture.Case<[String], String>) {
+        #expect(Conductor.autoStartTitle(c.input) == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateConductor", "dependencyDepthsCases", input: [Ticket].self, output: [String: Int].self))

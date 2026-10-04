@@ -3,6 +3,8 @@
 import type { Ticket } from "../../src/protocol";
 import {
   attentionOf,
+  autoStartTitle,
+  autoStartWaitingOn,
   childrenOfTicket,
   dependencyDepths,
   depChipTitle,
@@ -207,6 +209,34 @@ export const depChipTitleCases = cases(depChipTitle, {
   "unknown, missing false": { key: "D-5", done: false, state: "unknown", missing: false },
   "missing flag ignored when pending": { key: "D-6", done: false, state: "pending", missing: true },
 } satisfies Record<string, DepState>);
+
+type AutoStartInput = { tickets: Record<string, Ticket>; ticket: Ticket };
+const a1 = tk({ key: "S-1", status: "in_progress" });
+const a2 = tk({ key: "S-2", status: "done" });
+const a3 = tk({ key: "S-3", status: "review" });
+const waiter = tk({ key: "S-4", autoStart: true, dependsOn: ["S-1", "s-2", "S-3", "S-99"] });
+export const autoStartCases = cases(
+  ({ tickets, ticket }: AutoStartInput) => {
+    const keys = autoStartWaitingOn(ticket, depStates(tickets, ticket));
+    return { waitingOn: keys, title: keys.length ? autoStartTitle(keys) : null };
+  },
+  {
+    "waiting on the open deps only": { tickets: rec(a1, a2, a3), ticket: waiter },
+    "one open dep": { tickets: rec(a1, a2), ticket: tk({ key: "S-5", autoStart: true, dependsOn: ["S-1", "S-2"] }) },
+    "all done or unloaded": { tickets: rec(a2), ticket: tk({ key: "S-6", autoStart: true, dependsOn: ["S-2", "S-99"] }) },
+    "no autoStart": { tickets: rec(a1), ticket: tk({ key: "S-7", dependsOn: ["S-1"] }) },
+    draft: { tickets: rec(a1), ticket: tk({ key: "S-8", autoStart: true, draft: true, dependsOn: ["S-1"] }) },
+    "already in progress": { tickets: rec(a1), ticket: tk({ key: "S-9", autoStart: true, status: "in_progress", dependsOn: ["S-1"] }) },
+    "no dependencies": { tickets: {}, ticket: tk({ key: "S-10", autoStart: true }) },
+  },
+);
+
+export const autoStartTitleCases = cases(autoStartTitle, {
+  none: [],
+  one: ["A-1"],
+  two: ["A-1", "A-2"],
+  three: ["A-1", "A-2", "A-3"],
+} satisfies Record<string, string[]>);
 
 export const waitingOnCases = cases(waitingOn, {
   "unknown keys count": [

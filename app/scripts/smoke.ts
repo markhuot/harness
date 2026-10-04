@@ -103,6 +103,19 @@ try {
     check("the options button marks a non-default filter", await exists("[data-testid=search-options].active"));
     await js(`document.querySelector("[data-testid=search-options]").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
     check("Escape closes the options menu", !!(await until("menu closed", async () => !(await exists("[data-testid=show-children]")))));
+
+    // A planning ticket that starts on its own once its open dependency is done (HARNESS-3, a
+    // child waiting on HARNESS-2 in review): a clock on its card, and Start turned off.
+    const clocks = await js<{ key: string; title: string }[]>(`[...document.querySelectorAll(".card [data-testid=card-autostart]")].map(c => ({ key: c.closest(".card").dataset.key, title: c.getAttribute("title") }))`);
+    check("only the waiting auto-start card shows a clock", JSON.stringify(clocks) === JSON.stringify([{ key: "HARNESS-3", title: "Starts on its own once HARNESS-2 is done" }]), JSON.stringify(clocks));
+    await js(`location.hash = "#/board/all/ticket/HARNESS-3"`);
+    const startBtn = await until("waiting start button", () =>
+      js<{ disabled: boolean; text: string; title: string } | null>(`(() => { const b = document.querySelector("[data-testid=start-waiting]"); return b && { disabled: b.disabled, text: b.textContent.trim(), title: b.title }; })()`),
+    );
+    check("a waiting ticket's Start reads Starts automatically, turned off", startBtn.disabled && startBtn.text === "Starts automatically" && startBtn.title === "Starts on its own once HARNESS-2 is done", JSON.stringify(startBtn));
+    check("…with no Start work button beside it", !(await js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.trim() === "Start work")`)));
+    await screenshot("/tmp/harness-242-mac-waiting.png");
+    await js(`location.hash = "#/board/all"`);
   }
 
   // 1a'. Done pages from the service: first 50, the server total in the header, Load more, live

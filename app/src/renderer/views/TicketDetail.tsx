@@ -3,6 +3,8 @@ import { conductorManagedReason, isConductor, keyLabel, managingConductor, resol
 import { useAction, useStore } from "../state/store";
 import {
   AGENTS_LIVE_LABEL,
+  autoStartTitle,
+  autoStartWaitingOn,
   CHANGES_LABEL,
   CHANGES_TAB,
   childrenOf,
@@ -24,6 +26,7 @@ import {
   tabAfterSend,
   TAB_LABEL,
   tabStripTab,
+  dependencyStates,
   ticketByKey,
   visibleTabsWithChanges,
   type TicketTab,
@@ -341,6 +344,10 @@ function DetailHeader({
   // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
   // ⌘K palette (these are its "Actions" commands) run the same functions.
   const start = () => act(() => client.startTicket(k));
+  // Started while its dependencies were open: it starts on its own once they're done, so there's
+  // nothing to start (Start would skip the wait and run it now).
+  const waitingToStart = autoStartWaitingOn(ticket, dependencyStates(state, ticket));
+  const canStart = ticket.status === "planning" && !waitingToStart.length;
   // How the approved work lands: the Approve split button (state/approveMenu.ts). Approving lands
   // it once both reviews pass; there's no separate Complete step.
   // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
@@ -371,7 +378,7 @@ function DetailHeader({
     return c && { label: c.label, run: () => choose(c) };
   };
   useCommands(owner, {
-    "ticket.start": ticket.status === "planning" && start,
+    "ticket.start": canStart && start,
     "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
     "ticket.land.merge": landChoice("merge"),
     "ticket.land.pr": landChoice("pr"),
@@ -481,9 +488,14 @@ function DetailHeader({
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
 
         <div className="actions">
-          {ticket.status === "planning" && (
+          {canStart && (
             <button className="btn btn-primary" onClick={start}>
               <Icon name="play" /> Start work
+            </button>
+          )}
+          {waitingToStart.length > 0 && (
+            <button className="btn btn-primary" data-testid="start-waiting" disabled title={autoStartTitle(waitingToStart)}>
+              <Icon name="clock" /> Starts automatically
             </button>
           )}
           {/* A conductor's child keeps its (turned off) Approve once approved: the conductor lands it. */}

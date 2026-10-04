@@ -117,10 +117,18 @@ struct TicketDetailHero: View {
         let label = Keys.keyLabel(ticket)
         let managedReason = Completion.managingConductor(ticket: ticket, parent: parent).map { Completion.conductorManagedReason(conductorKey: $0.key) }
         let managed = managedReason != nil
-        if ticket.status == .planning {
+        // Started while its dependencies were open: the service starts it once they're done, so
+        // Start is off (it would skip the wait and run it now).
+        let waiting = Conductor.autoStartWaitingOn(ticket, store.state.dependencyStates(ticket))
+        if ticket.status == .planning && waiting.isEmpty {
             HButton("Start work", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: .success) {
                 perform(nil) { try await $0.startTicket($1) }
             }
+        }
+        if !waiting.isEmpty {
+            HButton("Starts automatically", icon: "clock", variant: .primary, small: true, fullWidth: false,
+                    accessibilityLabel: Conductor.autoStartTitle(waiting)) {}
+                .disabled(true)
         }
         // Approving lands the work once both reviews pass; there's no separate Complete step. A
         // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.

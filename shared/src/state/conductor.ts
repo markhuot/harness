@@ -130,6 +130,24 @@ export function depChipTitle(d: DepState): string {
 export const waitingOn = (deps: DepState[]) => deps.filter((d) => !d.done).map((d) => d.key);
 
 /**
+ * Dependencies an auto-start ticket is waiting on: it was started (or created to start on its
+ * own) while they were open, so it sits in planning and the service starts it once they're done.
+ * Empty when it isn't waiting. Only loaded, unfinished dependencies count: an unknown key is
+ * usually an older done ticket, and the service treats a deleted one as done, so neither holds it.
+ */
+export function autoStartWaitingOn(t: Ticket, deps: DepState[]): string[] {
+  if (t.draft || !t.autoStart || t.status !== "planning") return [];
+  return deps.filter((d) => d.state === "pending").map((d) => d.key);
+}
+
+/** The waiting card's clock and the disabled Start button: "Starts on its own once A and B are done". */
+export function autoStartTitle(keys: string[]): string {
+  if (keys.length === 0) return "Starts on its own once its dependencies are done";
+  const list = keys.length > 1 ? `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}` : keys[0];
+  return `Starts on its own once ${list} ${keys.length > 1 ? "are" : "is"} done`;
+}
+
+/**
  * Depth in the sibling dependency graph: 0 = depends on no sibling, n = 1 + deepest sibling dep.
  * Deps outside the set are ignored; cycles are cut (a ticket revisited mid-walk counts as 0).
  */

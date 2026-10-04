@@ -22,11 +22,12 @@ struct BoardTicketCard: View {
         let t = ticket
         let state = store.state
         let parent = t.parentId.flatMap { state.tickets[$0] }
-        Button { open() } label: { card(state: state, parent: parent) }
+        let waiting = Conductor.autoStartWaitingOn(t, state.dependencyStates(t))
+        Button { open() } label: { card(state: state, parent: parent, waiting: waiting) }
             .buttonStyle(BoardCardPressStyle())
             .contextMenu { menu(parent: parent) }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t))
+            .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")))
             .accessibilityHint(t.draft == true ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to move it.")
             .accessibilityAddTraits(.isButton)
             .accessibilityActions {
@@ -46,7 +47,8 @@ struct BoardTicketCard: View {
 
     // MARK: Card
 
-    @ViewBuilder private func card(state: BoardState, parent: Ticket?) -> some View {
+    /// `waiting`: the open dependencies an auto-start ticket waits on (a clock beside its key).
+    @ViewBuilder private func card(state: BoardState, parent: Ticket?, waiting: [String]) -> some View {
         let t = ticket
         let draft = t.draft == true
         let dim = Conductor.dimOnBoard(t)
@@ -79,7 +81,11 @@ struct BoardTicketCard: View {
                         ReviewMark(who: .human, state: t.humanReview)
                     }
                 }
-                if Conductor.isWorking(state.tickets, t) { Spinner().controlSize(.small) }
+                if Conductor.isWorking(state.tickets, t) {
+                    Spinner().controlSize(.small)
+                } else if !waiting.isEmpty {
+                    Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
+                }
                 if t.status == .done, case .value = t.pullRequestUrl { Badge("PR", tone: .violet, icon: "external") }
             }
             .frame(minHeight: 21)
