@@ -274,6 +274,22 @@ function clearDelta(deltas: State["deltas"], sessionId: string, runId: string | 
 
 const TERMINAL_RUN: Run["status"][] = ["succeeded", "failed", "cancelled"];
 
+/**
+ * Drop the deltas a refetch shows are over: those of sessions that aren't busy, and of runs that
+ * ended. A client that missed the events that clear a delta (the app was suspended mid-stream, the
+ * socket dropped) would otherwise show the half-streamed text under the transcript for good.
+ */
+function pruneDeltas(deltas: State["deltas"], sessions: State["sessions"], runs: Run[]): State["deltas"] {
+  let next = deltas;
+  for (const sessionId of Object.keys(deltas)) {
+    if (sessions[sessionId]?.busy === false) next = clearDelta(next, sessionId, null);
+  }
+  for (const r of runs) {
+    if (TERMINAL_RUN.includes(r.status)) next = clearDelta(next, r.sessionId, r.id);
+  }
+  return next;
+}
+
 // ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------
@@ -379,11 +395,13 @@ export function reducer(state: State, action: Action): State {
     case "snapshot": {
       const s = action.snapshot;
       // A snapshot is authoritative for entity lists; transcripts/activity are kept (they are
-      // merged by id, and views refetch them on reconnect). Paging restarts from its first page;
-      // an active search is re-armed (ids → null) for the client to re-run.
+      // merged by id, and views refetch them on reconnect), and so are the deltas of busy sessions.
+      // Paging restarts from its first page; an active search is re-armed (ids → null) for the
+      // client to re-run.
       const all = s.donePage ? [...s.tickets, ...s.donePage.page.tickets] : s.tickets;
       const donePaging: State["donePaging"] = {};
       if (s.donePage) donePaging[s.donePage.scope] = pagingFromPage(s.donePage.page, undefined, false);
+      const sessions = preferNewer(byId(s.sessions), state.sessions);
       return {
         ...state,
         ready: true,
@@ -396,7 +414,8 @@ export function reducer(state: State, action: Action): State {
         childrenLoaded: {},
         dependents: {},
         ticketsAsOf: all.reduce((n, t) => Math.max(n, t.createdAt), 0),
-        sessions: preferNewer(byId(s.sessions), state.sessions),
+        sessions,
+        deltas: pruneDeltas(state.deltas, sessions, []),
         watchers: byId(s.watchers),
         settings: s.settings,
         drivers: s.drivers,
@@ -419,6 +438,7 @@ export function reducer(state: State, action: Action): State {
         dependents: { ...state.dependents, [d.ticket.id]: d.dependents },
         runs,
         sessions: { ...state.sessions, [d.session.id]: d.session },
+        deltas: pruneDeltas(state.deltas, {}, d.runs),
         // Older services don't send sub-agents: leave the session's list unknown then.
         subagents: d.subagents ? mergeSubagents(state, d.session.id, d.subagents) : state.subagents,
         activity: {

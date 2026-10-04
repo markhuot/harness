@@ -5213,7 +5213,7 @@
       ]
     },
     {
-      "name": "snapshot keeps transcripts, activity, runs and deltas; prefers newer projects and sessions",
+      "name": "snapshot keeps transcripts, activity, runs and a busy session's deltas; prefers newer projects and sessions",
       "steps": [
         {
           "actions": [
@@ -5296,7 +5296,7 @@
                   "title": "live",
                   "triageStatus": null,
                   "outcome": null,
-                  "busy": false,
+                  "busy": true,
                   "createdAt": 0,
                   "updatedAt": 50
                 }
@@ -5586,7 +5586,7 @@
                 "title": "live",
                 "triageStatus": null,
                 "outcome": null,
-                "busy": false,
+                "busy": true,
                 "createdAt": 0,
                 "updatedAt": 50
               }
@@ -5670,6 +5670,580 @@
             "childrenLoaded": {},
             "dependents": {},
             "ticketsAsOf": 7
+          }
+        }
+      ]
+    },
+    {
+      "name": "snapshot drops the deltas of idle sessions (their end was missed, e.g. while suspended)",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s1",
+                "runId": "r1",
+                "text": "half a plan"
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s2",
+                "runId": "r2",
+                "text": "live"
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s3",
+                "runId": "r3",
+                "text": "unknown"
+              }
+            }
+          ],
+          "probes": []
+        },
+        {
+          "actions": [
+            {
+              "type": "snapshot",
+              "snapshot": {
+                "projects": [],
+                "tickets": [],
+                "sessions": [
+                  {
+                    "id": "s1",
+                    "key": "S1",
+                    "kind": "ticket",
+                    "ticketId": null,
+                    "driver": "dummy",
+                    "cwd": "/",
+                    "title": "",
+                    "triageStatus": null,
+                    "outcome": null,
+                    "busy": false,
+                    "createdAt": 0,
+                    "updatedAt": 0
+                  },
+                  {
+                    "id": "s2",
+                    "key": "S2",
+                    "kind": "ticket",
+                    "ticketId": null,
+                    "driver": "dummy",
+                    "cwd": "/",
+                    "title": "",
+                    "triageStatus": null,
+                    "outcome": null,
+                    "busy": true,
+                    "createdAt": 0,
+                    "updatedAt": 0
+                  }
+                ],
+                "watchers": [],
+                "settings": null,
+                "drivers": []
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s1"
+              ],
+              "output": []
+            },
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s2"
+              ],
+              "output": [
+                {
+                  "runId": "r2",
+                  "text": "live"
+                }
+              ]
+            },
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s3"
+              ],
+              "output": [
+                {
+                  "runId": "r3",
+                  "text": "unknown"
+                }
+              ]
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": true,
+            "projects": {},
+            "tickets": {},
+            "sessions": {
+              "s1": {
+                "id": "s1",
+                "key": "S1",
+                "kind": "ticket",
+                "ticketId": null,
+                "driver": "dummy",
+                "cwd": "/",
+                "title": "",
+                "triageStatus": null,
+                "outcome": null,
+                "busy": false,
+                "createdAt": 0,
+                "updatedAt": 0
+              },
+              "s2": {
+                "id": "s2",
+                "key": "S2",
+                "kind": "ticket",
+                "ticketId": null,
+                "driver": "dummy",
+                "cwd": "/",
+                "title": "",
+                "triageStatus": null,
+                "outcome": null,
+                "busy": true,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {
+              "s2": {
+                "r2": "live"
+              },
+              "s3": {
+                "r3": "unknown"
+              }
+            },
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "snapshot keeps a delta when a newer live session says it's busy",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "session.upserted",
+                "session": {
+                  "id": "s1",
+                  "key": "S1",
+                  "kind": "ticket",
+                  "ticketId": null,
+                  "driver": "dummy",
+                  "cwd": "/",
+                  "title": "",
+                  "triageStatus": null,
+                  "outcome": null,
+                  "busy": true,
+                  "createdAt": 0,
+                  "updatedAt": 9
+                }
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s1",
+                "runId": "r1",
+                "text": "live"
+              }
+            }
+          ],
+          "probes": []
+        },
+        {
+          "actions": [
+            {
+              "type": "snapshot",
+              "snapshot": {
+                "projects": [],
+                "tickets": [],
+                "sessions": [
+                  {
+                    "id": "s1",
+                    "key": "S1",
+                    "kind": "ticket",
+                    "ticketId": null,
+                    "driver": "dummy",
+                    "cwd": "/",
+                    "title": "",
+                    "triageStatus": null,
+                    "outcome": null,
+                    "busy": false,
+                    "createdAt": 0,
+                    "updatedAt": 1
+                  }
+                ],
+                "watchers": [],
+                "settings": null,
+                "drivers": []
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s1"
+              ],
+              "output": [
+                {
+                  "runId": "r1",
+                  "text": "live"
+                }
+              ]
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": true,
+            "projects": {},
+            "tickets": {},
+            "sessions": {
+              "s1": {
+                "id": "s1",
+                "key": "S1",
+                "kind": "ticket",
+                "ticketId": null,
+                "driver": "dummy",
+                "cwd": "/",
+                "title": "",
+                "triageStatus": null,
+                "outcome": null,
+                "busy": true,
+                "createdAt": 0,
+                "updatedAt": 9
+              }
+            },
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {
+              "s1": {
+                "r1": "live"
+              }
+            },
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "detail drops the deltas of runs it reports ended and keeps the running one's",
+      "steps": [
+        {
+          "actions": [
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s-t",
+                "runId": "r-plan",
+                "text": "stale plan"
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s-t",
+                "runId": "r-work",
+                "text": "streaming"
+              }
+            },
+            {
+              "type": "event",
+              "event": {
+                "kind": "transcript.delta",
+                "sessionId": "s2",
+                "runId": "r-x",
+                "text": "other"
+              }
+            }
+          ],
+          "probes": []
+        },
+        {
+          "actions": [
+            {
+              "type": "detail",
+              "detail": {
+                "ticket": {
+                  "id": "t",
+                  "key": "T",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "t",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-t",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "session": {
+                  "id": "s-t",
+                  "key": "S-T",
+                  "kind": "ticket",
+                  "ticketId": "t",
+                  "driver": "dummy",
+                  "cwd": "/",
+                  "title": "",
+                  "triageStatus": null,
+                  "outcome": null,
+                  "busy": false,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                "activity": [],
+                "runs": [
+                  {
+                    "id": "r-plan",
+                    "sessionId": "s-t",
+                    "kind": "work",
+                    "status": "succeeded",
+                    "driver": "dummy",
+                    "prompt": "",
+                    "error": null,
+                    "createdAt": 0,
+                    "startedAt": 0,
+                    "endedAt": null
+                  },
+                  {
+                    "id": "r-work",
+                    "sessionId": "s-t",
+                    "kind": "work",
+                    "status": "running",
+                    "driver": "dummy",
+                    "prompt": "",
+                    "error": null,
+                    "createdAt": 0,
+                    "startedAt": 0,
+                    "endedAt": null
+                  },
+                  {
+                    "id": "r-x",
+                    "sessionId": "s2",
+                    "kind": "work",
+                    "status": "queued",
+                    "driver": "dummy",
+                    "prompt": "",
+                    "error": null,
+                    "createdAt": 0,
+                    "startedAt": 0,
+                    "endedAt": null
+                  }
+                ],
+                "dependents": [],
+                "children": []
+              }
+            }
+          ],
+          "probes": [
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s-t"
+              ],
+              "output": [
+                {
+                  "runId": "r-work",
+                  "text": "streaming"
+                }
+              ]
+            },
+            {
+              "fn": "liveDelta",
+              "args": [
+                "s2"
+              ],
+              "output": [
+                {
+                  "runId": "r-x",
+                  "text": "other"
+                }
+              ]
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {
+              "t": {
+                "id": "t",
+                "key": "T",
+                "projectId": "p1",
+                "kind": "task",
+                "title": "t",
+                "spec": "",
+                "status": "planning",
+                "sessionId": "s-t",
+                "driver": "dummy",
+                "parentId": null,
+                "dependsOn": [],
+                "autoStart": false,
+                "agentReview": "pending",
+                "humanReview": "pending",
+                "externalRef": null,
+                "workdir": null,
+                "branch": null,
+                "blockedReason": null,
+                "permissionMode": null,
+                "busy": false,
+                "pendingApproval": null,
+                "allowedTools": [],
+                "model": null,
+                "position": 0,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "sessions": {
+              "s-t": {
+                "id": "s-t",
+                "key": "S-T",
+                "kind": "ticket",
+                "ticketId": "t",
+                "driver": "dummy",
+                "cwd": "/",
+                "title": "",
+                "triageStatus": null,
+                "outcome": null,
+                "busy": false,
+                "createdAt": 0,
+                "updatedAt": 0
+              }
+            },
+            "runs": {
+              "r-plan": {
+                "id": "r-plan",
+                "sessionId": "s-t",
+                "kind": "work",
+                "status": "succeeded",
+                "driver": "dummy",
+                "prompt": "",
+                "error": null,
+                "createdAt": 0,
+                "startedAt": 0,
+                "endedAt": null
+              },
+              "r-work": {
+                "id": "r-work",
+                "sessionId": "s-t",
+                "kind": "work",
+                "status": "running",
+                "driver": "dummy",
+                "prompt": "",
+                "error": null,
+                "createdAt": 0,
+                "startedAt": 0,
+                "endedAt": null
+              },
+              "r-x": {
+                "id": "r-x",
+                "sessionId": "s2",
+                "kind": "work",
+                "status": "queued",
+                "driver": "dummy",
+                "prompt": "",
+                "error": null,
+                "createdAt": 0,
+                "startedAt": 0,
+                "endedAt": null
+              }
+            },
+            "activity": {
+              "s-t": []
+            },
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {
+              "s-t": {
+                "r-work": "streaming"
+              },
+              "s2": {
+                "r-x": "other"
+              }
+            },
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {
+              "t": []
+            },
+            "ticketsAsOf": null
           }
         }
       ]

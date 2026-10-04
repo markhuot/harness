@@ -143,6 +143,19 @@ extension BoardState {
 
     static let terminalRun: [RunStatus] = [.succeeded, .failed, .cancelled]
 
+    /// Drop the deltas a refetch shows are over: those of sessions that aren't busy, and of runs
+    /// that ended. A client that missed the events that clear a delta (the app was suspended
+    /// mid-stream, the socket dropped) would otherwise show the half-streamed text under the
+    /// transcript for good.
+    mutating func pruneDeltas(sessions: [String: Session], runs: [Run]) {
+        for sessionId in deltas.keys.sorted() where sessions[sessionId]?.busy == false {
+            clearDelta(sessionId, nil)
+        }
+        for r in runs where Self.terminalRun.contains(r.status) {
+            clearDelta(r.sessionId, r.id)
+        }
+    }
+
     // MARK: Reducer
 
     /// `applyEvent`: one live event.
@@ -214,7 +227,8 @@ extension BoardState {
             connected = value
         case let .snapshot(s):
             // A snapshot is authoritative for entity lists; transcripts/activity are kept (they
-            // are merged by id, and views refetch them on reconnect). Paging restarts from its
+            // are merged by id, and views refetch them on reconnect), and so are the deltas of
+            // busy sessions. Paging restarts from its
             // first page; an active search is re-armed (ids → null) for the client to re-run.
             let all = s.donePage.map { s.tickets + $0.page.tickets } ?? s.tickets
             var paging: [String: DonePaging] = [:]
@@ -237,6 +251,7 @@ extension BoardState {
             dependents = [:]
             ticketsAsOf = all.reduce(0) { max($0, $1.createdAt) }
             sessions = Self.preferNewer(Self.byId(s.sessions), sessions, updatedAt: { $0.updatedAt })
+            pruneDeltas(sessions: sessions, runs: [])
             watchers = Self.byId(s.watchers)
             settings = s.settings
             drivers = s.drivers
@@ -249,6 +264,7 @@ extension BoardState {
             if d.ticket.isConductor { childrenLoaded[d.ticket.id] = true }
             dependents[d.ticket.id] = d.dependents
             for r in d.runs { runs[r.id] = r }
+            pruneDeltas(sessions: [:], runs: d.runs)
             sessions[d.session.id] = d.session
             // Older services don't send sub-agents: leave the session's list unknown then.
             if let subs = d.subagents { mergeSubagents(d.session.id, subs) }
