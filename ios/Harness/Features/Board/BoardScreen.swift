@@ -4,9 +4,10 @@ import SwiftUI
 /// The board: five columns as horizontally paged lists with a status strip (counts) on top, or
 /// on iPad at regular width all five side by side like the Mac (each with its own header, no
 /// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
-/// it scrolls into older pages (footer spinner) and its count is the server's total. The bottom
-/// bar reads filter ("Show child tickets", off by default), the search field (always on screen)
-/// and New session; in the iPad's DesktopShell they're in the top bar instead (search in the
+/// it scrolls into older pages (footer spinner) and its count is the server's total. On the phone
+/// there's no navigation bar: the bottom bar reads Projects, filter ("Show child tickets", off by
+/// default), the search field (always on screen, its placeholder the project's name or "All
+/// projects") and New session; in the iPad's DesktopShell they're in the top bar instead (search in the
 /// navigation bar, ⌘F; Filter and New session, ⌘N, trailing) and there's no bottom bar. Typing
 /// searches on the server; results page the same way, across every column.
 struct BoardScreen: View {
@@ -58,9 +59,13 @@ struct BoardScreen: View {
                 .accessibilityHidden(true)
         }
         .safeAreaInset(edge: .top, spacing: 0) { ConnectionBanner() }
-        .navigationTitle(ctx.project?.name ?? "All projects")
+        // The title still names the back button on a pushed ticket; on the phone the bar itself is
+        // hidden, so the board starts right under the status bar and the field's placeholder
+        // names the project instead.
+        .navigationTitle(scopeName(ctx))
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $query, placement: desktop ? .toolbar : .automatic, prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets")
+        .toolbar(desktop ? .automatic : .hidden, for: .navigationBar)
+        .searchable(text: $query, placement: desktop ? .toolbar : .automatic, prompt: desktop ? ctx.project.map { "Search \($0.name)" } ?? "Search tickets" : scopeName(ctx))
         .searchFocused($searchFocused)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
@@ -194,7 +199,7 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
-    /// Phone: sidebar in the header; filter, search field and New session along the bottom.
+    /// Phone: no header; Projects, filter, search field and New session along the bottom.
     /// iPad (DesktopShell): the split view's toggle, the search field in the navigation bar, and
     /// Filter and New session trailing.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
@@ -202,16 +207,18 @@ struct BoardScreen: View {
             ToolbarItem(placement: .primaryAction) { filterMenu }
             ToolbarItem(placement: .primaryAction) { newSession(ctx).keyboardShortcut("n") }
         } else {
-            SidebarToolbarItem()
+            // Projects and Filter share one glass; search and New session each get their own.
+            // Without the spacers the bar merges the search field with its neighbors.
+            SidebarToolbarItem(placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) { filterMenu }
-            // Filter, search and New session each get their own glass; without the spacers the
-            // bar merges the search field with its neighbors.
             ToolbarSpacer(.fixed, placement: .bottomBar)
             DefaultToolbarItem(kind: .search, placement: .bottomBar)
             ToolbarSpacer(.fixed, placement: .bottomBar)
             ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
     }
+
+    private func scopeName(_ ctx: BoardContext) -> String { ctx.project?.name ?? "All projects" }
 
     private var filterMenu: some View {
         Menu {

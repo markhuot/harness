@@ -386,8 +386,9 @@ feature needs something new here, add to it without changing what's there.
 
 ## iPad layout
 
-`MainTabs` branches on `horizontalSizeClass`, never on the device idiom. At compact width each section's root has `SidebarToolbarItem` (the Projects sheet) and the board's
-bottom bar reads Filter, search, New session. At regular width it's `DesktopShell`: a
+`MainTabs` branches on `horizontalSizeClass`, never on the device idiom. At compact width each section's root has `SidebarToolbarItem` (the Projects sheet); the board
+hides its navigation bar and puts it in the bottom bar, which reads Projects + Filter, search
+(placeholder: the project's name or "All projects"), New session. At regular width it's `DesktopShell`: a
 `NavigationSplitView` (`.balanced`, so the sidebar sits beside the section in portrait too) with
 `ProjectsSidebar(column: true)` in the sidebar column and the selected section's stack in the
 detail, so the gear's `router.push(.project(id:))` lands there. The column's visibility is the
@@ -778,7 +779,7 @@ native-pattern difference, not a missing feature.
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
 | Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
-| Board header: title, sidebar (Projects); bottom bar: Filter (Show child tickets), search field, + New session (iPad: search in the navigation bar, Filter and New session top trailing, ⌘F / ⌘N) | screens/Board, ui/header | BoardScreen | done (differs) |
+| Board (phone: no header); bottom bar: Projects, Filter (Show child tickets), search field (project name as placeholder), + New session (iPad: search in the navigation bar, Filter and New session top trailing, ⌘F / ⌘N) | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |

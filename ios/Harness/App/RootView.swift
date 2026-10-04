@@ -130,8 +130,8 @@ private struct SceneChrome: ViewModifier {
 
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
-/// section's sidebar button, switches between them, and the board's bottom bar holds its filter,
-/// search field and New session. At regular width (iPad) it's DesktopShell, where a ticket opens
+/// section's sidebar button, switches between them, and the board's bottom bar holds that button,
+/// its filter, search field and New session (the board has no header). At regular width (iPad) it's DesktopShell, where a ticket opens
 /// in a window of its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
     @Environment(Router.self) private var router
@@ -211,8 +211,10 @@ extension EnvironmentValues {
 /// The header button that opens the Projects sidebar, on each section's root screen. Its amber
 /// badge counts the triage sessions triaging or busy, like the sidebar's Inbox row, so the tab
 /// bar's old Inbox badge still shows from every section. None in the iPad's DesktopShell, where
-/// the split view's own toggle shows the sidebar and its Inbox row carries the badge.
+/// the split view's own toggle shows the sidebar and its Inbox row carries the badge. The phone's
+/// board puts it in its bottom bar instead (`.bottomBar`), leaving the board no header at all.
 struct SidebarToolbarItem: ToolbarContent {
+    var placement: ToolbarItemPlacement = .topBarLeading
     @Environment(Router.self) private var router
     @Environment(\.desktopShell) private var desktop
     @Environment(BoardStore.self) private var store
@@ -226,7 +228,7 @@ struct SidebarToolbarItem: ToolbarContent {
     }
 
     private func item(_ triaging: Int) -> some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: placement) {
             Button { router.present(.projects) } label: {
                 Image(systemName: "sidebar.left")
                     .overlay(alignment: .topTrailing) {
