@@ -4,7 +4,7 @@
 // mirrors them in HarnessKit's Annotations.swift, with the same tests). Platform-independent: no
 // React, DOM or native APIs.
 
-import type { AnnotationMark, MessageAnnotation } from "../protocol";
+import type { AnnotationMark, AttachmentAnnotation } from "../protocol";
 
 export interface Point {
   x: number;
@@ -134,7 +134,7 @@ export function setMarkMessage(marks: readonly DraftMark[], index: number, messa
 }
 
 /**
- * The marks as a message sends them (MessageAnnotation.marks): numbered 1…n in order, in pixels of
+ * The marks as an attachment keeps them (AttachmentAnnotation.marks): numbered 1…n in order, in pixels of
  * the `width`×`height` image, with trimmed messages.
  */
 export function marksForMessage(marks: readonly DraftMark[], width: number, height: number): AnnotationMark[] {
@@ -154,10 +154,10 @@ export function annotationNotesLabel(count: number): string {
 }
 
 /**
- * The marks of a sent or waiting annotation, back as fractions of its image, so the annotator can
- * reopen them to edit (over the original image, which has the same size as the annotated one).
+ * The marks of an annotation, back as fractions of its image, so the annotator can reopen them to
+ * edit (the image is untouched, so they still sit where they were drawn).
  */
-export function draftMarksFrom(a: Pick<MessageAnnotation, "width" | "height" | "marks">): DraftMark[] {
+export function draftMarksFrom(a: Pick<AttachmentAnnotation, "width" | "height" | "marks">): DraftMark[] {
   const unit = (x: number, y: number) => toUnit({ x, y }, a.width, a.height);
   return a.marks.map((m) => ({
     anchor: unit(m.x, m.y),
@@ -166,31 +166,8 @@ export function draftMarksFrom(a: Pick<MessageAnnotation, "width" | "height" | "
   }));
 }
 
-// A message (or New session) keeps its annotations beside its attachments, each naming its
-// attachment by index. These keep them pointed at the right file as the list changes.
-
-/** The annotation on `attachments[index]`, if it has one. */
-export function annotationFor(annotations: readonly MessageAnnotation[], index: number): MessageAnnotation | undefined {
-  return annotations.find((a) => a.attachment === index);
-}
-
-/** `annotations` with the one on `attachments[index]` set to `a` (null removes it), in attachment order. */
-export function withAnnotation(annotations: readonly MessageAnnotation[], index: number, a: Omit<MessageAnnotation, "attachment"> | null): MessageAnnotation[] {
-  const rest = annotations.filter((x) => x.attachment !== index);
-  return (a ? [...rest, { ...a, attachment: index }] : rest).sort((x, y) => x.attachment - y.attachment);
-}
-
-/** `annotations` once `attachments[index]` is removed: its own goes, and later ones move up an index. */
-export function annotationsWithout(annotations: readonly MessageAnnotation[], index: number): MessageAnnotation[] {
-  return annotations.filter((a) => a.attachment !== index).map((a) => (a.attachment > index ? { ...a, attachment: a.attachment - 1 } : a));
-}
-
-/** Only the annotations whose attachment is still in a list of `count` (what a send or save carries). */
-export function annotationsWithin(annotations: readonly MessageAnnotation[], count: number): MessageAnnotation[] {
-  return annotations.filter((a) => Number.isInteger(a.attachment) && a.attachment >= 0 && a.attachment < count);
-}
-
-/** Same annotations, same order, same contents. */
-export function sameAnnotations(a: readonly MessageAnnotation[], b: readonly MessageAnnotation[]): boolean {
-  return a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
+/** Both absent, or the same size, page and marks. */
+export function sameAnnotation(a: AttachmentAnnotation | undefined, b: AttachmentAnnotation | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  return JSON.stringify(a) === JSON.stringify(b);
 }

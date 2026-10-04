@@ -194,10 +194,12 @@ export const Ticket: P.Ticket[] = [
     draft: true,
     promptAttachments: [
       { path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file" },
-      { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
-    ],
-    promptAnnotations: [
-      { attachment: 1, source: { kind: "file", name: "Pasted image.png" }, width: 1170, height: 2532, marks: [{ n: 1, x: 585, y: 1200, tailX: 300, tailY: 900, message: "This overlaps the tab bar" }] },
+      {
+        path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+        name: "Pasted image.png",
+        source: "upload",
+        annotation: { width: 1170, height: 2532, marks: [{ n: 1, x: 585, y: 1200, tailX: 300, tailY: 900, message: "This overlaps the tab bar" }] },
+      },
     ],
     completedAt: null,
     agentReview: "skipped",
@@ -277,36 +279,21 @@ const run: P.Run = {
   endedAt: null,
 };
 
-// Annotations (DESIGN.md "Annotations"): numbered notes drawn on an image sent with a message.
-const browserSource: P.AnnotationSource = {
-  kind: "browser",
-  url: "http://localhost:3000/login",
-  title: "Log in",
-  tabId: 3,
-  viewport: { width: 1280, height: 800 },
-  scale: 2,
-};
-
-export const AnnotationSource: P.AnnotationSource[] = [
-  { kind: "attachment", id: "att_1", name: "after.png" },
-  { kind: "prompt-attachment", index: 0, name: "shot.png" },
-  { kind: "message-attachment", entryId: "ent_5", index: 1, name: "Pasted image.png" },
-  { kind: "file", name: "Pasted image.png" },
-  browserSource,
-  { kind: "browser", url: "about:blank", title: "", tabId: 1, viewport: { width: 390, height: 844 }, scale: 3 },
-];
-
+// Annotations (DESIGN.md "Annotations"): a human's numbered notes on an image attachment.
 export const AnnotationMark: P.AnnotationMark[] = [
   { n: 1, x: 412, y: 188, tailX: 520, tailY: 96, message: "This button should be blue" },
   { n: 2, x: 64, y: 700, message: "Typo: \"Sumbit\"" },
 ];
 
-const messageAnnotation: P.MessageAnnotation = { attachment: 0, source: AnnotationSource[0]!, width: 1280, height: 800, marks: AnnotationMark };
+export const AnnotationPage: P.AnnotationPage[] = [
+  { url: "http://localhost:3000/login", title: "Log in", tabId: 3, viewport: { width: 1280, height: 800 }, scale: 2 },
+  { url: "about:blank", title: "", tabId: 1, viewport: { width: 390, height: 844 }, scale: 1 },
+];
 
-export const MessageAnnotation: P.MessageAnnotation[] = [
-  messageAnnotation,
-  { attachment: 1, source: browserSource, width: 2560, height: 1600, marks: [{ n: 1, x: 1280, y: 800, tailX: 1400, tailY: 640, message: "Center this" }] },
-  { attachment: 2, source: AnnotationSource[2]!, width: 640, height: 480, marks: [{ n: 1, x: 0, y: 479, message: "Cut off here" }] },
+export const AttachmentAnnotation: P.AttachmentAnnotation[] = [
+  { width: 1280, height: 800, marks: AnnotationMark },
+  { width: 2560, height: 1600, marks: [{ n: 1, x: 1280, y: 800, tailX: 1400, tailY: 640, message: "Center this" }], page: AnnotationPage[0]! },
+  { width: 640, height: 480, marks: [{ n: 1, x: 0, y: 479, message: "" }] },
 ];
 
 export const BrowserScreenshot: P.BrowserScreenshot[] = [
@@ -323,7 +310,8 @@ export const BrowserScreenshot: P.BrowserScreenshot[] = [
   { data: "iVBORw0KGgo=", width: 1170, height: 2532, viewport: { width: 390, height: 844 }, scale: 3, tabId: 1, url: "about:blank", title: "" },
 ];
 
-const annotatedUpload: P.PromptAttachment = { path: "/Users/mark/.harness/uploads/cd34/annotated-after.png", name: "annotated-after.png", source: "upload" };
+const annotatedSpecImage: P.PromptAttachment = { path: "/Users/mark/.harness/attachments/att_1.png", name: "after.png", source: "file", annotation: AttachmentAnnotation[0]! };
+const annotatedPage: P.PromptAttachment = { path: "/Users/mark/.harness/uploads/cd34/localhost.png", name: "localhost.png", source: "upload", annotation: AttachmentAnnotation[1]! };
 
 export const Run: P.Run[] = [
   run,
@@ -332,7 +320,7 @@ export const Run: P.Run[] = [
   { ...run, id: "run_9", kind: "chat", status: "cancelled", endedAt: T0 + 2_000 },
   { ...run, id: "run_10", kind: "complete", status: "succeeded", endedAt: T0 + 3_000 },
   { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" }] },
-  { ...run, id: "run_12", kind: "chat", prompt: "Fix the marked spots.", attachments: [annotatedUpload], annotations: [messageAnnotation] },
+  { ...run, id: "run_12", kind: "chat", prompt: "Fix the marked spots.", attachments: [annotatedSpecImage, annotatedPage] },
 ];
 
 export const ToolResultContent: P.ToolResultContent[] = [
@@ -358,7 +346,7 @@ export const TranscriptContent: P.TranscriptContent[] = [
       { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" },
     ],
   },
-  { type: "text", text: "Fix the marked spots.", attachments: [annotatedUpload], annotations: MessageAnnotation.slice(0, 2) },
+  { type: "text", text: "Fix the marked spots.", attachments: [annotatedSpecImage, annotatedPage] },
 ];
 
 export const TranscriptEntry: P.TranscriptEntry[] = [
@@ -900,8 +888,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     key: "IMPORT-1",
     externalRef,
     draft: false,
-    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }, { path: "/tmp/notes.pdf" }],
-    promptAnnotations: [{ attachment: 0, source: { kind: "file", name: "shot.png" }, width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] }],
+    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png", annotation: { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] } }, { path: "/tmp/notes.pdf" }],
   },
   { projectId: "prj_8f2c1a", spec: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
   { projectId: "prj_8f2c1a", spec: "In the checkout", useWorktree: false },
@@ -915,11 +902,7 @@ export const UpdateTicketBody: P.UpdateTicketBody[] = [
   { spec: "Draft brief" },
   { promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }] },
   { promptAttachments: [] },
-  { promptAnnotations: [] },
-  {
-    promptAttachments: [{ path: "/Users/mark/.harness/uploads/upl_2/annotated-shot.png", name: "annotated-shot.png" }],
-    promptAnnotations: [{ attachment: 0, source: { kind: "file", name: "shot.png" }, width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "Here" }] }],
-  },
+  { promptAttachments: [{ path: "attachment:att_1", name: "after.png", annotation: { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "Here" }] } }] },
   {},
 ];
 
@@ -939,8 +922,7 @@ export const MessageBody: P.MessageBody[] = [
   { text: "See attached", move: true, attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
   {
     text: "Fix the marked spots.",
-    attachments: [{ path: annotatedUpload.path, name: annotatedUpload.name, source: "upload" }, { path: "/Users/mark/Desktop/shot.png" }],
-    annotations: [messageAnnotation, { ...MessageAnnotation[1]!, attachment: 1 }],
+    attachments: [{ path: "attachment:att_1", name: "after.png", annotation: AttachmentAnnotation[0]! }, { path: annotatedPage.path, name: annotatedPage.name, source: "upload", annotation: AttachmentAnnotation[1]! }, { path: "/Users/mark/Desktop/shot.png" }],
   },
 ];
 
@@ -1050,7 +1032,6 @@ export const discriminators: Record<string, string[]> = {
   BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, newTab: true, closeTab: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),
-  AnnotationSource: all<P.AnnotationSource["kind"]>({ attachment: true, "prompt-attachment": true, "message-attachment": true, file: true, browser: true }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1073,7 +1054,6 @@ export const forwardCompat: { type: string; samples: unknown[] }[] = [
   { type: "BrowserInput", samples: [{ type: "touch", points: [{ x: 1, y: 2 }] }] },
   { type: "PluginHostMessage", samples: [{ type: "harness:locale", locale: "de-DE" }] },
   { type: "PluginFrameMessage", samples: [{ type: "harness:resize", height: 400 }] },
-  { type: "AnnotationSource", samples: [{ kind: "region", page: 2, rect: { x: 10, y: 20, width: 300, height: 200 }, name: "spec.pdf" }] },
   {
     type: "Ticket",
     samples: [{ ...plainTicket, status: "archived", kind: "epic", agentReview: "escalated", humanReview: "waived", permissionMode: "yolo", completionAction: "deploy" }],

@@ -2,7 +2,8 @@
 // The pure pieces both apps use: turning what a client has into the list a draft keeps, the PATCH
 // side of it, and which ones get an image preview. Platform-independent: no React, DOM or native APIs.
 
-import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type PromptAttachmentInput } from "../protocol";
+import { MAX_PROMPT_ATTACHMENTS, type AttachmentAnnotation, type PromptAttachment, type PromptAttachmentInput } from "../protocol";
+import { sameAnnotation } from "./annotations";
 
 /** The last path component: "/a/b/shot.png" → "shot.png". */
 export function fileBaseName(path: string): string {
@@ -13,17 +14,17 @@ export function fileBaseName(path: string): string {
 
 /** What a client sent, as the draft keeps it: the file's name when none was given, "file" unless it says otherwise. */
 export function promptAttachmentFromInput(a: PromptAttachmentInput): PromptAttachment {
-  return { path: a.path, name: a.name?.trim() || fileBaseName(a.path), source: a.source ?? "file" };
+  return { path: a.path, name: a.name?.trim() || fileBaseName(a.path), source: a.source ?? "file", ...(a.annotation ? { annotation: a.annotation } : {}) };
 }
 
 /** The list as a create or PATCH body sends it (the service decides `source` itself). */
 export function promptAttachmentInputs(list: readonly PromptAttachment[]): PromptAttachmentInput[] {
-  return list.map((a) => ({ path: a.path, name: a.name }));
+  return list.map((a) => ({ path: a.path, name: a.name, ...(a.annotation ? { annotation: a.annotation } : {}) }));
 }
 
-/** Same files, same names, same order. */
+/** Same files, same names, same annotations, same order. */
 export function samePromptAttachments(a: readonly PromptAttachment[], b: readonly PromptAttachment[]): boolean {
-  return a.length === b.length && a.every((x, i) => x.path === b[i]!.path && x.name === b[i]!.name);
+  return a.length === b.length && a.every((x, i) => x.path === b[i]!.path && x.name === b[i]!.name && sameAnnotation(x.annotation, b[i]!.annotation));
 }
 
 /**
@@ -49,6 +50,37 @@ export function addPromptAttachments(
     out.push(promptAttachmentFromInput(a));
   }
   return { list: out, skipped };
+}
+
+/**
+ * `list` with `input` annotated (DESIGN.md "Annotations"): the attachment with the same path gets
+ * its annotation (null takes it off), or `input` is added at the end when it isn't there yet.
+ * `skipped` is true when it wasn't there and the list was already full.
+ */
+export function annotatePromptAttachment(
+  list: readonly PromptAttachment[],
+  input: PromptAttachmentInput,
+  annotation: AttachmentAnnotation | null,
+  max = MAX_PROMPT_ATTACHMENTS,
+): { list: PromptAttachment[]; skipped: boolean } {
+  const set = (a: PromptAttachment): PromptAttachment => {
+    const { annotation: _old, ...rest } = a;
+    return annotation ? { ...rest, annotation } : rest;
+  };
+  const i = list.findIndex((a) => a.path === input.path);
+  if (i >= 0) return { list: list.map((a, j) => (j === i ? set(a) : a)), skipped: false };
+  if (list.length >= max) return { list: [...list], skipped: true };
+  return { list: [...list, set(promptAttachmentFromInput(input))], skipped: false };
+}
+
+/** The reference a message sends for one of the ticket's spec images; the service stores its file's path. */
+export function specAttachmentPath(id: string): string {
+  return `attachment:${id}`;
+}
+
+/** The spec image id an attachment still refers to by `attachment:<id>` (one waiting to be sent), or null. */
+export function specAttachmentIdOf(path: string): string | null {
+  return path.startsWith("attachment:") ? path.slice("attachment:".length) || null : null;
 }
 
 /** `list` without the attachment at `index` (unchanged when there's none). */

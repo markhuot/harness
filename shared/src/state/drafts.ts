@@ -8,7 +8,6 @@
 import { harnessBranch, resolveBaseBranch } from "../branches";
 import type { BranchInfo, CreateTicketBody, Project, PublicSettings, Ticket, UpdateTicketBody } from "../protocol";
 import { promptAttachmentFromInput, promptAttachmentInputs, samePromptAttachments } from "./promptAttachments";
-import { sameAnnotations } from "./annotations";
 import { branchChoice, branchChoiceHint, canChangeBranch, ticketHasBranch, type BranchChoice } from "./branches";
 import { permissionModeLabel } from "./format";
 import { projectDriver, ticketChoice } from "./models";
@@ -108,9 +107,6 @@ export function applyTicketPatch(t: Ticket, patch: UpdateTicketBody): Ticket {
   if (patch.useWorktree !== undefined) next.useWorktree = patch.useWorktree;
   if (patch.projectId !== undefined) next.projectId = patch.projectId;
   if (patch.promptAttachments !== undefined) next.promptAttachments = patch.promptAttachments.map(promptAttachmentFromInput);
-  // As the service does: new attachments without their annotations clear them.
-  if (patch.promptAnnotations !== undefined) next.promptAnnotations = patch.promptAnnotations;
-  else if (patch.promptAttachments !== undefined) next.promptAnnotations = [];
   return next;
 }
 
@@ -164,7 +160,6 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
     skipHumanReview: !!t.skipHumanReview,
     ...(t.dependsOn.length ? { dependsOn: t.dependsOn } : {}),
     ...(t.promptAttachments?.length ? { promptAttachments: promptAttachmentInputs(t.promptAttachments) } : {}),
-    ...(t.promptAttachments?.length && t.promptAnnotations?.length ? { promptAnnotations: t.promptAnnotations } : {}),
   };
 }
 
@@ -189,10 +184,7 @@ export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null 
   if (!!next.skipAgentReview !== !!prev.skipAgentReview) p.skipAgentReview = !!next.skipAgentReview;
   if (!!next.skipHumanReview !== !!prev.skipHumanReview) p.skipHumanReview = !!next.skipHumanReview;
   if (!sameList(next.dependsOn, prev.dependsOn)) p.dependsOn = next.dependsOn;
-  const attachmentsChanged = !samePromptAttachments(next.promptAttachments ?? [], prev.promptAttachments ?? []);
-  if (attachmentsChanged) p.promptAttachments = promptAttachmentInputs(next.promptAttachments ?? []);
-  // The service clears annotations when the attachments change without them, so they go along.
-  if (attachmentsChanged || !sameAnnotations(next.promptAnnotations ?? [], prev.promptAnnotations ?? [])) p.promptAnnotations = next.promptAnnotations ?? [];
+  if (!samePromptAttachments(next.promptAttachments ?? [], prev.promptAttachments ?? [])) p.promptAttachments = promptAttachmentInputs(next.promptAttachments ?? []);
   return Object.keys(p).length ? p : null;
 }
 

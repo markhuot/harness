@@ -44,7 +44,6 @@ import type {
   WatcherBody,
   BrowserState,
   BrowserScreenshot,
-  MessageAnnotation,
   PluginInfo,
   PluginTab,
   NetworkStatus,
@@ -212,12 +211,11 @@ export class HarnessClient {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
   /** The message goes to the agent and the transcript, with any attachments (uploaded first when they aren't on the service's machine). */
-  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: PromptAttachmentInput[]; annotations?: MessageAnnotation[] } = {}) {
+  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: PromptAttachmentInput[] } = {}) {
     const body: MessageBody = {
       text,
       ...(opts.move ? { move: true } : {}),
       ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
-      ...(opts.annotations?.length ? { annotations: opts.annotations } : {}),
     };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }

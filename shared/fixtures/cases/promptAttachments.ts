@@ -3,6 +3,9 @@
 import type { PromptAttachment, PromptAttachmentInput } from "../../src/protocol";
 import {
   addPromptAttachments,
+  annotatePromptAttachment,
+  specAttachmentIdOf,
+  specAttachmentPath,
   fileBaseName,
   pastedImageName,
   promptAttachmentFromInput,
@@ -88,4 +91,21 @@ export const pastedImageNameCases = cases((m: string | null) => pastedImageName(
   unknown: "image/x-foo",
   empty: "",
   none: null,
+});
+
+const note = { width: 10, height: 10, marks: [{ n: 1, x: 1, y: 1, message: "here" }] };
+export const annotatePromptAttachmentCases = cases(
+  ({ list, input, annotation, max }: { list: PromptAttachment[]; input: PromptAttachmentInput; annotation: typeof note | null; max?: number }) => annotatePromptAttachment(list, input, annotation, max),
+  {
+    "a file already there gets the annotation in place": { list: [shot, notes], input: { path: shot.path }, annotation: note },
+    "null takes it off": { list: [{ ...shot, annotation: note }, notes], input: { path: shot.path }, annotation: null },
+    "a new file is added with it": { list: [shot], input: { path: specAttachmentPath("att_1"), name: "after.png" }, annotation: note },
+    "a full list skips a new file": { list: [shot, notes], input: { path: "/x.png" }, annotation: note, max: 2 },
+  },
+);
+
+export const specAttachmentIdOfCases = cases(specAttachmentIdOf, {
+  "a reference": specAttachmentPath("att_9"),
+  "a path": "/Users/me/attachment:x.png",
+  "no id": "attachment:",
 });

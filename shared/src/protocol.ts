@@ -257,12 +257,6 @@ export interface Ticket {
    * answers 404 for it then. Optional so fixtures type-check; the service always sends it.
    */
   promptAttachments?: PromptAttachment[];
-  /**
-   * The human's numbered notes on images among `promptAttachments` (DESIGN.md "Annotations"),
-   * each indexing that list. They go with the first message: its run's prompt lists them. Optional
-   * so fixtures type-check and clients tolerate an older service.
-   */
-  promptAnnotations?: MessageAnnotation[];
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -395,8 +389,6 @@ export interface Run {
    * with its prompt. Optional so clients tolerate an older service.
    */
   attachments?: PromptAttachment[];
-  /** Numbered notes on images among `attachments` (MessageBody.annotations), listed in its prompt. */
-  annotations?: MessageAnnotation[];
   error: string | null;
   createdAt: number;
   startedAt: number | null;
@@ -409,9 +401,8 @@ export type TranscriptContent =
   /**
    * `attachments`: on a human message (role "user"), the files sent with it. Their files are
    * served at GET /transcript/:entryId/attachments/:index (404 once one is gone).
-   * `annotations`: the human's numbered notes on some of those images (MessageBody.annotations).
    */
-  | { type: "text"; text: string; attachments?: PromptAttachment[]; annotations?: MessageAnnotation[] }
+  | { type: "text"; text: string; attachments?: PromptAttachment[] }
   | { type: "thinking"; text: string }
   | { type: "tool_call"; callId: string; name: string; input: unknown }
   | { type: "tool_result"; callId: string; name: string; output: ToolResultContent[]; isError: boolean }
@@ -540,6 +531,8 @@ export interface PromptAttachment {
    * iPhone/iPad), deleted with the ticket.
    */
   source: PromptAttachmentSource;
+  /** The human's numbered notes on this image (DESIGN.md "Annotations"); the file itself is untouched. */
+  annotation?: AttachmentAnnotation;
 }
 
 export type PromptAttachmentSource = "file" | "upload";
@@ -549,9 +542,11 @@ export type PromptAttachmentSource = "file" | "upload";
  * the service, which decides it from where the file is; clients keep it in their local copy.
  */
 export interface PromptAttachmentInput {
+  /** An absolute path on the service's machine, or `attachment:<id>` for one of the ticket's spec images (the service stores its file's path). */
   path: string;
   name?: string;
   source?: PromptAttachmentSource;
+  annotation?: AttachmentAnnotation;
 }
 
 /** Most prompt attachments one ticket takes. */
@@ -1069,23 +1064,10 @@ export interface BrowserScreenshot {
 // Annotations (DESIGN.md "Annotations")
 // ---------------------------------------------------------------------------
 
-/** Where an annotated image came from. */
-export type AnnotationSource =
-  /** An image in the ticket's spec (`attachment:<id>`). */
-  | { kind: "attachment"; id: string; name: string }
-  /** One of the ticket's prompt attachments (Ticket.promptAttachments[index]). */
-  | { kind: "prompt-attachment"; index: number; name: string }
-  /** A file sent with an earlier message (that transcript entry's attachments[index]). */
-  | { kind: "message-attachment"; entryId: string; index: number; name: string }
-  /** An image that was waiting in a composer or a New session, annotated before it was sent (it takes that file's place). */
-  | { kind: "file"; name: string }
-  /** A screenshot of a session browser tab (BrowserScreenshot). */
-  | { kind: "browser"; url: string; title: string; tabId: number; viewport: { width: number; height: number }; scale: number };
-
 /**
  * One numbered note. `x`/`y` is the anchor the arrow points at, `tailX`/`tailY` where the arrow
- * starts (where the number sits); both in the annotated image's pixels. No tail: a plain click,
- * with the number on the anchor.
+ * starts (where the number sits); both in the image's pixels. No tail: a plain click, with the
+ * number on the anchor.
  */
 export interface AnnotationMark {
   n: number;
@@ -1096,15 +1078,29 @@ export interface AnnotationMark {
   message: string;
 }
 
-/** Numbered notes on one image sent with a message: MessageBody.attachments[attachment]. */
-export interface MessageAnnotation {
-  attachment: number;
-  source: AnnotationSource;
-  /** The annotated image's size in pixels. */
+/** The page a browser screenshot shows (BrowserScreenshot), so the agent can find the marks on it in CSS pixels. */
+export interface AnnotationPage {
+  url: string;
+  title: string;
+  tabId: number;
+  /** The page's viewport in CSS pixels. */
+  viewport: { width: number; height: number };
+  /** Device pixels per CSS pixel. */
+  scale: number;
+}
+
+/**
+ * A human's numbered notes on an image attachment (PromptAttachment.annotation). Metadata only:
+ * the image file is never changed, and the apps draw the marks over it.
+ */
+export interface AttachmentAnnotation {
+  /** The image's size in pixels; the marks are in these pixels. */
   width: number;
   height: number;
   /** Numbered 1…n in order. */
   marks: AnnotationMark[];
+  /** Set when the image is a screenshot of a session browser tab. */
+  page?: AnnotationPage;
 }
 
 export const MAX_ANNOTATION_MARKS = 50;
@@ -1228,8 +1224,6 @@ export interface CreateTicketBody {
    * from another device go through POST /uploads first.
    */
   promptAttachments?: PromptAttachmentInput[];
-  /** Notes on images among `promptAttachments` (Ticket.promptAnnotations), validated like MessageBody.annotations. */
-  promptAnnotations?: MessageAnnotation[];
 }
 
 export interface UpdateTicketBody {
@@ -1285,12 +1279,8 @@ export interface UpdateTicketBody {
   /**
    * Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
    * ones the draft already had are kept as they are, even when their file has gone missing.
-   * A PATCH that changes this list without `promptAnnotations` clears the draft's annotations, so
-   * none is left pointing at another file.
    */
   promptAttachments?: PromptAttachmentInput[];
-  /** Drafts only (409 otherwise): the whole new list of notes on images among the prompt attachments. */
-  promptAnnotations?: MessageAnnotation[];
 }
 
 /** POST /tickets/:key/submit: launch a draft, starting work now (start) or planning first. */
@@ -1393,13 +1383,6 @@ export interface MessageBody {
    * message then answers it as a deny).
    */
   attachments?: PromptAttachmentInput[];
-  /**
-   * Numbered notes on images among `attachments` (DESIGN.md "Annotations"), at most one per
-   * attachment. The service writes them into the agent's prompt as a numbered list, and the
-   * transcript entry keeps them. 400 when an entry names no image attachment or its marks are
-   * malformed.
-   */
-  annotations?: MessageAnnotation[];
   /**
    * true: move the ticket before its agent gets the message: a review ticket back to in
    * progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it

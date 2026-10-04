@@ -198,6 +198,218 @@
       }
     }
   ],
+  "annotatePromptAttachmentCases": [
+    {
+      "name": "a file already there gets the annotation in place",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "input": {
+          "path": "/Users/me/Desktop/shot.png"
+        },
+        "annotation": {
+          "width": 10,
+          "height": 10,
+          "marks": [
+            {
+              "n": 1,
+              "x": 1,
+              "y": 1,
+              "message": "here"
+            }
+          ]
+        }
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "annotation": {
+              "width": 10,
+              "height": 10,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 1,
+                  "y": 1,
+                  "message": "here"
+                }
+              ]
+            }
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "skipped": false
+      }
+    },
+    {
+      "name": "null takes it off",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "annotation": {
+              "width": 10,
+              "height": 10,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 1,
+                  "y": 1,
+                  "message": "here"
+                }
+              ]
+            }
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "input": {
+          "path": "/Users/me/Desktop/shot.png"
+        },
+        "annotation": null
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "skipped": false
+      }
+    },
+    {
+      "name": "a new file is added with it",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          }
+        ],
+        "input": {
+          "path": "attachment:att_1",
+          "name": "after.png"
+        },
+        "annotation": {
+          "width": 10,
+          "height": 10,
+          "marks": [
+            {
+              "n": 1,
+              "x": 1,
+              "y": 1,
+              "message": "here"
+            }
+          ]
+        }
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "attachment:att_1",
+            "name": "after.png",
+            "source": "file",
+            "annotation": {
+              "width": 10,
+              "height": 10,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 1,
+                  "y": 1,
+                  "message": "here"
+                }
+              ]
+            }
+          }
+        ],
+        "skipped": false
+      }
+    },
+    {
+      "name": "a full list skips a new file",
+      "input": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "input": {
+          "path": "/x.png"
+        },
+        "annotation": {
+          "width": 10,
+          "height": 10,
+          "marks": [
+            {
+              "n": 1,
+              "x": 1,
+              "y": 1,
+              "message": "here"
+            }
+          ]
+        },
+        "max": 2
+      },
+      "output": {
+        "list": [
+          {
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file"
+          },
+          {
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file"
+          }
+        ],
+        "skipped": true
+      }
+    }
+  ],
   "fileBaseNameCases": [
     {
       "name": "a file",
@@ -695,6 +907,23 @@
         ]
       },
       "output": false
+    }
+  ],
+  "specAttachmentIdOfCases": [
+    {
+      "name": "a reference",
+      "input": "attachment:att_9",
+      "output": "att_9"
+    },
+    {
+      "name": "a path",
+      "input": "/Users/me/attachment:x.png",
+      "output": null
+    },
+    {
+      "name": "no id",
+      "input": "attachment:",
+      "output": null
     }
   ]
 }

@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { MessageAnnotation } from "../protocol";
 import {
-  annotationFor,
-  annotationsWithin,
-  annotationsWithout,
   draftMarksFrom,
-  withAnnotation,
+  sameAnnotation,
   annotationNotesLabel,
   annotationStyle,
   arrowGeometry,
@@ -92,37 +88,12 @@ describe("annotations", () => {
     expect(annotationNotesLabel(3)).toBe("3 notes");
   });
 
-  const note = (attachment: number, name = `f${attachment}`): MessageAnnotation => ({
-    attachment,
-    source: { kind: "file", name },
-    width: 100,
-    height: 50,
-    marks: [{ n: 1, x: 10, y: 5, message: name }],
-  });
-
-  test("removing an attachment drops its annotation and moves later ones up", () => {
-    const list = [note(0), note(2), note(3)];
-    expect(annotationsWithout(list, 2).map((a) => [a.attachment, (a.source as { name: string }).name])).toEqual([
-      [0, "f0"],
-      [2, "f3"],
-    ]);
-    // Removing a file without notes still shifts the ones after it.
-    expect(annotationsWithout(list, 1).map((a) => a.attachment)).toEqual([0, 1, 2]);
-  });
-
-  test("setting an annotation replaces the one on that attachment and keeps attachment order", () => {
-    const list = withAnnotation([note(0), note(3)], 1, note(9, "new"));
-    expect(list.map((a) => [a.attachment, (a.source as { name: string }).name])).toEqual([
-      [0, "f0"],
-      [1, "new"],
-      [3, "f3"],
-    ]);
-    expect(annotationFor(withAnnotation(list, 1, note(1, "again")), 1)?.source).toEqual({ kind: "file", name: "again" });
-    expect(withAnnotation(list, 1, null).map((a) => a.attachment)).toEqual([0, 3]);
-  });
-
-  test("only annotations on attachments still in the list are sent", () => {
-    expect(annotationsWithin([note(0), note(2), note(5)], 3).map((a) => a.attachment)).toEqual([0, 2]);
+  test("annotations compare by size, page and marks", () => {
+    const a = { width: 10, height: 10, marks: [{ n: 1, x: 1, y: 1, message: "a" }] };
+    expect(sameAnnotation(a, { ...a, marks: [{ ...a.marks[0]! }] })).toBe(true);
+    expect(sameAnnotation(a, { ...a, marks: [{ ...a.marks[0]!, message: "b" }] })).toBe(false);
+    expect(sameAnnotation(a, undefined)).toBe(false);
+    expect(sameAnnotation(undefined, undefined)).toBe(true);
   });
 
   test("marks reopen as fractions of the image, with and without arrows", () => {

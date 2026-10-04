@@ -142,29 +142,8 @@
       "message": "Typo: \"Sumbit\""
     }
   ],
-  "AnnotationSource": [
+  "AnnotationPage": [
     {
-      "kind": "attachment",
-      "id": "att_1",
-      "name": "after.png"
-    },
-    {
-      "kind": "prompt-attachment",
-      "index": 0,
-      "name": "shot.png"
-    },
-    {
-      "kind": "message-attachment",
-      "entryId": "ent_5",
-      "index": 1,
-      "name": "Pasted image.png"
-    },
-    {
-      "kind": "file",
-      "name": "Pasted image.png"
-    },
-    {
-      "kind": "browser",
       "url": "http://localhost:3000/login",
       "title": "Log in",
       "tabId": 3,
@@ -175,7 +154,6 @@
       "scale": 2
     },
     {
-      "kind": "browser",
       "url": "about:blank",
       "title": "",
       "tabId": 1,
@@ -183,7 +161,7 @@
         "width": 390,
         "height": 844
       },
-      "scale": 3
+      "scale": 1
     }
   ],
   "ApiError": [
@@ -219,6 +197,64 @@
       "mimeType": "video/mp4",
       "name": "flow.mp4",
       "size": 2400118
+    }
+  ],
+  "AttachmentAnnotation": [
+    {
+      "width": 1280,
+      "height": 800,
+      "marks": [
+        {
+          "n": 1,
+          "x": 412,
+          "y": 188,
+          "tailX": 520,
+          "tailY": 96,
+          "message": "This button should be blue"
+        },
+        {
+          "n": 2,
+          "x": 64,
+          "y": 700,
+          "message": "Typo: \"Sumbit\""
+        }
+      ]
+    },
+    {
+      "width": 2560,
+      "height": 1600,
+      "marks": [
+        {
+          "n": 1,
+          "x": 1280,
+          "y": 800,
+          "tailX": 1400,
+          "tailY": 640,
+          "message": "Center this"
+        }
+      ],
+      "page": {
+        "url": "http://localhost:3000/login",
+        "title": "Log in",
+        "tabId": 3,
+        "viewport": {
+          "width": 1280,
+          "height": 800
+        },
+        "scale": 2
+      }
+    },
+    {
+      "width": 640,
+      "height": 480,
+      "marks": [
+        {
+          "n": 1,
+          "x": 0,
+          "y": 479,
+          "message": ""
+        }
+      ]
     }
   ],
   "BoundAddress": [
@@ -556,29 +592,22 @@
       "promptAttachments": [
         {
           "path": "/Users/mark/Desktop/shot.png",
-          "name": "shot.png"
+          "name": "shot.png",
+          "annotation": {
+            "width": 640,
+            "height": 480,
+            "marks": [
+              {
+                "n": 1,
+                "x": 10,
+                "y": 20,
+                "message": "Here"
+              }
+            ]
+          }
         },
         {
           "path": "/tmp/notes.pdf"
-        }
-      ],
-      "promptAnnotations": [
-        {
-          "attachment": 0,
-          "source": {
-            "kind": "file",
-            "name": "shot.png"
-          },
-          "width": 640,
-          "height": 480,
-          "marks": [
-            {
-              "n": 1,
-              "x": 10,
-              "y": 20,
-              "message": "Here"
-            }
-          ]
         }
       ]
     },
@@ -1239,79 +1268,6 @@
       "mode": "any"
     }
   ],
-  "MessageAnnotation": [
-    {
-      "attachment": 0,
-      "source": {
-        "kind": "attachment",
-        "id": "att_1",
-        "name": "after.png"
-      },
-      "width": 1280,
-      "height": 800,
-      "marks": [
-        {
-          "n": 1,
-          "x": 412,
-          "y": 188,
-          "tailX": 520,
-          "tailY": 96,
-          "message": "This button should be blue"
-        },
-        {
-          "n": 2,
-          "x": 64,
-          "y": 700,
-          "message": "Typo: \"Sumbit\""
-        }
-      ]
-    },
-    {
-      "attachment": 1,
-      "source": {
-        "kind": "browser",
-        "url": "http://localhost:3000/login",
-        "title": "Log in",
-        "tabId": 3,
-        "viewport": {
-          "width": 1280,
-          "height": 800
-        },
-        "scale": 2
-      },
-      "width": 2560,
-      "height": 1600,
-      "marks": [
-        {
-          "n": 1,
-          "x": 1280,
-          "y": 800,
-          "tailX": 1400,
-          "tailY": 640,
-          "message": "Center this"
-        }
-      ]
-    },
-    {
-      "attachment": 2,
-      "source": {
-        "kind": "message-attachment",
-        "entryId": "ent_5",
-        "index": 1,
-        "name": "Pasted image.png"
-      },
-      "width": 640,
-      "height": 480,
-      "marks": [
-        {
-          "n": 1,
-          "x": 0,
-          "y": 479,
-          "message": "Cut off here"
-        }
-      ]
-    }
-  ],
   "MessageBody": [
     {
       "text": "Use Double for timestamps"
@@ -1351,66 +1307,60 @@
       "text": "Fix the marked spots.",
       "attachments": [
         {
-          "path": "/Users/mark/.harness/uploads/cd34/annotated-after.png",
-          "name": "annotated-after.png",
-          "source": "upload"
+          "path": "attachment:att_1",
+          "name": "after.png",
+          "annotation": {
+            "width": 1280,
+            "height": 800,
+            "marks": [
+              {
+                "n": 1,
+                "x": 412,
+                "y": 188,
+                "tailX": 520,
+                "tailY": 96,
+                "message": "This button should be blue"
+              },
+              {
+                "n": 2,
+                "x": 64,
+                "y": 700,
+                "message": "Typo: \"Sumbit\""
+              }
+            ]
+          }
+        },
+        {
+          "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
+          "name": "localhost.png",
+          "source": "upload",
+          "annotation": {
+            "width": 2560,
+            "height": 1600,
+            "marks": [
+              {
+                "n": 1,
+                "x": 1280,
+                "y": 800,
+                "tailX": 1400,
+                "tailY": 640,
+                "message": "Center this"
+              }
+            ],
+            "page": {
+              "url": "http://localhost:3000/login",
+              "title": "Log in",
+              "tabId": 3,
+              "viewport": {
+                "width": 1280,
+                "height": 800
+              },
+              "scale": 2
+            }
+          }
         },
         {
           "path": "/Users/mark/Desktop/shot.png"
-        }
-      ],
-      "annotations": [
-        {
-          "attachment": 0,
-          "source": {
-            "kind": "attachment",
-            "id": "att_1",
-            "name": "after.png"
-          },
-          "width": 1280,
-          "height": 800,
-          "marks": [
-            {
-              "n": 1,
-              "x": 412,
-              "y": 188,
-              "tailX": 520,
-              "tailY": 96,
-              "message": "This button should be blue"
-            },
-            {
-              "n": 2,
-              "x": 64,
-              "y": 700,
-              "message": "Typo: \"Sumbit\""
-            }
-          ]
-        },
-        {
-          "attachment": 1,
-          "source": {
-            "kind": "browser",
-            "url": "http://localhost:3000/login",
-            "title": "Log in",
-            "tabId": 3,
-            "viewport": {
-              "width": 1280,
-              "height": 800
-            },
-            "scale": 2
-          },
-          "width": 2560,
-          "height": 1600,
-          "marks": [
-            {
-              "n": 1,
-              "x": 1280,
-              "y": 800,
-              "tailX": 1400,
-              "tailY": 640,
-              "message": "Center this"
-            }
-          ]
         }
       ]
     }
@@ -2129,37 +2079,58 @@
       "endedAt": null,
       "attachments": [
         {
-          "path": "/Users/mark/.harness/uploads/cd34/annotated-after.png",
-          "name": "annotated-after.png",
-          "source": "upload"
-        }
-      ],
-      "annotations": [
+          "path": "/Users/mark/.harness/attachments/att_1.png",
+          "name": "after.png",
+          "source": "file",
+          "annotation": {
+            "width": 1280,
+            "height": 800,
+            "marks": [
+              {
+                "n": 1,
+                "x": 412,
+                "y": 188,
+                "tailX": 520,
+                "tailY": 96,
+                "message": "This button should be blue"
+              },
+              {
+                "n": 2,
+                "x": 64,
+                "y": 700,
+                "message": "Typo: \"Sumbit\""
+              }
+            ]
+          }
+        },
         {
-          "attachment": 0,
-          "source": {
-            "kind": "attachment",
-            "id": "att_1",
-            "name": "after.png"
-          },
-          "width": 1280,
-          "height": 800,
-          "marks": [
-            {
-              "n": 1,
-              "x": 412,
-              "y": 188,
-              "tailX": 520,
-              "tailY": 96,
-              "message": "This button should be blue"
-            },
-            {
-              "n": 2,
-              "x": 64,
-              "y": 700,
-              "message": "Typo: \"Sumbit\""
+          "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
+          "name": "localhost.png",
+          "source": "upload",
+          "annotation": {
+            "width": 2560,
+            "height": 1600,
+            "marks": [
+              {
+                "n": 1,
+                "x": 1280,
+                "y": 800,
+                "tailX": 1400,
+                "tailY": 640,
+                "message": "Center this"
+              }
+            ],
+            "page": {
+              "url": "http://localhost:3000/login",
+              "title": "Log in",
+              "tabId": 3,
+              "viewport": {
+                "width": 1280,
+                "height": 800
+              },
+              "scale": 2
             }
-          ]
+          }
         }
       ]
     }
@@ -2728,28 +2699,21 @@
         {
           "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
           "name": "Pasted image.png",
-          "source": "upload"
-        }
-      ],
-      "promptAnnotations": [
-        {
-          "attachment": 1,
-          "source": {
-            "kind": "file",
-            "name": "Pasted image.png"
-          },
-          "width": 1170,
-          "height": 2532,
-          "marks": [
-            {
-              "n": 1,
-              "x": 585,
-              "y": 1200,
-              "tailX": 300,
-              "tailY": 900,
-              "message": "This overlaps the tab bar"
-            }
-          ]
+          "source": "upload",
+          "annotation": {
+            "width": 1170,
+            "height": 2532,
+            "marks": [
+              {
+                "n": 1,
+                "x": 585,
+                "y": 1200,
+                "tailX": 300,
+                "tailY": 900,
+                "message": "This overlaps the tab bar"
+              }
+            ]
+          }
         }
       ],
       "completedAt": null
@@ -3125,37 +3089,58 @@
           "endedAt": null,
           "attachments": [
             {
-              "path": "/Users/mark/.harness/uploads/cd34/annotated-after.png",
-              "name": "annotated-after.png",
-              "source": "upload"
-            }
-          ],
-          "annotations": [
+              "path": "/Users/mark/.harness/attachments/att_1.png",
+              "name": "after.png",
+              "source": "file",
+              "annotation": {
+                "width": 1280,
+                "height": 800,
+                "marks": [
+                  {
+                    "n": 1,
+                    "x": 412,
+                    "y": 188,
+                    "tailX": 520,
+                    "tailY": 96,
+                    "message": "This button should be blue"
+                  },
+                  {
+                    "n": 2,
+                    "x": 64,
+                    "y": 700,
+                    "message": "Typo: \"Sumbit\""
+                  }
+                ]
+              }
+            },
             {
-              "attachment": 0,
-              "source": {
-                "kind": "attachment",
-                "id": "att_1",
-                "name": "after.png"
-              },
-              "width": 1280,
-              "height": 800,
-              "marks": [
-                {
-                  "n": 1,
-                  "x": 412,
-                  "y": 188,
-                  "tailX": 520,
-                  "tailY": 96,
-                  "message": "This button should be blue"
-                },
-                {
-                  "n": 2,
-                  "x": 64,
-                  "y": 700,
-                  "message": "Typo: \"Sumbit\""
+              "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
+              "name": "localhost.png",
+              "source": "upload",
+              "annotation": {
+                "width": 2560,
+                "height": 1600,
+                "marks": [
+                  {
+                    "n": 1,
+                    "x": 1280,
+                    "y": 800,
+                    "tailX": 1400,
+                    "tailY": 640,
+                    "message": "Center this"
+                  }
+                ],
+                "page": {
+                  "url": "http://localhost:3000/login",
+                  "title": "Log in",
+                  "tabId": 3,
+                  "viewport": {
+                    "width": 1280,
+                    "height": 800
+                  },
+                  "scale": 2
                 }
-              ]
+              }
             }
           ]
         }
@@ -3611,63 +3596,58 @@
       "text": "Fix the marked spots.",
       "attachments": [
         {
-          "path": "/Users/mark/.harness/uploads/cd34/annotated-after.png",
-          "name": "annotated-after.png",
-          "source": "upload"
-        }
-      ],
-      "annotations": [
-        {
-          "attachment": 0,
-          "source": {
-            "kind": "attachment",
-            "id": "att_1",
-            "name": "after.png"
-          },
-          "width": 1280,
-          "height": 800,
-          "marks": [
-            {
-              "n": 1,
-              "x": 412,
-              "y": 188,
-              "tailX": 520,
-              "tailY": 96,
-              "message": "This button should be blue"
-            },
-            {
-              "n": 2,
-              "x": 64,
-              "y": 700,
-              "message": "Typo: \"Sumbit\""
-            }
-          ]
+          "path": "/Users/mark/.harness/attachments/att_1.png",
+          "name": "after.png",
+          "source": "file",
+          "annotation": {
+            "width": 1280,
+            "height": 800,
+            "marks": [
+              {
+                "n": 1,
+                "x": 412,
+                "y": 188,
+                "tailX": 520,
+                "tailY": 96,
+                "message": "This button should be blue"
+              },
+              {
+                "n": 2,
+                "x": 64,
+                "y": 700,
+                "message": "Typo: \"Sumbit\""
+              }
+            ]
+          }
         },
         {
-          "attachment": 1,
-          "source": {
-            "kind": "browser",
-            "url": "http://localhost:3000/login",
-            "title": "Log in",
-            "tabId": 3,
-            "viewport": {
-              "width": 1280,
-              "height": 800
-            },
-            "scale": 2
-          },
-          "width": 2560,
-          "height": 1600,
-          "marks": [
-            {
-              "n": 1,
-              "x": 1280,
-              "y": 800,
-              "tailX": 1400,
-              "tailY": 640,
-              "message": "Center this"
+          "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
+          "name": "localhost.png",
+          "source": "upload",
+          "annotation": {
+            "width": 2560,
+            "height": 1600,
+            "marks": [
+              {
+                "n": 1,
+                "x": 1280,
+                "y": 800,
+                "tailX": 1400,
+                "tailY": 640,
+                "message": "Center this"
+              }
+            ],
+            "page": {
+              "url": "http://localhost:3000/login",
+              "title": "Log in",
+              "tabId": 3,
+              "viewport": {
+                "width": 1280,
+                "height": 800
+              },
+              "scale": 2
             }
-          ]
+          }
         }
       ]
     }
@@ -3858,34 +3838,24 @@
       "promptAttachments": []
     },
     {
-      "promptAnnotations": []
-    },
-    {
       "promptAttachments": [
         {
-          "path": "/Users/mark/.harness/uploads/upl_2/annotated-shot.png",
-          "name": "annotated-shot.png"
-        }
-      ],
-      "promptAnnotations": [
-        {
-          "attachment": 0,
-          "source": {
-            "kind": "file",
-            "name": "shot.png"
-          },
-          "width": 640,
-          "height": 480,
-          "marks": [
-            {
-              "n": 1,
-              "x": 10,
-              "y": 20,
-              "tailX": 200,
-              "tailY": 120,
-              "message": "Here"
-            }
-          ]
+          "path": "attachment:att_1",
+          "name": "after.png",
+          "annotation": {
+            "width": 640,
+            "height": 480,
+            "marks": [
+              {
+                "n": 1,
+                "x": 10,
+                "y": 20,
+                "tailX": 200,
+                "tailY": 120,
+                "message": "Here"
+              }
+            ]
+          }
         }
       ]
     },
@@ -4077,13 +4047,6 @@
       "harness:ready",
       "harness:openExternal",
       "harness:navigate"
-    ],
-    "AnnotationSource": [
-      "attachment",
-      "prompt-attachment",
-      "message-attachment",
-      "file",
-      "browser"
     ]
   },
   "enums": {
@@ -4412,22 +4375,6 @@
         {
           "type": "harness:resize",
           "height": 400
-        }
-      ]
-    },
-    {
-      "type": "AnnotationSource",
-      "samples": [
-        {
-          "kind": "region",
-          "page": 2,
-          "rect": {
-            "x": 10,
-            "y": 20,
-            "width": 300,
-            "height": 200
-          },
-          "name": "spec.pdf"
         }
       ]
     },
