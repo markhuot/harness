@@ -19,6 +19,19 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   sees attached images along with your message.
 - The Transcript shows the files sent with each message under it, with thumbnails. A file that was
   moved or deleted afterwards shows as missing.
+- Tear off a ticket's tabs. On the Mac, drag any tab of a ticket (Spec, Transcript, Details,
+  Browser and the rest) onto the board area to give it a pane of its own, so you can read the Spec
+  while you follow the Transcript. You can tear off one browser tab the same way, so two browser
+  tabs can run side by side, or drag off the message box. Right-click a tab for Open to the
+  Right/Below/Left/Above or Open in New Window. On iPad, drag a tab, a browser tab or the message
+  box out of its window, or choose Open in New Window from its menu, to give it a window of its own.
+- A torn-off tab stays in its ticket's tab bar. Selecting it there shows **Return to this window**,
+  which closes the separate pane or window and brings the tab back.
+- On the Mac, you can drag anything that opens as a pane out of the window to give it a window of
+  its own: a board card, a conductor's child ticket, a pane by its header, a tab or a browser tab.
+  File panes now have the pop-out button too. On iPad, drag a board card out of the window to open
+  its ticket in a new window. Dragging a card doesn't move it to another column; Move to … in its
+  menu still does that.
 
 ### Changed
 
