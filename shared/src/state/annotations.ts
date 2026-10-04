@@ -20,6 +20,8 @@ export interface DraftMark {
   anchor: Point;
   tail: Point | null;
   message: string;
+  /** On a browser screenshot: the element under the anchor (BrowserElement), once looked up. */
+  element?: { path: string; text: string } | null;
 }
 
 /** How far (in display points) the pointer has to move between press and release to make an arrow rather than a click. */
@@ -119,13 +121,20 @@ export function moveMark(marks: readonly DraftMark[], hit: MarkHit, to: Point): 
   return marks.map((m, i) => {
     if (i !== hit.index) return m;
     if (hit.part === "badge" && m.tail) return { ...m, tail: at };
-    return { ...m, anchor: at };
+    // The anchor moved, so whatever element it named is no longer known.
+    const { element: _gone, ...rest } = m;
+    return { ...rest, anchor: at };
   });
 }
 
 /** `marks` without the one at `index`; the ones after it move up a number. */
 export function removeMark(marks: readonly DraftMark[], index: number): DraftMark[] {
   return marks.filter((_, i) => i !== index);
+}
+
+/** `marks` with the element under the anchor of the one at `index` set (null: there's none, or the page moved on). */
+export function setMarkElement(marks: readonly DraftMark[], index: number, element: { path: string; text: string } | null): DraftMark[] {
+  return marks.map((m, i) => (i === index ? { ...m, element } : m));
 }
 
 /** `marks` with the message of the one at `index` replaced. */
@@ -144,6 +153,10 @@ export function marksForMessage(marks: readonly DraftMark[], width: number, heig
       out.tailX = Math.round(m.tail.x * width);
       out.tailY = Math.round(m.tail.y * height);
     }
+    if (m.element) {
+      out.path = m.element.path;
+      out.text = m.element.text;
+    }
     return out;
   });
 }
@@ -159,11 +172,15 @@ export function annotationNotesLabel(count: number): string {
  */
 export function draftMarksFrom(a: Pick<AttachmentAnnotation, "width" | "height" | "marks">): DraftMark[] {
   const unit = (x: number, y: number) => toUnit({ x, y }, a.width, a.height);
-  return a.marks.map((m) => ({
-    anchor: unit(m.x, m.y),
-    tail: m.tailX !== undefined && m.tailY !== undefined ? unit(m.tailX, m.tailY) : null,
-    message: m.message,
-  }));
+  return a.marks.map((m) => {
+    const out: DraftMark = {
+      anchor: unit(m.x, m.y),
+      tail: m.tailX !== undefined && m.tailY !== undefined ? unit(m.tailX, m.tailY) : null,
+      message: m.message,
+    };
+    if (m.path !== undefined) out.element = { path: m.path, text: m.text ?? "" };
+    return out;
+  });
 }
 
 /** Both absent, or the same size, page and marks. */

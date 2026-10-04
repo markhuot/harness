@@ -11,6 +11,7 @@ import {
   marksForMessage,
   moveMark,
   removeMark,
+  setMarkElement,
   setMarkMessage,
   toUnit,
   type DraftMark,
@@ -137,3 +138,32 @@ export const draftMarksFromCases = cases(draftMarksFrom, {
   "an arrow and a click": { width: 200, height: 100, marks: [{ n: 1, x: 50, y: 25, tailX: 100, tailY: 100, message: "a" }, { n: 2, x: 200, y: 0, message: "" }] },
   "none": { width: 10, height: 10, marks: [] },
 });
+
+// The element under a browser mark's anchor (AnnotationMark.path/.text).
+const named: DraftMark = { anchor: { x: 0.5, y: 0.5 }, tail: { x: 0.2, y: 0.2 }, message: "a", element: { path: "#save", text: "Save" } };
+export const markElementCases = cases(
+  ({ step }: { step: "send" | "reopen" | "move tail" | "move anchor" | "clear" | "set" }) => {
+    switch (step) {
+      case "send":
+        return marksForMessage([named], 100, 100);
+      case "reopen":
+        return draftMarksFrom({ width: 100, height: 100, marks: [{ n: 1, x: 50, y: 50, message: "", path: "body > p", text: "" }] });
+      case "move tail":
+        return moveMark([named], { index: 0, part: "badge" }, { x: 0.1, y: 0.1 });
+      case "move anchor":
+        return moveMark([named], { index: 0, part: "anchor" }, { x: 0.6, y: 0.6 });
+      case "clear":
+        return marksForMessage(setMarkElement([named], 0, null), 100, 100);
+      case "set":
+        return setMarkElement([{ ...named, element: undefined }], 0, { path: "#other", text: "Other" });
+    }
+  },
+  {
+    "sent with the mark": { step: "send" },
+    "reopened from a sent mark": { step: "reopen" },
+    "moving the tail keeps it": { step: "move tail" },
+    "moving the anchor forgets it": { step: "move anchor" },
+    "null leaves it out of the message": { step: "clear" },
+    "set on one mark": { step: "set" },
+  },
+);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  setMarkElement,
   draftMarksFrom,
   sameAnnotation,
   annotationNotesLabel,
@@ -100,5 +101,15 @@ describe("annotations", () => {
     const a = { width: 200, height: 100, marks: [{ n: 1, x: 50, y: 25, tailX: 100, tailY: 100, message: "a" }, { n: 2, x: 200, y: 0, message: "" }] };
     expect(draftMarksFrom(a)).toEqual([arrow(0.25, 0.25, 0.5, 1, "a"), click(1, 0, "")]);
     expect(marksForMessage(draftMarksFrom(a), 200, 100)).toEqual(a.marks);
+  });
+
+  test("an anchor's element goes with the mark, and moving the anchor forgets it", () => {
+    const named = { ...arrow(0.5, 0.5, 0.2, 0.2, "a"), element: { path: "#save", text: "Save" } };
+    expect(marksForMessage([named], 100, 100)[0]).toEqual({ n: 1, x: 50, y: 50, tailX: 20, tailY: 20, message: "a", path: "#save", text: "Save" });
+    expect(draftMarksFrom({ width: 100, height: 100, marks: marksForMessage([named], 100, 100) })[0]!.element).toEqual({ path: "#save", text: "Save" });
+    // Moving the tail keeps it; moving the anchor drops it until it's looked up again.
+    expect(moveMark([named], { index: 0, part: "badge" }, { x: 0.1, y: 0.1 })[0]!.element).toEqual({ path: "#save", text: "Save" });
+    expect(moveMark([named], { index: 0, part: "anchor" }, { x: 0.6, y: 0.6 })[0]!.element).toBeUndefined();
+    expect(marksForMessage(setMarkElement([named], 0, null), 100, 100)[0]).not.toHaveProperty("path");
   });
 });

@@ -847,6 +847,127 @@
       "output": false
     }
   ],
+  "markElementCases": [
+    {
+      "name": "sent with the mark",
+      "input": {
+        "step": "send"
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 50,
+          "y": 50,
+          "message": "a",
+          "tailX": 20,
+          "tailY": 20,
+          "path": "#save",
+          "text": "Save"
+        }
+      ]
+    },
+    {
+      "name": "reopened from a sent mark",
+      "input": {
+        "step": "reopen"
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "tail": null,
+          "message": "",
+          "element": {
+            "path": "body > p",
+            "text": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "moving the tail keeps it",
+      "input": {
+        "step": "move tail"
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "tail": {
+            "x": 0.1,
+            "y": 0.1
+          },
+          "message": "a",
+          "element": {
+            "path": "#save",
+            "text": "Save"
+          }
+        }
+      ]
+    },
+    {
+      "name": "moving the anchor forgets it",
+      "input": {
+        "step": "move anchor"
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.6,
+            "y": 0.6
+          },
+          "tail": {
+            "x": 0.2,
+            "y": 0.2
+          },
+          "message": "a"
+        }
+      ]
+    },
+    {
+      "name": "null leaves it out of the message",
+      "input": {
+        "step": "clear"
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 50,
+          "y": 50,
+          "message": "a",
+          "tailX": 20,
+          "tailY": 20
+        }
+      ]
+    },
+    {
+      "name": "set on one mark",
+      "input": {
+        "step": "set"
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "tail": {
+            "x": 0.2,
+            "y": 0.2
+          },
+          "message": "a",
+          "element": {
+            "path": "#other",
+            "text": "Other"
+          }
+        }
+      ]
+    }
+  ],
   "marksForMessageCases": [
     {
       "name": "none",
