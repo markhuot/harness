@@ -926,6 +926,47 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 .composer-bar .switch {
   font-size: 11.5px;
 }
+/* (+) at the input's left, and the files waiting to go with the message above it. */
+.composer {
+  position: relative;
+}
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.composer-row .composer-input {
+  flex: 1;
+  min-width: 0;
+}
+.composer-attach {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  color: var(--text-2);
+}
+.composer-attach[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.composer > .prompt-attachment-list-wrap {
+  margin-bottom: 8px;
+}
+.composer .prompt-attachment-list {
+  max-height: 160px;
+  overflow-y: auto;
+}
+/* Files hovering over the composer. */
+.composer.dropping {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
+}
+.composer .draft-drop-hint {
+  top: 50%;
+}
 
 /* Details tab */
 .details {
@@ -1129,6 +1170,19 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   background: var(--accent-soft);
   border-radius: 12px 12px 3px 12px;
   padding: 8px 12px;
+}
+/* The files sent with a message, under its bubble (components/PromptAttachments.tsx, read-only). */
+.t-attachments {
+  max-width: 88%;
+  min-width: 220px;
+  margin-top: 4px;
+}
+.t-attachments .prompt-attachment-list-wrap {
+  align-items: stretch;
+}
+.t-attachments .prompt-attachment-list {
+  width: auto;
+  margin: 0;
 }
 .t-assistant {
   padding: 2px 0;

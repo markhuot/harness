@@ -1,7 +1,7 @@
 // The files attached to a New session's prompt (Ticket.promptAttachments, DESIGN.md "Prompt
-// attachments"), as one vertical list used in two places: editable in the draft editor (each row
-// with ×, uploads on their way, the Attach button) and read-only at the bottom of a ticket's Spec
-// tab. Every row starts with the same square (an image's thumbnail, or a file icon), so the names
+// attachments"), and the files sent with a message, as one vertical list: editable in the draft
+// editor and the ticket's message composer (each row with ×, uploads on their way), read-only at
+// the bottom of a ticket's Spec tab and under a message in the Transcript. Every row starts with the same square (an image's thumbnail, or a file icon), so the names
 // line up. A file can go missing after it was attached (moved or deleted on disk): an image that
 // won't load, or a file the service answers 404 for, shows dimmed with where it was. Clicking an
 // image opens the lightbox, clicking a file reveals it in Finder.
@@ -102,6 +102,7 @@ function useMissing(a: PromptAttachment, source: Source): { missing: boolean; fa
 export function PromptAttachmentList({
   items,
   ticketKey,
+  urlOf,
   served,
   onRemove,
   pending = [],
@@ -110,6 +111,8 @@ export function PromptAttachmentList({
   items: readonly PromptAttachment[];
   /** The ticket the service has them on: its files are read from there. Null before the first save. */
   ticketKey: string | null;
+  /** Where the service serves the file at index i, for files not on a ticket's prompt (a message's, in the Transcript); takes the place of `ticketKey`'s */
+  urlOf?: (index: number) => string;
   /** The list as the service has it (indexes in the service's URLs are by this list); defaults to `items` */
   served?: readonly PromptAttachment[] | null;
   /** Editable: each row gets × */
@@ -121,7 +124,7 @@ export function PromptAttachmentList({
 }) {
   const { client } = useStore();
   const [open, setOpen] = useState<number | null>(null);
-  const urlAt = ticketKey ? (i: number) => client.promptAttachmentUrl(ticketKey, i) : null;
+  const urlAt = urlOf ?? (ticketKey ? (i: number) => client.promptAttachmentUrl(ticketKey, i) : null);
   const sourceOf = (a: PromptAttachment): Source => attachmentSource(a, previews.get(a.path), served === undefined ? items : served, urlAt);
 
   // The lightbox steps through the images that have something to show.

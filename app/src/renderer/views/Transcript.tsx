@@ -1,10 +1,11 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
+import type { PromptAttachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
 import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
+import { PromptAttachmentList } from "../components/PromptAttachments";
 import { useStickToBottom } from "../components/stickToBottom";
 
 export { groupTranscript, toolPreview } from "@harness/shared/state";
@@ -113,6 +114,16 @@ export function Transcript({
   );
 }
 
+/** The files sent with a message, under its bubble: read-only, served from the transcript entry. */
+function MessageAttachments({ entryId, items }: { entryId: string; items: PromptAttachment[] }) {
+  const { client } = useStore();
+  return (
+    <div className="t-attachments" data-testid="message-attachments">
+      <PromptAttachmentList items={items} ticketKey={null} urlOf={(i) => client.messageAttachmentUrl(entryId, i)} />
+    </div>
+  );
+}
+
 const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry; who: string }) {
   const c = entry.content;
   const time = new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -124,9 +135,12 @@ const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry
             <div className="t-who">
               <Icon name="user" size={12} /> You <span className="t-time">{time}</span>
             </div>
-            <div className="t-bubble">
-              <Markdown text={c.text} />
-            </div>
+            {c.text.trim() && (
+              <div className="t-bubble">
+                <Markdown text={c.text} />
+              </div>
+            )}
+            {!!c.attachments?.length && <MessageAttachments entryId={entry.id} items={c.attachments} />}
           </div>
         );
       }
