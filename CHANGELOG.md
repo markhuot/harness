@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- New sessions take attachments, and the agent sees attached images along with your prompt. They're
+- New sessions take attachments, and the agent sees attached images along with your prompt. Attachments are
   listed under the prompt the same way the Spec tab shows them, each with a remove button. On the
   Mac, drop files from Finder onto the New session, pick several with the paperclip button, or
   paste an image. Dropped and picked files stay where they are on disk. Pasted images are saved in
