@@ -362,6 +362,9 @@ try {
   check("the screenshot's size is the page's in device pixels, named after its host", !!shotAnn && !!page && Math.abs(shotAnn.width - page.viewport.width * page.scale) <= 2 && c2!.attachments![1]!.name === "127.0.0.1.png", JSON.stringify({ w: shotAnn?.width, name: c2?.attachments?.[1]?.name }));
 
   // ================================================================ 5. New session
+  // The send finished in the app (it then shows the Transcript, which would win over a navigation started before).
+  await until("the composer clears after the send", async () => (await composerRows()).length === 0, 10000);
+  await Bun.sleep(300);
   await go("#/compose");
   await until("New session pane", () => exists('[data-testid="draft-pane"] .draft-prompt'), 10000);
   await type(".draft-prompt", "Make the diagram match.");
