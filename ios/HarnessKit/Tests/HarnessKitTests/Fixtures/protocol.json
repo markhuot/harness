@@ -4082,6 +4082,7 @@
       "attachment",
       "prompt-attachment",
       "message-attachment",
+      "file",
       "browser"
     ]
   },

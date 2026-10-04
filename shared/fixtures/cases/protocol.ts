@@ -1050,7 +1050,7 @@ export const discriminators: Record<string, string[]> = {
   BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, newTab: true, closeTab: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),
-  AnnotationSource: all<P.AnnotationSource["kind"]>({ attachment: true, "prompt-attachment": true, "message-attachment": true, browser: true }),
+  AnnotationSource: all<P.AnnotationSource["kind"]>({ attachment: true, "prompt-attachment": true, "message-attachment": true, file: true, browser: true }),
 };
 
 // ---------------------------------------------------------------------------
