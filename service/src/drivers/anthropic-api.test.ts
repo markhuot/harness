@@ -4,7 +4,7 @@ import type { RunKind, Settings } from "@harness/shared";
 import { fakeBrowser, fakeContext, fakeOps } from "../tools/fakes";
 import { toolsForRun } from "../tools/index";
 import type { ToolDefinition } from "../tools/types";
-import { AnthropicApiDriver, DEFAULT_ANTHROPIC_MODEL, MAX_ITERATIONS, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
+import { AnthropicApiDriver, DEFAULT_ANTHROPIC_MODEL, MAX_ITERATIONS, SAVED_IMAGE_PLACEHOLDER, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
 import { RunInput, type DriverEvent, type RunRequest } from "./types";
 
 const baseSettings: Settings = {
@@ -234,6 +234,27 @@ describe("anthropic-api driver", () => {
     expect((blocks[1] as Anthropic.TextBlockParam).text).toBe("Stop and write HELLO.md instead");
     expect(input.undelivered()).toEqual([]);
     expect(input.push("too late")).toBe(false);
+  });
+
+  test("a steered message's images go right after its text, and are saved as a placeholder", async () => {
+    const { driver, fake } = driverWith([
+      { content: [toolUse("tu_1", "post_note", { note: "halfway" })], stop_reason: "tool_use" },
+      { content: [text("I see it.")], stop_reason: "end_turn" },
+    ]);
+    const { req } = makeReq("work", "go");
+    const input = new RunInput();
+    req.input = input;
+    const image = { name: "shot.png", path: "/tmp/shot.png", mediaType: "image/png" as const, data: "iVBORw0KGgo=" };
+    const states: unknown[] = [];
+    for await (const ev of driver.run(req)) {
+      if (ev.type === "tool_call") input.push("Match this", { text: "Match this", attachments: [] }, [image]);
+      if (ev.type === "state") states.push(ev.state);
+    }
+    const blocks = fake.requests[1]!.messages.at(-1)!.content as Anthropic.ContentBlockParam[];
+    expect(blocks.map((b) => b.type)).toEqual(["tool_result", "text", "image"]);
+    expect(blocks[2]).toEqual({ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } });
+    expect(JSON.stringify(states.at(-1))).not.toContain("iVBORw0KGgo=");
+    expect(JSON.stringify(states.at(-1))).toContain(SAVED_IMAGE_PLACEHOLDER.slice(0, 30));
   });
 
   test("a message waiting when the model ends its turn starts another turn instead of ending the run", async () => {

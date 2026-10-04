@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { DriverInfo, ModelInfo, Settings } from "@harness/shared";
 import type { ToolDefinition, ToolResult } from "../tools/types";
-import { executeTool, type Driver, type DriverEvent, type RunRequest } from "./types";
+import { executeTool, type Driver, type DriverEvent, type RunImage, type RunRequest } from "./types";
 
 export const MAX_ITERATIONS = 50;
 /** Used when no model is chosen for a run (ticket, project and settings all unset). */
@@ -94,6 +94,10 @@ export function savedMessages(messages: Anthropic.MessageParam[]): Anthropic.Mes
   );
 }
 
+function imageBlocks(images: RunImage[] | undefined): Anthropic.ImageBlockParam[] {
+  return (images ?? []).map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } }));
+}
+
 function readState(state: unknown): Anthropic.MessageParam[] {
   const messages = (state as Partial<AnthropicApiState> | null)?.messages;
   return Array.isArray(messages) ? structuredClone(messages) : [];
@@ -162,15 +166,16 @@ export class AnthropicApiDriver implements Driver {
   }
 
   /**
-   * Human messages sent since the last model turn, as text blocks for the next user message
-   * (DESIGN.md "Steering"). They're delivered once they're in the conversation: the state
-   * yielded next carries them, so even an aborted run keeps them for the next one.
+   * Human messages sent since the last model turn, as text blocks (each followed by its attached
+   * images) for the next user message (DESIGN.md "Steering"). They're delivered once they're in
+   * the conversation: the state yielded next carries them, so even an aborted run keeps them for
+   * the next one.
    */
-  private steering(req: RunRequest): Anthropic.TextBlockParam[] {
+  private steering(req: RunRequest): (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] {
     if (!req.input) return [];
-    return req.input.take().map((m) => {
+    return req.input.take().flatMap((m) => {
       req.input!.delivered(m.id);
-      return { type: "text", text: m.text };
+      return [{ type: "text" as const, text: m.text }, ...imageBlocks(m.images)];
     });
   }
 
@@ -187,8 +192,7 @@ export class AnthropicApiDriver implements Driver {
 
     const messages = readState(req.state);
     const pending = danglingToolResults(messages);
-    const images = (req.images ?? []).map((i) => ({ type: "image" as const, source: { type: "base64" as const, media_type: i.mediaType, data: i.data } }));
-    messages.push({ role: "user", content: [...pending, { type: "text", text: req.prompt }, ...images] });
+    messages.push({ role: "user", content: [...pending, { type: "text", text: req.prompt }, ...imageBlocks(req.images)] });
 
     let inputTokens = 0;
     let outputTokens = 0;

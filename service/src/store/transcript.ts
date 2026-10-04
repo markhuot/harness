@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { TranscriptContent, TranscriptEntry, TranscriptRole } from "@harness/shared";
+import type { PromptAttachment, TranscriptContent, TranscriptEntry, TranscriptRole } from "@harness/shared";
 import { fromJson, newId, now } from "./util";
 
 interface EntryRow {
@@ -42,6 +42,24 @@ export class TranscriptRepo {
         .run({ id, sessionId, runId, subagentId, seq: row.next_seq, role, content: JSON.stringify(content), t: now() });
     })();
     return toEntry(this.db.query("SELECT * FROM transcript WHERE id = $id").get({ id }) as EntryRow);
+  }
+
+  get(id: string): TranscriptEntry | null {
+    const r = this.db.query("SELECT * FROM transcript WHERE id = $id").get({ id }) as EntryRow | null;
+    return r ? toEntry(r) : null;
+  }
+
+  /**
+   * The files attached to human messages (a user entry's `attachments`), with the session each
+   * was sent in. The upload sweep keeps these, and deleting a ticket removes its own.
+   */
+  messageAttachments(sessionId?: string): { sessionId: string; attachment: PromptAttachment }[] {
+    const where = "role = 'user' AND json_extract(content, '$.attachments') IS NOT NULL" + (sessionId ? " AND session_id = $sessionId" : "");
+    const rows = this.db.query(`SELECT session_id, content FROM transcript WHERE ${where}`).all(sessionId ? { sessionId } : {}) as { session_id: string; content: string }[];
+    return rows.flatMap((r) => {
+      const c = fromJson<TranscriptContent>(r.content, { type: "text", text: "" });
+      return c.type === "text" && c.attachments ? c.attachments.map((attachment) => ({ sessionId: r.session_id, attachment })) : [];
+    });
   }
 
   /** The session agent's entries, or with `subagentId` that sub-agent's. */

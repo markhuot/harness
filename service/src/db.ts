@@ -621,6 +621,12 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN prompt_attachments TEXT NOT NULL DEFAULT '[]';
   `,
+  // 29: message attachments (DESIGN.md "Prompt attachments"): the files a human attached to the
+  //     message a run answers, as JSON [{ path, name, source }], so a queued run still has them
+  //     after a restart. The transcript's user entry carries the same list for the apps.
+  `
+  ALTER TABLE runs ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
+  `,
 ];
 
 /**

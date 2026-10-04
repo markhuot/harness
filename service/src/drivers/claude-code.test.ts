@@ -931,6 +931,22 @@ describe("ClaudeCodeDriver steering", () => {
     expect(input.push("too late")).toBe(false);
   });
 
+  test("a message's attached images go to the CLI as image blocks after its text", async () => {
+    const s = setup({ script: [init(), say("working"), { __until_input: 1 }, { __replay: true }, say("looked"), success()] });
+    const input = new RunInput();
+    const image = { name: "shot.png", path: "/tmp/shot.png", mediaType: "image/png" as const, data: "iVBORw0KGgo=" };
+    for await (const ev of s.driver.run(request({ input }))) {
+      if (ev.type === "text" && ev.text === "working") input.push("Match this", { text: "Match this", attachments: [] }, [image]);
+    }
+    expect(s.input().map((m) => m.content)).toEqual([
+      [
+        { type: "text", text: "Match this" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } },
+      ],
+    ]);
+    expect(input.undelivered()).toEqual([]);
+  });
+
   test("a message the CLI hasn't taken in when the turn ends keeps stdin open for the turn it starts", async () => {
     const s = setup({
       script: [
@@ -973,7 +989,7 @@ describe("ClaudeCodeDriver steering", () => {
     const { error } = await steer(s, input, "Also update the README");
     expect(error).toBeNull();
     expect(s.marks()).toEqual([{ label: "after result", stdinClosed: true }]);
-    expect(input.undelivered()).toEqual(["Also update the README"]);
+    expect(input.undelivered()).toEqual([{ text: "Also update the README", attachments: [] }]);
     expect(input.push("later")).toBe(false);
   });
 

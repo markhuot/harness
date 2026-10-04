@@ -11,7 +11,7 @@ test("take hands each message out once; it stays undelivered until delivered()",
   expect(input.inFlight().map((m) => m.text)).toEqual(["a", "b"]);
   expect(input.delivered(taken[0]!.id)).toBe(true);
   expect(input.delivered(taken[0]!.id)).toBe(false);
-  expect(input.undelivered()).toEqual(["b"]);
+  expect(input.undelivered()).toEqual([{ text: "b", attachments: [] }]);
   expect(input.pending).toBe(true);
 });
 
@@ -23,12 +23,17 @@ test("a closed input refuses pushes and stops notifying", () => {
   input.close();
   expect(input.push("b")).toBe(false);
   expect(pushes).toBe(1);
-  expect(input.undelivered()).toEqual(["a"]);
+  expect(input.undelivered()).toEqual([{ text: "a", attachments: [] }]);
 });
 
-test("undelivered gives back what the human wrote, not the text with attached files", () => {
+test("undelivered gives back what the human sent, not the text with attached files", () => {
   const input = new RunInput();
-  input.push("see @a.ts\n\n<file a.ts>…</file>", "see @a.ts");
-  expect(input.take()[0]!.text).toBe("see @a.ts\n\n<file a.ts>…</file>");
-  expect(input.undelivered()).toEqual(["see @a.ts"]);
+  const attachments = [{ path: "/tmp/shot.png", name: "shot.png", source: "upload" as const }];
+  const image = { name: "shot.png", path: "/tmp/shot.png", mediaType: "image/png" as const, data: "AAAA" };
+  input.push("see @a.ts\n\n<file a.ts>…</file>\n\n<attachments>…</attachments>", { text: "see @a.ts", attachments }, [image]);
+  const [taken] = input.take();
+  expect(taken!.text).toBe("see @a.ts\n\n<file a.ts>…</file>\n\n<attachments>…</attachments>");
+  expect(taken!.images).toEqual([image]);
+  expect(input.inFlight()[0]!.images).toEqual([image]);
+  expect(input.undelivered()).toEqual([{ text: "see @a.ts", attachments }]);
 });
