@@ -109,6 +109,7 @@ function DriverPanel({ driver: d, settings }: { driver: DriverInfo; settings: Pu
       )}
       {d.id === "anthropic-api" && settings && <AnthropicKeyRow settings={settings} />}
       {d.id === "claude-code" && settings && <ClaudeTokenRow settings={settings} />}
+      {d.id === "github-copilot" && settings && <CopilotTokenRow settings={settings} />}
       {settings && (
         <Row title="Review model" sub="Model for agent review runs on this driver.">
           <div data-testid={`model-settings-${d.id}`}>
@@ -174,6 +175,41 @@ function ClaudeTokenRow({ settings }: { settings: PublicSettings }) {
       placeholder="sk-ant-oat01-…"
       savedLabel="Token saved"
       isSet={settings.claudeOauthTokenSet}
+      save={save}
+      savedMessage="Token saved"
+      clearedMessage="Token cleared"
+    />
+  );
+}
+
+/**
+ * A GitHub token for the Copilot CLI (COPILOT_GITHUB_TOKEN): a fine-grained personal access token
+ * with the Copilot Requests permission. Like the Claude token, it saves runs from depending on the
+ * Keychain login. Hidden for a service that predates the setting (copilotGithubTokenSet undefined).
+ */
+function CopilotTokenRow({ settings }: { settings: PublicSettings }) {
+  const { client, dispatch } = useStore();
+  const act = useAction();
+  if (settings.copilotGithubTokenSet === undefined) return null;
+  const save = async (v: string | null) => {
+    const out = await client.updateSettings({ copilotGithubToken: v });
+    const drivers = await act(() => client.listDrivers());
+    if (drivers) dispatch({ type: "drivers", drivers });
+    return out;
+  };
+  return (
+    <SecretRow
+      testId="copilot-github-token"
+      title="GitHub token"
+      sub={
+        <>
+          A fine-grained personal access token with the <b>Copilot Requests</b> permission (GitHub → Settings → Developer settings → Fine-grained tokens), or the output of <code>gh auth token</code>. Classic <code>ghp_</code> tokens don't work. Runs use it instead of the Copilot login in your Keychain, which the service can't always read when it starts at login.
+        </>
+      }
+      label="GitHub token for Copilot"
+      placeholder="github_pat_…"
+      savedLabel="Token saved"
+      isSet={settings.copilotGithubTokenSet}
       save={save}
       savedMessage="Token saved"
       clearedMessage="Token cleared"

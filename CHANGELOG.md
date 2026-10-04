@@ -11,6 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A GitHub Copilot driver. Choose it in Settings → Drivers (or per project or ticket) to run agents
+  with your Copilot subscription and any model Copilot offers. Log in from Settings → Drivers, which
+  shows a code to enter on GitHub, or paste a GitHub token there (a fine-grained token with the
+  Copilot Requests permission), which keeps working when the service starts at login. Messages you
+  send while a Copilot agent is working are queued for its next turn. Mac, iPhone and iPad.
 - Messages to a ticket can carry attachments. A (+) button at the left of the message box lets you
   attach files the same way a New session does: on the Mac, choose files or paste an image (you can
   also drop files on the message box or paste an image into it); on iPhone and iPad, attach from

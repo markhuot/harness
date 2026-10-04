@@ -189,6 +189,9 @@ describe("config tools behind human approval", () => {
       await expect(req.toolContext.ops.updateSettings(req.toolContext, { claudeOauthToken: "sk-ant-oat01-from-model" })).rejects.toThrow(
         "claudeOauthToken can't be changed with a tool: ask the human to enter it in Settings.",
       );
+      await expect(req.toolContext.ops.updateSettings(req.toolContext, { copilotGithubToken: "github_pat_from-model" })).rejects.toThrow(
+        "copilotGithubToken can't be changed with a tool: ask the human to enter it in Settings.",
+      );
     });
     h.orch.updateSettings({ anthropicApiKey: "sk-secret-123", claudeOauthToken: "sk-ant-oat01-secret-456" });
     await h.orch.createTicket({ projectId: h.project.id, spec: "go" });

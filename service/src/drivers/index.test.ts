@@ -6,11 +6,11 @@ const ids = (env: Record<string, string | undefined>) => createDrivers({ setting
 
 describe("createDrivers", () => {
   test("leaves the dummy driver out of a normal service", () => {
-    expect(ids({})).toEqual(["claude-code", "anthropic-api"]);
+    expect(ids({})).toEqual(["claude-code", "anthropic-api", "github-copilot"]);
   });
 
   test("adds it only for HARNESS_DUMMY_DRIVER=1", () => {
-    expect(ids({ HARNESS_DUMMY_DRIVER: "1" })).toEqual(["claude-code", "anthropic-api", "dummy"]);
+    expect(ids({ HARNESS_DUMMY_DRIVER: "1" })).toEqual(["claude-code", "anthropic-api", "github-copilot", "dummy"]);
     expect(ids({ HARNESS_DUMMY_DRIVER: "0" })).not.toContain("dummy");
     expect(ids({ HARNESS_DUMMY_DRIVER: "" })).not.toContain("dummy");
   });

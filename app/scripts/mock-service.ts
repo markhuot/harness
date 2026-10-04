@@ -95,6 +95,7 @@ let settings: PublicSettings = {
   watcherModels: {},
   anthropicApiKeySet: false,
   claudeOauthTokenSet: false,
+  copilotGithubTokenSet: false,
   listen: { mode: "localhost" },
   baseBranch: "main",
   browserIdleTabMinutes: 5,
@@ -1940,7 +1941,7 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET") return ok(settings);
     if (method === "PATCH") {
       const body = await readBody(req);
-      const { anthropicApiKey, claudeOauthToken, defaultModels, reviewModels, watcherModels, listen, prompts, ...rest } = body;
+      const { anthropicApiKey, claudeOauthToken, copilotGithubToken, defaultModels, reviewModels, watcherModels, listen, prompts, ...rest } = body;
       if (prompts !== undefined) settings.prompts = mergePrompts(prompts);
       if (listen !== undefined) {
         settings.listen = applyListen(listen);
@@ -1959,6 +1960,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         d.authenticated = true;
         d.detail = claudeOauthToken ? "Long-lived token" : "mark@happycog.com · Happy Cog (team)";
       }
+      if (copilotGithubToken !== undefined) settings.copilotGithubTokenSet = !!copilotGithubToken;
       broadcast({ kind: "settings.updated", settings });
       return ok(settings);
     }

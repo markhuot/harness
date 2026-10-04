@@ -28,6 +28,9 @@ public struct Settings: Codable, Sendable, Equatable {
     /// own login. Never sent to clients (PublicSettings.claudeOauthTokenSet instead); optional, so
     /// a missing key decodes as nil and nil is omitted.
     public var claudeOauthToken: String?
+    /// GitHub token the github-copilot driver passes to the CLI as COPILOT_GITHUB_TOKEN. Never sent
+    /// to clients (PublicSettings.copilotGithubTokenSet instead); optional like claudeOauthToken.
+    public var copilotGithubToken: String?
     /// Default base branch (projects and tickets may override it): what completed tickets merge into
     /// and new ticket branches start from. A valid git branch name; default "main". The service
     /// always sends it; optional so clients tolerate an older service without it.
@@ -51,7 +54,7 @@ public struct Settings: Codable, Sendable, Equatable {
         defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
-        anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, baseBranch: String? = nil,
+        anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil
     ) {
         self.defaultDriver = defaultDriver
@@ -64,6 +67,7 @@ public struct Settings: Codable, Sendable, Equatable {
         self.watcherModels = watcherModels
         self.anthropicApiKey = anthropicApiKey
         self.claudeOauthToken = claudeOauthToken
+        self.copilotGithubToken = copilotGithubToken
         self.baseBranch = baseBranch
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
@@ -78,8 +82,8 @@ public enum BrowserIdleTabs {
     public static let maxMinutes = 1440
 }
 
-/// `Omit<Settings, "anthropicApiKey" | "claudeOauthToken"> & { anthropicApiKeySet: boolean;
-/// claudeOauthTokenSet?: boolean }`: what GET /settings and the settings.updated event send.
+/// `Omit<Settings, "anthropicApiKey" | "claudeOauthToken" | "copilotGithubToken"> & {
+/// anthropicApiKeySet: boolean; claudeOauthTokenSet?: boolean; copilotGithubTokenSet?: boolean }`: what GET /settings and the settings.updated event send.
 public struct PublicSettings: Codable, Sendable, Equatable {
     public var defaultDriver: String
     public var maxConcurrentRuns: Int
@@ -99,13 +103,15 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before
     /// it omit it (nil); `hasClaudeOauthToken` reads it as false then.
     public var claudeOauthTokenSet: Bool?
+    /// Whether a GitHub token for the github-copilot driver is stored. nil from older services.
+    public var copilotGithubTokenSet: Bool?
 
     public init(
         defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
-        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil
+        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil
     ) {
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -121,10 +127,14 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         self.prompts = prompts
         self.anthropicApiKeySet = anthropicApiKeySet
         self.claudeOauthTokenSet = claudeOauthTokenSet
+        self.copilotGithubTokenSet = copilotGithubTokenSet
     }
 
     /// claudeOauthTokenSet, or false when an older service doesn't send it.
     public var hasClaudeOauthToken: Bool { claudeOauthTokenSet ?? false }
+
+    /// copilotGithubTokenSet, or false when an older service doesn't send it.
+    public var hasCopilotGithubToken: Bool { copilotGithubTokenSet ?? false }
 
     /// browserIdleTabMinutes, or the default when an older service doesn't send it.
     public var idleTabMinutes: Int { browserIdleTabMinutes ?? BrowserIdleTabs.defaultMinutes }

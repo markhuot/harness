@@ -187,7 +187,7 @@ function settingsView(settings: PublicSettings): unknown {
 export const getSettings = defineTool<{ include_prompts?: boolean }>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key and the long-lived Claude token are never shown; anthropicApiKeySet and claudeOauthTokenSet say whether one is stored.",
+    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key, the long-lived Claude token and the GitHub Copilot token are never shown; anthropicApiKeySet, claudeOauthTokenSet and copilotGithubTokenSet say whether one is stored.",
   inputSchema: schema({
     include_prompts: {
       type: "boolean",

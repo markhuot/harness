@@ -1560,6 +1560,7 @@
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
           "claudeOauthToken": "sk-ant-oat01-redacted",
+          "copilotGithubToken": "github_pat_redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -1657,6 +1658,7 @@
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
           "claudeOauthToken": "sk-ant-oat01-redacted",
+          "copilotGithubToken": "github_pat_redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -1762,6 +1764,7 @@
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
           "claudeOauthToken": "sk-ant-oat01-redacted",
+          "copilotGithubToken": "github_pat_redacted",
           "baseBranch": "trunk",
           "listen": {
             "mode": "tailscale"
@@ -1921,6 +1924,7 @@
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
           "claudeOauthToken": "sk-ant-oat01-redacted",
+          "copilotGithubToken": "github_pat_redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -2094,6 +2098,7 @@
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
           "claudeOauthToken": "sk-ant-oat01-redacted",
+          "copilotGithubToken": "github_pat_redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
@@ -2252,6 +2257,7 @@
           },
           "anthropicApiKey": "sk-ant-api03-redacted",
           "claudeOauthToken": "sk-ant-oat01-redacted",
+          "copilotGithubToken": "github_pat_redacted",
           "baseBranch": "main",
           "listen": {
             "mode": "tailscale"
