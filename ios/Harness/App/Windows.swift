@@ -5,7 +5,9 @@ import UIKit
 // The iPad's windows (ARCHITECTURE.md § App shell, Windows): any number of main windows (RootView,
 // each with its own Router) and ticket windows (TicketWindowRoot, keyed by TicketWindowValue).
 // AppModel, the BoardStore, ToastCenter and Actions are shared by all of them. On iPad at regular
-// width, opening a ticket opens (or brings forward) its window.
+// width, opening a ticket opens (or brings forward) its window. A pinned ticket window is one
+// torn-off tab (or browser tab, or the composer): the ticket's other windows read which ones are
+// open (WindowDirectory.tornOff) and show Return to this window in their place.
 
 /// The scene ids HarnessApp's WindowGroups use.
 enum SceneID {
@@ -13,11 +15,48 @@ enum SceneID {
 }
 
 /// The open windows: main windows, most recently active last, so a ticket window can send a
-/// section link (harness://board, …) to one and bring it forward; and ticket windows by key, so
-/// tapping a ticket whose window is open brings that window forward instead of opening another.
+/// section link (harness://board, …) to one and bring it forward; ticket windows by key, so
+/// tapping a ticket whose window is open brings that window forward instead of opening another;
+/// and the pinned windows that are open (`pinned`, observed), read from the app's open scene
+/// sessions, so a relaunch knows them before their scenes connect.
 @MainActor
+@Observable
 final class WindowDirectory {
     static let shared = WindowDirectory()
+
+    /// Every open pinned window, whichever ticket. A window counts from the moment it saves its
+    /// value on its session (`remember`) until its scene disconnects or it's closed from here.
+    private(set) var pinned: [TicketWindowValue] = []
+    /// Sessions whose scene disconnected (closed, or let go by the system) or that were asked to
+    /// close: not counted as open, though UIKit can list them a moment longer. One that connects
+    /// again counts again.
+    @ObservationIgnored private var gone: Set<String> = []
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+
+    private init() {
+        let center = NotificationCenter.default
+        observers = [
+            center.addObserver(forName: UIScene.didDisconnectNotification, object: nil, queue: .main) { note in
+                // Posted on the main queue (`queue: .main`), by UIKit on the main thread.
+                nonisolated(unsafe) let object = note.object
+                MainActor.assumeIsolated {
+                    guard let id = (object as? UIScene)?.session.persistentIdentifier else { return }
+                    WindowDirectory.shared.gone.insert(id)
+                    WindowDirectory.shared.refreshPinned()
+                }
+            },
+            center.addObserver(forName: UIScene.willConnectNotification, object: nil, queue: .main) { note in
+                // Posted on the main queue (`queue: .main`), by UIKit on the main thread.
+                nonisolated(unsafe) let object = note.object
+                MainActor.assumeIsolated {
+                    guard let id = (object as? UIScene)?.session.persistentIdentifier else { return }
+                    WindowDirectory.shared.gone.remove(id)
+                    WindowDirectory.shared.refreshPinned()
+                }
+            },
+        ]
+        refreshPinned()
+    }
 
     private struct Entry {
         weak var router: Router?
@@ -32,11 +71,11 @@ final class WindowDirectory {
         }
     }
 
-    private var mains: [Entry] = []
-    private var tickets: [String: Entry] = [:]
+    @ObservationIgnored private var mains: [Entry] = []
+    @ObservationIgnored private var tickets: [String: Entry] = [:]
     /// A section link that came from a ticket window while no main window was open: the next main
     /// window to come up applies it.
-    private var pending: DeepLink?
+    @ObservationIgnored private var pending: DeepLink?
 
     /// A main window came up or became active (`scene` is nil until the view is in its window).
     /// Its ticket links open ticket windows from here on.
@@ -75,28 +114,91 @@ final class WindowDirectory {
         tickets[key.uppercased()] = Entry(router: router, scene: scene)
     }
 
-    /// Opens `value`'s ticket in a window of its own: the system's prominent placement, centered
-    /// over `from`, which the user can then move, resize, tile or put in Slide Over with the
-    /// window's own controls. Each ticket gets its own window; one already showing the ticket comes
-    /// forward instead, on the link's tab. A closed window's entry is dropped here, so its ticket
-    /// opens a new window rather than asking for the closed one back.
+    /// Opens `value` in a window of its own: the system's prominent placement, centered over
+    /// `from`, which the user can then move, resize, tile or put in Slide Over with the window's own
+    /// controls. Windows are unique by `TicketWindowValue.identity`: each ticket gets one full
+    /// window, and each torn-off tab one pinned window. One that's open comes forward instead (a
+    /// full one on the link's tab). A closed window's entry is dropped here, so it opens anew rather
+    /// than asking for the closed one back.
     func openTicket(_ value: TicketWindowValue, from scene: UIWindowScene?) {
-        tickets = tickets.filter { $0.value.isOpen }
-        if let target = tickets[value.key.uppercased()], let router = target.router, let session = target.scene?.session {
-            router.show(value.route)
-            let options = UIWindowScene.ActivationRequestOptions()
-            options.requestingScene = scene
+        let options = UIWindowScene.ActivationRequestOptions()
+        options.requestingScene = scene
+        if !value.pinned {
+            tickets = tickets.filter { $0.value.isOpen }
+            if let target = tickets[value.key.uppercased()], let router = target.router, let session = target.scene?.session {
+                router.show(value.route)
+                UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: session, userActivity: nil, options: options))
+                return
+            }
+        }
+        if let session = session(for: value) {
             UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: session, userActivity: nil, options: options))
             return
         }
+        options.placement = UIWindowSceneProminentPlacement.prominent()
+        UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(role: .windowApplication, userActivity: Self.activity(value), options: options))
+    }
+
+    /// The activity that opens `value`'s window: what an activation request carries, and what a
+    /// drag carries out of a window (TicketWindowDrag).
+    nonisolated static func activity(_ value: TicketWindowValue) -> NSUserActivity {
         let activity = NSUserActivity(activityType: TicketWindowValue.activityType)
-        activity.title = value.key
+        activity.title = TornOffTabs.windowTitle(value)
         activity.targetContentIdentifier = TicketWindowValue.sceneMatch
         activity.userInfo = value.userInfo
-        let options = UIWindowScene.ActivationRequestOptions()
-        options.placement = UIWindowSceneProminentPlacement.prominent()
-        options.requestingScene = scene
-        UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(role: .windowApplication, userActivity: activity, options: options))
+        return activity
+    }
+
+    // MARK: Pinned windows
+
+    /// Which of `key`'s tabs are torn off into pinned windows (observed: a view reading it updates
+    /// as they open and close).
+    func tornOff(_ key: String) -> TornOffTabs { TornOffTabs(pinned, key: key) }
+
+    /// The open session showing `value`'s window (`identity`), other than `excluding`.
+    func session(for value: TicketWindowValue, excluding: UISceneSession? = nil) -> UISceneSession? {
+        UIApplication.shared.openSessions.first { s in
+            s !== excluding && !gone.contains(s.persistentIdentifier) && TicketWindowValue(userInfo: s.userInfo)?.sameWindow(as: value) == true
+        }
+    }
+
+    /// Closes `value`'s pinned window (Return to this window). It stops counting at once, so the
+    /// tab is back here before the window has finished closing.
+    func close(_ value: TicketWindowValue) {
+        if let session = session(for: value) {
+            gone.insert(session.persistentIdentifier)
+            UIApplication.shared.requestSceneSessionDestruction(session, options: nil)
+        }
+        refreshPinned()
+    }
+
+    /// A pinned window's Return to ticket: closes it and brings the ticket's full window forward,
+    /// when one is open, where the tab shows again.
+    func returnToTicket(_ value: TicketWindowValue) {
+        let full = session(for: TicketWindowValue(key: value.key, tab: nil))
+        close(value)
+        if let full { UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: full)) }
+    }
+
+    /// Re-reads the pinned windows from the open sessions' saved values.
+    func refreshPinned() {
+        let next = UIApplication.shared.openSessions
+            .filter { !gone.contains($0.persistentIdentifier) }
+            .compactMap { TicketWindowValue(userInfo: $0.userInfo) }
+            .filter(\.pinned)
+            .sorted { $0.identity < $1.identity }
+        if next != pinned { pinned = next }
+    }
+}
+
+/// Dragging a ticket, tab, browser tab or the composer out of its window (iPad): the item carries
+/// the window's activity, so dropping it outside the window has iPadOS open that window.
+enum TicketWindowDrag {
+    static func provider(_ value: TicketWindowValue) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerObject(WindowDirectory.activity(value), visibility: .all)
+        provider.suggestedName = TornOffTabs.windowTitle(value)
+        return provider
     }
 }
 
@@ -142,7 +244,13 @@ struct TicketWindowRoot: View {
                     .environment(router)
                     .sceneChrome(router)
                     .onChange(of: router.root) { _, root in
-                        if let v = TicketWindowValue(route: root), v != value { value = v }
+                        guard var v = TicketWindowValue(route: root) else { return }
+                        // A pinned window keeps its tab; only its ticket can change (a rename).
+                        if let value, value.pinned {
+                            v = value
+                            v.key = TicketWindowValue(route: root)?.key ?? value.key
+                        }
+                        if v != value { value = v }
                     }
                     .onChange(of: router.closeRequested) { _, close in
                         if close, let session = scene?.session {
@@ -167,13 +275,21 @@ struct TicketWindowRoot: View {
             scene = s
             if let value {
                 remember(value, in: s)
-                if let router { WindowDirectory.shared.ticketWindow(router, scene: s, key: value.key) }
+                if let router, !value.pinned { WindowDirectory.shared.ticketWindow(router, scene: s, key: value.key) }
             } else if let v = TicketWindowValue(userInfo: s.session.userInfo) {
                 value = v
             }
         })
         .onContinueUserActivity(TicketWindowValue.activityType) { activity in
-            if let v = TicketWindowValue(userInfo: activity.userInfo) { value = v }
+            guard let v = TicketWindowValue(userInfo: activity.userInfo) else { return }
+            // A drag out of a window opens a new one whatever is open (iPadOS spawns the scene
+            // itself): when that window is already open, it comes forward and this one goes.
+            if value == nil, let scene, let other = WindowDirectory.shared.session(for: v, excluding: scene.session) {
+                UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: other))
+                UIApplication.shared.requestSceneSessionDestruction(scene.session, options: nil)
+                return
+            }
+            value = v
         }
         // Links from outside the app go to a main window (RootView prefers them).
         .handlesExternalEvents(preferring: [], allowing: ["\(DeepLink.scheme)://"])
@@ -187,8 +303,10 @@ struct TicketWindowRoot: View {
                 r.onSectionLink = { WindowDirectory.shared.openInMain($0) }
                 router = r
             }
-            if let router { WindowDirectory.shared.ticketWindow(router, scene: scene, key: v.key) }
+            // Only full windows are what tapping a ticket brings forward.
+            if let router, !v.pinned { WindowDirectory.shared.ticketWindow(router, scene: scene, key: v.key) }
         }
+        .environment(\.pinnedWindow, value?.pinned == true ? value : nil)
     }
 }
 
@@ -199,19 +317,35 @@ struct TicketWindowRoot: View {
 @MainActor
 private func remember(_ value: TicketWindowValue, in scene: UIWindowScene?) {
     guard let scene else { return }
-    scene.title = value.key
+    scene.title = TornOffTabs.windowTitle(value)
     scene.session.userInfo = value.userInfo
+    // A pinned window counts as open (its tab torn off) from here.
+    WindowDirectory.shared.refreshPinned()
 }
 
 /// The ticket window's screen: its ticket (the Router's root) under its own stack, once connected.
+/// A pinned window's root is only its one tab (TicketDetailScreen's pinned body); what it pushes
+/// (a linked ticket, a file) shows in full as anywhere else.
 private struct TicketWindowContent: View {
     @Environment(Router.self) private var router
+    @Environment(\.pinnedWindow) private var pinned
 
     var body: some View {
         RequireStore {
             TabStack(tab: .board) {
-                if let root = router.root { RouteScreen(route: root).id(root) }
+                if let root = router.root {
+                    if let pinned, case let .ticket(key, _) = root {
+                        TicketDetailScreen(key: key, initialTab: pinned.tab, pinned: pinned).id(pinned)
+                    } else {
+                        RouteScreen(route: root).id(root)
+                    }
+                }
             }
         }
     }
+}
+
+extension EnvironmentValues {
+    /// The pinned window this view is in (one torn-off tab), nil in a main or full ticket window.
+    @Entry var pinnedWindow: TicketWindowValue?
 }

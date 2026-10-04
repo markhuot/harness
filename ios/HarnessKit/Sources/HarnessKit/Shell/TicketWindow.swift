@@ -131,3 +131,25 @@ public struct TornOffTabs: Equatable, Sendable {
         return nil
     }
 }
+
+extension TornOffTabs {
+    /// What a torn-off thing is called in its placeholder and its window's title: the tab's label
+    /// (a plugin tab's title once `pluginTabs` have loaded), "Message" for the composer and the
+    /// browser tab's own label (`browserTabLabel`, else "Browser tab N") for a pinned browser tab.
+    public static func name(_ tab: TicketTab, browserTab: Int? = nil, browserTabLabel: String? = nil, pluginTabs: [PluginTab]? = nil) -> String {
+        if tab == TicketWindowValue.composer { return "Message" }
+        if tab == .browser, let browserTab { return browserTabLabel ?? "Browser tab \(browserTab)" }
+        if tab == .changes { return ChangesTab.label }
+        if let b = tab.builtin { return Tabs.tabLabel[b] ?? b.rawValue }
+        if let p = Tabs.parsePluginTab(tab.rawValue) {
+            return pluginTabs?.first { $0.pluginId == p.pluginId && $0.id == p.tabId }?.title ?? p.tabId
+        }
+        return tab.rawValue
+    }
+
+    /// A pinned window's title: "A-1 · Transcript".
+    public static func windowTitle(_ value: TicketWindowValue) -> String {
+        guard value.pinned, let tab = value.tab else { return value.key }
+        return "\(value.key) · \(name(tab, browserTab: value.browserTab))"
+    }
+}

@@ -4,12 +4,14 @@ import SwiftUI
 /// The ticket's tabs: Spec, Activity, Tickets (conductors), Transcript,
 /// Agents & tasks (once there are sub-agents or background tasks), Browser, Changes (when the service
 /// lists the git plugin's tab), Details, then the plugin tabs. Counts and a live dot ride along; a
-/// sub-agent's or task's view highlights Agents & tasks.
+/// sub-agent's or task's view highlights Agents & tasks. On iPad each tab drags out into a window
+/// of its own (TearOff.swift); a torn-off tab stays here with a window mark.
 struct TicketDetailTabStrip: View {
     let ticket: Ticket
     /// The tab shown (already through Tabs.effectiveTab)
     let tab: TicketTab
     let pluginTabs: [PluginTab]?
+    var tornOff: TornOffTabs = .none
     let onTab: (TicketTab) -> Void
 
     @Environment(BoardStore.self) private var store
@@ -30,7 +32,9 @@ struct TicketDetailTabStrip: View {
         ScrollView(.horizontal) {
             HStack(spacing: 0) {
                 ForEach(items) { item in
-                    button(item, on: item.id == strip)
+                    let away = tornOff.tabs.contains(item.id)
+                    button(item, on: item.id == strip, away: away)
+                        .tearOff(.pinned(ticket.key, item.id), tornOff: away) { onTab(item.id) }
                 }
             }
             .padding(.horizontal, 8)
@@ -67,7 +71,7 @@ struct TicketDetailTabStrip: View {
         }
     }
 
-    private func button(_ item: Item, on: Bool) -> some View {
+    private func button(_ item: Item, on: Bool, away: Bool) -> some View {
         Button {
             if !on { haptic(.select) }
             onTab(item.id)
@@ -86,6 +90,7 @@ struct TicketDetailTabStrip: View {
                         .background(c.bgActive, in: .capsule)
                 }
                 if item.live { Circle().fill(c.inProgress).frame(width: 7, height: 7) }
+                if away { Image(systemName: "macwindow").font(.scaled(size: 11)).foregroundStyle(c.text3) }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 11)
@@ -96,7 +101,7 @@ struct TicketDetailTabStrip: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.label)
-        .accessibilityValue([item.count.flatMap { $0 > 0 ? "\($0)" : nil }, item.liveLabel].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue([item.count.flatMap { $0 > 0 ? "\($0)" : nil }, item.liveLabel, away ? "In another window" : nil].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
     }
 }

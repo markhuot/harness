@@ -26,6 +26,8 @@ final class BrowserTabModel {
     /// The stage's size (points), from the view's geometry.
     private(set) var stage: CGSize = .zero
 
+    /// A pinned window's browser tab: the view starts on it and never switches.
+    let pinnedTab: Int?
     /// This view's viewer id on the socket, so another window's view of the same session (a
     /// torn-off browser tab) watches its own tab instead of switching this one.
     let viewer = UUID().uuidString.lowercased()
@@ -47,6 +49,11 @@ final class BrowserTabModel {
         toPage: { [weak self] p in self?.toPage(p) },
         scale: { [weak self] in self?.pageScale() ?? 1 }))
 
+    init(pinnedTab: Int? = nil) {
+        self.pinnedTab = pinnedTab
+        selection = BrowserTabSelection(shown: pinnedTab)
+    }
+
     /// What's drawn: the frame letterboxed into the stage (zero before the first frame).
     var drawn: Format.Rect {
         guard let frame else { return Format.Rect(x: 0, y: 0, w: 0, h: 0) }
@@ -63,7 +70,7 @@ final class BrowserTabModel {
     func run(sessionId: String, store: BoardStore, client: HarnessClient?) async {
         // A resubscribe (reconnect, foregrounding) comes back to the tab it was on; another
         // session starts on its lowest tab.
-        if sessionId != self.sessionId { selection = BrowserTabSelection() }
+        if sessionId != self.sessionId { selection = BrowserTabSelection(shown: pinnedTab) }
         self.sessionId = sessionId
         self.store = store
         state = nil

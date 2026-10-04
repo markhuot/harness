@@ -6,10 +6,12 @@ import SwiftUI
 /// an old key (from before a project rename), which it follows, or a remote ID, which lists the
 /// tickets sharing it (harness://ticket/JIRA-62). `initialTab` is the link's `?tab=`, already
 /// checked with ChangesTab.ticketTabFrom (an old "summaries" link is the Spec); nil opens the Spec
-/// (Tabs.openingTab).
+/// (Tabs.openingTab). `pinned` is the pinned window (iPad) showing only one of its tabs, or the
+/// composer: the hero collapses to its title line and there's no tab strip, pager or composer.
 struct TicketDetailScreen: View {
     let key: String
     let initialTab: TicketTab?
+    var pinned: TicketWindowValue?
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
@@ -21,9 +23,10 @@ struct TicketDetailScreen: View {
     @State private var pluginTabs: [PluginTab]?
     @State private var hero = TicketDetailHeroCollapse()
 
-    init(key: String, initialTab: TicketTab?) {
+    init(key: String, initialTab: TicketTab?, pinned: TicketWindowValue? = nil) {
         self.key = key
         self.initialTab = initialTab
+        self.pinned = pinned
         _tab = State(initialValue: initialTab ?? Tabs.openingTab())
     }
 
@@ -45,7 +48,11 @@ struct TicketDetailScreen: View {
             if missing, ticket == nil, let related = store.related.byRemoteKey[ticketKey.uppercased()], !related.isEmpty {
                 TicketDetailRemoteIdView(remoteKey: ticketKey.uppercased(), related: related) { replaceSelf(with: $0) }
             } else if let ticket, ticket.draft != true {
-                TicketDetailBody(ticket: ticket, tab: tab, pluginTabs: pluginTabs, hero: hero) { pick($0) }
+                if let pinned, let pinnedTab = pinned.tab {
+                    TicketPinnedBody(ticket: ticket, value: pinned, tab: pinnedTab, pluginTabs: pluginTabs)
+                } else {
+                    TicketDetailBody(ticket: ticket, tab: tab, pluginTabs: pluginTabs, hero: hero) { pick($0) }
+                }
             } else {
                 Group {
                     if missing {
@@ -135,6 +142,7 @@ private struct TicketDetailBody: View {
         let state = store.state
         let attachTarget: (any PromptAttachmentTarget)? = TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
+        let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
         VStack(spacing: 0) {
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
@@ -142,11 +150,11 @@ private struct TicketDetailBody: View {
                 .frame(height: hero.hidden ? 0 : nil, alignment: .top)
                 .clipped()
                 .accessibilityHidden(hero.hidden)
-            TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs) { t in
+            TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs, tornOff: tornOff) { t in
                 hero.show()
                 onTab(t)
             }
-            pager(shown)
+            pager(shown, tornOff: tornOff)
                 .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
                     hero.show()
                     onTab(t)
@@ -154,8 +162,18 @@ private struct TicketDetailBody: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, onTab: onTab).id(ticket.id)
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerTop = $0 }
+            Group {
+                // Torn off into a window of its own: one line to bring it back instead.
+                if let window = tornOff.window(ticket.key, tab: TicketWindowValue.composer) {
+                    ComposerReturnBar(value: window)
+                } else {
+                    VStack(spacing: 0) {
+                        ComposerGrip(ticketKey: ticket.key)
+                        TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, onTab: onTab).id(ticket.id)
+                    }
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerTop = $0 }
         }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
@@ -166,7 +184,7 @@ private struct TicketDetailBody: View {
     /// neighbouring tab, showing its content as it comes in. The Agents page shows the sub-agent or
     /// task open in it. Only the page on screen drives the hero, so a page coming into view (the
     /// Transcript jumping to its bottom, say) can't hide or show it.
-    private func pager(_ shown: TicketTab) -> some View {
+    private func pager(_ shown: TicketTab, tornOff: TornOffTabs) -> some View {
         let strip = Tabs.tabStripTab(shown)
         var pages = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: store.state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
         // A plugin tab from a link, before the ticket's plugin tabs have loaded.
@@ -180,7 +198,7 @@ private struct TicketDetailBody: View {
         return TabView(selection: selection) {
             ForEach(pages, id: \.self) { page in
                 let t = page == strip ? shown : page
-                tabBody(t, agent: Tabs.parseSubagentTab(t), plugin: Tabs.parsePluginTab(t))
+                pageBody(t, strip: page, tornOff: tornOff)
                     .safeAreaPadding(.bottom, max(0, pageBottom - composerTop))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
@@ -197,7 +215,30 @@ private struct TicketDetailBody: View {
         .ignoresSafeArea(.container, edges: .bottom)
     }
 
-    @ViewBuilder private func tabBody(_ shown: TicketTab, agent: String?, plugin: Tabs.ParsedPluginTab?) -> some View {
+    /// A page: its tab, or Return to this window when the tab is torn off.
+    @ViewBuilder private func pageBody(_ t: TicketTab, strip: TicketTab, tornOff: TornOffTabs) -> some View {
+        if let window = tornOff.window(ticket.key, tab: strip) {
+            TornOffPlaceholder(value: window, name: TornOffTabs.name(strip, pluginTabs: pluginTabs)) { onTab(strip) }
+        } else {
+            TicketTabBody(ticket: ticket, tab: t, pluginTabs: pluginTabs)
+        }
+    }
+}
+
+/// One tab's body (`tab` already through Tabs.effectiveTab), as the ticket screen's pager and a
+/// pinned window show it. `browserTab` pins the Browser tab to one browser tab.
+struct TicketTabBody: View {
+    let ticket: Ticket
+    let tab: TicketTab
+    let pluginTabs: [PluginTab]?
+    var browserTab: Int?
+
+    @Environment(BoardStore.self) private var store
+
+    var body: some View {
+        let shown = tab
+        let agent = Tabs.parseSubagentTab(shown)
+        let plugin = Tabs.parsePluginTab(shown)
         if let agent {
             // A background task has output, not a conversation.
             if store.state.subagentById(ticket.sessionId, agent).map(Subagents.isTask) == true {
@@ -220,12 +261,98 @@ private struct TicketDetailBody: View {
             case .children: TicketDetailChildrenTab(ticket: ticket)
             case .transcript: TranscriptView(sessionId: ticket.sessionId)
             case .agents: AgentsTabView(ticket: ticket)
-            case .browser: BrowserTabView(ticket: ticket)
+            case .browser: BrowserTabView(ticket: ticket, pinnedTab: browserTab)
             case .details: TicketDetailDetailsTab(ticket: ticket)
             case .activity: TicketDetailActivityTab(ticket: ticket)
             default: TicketDetailSpecTab(ticket: ticket)
             }
         }
+    }
+}
+
+/// A pinned window's ticket (iPad): only its one tab, fully working, under the hero collapsed to
+/// its title line (the approval card still shows there); or, for the composer, only the composer.
+/// The Agents & tasks tab still opens a sub-agent or task in place.
+private struct TicketPinnedBody: View {
+    let ticket: Ticket
+    let value: TicketWindowValue
+    let tab: TicketTab
+    let pluginTabs: [PluginTab]?
+
+    @Environment(BoardStore.self) private var store
+    @Environment(\.palette) private var c
+    @State private var height: CGFloat = 800
+    /// A sub-agent or task the pinned Agents & tasks tab opened.
+    @State private var agentTab: TicketTab?
+    @State private var outgoing = MessageAttachments()
+    @State private var uploader = PromptAttachmentUploader()
+
+    private var isComposer: Bool { tab == TicketWindowValue.composer }
+
+    var body: some View {
+        let attachTarget: (any PromptAttachmentTarget)? = isComposer && TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
+        VStack(spacing: 0) {
+            TicketDetailHero(ticket: ticket, compactTab: true, maxHeight: height * 0.45)
+            if isComposer {
+                Spacer(minLength: 0)
+            } else {
+                let shown = ChangesTab.effectiveTab(agentTab ?? tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs,
+                                                    subagents: store.state.subagentsOf(ticket.sessionId))
+                TicketTabBody(ticket: ticket, tab: shown, pluginTabs: pluginTabs, browserTab: value.browserTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
+                        guard tab == .agents else { return }
+                        agentTab = Tabs.parseSubagentTab(t) != nil ? t : nil
+                    })
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isComposer {
+                // `.transcript`: a send has no tab to move to here.
+                TicketDetailComposer(ticket: ticket, tab: .transcript, outgoing: outgoing, uploader: uploader, onTab: { _ in }).id(ticket.id)
+            }
+        }
+        .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
+        .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
+        .modifier(TicketPinnedHeader(ticket: ticket, value: value, name: TornOffTabs.name(tab, browserTab: value.browserTab, pluginTabs: pluginTabs)))
+    }
+}
+
+/// A pinned window's bar: the key and what's pinned, and Return to ticket, which closes the window
+/// so the tab shows in the ticket again.
+private struct TicketPinnedHeader: ViewModifier {
+    let ticket: Ticket
+    let value: TicketWindowValue
+    let name: String
+
+    @Environment(\.palette) private var c
+
+    func body(content: Content) -> some View {
+        let label = Keys.keyLabel(ticket)
+        content
+            .navigationTitle("\(label) · \(name)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Text(label).font(.mono(17, weight: .semibold)).foregroundStyle(c.text)
+                        Text(name).font(.scaled(size: 17)).foregroundStyle(c.text2)
+                    }
+                    .lineLimit(1)
+                    .accessibilityElement(children: .combine)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Return to ticket", systemImage: "arrow.down.right.and.arrow.up.left") {
+                            WindowDirectory.shared.returnToTicket(value)
+                        }
+                        Button("Copy key", systemImage: "number") { UIPasteboard.general.string = ticket.key }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
+                    }
+                }
+            }
     }
 }
 
@@ -300,7 +427,6 @@ private struct TicketDetailHeader: ViewModifier {
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @Environment(\.openURL) private var openURL
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var multipleWindows
     @State private var confirm: Confirmation?
 
@@ -330,7 +456,7 @@ private struct TicketDetailHeader: ViewModifier {
             // iPad: not in the window that's already this ticket's own.
             if multipleWindows && !isWindowRoot(key) {
                 Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                    openWindow(id: SceneID.ticket, value: TicketWindowValue(key: key, tab: nil))
+                    WindowDirectory.shared.openTicket(TicketWindowValue(key: key, tab: nil), from: nil)
                 }
             }
             if let ref = ticket.externalRef, let url = ref.url.flatMap(URL.init(string:)) {

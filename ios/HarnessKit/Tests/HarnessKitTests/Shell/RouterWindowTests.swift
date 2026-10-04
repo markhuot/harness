@@ -234,3 +234,25 @@ struct TornOffTabsTests {
         #expect(TornOffTabs.none.window("A-1", tab: TicketWindowValue.composer) == nil)
     }
 }
+
+@Suite("TornOffTabs names")
+struct TornOffNameTests {
+    @Test func namesEachKindOfTornOffThing() {
+        #expect(TornOffTabs.name(.transcript) == "Transcript")
+        #expect(TornOffTabs.name(.children) == "Tickets")
+        #expect(TornOffTabs.name(.changes) == "Changes")
+        #expect(TornOffTabs.name(TicketWindowValue.composer) == "Message")
+        #expect(TornOffTabs.name(.browser) == "Browser")
+        #expect(TornOffTabs.name(.browser, browserTab: 3) == "Browser tab 3")
+        #expect(TornOffTabs.name(.browser, browserTab: 3, browserTabLabel: "Docs") == "Docs")
+        let plugins = [PluginTab(pluginId: "notes", id: "board", title: "Notes board", when: .always)]
+        #expect(TornOffTabs.name("plugin:notes:board", pluginTabs: plugins) == "Notes board")
+        #expect(TornOffTabs.name("plugin:notes:board") == "board")
+    }
+
+    @Test func aPinnedWindowIsTitledByItsTabAndAFullOneByItsKey() {
+        #expect(TornOffTabs.windowTitle(TicketWindowValue(key: "A-1", tab: .spec)) == "A-1")
+        #expect(TornOffTabs.windowTitle(.pinned("A-1", .spec)) == "A-1 · Spec")
+        #expect(TornOffTabs.windowTitle(.pinned("A-1", .browser, browserTab: 2)) == "A-1 · Browser tab 2")
+    }
+}
