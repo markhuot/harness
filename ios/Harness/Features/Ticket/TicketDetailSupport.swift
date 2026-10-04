@@ -54,6 +54,14 @@ extension EnvironmentValues {
     /// The ticket whose tab bodies these are: images in them can be annotated and sent to its agent
     /// (AnnotatorView). nil outside a ticket (a New session, the composer's pending list).
     @Entry var annotationTicketKey: String?
+    /// Opens the annotator over the ticket (TicketDetailBody presents it).
+    @Entry var openAnnotator: AnnotatorOpener?
+}
+
+struct AnnotatorOpener: Sendable {
+    let open: @MainActor @Sendable (AnnotationRequest) -> Void
+
+    @MainActor func callAsFunction(_ request: AnnotationRequest) { open(request) }
 }
 
 extension View {

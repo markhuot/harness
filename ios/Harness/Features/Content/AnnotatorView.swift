@@ -426,6 +426,7 @@ struct AnnotatorPresenter: ViewModifier {
     var then: (() -> Void)?
 
     @Environment(\.ticketDetailOpenTab) private var openTab
+    @Environment(AppModel.self) private var app
 
     func body(content: Content) -> some View {
         content.fullScreenCover(item: $request) { r in
@@ -433,8 +434,23 @@ struct AnnotatorPresenter: ViewModifier {
                 request = nil
                 guard sent else { return }
                 then?()
+                // Inside a tab body the Transcript opens from here; the ticket's own presenter
+                // (outside the tabs, no opener) does it in `then`.
                 openTab?(Tabs.tabAfterSend(.spec, sent: true))
             }
+            // The app's appearance, even over the attachment viewer (which is always dark).
+            .preferredColorScheme(scheme)
+        }
+    }
+
+    /// The app's theme setting, else the system's (not the presenting view's, which the viewer forces dark).
+    private var scheme: ColorScheme {
+        switch app.prefs.theme {
+        case .dark: return .dark
+        case .light: return .light
+        default:
+            let screen = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen }.first
+            return screen?.traitCollection.userInterfaceStyle == .dark ? .dark : .light
         }
     }
 }

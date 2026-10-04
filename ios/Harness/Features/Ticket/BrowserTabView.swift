@@ -16,7 +16,7 @@ struct BrowserTabView: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var model = BrowserTabModel()
-    @State private var annotating: AnnotationRequest?
+    @Environment(\.openAnnotator) private var openAnnotator
     @State private var capturing = false
     @State private var urlDraft = ""
     @State private var urlSelection: TextSelection?
@@ -43,7 +43,6 @@ struct BrowserTabView: View {
             .frame(width: 1, height: 1)
             .opacity(0)
             .accessibilityHidden(true))
-        .annotator($annotating)
         .task(id: Subscription(sessionId: sessionId, epoch: store.epoch, socket: store.socketGeneration)) {
             await model.run(sessionId: sessionId, store: store, client: client)
         }
@@ -90,7 +89,8 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "edit", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
             }
-            BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing, disabled: model.frame == nil || capturing) {
+            BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
+                             disabled: model.frame == nil || capturing || openAnnotator == nil) {
                 annotate()
             }
             BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
@@ -205,7 +205,7 @@ struct BrowserTabView: View {
                 toasts.show("Couldn't read the page's screenshot.", kind: .error)
                 return
             }
-            annotating = AnnotationRequest(key: key, source: shot.source, image: image)
+            openAnnotator?(AnnotationRequest(key: key, source: shot.source, image: image))
         }
     }
 

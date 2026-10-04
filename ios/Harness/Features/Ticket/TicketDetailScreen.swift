@@ -126,6 +126,9 @@ private struct TicketDetailBody: View {
     /// so a drop anywhere on the ticket attaches.
     @State private var outgoing = MessageAttachments()
     @State private var uploader = PromptAttachmentUploader()
+    /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
+    /// pager, so a page redrawing under it can't take it down.
+    @State private var annotating: AnnotationRequest?
 
     var body: some View {
         let state = store.state
@@ -148,6 +151,7 @@ private struct TicketDetailBody: View {
                     onTab(t)
                 })
                 .environment(\.annotationTicketKey, ticket.key)
+                .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -156,6 +160,10 @@ private struct TicketDetailBody: View {
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
+        .annotator($annotating) {
+            hero.show()
+            onTab(Tabs.tabAfterSend(tab, sent: true))
+        }
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the
