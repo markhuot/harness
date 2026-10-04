@@ -83,12 +83,17 @@ export async function encodeWithinLimit(encode: Encode, limit = INLINE_IMAGE_LIM
   return smallest;
 }
 
-/** The file name of the annotated picture: `annotated-<the source's name without its extension>.png` (or .jpg). */
-export function annotatedName(sourceName: string, mimeType: string): string {
+/** A file's name without its extension ("Shot 2.png" → "Shot 2"; a name without one stays as is). */
+export function stripExtension(name: string): string {
+  const leaf = name.split(/[\\/]/).pop() ?? "";
+  return leaf.replace(/\.[A-Za-z][A-Za-z0-9]{0,4}$/, "");
+}
+
+/** The file name of the annotated picture: `annotated-<base>.png` (or .jpg), the base made safe for a file name. */
+export function annotatedName(base: string, mimeType: string): string {
   const ext = mimeType === "image/jpeg" ? "jpg" : "png";
-  const leaf = sourceName.split(/[\\/]/).pop() ?? "";
-  const base = leaf.replace(/\.[A-Za-z0-9]{1,5}$/, "").replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
-  return `annotated-${base || "image"}.${ext}`;
+  const safe = base.replace(/[^\w.-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "").slice(0, 80);
+  return `annotated-${safe || "image"}.${ext}`;
 }
 
 /** A browser page's name for its picture: the host, else the title, else "page". */

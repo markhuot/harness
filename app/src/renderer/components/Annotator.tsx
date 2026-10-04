@@ -27,7 +27,7 @@ import {
   type Point,
 } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { annotatedName, emptyHistory, encodeWithinLimit, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
+import { annotatedName, stripExtension, emptyHistory, encodeWithinLimit, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
 import { accentColor, drawAnnotations } from "./annotationDraw";
 import { Icon } from "./Icon";
 import { MOD, Modal, Switch } from "./bits";
@@ -35,8 +35,10 @@ import "./annotator.css";
 
 /** An image to annotate: where it came from (sent with the notes) and how to read its bytes. */
 export interface AnnotateTarget {
-  /** Shown in the header, and the base of the annotated file's name. */
+  /** Shown in the header. */
   name: string;
+  /** The annotated file is `annotated-<base>.png`; default: `name` without its extension. */
+  baseName?: string;
   source: AnnotationSource;
   load: () => Promise<Blob>;
 }
@@ -158,9 +160,8 @@ function Annotator({ ticket, target, onClose, onSent }: { ticket: Ticket; target
 
   const fit = useMemo(() => {
     if (!bitmap) return { x: 0, y: 0, w: 0, h: 0 };
-    // Never blown up past the image's own size (in CSS pixels on this screen).
-    const dpr = window.devicePixelRatio || 1;
-    const r = fitRect(Math.min(box.w, bitmap.width / dpr), Math.min(box.h, bitmap.height / dpr), bitmap.width, bitmap.height);
+    // Never blown up past one image pixel per point.
+    const r = fitRect(Math.min(box.w, bitmap.width), Math.min(box.h, bitmap.height), bitmap.width, bitmap.height);
     return { ...r, w: Math.max(1, Math.floor(r.w)), h: Math.max(1, Math.floor(r.h)) };
   }, [bitmap, box]);
 
@@ -348,7 +349,7 @@ function Annotator({ ticket, target, onClose, onSent }: { ticket: Ticket; target
         fctx.drawImage(canvas, 0, 0);
         return flat.convertToBlob({ type, quality });
       });
-      const name = annotatedName(target.name, blob.type);
+      const name = annotatedName(target.baseName ?? stripExtension(target.name), blob.type);
       const file = await client.uploadPromptAttachment(blob, name, blob.type);
       await client.sendMessage(ticket.key, note.trim(), {
         move,

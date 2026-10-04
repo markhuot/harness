@@ -430,7 +430,8 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     setShooting(false);
     if (!shot) return;
     annotator.open({
-      name: browserShotName(shot.url, shot.title),
+      name: shot.title || shot.url,
+      baseName: browserShotName(shot.url, shot.title),
       source: { kind: "browser", url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale },
       load: async () => new Blob([Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0))], { type: "image/png" }),
     });

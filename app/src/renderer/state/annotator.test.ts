@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DraftMark } from "@harness/shared/state";
-import { annotatedName, browserShotName, emptyHistory, encodeWithinLimit, endRun, hasAnnotatorWork, HISTORY_LIMIT, offersAnnotate, recordChange, undo, type AnnotatorSnapshot, type Encode } from "./annotator";
+import { annotatedName, browserShotName, stripExtension, emptyHistory, encodeWithinLimit, endRun, hasAnnotatorWork, HISTORY_LIMIT, offersAnnotate, recordChange, undo, type AnnotatorSnapshot, type Encode } from "./annotator";
 
 const mark = (x: number, message = ""): DraftMark => ({ anchor: { x, y: 0.5 }, tail: null, message });
 const snap = (marks: DraftMark[], note = ""): AnnotatorSnapshot => ({ marks, note });
@@ -98,11 +98,19 @@ describe("encodeWithinLimit", () => {
 });
 
 describe("names", () => {
-  test("annotated-<base>, with the extension the encoding has", () => {
-    expect(annotatedName("mockup.png", "image/png")).toBe("annotated-mockup.png");
-    expect(annotatedName("/Users/me/Shots/Screen Shot 2026.jpeg", "image/jpeg")).toBe("annotated-Screen-Shot-2026.jpg");
+  test("annotated-<base>, with the extension the encoding has, made safe for a file name", () => {
+    expect(annotatedName("mockup", "image/png")).toBe("annotated-mockup.png");
+    expect(annotatedName("Screen Shot 2026", "image/jpeg")).toBe("annotated-Screen-Shot-2026.jpg");
+    expect(annotatedName("127.0.0.1", "image/png")).toBe("annotated-127.0.0.1.png");
     expect(annotatedName("", "image/png")).toBe("annotated-image.png");
-    expect(annotatedName("???.png", "image/png")).toBe("annotated-image.png");
+    expect(annotatedName("???", "image/png")).toBe("annotated-image.png");
+  });
+
+  test("stripExtension drops a file's extension and folders, not a version or an address", () => {
+    expect(stripExtension("/Users/me/Shots/Screen Shot.jpeg")).toBe("Screen Shot");
+    expect(stripExtension("mockup.png")).toBe("mockup");
+    expect(stripExtension("Settings mockup")).toBe("Settings mockup");
+    expect(stripExtension("release 1.2")).toBe("release 1.2");
   });
 
   test("a browser page is named by its host, else its title", () => {
