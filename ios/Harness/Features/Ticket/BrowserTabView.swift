@@ -207,7 +207,8 @@ struct BrowserTabView: View {
             }
             // The screenshot as it is, uploaded on Add (closed without notes, it leaves nothing behind).
             let name = "\(Annotations.browserShotName(url: shot.url, title: shot.title)).png"
-            openAnnotator?(sink.request(.upload(data: data, name: name, mimeType: "image/png"), image: image, page: shot.page))
+            let lookup = AnnotationElementLookup(sessionId: id, screenshot: shot)
+            openAnnotator?(sink.request(.upload(data: data, name: name, mimeType: "image/png"), image: image, page: shot.page, lookup: lookup))
         }
     }
 

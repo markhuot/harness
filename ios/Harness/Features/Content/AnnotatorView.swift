@@ -2,19 +2,45 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// The file an annotation goes on: one the service already has (a spec image as
-/// `attachment:<id>`, a prompt or message attachment, a file waiting in a composer or New session),
-/// or a browser screenshot, uploaded as it is once Add is pressed.
+/// The file an annotation goes on: an attachment the service already has (a spec image, a prompt
+/// or message attachment, a file waiting in a composer or New session), or a browser screenshot,
+/// uploaded as it is once Add is pressed.
 enum AnnotationImage {
-    case existing(PromptAttachmentInput)
+    case existing(Attachment)
     case upload(data: Data, name: String, mimeType: String)
 
     /// The header's file name.
     var name: String {
         switch self {
-        case let .existing(input): input.name ?? PromptAttachments.fileBaseName(input.path)
+        case let .existing(a): a.name
         case let .upload(_, name, _): name
         }
+    }
+}
+
+/// Where a browser screenshot's marks look up the element under their anchor
+/// (POST /browser/:sessionId/element): the session and what the screenshot was of.
+struct AnnotationElementLookup {
+    let sessionId: String
+    let tabId: Int
+    let url: String
+    let scroll: BrowserScroll
+    /// Device pixels per CSS pixel: the screenshot's pixels over the page's.
+    let scale: Double
+
+    /// nil for an older service's screenshot (no scroll), which can't look elements up.
+    init?(sessionId: String, screenshot shot: BrowserScreenshot) {
+        guard let scroll = shot.scroll, shot.scale > 0 else { return nil }
+        self.sessionId = sessionId
+        tabId = shot.tabId
+        url = shot.url
+        self.scroll = scroll
+        scale = shot.scale
+    }
+
+    /// The query for a mark's anchor (a fraction of the `width`×`height` screenshot), in the page's CSS pixels.
+    func query(_ anchor: Annotations.Point, width: Double, height: Double) -> BrowserElementQuery {
+        BrowserElementQuery(tabId: tabId, x: anchor.x * width / scale, y: anchor.y * height / scale, url: url, scroll: scroll)
     }
 }
 
@@ -27,24 +53,28 @@ struct AnnotationRequest: Identifiable {
     let image: UIImage
     /// The page a browser screenshot shows (AttachmentAnnotation.page).
     var page: AnnotationPage?
+    /// A browser screenshot's element lookups (each mark names the element under its anchor).
+    var lookup: AnnotationElementLookup?
     var marks: [Annotations.DraftMark] = []
     /// Takes the file and its notes once Add has them.
     let add: @MainActor (AnnotatedAttachment) -> Void
 
-    init(file: AnnotationImage, image: UIImage, page: AnnotationPage? = nil, annotation: AttachmentAnnotation? = nil,
-         add: @escaping @MainActor (AnnotatedAttachment) -> Void) {
+    init(file: AnnotationImage, image: UIImage, page: AnnotationPage? = nil, lookup: AnnotationElementLookup? = nil,
+         annotation: AttachmentAnnotation? = nil, add: @escaping @MainActor (AnnotatedAttachment) -> Void) {
         self.file = file
         self.image = image
         self.page = page
+        // Only a browser screenshot's marks name elements.
+        self.lookup = page == nil ? nil : lookup
         self.marks = annotation.map(Annotations.draftMarks(from:)) ?? []
         self.add = add
     }
 }
 
-/// What Add hands back: the file (as a message or a New session sends it) and its notes, with the
-/// bytes it uploaded (a browser screenshot) so the list can draw them before the service serves them.
+/// What Add hands back: the attachment (the service's record, by id) and its notes, with the bytes
+/// it uploaded (a browser screenshot) so the list can draw them before the service's copy loads.
 struct AnnotatedAttachment {
-    let input: PromptAttachmentInput
+    let attachment: Attachment
     let annotation: AttachmentAnnotation
     var uploaded: Data?
 }
@@ -74,6 +104,8 @@ struct AnnotatorView: View {
     @State private var adding = false
     @State private var confirm: Confirmation?
     @State private var gesture: AnnotatorGesture?
+    /// Anchors the page answered no element for (or whose lookup failed): not asked again.
+    @State private var settled: Set<Annotations.Point> = []
     @FocusState private var focused: Int?
 
     init(request: AnnotationRequest, onClose: @escaping (_ added: AnnotatedAttachment?) -> Void) {
@@ -112,6 +144,34 @@ struct AnnotatorView: View {
         .confirmation($confirm)
         .toastOverlay()
         .interactiveDismissDisabled(changed || adding)
+        .task(id: pendingLookups) { await lookUpElements(pendingLookups) }
+    }
+
+    // MARK: Elements (browser screenshots)
+
+    /// The marks whose element is still to look up, with their anchors (the task's identity: a
+    /// placed or moved anchor starts it over, so the latest wins).
+    private var pendingLookups: [PendingLookup] {
+        guard request.lookup != nil else { return [] }
+        return Annotations.marksNeedingElement(marks, settled: settled).map { PendingLookup(index: $0, anchor: marks[$0].anchor) }
+    }
+
+    /// After a short pause (a drag that keeps going cancels it), ask the page what's under each
+    /// anchor and keep it on the mark that's still there. Failures leave the mark without one.
+    private func lookUpElements(_ pending: [PendingLookup]) async {
+        guard let lookup = request.lookup, !pending.isEmpty, let api = store.api else { return }
+        try? await Task.sleep(for: .milliseconds(300))
+        guard !Task.isCancelled else { return }
+        let px = AnnotationDrawing.pixelSize(request.image)
+        for p in pending {
+            let element = try? await api.browserElementAt(lookup.sessionId, lookup.query(p.anchor, width: px.width, height: px.height))
+            guard !Task.isCancelled else { return }
+            if let element {
+                marks = Annotations.resolveElement(marks, at: p.index, anchor: p.anchor, element)
+            } else {
+                settled.insert(p.anchor)
+            }
+        }
     }
 
     /// On a phone the image takes up to 55% of the height, less when the image is wide.
@@ -325,6 +385,7 @@ struct AnnotatorView: View {
                 .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
                 .padding(.top, 5)
                 .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 4) {
             TextField("What about this spot?", text: Binding(
                 get: { marks.indices.contains(i) ? marks[i].message : "" },
                 set: { v in if marks.indices.contains(i) { marks = Annotations.setMessage(marks, at: i, Annotations.clampMessage(v)) } }
@@ -339,6 +400,16 @@ struct AnnotatorView: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(focused == i ? c.accent : c.border, lineWidth: focused == i ? 1 : 0.5))
                 .accessibilityLabel("Note \(i + 1)")
                 .disabled(adding)
+                if let element = marks.indices.contains(i) ? marks[i].element : nil {
+                    Text(Annotations.elementLabel(element))
+                        .font(.scaled(size: 11.5, design: .monospaced))
+                        .foregroundStyle(c.text3)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                        .padding(.horizontal, 4)
+                        .accessibilityLabel("Points at \(Annotations.elementLabel(element))")
+                }
+            }
             Button {
                 haptic(.tap)
                 if focused == i { focused = nil }
@@ -384,11 +455,11 @@ struct AnnotatorView: View {
         Task {
             let result = await actions.run { () async throws -> AnnotatedAttachment in
                 switch file {
-                case let .existing(input):
-                    return AnnotatedAttachment(input: input, annotation: annotation)
+                case let .existing(a):
+                    return AnnotatedAttachment(attachment: a, annotation: annotation)
                 case let .upload(data, name, mimeType):
-                    let a = try await store.connectedAPI().uploadPromptAttachment(data: data, name: name, mimeType: mimeType)
-                    return AnnotatedAttachment(input: PromptAttachmentInput(path: a.path, name: a.name, source: a.source), annotation: annotation, uploaded: data)
+                    let a = try await store.connectedAPI().uploadAttachment(data: data, name: name, mimeType: mimeType)
+                    return AnnotatedAttachment(attachment: a, annotation: annotation, uploaded: data)
                 }
             }
             adding = false
@@ -405,6 +476,12 @@ private extension Format.Rect {
     func centered(in box: CGSize, from inner: CGSize) -> Format.Rect {
         Format.Rect(x: x + (box.width - inner.width) / 2, y: y + (box.height - inner.height) / 2, w: w, h: h)
     }
+}
+
+/// A mark waiting for the element under its anchor.
+private struct PendingLookup: Hashable {
+    let index: Int
+    let anchor: Annotations.Point
 }
 
 /// What a press on the image is doing: drawing a new mark (`tail` once it's a drag) or moving one.

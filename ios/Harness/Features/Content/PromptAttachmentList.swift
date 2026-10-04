@@ -3,51 +3,25 @@ import QuickLook
 import SwiftUI
 import UIKit
 
-/// Where the service serves an attachment's file.
-enum PromptAttachmentRemote: Equatable {
-    /// A ticket's prompt attachment: GET /tickets/:key/prompt-attachments/:index
-    case prompt(key: String, index: Int)
-    /// A file sent with a message: GET /transcript/:entryId/attachments/:index
-    case message(entryId: String, index: Int)
-    /// One of the ticket's spec images, waiting in a composer or New session as `attachment:<id>`
-    /// (the service resolves it when the message is sent): GET /attachments/:id
-    case spec(id: String)
-
-    func url(_ api: HarnessClient) -> String {
-        switch self {
-        case let .prompt(key, index): api.promptAttachmentUrl(key: key, index: index)
-        case let .message(entryId, index): api.messageAttachmentUrl(entryId: entryId, index: index)
-        case let .spec(id): api.attachmentUrl(id)
-        }
-    }
-
-    /// A waiting attachment that refers to a spec image by `attachment:<id>`.
-    static func waiting(_ a: PromptAttachment) -> PromptAttachmentRemote? {
-        PromptAttachments.specAttachmentId(of: a.path).map { .spec(id: $0) }
-    }
-}
-
 /// One attachment (a ticket's prompt attachment, or one going with or sent with a message) as the
-/// list draws it.
+/// list draws it. The service serves every one at GET /attachments/:id (HarnessClient.attachmentUrl).
 struct PromptAttachmentTile: Identifiable {
-    let attachment: PromptAttachment
+    let attachment: Attachment
     /// Its place in the list it came from (what removing it takes out)
     let index: Int
-    /// A thumbnail of bytes this device uploaded, drawn before the service has the draft
+    /// A thumbnail of bytes this device uploaded, drawn before the service's copy loads
     var local: UIImage?
-    /// Where the service serves it, once it's saved (nil: only on this device so far)
-    var remote: PromptAttachmentRemote?
 
-    var id: String { attachment.path }
-    /// Previewed as an image: by its extension, or because it's annotated or refers to a spec image
-    /// (`attachment:<id>`, whose name is the image's alt text, often without an extension).
-    var isImage: Bool {
-        PromptAttachments.isImage(attachment) || attachment.annotation != nil || PromptAttachments.specAttachmentId(of: attachment.path) != nil
-    }
+    var id: String { attachment.id.isEmpty ? attachment.path : attachment.id }
+    /// Previewed as an image: by its kind, or because it's annotated (only images are).
+    var isImage: Bool { PromptAttachments.isImage(attachment) || attachment.annotation != nil }
     /// The human's notes on it (drawn over its thumbnail, listed under its row)
     var annotation: AttachmentAnnotation? { attachment.annotation.flatMap { $0.marks.isEmpty ? nil : $0 } }
-    /// The file as a message or New session sends it, for annotating it.
-    var input: PromptAttachmentInput { PromptAttachmentInput(path: attachment.path, name: attachment.name) }
+
+    /// Where the service serves its file (nil: no id yet, so only this device has it).
+    func url(_ api: HarnessClient) -> String? {
+        attachment.id.isEmpty ? nil : api.attachmentUrl(attachment.id)
+    }
 }
 
 /// A file being uploaded for the list (a spinner row until it's attached).
@@ -68,7 +42,7 @@ enum PromptAttachmentCheck {
 
     @MainActor
     static func run(_ tile: PromptAttachmentTile, url: String?, api: HarnessClient?) async -> Result? {
-        guard tile.remote != nil, let url, let api else { return nil }
+        guard let url, let api else { return nil }
         if tile.isImage {
             if tile.local != nil {
                 // Drawn from this device's bytes; still find out when the file is gone.
@@ -129,7 +103,7 @@ private struct PromptAttachmentRow: View {
     @State private var failed = false
 
     private var url: String? {
-        tile.remote.flatMap { remote in store?.api.map(remote.url) }
+        store?.api.flatMap(tile.url)
     }
 
     var body: some View {
@@ -291,19 +265,11 @@ struct OpenablePromptAttachmentList: View {
             }
         })
         .fullScreenCover(item: $viewing) { start in
-            let api = store.api
             AttachmentViewer(
-                attachments: images.enumerated().map { i, tile in Attachment(id: String(i), kind: .image, mimeType: "", name: tile.attachment.name, size: 0) },
+                attachments: images.map(\.attachment),
                 start: start.index,
-                url: { a in
-                    guard let api, let i = Int(a.id), images.indices.contains(i) else { return nil }
-                    return images[i].remote?.url(api)
-                },
-                annotation: { a in Int(a.id).flatMap { images.indices.contains($0) ? images[$0].annotation : nil } },
-                annotate: sink.map { sink in { a, image in
-                    guard let i = Int(a.id), images.indices.contains(i) else { return nil }
-                    return sink.request(.existing(images[i].input), image: image, annotation: images[i].annotation)
-                } }
+                annotation: { a in a.annotation.flatMap { $0.marks.isEmpty ? nil : $0 } },
+                annotate: sink.map { sink in { a, image in sink.request(.existing(a), image: image, annotation: a.annotation) } }
             ) {
                 var t = Transaction()
                 t.disablesAnimations = true
@@ -315,7 +281,7 @@ struct OpenablePromptAttachmentList: View {
 
     /// Download a file into a temporary folder under its own name, then show it in Quick Look.
     private func open(_ tile: PromptAttachmentTile) {
-        guard !downloading, let api = store.api, let remote = tile.remote, let url = URL(string: remote.url(api)) else { return }
+        guard !downloading, let api = store.api, let url = tile.url(api).flatMap(URL.init(string:)) else { return }
         downloading = true
         let name = tile.attachment.name
         Task {
@@ -403,8 +369,8 @@ struct EditablePromptAttachmentList: View {
     let pending: [PromptAttachmentPending]
     let uploader: PromptAttachmentUploader
     var onRemove: ((PromptAttachmentTile) -> Void)?
-    /// Set the notes on the attachment `input` names.
-    let onAnnotate: @MainActor (PromptAttachmentInput, AttachmentAnnotation) -> Void
+    /// Set the notes on that attachment.
+    let onAnnotate: @MainActor (Attachment, AttachmentAnnotation) -> Void
 
     @Environment(BoardStore.self) private var store
     @State private var viewing: AttachmentViewerStart?
@@ -420,13 +386,12 @@ struct EditablePromptAttachmentList: View {
         .fullScreenCover(item: $viewing) { start in
             let add = onAnnotate
             AttachmentViewer(
-                attachments: images.enumerated().map { i, tile in Attachment(id: String(i), kind: .image, mimeType: "", name: tile.attachment.name, size: 0) },
+                attachments: images.map(\.attachment),
                 start: start.index,
-                url: { a in Int(a.id).flatMap { images.indices.contains($0) ? url(images[$0]) : nil } },
-                annotation: { a in Int(a.id).flatMap { images.indices.contains($0) ? images[$0].annotation : nil } },
+                url: { a in images.first { $0.attachment.id == a.id }.flatMap(url) },
+                annotation: { a in a.annotation.flatMap { $0.marks.isEmpty ? nil : $0 } },
                 annotate: { a, image in
-                    guard let i = Int(a.id), images.indices.contains(i) else { return nil }
-                    return AnnotationRequest(file: .existing(images[i].input), image: image, annotation: images[i].annotation) { add($0.input, $0.annotation) }
+                    AnnotationRequest(file: .existing(a), image: image, annotation: a.annotation) { add($0.attachment, $0.annotation) }
                 }
             ) {
                 var t = Transaction()
@@ -436,9 +401,9 @@ struct EditablePromptAttachmentList: View {
         }
     }
 
-    /// This device's copy, else the service's once it has the file (a spec image's right away).
+    /// This device's copy of a file it uploaded, else the service's.
     private func url(_ tile: PromptAttachmentTile) -> String? {
-        if let local = uploader.localFiles[tile.attachment.path] { return local.absoluteString }
-        return tile.remote.flatMap { remote in store.api.map(remote.url) }
+        if let local = uploader.localFiles[tile.attachment.id] { return local.absoluteString }
+        return store.api.flatMap(tile.url)
     }
 }

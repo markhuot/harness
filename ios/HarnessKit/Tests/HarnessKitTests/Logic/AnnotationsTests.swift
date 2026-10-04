@@ -125,3 +125,55 @@ struct AnnotationsTests {
         #expect(h.last == Annotations.historyLimit + 4)
     }
 }
+
+@Suite("Annotations: a browser mark's element (iPhone bookkeeping)")
+struct AnnotationElementBookkeepingTests {
+    typealias Mark = Annotations.DraftMark
+    typealias Point = Annotations.Point
+    static let save = BrowserElement(path: "#save", text: "Save")
+
+    @Test func onlyMarksWithoutAnElementAndAnUnsettledAnchorNeedALookup() {
+        let marks = [
+            Mark(anchor: Point(x: 0.1, y: 0.1), element: Self.save),
+            Mark(anchor: Point(x: 0.2, y: 0.2)),
+            Mark(anchor: Point(x: 0.3, y: 0.3)),
+        ]
+        #expect(Annotations.marksNeedingElement(marks, settled: []) == [1, 2])
+        #expect(Annotations.marksNeedingElement(marks, settled: [Point(x: 0.3, y: 0.3)]) == [1])
+    }
+
+    /// Moving the anchor forgets the element, so the moved mark needs a lookup again.
+    @Test func movingTheAnchorAsksAgain() {
+        let marks = [Mark(anchor: Point(x: 0.5, y: 0.5), tail: Point(x: 0.2, y: 0.2), element: Self.save)]
+        let moved = Annotations.move(marks, Annotations.MarkHit(index: 0, part: .anchor), to: Point(x: 0.6, y: 0.6))
+        #expect(Annotations.marksNeedingElement(moved, settled: [Point(x: 0.5, y: 0.5)]) == [0])
+        let tail = Annotations.move(marks, Annotations.MarkHit(index: 0, part: .badge), to: Point(x: 0.9, y: 0.9))
+        #expect(Annotations.marksNeedingElement(tail, settled: []) == [])
+    }
+
+    /// An answer for an anchor the mark has since left (or a mark since deleted) is dropped: the
+    /// latest lookup wins.
+    @Test func aStaleAnswerIsDropped() {
+        let at = Point(x: 0.4, y: 0.4)
+        let marks = [Mark(anchor: at)]
+        #expect(Annotations.resolveElement(marks, at: 0, anchor: at, Self.save)[0].element == Self.save)
+        #expect(Annotations.resolveElement(marks, at: 0, anchor: Point(x: 0.1, y: 0.1), Self.save) == marks)
+        #expect(Annotations.resolveElement(marks, at: 3, anchor: at, Self.save) == marks)
+        // null clears one that had an element.
+        let named = [Mark(anchor: at, element: Self.save)]
+        #expect(Annotations.resolveElement(named, at: 0, anchor: at, nil)[0].element == nil)
+    }
+
+    @Test func theLabelQuotesTextAndLeavesItOutWhenEmpty() {
+        #expect(Annotations.elementLabel(BrowserElement(path: "button:nth-of-type(2)", text: "Sign in")) == "button:nth-of-type(2) · \u{201C}Sign in\u{201D}")
+        #expect(Annotations.elementLabel(BrowserElement(path: "body > div", text: "")) == "body > div")
+    }
+
+    /// The sent mark carries what was looked up, in the page's terms; reopening keeps it.
+    @Test func theElementGoesOutWithTheMarkAndComesBack() {
+        let marks = Annotations.setElement([Mark(anchor: Point(x: 0.5, y: 0.25), message: "this")], at: 0, Self.save)
+        let sent = Annotations.marksForMessage(marks, width: 800, height: 400)
+        #expect(sent == [AnnotationMark(n: 1, x: 400, y: 100, message: "this", path: "#save", text: "Save")])
+        #expect(Annotations.draftMarks(width: 800, height: 400, marks: sent)[0].element == Self.save)
+    }
+}

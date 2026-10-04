@@ -13,26 +13,26 @@ protocol PromptAttachmentTarget: AnyObject, Sendable {
     /// What the limit toast says takes them
     var attachmentHolder: PromptAttachments.Holder { get }
     /// Attach `added` (deduped and capped); returns how many the limit left out.
-    func attach(_ added: [PromptAttachmentInput]) -> Int
+    func attach(_ added: [Attachment]) -> Int
 }
 
 extension NewSessionEditor: PromptAttachmentTarget {
     var attachmentCount: Int { local?.promptAttachments?.count ?? 0 }
     var attachmentHolder: PromptAttachments.Holder { .session }
-    func attach(_ added: [PromptAttachmentInput]) -> Int { addAttachments(added) }
+    func attach(_ added: [Attachment]) -> Int { addAttachments(added) }
 }
 
 extension MessageAttachments: PromptAttachmentTarget {
     var attachmentCount: Int { count }
     var attachmentHolder: PromptAttachments.Holder { .message }
-    func attach(_ added: [PromptAttachmentInput]) -> Int { add(added) }
+    func attach(_ added: [Attachment]) -> Int { add(added) }
 }
 
-/// Uploads files for attachments (DESIGN.md "Prompt attachments"): a New session's prompt, or a
-/// message from a ticket's composer. The phone's files aren't on the Mac, so every one goes
-/// through POST /uploads, then onto the target (deduped and capped). HEIC/HEIF photos go up as
-/// JPEG. It keeps a thumbnail of each uploaded image, so the list draws it before the service has
-/// it.
+/// Uploads files for attachments (DESIGN.md "Attachments"): a New session's prompt, or a message
+/// from a ticket's composer. The phone's files aren't on the Mac, so every one goes through
+/// POST /uploads, which registers it (an Attachment with its id), then onto the target (deduped and
+/// capped). HEIC/HEIF photos go up as JPEG. It keeps a thumbnail of each uploaded image, so the
+/// list draws it before the service's copy loads.
 @MainActor
 @Observable
 final class PromptAttachmentUploader {
@@ -60,10 +60,10 @@ final class PromptAttachmentUploader {
     /// whole screen (PromptAttachmentPickers): presented from a Form section, they'd attach to every row.
     var pickingPhotos = false
     var importing = false
-    /// Thumbnails of images this device uploaded, by their path on the service's machine.
+    /// Thumbnails of images this device uploaded, by attachment id.
     private(set) var thumbnails: [String: UIImage] = [:]
-    /// Copies of the images this device uploaded, in a temporary folder, by their path on the
-    /// service's machine: the viewer shows them before (or without) the service serving them.
+    /// Copies of the images this device uploaded, in a temporary folder, by attachment id: the
+    /// viewer shows them without waiting for the service's copy.
     private(set) var localFiles: [String: URL] = [:]
 
     private nonisolated let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attachment-uploads/\(UUID().uuidString)", isDirectory: true)
@@ -74,13 +74,13 @@ final class PromptAttachmentUploader {
 
     /// Hold on to an image uploaded elsewhere (the annotator's browser screenshot): its thumbnail
     /// and a copy to view.
-    func keepUploaded(_ data: Data, at path: String, name: String) async {
-        if let thumb = await Self.thumbnail(data) { thumbnails[path] = thumb }
-        await keep(data, name: name, path: path)
+    func keepUploaded(_ data: Data, for a: Attachment) async {
+        if let thumb = await Self.thumbnail(data) { thumbnails[a.id] = thumb }
+        await keep(data, name: a.name, id: a.id)
     }
 
     /// Write an uploaded image's bytes to the temporary folder for the viewer.
-    private func keep(_ data: Data, name: String, path: String) async {
+    private func keep(_ data: Data, name: String, id: String) async {
         let file = folder.appendingPathComponent(UUID().uuidString, isDirectory: true).appendingPathComponent(name.isEmpty ? "image" : name)
         let written = await Task.detached(priority: .utility) { () -> Bool in
             do {
@@ -89,7 +89,7 @@ final class PromptAttachmentUploader {
                 return true
             } catch { return false }
         }.value
-        if written { localFiles[path] = file }
+        if written { localFiles[id] = file }
     }
 
     /// Upload `sources` in order and attach each as it lands. Toasts a failure per file, and once
@@ -117,13 +117,12 @@ final class PromptAttachmentUploader {
                     name = PromptAttachments.jpegName(name)
                     mime = "image/jpeg"
                 }
-                let thumb = PromptAttachments.isImage(name: name, path: name) ? await Self.thumbnail(data) : nil
-                let a = try await client.uploadPromptAttachment(data: data, name: name, mimeType: mime)
-                if let thumb {
-                    thumbnails[a.path] = thumb
-                    await keep(data, name: a.name, path: a.path)
+                let a = try await client.uploadAttachment(data: data, name: name, mimeType: mime)
+                if PromptAttachments.isImage(a), let thumb = await Self.thumbnail(data) {
+                    thumbnails[a.id] = thumb
+                    await keep(data, name: a.name, id: a.id)
                 }
-                skipped += target.attach([PromptAttachmentInput(path: a.path, name: a.name, source: a.source)])
+                skipped += target.attach([a])
             } catch {
                 haptic(.error)
                 toasts.show("Couldn't attach \(source.name): \(localizedErrorMessage(error))", kind: .error)

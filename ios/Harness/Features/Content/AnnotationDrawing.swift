@@ -5,7 +5,7 @@ import UIKit
 /// Draws annotation marks (HarnessKit Annotations) into a Core Graphics context: one function for
 /// the annotator's overlay, the marks over an annotated attachment's thumbnail, and over the image
 /// in the full-screen viewer, so an annotation looks the same everywhere. The image itself is never
-/// changed: the marks are metadata on the attachment (PromptAttachment.annotation), drawn on top.
+/// changed: the marks are metadata on the attachment (Attachment.annotation), drawn on top.
 /// Each mark is an accent arrow with a white outline from its badge to its anchor (when it has a
 /// tail far enough away), then a filled accent badge with a white outline and its white number.
 /// Later marks draw over earlier ones, as hitTest expects.

@@ -9,7 +9,9 @@ import SwiftUI
 /// full width (a video as its first frame) with its alt text as the caption. `![alt](attachment:<id>
 /// "thumb")` is a 100 pt square thumbnail, and a line of them a wrapping row. A tap opens the
 /// full-screen viewer, paging through every attachment in the text; the parser turns remote and file
-/// images into links, so nothing an agent wrote gets fetched.
+/// images into links, so nothing an agent wrote gets fetched. Each one is the ticket's own
+/// Attachment record (`\.specAttachments`, TicketDetail.attachments), so annotating it adds that
+/// attachment, by its id, to the message being written.
 ///
 /// `size` is the body text size; `color` overrides the text color (nil = palette text). File links
 /// resolve against `linkContext` when it names a ticket or project, else the nearest
@@ -32,6 +34,7 @@ struct MarkdownView: View {
     @Environment(\.palette) private var c
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.annotationSink) private var sink
+    @Environment(\.specAttachments) private var known
     @State private var open: AttachmentViewerStart?
     /// Attachments that failed to load as an image and turned out to be videos.
     @State private var learned: [String: AttachmentKind] = [:]
@@ -63,9 +66,7 @@ struct MarkdownView: View {
         .modifier(ContentLinkHandling(override: linkContext))
         .fullScreenCover(item: $open) { start in
             AttachmentViewer(attachments: media.map(attachment), start: start.index,
-                             annotate: annotatable ? sink.map { sink in { a, image in
-                                 sink.request(.existing(PromptAttachmentInput(path: PromptAttachments.specAttachmentPath(a.id), name: a.name)), image: image)
-                             } } : nil) {
+                             annotate: annotatable ? sink.map { sink in { a, image in sink.request(.existing(a), image: image) } } : nil) {
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { open = nil }
@@ -73,13 +74,21 @@ struct MarkdownView: View {
         }
     }
 
+    /// The kind to show: one learned by playing it, else the ticket's record of it (an image's alt
+    /// text often has no extension to go by), else what the markdown says.
     private func kind(_ m: Markdown.Media) -> AttachmentKind {
-        learned[m.id] ?? (m.video ? .video : .image)
+        if let k = learned[m.id] { return k }
+        if let k = known?.first(where: { $0.id == m.id })?.kind, k == .image || k == .video { return k }
+        return m.video ? .video : .image
     }
 
-    /// What the viewer pages through. Markdown knows only the id and alt text; the header shows the alt text.
+    /// What the viewer pages through: the ticket's own record of the attachment, shown as the kind
+    /// it plays as. An older service lists none, so markdown's id and alt text stand in.
     private func attachment(_ m: Markdown.Media) -> Attachment {
-        Attachment(id: m.id, kind: kind(m), mimeType: "", name: m.alt.isEmpty ? m.id : m.alt, size: 0)
+        var a = known?.first { $0.id == m.id }
+            ?? Attachment(id: m.id, path: "", name: m.alt.isEmpty ? m.id : m.alt, source: .spec, kind: kind(m))
+        a.kind = kind(m)
+        return a
     }
 
     private func mediaScope(_ media: [Markdown.Media]) -> MarkdownMediaScope {

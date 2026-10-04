@@ -13,8 +13,8 @@ import SwiftUI
 /// shows its marks over the image, zooming with it; the file itself is never changed.
 struct AttachmentViewer: View {
     let attachments: [Attachment]
-    /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. Prompt
-    /// attachments (Ticket.promptAttachments) pass their own URLs.
+    /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. A
+    /// composer or New session passes this device's copy of a file it uploaded.
     let url: (@MainActor (Attachment) -> String?)?
     /// The notes drawn over an attachment's image (nil: none).
     let annotation: (@MainActor (Attachment) -> AttachmentAnnotation?)?
@@ -208,8 +208,9 @@ private struct AttachmentViewerHeader: View {
                     Text(current.name)
                         .font(.scaled(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
-                    // Markdown attachments come without a size (0): only the position, then.
-                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", current.size > 0 ? Attachments.formatSize(Double(current.size)) : ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                    // Without a known size (an older service's spec media): only the position, then.
+                    let size = current.size.flatMap { $0 > 0 ? Attachments.formatSize(Double($0)) : nil } ?? ""
+                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", size].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.scaled(size: 12.5))
                         .foregroundStyle(.white.opacity(0.6))
                 }

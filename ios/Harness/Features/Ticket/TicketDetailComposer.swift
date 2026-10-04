@@ -156,7 +156,7 @@ struct TicketDetailComposer: View {
     /// doesn't cover the tab.
     private func attachmentTray(accepts: Bool) -> some View {
         let tiles = outgoing.list.enumerated().map { i, a in
-            PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.path], remote: .waiting(a))
+            PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.id])
         }
         let rows = tiles.count + uploader.pending.count
         // A row is 44 tall with 4 between, and an annotated one has its "N notes" line (about 26)
@@ -170,7 +170,7 @@ struct TicketDetailComposer: View {
                     pending: uploader.pending,
                     uploader: uploader,
                     onRemove: sending ? nil : { outgoing.remove(at: $0.index) },
-                    onAnnotate: { input, annotation in outgoing.annotate(input, annotation: annotation) }
+                    onAnnotate: { a, annotation in outgoing.annotate(a, annotation: annotation) }
                 )
             }
             .scrollBounceBehavior(.basedOnSize)

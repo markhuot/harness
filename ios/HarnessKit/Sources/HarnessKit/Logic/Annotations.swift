@@ -270,6 +270,28 @@ public enum Annotations {
         return next.count > historyLimit ? Array(next.suffix(historyLimit)) : next
     }
 
+    // MARK: iPhone-only: looking up the element under a browser mark's anchor
+
+    /// The marks of a browser screenshot whose element still needs looking up: none yet, and an
+    /// anchor that hasn't already been looked up without one (`settled`: anchors the page answered
+    /// null for, or that failed), so an unchanged mark isn't asked about again.
+    public static func marksNeedingElement(_ marks: [DraftMark], settled: Set<Point>) -> [Int] {
+        marks.indices.filter { marks[$0].element == nil && !settled.contains(marks[$0].anchor) }
+    }
+
+    /// A lookup's answer for the mark that was at `index` with `anchor`: set on it while it's still
+    /// there, anchored there; otherwise the marks are unchanged (a later move, delete or undo won).
+    public static func resolveElement(_ marks: [DraftMark], at index: Int, anchor: Point, _ element: BrowserElement?) -> [DraftMark] {
+        guard marks.indices.contains(index), marks[index].anchor == anchor, marks[index].element != element else { return marks }
+        return setElement(marks, at: index, element)
+    }
+
+    /// The line under a mark's note naming its element: `button:nth-of-type(2) · "Sign in"`, the
+    /// path alone when the element has no text.
+    public static func elementLabel(_ e: BrowserElement) -> String {
+        e.text.isEmpty ? e.path : "\(e.path) · \u{201C}\(e.text)\u{201D}"
+    }
+
     /// A browser page's name for its screenshot (uploaded as `<name>.png`): the host, else the
     /// title, else "page". The Mac app's browserShotName.
     public static func browserShotName(url: String, title: String) -> String {

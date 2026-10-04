@@ -132,6 +132,15 @@ private struct TicketDetailBody: View {
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
     /// pager, so a page redrawing under it can't take it down.
     @State private var annotating: AnnotationRequest?
+    /// The spec's media (the detail's attachments), refetched when a new revision may show more.
+    @State private var specAttachments: [Attachment]?
+
+    /// What has to change for the spec's media to load again.
+    private struct SpecAttachmentsTrigger: Hashable {
+        let key: String
+        let revision: Int?
+        let epoch: Int
+    }
 
     var body: some View {
         let state = store.state
@@ -155,6 +164,11 @@ private struct TicketDetailBody: View {
                 })
                 .environment(\.annotationSink, sink)
                 .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
+                .environment(\.specAttachments, specAttachments)
+        }
+        .task(id: SpecAttachmentsTrigger(key: ticket.key, revision: ticket.specRevision, epoch: store.epoch)) {
+            guard let api = store.api, let detail = try? await api.getTicket(ticket.key), !Task.isCancelled else { return }
+            specAttachments = detail.attachments
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -174,15 +188,15 @@ private struct TicketDetailBody: View {
         let uploader = uploader
         let toasts = toasts
         let focus = { focusComposer += 1 }
-        return AnnotationSink(current: { path in
-            outgoing.list.first { $0.path == path }?.annotation
+        return AnnotationSink(current: { a in
+            outgoing.list.first { $0.id == a.id }?.annotation
         }, add: { added in
-            guard outgoing.annotate(added.input, annotation: added.annotation) else {
+            guard outgoing.annotate(added.attachment, annotation: added.annotation) else {
                 haptic(.warning)
                 toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
                 return
             }
-            if let data = added.uploaded { Task { await uploader.keepUploaded(data, at: added.input.path, name: added.input.name ?? "") } }
+            if let data = added.uploaded { Task { await uploader.keepUploaded(data, for: added.attachment) } }
             focus()
         })
     }
