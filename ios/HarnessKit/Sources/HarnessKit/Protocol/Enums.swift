@@ -323,25 +323,30 @@ public enum SpecRevisionAuthor: OpenEnum {
 }
 
 public enum AttachmentKind: OpenEnum {
-    case image, video
+    case image, video, file
     case unknown(String)
-    public static let allKnown: [Self] = [.image, .video]
+    public static let allKnown: [Self] = [.image, .video, .file]
     public var rawValue: String {
         switch self {
         case .image: "image"
         case .video: "video"
+        case .file: "file"
         case let .unknown(r): r
         }
     }
 }
 
-/// PromptAttachment.source: "file" is referenced in place, "upload" was stored by POST /uploads.
-public enum PromptAttachmentSource: OpenEnum {
-    case file, upload
+/// Attachment.source, where its file lives (DESIGN.md "Attachments"): "spec" was copied into the
+/// harness's attachments folder for a spec (lives until its ticket is deleted); "file" was already
+/// on disk and is referenced in place (it can go missing); "upload" was stored by POST /uploads
+/// (deleted with the last ticket that uses it).
+public enum AttachmentSource: OpenEnum {
+    case spec, file, upload
     case unknown(String)
-    public static let allKnown: [Self] = [.file, .upload]
+    public static let allKnown: [Self] = [.spec, .file, .upload]
     public var rawValue: String {
         switch self {
+        case .spec: "spec"
         case .file: "file"
         case .upload: "upload"
         case let .unknown(r): r

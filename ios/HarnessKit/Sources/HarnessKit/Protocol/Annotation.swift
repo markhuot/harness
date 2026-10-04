@@ -8,6 +8,10 @@ import Foundation
 public let maxAnnotationMarks = 50
 /// `MAX_ANNOTATION_MESSAGE`: most characters (UTF-16) in one note.
 public let maxAnnotationMessage = 2000
+/// `MAX_ANNOTATION_TEXT`: longest AnnotationMark.text (the anchored element's visible text).
+public let maxAnnotationText = 200
+/// `MAX_ANNOTATION_PATH`: longest AnnotationMark.path (a CSS selector).
+public let maxAnnotationPath = 1000
 
 /// A page's viewport in CSS pixels.
 public struct AnnotationViewport: Codable, Sendable, Equatable, Hashable {
@@ -30,14 +34,21 @@ public struct AnnotationMark: Codable, Sendable, Equatable, Hashable {
     public var tailX: Double?
     public var tailY: Double?
     public var message: String
+    /// On a browser screenshot (AttachmentAnnotation.page): a CSS selector for the element under
+    /// the anchor and its visible text (BrowserElement), so the agent can find it in the page and
+    /// the source. Absent when the page couldn't tell (it had moved on) or on other images.
+    public var path: String?
+    public var text: String?
 
-    public init(n: Int, x: Double, y: Double, tailX: Double? = nil, tailY: Double? = nil, message: String) {
+    public init(n: Int, x: Double, y: Double, tailX: Double? = nil, tailY: Double? = nil, message: String, path: String? = nil, text: String? = nil) {
         self.n = n
         self.x = x
         self.y = y
         self.tailX = tailX
         self.tailY = tailY
         self.message = message
+        self.path = path
+        self.text = text
     }
 }
 
@@ -61,7 +72,7 @@ public struct AnnotationPage: Codable, Sendable, Equatable, Hashable {
     }
 }
 
-/// A human's numbered notes on an image attachment (PromptAttachment.annotation). Metadata only:
+/// A human's numbered notes on an image attachment (Attachment.annotation). Metadata only:
 /// the image file is never changed, and the apps draw the marks over it.
 public struct AttachmentAnnotation: Codable, Sendable, Equatable, Hashable {
     /// The image's size in pixels; the marks are in these pixels.
@@ -94,8 +105,14 @@ public struct BrowserScreenshot: Codable, Sendable, Equatable {
     public var tabId: Int
     public var url: String
     public var title: String
+    /// How far the page was scrolled when it was captured, in CSS pixels (BrowserElementQuery
+    /// checks it). nil from an older service, which can't look up elements either.
+    public var scroll: BrowserScroll?
 
-    public init(data: String, width: Double, height: Double, viewport: AnnotationViewport, scale: Double, tabId: Int, url: String, title: String) {
+    public init(
+        data: String, width: Double, height: Double, viewport: AnnotationViewport, scale: Double, tabId: Int, url: String, title: String,
+        scroll: BrowserScroll? = nil
+    ) {
         self.data = data
         self.width = width
         self.height = height
@@ -104,6 +121,7 @@ public struct BrowserScreenshot: Codable, Sendable, Equatable {
         self.tabId = tabId
         self.url = url
         self.title = title
+        self.scroll = scroll
     }
 
     /// The PNG's bytes (nil when `data` isn't base64).
@@ -112,5 +130,52 @@ public struct BrowserScreenshot: Codable, Sendable, Equatable {
     /// The page it shows, for AttachmentAnnotation.page.
     public var page: AnnotationPage {
         AnnotationPage(url: url, title: title, tabId: tabId, viewport: viewport, scale: scale)
+    }
+}
+
+/// A page's scroll offset in CSS pixels.
+public struct BrowserScroll: Codable, Sendable, Equatable, Hashable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
+    }
+}
+
+/// POST /browser/:sessionId/element: what's under a point of a captured screenshot, so an
+/// annotation's mark can name it (AnnotationMark.path and .text). `url` and `scroll` are the
+/// screenshot's: when the tab has since navigated or scrolled, the answer is null rather than
+/// whatever is there now.
+public struct BrowserElementQuery: Codable, Sendable, Equatable {
+    public var tabId: Int
+    /// The point in the page's CSS pixels (the screenshot's pixels divided by its scale).
+    public var x: Double
+    public var y: Double
+    public var url: String
+    public var scroll: BrowserScroll
+
+    public init(tabId: Int, x: Double, y: Double, url: String, scroll: BrowserScroll) {
+        self.tabId = tabId
+        self.x = x
+        self.y = y
+        self.url = url
+        self.scroll = scroll
+    }
+}
+
+/// The element under a point of the page (BrowserElementQuery).
+public struct BrowserElement: Codable, Sendable, Equatable, Hashable {
+    /// A CSS selector that finds it (an id when it has a unique one, else a tag/nth-of-type chain
+    /// from the nearest id or body).
+    public var path: String
+    /// Its visible text, whitespace collapsed, at most `maxAnnotationText` characters ("" when it
+    /// has none).
+    public var text: String
+
+    public init(path: String, text: String) {
+        self.path = path
+        self.text = text
     }
 }

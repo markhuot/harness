@@ -138,10 +138,10 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     /// Save it as a draft (Ticket.draft): created in planning with no run, whatever `start` says.
     /// POST /tickets/:key/submit launches it later. The spec may be empty for a draft.
     public var draft: Bool?
-    /// Files to attach to the prompt (Ticket.promptAttachments): absolute paths on the service's
-    /// machine, each existing now (400 otherwise), at most `maxPromptAttachments`. Pastes and files
-    /// from another device go through POST /uploads first.
-    public var promptAttachments: [PromptAttachmentInput]?
+    /// Files to attach to the prompt (Ticket.promptAttachments), at most `maxPromptAttachments`: by
+    /// `id` (an upload, a registered file) or by `path` (existing now; 400 otherwise). Pastes and
+    /// files from another device go through POST /uploads first.
+    public var promptAttachments: [AttachmentInput]?
 
     public init(
         projectId: String, spec: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
@@ -149,7 +149,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
         parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
-        draft: Bool? = nil, promptAttachments: [PromptAttachmentInput]? = nil
+        draft: Bool? = nil, promptAttachments: [AttachmentInput]? = nil
     ) {
         self.projectId = projectId
         self.spec = spec
@@ -215,9 +215,9 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     /// Drafts only (409 otherwise): move the draft to another project. It takes that project's next
     /// key; the old key is kept as an alias (like a project rename), so open panes follow it.
     public var projectId: String?
-    /// Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
+    /// Drafts only (409 otherwise): the whole new list of prompt attachments. New files must exist;
     /// ones the draft already had are kept as they are, even when their file has gone missing.
-    public var promptAttachments: [PromptAttachmentInput]?
+    public var promptAttachments: [AttachmentInput]?
 
     public init(
         title: String? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
@@ -225,7 +225,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
         kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil,
-        promptAttachments: [PromptAttachmentInput]? = nil
+        promptAttachments: [AttachmentInput]? = nil
     ) {
         self.title = title
         self.spec = spec
@@ -281,12 +281,13 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// (planning → the plan run; blocked, review, done → a chat run with the work tools).
     public var move: Bool?
     /// Files sent with the message (at most maxPromptAttachments), like a New session's
-    /// promptAttachments: absolute paths on the service's machine, or what POST /uploads returned.
+    /// promptAttachments: by `id` (a spec image, an upload, a registered file, a file from an
+    /// earlier message) or by `path`.
     /// The agent gets their paths, and images inline. Not allowed while a tool approval waits (a
     /// message then answers it as a deny).
-    public var attachments: [PromptAttachmentInput]?
+    public var attachments: [AttachmentInput]?
 
-    public init(text: String, move: Bool? = nil, attachments: [PromptAttachmentInput]? = nil) {
+    public init(text: String, move: Bool? = nil, attachments: [AttachmentInput]? = nil) {
         self.text = text
         self.move = move
         self.attachments = attachments

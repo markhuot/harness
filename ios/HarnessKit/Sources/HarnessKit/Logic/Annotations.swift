@@ -22,11 +22,15 @@ public enum Annotations {
         public var anchor: Point
         public var tail: Point?
         public var message: String
+        /// On a browser screenshot: the element under the anchor (BrowserElement), once looked up.
+        /// nil until then, when the page couldn't tell, and on other images.
+        public var element: BrowserElement?
 
-        public init(anchor: Point, tail: Point? = nil, message: String = "") {
+        public init(anchor: Point, tail: Point? = nil, message: String = "", element: BrowserElement? = nil) {
             self.anchor = anchor
             self.tail = tail
             self.message = message
+            self.element = element
         }
     }
 
@@ -150,13 +154,19 @@ public enum Annotations {
     }
 
     /// `marks` with the hit part moved to `to` (a fraction of the surface). A tap's badge is its
-    /// anchor, so it moves the anchor.
+    /// anchor, so it moves the anchor. Moving the anchor forgets the element it named; moving an
+    /// arrow's tail keeps it.
     public static func move(_ marks: [DraftMark], _ hit: MarkHit, to: Point) -> [DraftMark] {
         let at = Point(x: clamp01(to.x), y: clamp01(to.y))
         return marks.enumerated().map { i, m in
             guard i == hit.index else { return m }
             var out = m
-            if hit.part == .badge && m.tail != nil { out.tail = at } else { out.anchor = at }
+            if hit.part == .badge && m.tail != nil {
+                out.tail = at
+            } else {
+                out.anchor = at
+                out.element = nil
+            }
             return out
         }
     }
@@ -164,6 +174,17 @@ public enum Annotations {
     /// `marks` without the one at `index`; the ones after it move up a number.
     public static func remove(_ marks: [DraftMark], at index: Int) -> [DraftMark] {
         marks.enumerated().filter { $0.offset != index }.map(\.element)
+    }
+
+    /// `setMarkElement`: `marks` with the element under the anchor of the one at `index` set (nil:
+    /// there's none, or the page moved on).
+    public static func setElement(_ marks: [DraftMark], at index: Int, _ element: BrowserElement?) -> [DraftMark] {
+        marks.enumerated().map { i, m in
+            guard i == index else { return m }
+            var out = m
+            out.element = element
+            return out
+        }
     }
 
     /// `marks` with the message of the one at `index` replaced.
@@ -185,6 +206,10 @@ public enum Annotations {
                 out.tailX = JSCompat.round(tail.x * width)
                 out.tailY = JSCompat.round(tail.y * height)
             }
+            if let element = m.element {
+                out.path = element.path
+                out.text = element.text
+            }
             return out
         }
     }
@@ -205,7 +230,8 @@ public enum Annotations {
         marks.map { m in
             let unit = { (x: Double, y: Double) in toUnit(Point(x: x, y: y), width: width, height: height) }
             let tail: Point? = if let tx = m.tailX, let ty = m.tailY { unit(tx, ty) } else { nil }
-            return DraftMark(anchor: unit(m.x, m.y), tail: tail, message: m.message)
+            let element = m.path.map { BrowserElement(path: $0, text: m.text ?? "") }
+            return DraftMark(anchor: unit(m.x, m.y), tail: tail, message: m.message, element: element)
         }
     }
 

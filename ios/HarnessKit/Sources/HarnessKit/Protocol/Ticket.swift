@@ -85,11 +85,11 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// `kind`, `useWorktree` and `projectId` can still change (UpdateTicketBody). Optional so fixtures
     /// type-check; the service always sends it.
     public var draft: Bool?
-    /// Files the human attached to the New session (DESIGN.md "Prompt attachments"): referenced where
-    /// they are on the service's machine, never copied. The first run gets their paths and the images
-    /// inline. One can go missing later (moved or deleted); GET /tickets/:key/prompt-attachments/:index
-    /// answers 404 for it then. Optional so older payloads decode; the service always sends it.
-    public var promptAttachments: [PromptAttachment]?
+    /// Files the human attached to the New session (DESIGN.md "Attachments"), each with its
+    /// annotation if any. The first run gets their paths and the images inline. A "file" one can go
+    /// missing later (moved or deleted); GET /attachments/:id answers 404 for it then. Optional so
+    /// older payloads decode; the service always sends it.
+    public var promptAttachments: [Attachment]?
     /// Why the ticket is blocked (question for the human), when status = blocked
     @Nullable public var blockedReason: String?
     /// True while any agent run for this ticket is queued or running
@@ -120,7 +120,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [PromptAttachment]? = nil, blockedReason: String? = nil, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, blockedReason: String? = nil, busy: Bool = false,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
         createdAt: Timestamp, updatedAt: Timestamp
@@ -331,11 +331,14 @@ public struct TicketDetail: Codable, Sendable, Equatable {
     /// Other tickets carrying a remote ID equal to the requested key or to this ticket's own remote
     /// ID, newest first. Absent from older services.
     public var relatedTickets: [RelatedTicket]?
+    /// The media in the ticket's spec (source "spec"), so clients can refer to them by id. Absent
+    /// from older services.
+    public var attachments: [Attachment]?
 
     public init(
         resolvedFrom: String? = nil, ticket: Ticket, session: Session, activity: [ActivityEntry] = [], runs: [Run] = [],
         dependents: [String] = [], children: [Ticket] = [], parent: Patch<Ticket> = .absent,
-        subagents: [Subagent]? = nil, relatedTickets: [RelatedTicket]? = nil
+        subagents: [Subagent]? = nil, relatedTickets: [RelatedTicket]? = nil, attachments: [Attachment]? = nil
     ) {
         self.resolvedFrom = resolvedFrom
         self.ticket = ticket
@@ -347,6 +350,7 @@ public struct TicketDetail: Codable, Sendable, Equatable {
         self.parent = parent
         self.subagents = subagents
         self.relatedTickets = relatedTickets
+        self.attachments = attachments
     }
 }
 

@@ -19,7 +19,8 @@ struct AnnotationsFixtureTests {
         let anchor: P
         let tail: P?
         let message: String
-        var draft: Annotations.DraftMark { .init(anchor: anchor.point, tail: tail?.point, message: message) }
+        var element: BrowserElement?
+        var draft: Annotations.DraftMark { .init(anchor: anchor.point, tail: tail?.point, message: message, element: element) }
     }
 
     struct Hit: Codable, Sendable, Equatable {
@@ -101,6 +102,7 @@ struct AnnotationsFixtureTests {
         for (a, e) in zip(actual, expected) {
             #expect(close(a.anchor, e.anchor), "\(name): anchor \(a.anchor) != \(e.anchor)")
             #expect(a.message == e.message, "\(name): message")
+            #expect(a.element == e.element, "\(name): element")
             switch (a.tail, e.tail) {
             case (nil, nil): break
             case let (at?, et?): #expect(close(at, et), "\(name): tail \(at) != \(et)")
@@ -197,5 +199,40 @@ struct AnnotationsFixtureTests {
     @Test(arguments: Fixture.cases("annotations", "draftMarksFromCases", input: AttachmentAnnotation.self, output: [Mark].self))
     func draftMarksFrom(_ c: Fixture.Case<AttachmentAnnotation, [Mark]>) {
         Self.expectMarks(Annotations.draftMarks(from: c.input), c.output, c.name)
+    }
+
+    struct ElementStep: Decodable, Sendable {
+        let step: String
+    }
+
+    /// markElementCases: the element under a browser mark's anchor rides from the draft into the
+    /// sent mark and back, survives a tail move, and is forgotten when the anchor moves.
+    @Test(arguments: Fixture.cases("annotations", "markElementCases", input: ElementStep.self, output: JSONValue.self))
+    func markElement(_ c: Fixture.Case<ElementStep, JSONValue>) throws {
+        let named = Annotations.DraftMark(
+            anchor: Point(x: 0.5, y: 0.5), tail: Point(x: 0.2, y: 0.2), message: "a", element: BrowserElement(path: "#save", text: "Save")
+        )
+        func drafts(_ marks: [Annotations.DraftMark]) throws {
+            let expected = try JSONDecoder().decode([Mark].self, from: JSONEncoder().encode(c.output))
+            Self.expectMarks(marks, expected, c.name)
+        }
+        switch c.input.step {
+        case "send":
+            try expectJSONMatchesTS(Annotations.marksForMessage([named], width: 100, height: 100), c.output)
+        case "reopen":
+            try drafts(Annotations.draftMarks(width: 100, height: 100, marks: [AnnotationMark(n: 1, x: 50, y: 50, message: "", path: "body > p", text: "")]))
+        case "move tail":
+            try drafts(Annotations.move([named], Annotations.MarkHit(index: 0, part: .badge), to: Point(x: 0.1, y: 0.1)))
+        case "move anchor":
+            try drafts(Annotations.move([named], Annotations.MarkHit(index: 0, part: .anchor), to: Point(x: 0.6, y: 0.6)))
+        case "clear":
+            try expectJSONMatchesTS(Annotations.marksForMessage(Annotations.setElement([named], at: 0, nil), width: 100, height: 100), c.output)
+        case "set":
+            var bare = named
+            bare.element = nil
+            try drafts(Annotations.setElement([bare], at: 0, BrowserElement(path: "#other", text: "Other")))
+        default:
+            Issue.record("unknown step \(c.input.step)")
+        }
     }
 }

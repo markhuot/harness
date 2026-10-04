@@ -173,15 +173,16 @@ public final class NewSessionEditor {
         edit(UpdateTicketBody(spec: text))
     }
 
-    /// Attach uploaded files to the prompt (deduped by path, capped at `maxPromptAttachments`).
+    /// Attach uploaded files to the prompt (the same file once, by id, capped at
+    /// `maxPromptAttachments`).
     /// Returns how many the limit left out, so the screen can say so.
     @discardableResult
-    public func addAttachments(_ added: [PromptAttachmentInput]) -> Int {
+    public func addAttachments(_ added: [Attachment]) -> Int {
         guard let local else { return added.count }
         let current = local.promptAttachments ?? []
         let result = PromptAttachments.add(current, added)
         if !PromptAttachments.same(result.list, current) {
-            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list)))
+            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputs(result.list)))
         }
         return result.skipped
     }
@@ -191,20 +192,20 @@ public final class NewSessionEditor {
         guard let local else { return }
         let current = local.promptAttachments ?? []
         guard current.indices.contains(index) else { return }
-        edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(PromptAttachments.remove(current, at: index))))
+        edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputs(PromptAttachments.remove(current, at: index))))
     }
 
-    /// Annotate `input` (DESIGN.md "Annotations"): the prompt's attachment with its path gets
+    /// Annotate `attachment` (DESIGN.md "Annotations"): the prompt's same file (by id) gets
     /// `annotation` in place (nil takes it off), or it's added at the end with it. The notes are
     /// metadata on the attachment, saved with the draft like any other attachment change. False
     /// when it wasn't there and the prompt is full.
     @discardableResult
-    public func annotateAttachment(_ input: PromptAttachmentInput, annotation: AttachmentAnnotation?) -> Bool {
+    public func annotateAttachment(_ attachment: Attachment, annotation: AttachmentAnnotation?) -> Bool {
         guard let local else { return false }
         let current = local.promptAttachments ?? []
-        let result = PromptAttachments.annotate(current, input, annotation: annotation)
+        let result = PromptAttachments.annotate(current, attachment, annotation: annotation)
         if !PromptAttachments.same(result.list, current) {
-            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list)))
+            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputs(result.list)))
         }
         return !result.skipped
     }

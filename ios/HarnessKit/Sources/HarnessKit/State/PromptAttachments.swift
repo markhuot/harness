@@ -1,9 +1,11 @@
 import Foundation
 
-// Port of shared/src/state/promptAttachments.ts. Prompt attachments (DESIGN.md "Prompt
-// attachments"): files a human attaches to a New session. The pure pieces both apps use: turning
-// what a client has into the list a draft keeps, the PATCH side of it, and which ones get an image
-// preview. Paths compare as JS strings do (code units, not canonical equivalence).
+// Port of shared/src/state/promptAttachments.ts. Attachment lists (DESIGN.md "Attachments"): the
+// files a human attaches to a New session or a message, each one an Attachment the service
+// registered (an upload, a registered file, a spec image, a file from an earlier message), with
+// its annotation if any. The pure pieces both apps use: the list a draft or composer keeps, what a
+// create, PATCH or message sends, and which files get an image preview. Paths and ids compare as
+// JS strings do (code units, not canonical equivalence).
 
 public enum PromptAttachments {
     /// The last path component: "/a/b/shot.png" → "shot.png".
@@ -14,100 +16,93 @@ public enum PromptAttachments {
         return string(scalars[(i + 1)...])
     }
 
-    /// What a client sent, as the draft keeps it: the file's name when none was given, "file"
-    /// unless it says otherwise.
-    public static func fromInput(_ a: PromptAttachmentInput) -> PromptAttachment {
-        let name = a.name.map(JSCompat.trim).flatMap { $0.isEmpty ? nil : $0 } ?? fileBaseName(a.path)
-        return PromptAttachment(path: a.path, name: name, source: a.source ?? .file, annotation: a.annotation)
+    private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "tiff"]
+    private static let videoExtensions: Set<String> = ["mp4", "webm", "mov", "m4v"]
+
+    /// A kind guessed from a file name, for an input the service hasn't described yet.
+    static func kindByName(_ name: String) -> AttachmentKind {
+        let ext = fileExtension(name).map(Mentions.JS.lowercase) ?? ""
+        return imageExtensions.contains(ext) ? .image : videoExtensions.contains(ext) ? .video : .file
     }
 
-    /// The list as a create or PATCH body sends it (the service decides `source` itself), each
-    /// with its notes.
-    public static func inputs(_ list: [PromptAttachment]) -> [PromptAttachmentInput] {
-        list.map { PromptAttachmentInput(path: $0.path, name: $0.name, annotation: $0.annotation) }
+    /// `attachmentFromInput`: an input as a list keeps it. A full Attachment stays as it is; a bare
+    /// `{ id }` or `{ path }` gets the defaults the service would fill in (its name from the path,
+    /// its kind from the name). Applied to a draft's own PATCH before the service answers.
+    public static func fromInput(_ a: AttachmentInput) -> Attachment {
+        let path = a.path ?? ""
+        let base = fileBaseName(path)
+        let name = a.name.map(JSCompat.trim).flatMap { $0.isEmpty ? nil : $0 } ?? (base.isEmpty ? "file" : base)
+        return Attachment(
+            id: a.id ?? "", path: path, name: name, source: a.source ?? .file, kind: a.kind ?? kindByName(name.isEmpty ? path : name),
+            mimeType: a.mimeType ?? "", size: a.size, width: a.width, height: a.height, annotation: a.annotation
+        )
     }
 
-    /// The list as inputs that keep `source`, for a local edit (`applyTicketPatch` would otherwise
-    /// turn every upload into "file" until the service answers).
-    public static func inputsKeepingSource(_ list: [PromptAttachment]) -> [PromptAttachmentInput] {
-        list.map { PromptAttachmentInput(path: $0.path, name: $0.name, source: $0.source, annotation: $0.annotation) }
+    /// `attachmentInputs`: the list as a create, PATCH or message body sends it, each attachment
+    /// whole (the service reads its id, name and annotation).
+    public static func inputs(_ list: [Attachment]) -> [AttachmentInput] {
+        list.map(AttachmentInput.init)
     }
 
-    /// Same files, same names, same annotations, same order.
-    public static func same(_ a: [PromptAttachment], _ b: [PromptAttachment]) -> Bool {
+    /// `sameAttachments`: same attachments, same names, same annotations, same order.
+    public static func same(_ a: [Attachment], _ b: [Attachment]) -> Bool {
         a.count == b.count && zip(a, b).allSatisfy {
-            jsEqual($0.path, $1.path) && jsEqual($0.name, $1.name) && Annotations.same($0.annotation, $1.annotation)
+            jsEqual($0.id, $1.id) && jsEqual($0.path, $1.path) && jsEqual($0.name, $1.name) && Annotations.same($0.annotation, $1.annotation)
         }
     }
 
-    /// `list` with `added` appended: a path already in the list (or twice in `added`) is attached
-    /// once, and nothing goes past `max`. `skipped` counts what was left out for the limit, so the
-    /// editor can say so.
-    public static func add(_ list: [PromptAttachment], _ added: [PromptAttachmentInput], max: Int = maxPromptAttachments) -> (list: [PromptAttachment], skipped: Int) {
+    /// The same file: by id once the service has registered it, else by path.
+    static func sameFile(_ a: Attachment, _ b: Attachment) -> Bool {
+        !a.id.isEmpty && !b.id.isEmpty ? jsEqual(a.id, b.id) : jsEqual(a.path, b.path)
+    }
+
+    /// `addAttachments`: `list` with `added` appended. A file already in the list (or twice in
+    /// `added`) is attached once, and nothing goes past `max`. `skipped` counts what was left out
+    /// for the limit, so the editor can say so.
+    public static func add(_ list: [Attachment], _ added: [Attachment], max: Int = maxPromptAttachments) -> (list: [Attachment], skipped: Int) {
         var out = list
-        var seen = Set(list.map { key($0.path) })
         var skipped = 0
         for a in added {
-            let k = key(a.path)
-            if seen.contains(k) { continue }
+            if out.contains(where: { sameFile($0, a) }) { continue }
             if out.count >= max {
                 skipped += 1
                 continue
             }
-            seen.insert(k)
-            out.append(fromInput(a))
+            out.append(a)
         }
         return (out, skipped)
     }
 
-    /// `annotatePromptAttachment`: `list` with `input` annotated (DESIGN.md "Annotations"). The
-    /// attachment with the same path gets `annotation` (nil takes it off), or `input` is added at the
-    /// end when it isn't there yet. `skipped` is true when it wasn't there and the list was full.
+    /// `annotateAttachment`: `list` with `attachment` annotated (DESIGN.md "Annotations"). The
+    /// same file already in the list gets `annotation` in place (nil takes it off), or `attachment`
+    /// is added at the end with it. `skipped` is true when it wasn't there and the list was full.
     public static func annotate(
-        _ list: [PromptAttachment], _ input: PromptAttachmentInput, annotation: AttachmentAnnotation?, max: Int = maxPromptAttachments
-    ) -> (list: [PromptAttachment], skipped: Bool) {
-        func set(_ a: PromptAttachment) -> PromptAttachment {
+        _ list: [Attachment], _ attachment: Attachment, annotation: AttachmentAnnotation?, max: Int = maxPromptAttachments
+    ) -> (list: [Attachment], skipped: Bool) {
+        func set(_ a: Attachment) -> Attachment {
             var out = a
             out.annotation = annotation
             return out
         }
-        if let i = list.firstIndex(where: { jsEqual($0.path, input.path) }) {
+        if let i = list.firstIndex(where: { sameFile($0, attachment) }) {
             var out = list
             out[i] = set(list[i])
             return (out, false)
         }
         if list.count >= max { return (list, true) }
-        return (list + [set(fromInput(input))], false)
+        return (list + [set(attachment)], false)
     }
 
-    /// The reference a message sends for one of the ticket's spec images (`attachment:<id>`); the
-    /// service stores its file's path.
-    public static func specAttachmentPath(_ id: String) -> String { "attachment:\(id)" }
-
-    /// The spec image id an attachment still refers to by `attachment:<id>` (one waiting to be
-    /// sent), or nil.
-    public static func specAttachmentId(of path: String) -> String? {
-        let prefix = Array("attachment:".unicodeScalars)
-        let scalars = Array(path.unicodeScalars)
-        guard scalars.starts(with: prefix), scalars.count > prefix.count else { return nil }
-        return string(scalars[prefix.count...])
-    }
-
-    /// `list` without the attachment at `index` (unchanged when there's none).
-    public static func remove(_ list: [PromptAttachment], at index: Int) -> [PromptAttachment] {
+    /// `removeAttachment`: `list` without the attachment at `index` (unchanged when there's none).
+    public static func remove(_ list: [Attachment], at index: Int) -> [Attachment] {
         list.enumerated().filter { $0.offset != index }.map(\.element)
     }
 
-    private static let previewExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "bmp"]
+    /// `attachmentIsImage`: whether the apps draw an image preview for it (and offer Annotate);
+    /// other files show as a named chip.
+    public static func isImage(kind: AttachmentKind) -> Bool { kind == .image }
 
-    /// Whether the apps draw an image preview for it (from its extension); other files show as a
-    /// named chip.
-    public static func isImage(name: String, path: String) -> Bool {
-        guard let ext = fileExtension(name) ?? fileExtension(path) else { return false }
-        return previewExtensions.contains(Mentions.JS.lowercase(ext))
-    }
-
-    public static func isImage(_ a: PromptAttachment) -> Bool { isImage(name: a.name, path: a.path) }
+    public static func isImage(_ a: Attachment) -> Bool { isImage(kind: a.kind) }
 
     private static let pasteExtensions: [String: String] = [
         "image/png": "png",
@@ -176,9 +171,6 @@ public enum PromptAttachments {
         v.append(contentsOf: s)
         return String(v)
     }
-
-    /// A JS-equality key: Swift's String hashing would merge canonically equivalent paths.
-    private static func key(_ s: String) -> [UInt32] { s.unicodeScalars.map(\.value) }
 
     private static func jsEqual(_ a: String, _ b: String) -> Bool { a.unicodeScalars.elementsEqual(b.unicodeScalars) }
 }
