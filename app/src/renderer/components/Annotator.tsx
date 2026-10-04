@@ -13,10 +13,10 @@
 // composer or a New session is annotated in place).
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { MAX_ANNOTATION_MARKS, type AnnotationPage, type Attachment, type AttachmentAnnotation } from "@harness/shared";
-import { annotationStyle, draftMarksFrom, fitRect, hitTestMarks, isAnnotationDrag, moveMark, removeMark, setMarkMessage, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
+import { MAX_ANNOTATION_MARKS, type AnnotationPage, type Attachment, type AttachmentAnnotation, type BrowserElement } from "@harness/shared";
+import { annotationStyle, draftMarksFrom, fitRect, hitTestMarks, isAnnotationDrag, moveMark, removeMark, setMarkElement, setMarkMessage, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { annotationFromMarks, emptyHistory, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
+import { anchorInPage, annotationFromMarks, elementLabel, emptyHistory, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
 import { previewFile, rememberPreview } from "./PromptAttachments";
 import { accentColor, drawAnnotations } from "./annotationDraw";
 import { Icon } from "./Icon";
@@ -42,6 +42,12 @@ export interface AnnotateTarget {
   attachment: Attachment | ((image: Blob) => Promise<Attachment>);
   /** The browser page a screenshot shows. */
   page?: AnnotationPage;
+  /**
+   * A browser screenshot's: the element under a point of the page as it was captured (CSS pixels),
+   * or null when the page has moved on. Each mark's anchor is looked up with it, so the agent is
+   * told which element the mark points at.
+   */
+  elementAt?: (x: number, y: number) => Promise<BrowserElement | null>;
   /** The notes it has already: reopened to edit. */
   annotation?: AttachmentAnnotation;
   /** Where Add to message puts it; default: the scope's (the ticket's composer). Throws to keep the annotator open. */
@@ -239,6 +245,41 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
     [change],
   );
 
+  // ------------------------------------------------------------------ the element under a browser mark
+
+  const lookups = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  useEffect(() => () => lookups.current.forEach((t) => clearTimeout(t)), []);
+  /**
+   * Look up the element under mark `i`'s anchor (a browser screenshot only), shortly after it was
+   * placed or moved: the latest placement wins, and an answer for an anchor that has moved on since
+   * (or a mark deleted) is dropped. A failure leaves the mark without one.
+   */
+  const lookUpElement = (i: number) => {
+    const elementAt = target.elementAt;
+    const page = target.page;
+    if (!elementAt || !page || !bitmap) return;
+    const pending = lookups.current.get(i);
+    if (pending) clearTimeout(pending);
+    const { width, height } = bitmap;
+    lookups.current.set(
+      i,
+      setTimeout(() => {
+        lookups.current.delete(i);
+        const anchor = cur.current.marks[i]?.anchor;
+        if (!anchor) return;
+        const p = anchorInPage(anchor, width, height, page.scale);
+        elementAt(p.x, p.y).then(
+          (el) => {
+            const now = cur.current.marks;
+            // Not in the undo history: it follows from where the anchor is.
+            if (now[i]?.anchor === anchor) setMarks(setMarkElement(now, i, el ? { path: el.path, text: el.text } : null));
+          },
+          () => {},
+        );
+      }, 250),
+    );
+  };
+
   const undoLast = useCallback(() => {
     const u = undo(history.current);
     if (!u) return;
@@ -331,8 +372,11 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
     if (!d) return;
     const p = local(e);
     if (d.kind === "move") {
-      if (d.moved) history.current = recordChange(endRun(history.current), d.before);
-      else focusField(d.hit.index);
+      if (d.moved) {
+        history.current = recordChange(endRun(history.current), d.before);
+        // The anchor moved (a click's badge is its anchor): what it points at may be another element.
+        if (cur.current.marks[d.hit.index]?.anchor !== d.before.marks[d.hit.index]?.anchor) lookUpElement(d.hit.index);
+      } else focusField(d.hit.index);
       return;
     }
     const list = cur.current.marks;
@@ -344,6 +388,7 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
     change({ marks: [...list, mark] });
     setSelected(list.length);
     focusAfter.current = list.length;
+    lookUpElement(list.length);
   };
 
   const onPointerCancel = () => {
@@ -424,6 +469,7 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
                   <button type="button" className="annotator-badge" tabIndex={-1} aria-label={`Note ${i + 1}`} onClick={() => focusField(i)}>
                     {i + 1}
                   </button>
+                  <div className="annotator-field">
                   <textarea
                     ref={(el) => {
                       fields.current[i] = el;
@@ -439,6 +485,12 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
                     onChange={(e) => change({ marks: setMarkMessage(cur.current.marks, i, e.target.value) }, `message:${i}`)}
                     onKeyDown={addKeys}
                   />
+                  {m.element && (
+                    <span className="annotator-element muted mono truncate" data-testid="annotator-element" title={`The agent is told: ${elementLabel(m.element)}`}>
+                      {elementLabel(m.element)}
+                    </span>
+                  )}
+                  </div>
                   <button type="button" className="annotator-remove" data-testid="annotator-remove" aria-label={`Delete note ${i + 1}`} title={`Delete note ${i + 1}`} onClick={() => remove(i)} disabled={adding}>
                     <Icon name="x" size={12} strokeWidth={2.25} />
                   </button>

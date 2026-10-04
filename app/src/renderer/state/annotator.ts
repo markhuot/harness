@@ -111,3 +111,21 @@ export function coverRect(bw: number, bh: number, iw: number, ih: number): Rect 
 export function thumbnailStyle(side: number): AnnotationStyle {
   return { badgeRadius: side * 0.17, fontSize: side * 0.22, lineWidth: side * 0.05, outline: side * 0.03, headLength: side * 0.16, headHalfWidth: side * 0.09 };
 }
+
+// ---------------------------------------------------------------------------
+// The element under a browser mark
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a mark's anchor (a fraction of the screenshot) is in the page, in CSS pixels: the
+ * screenshot's pixels divided by its device scale, which is what POST /browser/:id/element takes.
+ */
+export function anchorInPage(anchor: { x: number; y: number }, width: number, height: number, scale: number): { x: number; y: number } {
+  const k = scale > 0 ? scale : 1;
+  return { x: Math.round((anchor.x * width) / k), y: Math.round((anchor.y * height) / k) };
+}
+
+/** How the notes list shows a mark's element, as the agent will be told it: `selector · "text"` (the selector alone when it has no text). */
+export function elementLabel(e: { path: string; text: string }): string {
+  return e.text ? `${e.path} · "${e.text}"` : e.path;
+}

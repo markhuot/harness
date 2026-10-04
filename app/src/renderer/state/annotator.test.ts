@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AnnotationPage } from "@harness/shared";
 import type { DraftMark } from "@harness/shared/state";
-import { annotationFromMarks, browserShotName, coverRect, emptyHistory, endRun, hasAnnotatorWork, HISTORY_LIMIT, recordChange, undo, type AnnotatorSnapshot } from "./annotator";
+import { anchorInPage, annotationFromMarks, browserShotName, elementLabel, coverRect, emptyHistory, endRun, hasAnnotatorWork, HISTORY_LIMIT, recordChange, undo, type AnnotatorSnapshot } from "./annotator";
 
 const mark = (x: number, message = ""): DraftMark => ({ anchor: { x, y: 0.5 }, tail: null, message });
 const snap = (marks: DraftMark[]): AnnotatorSnapshot => ({ marks });
@@ -116,5 +116,31 @@ describe("browserShotName", () => {
     expect(browserShotName("http://127.0.0.1:5173/settings", "Settings")).toBe("127.0.0.1");
     expect(browserShotName("about:blank", "Blank")).toBe("Blank");
     expect(browserShotName("not a url", "  ")).toBe("page");
+  });
+});
+
+describe("the element under a browser mark", () => {
+  test("the anchor goes to the page's CSS pixels: screenshot pixels over the device scale", () => {
+    expect(anchorInPage({ x: 0.5, y: 0.25 }, 2400, 1600, 2)).toEqual({ x: 600, y: 200 });
+    expect(anchorInPage({ x: 0.5, y: 0.25 }, 1200, 800, 1)).toEqual({ x: 600, y: 200 });
+  });
+  test("a missing or zero scale reads as 1 rather than dividing by it", () => {
+    expect(anchorInPage({ x: 1, y: 1 }, 300, 200, 0)).toEqual({ x: 300, y: 200 });
+  });
+  test("the label quotes the text after the selector, and is the selector alone without text", () => {
+    expect(elementLabel({ path: "#signin", text: "Sign in" })).toBe('#signin · "Sign in"');
+    expect(elementLabel({ path: "main > div:nth-of-type(2)", text: "" })).toBe("main > div:nth-of-type(2)");
+  });
+  test("an annotation of a page keeps each mark's element; one the page couldn't tell has none", () => {
+    const page: AnnotationPage = { url: "http://x", title: "x", tabId: 1, viewport: { width: 100, height: 100 }, scale: 1 };
+    const marks: DraftMark[] = [
+      { ...mark(0.1, "this"), element: { path: "#signin", text: "Sign in" } },
+      { ...mark(0.2, "that"), element: null },
+    ];
+    const a = annotationFromMarks(marks, 100, 100, page)!;
+    expect(a.marks.map((m) => [m.path, m.text])).toEqual([
+      ["#signin", "Sign in"],
+      [undefined, undefined],
+    ]);
   });
 });

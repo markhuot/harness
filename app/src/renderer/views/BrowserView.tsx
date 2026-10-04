@@ -435,6 +435,9 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
       load: async () => new Blob([Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0))], { type: "image/png" }),
       // The screenshot as it is, uploaded once the notes are added (a frozen page closed unannotated leaves nothing behind).
       attachment: (png) => client.uploadAttachment(png, `${browserShotName(shot.url, shot.title)}.png`, "image/png"),
+      // What each mark points at, in the page as it was captured (null once the tab has moved on).
+      // An older service sends no scroll, and has no lookup either.
+      ...(shot.scroll ? { elementAt: (x: number, y: number) => client.browserElementAt(sessionId, { tabId: shot.tabId, x, y, url: shot.url, scroll: shot.scroll }) } : {}),
     });
   };
 
