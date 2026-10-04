@@ -4,7 +4,7 @@
 // mirrors them in HarnessKit's Annotations.swift, with the same tests). Platform-independent: no
 // React, DOM or native APIs.
 
-import type { AnnotationMark } from "../protocol";
+import type { AnnotationMark, MessageAnnotation } from "../protocol";
 
 export interface Point {
   x: number;
@@ -151,4 +151,46 @@ export function marksForMessage(marks: readonly DraftMark[], width: number, heig
 /** "1 note", "3 notes": the Transcript's line under an annotated image. */
 export function annotationNotesLabel(count: number): string {
   return `${count} ${count === 1 ? "note" : "notes"}`;
+}
+
+/**
+ * The marks of a sent or waiting annotation, back as fractions of its image, so the annotator can
+ * reopen them to edit (over the original image, which has the same size as the annotated one).
+ */
+export function draftMarksFrom(a: Pick<MessageAnnotation, "width" | "height" | "marks">): DraftMark[] {
+  const unit = (x: number, y: number) => toUnit({ x, y }, a.width, a.height);
+  return a.marks.map((m) => ({
+    anchor: unit(m.x, m.y),
+    tail: m.tailX !== undefined && m.tailY !== undefined ? unit(m.tailX, m.tailY) : null,
+    message: m.message,
+  }));
+}
+
+// A message (or New session) keeps its annotations beside its attachments, each naming its
+// attachment by index. These keep them pointed at the right file as the list changes.
+
+/** The annotation on `attachments[index]`, if it has one. */
+export function annotationFor(annotations: readonly MessageAnnotation[], index: number): MessageAnnotation | undefined {
+  return annotations.find((a) => a.attachment === index);
+}
+
+/** `annotations` with the one on `attachments[index]` set to `a` (null removes it), in attachment order. */
+export function withAnnotation(annotations: readonly MessageAnnotation[], index: number, a: Omit<MessageAnnotation, "attachment"> | null): MessageAnnotation[] {
+  const rest = annotations.filter((x) => x.attachment !== index);
+  return (a ? [...rest, { ...a, attachment: index }] : rest).sort((x, y) => x.attachment - y.attachment);
+}
+
+/** `annotations` once `attachments[index]` is removed: its own goes, and later ones move up an index. */
+export function annotationsWithout(annotations: readonly MessageAnnotation[], index: number): MessageAnnotation[] {
+  return annotations.filter((a) => a.attachment !== index).map((a) => (a.attachment > index ? { ...a, attachment: a.attachment - 1 } : a));
+}
+
+/** Only the annotations whose attachment is still in a list of `count` (what a send or save carries). */
+export function annotationsWithin(annotations: readonly MessageAnnotation[], count: number): MessageAnnotation[] {
+  return annotations.filter((a) => Number.isInteger(a.attachment) && a.attachment >= 0 && a.attachment < count);
+}
+
+/** Same annotations, same order, same contents. */
+export function sameAnnotations(a: readonly MessageAnnotation[], b: readonly MessageAnnotation[]): boolean {
+  return a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
 }

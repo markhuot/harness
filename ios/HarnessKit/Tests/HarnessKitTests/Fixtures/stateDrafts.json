@@ -1322,7 +1322,8 @@
         "model": null,
         "position": 0,
         "createdAt": 1,
-        "updatedAt": 1
+        "updatedAt": 1,
+        "promptAnnotations": []
       }
     },
     {
@@ -1412,7 +1413,8 @@
         "model": null,
         "position": 0,
         "createdAt": 1,
-        "updatedAt": 1
+        "updatedAt": 1,
+        "promptAnnotations": []
       }
     }
   ],
@@ -7160,7 +7162,8 @@
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png"
           }
-        ]
+        ],
+        "promptAnnotations": []
       }
     },
     {
@@ -7275,7 +7278,8 @@
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png"
           }
-        ]
+        ],
+        "promptAnnotations": []
       }
     },
     {
@@ -7470,7 +7474,8 @@
             "path": "/Users/me/Desktop/shot.png",
             "name": "after.png"
           }
-        ]
+        ],
+        "promptAnnotations": []
       }
     },
     {
@@ -7641,7 +7646,8 @@
         }
       },
       "output": {
-        "promptAttachments": []
+        "promptAttachments": [],
+        "promptAnnotations": []
       }
     }
   ],

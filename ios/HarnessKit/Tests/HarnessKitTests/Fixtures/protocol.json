@@ -160,6 +160,10 @@
       "name": "Pasted image.png"
     },
     {
+      "kind": "file",
+      "name": "Pasted image.png"
+    },
+    {
       "kind": "browser",
       "url": "http://localhost:3000/login",
       "title": "Log in",
@@ -556,6 +560,25 @@
         },
         {
           "path": "/tmp/notes.pdf"
+        }
+      ],
+      "promptAnnotations": [
+        {
+          "attachment": 0,
+          "source": {
+            "kind": "file",
+            "name": "shot.png"
+          },
+          "width": 640,
+          "height": 480,
+          "marks": [
+            {
+              "n": 1,
+              "x": 10,
+              "y": 20,
+              "message": "Here"
+            }
+          ]
         }
       ]
     },
@@ -2708,6 +2731,27 @@
           "source": "upload"
         }
       ],
+      "promptAnnotations": [
+        {
+          "attachment": 1,
+          "source": {
+            "kind": "file",
+            "name": "Pasted image.png"
+          },
+          "width": 1170,
+          "height": 2532,
+          "marks": [
+            {
+              "n": 1,
+              "x": 585,
+              "y": 1200,
+              "tailX": 300,
+              "tailY": 900,
+              "message": "This overlaps the tab bar"
+            }
+          ]
+        }
+      ],
       "completedAt": null
     },
     {
@@ -3812,6 +3856,38 @@
     },
     {
       "promptAttachments": []
+    },
+    {
+      "promptAnnotations": []
+    },
+    {
+      "promptAttachments": [
+        {
+          "path": "/Users/mark/.harness/uploads/upl_2/annotated-shot.png",
+          "name": "annotated-shot.png"
+        }
+      ],
+      "promptAnnotations": [
+        {
+          "attachment": 0,
+          "source": {
+            "kind": "file",
+            "name": "shot.png"
+          },
+          "width": 640,
+          "height": 480,
+          "marks": [
+            {
+              "n": 1,
+              "x": 10,
+              "y": 20,
+              "tailX": 200,
+              "tailY": 120,
+              "message": "Here"
+            }
+          ]
+        }
+      ]
     },
     {}
   ],

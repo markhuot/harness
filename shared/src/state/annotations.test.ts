@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import type { MessageAnnotation } from "../protocol";
 import {
+  annotationFor,
+  annotationsWithin,
+  annotationsWithout,
+  draftMarksFrom,
+  withAnnotation,
   annotationNotesLabel,
   annotationStyle,
   arrowGeometry,
@@ -84,5 +90,44 @@ describe("annotations", () => {
   test("the Transcript's label counts notes", () => {
     expect(annotationNotesLabel(1)).toBe("1 note");
     expect(annotationNotesLabel(3)).toBe("3 notes");
+  });
+
+  const note = (attachment: number, name = `f${attachment}`): MessageAnnotation => ({
+    attachment,
+    source: { kind: "file", name },
+    width: 100,
+    height: 50,
+    marks: [{ n: 1, x: 10, y: 5, message: name }],
+  });
+
+  test("removing an attachment drops its annotation and moves later ones up", () => {
+    const list = [note(0), note(2), note(3)];
+    expect(annotationsWithout(list, 2).map((a) => [a.attachment, (a.source as { name: string }).name])).toEqual([
+      [0, "f0"],
+      [2, "f3"],
+    ]);
+    // Removing a file without notes still shifts the ones after it.
+    expect(annotationsWithout(list, 1).map((a) => a.attachment)).toEqual([0, 1, 2]);
+  });
+
+  test("setting an annotation replaces the one on that attachment and keeps attachment order", () => {
+    const list = withAnnotation([note(0), note(3)], 1, note(9, "new"));
+    expect(list.map((a) => [a.attachment, (a.source as { name: string }).name])).toEqual([
+      [0, "f0"],
+      [1, "new"],
+      [3, "f3"],
+    ]);
+    expect(annotationFor(withAnnotation(list, 1, note(1, "again")), 1)?.source).toEqual({ kind: "file", name: "again" });
+    expect(withAnnotation(list, 1, null).map((a) => a.attachment)).toEqual([0, 3]);
+  });
+
+  test("only annotations on attachments still in the list are sent", () => {
+    expect(annotationsWithin([note(0), note(2), note(5)], 3).map((a) => a.attachment)).toEqual([0, 2]);
+  });
+
+  test("marks reopen as fractions of the image, with and without arrows", () => {
+    const a = { width: 200, height: 100, marks: [{ n: 1, x: 50, y: 25, tailX: 100, tailY: 100, message: "a" }, { n: 2, x: 200, y: 0, message: "" }] };
+    expect(draftMarksFrom(a)).toEqual([arrow(0.25, 0.25, 0.5, 1, "a"), click(1, 0, "")]);
+    expect(marksForMessage(draftMarksFrom(a), 200, 100)).toEqual(a.marks);
   });
 });

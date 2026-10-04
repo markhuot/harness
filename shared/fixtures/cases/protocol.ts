@@ -196,6 +196,9 @@ export const Ticket: P.Ticket[] = [
       { path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file" },
       { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
     ],
+    promptAnnotations: [
+      { attachment: 1, source: { kind: "file", name: "Pasted image.png" }, width: 1170, height: 2532, marks: [{ n: 1, x: 585, y: 1200, tailX: 300, tailY: 900, message: "This overlaps the tab bar" }] },
+    ],
     completedAt: null,
     agentReview: "skipped",
     humanReview: "approved",
@@ -288,6 +291,7 @@ export const AnnotationSource: P.AnnotationSource[] = [
   { kind: "attachment", id: "att_1", name: "after.png" },
   { kind: "prompt-attachment", index: 0, name: "shot.png" },
   { kind: "message-attachment", entryId: "ent_5", index: 1, name: "Pasted image.png" },
+  { kind: "file", name: "Pasted image.png" },
   browserSource,
   { kind: "browser", url: "about:blank", title: "", tabId: 1, viewport: { width: 390, height: 844 }, scale: 3 },
 ];
@@ -897,6 +901,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     externalRef,
     draft: false,
     promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }, { path: "/tmp/notes.pdf" }],
+    promptAnnotations: [{ attachment: 0, source: { kind: "file", name: "shot.png" }, width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] }],
   },
   { projectId: "prj_8f2c1a", spec: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
   { projectId: "prj_8f2c1a", spec: "In the checkout", useWorktree: false },
@@ -910,6 +915,11 @@ export const UpdateTicketBody: P.UpdateTicketBody[] = [
   { spec: "Draft brief" },
   { promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }] },
   { promptAttachments: [] },
+  { promptAnnotations: [] },
+  {
+    promptAttachments: [{ path: "/Users/mark/.harness/uploads/upl_2/annotated-shot.png", name: "annotated-shot.png" }],
+    promptAnnotations: [{ attachment: 0, source: { kind: "file", name: "shot.png" }, width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "Here" }] }],
+  },
   {},
 ];
 

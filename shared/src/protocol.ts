@@ -257,6 +257,12 @@ export interface Ticket {
    * answers 404 for it then. Optional so fixtures type-check; the service always sends it.
    */
   promptAttachments?: PromptAttachment[];
+  /**
+   * The human's numbered notes on images among `promptAttachments` (DESIGN.md "Annotations"),
+   * each indexing that list. They go with the first message: its run's prompt lists them. Optional
+   * so fixtures type-check and clients tolerate an older service.
+   */
+  promptAnnotations?: MessageAnnotation[];
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -1071,6 +1077,8 @@ export type AnnotationSource =
   | { kind: "prompt-attachment"; index: number; name: string }
   /** A file sent with an earlier message (that transcript entry's attachments[index]). */
   | { kind: "message-attachment"; entryId: string; index: number; name: string }
+  /** An image that was waiting in a composer or a New session, annotated before it was sent (it takes that file's place). */
+  | { kind: "file"; name: string }
   /** A screenshot of a session browser tab (BrowserScreenshot). */
   | { kind: "browser"; url: string; title: string; tabId: number; viewport: { width: number; height: number }; scale: number };
 
@@ -1220,6 +1228,8 @@ export interface CreateTicketBody {
    * from another device go through POST /uploads first.
    */
   promptAttachments?: PromptAttachmentInput[];
+  /** Notes on images among `promptAttachments` (Ticket.promptAnnotations), validated like MessageBody.annotations. */
+  promptAnnotations?: MessageAnnotation[];
 }
 
 export interface UpdateTicketBody {
@@ -1275,8 +1285,12 @@ export interface UpdateTicketBody {
   /**
    * Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
    * ones the draft already had are kept as they are, even when their file has gone missing.
+   * A PATCH that changes this list without `promptAnnotations` clears the draft's annotations, so
+   * none is left pointing at another file.
    */
   promptAttachments?: PromptAttachmentInput[];
+  /** Drafts only (409 otherwise): the whole new list of notes on images among the prompt attachments. */
+  promptAnnotations?: MessageAnnotation[];
 }
 
 /** POST /tickets/:key/submit: launch a draft, starting work now (start) or planning first. */

@@ -1,6 +1,12 @@
 // Annotation geometry (shared/src/state/annotations.ts) for HarnessKit's Logic/Annotations.swift.
-import type { AnnotationMark } from "../../src/protocol";
+import type { AnnotationMark, MessageAnnotation } from "../../src/protocol";
 import {
+  annotationFor,
+  annotationsWithin,
+  annotationsWithout,
+  draftMarksFrom,
+  sameAnnotations,
+  withAnnotation,
   annotationNotesLabel,
   annotationStyle,
   arrowGeometry,
@@ -120,4 +126,54 @@ export const annotationNotesLabelCases = cases(annotationNotesLabel, {
   one: 1,
   two: 2,
   many: 50,
+});
+
+// Keeping annotations on their attachments as a message's or New session's list changes.
+const note = (attachment: number, name: string): MessageAnnotation => ({
+  attachment,
+  source: { kind: "file", name },
+  width: 640,
+  height: 480,
+  marks: [{ n: 1, x: 320, y: 240, tailX: 100, tailY: 80, message: name }],
+});
+const notes = [note(0, "first"), note(2, "third"), note(3, "fourth")];
+
+export const annotationForCases = cases(({ list, index }: { list: MessageAnnotation[]; index: number }) => annotationFor(list, index) ?? null, {
+  "an annotated attachment": { list: notes, index: 2 },
+  "one without": { list: notes, index: 1 },
+  "none at all": { list: [], index: 0 },
+});
+
+export const withAnnotationCases = cases(
+  ({ list, index, a }: { list: MessageAnnotation[]; index: number; a: Omit<MessageAnnotation, "attachment"> | null }) => withAnnotation(list, index, a),
+  {
+    "added between, in attachment order": { list: notes, index: 1, a: note(9, "second") },
+    "replaces the one on that attachment": { list: notes, index: 2, a: note(9, "third again") },
+    "null removes it": { list: notes, index: 0, a: null },
+    "into an empty list": { list: [], index: 4, a: note(0, "only") },
+  },
+);
+
+export const annotationsWithoutCases = cases(({ list, index }: { list: MessageAnnotation[]; index: number }) => annotationsWithout(list, index), {
+  "an annotated one: later ones move up": { list: notes, index: 2 },
+  "one without notes: later ones still move up": { list: notes, index: 1 },
+  "the last": { list: notes, index: 3 },
+  "past the end changes nothing": { list: notes, index: 9 },
+});
+
+export const annotationsWithinCases = cases(({ list, count }: { list: MessageAnnotation[]; count: number }) => annotationsWithin(list, count), {
+  "drops ones past the list": { list: notes, count: 3 },
+  "an empty list keeps none": { list: notes, count: 0 },
+  "all still there": { list: notes, count: 4 },
+});
+
+export const sameAnnotationsCases = cases(({ a, b }: { a: MessageAnnotation[]; b: MessageAnnotation[] }) => sameAnnotations(a, b), {
+  "equal": { a: notes, b: notes.map((n) => ({ ...n })) },
+  "a message changed": { a: notes, b: [notes[0]!, { ...notes[1]!, marks: [{ ...notes[1]!.marks[0]!, message: "edited" }] }, notes[2]!] },
+  "one fewer": { a: notes, b: notes.slice(1) },
+});
+
+export const draftMarksFromCases = cases(draftMarksFrom, {
+  "an arrow and a click": { width: 200, height: 100, marks: [{ n: 1, x: 50, y: 25, tailX: 100, tailY: 100, message: "a" }, { n: 2, x: 200, y: 0, message: "" }] },
+  "none": { width: 10, height: 10, marks: [] },
 });
