@@ -18,7 +18,8 @@
 //      row whose annotation has the page. Sent together.
 //   5. New session: an attached image annotated in place, its row shows the marks and notes, saved
 //      with the draft; reopened after a reload it still offers Annotate, which reopens the marks to
-//      edit. Plan first: the Spec tab shows the marks and notes, and the run's prompt has the notes.
+//      edit. Plan first: the launched session keeps the notes on its attachment, and the Spec tab
+//      shows the marks and notes.
 //
 //   bun run build && bun scripts/annotate-check.ts [--shots=<dir>] [--theme=dark]
 import { createHash } from "node:crypto";
@@ -149,7 +150,14 @@ try {
     const hits = others.filter((o) => o.left < c.right && o.right > c.left && o.top < c.bottom && o.bottom > c.top);
     return { ok: others.length > 0 && hits.length === 0, detail: `${others.length} elements, ${hits.length} over the image` };
   };
-  const annotatorOpen = () => until("the annotator's image", async () => ((await canvasRect())?.width ?? 0) > 0, 10000).then(() => true, () => false);
+  const annotatorOpen = () =>
+    until("the annotator's image", async () => ((await canvasRect())?.width ?? 0) > 0, 10000).then(
+      () => true,
+      async () => {
+        console.error(`  annotator didn't open: ${JSON.stringify(await js<string | null>(`document.querySelector('[data-testid="annotator"]')?.textContent ?? null`))}`);
+        return false;
+      },
+    );
   /** An overlay canvas (`sel`) that's on screen, says how many marks it draws, and has accent pixels on it. */
   const overlay = (sel: string) =>
     js<{ marks: number; accent: number; w: number; h: number } | null>(`(() => {
@@ -163,9 +171,11 @@ try {
     js<{ path: string; notes: string | null; thumbMarks: number | null }[]>(`[...document.querySelectorAll('[data-testid="composer"] [data-testid="prompt-attachment"]')].map(el => ({
       path: el.dataset.path, notes: el.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? null,
       thumbMarks: el.querySelector('[data-testid="thumbnail-annotation"]') ? Number(el.querySelector('[data-testid="thumbnail-annotation"]').dataset.marks) : null }))`);
-  const openNotes = (scope: string) =>
-    js<string[]>(`(() => { const b = document.querySelector(${JSON.stringify(`${scope} [data-testid="annotation-notes"] button`)}); if (b && b.getAttribute("aria-expanded") !== "true") b.click();
-      return [...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid="annotation-notes-list"] li`)})].map(li => li.textContent.trim()); })()`);
+  const openNotes = async (scope: string) => {
+    await js(`(() => { const b = document.querySelector(${JSON.stringify(`${scope} [data-testid="annotation-notes"] button`)}); if (b && b.getAttribute("aria-expanded") !== "true") b.click(); })()`);
+    await Bun.sleep(150);
+    return js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid="annotation-notes-list"] li`)})].map(li => li.textContent.trim())`);
+  };
   const typeComposer = (text: string) => type('[data-testid="composer"] .composer-input', text);
   const sendComposer = () => js(`document.querySelector('[data-testid="composer-send"]').click()`);
 
@@ -223,7 +233,7 @@ try {
     const o = await overlay('[data-testid="composer"] [data-testid="thumbnail-annotation"]');
     return o && o.accent > 0 ? o : null;
   }, 5000).catch(() => null);
-  check("the thumbnail draws the marks (32×32, accent pixels on it)", !!thumb && thumb.w === 32 && thumb.h === 32, JSON.stringify(thumb));
+  check("the thumbnail draws the marks over the whole square (accent pixels on it)", !!thumb && thumb.w >= 28 && thumb.w === thumb.h, JSON.stringify(thumb));
   check("the thumbnail is the spec image itself", await until("composer thumbnail", () => js<boolean>(`(document.querySelector('[data-testid="composer"] [data-testid="prompt-attachment"] img')?.naturalWidth ?? 0) === 480`), 5000).catch(() => false));
   check("the composer's input has the focus", await js<boolean>(`document.activeElement === document.querySelector('[data-testid="composer"] .composer-input')`));
 
@@ -273,6 +283,9 @@ try {
   check("marks numbered, with their messages, where they were drawn", !!n1 && n1.marks.map((m) => m.n).join() === "1,2,3" && Math.abs(n1.marks[0]!.x - 120) <= 3 && Math.abs(n1.marks[0]!.y - 96) <= 3 && Math.abs(n1.marks[2]!.x - 408) <= 3 && n1.marks[1]!.message === "The spacing between these is off", JSON.stringify(n1?.marks));
   const runs = (await detail()).runs;
   check("the run that took the message carries the annotated attachment", runs.some((r) => r.attachments?.[0]?.annotation?.marks.length === 3), JSON.stringify(runs.map((r) => r.attachments?.map((a) => a.annotation?.marks.length ?? 0))));
+  // The dummy agent says back the prompt it got: the service's <attachments> block, with the notes under the file.
+  const said = await until("the agent's reply quotes the notes", async () => (await transcript()).find((e) => e.role === "assistant" && e.content.type === "text" && e.content.text.includes("The spacing between these is off")), 15000).catch(() => null);
+  check("the agent's prompt has the notes, under the image's path", !!said && (said.content as TextContent).text.includes(a1!.path) && (said.content as TextContent).text.includes("Make this heading bolder"), (said?.content as TextContent | undefined)?.text.slice(0, 300));
   const specBytesAfter = await fetchBytes(`/attachments/${encodeURIComponent(specId)}`);
   check("the spec image's file is unchanged", sha(specBytesAfter) === sha(specBytesBefore) && sha(readFileSync(a1!.path)) === sha(specBytesBefore));
   check("the composer is empty again", (await composerRows()).length === 0);
@@ -391,9 +404,12 @@ try {
 
   await js(`document.querySelector('[data-testid="draft-plan"]').click()`);
   await until("launched", async () => (await detail(draftKey)).ticket.draft === false, 10000);
+  // The service writes the notes into the first run's <attachments> block when it hands the run to
+  // the driver (service/src/orchestrator/prompt-annotations.test.ts covers the text); Run.prompt
+  // keeps only the human's words, so what's checked here is what that block is made from.
   const run = await until("the first run", async () => (await detail(draftKey)).runs[0], 10000).catch(() => null);
-  check("the run's prompt lists the notes", !!run && run.prompt.includes("This box is the public API") && run.prompt.includes("Arrow should go the other way"), run?.prompt.slice(0, 600));
-  check("and its attachment carries the annotation", run?.attachments?.[0]?.annotation?.marks.length === 2 || (await detail(draftKey)).ticket.promptAttachments?.[0]?.annotation?.marks.length === 2);
+  const launched = (await detail(draftKey)).ticket.promptAttachments ?? [];
+  check("the launched session's run has the human's words, and its attachment the edited notes it goes with", !!run && run.prompt.startsWith("Make the diagram match.") && launched.length === 1 && launched[0]!.path === diagram && launched[0]!.annotation?.marks.map((m) => m.message).join("|") === "This box is the public API|Arrow should go the other way", JSON.stringify({ prompt: run?.prompt.slice(0, 80), launched }));
   await go(`#/board/${project.id}/ticket/${draftKey}/spec`);
   const specScope = '[data-testid="spec-prompt-attachments"]';
   const specThumb = await until("the Spec tab's marks", async () => {

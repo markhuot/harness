@@ -16,7 +16,7 @@ import { MAX_ANNOTATION_MARKS, type AnnotationPage, type AttachmentAnnotation, t
 import { annotationStyle, draftMarksFrom, fitRect, hitTestMarks, isAnnotationDrag, moveMark, removeMark, setMarkMessage, specAttachmentIdOf, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { annotationFromMarks, emptyHistory, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
-import { rememberPreview } from "./PromptAttachments";
+import { previewFile, rememberPreview } from "./PromptAttachments";
 import { accentColor, drawAnnotations } from "./annotationDraw";
 import { Icon } from "./Icon";
 import { MOD, Modal } from "./bits";
@@ -54,14 +54,16 @@ export interface AnnotateOffer {
   onAdd?: (a: AnnotatedAttachment) => void;
 }
 
-/** A target read from a URL (the service's, with the token in the query, or a blob: preview). */
+/** A target read from a URL (the service's, with the token in the query), or a preview's own bytes. */
 export function offerTarget(url: string, name: string, offer: AnnotateOffer): AnnotateTarget {
+  const local = previewFile(url);
   return {
     name,
     input: offer.input,
     annotation: offer.annotation,
     onAdd: offer.onAdd,
     load: async () => {
+      if (local) return local;
       const res = await fetch(url);
       if (!res.ok) throw new Error(res.status === 404 ? "The image is gone" : `HTTP ${res.status}`);
       return res.blob();

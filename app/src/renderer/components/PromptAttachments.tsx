@@ -29,11 +29,15 @@ import { ThumbnailAnnotation } from "./AnnotationOverlay";
  * (they're small, and the same draft can reopen in another pane); removing an attachment frees its own.
  */
 const previews = new Map<string, string>();
+/** The file behind each preview URL: a page loaded from file:// can't fetch() its own blob: URLs, so the annotator reads the bytes from here. */
+const previewFiles = new Map<string, Blob>();
 
 /** Remember `file` as the preview of the attachment at `path` (images only). */
 export function rememberPreview(path: string, file: Blob) {
   if (previews.has(path) || !file.type.toLowerCase().startsWith("image/")) return;
-  previews.set(path, URL.createObjectURL(file));
+  const url = URL.createObjectURL(file);
+  previews.set(path, url);
+  previewFiles.set(url, file);
 }
 
 export function forgetPreview(path: string) {
@@ -41,6 +45,12 @@ export function forgetPreview(path: string) {
   if (!url) return;
   URL.revokeObjectURL(url);
   previews.delete(path);
+  previewFiles.delete(url);
+}
+
+/** The bytes of a preview URL this page made, if `url` is one. */
+export function previewFile(url: string): Blob | undefined {
+  return previewFiles.get(url);
 }
 
 /**
@@ -76,12 +86,19 @@ export interface PendingUpload {
 type Source = { url: string; local: boolean } | null;
 
 /**
+ * Whether a row previews as an image: by its extension, or because it's annotated or a spec image
+ * waiting by reference (only images are annotated, and a spec image's name is its alt text, often
+ * without an extension).
+ */
+const isImage = (a: PromptAttachment) => promptAttachmentIsImage(a) || !!a.annotation || !!specAttachmentIdOf(a.path);
+
+/**
  * Whether the attachment's file has gone missing: an image whose URL failed to load (call
  * `failedAt` from its onError), or a file the service answers 404 for (probed with HEAD, since a
  * file shows nothing to load).
  */
 function useMissing(a: PromptAttachment, source: Source): { missing: boolean; failedAt: (url: string) => void } {
-  const image = promptAttachmentIsImage(a);
+  const image = isImage(a);
   const url = source?.url ?? null;
   // Which URL failed (a new one, after a token rotation or a save, gets another try).
   const [failed, setFailed] = useState<string | null>(null);
@@ -140,7 +157,7 @@ export function PromptAttachmentList({
   };
 
   // The lightbox steps through the images that have something to show.
-  const images = items.filter((a) => promptAttachmentIsImage(a) && sourceOf(a));
+  const images = items.filter((a) => isImage(a) && sourceOf(a));
   const lightboxList: Attachment[] = images.map((a) => ({ id: a.path, kind: "image", mimeType: "", name: a.name, size: 0 }));
 
   if (!items.length && !pending.length && !children) return null;
@@ -153,7 +170,7 @@ export function PromptAttachmentList({
               key={a.path}
               a={a}
               source={sourceOf(a)}
-              onOpen={promptAttachmentIsImage(a) ? () => setOpen(images.indexOf(a)) : undefined}
+              onOpen={isImage(a) ? () => setOpen(images.indexOf(a)) : undefined}
               onRemove={onRemove && (() => onRemove(i))}
             />
           ))}
@@ -188,7 +205,7 @@ export function PromptAttachmentList({
 }
 
 function AttachmentRow({ a, source, onOpen, onRemove }: { a: PromptAttachment; source: Source; onOpen?: () => void; onRemove?: () => void }) {
-  const image = promptAttachmentIsImage(a);
+  const image = isImage(a);
   const notes = a.annotation && a.annotation.marks.length > 0 ? a.annotation : null;
   const url = source?.url ?? null;
   const { missing, failedAt } = useMissing(a, source);
