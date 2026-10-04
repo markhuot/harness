@@ -1729,8 +1729,8 @@ ticket keeps working after one is moved or deleted.
 - **Agents and the CLI.** `get_ticket` lists `promptAttachments` with `missing`. `create_ticket`
   takes `attachments` (paths, relative ones against the run's cwd). `harness new` takes
   `--attach <file>`, which can repeat.
-- **Mac app.** The draft editor has an attachment strip under the prompt (thumbnails, file chips,
-  ×), a paperclip that opens a multi-select file input, drag and drop of files from anywhere, and
+- **Mac app.** The draft editor lists the attachments under the prompt (the same list as the Spec
+  tab, below, with × on each row and a spinner row per upload), a paperclip that opens a multi-select file input, drag and drop of files from anywhere, and
   image paste. A file with a path (`window.harness.pathForFile`, Electron's
   `webUtils.getPathForFile`) is attached by path. Pathless image data (a screenshot on the
   clipboard, an image dragged out of a browser) is uploaded. A plain text paste stays text. When
@@ -1739,11 +1739,14 @@ ticket keeps working after one is moved or deleted.
   means nothing there (`planFiles` in `state/promptAttachmentFiles.ts`). A window-level guard stops
   a file dropped outside the draft pane from navigating the window to it. `app/scripts/attachments-check.ts` drives the whole flow
   against the real service.
-- **iPhone and iPad.** The New session has the same strip, and an Attach menu with Photos, Files
+- **iPhone and iPad.** The New session has the same list as the Spec tab (× on each row, a
+  spinner row per upload), and an Attach menu with Photos, Files
   and Paste. iPad also takes drops. Everything is uploaded, and HEIC photos are converted to JPEG
   first, since the agent APIs don't take HEIC.
-- **The Spec tab** (both apps) lists a ticket's attachments read-only at the bottom of the spec,
-  under an Attachments heading: one row each, a square of the same size for every row (the image's
+- **One list** (`PromptAttachmentList` in `components/PromptAttachments.tsx` on the Mac and
+  `Features/Content/PromptAttachmentList.swift` on iOS) draws the attachments in both places: in
+  the New session, editable, and on the Spec tab, read-only at the bottom of the spec under an
+  Attachments heading. One row each, a square of the same size for every row (the image's
   thumbnail, or a file icon) and then the name, so the names line up. A missing file's row is
   dimmed, with a dashed square and "Missing — was at <path>" under the name. An image opens the
   lightbox (Mac) or full-screen viewer (iOS); another file is revealed in Finder (Mac) or opens in

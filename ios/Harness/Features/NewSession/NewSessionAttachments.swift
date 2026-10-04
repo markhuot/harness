@@ -7,7 +7,7 @@ import UniformTypeIdentifiers
 /// Uploads files for a New session's prompt attachments (DESIGN.md "Prompt attachments"). The
 /// phone's files aren't on the Mac, so every one goes through POST /uploads, then onto the draft
 /// with the editor (deduped and capped, which saves the draft). HEIC/HEIF photos go up as JPEG.
-/// It keeps a thumbnail of each uploaded image, so the strip draws it before the draft is saved.
+/// It keeps a thumbnail of each uploaded image, so the list draws it before the draft is saved.
 @MainActor
 @Observable
 final class PromptAttachmentUploader {
@@ -155,7 +155,7 @@ final class PromptAttachmentUploader {
     }
 }
 
-/// The New session's Attachments section: the strip (with remove buttons) and the Attach menu
+/// The New session's Attachments section: the same list as the Spec tab (with remove buttons) and the Attach menu
 /// (Photos, Files, Paste).
 struct NewSessionAttachmentsSection: View {
     let editor: NewSessionEditor
@@ -171,7 +171,7 @@ struct NewSessionAttachmentsSection: View {
         let full = list.count + uploader.pending.count >= maxPromptAttachments
         Section {
             if !list.isEmpty || !uploader.pending.isEmpty {
-                PromptAttachmentStrip(
+                PromptAttachmentList(
                     tiles: tiles(list),
                     pending: uploader.pending,
                     onRemove: { editor.removeAttachment(at: $0.index) }
