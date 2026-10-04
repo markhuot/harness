@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261004.2203](https://github.com/markhuot/harness/releases/tag/app-20261004.2203) - 2026-10-04
+
 ### Added
 
 - A GitHub Copilot driver. Choose it in Settings → Drivers (or per project or ticket) to run agents
