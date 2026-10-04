@@ -5,9 +5,9 @@ import SwiftUI
 /// on iPad at regular width all five side by side like the Mac (each with its own header, no
 /// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
 /// it scrolls into older pages (footer spinner) and its count is the server's total. On the phone
-/// there's no navigation bar: the bottom bar reads Projects, filter ("Show child tickets", off by
-/// default), the search field (always on screen, its placeholder the project's name or "All
-/// projects") and New session; in the iPad's DesktopShell they're in the top bar instead (search in the
+/// there's no navigation bar: our own bottom bar (BoardBottomBar) reads Projects, the search field
+/// (always on screen, its placeholder the project's name or "All projects", with the filter, "Show
+/// child tickets", off by default, at its trailing end) and New session; in the iPad's DesktopShell they're in the top bar instead (search in the
 /// navigation bar, ⌘F; Filter and New session, ⌘N, trailing) and there's no bottom bar. Typing
 /// searches on the server; results page the same way, across every column.
 struct BoardScreen: View {
@@ -65,10 +65,11 @@ struct BoardScreen: View {
         .navigationTitle(scopeName(ctx))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(desktop ? .automatic : .hidden, for: .navigationBar)
-        .searchable(text: $query, placement: desktop ? .toolbar : .automatic, prompt: desktop ? ctx.project.map { "Search \($0.name)" } ?? "Search tickets" : scopeName(ctx))
-        .searchFocused($searchFocused)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
+        .modifier(BoardSearch(desktop: desktop, query: $query, focused: $searchFocused,
+                              prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets") {
+            BoardBottomBar(query: $query, focused: $searchFocused, placeholder: scopeName(ctx),
+                           filter: filterMenu, newSession: newSessionButton(ctx))
+        })
         .toolbar { toolbar(ctx) }
         // Paging follows the project filter; a refetch drops the paging, so ask again when it's gone.
         .onChange(of: ctx.projectId, initial: true) { _, id in store.setBoardScope(id) }
@@ -199,22 +200,12 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
-    /// Phone: no header; Projects, filter, search field and New session along the bottom.
     /// iPad (DesktopShell): the split view's toggle, the search field in the navigation bar, and
-    /// Filter and New session trailing.
+    /// Filter and New session trailing. The phone has no toolbar items: BoardBottomBar holds them.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
         if desktop {
             ToolbarItem(placement: .primaryAction) { filterMenu }
             ToolbarItem(placement: .primaryAction) { newSession(ctx).keyboardShortcut("n") }
-        } else {
-            // Projects and Filter share one glass; search and New session each get their own.
-            // Without the spacers the bar merges the search field with its neighbors.
-            SidebarToolbarItem(placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { filterMenu }
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-            DefaultToolbarItem(kind: .search, placement: .bottomBar)
-            ToolbarSpacer(.fixed, placement: .bottomBar)
-            ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
     }
 
@@ -234,6 +225,23 @@ struct BoardScreen: View {
     private func newSession(_ ctx: BoardContext) -> some View {
         Button("New session", systemImage: Self.newSessionSymbol) { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
             .primaryToolbarItem(c)
+    }
+
+    /// New session as a glass circle for the phone's bar: prominent accent glass when the glyph
+    /// reads in white on it, else plain glass with an accent glyph (as primaryToolbarItem decides).
+    @ViewBuilder private func newSessionButton(_ ctx: BoardContext) -> some View {
+        let button = Button { router.present(.newSession(projectId: ctx.projectId, key: nil)) } label: {
+            Image(systemName: Self.newSessionSymbol)
+                .font(.system(size: 19, weight: .medium))
+                .frame(width: 34, height: 34)
+        }
+        .buttonBorderShape(.circle)
+        .accessibilityLabel("New session")
+        if c.tokens[.onAccent].lowercased() == "#ffffff" {
+            button.buttonStyle(.glassProminent).tint(c.accent)
+        } else {
+            button.buttonStyle(.glass).foregroundStyle(c.accent)
+        }
     }
 
     // MARK: Moves
@@ -320,6 +328,110 @@ struct BoardContext {
 
     func count(_ s: TicketStatus) -> Int {
         BoardColumns.columnCount(state, projectId, shown: shown, status: s, searching: searching)
+    }
+}
+
+/// Where the board's search lives: the system field in the iPad's navigation bar, or on the phone
+/// our own bottom bar (the system field has no room for the filter inside it).
+private struct BoardSearch<Bar: View>: ViewModifier {
+    let desktop: Bool
+    @Binding var query: String
+    var focused: FocusState<Bool>.Binding
+    let prompt: String
+    @ViewBuilder var bar: Bar
+
+    func body(content: Content) -> some View {
+        if desktop {
+            content
+                .searchable(text: $query, placement: .toolbar, prompt: prompt)
+                .searchFocused(focused)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+        } else {
+            // The columns scroll on under the bar's glass.
+            content.safeAreaInset(edge: .bottom, spacing: 0) { bar }
+        }
+    }
+}
+
+/// The phone board's bottom bar, Liquid Glass floating over the columns: Projects, the search
+/// field with the filter at its trailing end, and New session. While the field is focused, Projects
+/// and New session make way and an X ends the search (clears it and drops the keyboard), as the
+/// system's search bar does.
+private struct BoardBottomBar<Filter: View, NewSession: View>: View {
+    @Binding var query: String
+    var focused: FocusState<Bool>.Binding
+    let placeholder: String
+    let filter: Filter
+    let newSession: NewSession
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        let searching = focused.wrappedValue
+        GlassEffectContainer(spacing: 10) {
+            HStack(spacing: 10) {
+                if !searching {
+                    ProjectsButton(circle: true)
+                }
+                field
+                if searching {
+                    Button {
+                        query = ""
+                        focused.wrappedValue = false
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 19, weight: .medium))
+                            .frame(width: 34, height: 34)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .foregroundStyle(c.text)
+                    .accessibilityLabel("Cancel search")
+                } else {
+                    newSession
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .animation(.snappy, value: searching)
+    }
+
+    private var field: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(c.text2)
+            TextField("", text: $query, prompt: Text(placeholder).foregroundStyle(c.text3))
+                .font(.scaled(size: 17))
+                .foregroundStyle(c.text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .focused(focused)
+                .accessibilityLabel(placeholder)
+            if !query.isEmpty {
+                Button("Clear", systemImage: "xmark.circle.fill") { query = "" }
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 17))
+                    .foregroundStyle(c.text3)
+            }
+            filter
+                .labelStyle(.iconOnly)
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(c.accent)
+                .frame(minWidth: 30, minHeight: 30)
+                .contentShape(.rect)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .frame(maxWidth: .infinity, minHeight: 50)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        // Tapping anywhere on the capsule (not just the text) starts typing.
+        .contentShape(.capsule)
+        .onTapGesture { focused.wrappedValue = true }
     }
 }
 

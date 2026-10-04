@@ -130,8 +130,8 @@ private struct SceneChrome: ViewModifier {
 
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
-/// section's sidebar button, switches between them, and the board's bottom bar holds that button,
-/// its filter, search field and New session (the board has no header). At regular width (iPad) it's DesktopShell, where a ticket opens
+/// section's sidebar button, switches between them; the board has no header, and its own bottom
+/// bar holds that button, the search field (with the filter inside it) and New session. At regular width (iPad) it's DesktopShell, where a ticket opens
 /// in a window of its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
     @Environment(Router.self) private var router
@@ -212,41 +212,57 @@ extension EnvironmentValues {
 /// badge counts the triage sessions triaging or busy, like the sidebar's Inbox row, so the tab
 /// bar's old Inbox badge still shows from every section. None in the iPad's DesktopShell, where
 /// the split view's own toggle shows the sidebar and its Inbox row carries the badge. The phone's
-/// board puts it in its bottom bar instead (`.bottomBar`), leaving the board no header at all.
+/// board has no header and puts ProjectsButton in its own bottom bar (BoardBottomBar).
 struct SidebarToolbarItem: ToolbarContent {
-    var placement: ToolbarItemPlacement = .topBarLeading
-    @Environment(Router.self) private var router
     @Environment(\.desktopShell) private var desktop
+
+    var body: some ToolbarContent {
+        if !desktop {
+            ToolbarItem(placement: .topBarLeading) { ProjectsButton() }
+        }
+    }
+}
+
+/// The sidebar glyph that opens the Projects sheet, with the amber triaging badge. `circle` draws
+/// it as a glass circle of its own, for a bar that isn't a toolbar (the phone board's).
+struct ProjectsButton: View {
+    var circle = false
+    @Environment(Router.self) private var router
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
 
-    var body: some ToolbarContent {
-        let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
-        if !desktop {
-            item(triaging)
+    var body: some View {
+        if circle {
+            button
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .foregroundStyle(c.accent)
+        } else {
+            button
         }
     }
 
-    private func item(_ triaging: Int) -> some ToolbarContent {
-        ToolbarItem(placement: placement) {
-            Button { router.present(.projects) } label: {
-                Image(systemName: "sidebar.left")
-                    .overlay(alignment: .topTrailing) {
-                        if triaging > 0 {
-                            Text("\(triaging)")
-                                .font(.scaled(size: 11, weight: .bold))
-                                .monospacedDigit()
-                                .foregroundStyle(c.onAmber)
-                                .padding(.horizontal, 4)
-                                .frame(minWidth: 16, minHeight: 16)
-                                .background(c.amber, in: .capsule)
-                                .offset(x: 9, y: -9)
-                        }
+    private var button: some View {
+        let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
+        return Button { router.present(.projects) } label: {
+            Image(systemName: "sidebar.left")
+                .font(circle ? .system(size: 19, weight: .medium) : nil)
+                .frame(width: circle ? 34 : nil, height: circle ? 34 : nil)
+                .overlay(alignment: .topTrailing) {
+                    if triaging > 0 {
+                        Text("\(triaging)")
+                            .font(.scaled(size: 11, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(c.onAmber)
+                            .padding(.horizontal, 4)
+                            .frame(minWidth: 16, minHeight: 16)
+                            .background(c.amber, in: .capsule)
+                            .offset(x: 9, y: -9)
                     }
-            }
-            .accessibilityLabel("Projects")
-            .accessibilityValue(triaging > 0 ? "\(triaging) triaging" : "")
+                }
         }
+        .accessibilityLabel("Projects")
+        .accessibilityValue(triaging > 0 ? "\(triaging) triaging" : "")
     }
 }
 

@@ -23,8 +23,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - On iPhone, the board has no title bar anymore, so its columns get more of the screen. The
-  Projects button moved to the bottom bar, next to Filter, and the search field's placeholder
-  names the project you're looking at (or "All projects").
+  Projects button moved to the bottom bar, the Filter button moved inside the search field, and
+  the search field's placeholder names the project you're looking at (or "All projects"). While
+  you search, an X next to the field ends the search.
 
 ### Fixed
 

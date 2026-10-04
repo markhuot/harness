@@ -833,8 +833,8 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     throw new Error("couldn't open the Done column");
   };
   const boardMenu = async () => {
-    // The filter shares the bottom bar's leading glass with Projects.
-    await tapHeader(udid, "Filter", { x: 115, y: 822 });
+    // The filter sits at the trailing end of the bottom bar's search field.
+    await tapHeader(udid, "Filter", { x: 303, y: 811 });
     await tapWhere(udid, "Show child tickets");
   };
   const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
@@ -871,11 +871,11 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   });
   await shootBoth(udid, "paging-done-scrolled");
   await check("search finds a done ticket that isn't loaded", async () => {
-    // The search field is always in the board's bottom bar, between the filter and New session;
+    // The search field is always in the board's bottom bar, between Projects and New session;
     // its placeholder is the board's scope ("All projects" here).
     await goto(udid, BOARD);
     await Bun.sleep(500);
-    await tapHeader(udid, "All projects", { x: 236, y: 822 });
+    await tapHeader(udid, "All projects", { x: 192, y: 811 });
     await Bun.sleep(500);
     await axe("type", "haystack", "--udid", udid);
     await until(`${p.needle.key} in the results`, () => has(`${p.needle.key} `), 10000);
