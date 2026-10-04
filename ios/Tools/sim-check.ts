@@ -941,7 +941,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   async function listView() {
     const all = await nodes(udid);
     const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Activity"));
-    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Move to in progress" || n.AXLabel === "Re-open and move to in progress");
+    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Attach" || n.AXLabel === "Move to in progress" || n.AXLabel === "Re-open and move to in progress");
     const top = tab ? tab.frame.y + tab.frame.height : 100;
     const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
     // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the
@@ -1035,6 +1035,14 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     });
   }
   await shot(udid, "stick-activity");
+  // Each tab's content runs on under the composer's glass rather than stopping above it: the pager
+  // reaches the bottom of the screen, and only the scroll content's inset keeps the last row clear.
+  for (const tab of ["spec", "activity", "transcript"]) {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
+    await Bun.sleep(1200);
+    if (tab !== "spec") await swipe("down", 1);
+    await shot(udid, `stick-under-composer-${tab}`);
+  }
 
   // The hero (title, badges, the review buttons) scrolls out of the way with the tab body, and
   // the tab strip moves up into its place (lib/heroCollapse has the rules, unit-tested).

@@ -20,6 +20,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The Transcript shows the files sent with each message under it, with thumbnails. A file that was
   moved or deleted afterwards shows as missing.
 
+### Fixed
+
+- On iPhone and iPad, a ticket's tabs (Spec, Activity, Transcript and the rest) scroll under the
+  message box again, so you can see the content through its glass. The last line still scrolls up
+  clear of the message box.
+
 ## [app-20261004.0031](https://github.com/markhuot/harness/releases/tag/app-20261004.0031) - 2026-10-04
 
 ### Added
