@@ -1,6 +1,6 @@
 // Prompt attachments end to end in the built app, against the REAL service (throwaway HARNESS_HOME,
-// dummy driver): a New session gets files dropped on it from disk (attached by path, with a drop
-// highlight), one picked with the paperclip, an image pasted from the clipboard (uploaded), a plain
+// dummy driver): a New session gets files dropped on it from disk (registered in place by their
+// path, each an Attachment with an id; with a drop highlight), one picked with the paperclip, an image pasted from the clipboard (uploaded), a plain
 // text paste that stays text, and × removing one; the draft saves the list; Plan first launches it;
 // then files are deleted on disk and the Spec tab shows them as missing while the ticket still
 // renders. A reopened draft whose file is gone shows it missing in the editor too.
@@ -67,8 +67,8 @@ try {
   check("typing saves the draft", /^ATT-\d+$/.test(draftKey), draftKey);
 
   const chips = () =>
-    js<{ path: string; kind: string | null; missing: boolean; label: string | null; img: boolean }[]>(`[...document.querySelectorAll('[data-testid="draft-pane"] [data-testid="prompt-attachment"]')].map(el => ({
-      path: el.dataset.path, kind: el.dataset.kind ?? null, missing: el.dataset.missing === "true", label: el.getAttribute("aria-label"), img: !!el.querySelector("img") }))`);
+    js<{ id: string; source: string; path: string; kind: string | null; missing: boolean; label: string | null; img: boolean }[]>(`[...document.querySelectorAll('[data-testid="draft-pane"] [data-testid="prompt-attachment"]')].map(el => ({
+      id: el.dataset.id, source: el.dataset.source, path: el.dataset.path, kind: el.dataset.kind ?? null, missing: el.dataset.missing === "true", label: el.getAttribute("aria-label"), img: !!el.querySelector("img") }))`);
   const getTicket = async (key: string) => (await api<{ ticket: Ticket }>("GET", `/tickets/${key}`)).ticket;
   const served = async () => (await getTicket(draftKey)).promptAttachments ?? [];
 
@@ -85,7 +85,8 @@ try {
   await until("dropped files attached", async () => (await chips()).length === 3, 5000);
   check("the highlight goes away on drop", !(await exists(".draft-pane.dropping")));
   let list = await chips();
-  check("dropped files are attached by their path on disk", JSON.stringify(list.map((c) => c.path)) === JSON.stringify([diagram, gonePng, goneTxt]), JSON.stringify(list.map((c) => c.path)));
+  check("dropped files are registered in place, in the order dropped", JSON.stringify(list.map((c) => c.path)) === JSON.stringify([diagram, gonePng, goneTxt]), JSON.stringify(list.map((c) => c.path)));
+  check("each is an attachment the service registered (an id, source file)", list.every((c) => !!c.id && c.source === "file") && new Set(list.map((c) => c.id)).size === 3, JSON.stringify(list.map((c) => [c.id, c.source])));
   check("images get a thumbnail, other files a chip", list[0]!.img && list[1]!.img && !list[2]!.img && list[2]!.kind === "file");
   check("the window didn't navigate to a dropped file", (await js<string>("location.protocol + location.pathname")).endsWith("index.html"));
 
@@ -95,7 +96,7 @@ try {
   await cdp("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: [notes, diagram] });
   await until("picked file attached", async () => (await chips()).length === 4, 5000);
   list = await chips();
-  check("a picked file is attached by path, and one already attached isn't twice", list[3]?.path === notes && list.length === 4, JSON.stringify(list.map((c) => c.path)));
+  check("a picked file is registered by path, and one already attached isn't twice", list[3]?.path === notes && !!list[3]?.id && list.length === 4, JSON.stringify(list.map((c) => c.path)));
 
   // --- Paste: plain text stays text; image data is uploaded and attached.
   await js(`(() => { const t = document.querySelector('[data-testid="draft-pane"] .draft-prompt'); t.focus(); t.setSelectionRange(t.value.length, t.value.length); })()`);
@@ -124,7 +125,7 @@ try {
   await until("pasted image attached", async () => (await chips()).length === 5, 8000);
   list = await chips();
   const upload = list[4]!;
-  check("the pasted image is uploaded and shows a thumbnail", upload.img && !upload.path.startsWith(files), upload.path);
+  check("the pasted image is uploaded and shows a thumbnail", upload.img && upload.source === "upload" && !!upload.id && !upload.path.startsWith(files), JSON.stringify(upload));
 
   // --- × removes one.
   await js(`document.querySelector('[data-testid="draft-pane"] [data-path=${JSON.stringify(notes)}] [data-testid="prompt-attachment-remove"]').click()`);
@@ -135,7 +136,7 @@ try {
   }, 5000).catch(async () => served());
   check(
     "the draft saved its attachments, files by path and the paste as an upload",
-    saved.map((a) => a.path).join() === [diagram, gonePng, goneTxt, upload.path].join() && saved[3]!.source === "upload" && saved[0]!.source === "file",
+    saved.map((a) => a.path).join() === [diagram, gonePng, goneTxt, upload.path].join() && saved[3]!.source === "upload" && saved[0]!.source === "file" && saved.map((a) => a.id).join() === (await chips()).map((c) => c.id).join(),
     JSON.stringify(saved),
   );
   const rowsIn = (scope: string) =>

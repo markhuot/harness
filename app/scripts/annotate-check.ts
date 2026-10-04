@@ -6,16 +6,18 @@
 //   1. A spec image → Annotate: two arrows dragged and a spot clicked, each with its message; a
 //      mark moved and deleted with the Delete key (the list renumbers, the badges follow), ⌘Z
 //      bringing it back, × on a row and ⌘Z again; the notes never over the image. Add to message:
-//      nothing went to the agent; the composer lists the image as attachment:<id> with its marks
-//      over the thumbnail and "3 notes", and has the focus.
+//      nothing went to the agent; the composer lists the spec image itself (its id, source "spec")
+//      with its marks over the thumbnail and "3 notes", and has the focus.
 //   2. That waiting image opens in the lightbox with its marks drawn over it, and Annotate again
 //      reopens its marks: one edited, Add: still one row. The human types why and sends: the
-//      Transcript entry's attachment is the spec image's stored file with the annotation (3 marks
-//      in image pixels), so is its run's, and the stored file's bytes are unchanged.
+//      Transcript entry's attachment is the spec image (same id, its stored file) with the
+//      annotation (3 marks in image pixels), so is its run's, and the stored file's bytes are unchanged.
 //   3. The sent image in the Transcript: marks over its thumbnail and in the lightbox; Annotate
-//      reopens the sent marks, one more click, Add → the composer.
-//   4. The browser pane's Annotate (a frozen screenshot of a local page) → Add → a second composer
-//      row whose annotation has the page. Sent together.
+//      reopens the sent marks, one more click, Add → the composer (the same attachment id).
+//   4. The browser pane's Annotate (a frozen screenshot of a local page): a mark on the Save button
+//      names it (#save · "Save") under its note; one clicked on the header names the header, and
+//      dragging its anchor onto the button names the button instead. Add → a second composer row
+//      whose annotation has the page and each mark's element (path, text). Sent together.
 //   5. New session: an attached image annotated in place, its row shows the marks and notes, saved
 //      with the draft; reopened after a reload it still offers Annotate, which reopens the marks to
 //      edit. Plan first: the launched session keeps the notes on its attachment, and the Spec tab
@@ -25,7 +27,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AttachmentAnnotation, Project, PromptAttachment, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import type { Attachment, Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
 import { png } from "./lib/png";
@@ -49,7 +51,8 @@ const site = Bun.serve({
     new Response(
       `<!doctype html><title>Settings</title><body style="margin:0;font:16px -apple-system;background:#f8fafc">
        <header style="height:56px;background:#1e293b;color:#fff;display:flex;align-items:center;padding:0 20px">Acme settings</header>
-       <main style="padding:24px"><h1>Profile</h1><button style="font-size:16px;padding:8px 14px">Save</button></main></body>`,
+       <main style="padding:24px"><h1>Profile</h1>
+       <button id="save" style="position:fixed;left:30%;top:45%;width:40%;height:30%;font-size:16px">Save</button></main></body>`,
       { headers: { "content-type": "text/html" } },
     ),
 });
@@ -78,7 +81,7 @@ const shot = async (name: string) => {
 };
 
 type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
-type TextContent = { text: string; attachments?: PromptAttachment[] };
+type TextContent = { text: string; attachments?: Attachment[] };
 
 try {
   await waitHealthy(base, 15000);
@@ -168,8 +171,8 @@ try {
       return { marks: Number(c.dataset.marks), accent: n, w: Math.round(r.width), h: Math.round(r.height) };
     })()`);
   const composerRows = () =>
-    js<{ path: string; notes: string | null; thumbMarks: number | null }[]>(`[...document.querySelectorAll('[data-testid="composer"] [data-testid="prompt-attachment"]')].map(el => ({
-      path: el.dataset.path, notes: el.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? null,
+    js<{ id: string; source: string; path: string; notes: string | null; thumbMarks: number | null }[]>(`[...document.querySelectorAll('[data-testid="composer"] [data-testid="prompt-attachment"]')].map(el => ({
+      id: el.dataset.id, source: el.dataset.source, path: el.dataset.path, notes: el.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? null,
       thumbMarks: el.querySelector('[data-testid="thumbnail-annotation"]') ? Number(el.querySelector('[data-testid="thumbnail-annotation"]').dataset.marks) : null }))`);
   const openNotes = async (scope: string) => {
     await js(`(() => { const b = document.querySelector(${JSON.stringify(`${scope} [data-testid="annotation-notes"] button`)}); if (b && b.getAttribute("aria-expanded") !== "true") b.click(); })()`);
@@ -228,7 +231,7 @@ try {
   await Bun.sleep(500);
   check("Add to message sends nothing", (await userMessages()).length === messagesBefore);
   let crow = await until("the composer row", async () => (await composerRows())[0], 5000).catch(() => null);
-  check("the composer lists the spec image by reference, with its marks over the thumbnail and 3 notes", crow?.path === `attachment:${specId}` && crow.notes === "3 notes" && crow.thumbMarks === 3, JSON.stringify(crow));
+  check("the composer lists the spec image itself (its id, source spec), with its marks over the thumbnail and 3 notes", crow?.id === specId && crow.source === "spec" && crow.notes === "3 notes" && crow.thumbMarks === 3, JSON.stringify(crow));
   const thumb = await until("the thumbnail's marks", async () => {
     const o = await overlay('[data-testid="composer"] [data-testid="thumbnail-annotation"]');
     return o && o.accent > 0 ? o : null;
@@ -278,7 +281,7 @@ try {
   const a1 = c1.attachments?.[0];
   const n1 = a1?.annotation;
   check("the message's text", c1.text === "Two things on the settings mockup, and the Save button.", c1.text);
-  check("its attachment is the spec image's stored file (resolved from attachment:<id>)", c1.attachments?.length === 1 && !!a1 && !a1.path.startsWith("attachment:") && existsSync(a1.path) && sha(readFileSync(a1.path)) === sha(specBytesBefore), JSON.stringify(a1));
+  check("its attachment is the spec image: same id, source spec, its stored file", c1.attachments?.length === 1 && !!a1 && a1.id === specId && a1.source === "spec" && existsSync(a1.path) && sha(readFileSync(a1.path)) === sha(specBytesBefore), JSON.stringify(a1));
   check("with its annotation: the image's size, three marks (two arrows, a click) in its pixels", !!n1 && n1.width === 480 && n1.height === 320 && n1.marks.length === 3 && n1.marks[0]!.tailX !== undefined && n1.marks[1]!.tailX !== undefined && n1.marks[2]!.tailX === undefined, JSON.stringify(n1));
   check("marks numbered, with their messages, where they were drawn", !!n1 && n1.marks.map((m) => m.n).join() === "1,2,3" && Math.abs(n1.marks[0]!.x - 120) <= 3 && Math.abs(n1.marks[0]!.y - 96) <= 3 && Math.abs(n1.marks[2]!.x - 408) <= 3 && n1.marks[1]!.message === "The spacing between these is off", JSON.stringify(n1?.marks));
   const runs = (await detail()).runs;
@@ -318,7 +321,7 @@ try {
   await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
   await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 5000);
   crow = (await composerRows())[0] ?? null;
-  check("Add puts it in the composer by its stored path, with 4 notes", crow?.path === a1?.path && crow?.notes === "4 notes" && crow?.thumbMarks === 4, JSON.stringify(crow));
+  check("Add puts the same attachment (its id) in the composer, with 4 notes", crow?.id === a1?.id && crow?.notes === "4 notes" && crow?.thumbMarks === 4, JSON.stringify(crow));
 
   // ================================================================ 4. the browser pane
   await go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
@@ -326,23 +329,36 @@ try {
   check("the browser pane offers Annotate once the page is drawn", ready);
   await js(`document.querySelector('[data-testid="browser-annotate"]').click()`);
   check("Annotate opens the annotator on a frozen screenshot of the page", await annotatorOpen());
-  await drag([0.12, 0.3], [0.3, 0.45]);
+  const elementLabels = () => js<(string | null)[]>(`[...document.querySelectorAll('[data-testid="annotator-row"]')].map(r => r.querySelector('[data-testid="annotator-element"]')?.textContent ?? null)`);
+  // The arrow's head (its anchor, where the press started) on the Save button.
+  await drag([0.5, 0.6], [0.2, 0.35]);
   await typeIn(1, "Save should be the accent colour");
+  const named = await until("mark 1 names the button", async () => ((await elementLabels())[0] ? await elementLabels() : null), 8000).catch(() => null);
+  check("a mark on the page names the element under its anchor, under its note", named?.[0] === '#save · "Save"', JSON.stringify(named));
+  await click([0.85, 0.03]);
+  await typeIn(2, "And move this");
+  const header = await until("mark 2 names the header", async () => ((await elementLabels())[1] ? await elementLabels() : null), 8000).catch(() => null);
+  check("a click on the header names the header", !!header?.[1] && header[1].includes("Acme settings") && !header[1].includes("#save"), JSON.stringify(header));
+  await drag([0.85, 0.03], [0.65, 0.5]);
+  const moved = await until("mark 2 names the button now", async () => ((await elementLabels())[1] === '#save · "Save"' ? await elementLabels() : null), 8000).catch(() => null);
+  check("dragging its anchor onto the button names the button instead", !!moved, JSON.stringify(await elementLabels()));
   const overlap3 = await noOverlap();
   check("the notes sit beside the page, none over it", overlap3.ok, overlap3.detail);
   await shot("browser-annotator");
   await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
   await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 8000);
   const both = await composerRows();
-  check("the screenshot joins the composer as a second row, 1 note", both.length === 2 && both[1]!.notes === "1 note" && both[1]!.thumbMarks === 1, JSON.stringify(both));
+  check("the screenshot joins the composer as a second row, 2 notes", both.length === 2 && both[1]!.notes === "2 notes" && both[1]!.thumbMarks === 2 && both[1]!.source === "upload", JSON.stringify(both));
   await typeComposer("The corner, and the page's Save button.");
   await sendComposer();
   const second = await until("the second message", async () => (await userMessages())[messagesBefore + 1], 15000).catch(() => null);
   const c2 = second?.content as TextContent | undefined;
   const page = c2?.attachments?.[1]?.annotation?.page;
-  check("both go, each with its own annotation", c2?.attachments?.length === 2 && c2.attachments[0]!.annotation?.marks.length === 4 && c2.attachments[1]!.annotation?.marks.length === 1, JSON.stringify(c2?.attachments?.map((a) => a.annotation?.marks.length)));
+  check("both go, each with its own annotation", c2?.attachments?.length === 2 && c2.attachments[0]!.annotation?.marks.length === 4 && c2.attachments[1]!.annotation?.marks.length === 2, JSON.stringify(c2?.attachments?.map((a) => a.annotation?.marks.length)));
   check("the screenshot's annotation has the page: url, title, tab, viewport and scale", page?.url === pageUrl && page.title === "Settings" && page.tabId >= 1 && page.viewport.width > 0 && page.scale > 0, JSON.stringify(page));
   const shotAnn = c2?.attachments?.[1]?.annotation;
+  check("each of its marks tells the agent the element it points at (path and text)", shotAnn?.marks.every((m) => m.path === "#save" && m.text === "Save") === true, JSON.stringify(shotAnn?.marks.map((m) => [m.path, m.text])));
+  check("marks on other images never name an element", c2?.attachments?.[0]?.annotation?.marks.every((m) => m.path === undefined && m.text === undefined) === true);
   check("the screenshot's size is the page's in device pixels, named after its host", !!shotAnn && !!page && Math.abs(shotAnn.width - page.viewport.width * page.scale) <= 2 && c2!.attachments![1]!.name === "127.0.0.1.png", JSON.stringify({ w: shotAnn?.width, name: c2?.attachments?.[1]?.name }));
 
   // ================================================================ 5. New session
@@ -374,7 +390,8 @@ try {
     const a = (await detail(draftKey)).ticket.promptAttachments?.[0];
     return a?.annotation?.marks.length === 2 ? a : null;
   }, 8000).catch(() => null);
-  check("saved with the draft, on the same file (not a copy)", saved?.path === diagram && saved.annotation?.width === 400 && saved.annotation.height === 260, JSON.stringify(saved));
+  const draftRowId = await js<string | null>(`document.querySelector('[data-testid="draft-pane"] [data-testid="prompt-attachment"]')?.dataset.id ?? null`);
+  check("saved with the draft, on the same file (registered in place, not a copy)", saved?.path === diagram && saved.source === "file" && !!saved.id && saved.id === draftRowId && saved.annotation?.width === 400 && saved.annotation.height === 260, JSON.stringify(saved));
   await shot("new-session");
 
   await js("location.reload()");

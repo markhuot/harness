@@ -79,6 +79,9 @@ const activity: ActivityEntry[] = [];
 const specRevisions = new Map<string, SpecRevision[]>();
 /** Attachment bytes by id, served at GET /attachments/:id (an attachment seeded without bytes 404s). Rendered on first request. */
 const attachmentFiles = new Map<string, { mimeType: string; bytes: () => Uint8Array }>();
+/** Every attachment record by id (spec media), for TicketDetail.attachments. */
+const attachmentRecords = new Map<string, Attachment>();
+const specMedia = (a: Attachment): Attachment => (attachmentRecords.set(a.id, a), a);
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
 const watchers = new Map<string, Watcher>();
 let triageSeq = 0;
@@ -857,7 +860,7 @@ function seed() {
             mockScreenshot("board-dark.png", 1440, 900, 265, true),
             mockScreenshot("board-narrow.png", 390, 844, 150, false),
             ...mockVideo("drag.mp4"),
-            { id: newId("att"), kind: "image", mimeType: "image/png", name: "deleted.png", size: 1024, width: 800, height: 600 } satisfies Attachment,
+            specMedia({ id: newId("att"), path: "/tmp/harness-mock/attachments/deleted.png", name: "deleted.png", source: "spec", kind: "image", mimeType: "image/png", size: 1024, width: 800, height: 600 }),
           ]
             .map((a) => `![${a.name}](attachment:${a.id} "thumb")`)
             .join(" "),
@@ -1255,6 +1258,8 @@ function ticketDetail(t: Ticket, resolvedFrom: string | null = null): TicketDeta
     dependents: [...tickets.values()].filter((o) => o.dependsOn.includes(t.key)).map((o) => o.key),
     children: [...tickets.values()].filter((o) => o.parentId === t.id),
     relatedTickets: relatedTickets(resolvedFrom ?? t.key, t),
+    // Like the service: the media the spec refers to, as attachment records.
+    attachments: [...new Set([...t.spec.matchAll(/\(attachment:([^\s)]+)/g)].map((m) => m[1]!))].flatMap((id) => attachmentRecords.get(id) ?? []),
   };
 }
 
@@ -2220,7 +2225,7 @@ function mockScreenshot(name: string, w: number, h: number, hue: number, dark: b
   const id = newId("att");
   let png: Uint8Array | undefined;
   attachmentFiles.set(id, { mimeType: "image/png", bytes: () => (png ??= renderScreenshot(w, h, hue, dark)) });
-  return { id, kind: "image", mimeType: "image/png", name, size: w * h, width: w, height: h };
+  return specMedia({ id, path: `/tmp/harness-mock/attachments/${id}.png`, name, source: "spec", kind: "image", mimeType: "image/png", size: w * h, width: w, height: h });
 }
 
 function renderScreenshot(w: number, h: number, hue: number, dark: boolean): Uint8Array {
@@ -2251,7 +2256,7 @@ function mockVideo(name: string): Attachment[] {
   const bytes = new Uint8Array(readFileSync(path));
   const id = newId("att");
   attachmentFiles.set(id, { mimeType: "video/mp4", bytes: () => bytes });
-  return [{ id, kind: "video", mimeType: "video/mp4", name, size: bytes.length }];
+  return [specMedia({ id, path, name, source: "spec", kind: "video", mimeType: "video/mp4", size: bytes.length })];
 }
 
 function renderFrame(sessionId: string, tabId: number, tick: number): { data: string; width: number; height: number } {

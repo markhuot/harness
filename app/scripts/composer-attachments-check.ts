@@ -1,9 +1,10 @@
 // Message attachments end to end in the built app, against the REAL service (throwaway HARNESS_HOME,
 // dummy driver): the ticket composer's (+) menu, a file picked through it, a file dropped on the
-// composer (attached by path, with a drop highlight), an image pasted into the input (uploaded), ×
+// composer (registered in place by its path, with a drop highlight), an image pasted into the input (uploaded), ×
 // removing one before sending, then Send: the list clears, the service's transcript has the message
 // with its attachments, and the Transcript tab shows them under the message, served by the service
-// (after a reload, so nothing comes from the composer's previews), a deleted one as missing.
+// (after a reload, so nothing comes from the composer's previews) by each attachment's id
+// (GET /attachments/:id), a deleted one as missing.
 //
 //   bun run build && bun scripts/composer-attachments-check.ts [--shots=<dir>] [--theme=dark]
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -61,8 +62,8 @@ try {
   await until("the composer", () => exists('[data-testid="composer"] .composer-input'), 10000);
 
   const rows = () =>
-    js<{ path: string; kind: string | null; img: boolean; remove: boolean }[]>(`[...document.querySelectorAll('[data-testid="composer"] [data-testid="prompt-attachment"]')].map(el => ({
-      path: el.dataset.path, kind: el.dataset.kind ?? null, img: !!el.querySelector("img"), remove: !!el.querySelector('[data-testid="prompt-attachment-remove"]') }))`);
+    js<{ id: string; source: string; path: string; kind: string | null; img: boolean; remove: boolean }[]>(`[...document.querySelectorAll('[data-testid="composer"] [data-testid="prompt-attachment"]')].map(el => ({
+      id: el.dataset.id, source: el.dataset.source, path: el.dataset.path, kind: el.dataset.kind ?? null, img: !!el.querySelector("img"), remove: !!el.querySelector('[data-testid="prompt-attachment-remove"]') }))`);
   const sendEnabled = () => js<boolean>(`!document.querySelector('[data-testid="composer-send"]').disabled`);
   check("Send starts disabled with nothing typed or attached", !(await sendEnabled()));
 
@@ -83,7 +84,7 @@ try {
   await cdp("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: [mockup, report, unwanted] });
   await until("picked files attached", async () => (await rows()).length === 3, 5000);
   let list = await rows();
-  check("picked files are attached by path, before sending, each with ×", list.map((r) => r.path).join() === [mockup, report, unwanted].join() && list.every((r) => r.remove), JSON.stringify(list));
+  check("picked files are registered in place (an id each, source file), in order, each with ×", list.map((r) => r.path).join() === [mockup, report, unwanted].join() && list.every((r) => r.remove && !!r.id && r.source === "file"), JSON.stringify(list));
   check("an image shows a thumbnail, a text file an icon", list[0]!.img && !list[1]!.img && list[1]!.kind === "file");
   check("attachments alone enable Send", await sendEnabled());
 
@@ -124,7 +125,8 @@ try {
   await until("pasted image attached", async () => (await rows()).length === 5, 8000);
   list = await rows();
   const upload = list[4]!;
-  check("the pasted image is uploaded and shows a thumbnail", upload.img && !upload.path.startsWith(files), upload.path);
+  check("the pasted image is uploaded and shows a thumbnail", upload.img && upload.source === "upload" && !!upload.id && !upload.path.startsWith(files), JSON.stringify(upload));
+  const composerIds = (await rows()).map((r) => r.id);
 
   // --- × removes one before sending.
   await js(`document.querySelector('[data-testid="composer"] [data-path=${JSON.stringify(unwanted)}] [data-testid="prompt-attachment-remove"]').click()`);
@@ -146,6 +148,7 @@ try {
   const sentList = userEntry.content.type === "text" ? (userEntry.content.attachments ?? []) : [];
   check("the service has the message with its attachments, in order", sentList.map((a) => a.path).join() === sent.join(), JSON.stringify(sentList));
   check("files went by path, the paste as an upload", sentList[0]?.source === "file" && sentList[3]?.source === "upload", JSON.stringify(sentList.map((a) => a.source)));
+  check("the message's attachments are the ones the composer had (same ids)", sentList.map((a) => a.id).join() === composerIds.filter((_, i) => i !== 2).join(), JSON.stringify({ sent: sentList.map((a) => a.id), composerIds }));
 
   // --- The Transcript, fresh (no composer previews), with one file gone on disk.
   rmSync(report);
@@ -161,7 +164,7 @@ try {
   }, 10000).catch(async () => msgRows());
   const at = (p: string) => shown.find((r) => r.path === p);
   check("the Transcript lists the four attachments under the message, read-only", shown.length === 4 && shown.every((r) => !r.remove), JSON.stringify(shown));
-  check("images load from the service's message attachment route", !!at(mockup)?.img && !!at(dropped)?.img && !!at(upload.path)?.img && !!at(mockup)?.src?.includes(`/transcript/${userEntry.id}/attachments/0`), JSON.stringify(at(mockup)));
+  check("images load from the service by their attachment id", !!at(mockup)?.img && !!at(dropped)?.img && !!at(upload.path)?.img && !!at(mockup)?.src?.includes(`/attachments/${encodeURIComponent(sentList[0]!.id)}?`), JSON.stringify(at(mockup)));
   check("a file deleted on disk (HEAD 404) shows as missing", !!at(report)?.missing);
   check(
     "they sit under the message's bubble",

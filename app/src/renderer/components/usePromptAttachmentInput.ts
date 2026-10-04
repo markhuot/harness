@@ -51,21 +51,27 @@ export function usePromptAttachmentInput({
     const t = target;
     if (!t || !enabled || !files.length) return false;
     const plan = planFiles(files, (f) => window.harness?.pathForFile(f) ?? null, { uploadAny, local: isLocalService(client.baseUrl) });
+    // A file already in the list (or twice in this batch) isn't registered again.
+    const have = new Set(t.get().map((a) => a.path));
+    const registers = plan.registers.filter((r) => !have.has(r.path) && (have.add(r.path), true));
+    if (!registers.length && !plan.uploads.length) return plan.registers.length > 0;
     const jobs = [
-      ...plan.registers.map((r) => ({ name: r.name, file: r.file, run: () => client.registerAttachment(r.path, r.name) })),
+      ...registers.map((r) => ({ name: r.name, file: r.file, run: () => client.registerAttachment(r.path, r.name) })),
       ...plan.uploads.map((u) => ({ name: u.name, file: u.file, run: () => client.uploadAttachment(u.file, u.name, u.mimeType) })),
     ];
-    if (!jobs.length) return false;
     // Room left (counting what's already on its way): the rest isn't registered or uploaded at all.
     const room = Math.max(0, MAX_PROMPT_ATTACHMENTS - t.get().length - pending.length);
     const taken = jobs.slice(0, room);
     const message = limitMessage(jobs.length - taken.length, MAX_PROMPT_ATTACHMENTS, what);
     if (message) toast(message, "error");
+    // All at once, but added in the order they were dropped or picked, whichever answers first.
+    let previous: Promise<unknown> = Promise.resolve();
     for (const job of taken) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       setPending((p) => [...p, { id, name: job.name }]);
-      job
-        .run()
+      const running = job.run();
+      previous = previous
+        .then(() => running)
         .then(
           (a) => {
             // The row shows the picture from the file in hand, without a round trip.
