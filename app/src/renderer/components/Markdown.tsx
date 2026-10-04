@@ -11,7 +11,9 @@
 // `![alt](attachment:<id>)` alone on its line is a figure: the attachment across the full width with
 // its alt text as the caption. `![alt](attachment:<id> "thumb")` is a 100×100 thumbnail, and a line of
 // them a row. Either opens the lightbox on a click (stepping through every image in the text). The
-// parser turns remote and file images into links, so nothing here loads a URL an agent wrote.
+// parser turns remote and file images into links, so nothing here loads a URL an agent wrote. Each
+// one is the ticket's own Attachment record (SpecAttachmentsScope: TicketDetail.attachments), so
+// annotating it adds that attachment, by its id, to the message being written.
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { parseFileLink, type AttachmentKind, type Attachment } from "@harness/shared";
@@ -19,7 +21,6 @@ import {
   inlineTokens,
   mediaIn,
   parseBlocks,
-  specAttachmentPath,
   ticketByKey,
   ticketLinkable,
   type Block,
@@ -32,12 +33,20 @@ import {
 } from "@harness/shared/state";
 import type { FileLinkContext } from "../state/fileOpen";
 import { useOptionalStore } from "../state/store";
+import { mediaAttachment } from "../state/promptAttachmentFiles";
 import { Lightbox, Missing } from "./Attachments";
 import { DiffCodeBlock, FencedCode } from "./Code";
 import { Icon } from "./Icon";
 import { PaneContext, PaneScopeContext, useOpenTicket } from "./paneContext";
 
 export { parseBlocks, plainText } from "@harness/shared/state";
+
+const SpecAttachmentsContext = createContext<readonly Attachment[] | undefined>(undefined);
+
+/** The ticket's spec media (TicketDetail.attachments) that `attachment:<id>` in the Markdown below refers to. */
+export function SpecAttachmentsScope({ attachments, children }: { attachments: readonly Attachment[] | undefined; children: ReactNode }) {
+  return <SpecAttachmentsContext.Provider value={attachments}>{children}</SpecAttachmentsContext.Provider>;
+}
 
 /** How ticket keys (FOO-12) render: linked to the ticket when it can be opened, else plain text. */
 export interface TicketLinks {
@@ -178,6 +187,12 @@ const MediaScopeContext = createContext<MediaScope | null>(null);
 
 const defaultKind = (m: Media): AttachmentKind => (m.video ? "video" : "image");
 
+/** The kind to show: the ticket's record of it says (an image's alt text often has no extension to go by). */
+const knownKind = (known: readonly Attachment[] | undefined, id: string): AttachmentKind | undefined => {
+  const k = known?.find((a) => a.id === id)?.kind;
+  return k === "image" || k === "video" ? k : undefined;
+};
+
 /**
  * An attachment in markdown: the image (fitted to the width, across it in a figure, or cropped to a
  * square as a thumbnail), or a video's first frame with a play badge, opening the lightbox when
@@ -314,7 +329,8 @@ function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: numbe
 function MarkdownFrame({ media, className, children }: { media: Media[]; className?: string; children: ReactNode }) {
   const [learned, setLearned] = useState<Record<string, AttachmentKind>>({});
   const [open, setOpen] = useState<number | null>(null);
-  const kind = useCallback((m: Media) => learned[m.id] ?? defaultKind(m), [learned]);
+  const known = useContext(SpecAttachmentsContext);
+  const kind = useCallback((m: Media) => learned[m.id] ?? knownKind(known, m.id) ?? defaultKind(m), [learned, known]);
   const scope = useMemo<MediaScope>(
     () => ({
       kind,
@@ -327,14 +343,19 @@ function MarkdownFrame({ media, className, children }: { media: Media[]; classNa
     [kind, media],
   );
   const list = useMemo<Attachment[]>(
-    () => media.map((m) => ({ id: m.id, kind: kind(m), mimeType: "", name: m.alt || m.id, size: 0 })),
-    [media, kind],
+    () =>
+      media.map((m) => {
+        const a = mediaAttachment(m, known, kind(m));
+        // A video that only played as one (its record says otherwise, or there's none) shows as one.
+        return a.kind === kind(m) ? a : { ...a, kind: kind(m) };
+      }),
+    [media, kind, known],
   );
   return (
     <MediaScopeContext.Provider value={scope}>
       <div className={`md selectable ${className ?? ""}`}>{children}</div>
       {open !== null && list.length > 0 && (
-        <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} annotate={(a) => ({ input: { path: specAttachmentPath(a.id), name: a.name } })} />
+        <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} annotate={(a) => ({ attachment: a })} />
       )}
     </MediaScopeContext.Provider>
   );

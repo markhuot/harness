@@ -1,5 +1,6 @@
-// The annotator (DESIGN.md "Annotations"): an image (a spec image, a prompt attachment, a file sent
-// with a message, a frozen browser page, or a file waiting in the composer or a New session) with
+// The annotator (DESIGN.md "Annotations"): an image attachment (a spec image, a New session's file,
+// a file sent with a message, a frozen browser page, or a file waiting in the composer or a New
+// session) with
 // numbered notes drawn over it. Pressing on the image sets an anchor and dragging pulls out an arrow
 // whose head points at it; a plain click numbers the spot itself. Each number gets its own message
 // in the list beside the image (never over it). Add to message hands the attachment and its
@@ -12,8 +13,8 @@
 // composer or a New session is annotated in place).
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { MAX_ANNOTATION_MARKS, type AnnotationPage, type AttachmentAnnotation, type PromptAttachmentInput } from "@harness/shared";
-import { annotationStyle, draftMarksFrom, fitRect, hitTestMarks, isAnnotationDrag, moveMark, removeMark, setMarkMessage, specAttachmentIdOf, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
+import { MAX_ANNOTATION_MARKS, type AnnotationPage, type Attachment, type AttachmentAnnotation } from "@harness/shared";
+import { annotationStyle, draftMarksFrom, fitRect, hitTestMarks, isAnnotationDrag, moveMark, removeMark, setMarkMessage, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { annotationFromMarks, emptyHistory, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
 import { previewFile, rememberPreview } from "./PromptAttachments";
@@ -24,7 +25,7 @@ import "./annotator.css";
 
 /** What Add to message hands on: the attachment, and its notes (null: none, which takes them off). */
 export interface AnnotatedAttachment {
-  input: PromptAttachmentInput;
+  attachment: Attachment;
   annotation: AttachmentAnnotation | null;
 }
 
@@ -34,11 +35,11 @@ export interface AnnotateTarget {
   name: string;
   load: () => Promise<Blob>;
   /**
-   * The attachment the annotation goes on (a spec image as `attachment:<id>`, any other file by
-   * its path); or, for an image that isn't a file yet (a browser screenshot), made from its bytes
-   * on Add (uploaded then).
+   * The attachment the annotation goes on (a spec image, a waiting or sent file: the record with
+   * its id); or, for an image that isn't a file yet (a browser screenshot), made from its bytes on
+   * Add (uploaded then).
    */
-  input: PromptAttachmentInput | ((image: Blob) => Promise<PromptAttachmentInput>);
+  attachment: Attachment | ((image: Blob) => Promise<Attachment>);
   /** The browser page a screenshot shows. */
   page?: AnnotationPage;
   /** The notes it has already: reopened to edit. */
@@ -47,20 +48,19 @@ export interface AnnotateTarget {
   onAdd?: (a: AnnotatedAttachment) => void;
 }
 
-/** What a lightbox item offers Annotate with: its attachment, its notes, and where the result goes. */
+/** What a lightbox item offers Annotate with: its attachment (with the notes it has), and where the result goes. */
 export interface AnnotateOffer {
-  input: PromptAttachmentInput;
-  annotation?: AttachmentAnnotation;
+  attachment: Attachment;
   onAdd?: (a: AnnotatedAttachment) => void;
 }
 
 /** A target read from a URL (the service's, with the token in the query), or a preview's own bytes. */
-export function offerTarget(url: string, name: string, offer: AnnotateOffer): AnnotateTarget {
+export function offerTarget(url: string, offer: AnnotateOffer): AnnotateTarget {
   const local = previewFile(url);
   return {
-    name,
-    input: offer.input,
-    annotation: offer.annotation,
+    name: offer.attachment.name,
+    attachment: offer.attachment,
+    annotation: offer.attachment.annotation,
     onAdd: offer.onAdd,
     load: async () => {
       if (local) return local;
@@ -87,7 +87,7 @@ export function useAnnotate(): AnnotateScopeValue | null {
  * their own destination; `annotationOf` says what notes that destination has on a file already
  * (one waiting in the composer), so annotating it again from anywhere edits those.
  */
-export function AnnotateScope({ onAdd, annotationOf, children }: { onAdd?: (a: AnnotatedAttachment) => void; annotationOf?: (path: string) => AttachmentAnnotation | undefined; children: ReactNode }) {
+export function AnnotateScope({ onAdd, annotationOf, children }: { onAdd?: (a: AnnotatedAttachment) => void; annotationOf?: (a: Attachment) => AttachmentAnnotation | undefined; children: ReactNode }) {
   const [target, setTarget] = useState<{ t: AnnotateTarget; n: number } | null>(null);
   const opened = useRef(0);
   const fallback = useRef({ onAdd, annotationOf });
@@ -95,7 +95,7 @@ export function AnnotateScope({ onAdd, annotationOf, children }: { onAdd?: (a: A
   const value = useMemo<AnnotateScopeValue>(
     () => ({
       open: (t) => {
-        const waiting = !t.onAdd && typeof t.input !== "function" ? fallback.current.annotationOf?.(t.input.path) : undefined;
+        const waiting = !t.onAdd && typeof t.attachment !== "function" ? fallback.current.annotationOf?.(t.attachment) : undefined;
         setTarget({ t: waiting ? { ...t, annotation: waiting } : t, n: ++opened.current });
       },
     }),
@@ -360,10 +360,10 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
     setAdding(true);
     try {
       const { width, height } = image.bitmap;
-      const input = typeof target.input === "function" ? await target.input(image.blob) : target.input;
-      // The row shows the picture at once, without a round trip (a spec image's is served by its id).
-      if (!specAttachmentIdOf(input.path)) rememberPreview(input.path, image.blob);
-      onAdd({ input, annotation: annotationFromMarks(marks, width, height, target.page ?? target.annotation?.page) });
+      const attachment = typeof target.attachment === "function" ? await target.attachment(image.blob) : target.attachment;
+      // The row shows the picture at once, from the bytes in hand.
+      rememberPreview(attachment.id, image.blob);
+      onAdd({ attachment, annotation: annotationFromMarks(marks, width, height, target.page ?? target.annotation?.page) });
     } catch (e) {
       toast(`Couldn't add the annotations: ${e instanceof Error ? e.message : String(e)}`, "error");
       setAdding(false);

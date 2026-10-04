@@ -1,10 +1,10 @@
-// Screenshots and recordings attached to a ticket, as Markdown shows them inline (attachment:<id>
-// images): a lightbox that shows one at up to the window's size, and the card for one that couldn't
-// load. URLs come from the current client on every render (they carry the token), so a rotated
+// Attachments shown big (DESIGN.md "Attachments"): a lightbox that shows one image or video at up
+// to the window's size (a spec's media, a New session's or a message's files), and the card for one
+// that couldn't load. URLs come from the current client on every render (they carry the token), so a rotated
 // token swaps them for working ones.
 
 import { useEffect, useState } from "react";
-import type { Attachment, AttachmentAnnotation } from "@harness/shared";
+import type { Attachment } from "@harness/shared";
 import { stepAttachment } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { offerTarget, useAnnotate, type AnnotateOffer } from "./Annotator";
@@ -24,10 +24,10 @@ export function Missing({ name }: { name: string }) {
 
 /**
  * One attachment at a time over the app. ← and → (or the side buttons) step through the list (the
- * images in a piece of markdown); Esc or the backdrop closes. `urlOf` reads one from somewhere other
- * than the spec's attachments (a prompt attachment). `annotationOf` gives an image's notes, drawn
- * over it. Inside an AnnotateScope, `annotate` offers an image for annotating (its attachment, and
- * where the notes go), and the bar offers Annotate for it.
+ * images in a piece of markdown, or a list of attachments); Esc or the backdrop closes. Each is read
+ * by its id, unless `urlOf` has it from somewhere closer (the bytes a list already has in hand). An
+ * annotated image has its notes drawn over it. Inside an AnnotateScope, `annotate` offers an image
+ * for annotating (where its notes go), and the bar offers Annotate for it.
  */
 export function Lightbox({
   list,
@@ -36,28 +36,26 @@ export function Lightbox({
   onClose,
   urlOf,
   annotate,
-  annotationOf,
 }: {
   list: Attachment[];
   index: number;
   onIndex: (i: number) => void;
   onClose: () => void;
-  urlOf?: (a: Attachment, index: number) => string;
-  annotate?: (a: Attachment, index: number) => AnnotateOffer | null;
-  annotationOf?: (a: Attachment, index: number) => AttachmentAnnotation | undefined;
+  urlOf?: (a: Attachment) => string;
+  annotate?: (a: Attachment) => AnnotateOffer | null;
 }) {
   const { client } = useStore();
   // Callers render this only with a non-empty list.
   const at = Math.min(index, list.length - 1);
   const a = list[at]!;
-  const url = urlOf ? urlOf(a, at) : client.attachmentUrl(a.id);
+  const url = urlOf ? urlOf(a) : client.attachmentUrl(a.id);
   const [failed, setFailed] = useState<string | null>(null);
   const many = list.length > 1;
   const annotator = useAnnotate();
-  const offer = annotate?.(a, at) ?? null;
+  const offer = annotate?.(a) ?? null;
   // An image that loaded, where there's a message to add it to.
   const canAnnotate = !!annotator && !!offer && a.kind === "image" && failed !== url;
-  const annotation = a.kind === "image" ? annotationOf?.(a, at) : undefined;
+  const annotation = a.kind === "image" ? a.annotation : undefined;
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const step = (delta: number) => onIndex(stepAttachment(index, delta, list.length));
 
@@ -115,7 +113,7 @@ export function Lightbox({
             title={annotation ? "Edit the numbered notes on this image, for your message" : "Number spots on this image and add it to your message with a note on each"}
             onClick={() => {
               onClose();
-              annotator!.open(offerTarget(url, a.name, offer!));
+              annotator!.open(offerTarget(url, offer!));
             }}
           >
             <Icon name="edit" /> Annotate

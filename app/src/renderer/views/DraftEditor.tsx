@@ -9,9 +9,9 @@
 // (⇧⌘↩) and Start session (⌘↩).
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent } from "react";
-import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
+import { MAX_PROMPT_ATTACHMENTS, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
 import {
-  annotatePromptAttachment,
+  annotateAttachment,
   blankDraftTicket,
   composerProject,
   draftReviewSkipsPatch,
@@ -42,6 +42,7 @@ import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
 import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
+import { waitingAnnotation } from "../state/promptAttachmentFiles";
 import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 
 const LAST_PROJECT = "harness.lastProject";
@@ -257,7 +258,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
    */
   const annotateDraft = (a: AnnotatedAttachment) => {
     if (!session) throw new Error("the session isn't ready");
-    const next = annotatePromptAttachment(session.local.promptAttachments ?? [], a.input, a.annotation);
+    const next = annotateAttachment(session.local.promptAttachments ?? [], a.attachment, a.annotation);
     if (next.skipped) throw new Error(`a session takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
     session.edit({ promptAttachments: next.list });
   };
@@ -394,14 +395,12 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           onPaste={attach.onPaste}
         />
 
-        <AnnotateScope onAdd={annotateDraft} annotationOf={(path) => session?.local.promptAttachments?.find((x) => x.path === path)?.annotation}>
+        <AnnotateScope onAdd={annotateDraft} annotationOf={(a) => waitingAnnotation(session?.local.promptAttachments ?? [], a)}>
         <PromptAttachmentList
           items={view?.promptAttachments ?? []}
-          ticketKey={session?.saved?.key ?? null}
-          served={session?.saved?.promptAttachments}
           onRemove={attach.remove}
           pending={pending}
-          annotate={(a) => ({ input: { path: a.path, name: a.name }, annotation: a.annotation, onAdd: annotateDraft })}
+          annotate={(a) => ({ attachment: a, onAdd: annotateDraft })}
         >
           <button
             type="button"

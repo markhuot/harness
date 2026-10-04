@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { PromptAttachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
+import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
 import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -115,20 +115,14 @@ export function Transcript({
 }
 
 /**
- * The files sent with a message, under its bubble: read-only, served from the transcript entry.
- * Their images can be annotated again (for the next message, starting from the notes they went
- * with); an annotated one shows its marks and lists its numbered notes behind "N notes".
+ * The files sent with a message, under its bubble: read-only, each read by its id. Their images can
+ * be annotated again (for the next message, starting from the notes they went with); an annotated
+ * one shows its marks and lists its numbered notes behind "N notes".
  */
-function MessageAttachments({ entryId, items }: { entryId: string; items: PromptAttachment[] }) {
-  const { client } = useStore();
+function MessageAttachments({ items }: { items: Attachment[] }) {
   return (
     <div className="t-attachments" data-testid="message-attachments">
-      <PromptAttachmentList
-        items={items}
-        ticketKey={null}
-        urlOf={(i) => client.messageAttachmentUrl(entryId, i)}
-        annotate={(a) => ({ input: { path: a.path, name: a.name }, annotation: a.annotation })}
-      />
+      <PromptAttachmentList items={items} annotate={(a) => ({ attachment: a })} />
     </div>
   );
 }
@@ -149,7 +143,7 @@ const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry
                 <Markdown text={c.text} />
               </div>
             )}
-            {!!c.attachments?.length && <MessageAttachments entryId={entry.id} items={c.attachments} />}
+            {!!c.attachments?.length && <MessageAttachments items={c.attachments} />}
           </div>
         );
       }

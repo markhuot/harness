@@ -1,10 +1,13 @@
-// Prompt attachments on the Mac (DESIGN.md "Prompt attachments"): the pure decisions behind the
-// draft editor's paperclip, drops and pastes, and the strip that shows them. A file that's on disk
-// is attached by its path, never copied; anything else (pasted image data, an image dragged out of
-// a browser) is uploaded to the service first. No React or DOM APIs beyond the File-like shape.
+// Attachments on the Mac (DESIGN.md "Attachments"): the pure decisions behind the draft editor's
+// and the composer's paperclip, drops and pastes, and the list that shows them. A file that's on
+// disk is registered with the service by its path (referenced in place, never copied) when the
+// service is on this Mac; anything else (pasted image data, an image dragged out of a browser, any
+// file for a service elsewhere) is uploaded first. Either way the list holds the Attachment the
+// service answered with, so every file is read back by its id. No React or DOM APIs beyond the
+// File-like shape.
 
-import type { PromptAttachment, PromptAttachmentInput } from "@harness/shared";
-import { fileBaseName, pastedImageName } from "@harness/shared/state";
+import type { Attachment, AttachmentKind } from "@harness/shared";
+import { fileBaseName, pastedImageName, type Media } from "@harness/shared/state";
 
 /** What the editor knows about a File it was handed: its name, MIME type and (from the preload) path on disk. */
 export interface FileLike {
@@ -12,9 +15,10 @@ export interface FileLike {
   type: string;
 }
 
-/** A batch of files, split into the ones attached in place and the ones that have to be uploaded. */
+/** A batch of files, split into the ones registered in place and the ones that have to be uploaded. */
 export interface FilePlan<F> {
-  byPath: { input: PromptAttachmentInput; file: F }[];
+  /** Files on the service's machine: registered by path (POST /attachments) */
+  registers: { path: string; name: string; file: F }[];
   uploads: { file: F; name: string; mimeType: string }[];
   /** Pathless files that aren't worth uploading (a paste's non-image data) */
   ignored: number;
@@ -22,18 +26,18 @@ export interface FilePlan<F> {
 
 /**
  * Sort `files` by where they come from. `pathOf` is the preload's webUtils lookup (null for data
- * with no file behind it). With the service on this Mac (`local`), a file with a path is attached by
- * it. With a service on another machine that path means nothing there, so the file's bytes are
+ * with no file behind it). With the service on this Mac (`local`), a file with a path is registered
+ * by it. With a service on another machine that path means nothing there, so the file's bytes are
  * uploaded under its own name instead. A pathless one is uploaded: always for a drop or a pick
  * (`uploadAny`), and only when it's an image for a paste, so a paste of rich text that happens to
  * carry other data still pastes as text.
  */
 export function planFiles<F extends FileLike>(files: readonly F[], pathOf: (f: F) => string | null, opts: { uploadAny: boolean; local: boolean }): FilePlan<F> {
-  const plan: FilePlan<F> = { byPath: [], uploads: [], ignored: 0 };
+  const plan: FilePlan<F> = { registers: [], uploads: [], ignored: 0 };
   for (const file of files) {
     const path = pathOf(file);
     if (path && opts.local) {
-      plan.byPath.push({ input: { path, name: file.name || undefined, source: "file" }, file });
+      plan.registers.push({ path, name: file.name || fileBaseName(path), file });
       continue;
     }
     if (path) {
@@ -118,23 +122,25 @@ export function composerCanSend(d: ComposerDraft): boolean {
 }
 
 /** The label and tooltip of an attachment whose file is gone. */
-export const missingLabel = (a: Pick<PromptAttachment, "path">) => `Missing — was at ${a.path}`;
+export const missingLabel = (a: Pick<Attachment, "path">) => (a.path ? `Missing — was at ${a.path}` : "Missing");
 
 /**
- * Where an attachment's file can be read from: the preview the editor made from the File it was
- * handed (fresh, no round trip), else the service's copy at the attachment's index in the list the
- * service has (`served`, the saved ticket's list), else nowhere yet (an unsaved draft, or an edit
- * the service hasn't got). The service's index is by the list it has, which may differ from what
- * the editor shows while an edit is on its way.
+ * The attachment a spec's `![alt](attachment:<id>)` shows: the ticket's own record of it
+ * (TicketDetail.attachments) when the client has one, else one made from the markdown (an older
+ * service, or an image added since the detail was fetched). Either has the id, which is all that
+ * reading the file or attaching it to a message needs.
  */
-export function attachmentSource(
-  a: Pick<PromptAttachment, "path">,
-  preview: string | undefined,
-  served: readonly Pick<PromptAttachment, "path">[] | null | undefined,
-  urlAt: ((index: number) => string) | null,
-): { url: string; local: boolean } | null {
-  if (preview) return { url: preview, local: true };
-  if (!served || !urlAt) return null;
-  const i = served.findIndex((s) => s.path === a.path);
-  return i === -1 ? null : { url: urlAt(i), local: false };
+export function mediaAttachment(media: Pick<Media, "id" | "alt">, known: readonly Attachment[] | null | undefined, kind: AttachmentKind): Attachment {
+  const found = known?.find((a) => a.id === media.id);
+  if (found) return found;
+  return { id: media.id, path: "", name: media.alt || media.id, source: "spec", kind, mimeType: "" };
+}
+
+/**
+ * The notes `list` (a composer's, a draft's) already has on `a`'s file, so annotating it again
+ * from anywhere (the spec, the Transcript) edits those: the same attachment by id, or by path for
+ * one the service hasn't registered.
+ */
+export function waitingAnnotation(list: readonly Attachment[], a: Pick<Attachment, "id" | "path">): Attachment["annotation"] {
+  return list.find((x) => (x.id && a.id ? x.id === a.id : !!a.path && x.path === a.path))?.annotation;
 }

@@ -11,7 +11,7 @@
 //   • one request at a time: edits made while one is out are sent after it, rebased on its answer.
 
 import type { CreateTicketBody, SubmitTicketBody, Ticket, UpdateTicketBody } from "@harness/shared";
-import { applyTicketPatch, draftCreateBody, draftIsEmpty, draftPatch, samePromptAttachments } from "@harness/shared/state";
+import { applyTicketPatch, draftCreateBody, draftIsEmpty, draftPatch, sameAttachments } from "@harness/shared/state";
 
 type DraftProject = Parameters<typeof draftCreateBody>[1];
 type DraftSettings = Parameters<typeof draftIsEmpty>[2];
@@ -44,7 +44,7 @@ const EDITABLE = ["projectId", "spec", "kind", "driver", "model", "permissionMod
 
 const same = (f: (typeof EDITABLE)[number], a: unknown, b: unknown) =>
   f === "promptAttachments"
-    ? samePromptAttachments((a as Ticket["promptAttachments"]) ?? [], (b as Ticket["promptAttachments"]) ?? [])
+    ? sameAttachments((a as Ticket["promptAttachments"]) ?? [], (b as Ticket["promptAttachments"]) ?? [])
     : Array.isArray(a) && Array.isArray(b)
       ? a.length === b.length && a.every((v, i) => v === b[i])
       : (a ?? null) === (b ?? null);
