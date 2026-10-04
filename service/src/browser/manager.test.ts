@@ -265,6 +265,15 @@ withChrome("BrowserManager (real Chrome)", () => {
       expect(png.readUInt32BE(16)).toBe(1280);
       expect(png.readUInt32BE(20)).toBe(800);
     });
+
+    test("capture is the viewport's PNG with its CSS size, scale and tab", async () => {
+      const shot = await browser.capture("s-eval");
+      const png = Buffer.from(shot.data, "base64");
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([shot.width, shot.height]);
+      expect([shot.width, shot.height, shot.viewport, shot.scale]).toEqual([1280, 800, { width: 1280, height: 800 }, 1]);
+      expect([shot.tabId, shot.url, shot.title]).toEqual([1, `${base}/`, "Home Page"]);
+      await expect(browser.capture("s-eval", { tab: 9 })).rejects.toThrow();
+    });
   });
 
   test("sessions get isolated tabs", async () => {
