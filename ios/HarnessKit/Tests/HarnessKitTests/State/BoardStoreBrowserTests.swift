@@ -23,14 +23,16 @@ struct BoardStoreBrowserTests {
 
         func send(_ msg: ClientMessage) async {
             try? await Task.sleep(for: .milliseconds(Int.random(in: 0...3)))
-            guard case let .browserInput(sessionId, tabId, input) = msg else { return log.append("other \(msg.type)") }
-            log.append("\(sessionId)\(tabId.map { "#\($0)" } ?? "") \(Self.describe(input))")
+            guard case let .browserInput(sessionId, tabId, input, viewerId) = msg else { return log.append("other \(msg.type)") }
+            log.append("\(sessionId)\(viewerId.map { "@\($0)" } ?? "")\(tabId.map { "#\($0)" } ?? "") \(Self.describe(input))")
         }
 
-        func subscribeBrowser(_ sessionId: String, tabId: Int?) async {
-            log.append("subscribe \(sessionId)\(tabId.map { "#\($0)" } ?? "")")
+        func subscribeBrowser(_ sessionId: String, tabId: Int?, viewerId: String?) async {
+            log.append("subscribe \(sessionId)\(viewerId.map { "@\($0)" } ?? "")\(tabId.map { "#\($0)" } ?? "")")
         }
-        func unsubscribeBrowser(_ sessionId: String) async { log.append("unsubscribe \(sessionId)") }
+        func unsubscribeBrowser(_ sessionId: String, viewerId: String?) async {
+            log.append("unsubscribe \(sessionId)\(viewerId.map { "@\($0)" } ?? "")")
+        }
 
         func close() async {
             eventsOut.finish()
@@ -82,6 +84,18 @@ struct BoardStoreBrowserTests {
         let socket = r.sockets[0]
         #expect(await eventually { socket.log.all.count == 4 })
         #expect(socket.log.all == ["subscribe s1#2", "s1#3 closeTab", "s1 newTab", "subscribe s1"])
+    }
+
+    @Test func viewersRideAlongOnSubscribeInputAndUnsubscribe() async {
+        let r = Rig()
+        r.store.start()
+        r.store.subscribeBrowser("s1", tabId: 1, viewer: "a")
+        r.store.subscribeBrowser("s1", tabId: 2, viewer: "b")
+        r.store.sendBrowserInput("s1", viewer: "b", .reload)
+        r.store.unsubscribeBrowser("s1", viewer: "a")
+        let socket = r.sockets[0]
+        #expect(await eventually { socket.log.all.count == 4 })
+        #expect(socket.log.all == ["subscribe s1@a#1", "subscribe s1@b#2", "s1@b reload", "unsubscribe s1@a"])
     }
 
     @Test func nothingIsSentBeforeStart() async {
