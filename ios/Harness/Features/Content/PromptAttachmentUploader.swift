@@ -62,6 +62,46 @@ final class PromptAttachmentUploader {
     var importing = false
     /// Thumbnails of images this device uploaded, by their path on the service's machine.
     private(set) var thumbnails: [String: UIImage] = [:]
+    /// Copies of the images this device uploaded, in a temporary folder, by their path on the
+    /// service's machine: the viewer shows them before (or without) the service serving them.
+    private(set) var localFiles: [String: URL] = [:]
+    /// Annotated images' originals and marks, by the annotated file's path, so Annotate reopens
+    /// them. Memory only: a reopened draft's annotated rows can't be annotated again.
+    private(set) var annotated: [String: AnnotatedOriginal] = [:]
+
+    struct AnnotatedOriginal {
+        let source: AnnotationSource
+        let original: UIImage
+        let marks: [Annotations.DraftMark]
+    }
+
+    private nonisolated let folder = FileManager.default.temporaryDirectory.appendingPathComponent("attachment-uploads/\(UUID().uuidString)", isDirectory: true)
+
+    deinit {
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    /// Hold on to an annotated image Add uploaded: its thumbnail, a copy to view, and its original
+    /// with the marks.
+    func remember(_ added: AnnotatedImage) async {
+        let path = added.attachment.path
+        annotated[path] = AnnotatedOriginal(source: added.annotation.source, original: added.original, marks: added.marks)
+        if let thumb = await Self.thumbnail(added.data) { thumbnails[path] = thumb }
+        await keep(added.data, name: added.attachment.name, path: path)
+    }
+
+    /// Write an uploaded image's bytes to the temporary folder for the viewer.
+    private func keep(_ data: Data, name: String, path: String) async {
+        let file = folder.appendingPathComponent(UUID().uuidString, isDirectory: true).appendingPathComponent(name.isEmpty ? "image" : name)
+        let written = await Task.detached(priority: .utility) { () -> Bool in
+            do {
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try data.write(to: file)
+                return true
+            } catch { return false }
+        }.value
+        if written { localFiles[path] = file }
+    }
 
     /// Upload `sources` in order and attach each as it lands. Toasts a failure per file, and once
     /// when the 20-attachment limit left some out (those aren't uploaded at all).
@@ -90,7 +130,10 @@ final class PromptAttachmentUploader {
                 }
                 let thumb = PromptAttachments.isImage(name: name, path: name) ? await Self.thumbnail(data) : nil
                 let a = try await client.uploadPromptAttachment(data: data, name: name, mimeType: mime)
-                if let thumb { thumbnails[a.path] = thumb }
+                if let thumb {
+                    thumbnails[a.path] = thumb
+                    await keep(data, name: a.name, path: a.path)
+                }
                 skipped += target.attach([PromptAttachmentInput(path: a.path, name: a.name, source: a.source)])
             } catch {
                 haptic(.error)

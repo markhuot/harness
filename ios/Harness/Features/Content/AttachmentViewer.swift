@@ -6,17 +6,17 @@ import SwiftUI
 /// Full-screen pager over the attachments in a piece of markdown: ✕,
 /// the file name and "2 of 4 · 1.2 MB" on top; pages swipe sideways (a select haptic each),
 /// images pinch-zoom 1–4× or double-tap to 2.5× (paging stops while zoomed), videos play with the
-/// system controls while their page shows, and pulling a page down (or ✕) closes it. Inside a
-/// ticket (`\.annotationTicketKey`), a caller that says where its images came from (`annotate`) gets
-/// an Annotate button on the right of the header once the page's image has loaded; it opens the
-/// annotator on that image, and a send closes the viewer and opens the Transcript.
+/// system controls while their page shows, and pulling a page down (or ✕) closes it. A caller that
+/// says what annotating an image means (`annotate`: where it came from and where the result goes)
+/// gets an Annotate button on the right of the header once the page's image has loaded; it opens
+/// the annotator on that image, and Add closes the viewer.
 struct AttachmentViewer: View {
     let attachments: [Attachment]
     /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. Prompt
     /// attachments (Ticket.promptAttachments) pass their own URLs.
     let url: (@MainActor (Attachment) -> String?)?
-    /// Where an image came from, for the annotator (nil: that page can't be annotated).
-    let annotate: (@MainActor (Attachment) -> AnnotationSource?)?
+    /// The annotator's request for a loaded image (nil: that page can't be annotated).
+    let annotate: (@MainActor (Attachment, UIImage) -> AnnotationRequest?)?
     let onClose: () -> Void
 
     @State private var position: Int?
@@ -31,11 +31,10 @@ struct AttachmentViewer: View {
     // Hosted pages don't inherit the environment, so the viewer hands them these.
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.palette) private var c
-    @Environment(\.annotationTicketKey) private var ticketKey
 
     init(
         attachments: [Attachment], start: Int, url: (@MainActor (Attachment) -> String?)? = nil,
-        annotate: (@MainActor (Attachment) -> AnnotationSource?)? = nil, onClose: @escaping () -> Void
+        annotate: (@MainActor (Attachment, UIImage) -> AnnotationRequest?)? = nil, onClose: @escaping () -> Void
     ) {
         self.attachments = attachments
         self.url = url
@@ -87,7 +86,7 @@ struct AttachmentViewer: View {
         .statusBarHidden(false)
         .onAppear { withAnimation(.easeOut(duration: 0.2)) { shown = true } }
         .annotator($annotating) {
-            // Sent: the viewer goes too, so the Transcript shows the message.
+            // Added: the viewer goes too, so the composer it went to shows.
             var t = Transaction()
             t.disablesAnimations = true
             withTransaction(t) { onClose() }
@@ -98,16 +97,16 @@ struct AttachmentViewer: View {
         url.map { $0(a) } ?? AttachmentMedia.url(store, a.id)
     }
 
-    /// The header's Annotate: inside a ticket, on an image page whose image has loaded, when the
-    /// caller says where it came from.
+    /// The header's Annotate: on an image page whose image has loaded, when the caller says what
+    /// annotating it means.
     private var annotateAction: (() -> Void)? {
-        guard let ticketKey, let annotate, attachments.indices.contains(index) else { return nil }
+        guard let annotate, attachments.indices.contains(index) else { return nil }
         let a = attachments[index]
-        guard a.kind == .image, let source = annotate(a), let u = pageUrl(a), loaded.urls.contains(u),
-              let image = AttachmentMedia.shared.cached(u) else { return nil }
+        guard a.kind == .image, let u = pageUrl(a), loaded.urls.contains(u),
+              let image = AttachmentMedia.shared.cached(u), let request = annotate(a, image) else { return nil }
         return {
             haptic(.tap)
-            annotating = AnnotationRequest(key: ticketKey, source: source, image: image)
+            annotating = request
         }
     }
 

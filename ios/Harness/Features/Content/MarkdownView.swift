@@ -31,6 +31,7 @@ struct MarkdownView: View {
 
     @Environment(\.palette) private var c
     @Environment(BoardStore.self) private var store: BoardStore?
+    @Environment(\.annotationSink) private var sink
     @State private var open: AttachmentViewerStart?
     /// Attachments that failed to load as an image and turned out to be videos.
     @State private var learned: [String: AttachmentKind] = [:]
@@ -62,7 +63,7 @@ struct MarkdownView: View {
         .modifier(ContentLinkHandling(override: linkContext))
         .fullScreenCover(item: $open) { start in
             AttachmentViewer(attachments: media.map(attachment), start: start.index,
-                             annotate: annotatable ? { a in .attachment(id: a.id, name: a.name) } : nil) {
+                             annotate: annotatable ? sink.map { sink in { a, image in sink.request(.attachment(id: a.id, name: a.name), image: image) } } : nil) {
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { open = nil }

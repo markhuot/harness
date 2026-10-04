@@ -17,6 +17,7 @@ struct BrowserTabView: View {
     @Environment(\.palette) private var c
     @State private var model = BrowserTabModel()
     @Environment(\.openAnnotator) private var openAnnotator
+    @Environment(\.annotationSink) private var sink
     @State private var capturing = false
     @State private var urlDraft = ""
     @State private var urlSelection: TextSelection?
@@ -90,7 +91,7 @@ struct BrowserTabView: View {
                 typing.toggle()
             }
             BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
-                             disabled: model.frame == nil || capturing || openAnnotator == nil) {
+                             disabled: model.frame == nil || capturing || openAnnotator == nil || sink == nil) {
                 annotate()
             }
             BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
@@ -192,11 +193,10 @@ struct BrowserTabView: View {
 
     /// A screenshot of the shown tab, opened in the annotator.
     private func annotate() {
-        guard let client, !capturing else { return }
+        guard let client, let sink, !capturing else { return }
         capturing = true
         let id = sessionId
         let tab = model.selection.shown
-        let key = ticket.key
         Task {
             defer { capturing = false }
             guard let shot = await actions.run(nil, { try await client.browserScreenshot(id, tabId: tab) }) else { return }
@@ -205,7 +205,7 @@ struct BrowserTabView: View {
                 toasts.show("Couldn't read the page's screenshot.", kind: .error)
                 return
             }
-            openAnnotator?(AnnotationRequest(key: key, source: shot.source, image: image))
+            openAnnotator?(sink.request(shot.source, image: image))
         }
     }
 

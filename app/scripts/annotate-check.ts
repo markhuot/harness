@@ -1,12 +1,21 @@
 // Annotations end to end in the built app, against the REAL service (throwaway HARNESS_HOME, dummy
-// driver, real headless Chrome for the session browser): a spec image opened in the lightbox →
-// Annotate; two arrows dragged and one spot clicked, each with its message; a mark moved and
-// deleted with the Delete key (the list renumbers, the badges follow), ⌘Z bringing it back, × on a
-// row; the notes never over the image; Send: the Transcript shows the annotated image with "2
-// notes" that open to the list, and the service has the annotations on the transcript entry and
-// the run. Then the same from a Transcript message attachment (with Esc asking before discarding)
-// and from the browser pane's Annotate (a frozen screenshot of a local page). The composer's own
-// pending list offers no Annotate; the Spec tab's prompt attachments do.
+// driver, real headless Chrome for the session browser). Annotating never sends anything: Add to
+// message puts the annotated picture, with its notes, in the message being written.
+//
+//   1. A spec image → Annotate: two arrows dragged and one spot clicked, each with its message; a
+//      mark moved and deleted with the Delete key (the list renumbers, the badges follow), ⌘Z
+//      bringing it back, × on a row; the notes never over the image. Add to message: nothing went
+//      to the agent, the composer lists the picture with "2 notes" and has the focus; the human
+//      types why and sends: the Transcript entry has the text, the picture and the notes, and so
+//      does its run.
+//   2. A Transcript message attachment → Annotate (Esc asks before discarding) → Add → composer;
+//      that waiting picture annotated again (its marks reopen to edit; Cancel untouched doesn't
+//      ask), and a plain waiting file annotated: each replaced in place. Sent: both pictures, notes
+//      on each, the plain one's source the file.
+//   3. The browser pane's Annotate (a frozen screenshot of a local page) → Add → composer → sent.
+//   4. New session: an attached image annotated in place, its row shows the notes, saved with the
+//      draft; reopened after a reload it shows the notes without offering Annotate. Plan first:
+//      the first run's prompt lists <annotations>, and the Spec tab shows the notes.
 //
 //   bun run build && bun scripts/annotate-check.ts [--shots=<dir>] [--theme=dark]
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";

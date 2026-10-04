@@ -41,6 +41,8 @@ struct MentionTextEditor: View {
     var fieldBox: MentionFieldBox?
     /// Focus the field when it appears (New session's prompt)
     var autofocus = false
+    /// Focus the field each time this changes (the composer once an annotated image joins it)
+    var focusRequest = 0
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
@@ -89,6 +91,12 @@ struct MentionTextEditor: View {
             .focused($focused)
             .onChange(of: focused) { _, now in onFocusChange?(now) }
             .accessibilityLabel(fieldLabel ?? placeholder)
+            .task(id: focusRequest) {
+                guard focusRequest > 0 else { return }
+                // After the annotator's cover has gone.
+                try? await Task.sleep(for: .milliseconds(450))
+                focused = true
+            }
             .task {
                 guard autofocus else { return }
                 // A sheet's field takes focus once the sheet has finished sliding up.

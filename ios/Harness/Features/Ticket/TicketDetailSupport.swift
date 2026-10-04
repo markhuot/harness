@@ -51,11 +51,21 @@ extension EnvironmentValues {
     @Entry var ticketDetailHero: TicketDetailHeroCollapse?
     /// `openTab(Tabs.subagentTabRoute(id))` from inside a ticket tab body.
     @Entry var ticketDetailOpenTab: TicketDetailTabOpener?
-    /// The ticket whose tab bodies these are: images in them can be annotated and sent to its agent
-    /// (AnnotatorView). nil outside a ticket (a New session, the composer's pending list).
-    @Entry var annotationTicketKey: String?
+    /// Where an image annotated inside a ticket goes: its composer's attachments (AnnotatorView).
+    /// nil outside a ticket, where nothing offers Annotate unless it says where the image goes.
+    @Entry var annotationSink: AnnotationSink?
     /// Opens the annotator over the ticket (TicketDetailBody presents it).
     @Entry var openAnnotator: AnnotatorOpener?
+}
+
+/// Takes an annotated image into the ticket's composer.
+struct AnnotationSink: Sendable {
+    let add: @MainActor @Sendable (AnnotatedImage) -> Void
+
+    /// Annotate `image` from `source`, the result going to the composer.
+    @MainActor func request(_ source: AnnotationSource, image: UIImage) -> AnnotationRequest {
+        AnnotationRequest(source: source, image: image, add: add)
+    }
 }
 
 struct AnnotatorOpener: Sendable {

@@ -240,7 +240,8 @@ private struct PromptAttachmentUploadingRow: View {
 
 /// A read-only list whose rows open: images in the full-screen viewer (paging through the list's
 /// images), other files downloaded into Quick Look. The Spec tab's prompt attachments and a sent
-/// message's attachments in the Transcript, whose images the viewer offers to annotate.
+/// message's attachments in the Transcript, whose images the viewer offers to annotate into the
+/// ticket's composer (`\.annotationSink`).
 /// `downloading` is on while a file is being fetched.
 struct OpenablePromptAttachmentList: View {
     let tiles: [PromptAttachmentTile]
@@ -248,6 +249,7 @@ struct OpenablePromptAttachmentList: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(ToastCenter.self) private var toasts
+    @Environment(\.annotationSink) private var sink
     @State private var viewing: AttachmentViewerStart?
     @State private var preview: URL?
 
@@ -273,10 +275,10 @@ struct OpenablePromptAttachmentList: View {
                     guard let api, let i = Int(a.id), remotes.indices.contains(i) else { return nil }
                     return remotes[i]?.url(api)
                 },
-                annotate: { a in
-                    guard let i = Int(a.id), remotes.indices.contains(i) else { return nil }
-                    return remotes[i]?.annotationSource(name: a.name)
-                }
+                annotate: sink.map { sink in { a, image in
+                    guard let i = Int(a.id), remotes.indices.contains(i), let source = remotes[i]?.annotationSource(name: a.name) else { return nil }
+                    return sink.request(source, image: image)
+                } }
             ) {
                 var t = Transaction()
                 t.disablesAnimations = true
@@ -308,5 +310,84 @@ struct OpenablePromptAttachmentList: View {
                 toasts.show("Couldn't open \(name): \(localizedErrorMessage(error))", kind: .error)
             }
         }
+    }
+}
+
+/// The numbered notes on annotated attachments, under their list: a "3 notes" disclosure per
+/// annotated image (named when the list has several files), as the Transcript shows them.
+struct PromptAttachmentNotes: View {
+    let list: [PromptAttachment]
+    let annotations: [MessageAnnotation]
+
+    var body: some View {
+        let notes = Annotations.byAttachment(annotations, attachments: list.count).sorted { $0.key < $1.key }
+        ForEach(notes, id: \.key) { index, annotation in
+            TranscriptAnnotationNotes(name: list[index].name, annotation: annotation, named: list.count > 1)
+        }
+    }
+}
+
+/// An editable list (a composer's or a New session's attachments): rows with remove buttons and
+/// upload spinners, "N notes" under it for annotated images, and images opening full screen with
+/// Annotate. Annotate reopens an image's original and marks while this device holds them
+/// (PromptAttachmentUploader.annotated); an image annotated elsewhere (a reopened draft) doesn't
+/// offer it, and any other image is annotated as it is, as a `file`. Add replaces the row in place
+/// (`onAnnotated`).
+struct EditablePromptAttachmentList: View {
+    let tiles: [PromptAttachmentTile]
+    let pending: [PromptAttachmentPending]
+    let annotations: [MessageAnnotation]
+    let uploader: PromptAttachmentUploader
+    var onRemove: ((PromptAttachmentTile) -> Void)?
+    /// Replace the attachment at `path` with the annotated image.
+    let onAnnotated: @MainActor (_ path: String, AnnotatedImage) -> Void
+
+    @Environment(BoardStore.self) private var store
+    @State private var viewing: AttachmentViewerStart?
+
+    var body: some View {
+        let images = tiles.filter { $0.isImage && url($0) != nil }
+        VStack(alignment: .leading, spacing: 2) {
+            PromptAttachmentList(tiles: tiles, pending: pending, onRemove: onRemove, onOpen: { tile in
+                guard let i = images.firstIndex(where: { $0.index == tile.index }) else { return }
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { viewing = AttachmentViewerStart(index: i) }
+            })
+            PromptAttachmentNotes(list: tiles.map(\.attachment), annotations: annotations)
+        }
+        .fullScreenCover(item: $viewing) { start in
+            AttachmentViewer(
+                attachments: images.enumerated().map { i, tile in Attachment(id: String(i), kind: .image, mimeType: "", name: tile.attachment.name, size: 0) },
+                start: start.index,
+                url: { a in Int(a.id).flatMap { images.indices.contains($0) ? url(images[$0]) : nil } },
+                annotate: { a, image in
+                    guard let i = Int(a.id), images.indices.contains(i) else { return nil }
+                    return request(images[i], image: image)
+                }
+            ) {
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { viewing = nil }
+            }
+        }
+    }
+
+    /// This device's copy, else the service's once it has the file.
+    private func url(_ tile: PromptAttachmentTile) -> String? {
+        if let local = uploader.localFiles[tile.attachment.path] { return local.absoluteString }
+        return tile.remote.flatMap { remote in store.api.map(remote.url) }
+    }
+
+    private func request(_ tile: PromptAttachmentTile, image: UIImage) -> AnnotationRequest? {
+        let path = tile.attachment.path
+        let add = onAnnotated
+        if let held = uploader.annotated[path] {
+            return AnnotationRequest(source: held.source, image: held.original, marks: held.marks) { add(path, $0) }
+        }
+        // Annotated, but its original isn't on this device: annotating the marked-up copy would
+        // burn its numbers in twice.
+        if Annotations.annotation(for: tile.index, in: annotations) != nil { return nil }
+        return AnnotationRequest(source: .file(name: tile.attachment.name), image: image) { add(path, $0) }
     }
 }

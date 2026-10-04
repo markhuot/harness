@@ -2,13 +2,28 @@ import HarnessKit
 import SwiftUI
 import UIKit
 
-/// An image to annotate and where it came from: a spec image, a prompt attachment, a message's
-/// attachment or a browser screenshot of ticket `key`.
+/// An image to annotate, where it came from, and what takes the result: the ticket's composer, or
+/// the New session or composer row it replaces. `marks` reopens earlier notes over `image` (the
+/// original) to edit them.
 struct AnnotationRequest: Identifiable {
     let id = UUID()
-    let key: String
     let source: AnnotationSource
     let image: UIImage
+    var marks: [Annotations.DraftMark] = []
+    /// Takes the annotated image once Add has uploaded it.
+    let add: @MainActor (AnnotatedImage) -> Void
+}
+
+/// What Add hands back: the uploaded picture with the marks burned in, its notes (`attachment` 0:
+/// whoever takes it sets the index), and the original with the marks, so Annotate can reopen them
+/// while this device still holds them.
+struct AnnotatedImage {
+    let attachment: PromptAttachment
+    let annotation: MessageAnnotation
+    let original: UIImage
+    let marks: [Annotations.DraftMark]
+    /// The uploaded picture's bytes, for its thumbnail and the viewer.
+    let data: Data
 }
 
 /// Full-screen annotator (DESIGN.md "Annotations"). The image is fitted at the top (iPhone) or on
@@ -17,35 +32,38 @@ struct AnnotationRequest: Identifiable {
 /// numbered anchor. Pressing a badge (or an arrow's head) drags that mark instead. Only the arrows
 /// and badges draw over the image: each number's note is a field in the list below it (iPhone) or
 /// beside it (iPad), never on top, with × to delete it (the ones after it renumber). Undo takes back
-/// the last add, move or delete. Send uploads the image with the marks burned in and sends it with
-/// the numbered notes and the optional Note; the composer's move switch shows for a ticket in review
-/// or done. A send that goes through closes the annotator and opens the Transcript.
+/// the last add, move or delete. Annotations never message the agent themselves: Add uploads the
+/// image with the marks burned in and hands it back (AnnotationRequest.add) to wait in a composer or
+/// a New session beside the human's own words. Cancel asks before throwing away changed marks.
 struct AnnotatorView: View {
     let request: AnnotationRequest
-    /// Closes the annotator; `sent` once the message went through.
-    let onClose: (_ sent: Bool) -> Void
+    /// Closes the annotator, with the annotated image once Add went through (nil: cancelled).
+    let onClose: (_ added: AnnotatedImage?) -> Void
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @Environment(\.horizontalSizeClass) private var sizeClass
 
-    @State private var marks: [Annotations.DraftMark] = []
+    @State private var marks: [Annotations.DraftMark]
     @State private var history: [[Annotations.DraftMark]] = []
-    @State private var note = ""
-    @State private var moveFirst = false
-    @State private var sending = false
+    @State private var adding = false
     @State private var confirm: Confirmation?
     @State private var gesture: AnnotatorGesture?
-    @FocusState private var focused: AnnotatorField?
+    @FocusState private var focused: Int?
 
-    private var ticket: Ticket? { store.state.ticketByKey(request.key) }
+    init(request: AnnotationRequest, onClose: @escaping (_ added: AnnotatedImage?) -> Void) {
+        self.request = request
+        self.onClose = onClose
+        _marks = State(initialValue: request.marks)
+    }
+
+    /// Something worth asking about before Cancel throws it away.
+    private var changed: Bool { marks != request.marks }
 
     var body: some View {
-        let approvalPending = ticket?.pendingApproval != nil
-        let canSend = Annotations.canSend(marks: marks.count, sending: sending, approvalPending: approvalPending)
         VStack(spacing: 0) {
-            header(canSend: canSend)
+            header
             Divider().overlay(c.border)
             GeometryReader { geo in
                 if sizeClass == .regular && geo.size.width > geo.size.height * 0.9 {
@@ -53,7 +71,7 @@ struct AnnotatorView: View {
                         stage
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         Divider().overlay(c.border)
-                        notes(approvalPending: approvalPending)
+                        notes
                             .frame(width: min(380, geo.size.width * 0.4))
                     }
                 } else {
@@ -61,7 +79,7 @@ struct AnnotatorView: View {
                         stage
                             .frame(height: stageHeight(geo.size))
                         Divider().overlay(c.border)
-                        notes(approvalPending: approvalPending)
+                        notes
                     }
                 }
             }
@@ -69,7 +87,7 @@ struct AnnotatorView: View {
         .background(c.bg.ignoresSafeArea())
         .confirmation($confirm)
         .toastOverlay()
-        .interactiveDismissDisabled(!marks.isEmpty || sending)
+        .interactiveDismissDisabled(changed || adding)
     }
 
     /// On a phone the image takes up to 55% of the height, less when the image is wide.
@@ -81,12 +99,12 @@ struct AnnotatorView: View {
 
     // MARK: Header
 
-    private func header(canSend: Bool) -> some View {
+    private var header: some View {
         HStack(spacing: 10) {
             Button("Cancel") { cancel() }
                 .font(.scaled(size: 16))
                 .foregroundStyle(c.accentText)
-                .disabled(sending)
+                .disabled(adding)
             VStack(spacing: 1) {
                 Text("Annotate").font(.scaled(size: 15, weight: .semibold)).foregroundStyle(c.text)
                 Text(request.source.displayName)
@@ -105,15 +123,15 @@ struct AnnotatorView: View {
                     .frame(width: 34, height: 34)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(history.isEmpty || sending ? c.text3 : c.text2)
-            .disabled(history.isEmpty || sending)
+            .foregroundStyle(history.isEmpty || adding ? c.text3 : c.text2)
+            .disabled(history.isEmpty || adding)
             .accessibilityLabel("Undo")
-            Button { send() } label: {
+            Button { add() } label: {
                 Group {
-                    if sending {
+                    if adding {
                         ProgressView().tint(c.onAccent)
                     } else {
-                        Text("Send").font(.scaled(size: 15, weight: .semibold))
+                        Text("Add").font(.scaled(size: 15, weight: .semibold))
                     }
                 }
                 .frame(minWidth: 52, minHeight: 22)
@@ -121,9 +139,9 @@ struct AnnotatorView: View {
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
             .tint(c.accent)
-            .disabled(!canSend)
-            .accessibilityLabel("Send")
-            .accessibilityHint(marks.isEmpty ? "Add a note first" : "")
+            .disabled(marks.isEmpty || adding)
+            .accessibilityLabel("Add")
+            .accessibilityHint(marks.isEmpty ? "Add a note first" : "Adds the image with its notes to your message")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
@@ -149,7 +167,7 @@ struct AnnotatorView: View {
                 AnnotationOverlay(marks: shown, accent: c.accent)
                     .frame(width: size.width, height: size.height)
                 BrowserTouchSurface(
-                    enabled: !sending,
+                    enabled: !adding,
                     began: { p, _ in began(p, size: size) },
                     moved: { p, _ in moved(p, size: size) },
                     ended: { p, _ in ended(p, size: size) },
@@ -223,7 +241,7 @@ struct AnnotatorView: View {
             if Annotations.isDrag(Annotations.Point(x: start.x, y: start.y), Annotations.Point(x: p.x, y: p.y)) {
                 change(Annotations.move(marks, hit, to: unit(p, size)))
             } else {
-                focused = .mark(hit.index)
+                focused = hit.index
             }
         case nil:
             break
@@ -248,53 +266,18 @@ struct AnnotatorView: View {
 
     // MARK: Notes
 
-    private func notes(approvalPending: Bool) -> some View {
+    private var notes: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    if approvalPending {
-                        Callout(tone: .red, icon: "alert", title: "A tool approval is waiting",
-                                message: "Answer it first: a message now would answer it, and can't carry an image.")
-                    }
                     if marks.isEmpty {
-                        Text("Tap the image to add a numbered note, or drag to point an arrow at something.")
+                        Text("Tap the image to add a numbered note, or drag to point an arrow at something. Add puts the image in your message, where you can say more before sending.")
                             .font(.scaled(size: 14))
                             .foregroundStyle(c.text3)
                             .padding(.vertical, 6)
                     }
                     ForEach(Array(marks.enumerated()), id: \.offset) { i, _ in
-                        markRow(i).id(AnnotatorField.mark(i))
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        SectionTitle("Note")
-                        TextField("Anything else for the agent (optional)", text: $note, axis: .vertical)
-                            .font(.scaled(size: 15))
-                            .foregroundStyle(c.text)
-                            .lineLimit(1...6)
-                            .focused($focused, equals: .note)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .background(c.bgSunken, in: .rect(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c.border, lineWidth: 0.5))
-                            .disabled(sending)
-                    }
-                    .padding(.top, 4)
-                    .id(AnnotatorField.note)
-                    if let ticket, let label = Format.moveSwitchLabel(ticket) {
-                        Toggle(isOn: Binding(get: { moveFirst }, set: { on in
-                            haptic(.select)
-                            moveFirst = on
-                        })) {
-                            Text(label).font(.scaled(size: 14)).foregroundStyle(c.text2)
-                        }
-                        .tint(c.accent)
-                        .disabled(sending)
-                    }
-                    if let ticket {
-                        let hint = Format.composerHint(ticket, move: Format.moveSwitchLabel(ticket) != nil && moveFirst)
-                        if !hint.isEmpty {
-                            Text(hint).font(.scaled(size: 12)).foregroundStyle(c.text3)
-                        }
+                        markRow(i).id(i)
                     }
                 }
                 .padding(14)
@@ -302,7 +285,7 @@ struct AnnotatorView: View {
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: marks.count) { old, new in
                 guard new > old else { return }
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(AnnotatorField.mark(new - 1), anchor: .bottom) }
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(new - 1, anchor: .bottom) }
             }
         }
         .background(c.bg)
@@ -325,16 +308,16 @@ struct AnnotatorView: View {
                 .font(.scaled(size: 15))
                 .foregroundStyle(c.text)
                 .lineLimit(1...5)
-                .focused($focused, equals: .mark(i))
+                .focused($focused, equals: i)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
                 .background(c.bgSunken, in: .rect(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(focused == .mark(i) ? c.accent : c.border, lineWidth: focused == .mark(i) ? 1 : 0.5))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(focused == i ? c.accent : c.border, lineWidth: focused == i ? 1 : 0.5))
                 .accessibilityLabel("Note \(i + 1)")
-                .disabled(sending)
+                .disabled(adding)
             Button {
                 haptic(.tap)
-                if focused == .mark(i) { focused = nil }
+                if focused == i { focused = nil }
                 change(Annotations.remove(marks, at: i))
             } label: {
                 Image(systemName: "xmark")
@@ -344,7 +327,7 @@ struct AnnotatorView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(sending)
+            .disabled(adding)
             .accessibilityLabel("Delete note \(i + 1)")
         }
     }
@@ -352,49 +335,41 @@ struct AnnotatorView: View {
     // MARK: Actions
 
     private func cancel() {
-        if marks.isEmpty && TicketDetailLogic.trim(note).isEmpty {
-            onClose(false)
+        guard changed else {
+            onClose(nil)
             return
         }
         confirm = Confirmation(title: "Discard these notes?", message: "The marks and notes on this image will be lost.", action: "Discard") {
-            onClose(false)
+            onClose(nil)
         }
     }
 
-    private func send() {
-        let approvalPending = ticket?.pendingApproval != nil
-        guard Annotations.canSend(marks: marks.count, sending: sending, approvalPending: approvalPending) else { return }
+    /// Burn the marks in, upload the picture and hand it back. Nothing is sent to the agent.
+    private func add() {
+        guard !marks.isEmpty, !adding else { return }
         focused = nil
-        sending = true
-        let key = request.key
+        adding = true
         let source = request.source
         let image = request.image
         let drafts = marks
-        let text = TicketDetailLogic.trim(note)
-        let move = ticket.flatMap(Format.moveSwitchLabel) != nil && moveFirst
         let accent = UIColor(c.accent)
         Task {
-            let ok = await actions.run { () async throws -> Ticket in
+            let result = await actions.run { () async throws -> AnnotatedImage in
                 guard let composite = AnnotationDrawing.composite(image, marks: drafts, accent: accent) else {
                     throw HarnessAPIError(status: 0, message: "Couldn't draw the notes onto the image.", data: nil)
                 }
-                let api = try store.connectedAPI()
                 let name = Annotations.annotatedName(source, jpeg: composite.jpeg)
-                let uploaded = try await api.uploadPromptAttachment(data: composite.data, name: name, mimeType: composite.jpeg ? "image/jpeg" : "image/png")
+                let uploaded = try await store.connectedAPI().uploadPromptAttachment(data: composite.data, name: name, mimeType: composite.jpeg ? "image/jpeg" : "image/png")
                 let annotation = MessageAnnotation(
                     attachment: 0, source: source, width: composite.width, height: composite.height,
                     marks: Annotations.marksForMessage(drafts, width: composite.width, height: composite.height)
                 )
-                return try await api.sendMessage(
-                    key, text: text, move: move,
-                    attachments: [PromptAttachmentInput(path: uploaded.path, name: uploaded.name, source: uploaded.source)],
-                    annotations: [annotation]
-                )
+                return AnnotatedImage(attachment: uploaded, annotation: annotation, original: image, marks: drafts, data: composite.data)
             }
-            sending = false
-            if ok != nil {
+            adding = false
+            if let result {
                 haptic(.success)
-                onClose(true)
+                onClose(result)
             }
         }
     }
@@ -413,30 +388,21 @@ private enum AnnotatorGesture {
     case moving(Annotations.MarkHit, start: CGPoint, current: [Annotations.DraftMark])
 }
 
-private enum AnnotatorField: Hashable {
-    case mark(Int)
-    case note
-}
-
-/// Presents the annotator over a ticket's view, and on a send that went through opens the
-/// Transcript (where the message and the agent's reply show), like the composer
-/// (Tabs.tabAfterSend). `then` runs after a send, before the tab changes (e.g. to close a viewer).
+/// Presents the annotator. On Add the request's `add` takes the annotated image, then `then` runs
+/// (e.g. to close the viewer it was opened from).
 struct AnnotatorPresenter: ViewModifier {
     @Binding var request: AnnotationRequest?
     var then: (() -> Void)?
 
-    @Environment(\.ticketDetailOpenTab) private var openTab
     @Environment(AppModel.self) private var app
 
     func body(content: Content) -> some View {
         content.fullScreenCover(item: $request) { r in
-            AnnotatorView(request: r) { sent in
+            AnnotatorView(request: r) { added in
                 request = nil
-                guard sent else { return }
+                guard let added else { return }
+                r.add(added)
                 then?()
-                // Inside a tab body the Transcript opens from here; the ticket's own presenter
-                // (outside the tabs, no opener) does it in `then`.
-                openTab?(Tabs.tabAfterSend(.spec, sent: true))
             }
             // The app's appearance, even over the attachment viewer (which is always dark).
             .preferredColorScheme(scheme)

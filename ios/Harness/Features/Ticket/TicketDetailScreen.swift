@@ -120,8 +120,11 @@ private struct TicketDetailBody: View {
     let onTab: (TicketTab) -> Void
 
     @Environment(BoardStore.self) private var store
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var height: CGFloat = 800
+    /// Bumped to focus the composer's field (an annotated image just joined the message).
+    @State private var focusComposer = 0
     /// The files going with the next message, and their uploads: here rather than in the composer,
     /// so a drop anywhere on the ticket attaches.
     @State private var outgoing = MessageAttachments()
@@ -150,19 +153,35 @@ private struct TicketDetailBody: View {
                     hero.show()
                     onTab(t)
                 })
-                .environment(\.annotationTicketKey, ticket.key)
+                .environment(\.annotationSink, sink)
                 .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, onTab: onTab).id(ticket.id)
+            TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
         }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
-        .annotator($annotating) {
-            hero.show()
-            onTab(Tabs.tabAfterSend(tab, sent: true))
+        .annotator($annotating) { hero.show() }
+    }
+
+    /// Annotated images join the next message (with their notes), never sent on their own; the
+    /// field takes focus so the human can say why.
+    private var sink: AnnotationSink {
+        let outgoing = outgoing
+        let uploader = uploader
+        let toasts = toasts
+        let focus = { focusComposer += 1 }
+        return AnnotationSink { added in
+            let input = PromptAttachmentInput(path: added.attachment.path, name: added.attachment.name, source: added.attachment.source)
+            guard outgoing.addAnnotated(input, annotation: added.annotation) else {
+                haptic(.warning)
+                toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
+                return
+            }
+            Task { await uploader.remember(added) }
+            focus()
         }
     }
 
