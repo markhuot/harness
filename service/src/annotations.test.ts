@@ -1,15 +1,20 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type PromptAttachment } from "@harness/shared";
+import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type Attachment } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { annotationLines, compactNotes, normalizeAnnotation } from "./annotations";
-import { normalizePromptAttachments, runAttachments } from "./attachment-lists";
+import { resolveAttachments, runAttachments } from "./attachment-lists";
+import { openDb } from "./db";
+import { Store } from "./store";
 import { png } from "./testing/media";
 
 const dir = tempDir("harness-annotations-");
 const uploads = join(dir, "uploads");
 mkdirSync(uploads, { recursive: true });
+const registry = new Store(openDb(":memory:")).attachments;
+/** The list a create, PATCH or message stores for these inputs. */
+const normalize = (raw: unknown, previous: readonly Attachment[] = []) => resolveAttachments(raw, previous, registry, uploads);
 const write = (name: string, data: Uint8Array | string) => {
   const path = join(dir, name);
   writeFileSync(path, data);
@@ -153,53 +158,50 @@ describe("annotationLines", () => {
   });
 });
 
-describe("normalizePromptAttachments with annotations", () => {
+describe("resolveAttachments with annotations", () => {
   const annotated = (path: string, annotation: unknown = good()) => ({ path, annotation });
 
   test("carries a checked annotation on its attachment, and none on the rest", () => {
-    const list = normalizePromptAttachments([{ path: notes }, annotated(shot)], [], uploads);
-    expect(list).toEqual([
-      { path: notes, name: "notes.md", source: "file" },
-      { path: shot, name: "shot.png", source: "file", annotation: normalizeAnnotation(good(), "a") },
+    const list = normalize([{ path: notes }, annotated(shot)]);
+    expect(list.map((a) => [a.path, a.kind, a.annotation ?? null])).toEqual([
+      [notes, "file", null],
+      [shot, "image", normalizeAnnotation(good(), "a")],
     ]);
   });
 
   test("refuses an annotation on a file that isn't an image by its bytes, and a malformed one", () => {
-    expect(() => normalizePromptAttachments([annotated(notes)], [], uploads)).toThrow(/notes\.md\): only a PNG, JPEG, GIF or WebP image can be annotated/);
-    expect(() => normalizePromptAttachments([annotated(fake)], [], uploads)).toThrow(/fake\.png\): only a PNG/);
-    expect(() => normalizePromptAttachments([{ path: notes }, annotated(shot, withMark({ x: 999 }))], [], uploads)).toThrow(/attachments\[1\] \(shot\.png\), mark 1: the point/);
+    expect(() => normalize([annotated(notes)])).toThrow(/notes\.md\): only a PNG, JPEG, GIF or WebP image can be annotated/);
+    expect(() => normalize([annotated(fake)])).toThrow(/fake\.png\): only a PNG/);
+    expect(() => normalize([{ path: notes }, annotated(shot, withMark({ x: 999 }))])).toThrow(/attachments\[1\] \(shot\.png\), mark 1: the point/);
   });
 
   test("a kept attachment whose file has gone missing keeps a new annotation unsniffed, but its shape is still checked", () => {
     const gone = write("gone.png", png(200, 100));
-    const previous = normalizePromptAttachments([annotated(gone)], [], uploads);
+    const previous = normalize([annotated(gone)]);
     rmSync(gone);
     const changed = { ...good(), marks: [{ n: 1, x: 1, y: 1, message: "Moved" }] };
-    expect(normalizePromptAttachments([annotated(gone, changed)], previous, uploads)[0]!.annotation!.marks[0]!.message).toBe("Moved");
-    expect(() => normalizePromptAttachments([annotated(gone, withMark({ n: 5 }))], previous, uploads)).toThrow(/numbered/);
+    const byId = (annotation?: unknown) => ({ id: previous[0]!.id, annotation });
+    expect(normalize([byId(changed)], previous)[0]!.annotation!.marks[0]!.message).toBe("Moved");
+    expect(() => normalize([byId(withMark({ n: 5 }))], previous)).toThrow(/numbered/);
     // Sent without one, the kept attachment drops it.
-    expect(normalizePromptAttachments([{ path: gone }], previous, uploads)[0]).not.toHaveProperty("annotation");
+    expect(normalize([byId()], previous)[0]).not.toHaveProperty("annotation");
     // A kept file that's still there is sniffed when it gets an annotation.
-    const kept = normalizePromptAttachments([{ path: fake }], [], uploads);
-    expect(() => normalizePromptAttachments([annotated(fake)], kept, uploads)).toThrow(/only a PNG/);
+    const kept = normalize([{ path: fake }]);
+    expect(() => normalize([annotated(fake)], kept)).toThrow(/only a PNG/);
   });
 
-  test("attachment:<id> is the ticket's spec image, referenced where it's stored", () => {
-    const lookup = (id: string) => (id === "att_1" ? { path: shot, name: "mockup.png" } : null);
-    expect(normalizePromptAttachments([annotated("attachment:att_1")], [], uploads, lookup)).toEqual([
-      { path: shot, name: "mockup.png", source: "file", annotation: normalizeAnnotation(good(), "a") },
-    ]);
-    expect(normalizePromptAttachments([{ path: "attachment:att_1", name: "Renamed.png" }], [], uploads, lookup)[0]!.name).toBe("Renamed.png");
-    expect(() => normalizePromptAttachments([{ path: "attachment:att_9" }], [], uploads, lookup)).toThrow(/attachment:att_9 isn't one of this ticket's spec images/);
-    expect(() => normalizePromptAttachments([{ path: "attachment:" }], [], uploads, lookup)).toThrow(/isn't one of this ticket's/);
-    // Without a ticket (one being created) there's nothing it could be.
-    expect(() => normalizePromptAttachments([{ path: "attachment:att_1" }], [], uploads)).toThrow(/a new ticket has no spec images/);
+  test("a spec image by id takes an annotation; the record stays without it", () => {
+    registry.add(null, [{ id: "att_1", path: shot, name: "mockup.png", source: "spec", kind: "image", mimeType: "image/png" }]);
+    const [a] = normalize([{ id: "att_1", annotation: good(), name: "Renamed.png" }]);
+    expect(a).toEqual({ id: "att_1", path: shot, name: "Renamed.png", source: "spec", kind: "image", mimeType: "image/png", annotation: normalizeAnnotation(good(), "a") });
+    expect(registry.get("att_1")).not.toHaveProperty("annotation");
+    expect(() => normalize([{ id: "att_9" }])).toThrow(/Unknown attachment: att_9/);
   });
 });
 
 describe("runAttachments", () => {
   test("lists each annotated file's notes under its path, with the intro said once", () => {
-    const list: PromptAttachment[] = normalizePromptAttachments([{ path: notes }, { path: shot, annotation: good() }, { path: write("b.png", png(40, 20)), annotation: { width: 40, height: 20, marks: [{ n: 1, x: 4, y: 2, message: "Here" }], page } }], [], uploads);
+    const list: Attachment[] = normalize([{ path: notes }, { path: shot, annotation: good() }, { path: write("b.png", png(40, 20)), annotation: { width: 40, height: 20, marks: [{ n: 1, x: 4, y: 2, message: "Here" }], page } }]);
     const { block } = runAttachments(list)!;
     const lines = block.split("\n");
     expect(block.match(/The human drew numbered notes/g)).toHaveLength(1);
@@ -216,11 +218,11 @@ describe("runAttachments", () => {
 
   test("a missing annotated file still has its notes; no annotations, no intro", () => {
     const gone = write("gone2.png", png(200, 100));
-    const list = normalizePromptAttachments([{ path: gone, annotation: good() }], [], uploads);
+    const list = normalize([{ path: gone, annotation: good() }]);
     rmSync(gone);
     const lines = runAttachments(list)!.block.split("\n");
     const at = lines.indexOf(`- ${gone} (missing: it was moved or deleted after it was attached)`);
     expect(lines[at + 1]).toBe("  200×100 px. Notes:");
-    expect(runAttachments([{ path: shot, name: "shot.png", source: "file" }])!.block).not.toContain("numbered notes");
+    expect(runAttachments(normalize([{ path: shot }]))!.block).not.toContain("numbered notes");
   });
 });

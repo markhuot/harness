@@ -172,8 +172,9 @@ describe("update_spec images", () => {
     const r = await tool("update_spec").execute({ spec, note: "Screenshots", base_revision: 1 }, h.ctx(t));
     expect(text(r)).toMatch(/^Spec updated to revision 2\. Stored 2 attachments \(after\.png → attachment:/);
     const [shot, video] = h.store.attachments.listByTicket(t.id);
-    expect(shot).toMatchObject({ kind: "image", mimeType: "image/png", name: "after.png", width: 800, height: 600 });
-    expect(video).toMatchObject({ kind: "video", mimeType: "video/mp4", name: "flow.mp4" });
+    expect(shot).toMatchObject({ source: "spec", kind: "image", mimeType: "image/png", name: "after.png", width: 800, height: 600 });
+    expect(shot!.path).toBe(join(h.paths.attachmentsDir, `${shot!.id}.png`));
+    expect(video).toMatchObject({ source: "spec", kind: "video", mimeType: "video/mp4", name: "flow.mp4" });
     const body = h.fresh(t).spec;
     expect(body).toContain(`![After](attachment:${shot!.id})`);
     expect(body).toContain(`![Flow](attachment:${video!.id})`);
@@ -183,7 +184,9 @@ describe("update_spec images", () => {
     expect(readFileSync(file.path)).toEqual(png(800, 600));
     // get_ticket names the stored path, so a reviewer can open it.
     const detail = await h.orch.ops.getTicket(h.ctx(h.fresh(t)), t.key);
-    expect(detail.attachments.map((a) => a.path)).toEqual([file.path, h.orch.attachmentFilePath(video!)]);
+    expect(detail.attachments.map((a) => a.path)).toEqual([file.path, video!.path]);
+    // TicketDetail carries them, so clients can send one on by id.
+    expect(h.orch.ticketDetail(t.key).attachments).toEqual([shot!, video!]);
   });
 
   test("a bad extension or bad magic bytes fails the call and stores nothing", async () => {
@@ -205,7 +208,7 @@ describe("update_spec images", () => {
     const t = await h.make();
     await h.orch.ops.updateSpec(h.ctx(t), { spec: "![a](shots/after.png)", note: "x", baseRevision: 1 });
     const [a] = h.store.attachments.listByTicket(t.id);
-    const path = h.orch.attachmentFilePath(a!);
+    const path = a!.path;
     expect(existsSync(path)).toBe(true);
     await h.orch.deleteTicket(t.key);
     expect(existsSync(path)).toBe(false);

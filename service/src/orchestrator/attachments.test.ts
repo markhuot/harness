@@ -124,7 +124,7 @@ describe("deleting removes attachment files", () => {
     const [kept] = h.store.attachments.listByTicket(b.id);
     expect(h.stored()).toHaveLength(3);
     await h.orch.deleteTicket(a.key);
-    expect(h.stored()).toEqual([h.orch.attachmentFilePath(kept!).split("/").at(-1)!]);
+    expect(h.stored()).toEqual([kept!.path.split("/").at(-1)!]);
     expect(h.orch.attachmentFile(kept!.id)).not.toBeNull();
   });
 

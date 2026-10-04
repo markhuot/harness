@@ -1,12 +1,12 @@
 // An annotation sent with a message (DESIGN.md "Annotations") is metadata on its attachment: it
 // rides in MessageBody.attachments into the transcript entry, a queued run's attachments and a
 // steered message, and the run that answers lists its notes under that file's path in the
-// <attachments> block. A spec image is sent as attachment:<id> and referenced where it's stored.
+// <attachments> block. A spec image is sent by its id and referenced where it's stored.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HarnessApiError, HarnessClient, type AttachmentAnnotation, type PromptAttachment, type Ticket } from "@harness/shared";
+import { HarnessApiError, HarnessClient, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
@@ -27,13 +27,12 @@ function setup(steering = false) {
     return p;
   };
   /** Store a spec image on the ticket as the spec's attachment:<id> would. */
-  const specImage = (t: Ticket, id: string, name = "mockup.png") => {
-    const a = { id, kind: "image" as const, mimeType: "image/png", name, size: 1, width: 40, height: 20 };
+  const specImage = (t: Ticket, id: string, name = "mockup.png"): Attachment => {
+    const a: Attachment = { id, path: join(h.paths.attachmentsDir, `${id}.png`), name, source: "spec", kind: "image", mimeType: "image/png", size: 1, width: 40, height: 20 };
     mkdirSync(h.paths.attachmentsDir, { recursive: true });
     h.store.attachments.add(t.id, [a]);
-    const path = h.orch.attachmentFilePath(a);
-    writeFileSync(path, png(40, 20));
-    return path;
+    writeFileSync(a.path, png(40, 20));
+    return a;
   };
   const userEntries = (t: Ticket) => h.store.transcript.list(t.sessionId).filter((e) => e.role === "user");
   return { ...h, project, file, specImage, userEntries };
@@ -83,9 +82,9 @@ describe("a message's annotated attachment", () => {
     // The image goes inline, unchanged.
     expect(Buffer.from(chat.images![0]!.data, "base64").equals(png(40, 20))).toBe(true);
 
-    const files: PromptAttachment[] = [
-      { path: notes, name: "notes.md", source: "file" },
-      { path: shot, name: "shot.png", source: "file", annotation: note() },
+    const files: Attachment[] = [
+      { id: expect.any(String), path: notes, name: "notes.md", source: "file", kind: "file", mimeType: "text/markdown", size: 7 },
+      { id: expect.any(String), path: shot, name: "shot.png", source: "file", kind: "image", mimeType: "image/png", size: png(40, 20).length, width: 40, height: 20, annotation: note() },
     ];
     expect(h.userEntries(t).at(-1)!.content).toEqual({ type: "text", text: "Fix these", attachments: files });
     expect(h.store.runs.listBySession(t.sessionId).at(-1)!.attachments).toEqual(files);
@@ -127,24 +126,34 @@ describe("a message's annotated attachment", () => {
   });
 });
 
-describe("a spec image as attachment:<id>", () => {
-  test("resolves to its stored file, named after it, and its notes are listed under that path", async () => {
+describe("a spec image by id", () => {
+  test("is referenced at its stored file, named after it, and its notes are listed under that path", async () => {
     const h = setup();
     const t = await blocked(h);
     const stored = h.specImage(t, "att_1");
-    await h.orch.sendMessage(t.key, "This one", { attachments: [{ path: "attachment:att_1", annotation: note() }] });
+    await h.orch.sendMessage(t.key, "This one", { attachments: [{ id: "att_1", annotation: note() }] });
     await h.orch.idle();
-    expect(h.userEntries(t).at(-1)!.content).toMatchObject({ attachments: [{ path: stored, name: "mockup.png", source: "file", annotation: note() }] });
-    expect(under(h.driver.calls.at(-1)!.prompt, stored)).toEqual(["  40×20 px. Notes:", `  ${LINE}`]);
+    expect(h.userEntries(t).at(-1)!.content).toEqual({ type: "text", text: "This one", attachments: [{ ...stored, annotation: note() }] });
+    expect(under(h.driver.calls.at(-1)!.prompt, stored.path)).toEqual(["  40×20 px. Notes:", `  ${LINE}`]);
   });
 
-  test("an unknown id, or another ticket's, is refused", async () => {
+  test("a file from an earlier message goes again by id, with its own notes this time", async () => {
     const h = setup();
     const t = await blocked(h);
-    const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", start: false });
-    h.specImage(other, "att_other");
-    await expect(h.orch.sendMessage(t.key, "x", { attachments: [{ path: "attachment:att_9" }] })).rejects.toMatchObject({ status: 400 });
-    await expect(h.orch.sendMessage(t.key, "x", { attachments: [{ path: "attachment:att_other" }] })).rejects.toMatchObject({ status: 400 });
+    await h.orch.sendMessage(t.key, "First", { attachments: [{ path: h.file("shot.png", png(40, 20)), annotation: note() }] });
+    await h.orch.idle();
+    const first = h.userEntries(t).at(-1)!.content as { attachments: Attachment[] };
+    await h.orch.sendMessage(t.key, "Again", { attachments: [{ id: first.attachments[0]!.id, annotation: note("Smaller") }] });
+    await h.orch.idle();
+    const again = h.userEntries(t).at(-1)!.content as { attachments: Attachment[] };
+    expect(again.attachments.map((a) => [a.id, a.annotation?.marks[0]!.message])).toEqual([[first.attachments[0]!.id, "Smaller"]]);
+    expect(first.attachments[0]!.annotation!.marks[0]!.message).toBe("Bigger");
+  });
+
+  test("an unknown id is refused and nothing runs", async () => {
+    const h = setup();
+    const t = await blocked(h);
+    await expect(h.orch.sendMessage(t.key, "x", { attachments: [{ id: "att_9" }] })).rejects.toMatchObject({ status: 400 });
     expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work"]);
   });
 });
@@ -176,7 +185,9 @@ describe("steering", () => {
     await h.orch.idle();
 
     expect(under(h.driver.calls[1]!.prompt, shot)).toEqual(["  40×20 px. Notes:", `  ${LINE}`]);
-    expect(h.store.runs.listBySession(t.sessionId)[1]!.attachments).toEqual([{ path: shot, name: "shot.png", source: "file", annotation: note() }]);
+    expect(h.store.runs.listBySession(t.sessionId)[1]!.attachments).toEqual([
+      { id: expect.any(String), path: shot, name: "shot.png", source: "file", kind: "image", mimeType: "image/png", size: png(40, 20).length, width: 40, height: 20, annotation: note() },
+    ]);
   });
 });
 
@@ -205,18 +216,18 @@ describe("over HTTP", () => {
     expect(Buffer.from(shot.data, "base64").equals(png(1280, 800))).toBe(true);
     expect(((await client.browserScreenshot(t.sessionId, 7).catch((e) => e)) as HarnessApiError).status).toBe(404);
 
-    const up = await client.uploadPromptAttachment(new Blob([Buffer.from(shot.data, "base64")], { type: "image/png" }), "Browser.png", "image/png");
+    const up = await client.uploadAttachment(new Blob([Buffer.from(shot.data, "base64")], { type: "image/png" }), "Browser.png", "image/png");
     const annotation: AttachmentAnnotation = {
       width: shot.width,
       height: shot.height,
       marks: [{ n: 1, x: 1000, y: 100, message: "Log in button" }],
       page: { url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale },
     };
-    await client.sendMessage(t.key, "Click this", { attachments: [{ path: up.path, annotation }] });
+    await client.sendMessage(t.key, "Click this", { attachments: [{ id: up.id, annotation }] });
     const entry = (await client.transcript(t.sessionId)).find((e) => e.role === "user" && e.content.type === "text" && e.content.text === "Click this");
-    expect(entry?.content).toMatchObject({ attachments: [{ path: up.path, name: "Browser.png", source: "upload", annotation }] });
+    expect(entry?.content).toEqual({ type: "text", text: "Click this", attachments: [{ ...up, annotation }] });
 
-    const bad = await client.sendMessage(t.key, "x", { attachments: [{ path: up.path, annotation: { ...annotation, marks: [{ n: 1, x: 3000, y: 1, message: "" }] } }] }).catch((e) => e);
+    const bad = await client.sendMessage(t.key, "x", { attachments: [{ id: up.id, annotation: { ...annotation, marks: [{ n: 1, x: 3000, y: 1, message: "" }] } }] }).catch((e) => e);
     expect((bad as HarnessApiError).status).toBe(400);
     expect((bad as HarnessApiError).message).toMatch(/inside the 1280×800 image/);
   });

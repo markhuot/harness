@@ -28,7 +28,7 @@ test("a closed input refuses pushes and stops notifying", () => {
 
 test("undelivered gives back what the human sent, not the text with attached files", () => {
   const input = new RunInput();
-  const attachments = [{ path: "/tmp/shot.png", name: "shot.png", source: "upload" as const }];
+  const attachments = [{ id: "a1", path: "/tmp/shot.png", name: "shot.png", source: "upload" as const, kind: "image" as const, mimeType: "image/png" }];
   const image = { name: "shot.png", path: "/tmp/shot.png", mediaType: "image/png" as const, data: "AAAA" };
   input.push("see @a.ts\n\n<file a.ts>…</file>\n\n<attachments>…</attachments>", { text: "see @a.ts", attachments }, [image]);
   const [taken] = input.take();
