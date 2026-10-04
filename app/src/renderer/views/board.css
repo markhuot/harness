@@ -146,6 +146,11 @@
 .card.draft.cursor {
   border-style: dashed;
 }
+.card-autostart {
+  display: inline-flex;
+  flex: none;
+  color: var(--accent);
+}
 .card-draft-icon {
   color: var(--accent);
   flex: none;

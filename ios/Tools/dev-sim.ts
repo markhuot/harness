@@ -322,11 +322,12 @@ function client(d: Daemon) {
   };
 }
 
-export type Seeded = { project: Project; review: Ticket; planning: Ticket; blocked: Ticket; done: Ticket };
+export type Seeded = { project: Project; review: Ticket; planning: Ticket; blocked: Ticket; done: Ticket; waiting: Ticket };
 
 /**
  * One git project (GREET, with worktrees) and a ticket in each of review, planning, blocked and
- * done. Created one at a time so the keys are always GREET-1 … GREET-4.
+ * done, plus GREET-5: started while GREET-1 was still in review, so it waits in planning to start
+ * on its own. Created one at a time so the keys are always GREET-1 … GREET-5.
  */
 async function seed(d: Daemon): Promise<Seeded> {
   const api = client(d);
@@ -359,7 +360,8 @@ async function seed(d: Daemon): Promise<Seeded> {
   for (const spec of TIDY_REVISIONS) {
     revised = await api<Ticket>("PATCH", `/tickets/${dn.key}`, { spec, baseRevision: revised.specRevision });
   }
-  return { project, review: r, planning: p, blocked: b, done: revised };
+  const waiting = await create("Link the install page from the README", { dependsOn: [r.key] });
+  return { project, review: r, planning: p, blocked: b, done: revised, waiting };
 }
 
 /** Revisions 2 and 3 of GREET-4's spec: edited words, an added list item and table row, a changed code line, a removed paragraph. */
@@ -372,7 +374,7 @@ function printSeeded(d: Daemon, s: Seeded) {
   log(`daemon:  ${d.base}`);
   log(`token:   ${join(d.home, "token")}`);
   log(`project: ${s.project.key} (id ${s.project.id})`);
-  for (const t of [s.review, s.planning, s.blocked, s.done]) log(`  ${t.key}  ${t.status.padEnd(9)} ${t.title}`);
+  for (const t of [s.review, s.planning, s.blocked, s.done, s.waiting]) log(`  ${t.key}  ${t.status.padEnd(9)} ${t.title}`);
 }
 
 // ------------------------------------------------------------------ main

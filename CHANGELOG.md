@@ -19,6 +19,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   sees attached images along with your message.
 - The Transcript shows the files sent with each message under it, with thumbnails. A file that was
   moved or deleted afterwards shows as missing.
+- A ticket you started before its dependencies were done now shows a clock on its board card in
+  Planning, so you can tell it will start on its own once they finish. Its Start button reads
+  "Starts automatically" and is turned off, and hovering it (or VoiceOver) names the tickets it's
+  waiting on. Mac, iPhone and iPad.
 
 ### Fixed
 
