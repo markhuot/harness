@@ -135,7 +135,10 @@ struct AnnotatorView: View {
     private var stage: some View {
         GeometryReader { geo in
             let px = AnnotationDrawing.pixelSize(request.image)
-            let fit = Format.fitRect(boxW: geo.size.width - 24, boxH: geo.size.height - 24, w: px.width, h: px.height)
+            // Fitted to the stage, but never blown up past one point per pixel (like the Mac's 1:1 cap).
+            let box = CGSize(width: max(0, geo.size.width - 24), height: max(0, geo.size.height - 24))
+            let fit = Format.fitRect(boxW: min(box.width, px.width), boxH: min(box.height, px.height), w: px.width, h: px.height)
+                .centered(in: box, from: CGSize(width: min(box.width, px.width), height: min(box.height, px.height)))
             let size = CGSize(width: fit.w, height: fit.h)
             ZStack(alignment: .topLeading) {
                 Image(uiImage: request.image)
@@ -229,7 +232,7 @@ struct AnnotatorView: View {
 
     /// Replace the marks, remembering the old ones for Undo.
     private func change(_ next: [Annotations.DraftMark]) {
-        history.append(marks)
+        history = Annotations.pushHistory(history, marks)
         marks = next
     }
 
@@ -376,7 +379,7 @@ struct AnnotatorView: View {
                     throw HarnessAPIError(status: 0, message: "Couldn't draw the notes onto the image.", data: nil)
                 }
                 let api = try store.connectedAPI()
-                let name = Annotations.compositeName(source, jpeg: composite.jpeg)
+                let name = Annotations.annotatedName(source, jpeg: composite.jpeg)
                 let uploaded = try await api.uploadPromptAttachment(data: composite.data, name: name, mimeType: composite.jpeg ? "image/jpeg" : "image/png")
                 let annotation = MessageAnnotation(
                     attachment: 0, source: source, width: composite.width, height: composite.height,
@@ -394,6 +397,13 @@ struct AnnotatorView: View {
                 onClose(true)
             }
         }
+    }
+}
+
+private extension Format.Rect {
+    /// This rect (fitted into `inner`) re-centered in the larger `box`.
+    func centered(in box: CGSize, from inner: CGSize) -> Format.Rect {
+        Format.Rect(x: x + (box.width - inner.width) / 2, y: y + (box.height - inner.height) / 2, w: w, h: h)
     }
 }
 

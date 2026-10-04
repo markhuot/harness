@@ -230,22 +230,81 @@ public enum Annotations {
         return out
     }
 
-    /// Bytes the composite may take as a PNG before it's sent as a JPEG instead (the service's
-    /// upload limit leaves room for this; Claude's image limit is 5 MB of base64).
-    public static let maxPngBytes = 3_750_000
+    /// The largest picture that still goes to the agent inline (the API takes 5 MB of base64 per
+    /// image; 3.75 MB of bytes is that once encoded). The Mac app's INLINE_IMAGE_LIMIT.
+    public static let inlineImageLimit = Int(3.75 * 1024 * 1024)
 
-    /// The name of the composite upload: the source's name with `-annotated` before its extension,
-    /// and the extension matching what was encoded ("shot.png" → "shot-annotated.png").
-    public static func compositeName(_ source: AnnotationSource, jpeg: Bool) -> String {
-        let ext = jpeg ? "jpg" : "png"
-        let raw: String = switch source {
-        case .browser: "browser"
-        default: source.displayName
+    /// The JPEG qualities tried, best first, when the PNG is too big.
+    public static let jpegQualities: [Double] = [0.9, 0.8, 0.7, 0.6, 0.5]
+
+    /// How many steps Undo keeps (the Mac app's HISTORY_LIMIT).
+    public static let historyLimit = 100
+
+    /// An encoded picture: its bytes, and whether they're a JPEG (else a PNG).
+    public struct Encoded: Sendable, Equatable {
+        public var data: Data
+        public var jpeg: Bool
+
+        public init(data: Data, jpeg: Bool) {
+            self.data = data
+            self.jpeg = jpeg
         }
-        var stem = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let dot = stem.lastIndex(of: "."), dot > stem.startIndex { stem = String(stem[..<dot]) }
-        stem = stem.replacingOccurrences(of: "/", with: "-")
-        if stem.isEmpty { stem = "image" }
-        return "\(stem)-annotated.\(ext)"
+    }
+
+    /// The annotated picture as a PNG, or when that's over `limit` as the best JPEG that fits (none
+    /// fits: the smallest one tried, and the service decides what to do with it). `encode(nil)` is
+    /// the PNG, `encode(q)` a JPEG at quality q; nil when it couldn't encode. The Mac app's
+    /// encodeWithinLimit.
+    public static func encodeWithinLimit(limit: Int = inlineImageLimit, _ encode: (Double?) -> Data?) -> Encoded? {
+        let png = encode(nil)
+        if let png, png.count <= limit { return Encoded(data: png, jpeg: false) }
+        var smallest = png.map { Encoded(data: $0, jpeg: false) }
+        for q in jpegQualities {
+            guard let jpeg = encode(q) else { continue }
+            if jpeg.count <= limit { return Encoded(data: jpeg, jpeg: true) }
+            if smallest == nil || jpeg.count < smallest!.data.count { smallest = Encoded(data: jpeg, jpeg: true) }
+        }
+        return smallest
+    }
+
+    /// `history` with `snapshot` pushed, keeping the newest historyLimit.
+    public static func pushHistory<T>(_ history: [T], _ snapshot: T) -> [T] {
+        let next = history + [snapshot]
+        return next.count > historyLimit ? Array(next.suffix(historyLimit)) : next
+    }
+
+    // Names, as the Mac app gives them (app/src/renderer/state/annotator.ts), so the agent sees the
+    // same file names from either app.
+
+    /// A file's name without its folders and extension ("/a/Screen Shot.jpeg" → "Screen Shot"); a
+    /// dot that isn't an extension ("release 1.2") stays.
+    public static func stripExtension(_ name: String) -> String {
+        let leaf = name.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
+        return leaf.replacingOccurrences(of: #"\.[A-Za-z][A-Za-z0-9]{0,4}\z"#, with: "", options: .regularExpression)
+    }
+
+    /// The file name of the annotated picture: `annotated-<base>.png` (or .jpg), the base made safe
+    /// for a file name.
+    public static func annotatedName(_ base: String, jpeg: Bool) -> String {
+        let ext = jpeg ? "jpg" : "png"
+        var safe = base.replacingOccurrences(of: #"[^A-Za-z0-9_.-]+"#, with: "-", options: .regularExpression)
+        safe = safe.replacingOccurrences(of: #"^[-.]+|[-.]+\z"#, with: "", options: .regularExpression)
+        safe = String(safe.prefix(80))
+        return "annotated-\(safe.isEmpty ? "image" : safe).\(ext)"
+    }
+
+    /// A browser page's name for its picture: the host, else the title, else "page".
+    public static func browserShotName(url: String, title: String) -> String {
+        if let host = URL(string: url)?.host(percentEncoded: false), !host.isEmpty { return host.lowercased() }
+        let t = JSCompat.trim(title)
+        return t.isEmpty ? "page" : t
+    }
+
+    /// The annotated picture's file name for an image from `source`.
+    public static func annotatedName(_ source: AnnotationSource, jpeg: Bool) -> String {
+        switch source {
+        case let .browser(url, title, _, _, _): annotatedName(browserShotName(url: url, title: title), jpeg: jpeg)
+        default: annotatedName(stripExtension(source.displayName), jpeg: jpeg)
+        }
     }
 }

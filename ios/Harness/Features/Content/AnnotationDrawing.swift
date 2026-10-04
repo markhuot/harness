@@ -68,7 +68,7 @@ enum AnnotationDrawing {
     private static func cgPoint(_ p: Annotations.Point) -> CGPoint { CGPoint(x: p.x, y: p.y) }
 
     /// The image with `marks` burned in at its own pixel size, encoded as PNG, or as JPEG when the
-    /// PNG is over Annotations.maxPngBytes. nil when it couldn't be encoded.
+    /// PNG is over the inline limit (Annotations.encodeWithinLimit). nil when it couldn't be encoded.
     static func composite(_ image: UIImage, marks: [Annotations.DraftMark], accent: UIColor) -> (data: Data, jpeg: Bool, width: Double, height: Double)? {
         let size = pixelSize(image)
         guard size.width > 0, size.height > 0 else { return nil }
@@ -80,16 +80,10 @@ enum AnnotationDrawing {
             image.draw(in: CGRect(origin: .zero, size: size))
             draw(marks, in: ctx.cgContext, size: size, accent: accent)
         }
-        if let png = out.pngData(), png.count <= Annotations.maxPngBytes {
-            return (png, false, size.width, size.height)
-        }
-        // A photo-sized PNG: a JPEG keeps it under the limit (quality steps down if it has to).
-        for quality in [0.9, 0.8, 0.65, 0.5] as [CGFloat] {
-            if let jpg = out.jpegData(compressionQuality: quality), jpg.count <= Annotations.maxPngBytes || quality == 0.5 {
-                return (jpg, true, size.width, size.height)
-            }
-        }
-        return nil
+        guard let encoded = Annotations.encodeWithinLimit({ q in
+            if let q { out.jpegData(compressionQuality: q) } else { out.pngData() }
+        }) else { return nil }
+        return (encoded.data, encoded.jpeg, size.width, size.height)
     }
 
     /// The image's size in pixels (its points times its scale, orientation applied).
