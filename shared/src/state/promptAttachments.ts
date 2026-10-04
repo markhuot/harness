@@ -1,8 +1,10 @@
-// Prompt attachments (DESIGN.md "Prompt attachments"): files a human attaches to a New session.
-// The pure pieces both apps use: turning what a client has into the list a draft keeps, the PATCH
-// side of it, and which ones get an image preview. Platform-independent: no React, DOM or native APIs.
+// Attachment lists (DESIGN.md "Attachments"): the files a human attaches to a New session or a
+// message, each one an Attachment the service registered (an upload, a registered file, a spec
+// image, a file from an earlier message), with its annotation if any. The pure pieces both apps
+// use: the list a draft or composer keeps, what a create, PATCH or message sends, and which files
+// get an image preview. Platform-independent: no React, DOM or native APIs.
 
-import { MAX_PROMPT_ATTACHMENTS, type AttachmentAnnotation, type PromptAttachment, type PromptAttachmentInput } from "../protocol";
+import { MAX_PROMPT_ATTACHMENTS, type Attachment, type AttachmentAnnotation, type AttachmentInput } from "../protocol";
 import { sameAnnotation } from "./annotations";
 
 /** The last path component: "/a/b/shot.png" → "shot.png". */
@@ -12,88 +14,99 @@ export function fileBaseName(path: string): string {
   return i === -1 ? trimmed : trimmed.slice(i + 1);
 }
 
-/** What a client sent, as the draft keeps it: the file's name when none was given, "file" unless it says otherwise. */
-export function promptAttachmentFromInput(a: PromptAttachmentInput): PromptAttachment {
-  return { path: a.path, name: a.name?.trim() || fileBaseName(a.path), source: a.source ?? "file", ...(a.annotation ? { annotation: a.annotation } : {}) };
-}
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "tiff"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v"]);
 
-/** The list as a create or PATCH body sends it (the service decides `source` itself). */
-export function promptAttachmentInputs(list: readonly PromptAttachment[]): PromptAttachmentInput[] {
-  return list.map((a) => ({ path: a.path, name: a.name, ...(a.annotation ? { annotation: a.annotation } : {}) }));
-}
-
-/** Same files, same names, same annotations, same order. */
-export function samePromptAttachments(a: readonly PromptAttachment[], b: readonly PromptAttachment[]): boolean {
-  return a.length === b.length && a.every((x, i) => x.path === b[i]!.path && x.name === b[i]!.name && sameAnnotation(x.annotation, b[i]!.annotation));
+/** A kind guessed from a file name, for an input the service hasn't described yet. */
+function kindByName(name: string): Attachment["kind"] {
+  const ext = /\.([^./]+)$/.exec(name)?.[1]?.toLowerCase() ?? "";
+  return IMAGE_EXTENSIONS.has(ext) ? "image" : VIDEO_EXTENSIONS.has(ext) ? "video" : "file";
 }
 
 /**
- * `list` with `added` appended: a path already in the list (or twice in `added`) is attached once,
+ * An input as a list keeps it: a full Attachment stays as it is; a bare `{ id }` or `{ path }` gets
+ * the defaults the service would fill in (its name from the path, its kind from the name). Applied
+ * to a draft's own PATCH before the service answers.
+ */
+export function attachmentFromInput(a: AttachmentInput): Attachment {
+  const path = a.path ?? "";
+  const name = a.name?.trim() || fileBaseName(path) || "file";
+  const out: Attachment = {
+    id: a.id ?? "",
+    path,
+    name,
+    source: a.source ?? "file",
+    kind: a.kind ?? kindByName(name || path),
+    mimeType: a.mimeType ?? "",
+  };
+  if (a.size !== undefined) out.size = a.size;
+  if (a.width !== undefined) out.width = a.width;
+  if (a.height !== undefined) out.height = a.height;
+  if (a.annotation) out.annotation = a.annotation;
+  return out;
+}
+
+/** The list as a create, PATCH or message body sends it: each attachment whole (the service reads its id, name and annotation). */
+export function attachmentInputs(list: readonly Attachment[]): AttachmentInput[] {
+  return list.map((a) => ({ ...a }));
+}
+
+/** Same attachments, same names, same annotations, same order. */
+export function sameAttachments(a: readonly Attachment[], b: readonly Attachment[]): boolean {
+  return a.length === b.length && a.every((x, i) => x.id === b[i]!.id && x.path === b[i]!.path && x.name === b[i]!.name && sameAnnotation(x.annotation, b[i]!.annotation));
+}
+
+/** The same file: by id once the service has registered it, else by path. */
+const sameFile = (a: Pick<Attachment, "id" | "path">, b: Pick<Attachment, "id" | "path">) => (a.id && b.id ? a.id === b.id : a.path === b.path);
+
+/**
+ * `list` with `added` appended: a file already in the list (or twice in `added`) is attached once,
  * and nothing goes past `max`. `skipped` counts what was left out for the limit, so the editor can
  * say so.
  */
-export function addPromptAttachments(
-  list: readonly PromptAttachment[],
-  added: readonly PromptAttachmentInput[],
-  max = MAX_PROMPT_ATTACHMENTS,
-): { list: PromptAttachment[]; skipped: number } {
+export function addAttachments(list: readonly Attachment[], added: readonly Attachment[], max = MAX_PROMPT_ATTACHMENTS): { list: Attachment[]; skipped: number } {
   const out = [...list];
-  const seen = new Set(list.map((a) => a.path));
   let skipped = 0;
   for (const a of added) {
-    if (seen.has(a.path)) continue;
+    if (out.some((x) => sameFile(x, a))) continue;
     if (out.length >= max) {
       skipped++;
       continue;
     }
-    seen.add(a.path);
-    out.push(promptAttachmentFromInput(a));
+    out.push(a);
   }
   return { list: out, skipped };
 }
 
 /**
- * `list` with `input` annotated (DESIGN.md "Annotations"): the attachment with the same path gets
- * its annotation (null takes it off), or `input` is added at the end when it isn't there yet.
+ * `list` with `attachment` annotated (DESIGN.md "Annotations"): the same file already in the list
+ * gets the annotation in place (null takes it off), or `attachment` is added at the end with it.
  * `skipped` is true when it wasn't there and the list was already full.
  */
-export function annotatePromptAttachment(
-  list: readonly PromptAttachment[],
-  input: PromptAttachmentInput,
+export function annotateAttachment(
+  list: readonly Attachment[],
+  attachment: Attachment,
   annotation: AttachmentAnnotation | null,
   max = MAX_PROMPT_ATTACHMENTS,
-): { list: PromptAttachment[]; skipped: boolean } {
-  const set = (a: PromptAttachment): PromptAttachment => {
+): { list: Attachment[]; skipped: boolean } {
+  const set = (a: Attachment): Attachment => {
     const { annotation: _old, ...rest } = a;
     return annotation ? { ...rest, annotation } : rest;
   };
-  const i = list.findIndex((a) => a.path === input.path);
+  const i = list.findIndex((a) => sameFile(a, attachment));
   if (i >= 0) return { list: list.map((a, j) => (j === i ? set(a) : a)), skipped: false };
   if (list.length >= max) return { list: [...list], skipped: true };
-  return { list: [...list, set(promptAttachmentFromInput(input))], skipped: false };
-}
-
-/** The reference a message sends for one of the ticket's spec images; the service stores its file's path. */
-export function specAttachmentPath(id: string): string {
-  return `attachment:${id}`;
-}
-
-/** The spec image id an attachment still refers to by `attachment:<id>` (one waiting to be sent), or null. */
-export function specAttachmentIdOf(path: string): string | null {
-  return path.startsWith("attachment:") ? path.slice("attachment:".length) || null : null;
+  return { list: [...list, set(attachment)], skipped: false };
 }
 
 /** `list` without the attachment at `index` (unchanged when there's none). */
-export function removePromptAttachment(list: readonly PromptAttachment[], index: number): PromptAttachment[] {
+export function removeAttachment(list: readonly Attachment[], index: number): Attachment[] {
   return list.filter((_, i) => i !== index);
 }
 
-const PREVIEW_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp"]);
-
-/** Whether the apps draw an image preview for it (from its extension); other files show as a named chip. */
-export function promptAttachmentIsImage(a: Pick<PromptAttachment, "name" | "path">): boolean {
-  const ext = /\.([^./]+)$/.exec(a.name)?.[1] ?? /\.([^./]+)$/.exec(a.path)?.[1];
-  return !!ext && PREVIEW_EXTENSIONS.has(ext.toLowerCase());
+/** Whether the apps draw an image preview for it (and offer Annotate); other files show as a named chip. */
+export function attachmentIsImage(a: Pick<Attachment, "kind">): boolean {
+  return a.kind === "image";
 }
 
 const PASTE_EXTENSIONS: Record<string, string> = {

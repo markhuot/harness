@@ -184,19 +184,49 @@
   "Attachment": [
     {
       "id": "att_1",
+      "path": "/Users/mark/.harness/attachments/att_1.png",
+      "name": "after.png",
+      "source": "spec",
       "kind": "image",
       "mimeType": "image/png",
-      "name": "after.png",
       "size": 48213,
       "width": 1280,
       "height": 800
     },
     {
       "id": "att_2",
+      "path": "/Users/mark/.harness/attachments/att_2.mp4",
+      "name": "flow.mp4",
+      "source": "spec",
       "kind": "video",
       "mimeType": "video/mp4",
-      "name": "flow.mp4",
       "size": 2400118
+    },
+    {
+      "id": "att_31",
+      "path": "/Users/mark/Desktop/shot.png",
+      "name": "shot.png",
+      "source": "file",
+      "kind": "image",
+      "mimeType": "image/png"
+    },
+    {
+      "id": "att_32",
+      "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+      "name": "Pasted image.png",
+      "source": "upload",
+      "kind": "image",
+      "mimeType": "image/png",
+      "width": 1170,
+      "height": 2532
+    },
+    {
+      "id": "att_42",
+      "path": "/Users/mark/notes.pdf",
+      "name": "Notes",
+      "source": "file",
+      "kind": "file",
+      "mimeType": ""
     }
   ],
   "AttachmentAnnotation": [
@@ -255,6 +285,44 @@
           "message": ""
         }
       ]
+    }
+  ],
+  "AttachmentInput": [
+    {
+      "path": "/Users/mark/Desktop/shot.png"
+    },
+    {
+      "path": "/Users/mark/notes.pdf",
+      "name": "Notes"
+    },
+    {
+      "id": "att_1"
+    },
+    {
+      "id": "att_1",
+      "name": "After",
+      "annotation": {
+        "width": 1280,
+        "height": 800,
+        "marks": [
+          {
+            "n": 1,
+            "x": 10,
+            "y": 20,
+            "message": "Here"
+          }
+        ]
+      }
+    },
+    {
+      "id": "att_32",
+      "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+      "name": "Pasted image.png",
+      "source": "upload",
+      "kind": "image",
+      "mimeType": "image/png",
+      "width": 1170,
+      "height": 2532
     }
   ],
   "BoundAddress": [
@@ -607,7 +675,7 @@
           }
         },
         {
-          "path": "/tmp/notes.pdf"
+          "id": "att_32"
         }
       ]
     },
@@ -1288,8 +1356,7 @@
         },
         {
           "path": "/Users/mark/notes.pdf",
-          "name": "Notes",
-          "source": "file"
+          "name": "Notes"
         }
       ]
     },
@@ -1307,8 +1374,7 @@
       "text": "Fix the marked spots.",
       "attachments": [
         {
-          "path": "attachment:att_1",
-          "name": "after.png",
+          "id": "att_1",
           "annotation": {
             "width": 1280,
             "height": 800,
@@ -1331,9 +1397,12 @@
           }
         },
         {
+          "id": "att_40",
           "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
           "name": "localhost.png",
           "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png",
           "annotation": {
             "width": 2560,
             "height": 1600,
@@ -1801,28 +1870,6 @@
       "updatedAt": 1759276800000
     }
   ],
-  "PromptAttachment": [
-    {
-      "path": "/Users/mark/Desktop/shot.png",
-      "name": "shot.png",
-      "source": "file"
-    },
-    {
-      "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
-      "name": "Pasted image.png",
-      "source": "upload"
-    }
-  ],
-  "PromptAttachmentInput": [
-    {
-      "path": "/Users/mark/Desktop/shot.png"
-    },
-    {
-      "path": "/Users/mark/notes.pdf",
-      "name": "Notes",
-      "source": "file"
-    }
-  ],
   "PromptEntry": [
     {
       "id": "run.work_start",
@@ -2060,9 +2107,12 @@
       "endedAt": null,
       "attachments": [
         {
+          "id": "att_41",
           "path": "/Users/mark/.harness/uploads/ab12/shot.png",
           "name": "shot.png",
-          "source": "upload"
+          "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png"
         }
       ]
     },
@@ -2079,9 +2129,15 @@
       "endedAt": null,
       "attachments": [
         {
+          "id": "att_1",
           "path": "/Users/mark/.harness/attachments/att_1.png",
           "name": "after.png",
-          "source": "file",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "size": 48213,
+          "width": 1280,
+          "height": 800,
           "annotation": {
             "width": 1280,
             "height": 800,
@@ -2104,9 +2160,12 @@
           }
         },
         {
+          "id": "att_40",
           "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
           "name": "localhost.png",
           "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png",
           "annotation": {
             "width": 2560,
             "height": 1600,
@@ -2692,14 +2751,23 @@
       "draft": true,
       "promptAttachments": [
         {
+          "id": "att_31",
           "path": "/Users/mark/Desktop/login bug.png",
           "name": "login bug.png",
-          "source": "file"
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png",
+          "size": 52311
         },
         {
+          "id": "att_32",
           "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
           "name": "Pasted image.png",
           "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 1170,
+          "height": 2532,
           "annotation": {
             "width": 1170,
             "height": 2532,
@@ -3070,9 +3138,12 @@
           "endedAt": null,
           "attachments": [
             {
+              "id": "att_41",
               "path": "/Users/mark/.harness/uploads/ab12/shot.png",
               "name": "shot.png",
-              "source": "upload"
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ]
         },
@@ -3089,9 +3160,15 @@
           "endedAt": null,
           "attachments": [
             {
+              "id": "att_1",
               "path": "/Users/mark/.harness/attachments/att_1.png",
               "name": "after.png",
-              "source": "file",
+              "source": "spec",
+              "kind": "image",
+              "mimeType": "image/png",
+              "size": 48213,
+              "width": 1280,
+              "height": 800,
               "annotation": {
                 "width": 1280,
                 "height": 800,
@@ -3114,9 +3191,12 @@
               }
             },
             {
+              "id": "att_40",
               "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
               "name": "localhost.png",
               "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png",
               "annotation": {
                 "width": 2560,
                 "height": 1600,
@@ -3580,14 +3660,21 @@
       "text": "",
       "attachments": [
         {
+          "id": "att_41",
           "path": "/Users/mark/.harness/uploads/ab12/shot.png",
           "name": "shot.png",
-          "source": "upload"
+          "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png"
         },
         {
+          "id": "att_42",
           "path": "/Users/mark/notes.pdf",
           "name": "Notes",
-          "source": "file"
+          "source": "file",
+          "kind": "file",
+          "mimeType": "application/pdf",
+          "size": 9120
         }
       ]
     },
@@ -3596,9 +3683,15 @@
       "text": "Fix the marked spots.",
       "attachments": [
         {
+          "id": "att_1",
           "path": "/Users/mark/.harness/attachments/att_1.png",
           "name": "after.png",
-          "source": "file",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "size": 48213,
+          "width": 1280,
+          "height": 800,
           "annotation": {
             "width": 1280,
             "height": 800,
@@ -3621,9 +3714,12 @@
           }
         },
         {
+          "id": "att_40",
           "path": "/Users/mark/.harness/uploads/cd34/localhost.png",
           "name": "localhost.png",
           "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png",
           "annotation": {
             "width": 2560,
             "height": 1600,
@@ -3742,14 +3838,21 @@
         "text": "",
         "attachments": [
           {
+            "id": "att_41",
             "path": "/Users/mark/.harness/uploads/ab12/shot.png",
             "name": "shot.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "att_42",
             "path": "/Users/mark/notes.pdf",
             "name": "Notes",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 9120
           }
         ]
       },
@@ -3840,11 +3943,10 @@
     {
       "promptAttachments": [
         {
-          "path": "attachment:att_1",
-          "name": "after.png",
+          "id": "att_32",
           "annotation": {
-            "width": 640,
-            "height": 480,
+            "width": 1170,
+            "height": 2532,
             "marks": [
               {
                 "n": 1,
@@ -4164,9 +4266,11 @@
     ],
     "AttachmentKind": [
       "image",
-      "video"
+      "video",
+      "file"
     ],
-    "PromptAttachmentSource": [
+    "AttachmentSource": [
+      "spec",
       "file",
       "upload"
     ],

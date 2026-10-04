@@ -1299,19 +1299,28 @@
         "draft": true,
         "promptAttachments": [
           {
+            "id": "",
             "path": "/Users/me/a b/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": ""
           },
           {
+            "id": "",
             "path": "/x/y.png",
             "name": "y.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": ""
           },
           {
+            "id": "",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": ""
           }
         ],
         "blockedReason": null,
@@ -3396,11 +3405,13 @@
         "promptAttachments": [
           {
             "path": "/Users/me/Desktop/shot.png",
-            "name": "shot.png"
+            "name": "shot.png",
+            "source": "file"
           },
           {
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-            "name": "Pasted image.png"
+            "name": "Pasted image.png",
+            "source": "upload"
           }
         ]
       }
@@ -7154,11 +7165,13 @@
         "promptAttachments": [
           {
             "path": "/Users/me/Desktop/shot.png",
-            "name": "shot.png"
+            "name": "shot.png",
+            "source": "file"
           },
           {
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-            "name": "Pasted image.png"
+            "name": "Pasted image.png",
+            "source": "upload"
           }
         ]
       }
@@ -7269,11 +7282,13 @@
         "promptAttachments": [
           {
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-            "name": "Pasted image.png"
+            "name": "Pasted image.png",
+            "source": "upload"
           },
           {
             "path": "/Users/me/Desktop/shot.png",
-            "name": "shot.png"
+            "name": "shot.png",
+            "source": "file"
           }
         ]
       }
@@ -7468,7 +7483,8 @@
         "promptAttachments": [
           {
             "path": "/Users/me/Desktop/shot.png",
-            "name": "after.png"
+            "name": "after.png",
+            "source": "file"
           }
         ]
       }

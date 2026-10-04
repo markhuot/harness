@@ -193,11 +193,16 @@ export const Ticket: P.Ticket[] = [
     pullRequestUrl: null,
     draft: true,
     promptAttachments: [
-      { path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file" },
+      { id: "att_31", path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file", kind: "image", mimeType: "image/png", size: 52_311 },
       {
+        id: "att_32",
         path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
         name: "Pasted image.png",
         source: "upload",
+        kind: "image",
+        mimeType: "image/png",
+        width: 1170,
+        height: 2532,
         annotation: { width: 1170, height: 2532, marks: [{ n: 1, x: 585, y: 1200, tailX: 300, tailY: 900, message: "This overlaps the tab bar" }] },
       },
     ],
@@ -310,8 +315,19 @@ export const BrowserScreenshot: P.BrowserScreenshot[] = [
   { data: "iVBORw0KGgo=", width: 1170, height: 2532, viewport: { width: 390, height: 844 }, scale: 3, tabId: 1, url: "about:blank", title: "" },
 ];
 
-const annotatedSpecImage: P.PromptAttachment = { path: "/Users/mark/.harness/attachments/att_1.png", name: "after.png", source: "file", annotation: AttachmentAnnotation[0]! };
-const annotatedPage: P.PromptAttachment = { path: "/Users/mark/.harness/uploads/cd34/localhost.png", name: "localhost.png", source: "upload", annotation: AttachmentAnnotation[1]! };
+const annotatedSpecImage: P.Attachment = {
+  id: "att_1",
+  path: "/Users/mark/.harness/attachments/att_1.png",
+  name: "after.png",
+  source: "spec",
+  kind: "image",
+  mimeType: "image/png",
+  size: 48213,
+  width: 1280,
+  height: 800,
+  annotation: AttachmentAnnotation[0]!,
+};
+const annotatedPage: P.Attachment = { id: "att_40", path: "/Users/mark/.harness/uploads/cd34/localhost.png", name: "localhost.png", source: "upload", kind: "image", mimeType: "image/png", annotation: AttachmentAnnotation[1]! };
 
 export const Run: P.Run[] = [
   run,
@@ -319,7 +335,7 @@ export const Run: P.Run[] = [
   { ...run, id: "run_8", kind: "review", status: "queued", startedAt: null },
   { ...run, id: "run_9", kind: "chat", status: "cancelled", endedAt: T0 + 2_000 },
   { ...run, id: "run_10", kind: "complete", status: "succeeded", endedAt: T0 + 3_000 },
-  { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" }] },
+  { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ id: "att_41", path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload", kind: "image", mimeType: "image/png" }] },
   { ...run, id: "run_12", kind: "chat", prompt: "Fix the marked spots.", attachments: [annotatedSpecImage, annotatedPage] },
 ];
 
@@ -342,8 +358,8 @@ export const TranscriptContent: P.TranscriptContent[] = [
     type: "text",
     text: "",
     attachments: [
-      { path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" },
-      { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" },
+      { id: "att_41", path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload", kind: "image", mimeType: "image/png" },
+      { id: "att_42", path: "/Users/mark/notes.pdf", name: "Notes", source: "file", kind: "file", mimeType: "application/pdf", size: 9_120 },
     ],
   },
   { type: "text", text: "Fix the marked spots.", attachments: [annotatedSpecImage, annotatedPage] },
@@ -414,16 +430,20 @@ export const TaskOutput: P.TaskOutput[] = [
 ];
 
 export const Attachment: P.Attachment[] = [
-  { id: "att_1", kind: "image", mimeType: "image/png", name: "after.png", size: 48213, width: 1280, height: 800 },
-  { id: "att_2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 2_400_118 },
+  { id: "att_1", path: "/Users/mark/.harness/attachments/att_1.png", name: "after.png", source: "spec", kind: "image", mimeType: "image/png", size: 48213, width: 1280, height: 800 },
+  { id: "att_2", path: "/Users/mark/.harness/attachments/att_2.mp4", name: "flow.mp4", source: "spec", kind: "video", mimeType: "video/mp4", size: 2_400_118 },
+  { id: "att_31", path: "/Users/mark/Desktop/shot.png", name: "shot.png", source: "file", kind: "image", mimeType: "image/png" },
+  { id: "att_32", path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 1170, height: 2532 },
+  { id: "att_42", path: "/Users/mark/notes.pdf", name: "Notes", source: "file", kind: "file", mimeType: "" },
 ];
 
-export const PromptAttachment: P.PromptAttachment[] = [
-  { path: "/Users/mark/Desktop/shot.png", name: "shot.png", source: "file" },
-  { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
+export const AttachmentInput: P.AttachmentInput[] = [
+  { path: "/Users/mark/Desktop/shot.png" },
+  { path: "/Users/mark/notes.pdf", name: "Notes" },
+  { id: "att_1" },
+  { id: "att_1", name: "After", annotation: { width: 1280, height: 800, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] } },
+  { id: "att_32", path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 1170, height: 2532 },
 ];
-
-export const PromptAttachmentInput: P.PromptAttachmentInput[] = [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }];
 
 export const ActivityMeta: P.ActivityMeta[] = [
   { question: "Should HarnessEvent decode unknown kinds or drop them?" },
@@ -888,7 +908,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     key: "IMPORT-1",
     externalRef,
     draft: false,
-    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png", annotation: { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] } }, { path: "/tmp/notes.pdf" }],
+    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png", annotation: { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] } }, { id: "att_32" }],
   },
   { projectId: "prj_8f2c1a", spec: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
   { projectId: "prj_8f2c1a", spec: "In the checkout", useWorktree: false },
@@ -902,7 +922,7 @@ export const UpdateTicketBody: P.UpdateTicketBody[] = [
   { spec: "Draft brief" },
   { promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }] },
   { promptAttachments: [] },
-  { promptAttachments: [{ path: "attachment:att_1", name: "after.png", annotation: { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "Here" }] } }] },
+  { promptAttachments: [{ id: "att_32", annotation: { width: 1170, height: 2532, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "Here" }] } }] },
   {},
 ];
 
@@ -918,11 +938,11 @@ export const MessageBody: P.MessageBody[] = [
   { text: "Use Double for timestamps" },
   { text: "Re-open please", move: true },
   { text: "Back to work", move: false },
-  { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }] },
+  { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes" }] },
   { text: "See attached", move: true, attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
   {
     text: "Fix the marked spots.",
-    attachments: [{ path: "attachment:att_1", name: "after.png", annotation: AttachmentAnnotation[0]! }, { path: annotatedPage.path, name: annotatedPage.name, source: "upload", annotation: AttachmentAnnotation[1]! }, { path: "/Users/mark/Desktop/shot.png" }],
+    attachments: [{ id: "att_1", annotation: AttachmentAnnotation[0]! }, annotatedPage, { path: "/Users/mark/Desktop/shot.png" }],
   },
 ];
 
@@ -985,8 +1005,8 @@ export const enums: Record<string, readonly string[]> = {
   ActivityAuthor: all<P.ActivityAuthor>({ agent: true, human: true, system: true }),
   ActivityKind: ACTIVITY_KINDS satisfies readonly P.ActivityKind[],
   SpecRevisionAuthor: all<P.SpecRevisionAuthor>({ agent: true, human: true, system: true }),
-  AttachmentKind: all<P.AttachmentKind>({ image: true, video: true }),
-  PromptAttachmentSource: all<P.PromptAttachmentSource>({ file: true, upload: true }),
+  AttachmentKind: all<P.AttachmentKind>({ image: true, video: true, file: true }),
+  AttachmentSource: all<P.AttachmentSource>({ spec: true, file: true, upload: true }),
   WatcherMode: all<P.Watcher["mode"]>({ loop: true, interval: true }),
   WatcherLiveState: all<P.WatcherLive["state"]>({ running: true, waiting: true, stopped: true }),
   PromptId: PROMPT_IDS satisfies readonly P.PromptId[],

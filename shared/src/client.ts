@@ -7,8 +7,8 @@ import type {
   CompleteBody,
   CreateProjectBody,
   CreateTicketBody,
-  PromptAttachment,
-  PromptAttachmentInput,
+  Attachment,
+  AttachmentInput,
   DriverInfo,
   DriverModels,
   FileDiff,
@@ -211,7 +211,7 @@ export class HarnessClient {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
   /** The message goes to the agent and the transcript, with any attachments (uploaded first when they aren't on the service's machine). */
-  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: PromptAttachmentInput[] } = {}) {
+  sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: AttachmentInput[] } = {}) {
     const body: MessageBody = {
       text,
       ...(opts.move ? { move: true } : {}),
@@ -268,29 +268,15 @@ export class HarnessClient {
   specDiff(key: string, from: number, to: number) {
     return this.request<SpecDiff>("GET", `/tickets/${key}/spec/revisions/${to}${query({ diff: from })}`);
   }
-  /** Absolute URL of a ticket attachment (attachment:<id> in a spec), token in the query so <img>/<video> can load it. */
+  /** Absolute URL of any attachment's file (Attachment.id), token in the query so <img>/<video> can load it. 404 once the file is gone. */
   attachmentUrl(id: string): string {
     return `${this.baseUrl}/attachments/${encodeURIComponent(id)}?token=${encodeURIComponent(this.opts.token)}`;
   }
   /**
-   * The file of a ticket's prompt attachment (Ticket.promptAttachments[index]), with the token in
-   * the query for <img> and HEAD probes. 404 once the file is gone.
+   * Store bytes (a pasted image, a browser screenshot, a file from another device) on the service's
+   * machine. Resolves with the registered attachment to add to a draft or a message.
    */
-  promptAttachmentUrl(key: string, index: number): string {
-    return `${this.baseUrl}/tickets/${encodeURIComponent(key)}/prompt-attachments/${index}?token=${encodeURIComponent(this.opts.token)}`;
-  }
-  /**
-   * The file of an attachment sent with a message (TranscriptContent text `attachments[index]` of
-   * transcript entry `entryId`), token in the query like promptAttachmentUrl. 404 once it's gone.
-   */
-  messageAttachmentUrl(entryId: string, index: number): string {
-    return `${this.baseUrl}/transcript/${encodeURIComponent(entryId)}/attachments/${index}?token=${encodeURIComponent(this.opts.token)}`;
-  }
-  /**
-   * Store bytes (a pasted image, a file from another device) on the service's machine for a prompt
-   * attachment. Resolves with the attachment to add to a draft's promptAttachments.
-   */
-  async uploadPromptAttachment(data: Blob | ArrayBuffer | Uint8Array, name: string, mimeType?: string): Promise<PromptAttachment> {
+  async uploadAttachment(data: Blob | ArrayBuffer | Uint8Array, name: string, mimeType?: string): Promise<Attachment> {
     const res = await fetch(`${this.baseUrl}/uploads?name=${encodeURIComponent(name)}`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.opts.token}`, "content-type": mimeType || (data instanceof Blob && data.type) || "application/octet-stream" },
@@ -299,7 +285,11 @@ export class HarnessClient {
     const text = await res.text();
     const json = text ? JSON.parse(text) : {};
     if (!res.ok) throw new HarnessApiError(res.status, json.error ?? res.statusText, json.data);
-    return json.data as PromptAttachment;
+    return json.data as Attachment;
+  }
+  /** Register a file already on the service's machine (a drop or pick on the Mac when the service is local), referenced in place. */
+  registerAttachment(path: string, name?: string) {
+    return this.request<Attachment>("POST", "/attachments", name ? { path, name } : { path });
   }
 
   // Sessions (ticket + triage) and transcripts

@@ -1,94 +1,187 @@
 {
-  "addPromptAttachmentsCases": [
+  "addAttachmentsCases": [
     {
       "name": "appends in order",
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "added": [
           {
-            "path": "/Users/me/notes.pdf"
+            "id": "a2",
+            "path": "/Users/me/notes.pdf",
+            "name": "notes.pdf",
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ]
       },
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "skipped": 0
       }
     },
     {
-      "name": "a path already attached is skipped",
+      "name": "an id already attached is skipped",
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "added": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
-            "name": "again"
+            "name": "again",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       },
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "skipped": 0
       }
     },
     {
-      "name": "a path twice in one add is attached once",
+      "name": "the same id at another path is the same file",
+      "input": {
+        "list": [
+          {
+            "id": "a1",
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ],
+        "added": [
+          {
+            "id": "a1",
+            "path": "/moved.png",
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ]
+      },
+      "output": {
+        "list": [
+          {
+            "id": "a1",
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ],
+        "skipped": 0
+      }
+    },
+    {
+      "name": "twice in one add is attached once",
       "input": {
         "list": [],
         "added": [
           {
-            "path": "/x.png"
+            "id": "a3",
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           },
           {
-            "path": "/x.png"
+            "id": "a3",
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ]
       },
       "output": {
         "list": [
           {
-            "path": "/x.png",
-            "name": "x.png",
-            "source": "file"
+            "id": "a3",
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "skipped": 0
@@ -99,25 +192,53 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           }
         ],
         "added": [
           {
-            "path": "/1.png"
+            "id": "a3",
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           },
           {
-            "path": "/2.png"
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480
           },
           {
-            "path": "/3.png"
+            "id": "att_2",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480
           }
         ],
         "max": 3
@@ -125,19 +246,31 @@
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           },
           {
-            "path": "/1.png",
-            "name": "1.png",
-            "source": "file"
+            "id": "a3",
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "skipped": 2
@@ -148,17 +281,32 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "added": [
           {
-            "path": "/Users/me/Desktop/shot.png"
+            "id": "a1",
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
-            "path": "/2.png"
+            "id": "a3",
+            "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "max": 1
@@ -166,9 +314,12 @@
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "skipped": 1
@@ -179,9 +330,12 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "added": []
@@ -189,42 +343,62 @@
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "skipped": 0
       }
     }
   ],
-  "annotatePromptAttachmentCases": [
+  "annotateAttachmentCases": [
     {
-      "name": "a file already there gets the annotation in place",
+      "name": "a file already there is annotated in place",
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
-            "path": "/Users/me/notes.pdf",
-            "name": "notes.pdf",
-            "source": "file"
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480
           }
         ],
-        "input": {
-          "path": "/Users/me/Desktop/shot.png"
+        "attachment": {
+          "id": "att_1",
+          "path": "/Users/me/.harness/attachments/att_1.png",
+          "name": "After",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 640,
+          "height": 480
         },
         "annotation": {
-          "width": 10,
-          "height": 10,
+          "width": 640,
+          "height": 480,
           "marks": [
             {
               "n": 1,
-              "x": 1,
-              "y": 1,
+              "x": 10,
+              "y": 20,
+              "tailX": 200,
+              "tailY": 120,
               "message": "here"
             }
           ]
@@ -233,101 +407,147 @@
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
             "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          },
+          {
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480,
             "annotation": {
-              "width": 10,
-              "height": 10,
+              "width": 640,
+              "height": 480,
               "marks": [
                 {
                   "n": 1,
-                  "x": 1,
-                  "y": 1,
+                  "x": 10,
+                  "y": 20,
+                  "tailX": 200,
+                  "tailY": 120,
                   "message": "here"
                 }
               ]
             }
-          },
-          {
-            "path": "/Users/me/notes.pdf",
-            "name": "notes.pdf",
-            "source": "file"
           }
         ],
         "skipped": false
       }
     },
     {
-      "name": "null takes it off",
+      "name": "null takes it off and keeps the file",
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
             "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          },
+          {
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480,
             "annotation": {
-              "width": 10,
-              "height": 10,
+              "width": 640,
+              "height": 480,
               "marks": [
                 {
                   "n": 1,
-                  "x": 1,
-                  "y": 1,
+                  "x": 10,
+                  "y": 20,
+                  "tailX": 200,
+                  "tailY": 120,
                   "message": "here"
                 }
               ]
             }
-          },
-          {
-            "path": "/Users/me/notes.pdf",
-            "name": "notes.pdf",
-            "source": "file"
           }
         ],
-        "input": {
-          "path": "/Users/me/Desktop/shot.png"
+        "attachment": {
+          "id": "att_1",
+          "path": "/Users/me/.harness/attachments/att_1.png",
+          "name": "After",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 640,
+          "height": 480
         },
         "annotation": null
       },
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
-            "path": "/Users/me/notes.pdf",
-            "name": "notes.pdf",
-            "source": "file"
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480
           }
         ],
         "skipped": false
       }
     },
     {
-      "name": "a new file is added with it",
+      "name": "another file is added with it",
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
-        "input": {
-          "path": "attachment:att_1",
-          "name": "after.png"
+        "attachment": {
+          "id": "att_1",
+          "path": "/Users/me/.harness/attachments/att_1.png",
+          "name": "After",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 640,
+          "height": 480
         },
         "annotation": {
-          "width": 10,
-          "height": 10,
+          "width": 640,
+          "height": 480,
           "marks": [
             {
               "n": 1,
-              "x": 1,
-              "y": 1,
+              "x": 10,
+              "y": 20,
+              "tailX": 200,
+              "tailY": 120,
               "message": "here"
             }
           ]
@@ -336,22 +556,32 @@
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
-            "path": "attachment:att_1",
-            "name": "after.png",
-            "source": "file",
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480,
             "annotation": {
-              "width": 10,
-              "height": 10,
+              "width": 640,
+              "height": 480,
               "marks": [
                 {
                   "n": 1,
-                  "x": 1,
-                  "y": 1,
+                  "x": 10,
+                  "y": 20,
+                  "tailX": 200,
+                  "tailY": 120,
                   "message": "here"
                 }
               ]
@@ -366,27 +596,43 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           }
         ],
-        "input": {
-          "path": "/x.png"
+        "attachment": {
+          "id": "att_1",
+          "path": "/Users/me/.harness/attachments/att_1.png",
+          "name": "After",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 640,
+          "height": 480
         },
         "annotation": {
-          "width": 10,
-          "height": 10,
+          "width": 640,
+          "height": 480,
           "marks": [
             {
               "n": 1,
-              "x": 1,
-              "y": 1,
+              "x": 10,
+              "y": 20,
+              "tailX": 200,
+              "tailY": 120,
               "message": "here"
             }
           ]
@@ -396,18 +642,288 @@
       "output": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           }
         ],
         "skipped": true
       }
+    }
+  ],
+  "attachmentFromInputCases": [
+    {
+      "name": "a full attachment stays as it is",
+      "input": {
+        "id": "att_1",
+        "path": "/Users/me/.harness/attachments/att_1.png",
+        "name": "After",
+        "source": "spec",
+        "kind": "image",
+        "mimeType": "image/png",
+        "width": 640,
+        "height": 480
+      },
+      "output": {
+        "id": "att_1",
+        "path": "/Users/me/.harness/attachments/att_1.png",
+        "name": "After",
+        "source": "spec",
+        "kind": "image",
+        "mimeType": "image/png",
+        "width": 640,
+        "height": 480
+      }
+    },
+    {
+      "name": "an annotated one keeps its notes",
+      "input": {
+        "id": "a3",
+        "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+        "name": "Pasted image.png",
+        "source": "upload",
+        "kind": "image",
+        "mimeType": "image/png",
+        "width": 800,
+        "height": 600,
+        "annotation": {
+          "width": 640,
+          "height": 480,
+          "marks": [
+            {
+              "n": 1,
+              "x": 10,
+              "y": 20,
+              "tailX": 200,
+              "tailY": 120,
+              "message": "here"
+            }
+          ]
+        }
+      },
+      "output": {
+        "id": "a3",
+        "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
+        "name": "Pasted image.png",
+        "source": "upload",
+        "kind": "image",
+        "mimeType": "image/png",
+        "width": 800,
+        "height": 600,
+        "annotation": {
+          "width": 640,
+          "height": 480,
+          "marks": [
+            {
+              "n": 1,
+              "x": 10,
+              "y": 20,
+              "tailX": 200,
+              "tailY": 120,
+              "message": "here"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a bare path: name and kind from it",
+      "input": {
+        "path": "/a/shot.PNG"
+      },
+      "output": {
+        "id": "",
+        "path": "/a/shot.PNG",
+        "name": "shot.PNG",
+        "source": "file",
+        "kind": "image",
+        "mimeType": ""
+      }
+    },
+    {
+      "name": "a video",
+      "input": {
+        "path": "/a/flow.mov"
+      },
+      "output": {
+        "id": "",
+        "path": "/a/flow.mov",
+        "name": "flow.mov",
+        "source": "file",
+        "kind": "video",
+        "mimeType": ""
+      }
+    },
+    {
+      "name": "another file",
+      "input": {
+        "path": "/a/report.pdf"
+      },
+      "output": {
+        "id": "",
+        "path": "/a/report.pdf",
+        "name": "report.pdf",
+        "source": "file",
+        "kind": "file",
+        "mimeType": ""
+      }
+    },
+    {
+      "name": "a given name, trimmed",
+      "input": {
+        "path": "/a/shot.png",
+        "name": " After "
+      },
+      "output": {
+        "id": "",
+        "path": "/a/shot.png",
+        "name": "After",
+        "source": "file",
+        "kind": "file",
+        "mimeType": ""
+      }
+    },
+    {
+      "name": "a blank name falls back",
+      "input": {
+        "path": "/a/shot.png",
+        "name": "  "
+      },
+      "output": {
+        "id": "",
+        "path": "/a/shot.png",
+        "name": "shot.png",
+        "source": "file",
+        "kind": "image",
+        "mimeType": ""
+      }
+    },
+    {
+      "name": "a bare id",
+      "input": {
+        "id": "att_9"
+      },
+      "output": {
+        "id": "att_9",
+        "path": "",
+        "name": "file",
+        "source": "file",
+        "kind": "file",
+        "mimeType": ""
+      }
+    }
+  ],
+  "attachmentInputsCases": [
+    {
+      "name": "none",
+      "input": [],
+      "output": []
+    },
+    {
+      "name": "each whole, annotations included",
+      "input": [
+        {
+          "id": "a1",
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png"
+        },
+        {
+          "id": "att_1",
+          "path": "/Users/me/.harness/attachments/att_1.png",
+          "name": "After",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 640,
+          "height": 480,
+          "annotation": {
+            "width": 640,
+            "height": 480,
+            "marks": [
+              {
+                "n": 1,
+                "x": 10,
+                "y": 20,
+                "tailX": 200,
+                "tailY": 120,
+                "message": "here"
+              }
+            ]
+          }
+        }
+      ],
+      "output": [
+        {
+          "id": "a1",
+          "path": "/Users/me/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png"
+        },
+        {
+          "id": "att_1",
+          "path": "/Users/me/.harness/attachments/att_1.png",
+          "name": "After",
+          "source": "spec",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 640,
+          "height": 480,
+          "annotation": {
+            "width": 640,
+            "height": 480,
+            "marks": [
+              {
+                "n": 1,
+                "x": 10,
+                "y": 20,
+                "tailX": 200,
+                "tailY": 120,
+                "message": "here"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "attachmentIsImageCases": [
+    {
+      "name": "image",
+      "input": {
+        "kind": "image"
+      },
+      "output": true
+    },
+    {
+      "name": "video",
+      "input": {
+        "kind": "video"
+      },
+      "output": false
+    },
+    {
+      "name": "file",
+      "input": {
+        "kind": "file"
+      },
+      "output": false
     }
   ],
   "fileBaseNameCases": [
@@ -479,222 +995,60 @@
       "output": "Pasted image.png"
     }
   ],
-  "promptAttachmentFromInputCases": [
-    {
-      "name": "name from the path",
-      "input": {
-        "path": "/a/shot.png"
-      },
-      "output": {
-        "path": "/a/shot.png",
-        "name": "shot.png",
-        "source": "file"
-      }
-    },
-    {
-      "name": "a given name",
-      "input": {
-        "path": "/a/shot.png",
-        "name": "After"
-      },
-      "output": {
-        "path": "/a/shot.png",
-        "name": "After",
-        "source": "file"
-      }
-    },
-    {
-      "name": "a blank name falls back",
-      "input": {
-        "path": "/a/shot.png",
-        "name": "  "
-      },
-      "output": {
-        "path": "/a/shot.png",
-        "name": "shot.png",
-        "source": "file"
-      }
-    },
-    {
-      "name": "a name is trimmed",
-      "input": {
-        "path": "/a/shot.png",
-        "name": " After "
-      },
-      "output": {
-        "path": "/a/shot.png",
-        "name": "After",
-        "source": "file"
-      }
-    },
-    {
-      "name": "an upload keeps its source",
-      "input": {
-        "path": "/u/x.png",
-        "source": "upload"
-      },
-      "output": {
-        "path": "/u/x.png",
-        "name": "x.png",
-        "source": "upload"
-      }
-    }
-  ],
-  "promptAttachmentInputsCases": [
-    {
-      "name": "none",
-      "input": [],
-      "output": []
-    },
-    {
-      "name": "path and name only",
-      "input": [
-        {
-          "path": "/Users/me/Desktop/shot.png",
-          "name": "shot.png",
-          "source": "file"
-        },
-        {
-          "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-          "name": "Pasted image.png",
-          "source": "upload"
-        }
-      ],
-      "output": [
-        {
-          "path": "/Users/me/Desktop/shot.png",
-          "name": "shot.png"
-        },
-        {
-          "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-          "name": "Pasted image.png"
-        }
-      ]
-    }
-  ],
-  "promptAttachmentIsImageCases": [
-    {
-      "name": "png",
-      "input": {
-        "name": "shot.png",
-        "path": "/a/shot.png"
-      },
-      "output": true
-    },
-    {
-      "name": "upper-case JPG",
-      "input": {
-        "name": "IMG.JPG",
-        "path": "/a/IMG.JPG"
-      },
-      "output": true
-    },
-    {
-      "name": "jpeg",
-      "input": {
-        "name": "a.jpeg",
-        "path": "/a/a.jpeg"
-      },
-      "output": true
-    },
-    {
-      "name": "webp",
-      "input": {
-        "name": "a.webp",
-        "path": "/a/a.webp"
-      },
-      "output": true
-    },
-    {
-      "name": "gif",
-      "input": {
-        "name": "a.gif",
-        "path": "/a/a.gif"
-      },
-      "output": true
-    },
-    {
-      "name": "bmp",
-      "input": {
-        "name": "a.bmp",
-        "path": "/a/a.bmp"
-      },
-      "output": true
-    },
-    {
-      "name": "pdf",
-      "input": {
-        "name": "notes.pdf",
-        "path": "/a/notes.pdf"
-      },
-      "output": false
-    },
-    {
-      "name": "heic",
-      "input": {
-        "name": "IMG.heic",
-        "path": "/a/IMG.heic"
-      },
-      "output": false
-    },
-    {
-      "name": "no extension",
-      "input": {
-        "name": "Makefile",
-        "path": "/a/Makefile"
-      },
-      "output": false
-    },
-    {
-      "name": "a name without one falls back to the path",
-      "input": {
-        "name": "After",
-        "path": "/a/shot.png"
-      },
-      "output": true
-    },
-    {
-      "name": "a dot folder isn't an extension",
-      "input": {
-        "name": "file",
-        "path": "/a.png/file"
-      },
-      "output": false
-    }
-  ],
-  "removePromptAttachmentCases": [
+  "removeAttachmentCases": [
     {
       "name": "first",
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "index": 0
       },
       "output": [
         {
+          "id": "a2",
           "path": "/Users/me/notes.pdf",
           "name": "notes.pdf",
-          "source": "file"
+          "source": "file",
+          "kind": "file",
+          "mimeType": "application/pdf",
+          "size": 912
         },
         {
+          "id": "a3",
           "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
           "name": "Pasted image.png",
-          "source": "upload"
+          "source": "upload",
+          "kind": "image",
+          "mimeType": "image/png",
+          "width": 800,
+          "height": 600
         }
       ]
     },
@@ -703,33 +1057,52 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": "application/pdf",
+            "size": 912
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "index": 2
       },
       "output": [
         {
+          "id": "a1",
           "path": "/Users/me/Desktop/shot.png",
           "name": "shot.png",
-          "source": "file"
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png"
         },
         {
+          "id": "a2",
           "path": "/Users/me/notes.pdf",
           "name": "notes.pdf",
-          "source": "file"
+          "source": "file",
+          "kind": "file",
+          "mimeType": "application/pdf",
+          "size": 912
         }
       ]
     },
@@ -738,18 +1111,24 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "index": 4
       },
       "output": [
         {
+          "id": "a1",
           "path": "/Users/me/Desktop/shot.png",
           "name": "shot.png",
-          "source": "file"
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png"
         }
       ]
     },
@@ -758,23 +1137,29 @@
       "input": {
         "list": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "index": -1
       },
       "output": [
         {
+          "id": "a1",
           "path": "/Users/me/Desktop/shot.png",
           "name": "shot.png",
-          "source": "file"
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png"
         }
       ]
     }
   ],
-  "samePromptAttachmentsCases": [
+  "sameAttachmentsCases": [
     {
       "name": "both empty",
       "input": {
@@ -788,26 +1173,42 @@
       "input": {
         "x": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "y": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ]
       },
@@ -818,26 +1219,42 @@
       "input": {
         "x": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ],
         "y": [
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           },
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       },
@@ -848,36 +1265,177 @@
       "input": {
         "x": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "y": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "other.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       },
       "output": false
     },
     {
-      "name": "source alone doesn't count",
+      "name": "another id",
       "input": {
         "x": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "y": [
           {
+            "id": "a9",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "upload"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ]
+      },
+      "output": false
+    },
+    {
+      "name": "an annotation added",
+      "input": {
+        "x": [
+          {
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480
+          }
+        ],
+        "y": [
+          {
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480,
+            "annotation": {
+              "width": 640,
+              "height": 480,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 10,
+                  "y": 20,
+                  "tailX": 200,
+                  "tailY": 120,
+                  "message": "here"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "output": false
+    },
+    {
+      "name": "an annotation changed",
+      "input": {
+        "x": [
+          {
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480,
+            "annotation": {
+              "width": 640,
+              "height": 480,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 10,
+                  "y": 20,
+                  "tailX": 200,
+                  "tailY": 120,
+                  "message": "here"
+                }
+              ]
+            }
+          }
+        ],
+        "y": [
+          {
+            "id": "att_1",
+            "path": "/Users/me/.harness/attachments/att_1.png",
+            "name": "After",
+            "source": "spec",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480,
+            "annotation": {
+              "width": 640,
+              "height": 480,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 10,
+                  "y": 20,
+                  "tailX": 200,
+                  "tailY": 120,
+                  "message": "there"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "output": false
+    },
+    {
+      "name": "size alone doesn't count",
+      "input": {
+        "x": [
+          {
+            "id": "a1",
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ],
+        "y": [
+          {
+            "id": "a1",
+            "path": "/Users/me/Desktop/shot.png",
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png",
+            "size": 99
           }
         ]
       },
@@ -888,42 +1446,36 @@
       "input": {
         "x": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "y": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
             "name": "shot.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a3",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "width": 800,
+            "height": 600
           }
         ]
       },
       "output": false
-    }
-  ],
-  "specAttachmentIdOfCases": [
-    {
-      "name": "a reference",
-      "input": "attachment:att_9",
-      "output": "att_9"
-    },
-    {
-      "name": "a path",
-      "input": "/Users/me/attachment:x.png",
-      "output": null
-    },
-    {
-      "name": "no id",
-      "input": "attachment:",
-      "output": null
     }
   ]
 }
