@@ -1,26 +1,30 @@
 // Annotations end to end in the built app, against the REAL service (throwaway HARNESS_HOME, dummy
-// driver, real headless Chrome for the session browser). Annotating never sends anything: Add to
-// message puts the annotated picture, with its notes, in the message being written.
+// driver, real headless Chrome for the session browser). An annotation is metadata on its
+// attachment: Add to message puts the attachment, with its notes, in the message being written;
+// nothing is sent until the human sends that message, and the image itself never changes.
 //
-//   1. A spec image → Annotate: two arrows dragged and one spot clicked, each with its message; a
+//   1. A spec image → Annotate: two arrows dragged and a spot clicked, each with its message; a
 //      mark moved and deleted with the Delete key (the list renumbers, the badges follow), ⌘Z
-//      bringing it back, × on a row; the notes never over the image. Add to message: nothing went
-//      to the agent, the composer lists the picture with "2 notes" and has the focus; the human
-//      types why and sends: the Transcript entry has the text, the picture and the notes, and so
-//      does its run.
-//   2. A Transcript message attachment → Annotate (Esc asks before discarding) → Add → composer;
-//      that waiting picture annotated again (its marks reopen to edit; Cancel untouched doesn't
-//      ask), and a plain waiting file annotated: each replaced in place. Sent: both pictures, notes
-//      on each, the plain one's source the file.
-//   3. The browser pane's Annotate (a frozen screenshot of a local page) → Add → composer → sent.
-//   4. New session: an attached image annotated in place, its row shows the notes, saved with the
-//      draft; reopened after a reload it shows the notes without offering Annotate. Plan first:
-//      the first run's prompt lists <annotations>, and the Spec tab shows the notes.
+//      bringing it back, × on a row and ⌘Z again; the notes never over the image. Add to message:
+//      nothing went to the agent; the composer lists the image as attachment:<id> with its marks
+//      over the thumbnail and "3 notes", and has the focus.
+//   2. That waiting image opens in the lightbox with its marks drawn over it, and Annotate again
+//      reopens its marks: one edited, Add: still one row. The human types why and sends: the
+//      Transcript entry's attachment is the spec image's stored file with the annotation (3 marks
+//      in image pixels), so is its run's, and the stored file's bytes are unchanged.
+//   3. The sent image in the Transcript: marks over its thumbnail and in the lightbox; Annotate
+//      reopens the sent marks, one more click, Add → the composer.
+//   4. The browser pane's Annotate (a frozen screenshot of a local page) → Add → a second composer
+//      row whose annotation has the page. Sent together.
+//   5. New session: an attached image annotated in place, its row shows the marks and notes, saved
+//      with the draft; reopened after a reload it still offers Annotate, which reopens the marks to
+//      edit. Plan first: the Spec tab shows the marks and notes, and the run's prompt has the notes.
 //
 //   bun run build && bun scripts/annotate-check.ts [--shots=<dir>] [--theme=dark]
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { MessageAnnotation, Project, PromptAttachment, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
+import type { AttachmentAnnotation, Project, PromptAttachment, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
 import { png } from "./lib/png";
@@ -33,10 +37,9 @@ const home = tempDir("harness-annotate-home-");
 const projectDir = tempDir("harness-annotate-project-");
 mkdirSync(join(projectDir, "shots"), { recursive: true });
 writeFileSync(join(projectDir, "shots", "mockup.png"), png(480, 320, [226, 232, 240], [148, 163, 184]));
-const whiteboard = join(projectDir, "whiteboard.png");
-writeFileSync(whiteboard, png(200, 120, [254, 243, 199], [251, 191, 36]));
-const composerFile = join(projectDir, "pending.png");
-writeFileSync(composerFile, png(64, 64, [37, 99, 235], [16, 185, 129]));
+const diagram = join(projectDir, "diagram.png");
+writeFileSync(diagram, png(400, 260, [254, 243, 199], [251, 191, 36]));
+const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 
 // A plain local page for the session browser.
 const site = Bun.serve({
@@ -62,36 +65,38 @@ const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
 const counter = checker();
 const { check } = counter;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
+/** A screenshot of the window at 1× (one image pixel per CSS pixel), whatever the display's scale. */
 const shot = async (name: string) => {
   if (!shots || !app) return;
   await Bun.sleep(400);
-  await app.screenshot(join(shots, `annotate-${name}-${theme}.png`));
+  const size = await app.js<{ w: number; h: number; dpr: number }>(`({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio })`);
+  const r = await app.cdp("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: size.w, height: size.h, scale: 1 / size.dpr } });
+  const file = join(shots, `annotate-${name}-${theme}.png`);
+  writeFileSync(file, Buffer.from(r.result.data, "base64"));
+  console.log(`  📸 ${file}`);
 };
 
 type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+type TextContent = { text: string; attachments?: PromptAttachment[] };
 
 try {
   await waitHealthy(base, 15000);
   const token = readFileSync(join(home, "token"), "utf8").trim();
   const api = makeApi(base, token);
+  const fetchBytes = async (path: string) => new Uint8Array(await (await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` } })).arrayBuffer());
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "annotate", key: "ANN" });
   // The dummy agent puts a screenshot in the spec (stored as attachment:<id>) and opens the local page.
   const tools = [
     { name: "update_spec", input: { base_revision: 1, note: "Added the mockup", spec: "# Settings page\n\n![Settings mockup](shots/mockup.png)\n\nMake it match.\n" } },
     { name: "browser_open", input: { url: pageUrl } },
   ];
-  const ticket = await api<Ticket>("POST", "/tickets", {
-    projectId: project.id,
-    spec: `/tools ${JSON.stringify(tools)}`,
-    driver: "dummy",
-    start: true,
-    promptAttachments: [{ path: whiteboard, name: "whiteboard.png", source: "file" }],
-  });
-  const detail = () => api<TicketDetail>("GET", `/tickets/${ticket.key}`);
-  await until("the spec has the mockup", async () => /\]\(attachment:[^)]+\)/.test((await detail()).ticket.spec), 30000);
+  const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: `/tools ${JSON.stringify(tools)}`, driver: "dummy", start: true });
+  const detail = (key = ticket.key) => api<TicketDetail>("GET", `/tickets/${key}`);
+  const specId = await until("the spec has the mockup", async () => /\]\(attachment:([^)]+)\)/.exec((await detail()).ticket.spec)?.[1], 30000);
   await until("the agent is idle", async () => !(await detail()).ticket.busy, 30000);
-  const transcript = () => api<TranscriptEntry[]>("GET", `/sessions/${ticket.sessionId}/transcript?after=0`);
-  const annotatedEntries = async () => (await transcript()).filter((e) => e.role === "user" && e.content.type === "text" && !!e.content.annotations?.length);
+  const specBytesBefore = await fetchBytes(`/attachments/${encodeURIComponent(specId)}`);
+  const transcript = (sessionId = ticket.sessionId) => api<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript?after=0`);
+  const userMessages = async () => (await transcript()).filter((e) => e.role === "user" && e.content.type === "text" && !!(e.content as TextContent).attachments?.length);
 
   app = await launchApp({ baseUrl: base, token, theme, env: {} });
   const { js, exists, go, cdp, type, key } = app;
@@ -125,7 +130,7 @@ try {
   const rows = () => js<{ n: string; message: string }[]>(`[...document.querySelectorAll('[data-testid="annotator-row"]')].map(r => ({ n: r.querySelector(".annotator-badge").textContent.trim(), message: r.querySelector("textarea").value }))`);
   const focusedRow = () => js<string | null>(`document.activeElement?.closest('[data-testid="annotator-row"]')?.dataset.n ?? null`);
   const typeIn = (n: number, text: string) => type(`[data-testid="annotator-row"][data-n="${n}"] textarea`, text);
-  /** The canvas pixel at fractions of the image, as "accent" (the badge fill), "white", or something else. */
+  /** The canvas pixel at fractions of the image. */
   const pixel = (fx: number, fy: number) =>
     js<number[]>(`(() => { const c = document.querySelector('[data-testid="annotator-canvas"]'); const d = c.getContext("2d").getImageData(Math.floor(c.width * ${fx}), Math.floor(c.height * ${fy}), 1, 1).data; return [d[0], d[1], d[2]]; })()`);
   const accent = await js<number[]>(`(() => { const s = document.createElement("span"); s.style.color = "var(--accent)"; document.body.append(s); const c = getComputedStyle(s).color; s.remove(); const m = c.match(/[\\d.]+/g).map(Number); return m.slice(0, 3); })()`);
@@ -140,33 +145,33 @@ try {
   };
   const noOverlap = async () => {
     const c = (await canvasRect())!;
-    const others = await js<Rect[]>(`[...document.querySelectorAll('[data-testid="annotator-side"], [data-testid="annotator-row"], [data-testid="annotator-message"], [data-testid="annotator-note"]')].map(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; })`);
+    const others = await js<Rect[]>(`[...document.querySelectorAll('[data-testid="annotator-side"], [data-testid="annotator-row"], [data-testid="annotator-message"]')].map(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; })`);
     const hits = others.filter((o) => o.left < c.right && o.right > c.left && o.top < c.bottom && o.bottom > c.top);
     return { ok: others.length > 0 && hits.length === 0, detail: `${others.length} elements, ${hits.length} over the image` };
   };
   const annotatorOpen = () => until("the annotator's image", async () => ((await canvasRect())?.width ?? 0) > 0, 10000).then(() => true, () => false);
-
-  // ================================================================ the composer's own list: no Annotate
-  await go(`#/board/${project.id}/ticket/${ticket.key}/spec`);
-  await until("the composer", () => exists('[data-testid="composer"] .composer-input'), 10000);
-  const doc = await cdp("DOM.getDocument", {});
-  const input = await cdp("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: '[data-testid="composer-attach-input"]' });
-  await cdp("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: [composerFile] });
-  await until("composer attachment", () => exists('[data-testid="composer"] [data-testid="prompt-attachment"]'), 5000);
-  await js(`document.querySelector('[data-testid="composer"] .prompt-attachment-row-open').click()`);
-  await until("composer lightbox", () => exists(".lightbox-stage img"), 5000);
-  check("a file waiting in the composer opens in the lightbox without Annotate", !(await exists('[data-testid="lightbox-annotate"]')));
-  await key("Escape", "Escape", 27);
-  await js(`document.querySelector('[data-testid="composer"] [data-testid="prompt-attachment-remove"]').click()`);
-
-  // ================================================================ the Spec tab's prompt attachments: Annotate
-  await until("the Spec tab's attachments", () => exists('[data-testid="spec-prompt-attachments"] .prompt-attachment-row-open'), 10000);
-  await js(`document.querySelector('[data-testid="spec-prompt-attachments"] .prompt-attachment-row-open').click()`);
-  const promptAnnotate = await until("prompt attachment Annotate", () => exists('[data-testid="lightbox-annotate"]'), 5000).catch(() => false);
-  check("a prompt attachment on the Spec tab offers Annotate", promptAnnotate);
-  await key("Escape", "Escape", 27);
+  /** An overlay canvas (`sel`) that's on screen, says how many marks it draws, and has accent pixels on it. */
+  const overlay = (sel: string) =>
+    js<{ marks: number; accent: number; w: number; h: number } | null>(`(() => {
+      const c = document.querySelector(${JSON.stringify(sel)}); if (!c || !c.width) return null;
+      const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200 && Math.abs(d[i] - ${accent[0]}) < 40 && Math.abs(d[i + 1] - ${accent[1]}) < 40 && Math.abs(d[i + 2] - ${accent[2]}) < 40) n++;
+      const r = c.getBoundingClientRect();
+      return { marks: Number(c.dataset.marks), accent: n, w: Math.round(r.width), h: Math.round(r.height) };
+    })()`);
+  const composerRows = () =>
+    js<{ path: string; notes: string | null; thumbMarks: number | null }[]>(`[...document.querySelectorAll('[data-testid="composer"] [data-testid="prompt-attachment"]')].map(el => ({
+      path: el.dataset.path, notes: el.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? null,
+      thumbMarks: el.querySelector('[data-testid="thumbnail-annotation"]') ? Number(el.querySelector('[data-testid="thumbnail-annotation"]').dataset.marks) : null }))`);
+  const openNotes = (scope: string) =>
+    js<string[]>(`(() => { const b = document.querySelector(${JSON.stringify(`${scope} [data-testid="annotation-notes"] button`)}); if (b && b.getAttribute("aria-expanded") !== "true") b.click();
+      return [...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid="annotation-notes-list"] li`)})].map(li => li.textContent.trim()); })()`);
+  const typeComposer = (text: string) => type('[data-testid="composer"] .composer-input', text);
+  const sendComposer = () => js(`document.querySelector('[data-testid="composer-send"]').click()`);
 
   // ================================================================ 1. a spec image
+  await go(`#/board/${project.id}/ticket/${ticket.key}/spec`);
+  await until("the composer", () => exists('[data-testid="composer"] .composer-input'), 10000);
   const fig = await until("the spec's figure", () => exists(".md img"), 10000).catch(() => false);
   check("the spec shows the mockup", fig);
   await js(`document.querySelector(".md img").click()`);
@@ -174,12 +179,13 @@ try {
   check("the spec image's lightbox offers Annotate", await exists('[data-testid="lightbox-annotate"]'));
   await js(`document.querySelector('[data-testid="lightbox-annotate"]').click()`);
   check("Annotate opens the annotator on the image (and closes the lightbox)", (await annotatorOpen()) && !(await exists(".lightbox-stage")));
-  check("Send waits for a note", await js<boolean>(`document.querySelector('[data-testid="annotator-send"]').disabled`));
+  check("Add to message waits for a note", await js<boolean>(`document.querySelector('[data-testid="annotator-add"]').disabled`));
 
   await drag([0.25, 0.3], [0.55, 0.15]);
   check("dragging makes note 1 and focuses its field", (await rows()).length === 1 && (await focusedRow()) === "1");
   await typeIn(1, "Make this heading bolder");
   await drag([0.7, 0.75], [0.45, 0.88]);
+  check("a second drag makes note 2", (await rows()).length === 2 && (await focusedRow()) === "2");
   await typeIn(2, "This spacing is off");
   await click([0.85, 0.3]);
   check("a plain click makes note 3", (await rows()).length === 3 && (await focusedRow()) === "3");
@@ -200,52 +206,108 @@ try {
   list = await rows();
   check("⌘Z brings it back with its message", list.length === 3 && list[1]!.message === "This spacing is off", JSON.stringify(list));
   await js(`document.querySelectorAll('[data-testid="annotator-remove"]')[1].click()`);
+  check("× on a row deletes that note", (await rows()).map((r) => r.message).join("|") === "Make this heading bolder|Add the Save button here");
+  await js(`document.activeElement?.blur(); document.querySelector('[data-testid="annotator-canvas"]').focus()`);
+  await key("z", "KeyZ", 90, 4);
   list = await rows();
-  check("× on a row deletes that note", list.map((r) => `${r.n}:${r.message}`).join("|") === "1:Make this heading bolder|2:Add the Save button here", JSON.stringify(list));
-  await type('[data-testid="annotator-note"]', "Two things on the settings mockup.");
-  await shot("annotator-renumbered");
+  check("⌘Z brings that one back too", list.map((r) => r.message).join("|") === "Make this heading bolder|This spacing is off|Add the Save button here", JSON.stringify(list));
 
-  await js(`document.querySelector('[data-testid="annotator-send"]').click()`);
-  const first = await until("the annotated message reaches the service", async () => (await annotatedEntries())[0], 15000);
-  check("after sending, the annotator closes and the Transcript shows", await until("transcript tab", async () => !(await exists('[data-testid="annotator"]')) && (await exists('.tab.on[data-tab="transcript"]')), 8000).catch(() => false));
-  const c1 = first.content as { text: string; attachments?: PromptAttachment[]; annotations?: MessageAnnotation[] };
-  const a1 = c1.annotations![0]!;
-  check("the note is the message's text", c1.text === "Two things on the settings mockup.", c1.text);
-  check("one annotated picture is attached, named after the source", c1.attachments?.length === 1 && c1.attachments[0]!.name === "annotated-Settings-mockup.png", JSON.stringify(c1.attachments));
-  check("its source is the spec attachment", a1.source.kind === "attachment" && a1.source.name === "Settings mockup", JSON.stringify(a1.source));
-  check("at the image's own size, with two marks: an arrow and a click", a1.width === 480 && a1.height === 320 && a1.marks.length === 2 && a1.marks[0]!.tailX !== undefined && a1.marks[1]!.tailX === undefined, JSON.stringify(a1));
-  check("marks in image pixels, numbered, with their messages", a1.marks[0]!.n === 1 && Math.abs(a1.marks[0]!.x - 120) <= 3 && Math.abs(a1.marks[0]!.y - 96) <= 3 && a1.marks[1]!.message === "Add the Save button here", JSON.stringify(a1.marks));
-  const runs = (await detail()).runs;
-  check("the run that took the message has the annotations too", runs.some((r) => r.annotations?.[0]?.marks.length === 2), JSON.stringify(runs.map((r) => r.annotations?.length ?? 0)));
+  const messagesBefore = (await userMessages()).length;
+  await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
+  await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 5000);
+  await Bun.sleep(500);
+  check("Add to message sends nothing", (await userMessages()).length === messagesBefore);
+  let crow = await until("the composer row", async () => (await composerRows())[0], 5000).catch(() => null);
+  check("the composer lists the spec image by reference, with its marks over the thumbnail and 3 notes", crow?.path === `attachment:${specId}` && crow.notes === "3 notes" && crow.thumbMarks === 3, JSON.stringify(crow));
+  const thumb = await until("the thumbnail's marks", async () => {
+    const o = await overlay('[data-testid="composer"] [data-testid="thumbnail-annotation"]');
+    return o && o.accent > 0 ? o : null;
+  }, 5000).catch(() => null);
+  check("the thumbnail draws the marks (32×32, accent pixels on it)", !!thumb && thumb.w === 32 && thumb.h === 32, JSON.stringify(thumb));
+  check("the thumbnail is the spec image itself", await until("composer thumbnail", () => js<boolean>(`(document.querySelector('[data-testid="composer"] [data-testid="prompt-attachment"] img')?.naturalWidth ?? 0) === 480`), 5000).catch(() => false));
+  check("the composer's input has the focus", await js<boolean>(`document.activeElement === document.querySelector('[data-testid="composer"] .composer-input')`));
 
-  const sentImage = await until("the annotated image in the Transcript", () => js<number[] | null>(`(() => { const i = document.querySelector('[data-testid="message-attachments"] img'); return i && i.naturalWidth ? [i.naturalWidth, i.naturalHeight] : null; })()`), 10000).catch(() => null);
-  check("the Transcript shows the annotated image the service has", JSON.stringify(sentImage) === "[480,320]", JSON.stringify(sentImage));
-  check("under it: 2 notes, closed", (await js<string>(`document.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? ""`)).startsWith("2 notes") && !(await exists('[data-testid="annotation-notes-list"]')));
-  await js(`document.querySelector('[data-testid="annotation-notes"] button').click()`);
-  const notes = await js<string[]>(`[...document.querySelectorAll('[data-testid="annotation-notes-list"] li')].map(li => li.textContent.trim())`);
-  check("which open to the numbered list", notes.join("|") === "1Make this heading bolder|2Add the Save button here", JSON.stringify(notes));
-  await js(`document.querySelector('[data-testid="annotation-notes"]').scrollIntoView({ block: "center" })`);
-  await shot("transcript-notes");
-
-  // ================================================================ 2. a Transcript message attachment
-  await js(`document.querySelector('[data-testid="message-attachments"] .prompt-attachment-row-open').click()`);
-  await until("lightbox", () => exists(".lightbox-stage img"), 5000);
-  check("a message's image offers Annotate", await exists('[data-testid="lightbox-annotate"]'));
+  // ================================================================ 2. the waiting image, again
+  await js(`document.querySelector('[data-testid="composer"] .prompt-attachment-row-open').click()`);
+  await until("composer lightbox", () => exists(".lightbox-stage img"), 5000);
+  const lb1 = await until("the lightbox's marks", async () => {
+    const o = await overlay('[data-testid="lightbox-annotation"]');
+    return o && o.accent > 0 ? o : null;
+  }, 5000).catch(() => null);
+  const lbImg = await rectOf(".lightbox-stage img");
+  check("the lightbox draws the marks over the whole image", !!lb1 && lb1.marks === 3 && !!lbImg && Math.abs(lb1.w - lbImg.width) <= 1 && Math.abs(lb1.h - lbImg.height) <= 1, JSON.stringify({ lb1, lbImg }));
+  check("a waiting image offers Annotate", await exists('[data-testid="lightbox-annotate"]'));
   await js(`document.querySelector('[data-testid="lightbox-annotate"]').click()`);
   await annotatorOpen();
-  await click([0.5, 0.5]);
-  await typeIn(1, "Still too tight");
-  // Esc with notes asks first; saying no keeps them.
+  list = await rows();
+  check("its marks reopen to edit", list.map((r) => r.message).join("|") === "Make this heading bolder|This spacing is off|Add the Save button here", JSON.stringify(list));
+  check("…drawn where they were", (await badgeAt(0.55, 0.15)) && (await badgeAt(0.85, 0.3)));
+  // Closing untouched loses nothing, so it doesn't ask; with a change it asks, and No keeps it open.
   await js(`window.__asked = 0; window.confirm = () => (window.__asked++, false)`);
   await key("Escape", "Escape", 27);
-  check("Esc with notes asks before discarding, and No keeps the annotator", (await js<number>("window.__asked")) === 1 && (await exists('[data-testid="annotator"]')));
-  await js(`document.querySelector('[data-testid="annotator-send"]').click()`);
-  const second = await until("the second annotated message", async () => (await annotatedEntries())[1], 15000).catch(() => null);
-  const a2 = (second?.content as { annotations?: MessageAnnotation[] } | undefined)?.annotations?.[0];
-  check("its source is the earlier message's attachment", a2?.source.kind === "message-attachment" && a2.source.entryId === first.id && a2.source.index === 0, JSON.stringify(a2?.source));
-  check("one click mark with its message", a2?.marks.length === 1 && a2.marks[0]!.tailX === undefined && a2.marks[0]!.message === "Still too tight", JSON.stringify(a2?.marks));
+  check("Esc on reopened marks left as they were closes without asking", !(await exists('[data-testid="annotator"]')) && (await js<number>("window.__asked")) === 0);
+  await js(`document.querySelector('[data-testid="composer"] .prompt-attachment-row-open').click()`);
+  await until("composer lightbox", () => exists('[data-testid="lightbox-annotate"]'), 5000);
+  await js(`document.querySelector('[data-testid="lightbox-annotate"]').click()`);
+  await annotatorOpen();
+  await typeIn(2, "The spacing between these is off");
+  await js(`document.querySelector('[data-testid="annotator-canvas"]').focus()`);
+  await key("Escape", "Escape", 27);
+  check("Esc after an edit asks first, and No keeps the annotator", (await js<number>("window.__asked")) === 1 && (await exists('[data-testid="annotator"]')));
+  await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
+  await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 5000);
+  crow = (await composerRows())[0] ?? null;
+  check("annotating it again edits it in place: still one row, 3 notes", (await composerRows()).length === 1 && crow?.notes === "3 notes", JSON.stringify(await composerRows()));
+  const notes2 = await openNotes('[data-testid="composer"]');
+  check("with the edited note", notes2[1] === "2The spacing between these is off", JSON.stringify(notes2));
+  await typeComposer("Two things on the settings mockup, and the Save button.");
+  await shot("composer");
+  await sendComposer();
+  const first = await until("the message reaches the service", async () => (await userMessages())[messagesBefore], 15000);
+  const c1 = first.content as TextContent;
+  const a1 = c1.attachments?.[0];
+  const n1 = a1?.annotation;
+  check("the message's text", c1.text === "Two things on the settings mockup, and the Save button.", c1.text);
+  check("its attachment is the spec image's stored file (resolved from attachment:<id>)", c1.attachments?.length === 1 && !!a1 && !a1.path.startsWith("attachment:") && existsSync(a1.path) && sha(readFileSync(a1.path)) === sha(specBytesBefore), JSON.stringify(a1));
+  check("with its annotation: the image's size, three marks (two arrows, a click) in its pixels", !!n1 && n1.width === 480 && n1.height === 320 && n1.marks.length === 3 && n1.marks[0]!.tailX !== undefined && n1.marks[1]!.tailX !== undefined && n1.marks[2]!.tailX === undefined, JSON.stringify(n1));
+  check("marks numbered, with their messages, where they were drawn", !!n1 && n1.marks.map((m) => m.n).join() === "1,2,3" && Math.abs(n1.marks[0]!.x - 120) <= 3 && Math.abs(n1.marks[0]!.y - 96) <= 3 && Math.abs(n1.marks[2]!.x - 408) <= 3 && n1.marks[1]!.message === "The spacing between these is off", JSON.stringify(n1?.marks));
+  const runs = (await detail()).runs;
+  check("the run that took the message carries the annotated attachment", runs.some((r) => r.attachments?.[0]?.annotation?.marks.length === 3), JSON.stringify(runs.map((r) => r.attachments?.map((a) => a.annotation?.marks.length ?? 0))));
+  const specBytesAfter = await fetchBytes(`/attachments/${encodeURIComponent(specId)}`);
+  check("the spec image's file is unchanged", sha(specBytesAfter) === sha(specBytesBefore) && sha(readFileSync(a1!.path)) === sha(specBytesBefore));
+  check("the composer is empty again", (await composerRows()).length === 0);
 
-  // ================================================================ 3. the browser pane
+  // ================================================================ 3. the sent image in the Transcript
+  check("after sending, the Transcript shows", await until("transcript tab", () => exists('.tab.on[data-tab="transcript"]'), 8000).catch(() => false));
+  const tScope = '[data-testid="message-attachments"]';
+  const tThumb = await until("the sent thumbnail's marks", async () => {
+    const o = await overlay(`${tScope} [data-testid="thumbnail-annotation"]`);
+    return o && o.accent > 0 ? o : null;
+  }, 10000).catch(() => null);
+  check("the Transcript draws the marks over the sent image's thumbnail", tThumb?.marks === 3, JSON.stringify(tThumb));
+  const tNotes = await openNotes(tScope);
+  check("under it: 3 notes, open to the numbered list", tNotes.join("|") === "1Make this heading bolder|2The spacing between these is off|3Add the Save button here", JSON.stringify(tNotes));
+  await js(`document.querySelector('${tScope}').scrollIntoView({ block: "center" })`);
+  await shot("transcript");
+  await js(`document.querySelector('${tScope} .prompt-attachment-row-open').click()`);
+  await until("lightbox", () => exists(".lightbox-stage img"), 5000);
+  const lb2 = await until("the sent image's marks in the lightbox", async () => {
+    const o = await overlay('[data-testid="lightbox-annotation"]');
+    return o && o.accent > 0 ? o : null;
+  }, 5000).catch(() => null);
+  check("the lightbox draws the marks over the sent image", lb2?.marks === 3, JSON.stringify(lb2));
+  await shot("lightbox");
+  await js(`document.querySelector('[data-testid="lightbox-annotate"]').click()`);
+  await annotatorOpen();
+  check("Annotate on a sent image reopens the marks it went with", (await rows()).length === 3);
+  await click([0.15, 0.85]);
+  await typeIn(4, "And this corner");
+  await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
+  await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 5000);
+  crow = (await composerRows())[0] ?? null;
+  check("Add puts it in the composer by its stored path, with 4 notes", crow?.path === a1?.path && crow?.notes === "4 notes" && crow?.thumbMarks === 4, JSON.stringify(crow));
+
+  // ================================================================ 4. the browser pane
   await go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
   const ready = await until("the page's first frame", () => js<boolean>(`!!document.querySelector('[data-testid="browser-annotate"]') && !document.querySelector('[data-testid="browser-annotate"]').disabled`), 20000).catch(() => false);
   check("the browser pane offers Annotate once the page is drawn", ready);
@@ -256,19 +318,93 @@ try {
   const overlap3 = await noOverlap();
   check("the notes sit beside the page, none over it", overlap3.ok, overlap3.detail);
   await shot("browser-annotator");
-  await js(`window.confirm = () => true`);
-  await js(`document.querySelector('[data-testid="annotator-send"]').click()`);
-  const third = await until("the browser annotation", async () => (await annotatedEntries())[2], 15000).catch(() => null);
-  const a3 = (third?.content as { annotations?: MessageAnnotation[]; attachments?: PromptAttachment[] } | undefined);
-  const s3 = a3?.annotations?.[0]?.source;
-  check("its source is the browser tab, with the page's url, viewport and scale", s3?.kind === "browser" && s3.url === pageUrl && s3.title === "Settings" && s3.tabId >= 1 && s3.viewport.width > 0 && s3.scale > 0, JSON.stringify(s3));
-  check("the picture is named after the page's host", a3?.attachments?.[0]?.name === "annotated-127.0.0.1.png", JSON.stringify(a3?.attachments));
-  const w3 = a3?.annotations?.[0];
-  check("the image size is the screenshot's device pixels", !!w3 && s3?.kind === "browser" && Math.abs(w3.width - s3.viewport.width * s3.scale) <= 2, JSON.stringify(w3 && { w: w3.width, h: w3.height }));
-  await until("transcript tab", () => exists('.tab.on[data-tab="transcript"]'), 5000).catch(() => false);
-  await until("third message's notes", () => js<boolean>(`document.querySelectorAll('[data-testid="annotation-notes"]').length >= 3`), 8000).catch(() => false);
-  await js(`[...document.querySelectorAll('[data-testid="annotation-notes"]')].pop().scrollIntoView({ block: "center" })`);
-  await shot("transcript-browser");
+  await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
+  await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 8000);
+  const both = await composerRows();
+  check("the screenshot joins the composer as a second row, 1 note", both.length === 2 && both[1]!.notes === "1 note" && both[1]!.thumbMarks === 1, JSON.stringify(both));
+  await typeComposer("The corner, and the page's Save button.");
+  await sendComposer();
+  const second = await until("the second message", async () => (await userMessages())[messagesBefore + 1], 15000).catch(() => null);
+  const c2 = second?.content as TextContent | undefined;
+  const page = c2?.attachments?.[1]?.annotation?.page;
+  check("both go, each with its own annotation", c2?.attachments?.length === 2 && c2.attachments[0]!.annotation?.marks.length === 4 && c2.attachments[1]!.annotation?.marks.length === 1, JSON.stringify(c2?.attachments?.map((a) => a.annotation?.marks.length)));
+  check("the screenshot's annotation has the page: url, title, tab, viewport and scale", page?.url === pageUrl && page.title === "Settings" && page.tabId >= 1 && page.viewport.width > 0 && page.scale > 0, JSON.stringify(page));
+  const shotAnn = c2?.attachments?.[1]?.annotation;
+  check("the screenshot's size is the page's in device pixels, named after its host", !!shotAnn && !!page && Math.abs(shotAnn.width - page.viewport.width * page.scale) <= 2 && c2!.attachments![1]!.name === "127.0.0.1.png", JSON.stringify({ w: shotAnn?.width, name: c2?.attachments?.[1]?.name }));
+
+  // ================================================================ 5. New session
+  await go("#/compose");
+  await until("New session pane", () => exists('[data-testid="draft-pane"] .draft-prompt'), 10000);
+  await type(".draft-prompt", "Make the diagram match.");
+  const draftKey = await until("the draft is saved", () => js<string | null>(`document.querySelector('[data-testid="draft-pane"]')?.dataset.draftKey ?? null`), 10000);
+  const doc = await cdp("DOM.getDocument", {});
+  const input = await cdp("DOM.querySelector", { nodeId: doc.result.root.nodeId, selector: '[data-testid="draft-pane"] [data-testid="prompt-attach-input"]' });
+  await cdp("DOM.setFileInputFiles", { nodeId: input.result.nodeId, files: [diagram] });
+  await until("the draft's row", () => exists('[data-testid="draft-pane"] [data-testid="prompt-attachment"] img'), 5000);
+  await js(`document.querySelector('[data-testid="draft-pane"] .prompt-attachment-row-open').click()`);
+  await until("draft lightbox", () => exists(".lightbox-stage img"), 5000);
+  check("an image in a New session offers Annotate", await exists('[data-testid="lightbox-annotate"]'));
+  await js(`document.querySelector('[data-testid="lightbox-annotate"]').click()`);
+  await annotatorOpen();
+  await click([0.3, 0.4]);
+  await typeIn(1, "This box is the API");
+  await drag([0.7, 0.6], [0.9, 0.85]);
+  await typeIn(2, "Arrow should go the other way");
+  await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
+  await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 5000);
+  const draftRow = () =>
+    js<{ n: number; notes: string | null; thumbMarks: number | null }>(`(() => { const rows = document.querySelectorAll('[data-testid="draft-pane"] [data-testid="prompt-attachment"]'); const el = rows[0];
+      return { n: rows.length, notes: el?.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? null, thumbMarks: el?.querySelector('[data-testid="thumbnail-annotation"]') ? Number(el.querySelector('[data-testid="thumbnail-annotation"]').dataset.marks) : null }; })()`);
+  const dr = await draftRow();
+  check("the draft's image is annotated in place: one row, marks over the thumbnail, 2 notes", dr.n === 1 && dr.notes === "2 notes" && dr.thumbMarks === 2, JSON.stringify(dr));
+  const saved = await until("the draft saves the annotation", async () => {
+    const a = (await detail(draftKey)).ticket.promptAttachments?.[0];
+    return a?.annotation?.marks.length === 2 ? a : null;
+  }, 8000).catch(() => null);
+  check("saved with the draft, on the same file (not a copy)", saved?.path === diagram && saved.annotation?.width === 400 && saved.annotation.height === 260, JSON.stringify(saved));
+  await shot("new-session");
+
+  await js("location.reload()");
+  await until("reloaded", () => exists('[data-testid="pane-board"], .sidebar'), 15000);
+  await go(`#/board/${project.id}/ticket/${draftKey}`);
+  const reopened = await until("the reopened draft's row", async () => {
+    const r = await js<{ notes: string | null; thumbMarks: number | null } | null>(`(() => { const el = document.querySelector('[data-draft-key=${JSON.stringify(draftKey)}] [data-testid="prompt-attachment"]'); if (!el) return null;
+      return { notes: el.querySelector('[data-testid="annotation-notes"] button')?.textContent.trim() ?? null, thumbMarks: el.querySelector('[data-testid="thumbnail-annotation"]') ? Number(el.querySelector('[data-testid="thumbnail-annotation"]').dataset.marks) : null }; })()`);
+    return r?.thumbMarks ? r : null;
+  }, 10000).catch(() => null);
+  check("a reopened draft shows the marks and notes", reopened?.notes === "2 notes" && reopened.thumbMarks === 2, JSON.stringify(reopened));
+  await js(`document.querySelector('[data-draft-key=${JSON.stringify(draftKey)}] .prompt-attachment-row-open').click()`);
+  await until("lightbox", () => exists(".lightbox-stage img"), 5000);
+  check("…and still offers Annotate (the image is untouched)", await exists('[data-testid="lightbox-annotate"]'));
+  await js(`document.querySelector('[data-testid="lightbox-annotate"]').click()`);
+  await annotatorOpen();
+  list = await rows();
+  check("which reopens its marks", list.map((r) => r.message).join("|") === "This box is the API|Arrow should go the other way", JSON.stringify(list));
+  await typeIn(1, "This box is the public API");
+  await js(`document.querySelector('[data-testid="annotator-add"]').click()`);
+  await until("the annotator closes", async () => !(await exists('[data-testid="annotator"]')), 5000);
+  const edited = await until("the edit saves", async () => {
+    const a = (await detail(draftKey)).ticket.promptAttachments?.[0];
+    return a?.annotation?.marks[0]?.message === "This box is the public API" ? a : null;
+  }, 8000).catch(() => null);
+  check("the edited marks save with the draft, still one attachment", !!edited && (await detail(draftKey)).ticket.promptAttachments?.length === 1);
+
+  await js(`document.querySelector('[data-testid="draft-plan"]').click()`);
+  await until("launched", async () => (await detail(draftKey)).ticket.draft === false, 10000);
+  const run = await until("the first run", async () => (await detail(draftKey)).runs[0], 10000).catch(() => null);
+  check("the run's prompt lists the notes", !!run && run.prompt.includes("This box is the public API") && run.prompt.includes("Arrow should go the other way"), run?.prompt.slice(0, 600));
+  check("and its attachment carries the annotation", run?.attachments?.[0]?.annotation?.marks.length === 2 || (await detail(draftKey)).ticket.promptAttachments?.[0]?.annotation?.marks.length === 2);
+  await go(`#/board/${project.id}/ticket/${draftKey}/spec`);
+  const specScope = '[data-testid="spec-prompt-attachments"]';
+  const specThumb = await until("the Spec tab's marks", async () => {
+    const o = await overlay(`${specScope} [data-testid="thumbnail-annotation"]`);
+    return o && o.accent > 0 ? o : null;
+  }, 10000).catch(() => null);
+  check("the Spec tab draws the marks over its prompt attachment", specThumb?.marks === 2, JSON.stringify(specThumb));
+  const specNotes = await openNotes(specScope);
+  check("…with 2 notes that open to the list", specNotes.join("|") === "1This box is the public API|2Arrow should go the other way", JSON.stringify(specNotes));
+  await js(`document.querySelector('${specScope}').scrollIntoView({ block: "center" })`);
+  await shot("spec-tab");
 } catch (e) {
   console.error(e);
   counter.fail();
