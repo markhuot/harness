@@ -52,7 +52,7 @@ public enum Drafts {
             sessionId: "", driver: projectDriver(project, settings), parentId: nil, childCount: 0, dependsOn: [],
             autoStart: false, agentReview: .pending, humanReview: .pending, externalRef: nil, workdir: nil, branch: nil,
             requestedBranch: .null, baseBranch: .null, useWorktree: .null, skipAgentReview: skips.skipAgentReview, skipHumanReview: skips.skipHumanReview, draft: true,
-            blockedReason: nil, busy: false, pendingApproval: nil, allowedTools: [], permissionMode: nil, model: nil,
+            promptAttachments: [], blockedReason: nil, busy: false, pendingApproval: nil, allowedTools: [], permissionMode: nil, model: nil,
             position: 0, createdAt: now, updatedAt: now
         )
     }
@@ -80,6 +80,7 @@ public enum Drafts {
         if let kind = patch.kind { next.kind = kind }
         if patch.useWorktree.isPresent { next.useWorktree = patch.useWorktree }
         if let projectId = patch.projectId { next.projectId = projectId }
+        if let attachments = patch.promptAttachments { next.promptAttachments = attachments.map(PromptAttachments.fromInput) }
         return next
     }
 
@@ -90,12 +91,13 @@ public enum Drafts {
         return t.useWorktree.optional ?? project.useWorktrees
     }
 
-    /// Nothing worth keeping: no prompt, every setting still inherited and the review switches on
+    /// Nothing worth keeping: no prompt or attachments, every setting still inherited and the review switches on
     /// the project's defaults. A New session isn't saved until this turns false, and closing one
     /// that's still empty doesn't ask.
     public static func draftIsEmpty(_ t: Ticket, project: Project?, settings: DraftSettings?) -> Bool {
         let skips = projectReviewSkips(project)
         return JSCompat.trim(t.spec).isEmpty
+            && (t.promptAttachments ?? []).isEmpty
             && t.kind == .task
             && choiceDriver(t, project, settings) == nil
             && t.permissionMode == nil
@@ -126,7 +128,8 @@ public enum Drafts {
             skipAgentReview: t.skipAgentReview == true,
             skipHumanReview: t.skipHumanReview == true,
             dependsOn: t.dependsOn.isEmpty ? nil : t.dependsOn,
-            draft: true
+            draft: true,
+            promptAttachments: (t.promptAttachments ?? []).isEmpty ? nil : PromptAttachments.inputs(t.promptAttachments ?? [])
         )
     }
 
@@ -147,6 +150,9 @@ public enum Drafts {
         if (next.skipAgentReview == true) != (prev.skipAgentReview == true) { p.skipAgentReview = next.skipAgentReview == true }
         if (next.skipHumanReview == true) != (prev.skipHumanReview == true) { p.skipHumanReview = next.skipHumanReview == true }
         if !next.dependsOn.elementsEqual(prev.dependsOn, by: Branches.jsEqual) { p.dependsOn = next.dependsOn }
+        if !PromptAttachments.same(next.promptAttachments ?? [], prev.promptAttachments ?? []) {
+            p.promptAttachments = PromptAttachments.inputs(next.promptAttachments ?? [])
+        }
         return p == UpdateTicketBody() ? nil : p
     }
 

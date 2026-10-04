@@ -9,6 +9,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- New sessions take attachments, and the agent sees attached images along with your prompt. Attachments are
+  listed under the prompt the same way the Spec tab shows them, each with a remove button. On the
+  Mac, drop files from Finder onto the New session, pick several with the paperclip button, or
+  paste an image. Dropped and picked files stay where they are on disk. Pasted images are saved in
+  the harness folder. On iPhone and iPad, attach from Photos, Files or the clipboard, or drag files
+  in on iPad.
+- A ticket's Spec tab lists the files attached to its New session at the bottom, one per line with
+  a thumbnail or file icon. A file that was moved, renamed or deleted afterwards shows as missing,
+  along with the path it used to be at.
+
 ## [app-20261003.2235](https://github.com/markhuot/harness/releases/tag/app-20261003.2235) - 2026-10-03
 
 ### Added

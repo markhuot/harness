@@ -319,3 +319,56 @@ struct HarnessClientErrorTests {
         await #expect(throws: DecodingError.self) { try await client(t).health() }
     }
 }
+
+@Suite("HarnessClient prompt attachments")
+struct HarnessClientPromptAttachmentTests {
+    @Test func promptAttachmentUrlEncodesKeyAndToken() {
+        let c = client(token: "t&k=1 /")
+        #expect(c.promptAttachmentUrl(key: "NY 1/x", index: 3) == "\(base)/tickets/NY%201%2Fx/prompt-attachments/3?token=t%26k%3D1%20%2F")
+    }
+
+    @Test func uploadSendsRawBytesWithTypeNameAndToken() async throws {
+        let t = FakeTransport(status: 200, body: #"{"data":{"path":"/Users/me/.harness/uploads/u1/My shot.png","name":"My shot.png","source":"upload"}}"#)
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF])
+        let a = try await client(t, token: "tok").uploadPromptAttachment(data: bytes, name: "My shot&1.png", mimeType: "image/png")
+        #expect(a == PromptAttachment(path: "/Users/me/.harness/uploads/u1/My shot.png", name: "My shot.png", source: .upload))
+        let r = try #require(t.last)
+        #expect(r.method == "POST")
+        #expect(path(t) == "/uploads?name=My%20shot%261.png")
+        #expect(r.body == bytes)
+        #expect(r.headers["content-type"] == "image/png")
+        #expect(r.headers["authorization"] == "Bearer tok")
+    }
+
+    @Test func uploadWithoutATypeIsOctetStream() async throws {
+        let t = FakeTransport(status: 200, body: #"{"data":{"path":"/u/a.bin","name":"a.bin","source":"upload"}}"#)
+        _ = try await client(t).uploadPromptAttachment(data: Data([1]), name: "a.bin", mimeType: "")
+        #expect(t.last?.headers["content-type"] == "application/octet-stream")
+    }
+
+    @Test func uploadTooLargeThrowsTheServicesError() async throws {
+        let t = FakeTransport(status: 413, body: #"{"error":"Uploads are limited to 100 MB"}"#)
+        let err = try await #require(throws: HarnessAPIError.self) {
+            try await client(t).uploadPromptAttachment(data: Data([1]), name: "big.mov", mimeType: "video/quicktime")
+        }
+        #expect(err.status == 413)
+        #expect(err.message == "Uploads are limited to 100 MB")
+    }
+
+    @Test func existsIsAHeadProbe() async throws {
+        let t = FakeTransport(status: 200, body: "")
+        #expect(await client(t).promptAttachmentExists(key: "NY-1", index: 0) == true)
+        #expect(t.last?.method == "HEAD")
+        #expect(path(t) == "/tickets/NY-1/prompt-attachments/0?token=tok")
+    }
+
+    @Test func existsIsFalseOnlyOn404() async throws {
+        #expect(await client(FakeTransport(status: 404, body: #"{"error":"gone"}"#)).promptAttachmentExists(key: "NY-1", index: 2) == false)
+        #expect(await client(FakeTransport(status: 500, body: "")).promptAttachmentExists(key: "NY-1", index: 2) == nil)
+        #expect(await HarnessClient(baseUrl: base, token: "tok", transport: FailingTransport()).promptAttachmentExists(key: "NY-1", index: 2) == nil)
+    }
+
+    struct FailingTransport: HTTPTransport {
+        func send(_ request: HTTPRequest) async throws -> HTTPResponse { throw URLError(.notConnectedToInternet) }
+    }
+}

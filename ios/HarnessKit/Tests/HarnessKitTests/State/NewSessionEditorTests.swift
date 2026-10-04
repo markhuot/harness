@@ -31,15 +31,21 @@ struct NewSessionEditorTests {
         var ops: [String] = []
         var fail = false
         var server: Ticket?
+        var creates: [CreateTicketBody] = []
+        var patches: [UpdateTicketBody] = []
         private var now: Double = 10
 
         func create(_ body: CreateTicketBody) async throws -> Ticket {
             ops.append("create")
+            creates.append(body)
             if fail { throw HarnessAPIError(status: 500, message: "boom") }
             let p = NewSessionEditorTests.projects[body.projectId]!
             var t = Drafts.blankDraftTicket(project: p, settings: DraftSettings(NewSessionEditorTests.settings), key: "\(p.key)-\(p.nextSeq)")
             t.id = "t1"
             t.spec = body.spec
+            t.promptAttachments = body.promptAttachments.map { $0.map { a in
+                PromptAttachments.fromInput(PromptAttachmentInput(path: a.path, name: a.name, source: a.path.hasPrefix("/up/") ? .upload : .file))
+            } } ?? []
             t.updatedAt = stamp()
             server = t
             return t
@@ -47,6 +53,7 @@ struct NewSessionEditorTests {
 
         func update(_ key: String, _ patch: UpdateTicketBody) async throws -> Ticket {
             ops.append("update \(key)")
+            patches.append(patch)
             if fail { throw HarnessAPIError(status: 500, message: "boom") }
             var t = Drafts.applyTicketPatch(server!, patch)
             t.updatedAt = stamp()
@@ -361,5 +368,72 @@ struct NewSessionEditorTests {
         await Self.drain()
         #expect(r.store.errors.count == 1)
         #expect(r.editor.savedId == nil)
+    }
+}
+
+// MARK: Prompt attachments
+
+extension NewSessionEditorTests {
+    static func uploads(_ names: [String]) -> [PromptAttachmentInput] {
+        names.map { PromptAttachmentInput(path: "/up/\($0)", name: $0, source: .upload) }
+    }
+
+    @Test func anAttachmentAloneSavesTheDraftWithItsPathAndName() async {
+        let r = Rig()
+        r.editor.begin(projectId: "p1", candidates: [])
+        #expect(r.editor.cancelStep == .discardAndDismiss)
+        #expect(r.editor.addAttachments(Self.uploads(["shot.png"])) == 0)
+        await Self.drain()
+        #expect(r.api.ops == ["create"])
+        #expect(r.api.creates.first?.promptAttachments == [PromptAttachmentInput(path: "/up/shot.png", name: "shot.png")])
+        #expect(r.editor.local?.promptAttachments == [PromptAttachment(path: "/up/shot.png", name: "shot.png", source: .upload)])
+        #expect(r.editor.cancelStep == .ask)
+        // An attachment isn't a prompt: launching still needs a spec.
+        #expect(!r.editor.canSubmit(r.store.state, hint: nil))
+    }
+
+    @Test func addingDedupesAndReportsWhatTheLimitLeftOut() async {
+        let r = Rig()
+        r.editor.begin(projectId: "p1", candidates: [])
+        #expect(r.editor.addAttachments(Self.uploads((1...18).map { "\($0).png" })) == 0)
+        await Self.drain()
+        // 18 + "1.png" again (dropped as a duplicate) + 3 new: two fit, one is left out.
+        #expect(r.editor.addAttachments(Self.uploads(["1.png", "a.png", "b.png", "c.png"])) == 1)
+        #expect(r.editor.local?.promptAttachments?.count == maxPromptAttachments)
+        #expect(r.editor.local?.promptAttachments?.last?.name == "b.png")
+        // Nothing new: no edit, so nothing to save.
+        await r.wait()
+        let before = r.api.ops.count
+        #expect(r.editor.addAttachments(Self.uploads(["a.png"])) == 0)
+        await r.wait()
+        #expect(r.api.ops.count == before)
+    }
+
+    @Test func removingPatchesTheWholeListAndEmptyingDeletesOnSave() async throws {
+        let r = Rig()
+        r.editor.begin(projectId: "p1", candidates: [])
+        r.editor.addAttachments(Self.uploads(["a.png", "b.pdf"]))
+        await Self.drain()
+        r.editor.removeAttachment(at: 0)
+        r.editor.removeAttachment(at: 7)
+        await r.wait()
+        #expect(r.api.patches.last?.promptAttachments == [PromptAttachmentInput(path: "/up/b.pdf", name: "b.pdf")])
+        #expect(r.api.server?.promptAttachments?.map(\.name) == ["b.pdf"])
+        r.editor.removeAttachment(at: 0)
+        #expect(r.editor.cancelStep == .discardAndDismiss)
+        try await r.editor.save().value
+        #expect(r.api.ops.last == "remove WEB-4")
+    }
+
+    @Test func anotherDevicesAttachmentsAreAdopted() async {
+        let r = Rig(reopen: "WEB-2")
+        var d = Self.draft()
+        r.store.state.tickets[d.id] = d
+        #expect(r.editor.begin(projectId: nil, candidates: []) == .started)
+        d.promptAttachments = [PromptAttachment(path: "/Users/me/x.png", name: "x.png")]
+        d.updatedAt = 50
+        r.store.state.tickets[d.id] = d
+        #expect(r.editor.storeChanged(r.store.state) == .adopted)
+        #expect(r.editor.local?.promptAttachments?.map(\.path) == ["/Users/me/x.png"])
     }
 }

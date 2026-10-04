@@ -11,6 +11,7 @@ import { FOLLOW_LATEST, scrubTo, shownRevision, stepRevision, type SpecHistory }
 import { Icon } from "../components/Icon";
 import { Markdown, MarkdownDiff } from "../components/Markdown";
 import { relativeTime, Switch, TicketKey, useNow } from "../components/bits";
+import { PromptAttachmentList } from "../components/PromptAttachments";
 
 const AUTHOR_LABEL: Record<SpecRevisionAuthor, string> = { agent: "Agent", human: "You", system: "Harness" };
 
@@ -146,6 +147,12 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
             <strong>No spec yet</strong>
             {ticket.status === "planning" ? "The planning agent writes the plan here." : "Write one in Details, or ask the agent to."}
           </div>
+        )}
+        {!!ticket.promptAttachments?.length && (
+          <section className="spec-prompt-attachments" data-testid="spec-prompt-attachments">
+            <span className="section-title">Attachments</span>
+            <PromptAttachmentList ticketKey={ticket.key} items={ticket.promptAttachments} />
+          </section>
         )}
       </div>
     </div>

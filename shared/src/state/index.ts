@@ -19,6 +19,7 @@ export * from "./icons";
 export * from "./stickToBottom";
 export * from "./watchers";
 export * from "./attachments";
+export * from "./promptAttachments";
 export * from "./branches";
 export * from "./drafts";
 export * from "./code";

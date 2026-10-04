@@ -8,6 +8,7 @@ import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
 import { createWsHandlers, type WsData } from "./ws";
+import { MAX_UPLOAD_BYTES } from "../prompt-attachments";
 import type { PluginHost } from "../plugins/host";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
@@ -144,10 +145,10 @@ const ATTACHMENT_CACHE = "private, max-age=31536000, immutable";
  * headers on non-loopback sockets (LAN, Tailscale), so the phone got a headerless PNG and showed
  * "Couldn't load". Video players ask for ranges, which keeps what's buffered small.
  */
-export async function serveFile(req: Request, path: string, mimeType: string): Promise<Response> {
+export async function serveFile(req: Request, path: string, mimeType: string, cacheControl = ATTACHMENT_CACHE): Promise<Response> {
   const file = Bun.file(path);
   const size = file.size;
-  const headers: Record<string, string> = { "content-type": mimeType, "cache-control": ATTACHMENT_CACHE, "accept-ranges": "bytes" };
+  const headers: Record<string, string> = { "content-type": mimeType, "cache-control": cacheControl, "accept-ranges": "bytes" };
   const range = parseRange(req.headers.get("range"), size);
   if (range === "unsatisfiable") return new Response(null, { status: 416, headers: { ...headers, "content-range": `bytes */${size}` } });
   const head = req.method === "HEAD";
@@ -256,6 +257,14 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/tickets/:key/commands", ({ params, url }) => o.ticketCommands(params.key!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
   add("GET", "/tickets/:key/file", ({ params, url }) => o.ticketFile(params.key!, url.searchParams.get("path") ?? ""));
   add("GET", "/tickets/:key/file/diff", ({ params, url }) => o.ticketFileDiff(params.key!, url.searchParams.get("path") ?? ""));
+
+  // Prompt attachment uploads: the raw bytes as the body, the file name in ?name=.
+  add("POST", "/uploads", async ({ req, url }) => {
+    const length = Number(req.headers.get("content-length") ?? "0");
+    if (length > MAX_UPLOAD_BYTES) throw new HarnessError(413, `The upload is over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
+    const bytes = new Uint8Array(await req.arrayBuffer());
+    return o.uploadPromptAttachment(bytes, url.searchParams.get("name"), req.headers.get("content-type"));
+  });
 
   // Sessions
   add("GET", "/sessions", ({ url }) => {
@@ -434,6 +443,22 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         const found = opts.orchestrator.attachmentFile(decodeURIComponent(attachment[1]!));
         if (!found) return json({ error: "Not found" }, 404);
         return serveFile(req, found.path, found.attachment.mimeType);
+      }
+
+      // A ticket's prompt attachments, the same way: the apps load previews with <img> and probe
+      // other files with HEAD. A file that has gone missing is a 404.
+      const promptFile = /^\/tickets\/([^/]+)\/prompt-attachments\/([^/]+)$/.exec(path);
+      if (promptFile && (req.method === "GET" || req.method === "HEAD")) {
+        const token = opts.tokens.get();
+        if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
+        try {
+          const found = opts.orchestrator.promptAttachmentFile(decodeURIComponent(promptFile[1]!), decodeURIComponent(promptFile[2]!));
+          if (!found) return json({ error: "The attached file is missing" }, 404);
+          return await serveFile(req, found.path, found.mimeType, "no-cache");
+        } catch (err) {
+          if (err instanceof HarnessError) return json({ error: err.message }, err.status);
+          return json({ error: "The attached file is missing" }, 404);
+        }
       }
 
       // Every other route needs the bearer token, from loopback and remote hosts alike.

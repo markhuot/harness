@@ -462,3 +462,22 @@ describe("anthropic-api models", () => {
     expect((await d.driver.info()).detail).toStartWith("claude-opus-5 ·");
   });
 });
+
+describe("savedMessages (prompt attachments)", () => {
+  test("images become a placeholder line in the saved conversation; everything else is kept as is", async () => {
+    const { savedMessages, SAVED_IMAGE_PLACEHOLDER } = await import("./anthropic-api");
+    const plain = { role: "assistant" as const, content: "ok" };
+    const withImage = {
+      role: "user" as const,
+      content: [
+        { type: "text" as const, text: "Look" },
+        { type: "image" as const, source: { type: "base64" as const, media_type: "image/png" as const, data: "AAA=" } },
+      ],
+    };
+    const out = savedMessages([withImage, plain]);
+    expect(out[0]!.content).toEqual([{ type: "text", text: "Look" }, { type: "text", text: SAVED_IMAGE_PLACEHOLDER }]);
+    expect(out[1]).toBe(plain);
+    // The run's own copy still has the image.
+    expect(withImage.content[1]!.type).toBe("image");
+  });
+});

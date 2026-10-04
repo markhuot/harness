@@ -464,7 +464,16 @@
           }
         }
       },
-      "draft": false
+      "draft": false,
+      "promptAttachments": [
+        {
+          "path": "/Users/mark/Desktop/shot.png",
+          "name": "shot.png"
+        },
+        {
+          "path": "/tmp/notes.pdf"
+        }
+      ]
     },
     {
       "projectId": "prj_8f2c1a",
@@ -1572,6 +1581,28 @@
       "updatedAt": 1759276800000
     }
   ],
+  "PromptAttachment": [
+    {
+      "path": "/Users/mark/Desktop/shot.png",
+      "name": "shot.png",
+      "source": "file"
+    },
+    {
+      "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+      "name": "Pasted image.png",
+      "source": "upload"
+    }
+  ],
+  "PromptAttachmentInput": [
+    {
+      "path": "/Users/mark/Desktop/shot.png"
+    },
+    {
+      "path": "/Users/mark/notes.pdf",
+      "name": "Notes",
+      "source": "file"
+    }
+  ],
   "PromptEntry": [
     {
       "id": "run.work_start",
@@ -2352,6 +2383,18 @@
       "completionInstructions": null,
       "pullRequestUrl": null,
       "draft": true,
+      "promptAttachments": [
+        {
+          "path": "/Users/mark/Desktop/login bug.png",
+          "name": "login bug.png",
+          "source": "file"
+        },
+        {
+          "path": "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+          "name": "Pasted image.png",
+          "source": "upload"
+        }
+      ],
       "completedAt": null
     },
     {
@@ -3275,6 +3318,17 @@
     {
       "spec": "Draft brief"
     },
+    {
+      "promptAttachments": [
+        {
+          "path": "/Users/mark/Desktop/shot.png",
+          "name": "shot.png"
+        }
+      ]
+    },
+    {
+      "promptAttachments": []
+    },
     {}
   ],
   "Watcher": [
@@ -3581,6 +3635,10 @@
     "AttachmentKind": [
       "image",
       "video"
+    ],
+    "PromptAttachmentSource": [
+      "file",
+      "upload"
     ],
     "WatcherMode": [
       "loop",

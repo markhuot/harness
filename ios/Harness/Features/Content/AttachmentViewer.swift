@@ -9,6 +9,9 @@ import SwiftUI
 /// system controls while their page shows, and pulling a page down (or ✕) closes it.
 struct AttachmentViewer: View {
     let attachments: [Attachment]
+    /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. Prompt
+    /// attachments (Ticket.promptAttachments) pass their own URLs.
+    let url: (@MainActor (Attachment) -> String?)?
     let onClose: () -> Void
 
     @State private var position: Int?
@@ -22,8 +25,9 @@ struct AttachmentViewer: View {
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.palette) private var c
 
-    init(attachments: [Attachment], start: Int, onClose: @escaping () -> Void) {
+    init(attachments: [Attachment], start: Int, url: (@MainActor (Attachment) -> String?)? = nil, onClose: @escaping () -> Void) {
         self.attachments = attachments
+        self.url = url
         self.onClose = onClose
         _position = State(initialValue: Attachments.clampPage(Double(start), count: attachments.count))
     }
@@ -82,7 +86,7 @@ struct AttachmentViewer: View {
         if a.kind == .video {
             AttachmentVideoPage(attachment: a, current: current, insets: insets, events: events)
         } else {
-            AttachmentImagePage(attachment: a, insets: insets, events: events)
+            AttachmentImagePage(attachment: a, url: url.map { $0(a) } ?? AttachmentMedia.url(store, a.id), insets: insets, events: events)
         }
     }
 
@@ -176,15 +180,14 @@ private struct AttachmentViewerHeader: View {
 /// One image fitted to the page; it zooms in its page's scroll view.
 private struct AttachmentImagePage: View {
     let attachment: Attachment
+    let url: String?
     let insets: UIEdgeInsets
     let events: AttachmentPageEvents
 
-    @Environment(BoardStore.self) private var store: BoardStore?
     @State private var image: UIImage?
     @State private var failed = false
 
     var body: some View {
-        let url = AttachmentMedia.url(store, attachment.id)
         Group {
             if failed {
                 AttachmentHostedPage(insets: insets, events: events) { AttachmentFailed(name: attachment.name, dark: true) }

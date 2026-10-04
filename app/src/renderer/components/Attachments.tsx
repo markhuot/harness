@@ -20,12 +20,29 @@ export function Missing({ name }: { name: string }) {
   );
 }
 
-/** One attachment at a time over the app. ← and → (or the side buttons) step through the list (the images in a piece of markdown); Esc or the backdrop closes. */
-export function Lightbox({ list, index, onIndex, onClose }: { list: Attachment[]; index: number; onIndex: (i: number) => void; onClose: () => void }) {
+/**
+ * One attachment at a time over the app. ← and → (or the side buttons) step through the list (the
+ * images in a piece of markdown); Esc or the backdrop closes. `urlOf` reads one from somewhere other
+ * than the spec's attachments (a prompt attachment).
+ */
+export function Lightbox({
+  list,
+  index,
+  onIndex,
+  onClose,
+  urlOf,
+}: {
+  list: Attachment[];
+  index: number;
+  onIndex: (i: number) => void;
+  onClose: () => void;
+  urlOf?: (a: Attachment, index: number) => string;
+}) {
   const { client } = useStore();
-  // Markdown renders this only with a non-empty list.
-  const a = list[Math.min(index, list.length - 1)]!;
-  const url = client.attachmentUrl(a.id);
+  // Callers render this only with a non-empty list.
+  const at = Math.min(index, list.length - 1);
+  const a = list[at]!;
+  const url = urlOf ? urlOf(a, at) : client.attachmentUrl(a.id);
   const [failed, setFailed] = useState<string | null>(null);
   const many = list.length > 1;
   const step = (delta: number) => onIndex(stepAttachment(index, delta, list.length));

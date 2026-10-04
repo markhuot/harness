@@ -2,7 +2,7 @@
 // harness CLI: manage the launchd agent and do quick ticket operations.
 //
 //   harness service install|uninstall|start|stop|restart|status|ensure [--force] [--json]
-//   harness new <dir> "<prompt>" [--driver <id>] [--plan]
+//   harness new <dir> "<prompt>" [--driver <id>] [--attach <file>]... [--plan]
 //   harness tickets [--json]
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
@@ -409,7 +409,7 @@ export class Cli {
     return new HarnessClient({ baseUrl: `http://127.0.0.1:${port}`, token });
   }
 
-  async newTicket(dir: string, prompt: string, opts: { driver?: string; plan?: boolean }): Promise<Ticket> {
+  async newTicket(dir: string, prompt: string, opts: { driver?: string; plan?: boolean; attach?: string[] }): Promise<Ticket> {
     const client = this.client();
     try {
       await client.health();
@@ -418,7 +418,9 @@ export class Cli {
     }
     const path = resolve(dir);
     const project = (await client.listProjects()).find((p) => p.path === path) ?? (await client.createProject({ path }));
-    return client.createTicket({ projectId: project.id, spec: prompt, driver: opts.driver, start: !opts.plan });
+    // Attached files are referenced where they are, so relative paths resolve against the shell's folder.
+    const promptAttachments = opts.attach?.length ? opts.attach.map((p) => ({ path: resolve(p) })) : undefined;
+    return client.createTicket({ projectId: project.id, spec: prompt, driver: opts.driver, start: !opts.plan, ...(promptAttachments ? { promptAttachments } : {}) });
   }
 
   async run(argv: string[]): Promise<number> {
@@ -475,11 +477,13 @@ export class Cli {
         }
       } else if (cmd === "new") {
         const driver = flag("--driver");
+        const attach: string[] = [];
+        for (let a = flag("--attach"); a !== undefined; a = flag("--attach")) attach.push(a);
         const plan = args.includes("--plan");
         const pos = args.filter((a) => a !== "--plan").slice(1);
         const [dir, ...words] = pos;
         if (!dir || !words.length) return this.usage();
-        const t = await this.newTicket(dir, words.join(" "), { driver, plan });
+        const t = await this.newTicket(dir, words.join(" "), { driver, plan, attach });
         print(`${keyLabel(t)} ${t.title} [${t.status}]`, t);
         return 0;
       } else if (cmd === "network") {
@@ -525,7 +529,7 @@ export class Cli {
       [
         "usage:",
         "  harness service install|uninstall|start|stop|restart|status|ensure [--force] [--json]",
-        '  harness new <dir> "<prompt>" [--driver <id>] [--plan] [--json]',
+        '  harness new <dir> "<prompt>" [--driver <id>] [--attach <file>]... [--plan] [--json]',
         "  harness tickets [--json]",
         "  harness network [--json]",
         "  harness listen localhost|tailscale|any|custom <host> [--json]",

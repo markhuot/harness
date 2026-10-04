@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { Root } from "./App";
 import { initTheme } from "./state/theme";
+import { installFileDropGuard } from "./components/PromptAttachments";
 import "./styles.css";
 import "./app.css";
 import "./components/keyboard.css";
@@ -9,6 +10,7 @@ import "./components/keyboard.css";
 window.addEventListener("error", (e: ErrorEvent) => console.error(e.error?.stack ?? e.message));
 
 initTheme();
+installFileDropGuard();
 
 createRoot(document.getElementById("root")!, {
   onUncaughtError: (error, info) => console.error(String(error), info.componentStack),

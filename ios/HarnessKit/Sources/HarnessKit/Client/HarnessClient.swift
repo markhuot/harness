@@ -275,6 +275,36 @@ public final class HarnessClient: Sendable {
         "\(baseUrl)/attachments/\(URIComponent.encode(id))?token=\(URIComponent.encode(token))"
     }
 
+    /// The file of a ticket's prompt attachment (Ticket.promptAttachments[index]), with the token
+    /// in the query for image loads and HEAD probes. 404 once the file is gone.
+    public func promptAttachmentUrl(key: String, index: Int) -> String {
+        "\(baseUrl)/tickets/\(URIComponent.encode(key))/prompt-attachments/\(index)?token=\(URIComponent.encode(token))"
+    }
+
+    /// Whether a ticket's prompt attachment is still on the service's machine: a HEAD of
+    /// `promptAttachmentUrl`. false on 404 (moved, deleted, or the index is past the list), nil when
+    /// the service couldn't say (another status, or the request failed), so a flaky network doesn't
+    /// mark files missing.
+    public func promptAttachmentExists(key: String, index: Int) async -> Bool? {
+        guard let url = URL(string: promptAttachmentUrl(key: key, index: index)) else { return nil }
+        guard let res = try? await transport.send(HTTPRequest(method: "HEAD", url: url)) else { return nil }
+        if res.ok { return true }
+        return res.status == 404 ? false : nil
+    }
+
+    /// Store bytes (a photo, a pasted image, a file from this device) on the service's machine for a
+    /// prompt attachment: POST /uploads with the raw bytes as the body. Returns the attachment to
+    /// add to a draft's promptAttachments (source "upload"). Throws HarnessAPIError for a 400/413.
+    public func uploadPromptAttachment(data: Data, name: String, mimeType: String? = nil) async throws -> PromptAttachment {
+        guard let url = URL(string: "\(baseUrl)/uploads?name=\(URIComponent.encode(name))") else { throw URLError(.badURL) }
+        let type = mimeType.flatMap { $0.isEmpty ? nil : $0 } ?? "application/octet-stream"
+        let headers = ["authorization": "Bearer \(token)", "content-type": type]
+        let res = try await transport.send(HTTPRequest(method: "POST", url: url, headers: headers, body: data, timeout: 300))
+        let text = res.body.isEmpty ? Data("{}".utf8) : res.body
+        guard res.ok else { throw Self.apiError(status: res.status, body: text) }
+        return try JSONDecoder().decode(Envelope<PromptAttachment>.self, from: text).data
+    }
+
     // MARK: Sessions (ticket + triage) and transcripts
 
     public func listSessions(kind: SessionKind? = nil) async throws -> [Session] {

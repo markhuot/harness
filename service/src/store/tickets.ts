@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, ExternalRef, PendingApproval, PermissionMode, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import type { CompletionAction, ExternalRef, PendingApproval, PermissionMode, PromptAttachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
 import { isCompletionAction } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
@@ -43,6 +43,7 @@ interface TicketRow {
   pull_request_url?: string | null;
   has_changes?: number | null;
   draft?: number;
+  prompt_attachments?: string;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -112,6 +113,8 @@ export interface NewTicket {
   skipHumanReview?: boolean;
   /** A draft (Ticket.draft): never runs until submitted */
   draft?: boolean;
+  /** Ticket.promptAttachments, already validated */
+  promptAttachments?: PromptAttachment[];
 }
 
 /** Every column but the spec, which only SpecRepo writes (a revision each time). */
@@ -143,6 +146,7 @@ export type TicketPatch = Partial<{
   draft: boolean;
   kind: TicketKind;
   useWorktree: boolean | null;
+  promptAttachments: PromptAttachment[];
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -172,9 +176,10 @@ const COLUMNS: Record<string, string> = {
   draft: "draft",
   kind: "kind",
   useWorktree: "use_worktree",
+  promptAttachments: "prompt_attachments",
 };
 
-const JSON_FIELDS = new Set(["pendingApproval", "allowedTools"]);
+const JSON_FIELDS = new Set(["pendingApproval", "allowedTools", "promptAttachments"]);
 
 export class TicketRepo {
   constructor(private db: Database) {}
@@ -232,6 +237,7 @@ export class TicketRepo {
       pullRequestUrl: r.pull_request_url ?? null,
       hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
+      promptAttachments: fromJson<PromptAttachment[]>(r.prompt_attachments ?? null, []),
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
@@ -471,9 +477,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, skip_human_review, draft, created_at, updated_at)
+           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, skip_human_review, draft, prompt_attachments, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $spec, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $skipHumanReview, $draft, $t, $t)`,
+           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $skipHumanReview, $draft, $promptAttachments, $t, $t)`,
       )
       .run({
         id,
@@ -498,6 +504,7 @@ export class TicketRepo {
         skipAgentReview: int(input.skipAgentReview ?? false),
         skipHumanReview: int(input.skipHumanReview ?? false),
         draft: int(input.draft ?? false),
+        promptAttachments: toJson(input.promptAttachments ?? []),
         t,
       });
     this.setDeps(id, input.dependsOn);

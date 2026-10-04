@@ -250,6 +250,13 @@ export interface Ticket {
    * type-check; the service always sends it.
    */
   draft?: boolean;
+  /**
+   * Files the human attached to the New session (DESIGN.md "Prompt attachments"): referenced where
+   * they are on the service's machine, never copied. The first run gets their paths and the images
+   * inline. One can go missing later (moved or deleted); GET /tickets/:key/prompt-attachments/:index
+   * answers 404 for it then. Optional so fixtures type-check; the service always sends it.
+   */
+  promptAttachments?: PromptAttachment[];
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -499,6 +506,38 @@ export interface Attachment {
   width?: number;
   height?: number;
 }
+
+/**
+ * A file attached to a New session's prompt (Ticket.promptAttachments). Unlike an Attachment it
+ * isn't copied: `path` is where the file is on the service's machine, so it can go missing.
+ */
+export interface PromptAttachment {
+  /** Absolute path on the service's machine */
+  path: string;
+  /** Display name: the file name when it was attached ("Pasted image.png" for a paste) */
+  name: string;
+  /**
+   * "file": a file that was already on disk (dropped or picked on the Mac), referenced in place.
+   * "upload": bytes the service stored with POST /uploads (a paste, or anything from the
+   * iPhone/iPad), deleted with the ticket.
+   */
+  source: PromptAttachmentSource;
+}
+
+export type PromptAttachmentSource = "file" | "upload";
+
+/**
+ * A prompt attachment as clients send it: the name defaults to the file's. `source` is ignored by
+ * the service, which decides it from where the file is; clients keep it in their local copy.
+ */
+export interface PromptAttachmentInput {
+  path: string;
+  name?: string;
+  source?: PromptAttachmentSource;
+}
+
+/** Most prompt attachments one ticket takes. */
+export const MAX_PROMPT_ATTACHMENTS = 20;
 
 /**
  * What an Activity entry records (DESIGN.md "Activity"):
@@ -1102,6 +1141,12 @@ export interface CreateTicketBody {
    * POST /tickets/:key/submit launches it later. The prompt may be empty for a draft.
    */
   draft?: boolean;
+  /**
+   * Files to attach to the prompt (Ticket.promptAttachments): absolute paths on the service's
+   * machine, each existing now (400 otherwise), at most MAX_PROMPT_ATTACHMENTS. Pastes and files
+   * from another device go through POST /uploads first.
+   */
+  promptAttachments?: PromptAttachmentInput[];
 }
 
 export interface UpdateTicketBody {
@@ -1154,6 +1199,11 @@ export interface UpdateTicketBody {
    * key; the old key is kept as an alias (like a project rename), so open panes follow it.
    */
   projectId?: string;
+  /**
+   * Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
+   * ones the draft already had are kept as they are, even when their file has gone missing.
+   */
+  promptAttachments?: PromptAttachmentInput[];
 }
 
 /** POST /tickets/:key/submit: launch a draft, starting work now (start) or planning first. */

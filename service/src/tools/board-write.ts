@@ -65,6 +65,7 @@ export const createTicket = defineTool<{
   skip_human_review?: boolean;
   remote_id?: string;
   remote_url?: string;
+  attachments?: string[];
 }>({
   name: "create_ticket",
   description:
@@ -95,6 +96,13 @@ export const createTicket = defineTool<{
       skip_human_review: skipHumanReviewProp,
       remote_id: remoteIdProp,
       remote_url: remoteUrlProp,
+      attachments: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        maxItems: 20,
+        description:
+          "Files to attach to the new ticket's first message, such as screenshots it should look at: paths (absolute, or relative to your working directory) that exist now. They're referenced where they are, not copied, so don't attach files you're about to delete. Images also go to its agent inline.",
+      },
     },
     ["title", "spec"],
   ),
@@ -117,6 +125,7 @@ export const createTicket = defineTool<{
       skipHumanReview: input.skip_human_review,
       remoteId: remoteInput(input.remote_id) ?? undefined,
       remoteUrl: remoteInput(input.remote_url),
+      attachments: input.attachments,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },

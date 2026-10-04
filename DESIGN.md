@@ -138,7 +138,8 @@ place of the key.
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
   `worktrees/<KEY>/`, `chrome-profile/`, `service.json` (`{ port, pid, startedAt }`),
-  `attachments/<id>.<ext>` (ticket attachments, see "Spec revisions and attachments"), `tmp/<sessionId>/`
+  `attachments/<id>.<ext>` (ticket attachments, see "Spec revisions and attachments"),
+  `uploads/<uuid>/<name>` (pasted and uploaded prompt attachments, see "Prompt attachments"), `tmp/<sessionId>/`
   (a run's scratch folder for `browser_screenshot` `save_to`, removed with its ticket).
 - Tests always set `HARNESS_HOME` to a temp dir and use port 0 / an ephemeral port.
 - launchd label `com.markhuot.harness`, `KeepAlive` true, logs to `$HARNESS_HOME/logs/service.log`.
@@ -701,11 +702,11 @@ Harness tools (always exposed, via MCP for claude-code):
 | `submit_for_review` | work, conductor, chat | `{ note, spec_is_up_to_date, skip_agent_review?, skip_human_review? }`: `spec_is_up_to_date` is advertised as required and must be `true` (anything else is refused with a message saying to update the spec first); `note` covers this round only; Activity shows its first line (see "Activity"). `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }`: any length; Activity shows the first line, which must state the outcome on its own (see "Activity") |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
-| `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }`. `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url?, attachments?: string[] }`. `attachments` sets `promptAttachments` (paths that exist now, relative ones against the run's cwd; see "Prompt attachments"). `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -867,6 +868,7 @@ client state, not service state.
 | Board | move a ticket's work to another branch after it started | `update_branch` (the ticket's own agent; ask it with a message) | the apps don't re-point a running ticket themselves: the agent has to move its commits |
 | Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
+| Board | attach files to a new session (drop, pick, paste; images go to the agent inline) and see them, missing ones flagged, on the Spec tab | `create_ticket` (`attachments`), `get_ticket` (`promptAttachments`) | uploads (`POST /uploads`) have no tool: an agent's files are already on disk |
 | Board | @-mention project files in a new session or a message (autocomplete; the files are attached to the run) | none | agents read files with their own tools; `message_ticket` text with `@path` still gets the files attached |
 | Board | start a new session or a message with an agent's `/command` or skill (autocomplete; the agent expands it) | none | agents run their own skills; `message_ticket` or `create_ticket` text that starts with `/name` still reaches a claude-code agent as a command |
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
@@ -1363,6 +1365,8 @@ GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
 GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
 GET    /tickets/:key/spec/revisions/:rev?diff=<other>   → SpecRevision, or SpecDiff with diff
 GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
+GET    /tickets/:key/prompt-attachments/:index   (the attached file; bearer or ?token=; HEAD too; 404 when gone)
+POST   /uploads?name=        (raw bytes → PromptAttachment under uploads/; see "Prompt attachments")
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
@@ -1678,6 +1682,75 @@ completed, moved or deleted between fetches never duplicate or skip a row.
   punctuation-only terms are dropped. `ticket_fts` is derived data, created and rebuilt on open
   when missing. Without FTS5, search falls back to LIKE over `ticket_search` with the same
   ranking.
+
+**Prompt attachments.** A New session can carry files for the agent: `Ticket.promptAttachments`,
+a list of `PromptAttachment { path, name, source }` stored as JSON in `tickets.prompt_attachments`
+(migration 28). Files are referenced in place on the service's machine and never copied, so a
+ticket keeps working after one is moved or deleted.
+
+- **Setting them.** `CreateTicketBody.promptAttachments` and, on drafts only (409 otherwise),
+  `UpdateTicketBody.promptAttachments` take `PromptAttachmentInput { path, name? }` and replace the
+  whole list (`normalizePromptAttachments` in `service/src/prompt-attachments.ts`). A new path must
+  be absolute and an existing regular file (400 otherwise). A path the ticket already had stays as
+  it is even when its file is gone, so a reopened draft still saves. Duplicates collapse, the limit
+  is `MAX_PROMPT_ATTACHMENTS` (20), the name defaults to the file name, and the service decides
+  `source`: `upload` for a file in its own folder right under `$HARNESS_HOME/uploads/`, else
+  `file`. The shared draft helpers carry the list like any other field: an attachment alone makes a
+  draft non-empty (`draftIsEmpty`), and `draftCreateBody` / `draftPatch` send it. The pure list
+  helpers live in `shared/src/state/promptAttachments.ts`, ported to HarnessKit and checked against
+  fixtures.
+- **Uploads.** Pastes, and anything from the iPhone or iPad (its files aren't on the Mac), go to
+  `POST /uploads?name=<file name>` with the raw bytes as the body (up to 100 MB; empty is a 400,
+  bigger a 413). The service writes `$HARNESS_HOME/uploads/<uuid>/<name>`, with the name cut down
+  to one safe path component (`safeUploadName`, adding the MIME type's extension when there's
+  none), and answers the `PromptAttachment`. `HarnessClient.uploadPromptAttachment` wraps it.
+  Deleting a ticket deletes its upload folders, except one another ticket still lists (a conductor
+  can pass a pasted screenshot's path on to a child with `create_ticket`), and never a `file`
+  attachment. When the service
+  starts, `sweepUploads` removes upload folders over a day old that no ticket refers to, such as a
+  paste taken back out of a draft.
+- **Serving and missing files.** `GET`/`HEAD /tickets/:key/prompt-attachments/:index` streams the
+  file (bearer or `?token=`, like `/attachments/:id`, with `Cache-Control: no-cache` since the file
+  can change or vanish). An index out of range, or a file that is gone, gets a 404.
+  `HarnessClient.promptAttachmentUrl` builds the URL. The apps draw image previews from it and
+  probe other files with HEAD, and a 404 shows the attachment as missing, with its name and the
+  path it was at. Nothing else about the ticket depends on the files.
+- **To the agent.** A plan, work, conductor or chat run of a ticket with attachments, while its
+  session has no earlier succeeded run of those kinds, appends an `<attachments>` block to the
+  prompt (`runAttachments`). The block lists every path and marks missing files, so the agent can
+  open any of them with its file tools. Images whose first bytes are PNG, JPEG, GIF or WebP, up to
+  3.75 MB each (5 MB once base64-encoded, the API's limit) and 10 per run, also go in
+  `RunRequest.images`. claude-code sends them as image blocks in its stream-json user message
+  (`userContent`), and anthropic-api adds them to the user turn. anthropic-api saves its
+  conversation with each image replaced by a line of text (`savedMessages`), so the session row
+  stays small. Later runs resume the conversation, so they aren't sent again. The transcript gets
+  `Attached a.png, notes.md`, then `Attachment missing: <name> (was at <path>)` or
+  `Sent <name> by path only: <reason>` lines as needed.
+- **Agents and the CLI.** `get_ticket` lists `promptAttachments` with `missing`. `create_ticket`
+  takes `attachments` (paths, relative ones against the run's cwd). `harness new` takes
+  `--attach <file>`, which can repeat.
+- **Mac app.** The draft editor lists the attachments under the prompt (the same list as the Spec
+  tab, below, with × on each row and a spinner row per upload), a paperclip that opens a multi-select file input, drag and drop of files from anywhere, and
+  image paste. A file with a path (`window.harness.pathForFile`, Electron's
+  `webUtils.getPathForFile`) is attached by path. Pathless image data (a screenshot on the
+  clipboard, an image dragged out of a browser) is uploaded. A plain text paste stays text. When
+  the service isn't on this Mac (`isLocalService(client.baseUrl)` is false: anything but
+  `localhost`, `::1` or `127.x`), every file is uploaded under its own name instead, since its path
+  means nothing there (`planFiles` in `state/promptAttachmentFiles.ts`). A window-level guard stops
+  a file dropped outside the draft pane from navigating the window to it. `app/scripts/attachments-check.ts` drives the whole flow
+  against the real service.
+- **iPhone and iPad.** The New session has the same list as the Spec tab (× on each row, a
+  spinner row per upload), and an Attach menu with Photos, Files
+  and Paste. iPad also takes drops. Everything is uploaded, and HEIC photos are converted to JPEG
+  first, since the agent APIs don't take HEIC.
+- **One list** (`PromptAttachmentList` in `components/PromptAttachments.tsx` on the Mac and
+  `Features/Content/PromptAttachmentList.swift` on iOS) draws the attachments in both places: in
+  the New session, editable, and on the Spec tab, read-only at the bottom of the spec under an
+  Attachments heading. One row each, a square of the same size for every row (the image's
+  thumbnail, or a file icon) and then the name, so the names line up. A missing file's row is
+  dimmed, with a dashed square and "Missing — was at <path>" under the name. An image opens the
+  lightbox (Mac) or full-screen viewer (iOS); another file is revealed in Finder (Mac) or opens in
+  Quick Look (iOS).
 
 **File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
 mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path

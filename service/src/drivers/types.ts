@@ -4,6 +4,9 @@
 import type { CommandMatch, DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentKind, SubagentStatus } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 import type { RunInput } from "./input";
+import type { RunImage } from "../prompt-attachments";
+
+export type { RunImage };
 
 export { RunInput, type SteerMessage } from "./input";
 
@@ -71,6 +74,12 @@ export interface RunRequest {
   kind: RunKind;
   /** The user-turn prompt for this run (human message or orchestrator instruction) */
   prompt: string;
+  /**
+   * Images that go with `prompt` in the same user message (DESIGN.md "Prompt attachments"): the
+   * ticket's attached images, on its first run only. Drivers that take image input (claude-code,
+   * anthropic-api) send them as image content blocks; the prompt lists their paths either way.
+   */
+  images?: RunImage[];
   /** Harness system prompt for this run kind (drivers append it to their own, if any) */
   systemPrompt: string;
   cwd: string;

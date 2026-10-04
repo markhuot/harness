@@ -335,6 +335,20 @@ public enum AttachmentKind: OpenEnum {
     }
 }
 
+/// PromptAttachment.source: "file" is referenced in place, "upload" was stored by POST /uploads.
+public enum PromptAttachmentSource: OpenEnum {
+    case file, upload
+    case unknown(String)
+    public static let allKnown: [Self] = [.file, .upload]
+    public var rawValue: String {
+        switch self {
+        case .file: "file"
+        case .upload: "upload"
+        case let .unknown(r): r
+        }
+    }
+}
+
 /// Watcher.mode. "loop": run, read output until exit, re-run immediately (for blocking or
 /// long-running commands). "interval": run every intervalSec seconds.
 public enum WatcherMode: OpenEnum {
