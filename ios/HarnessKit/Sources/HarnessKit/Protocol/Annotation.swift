@@ -1,7 +1,7 @@
 import Foundation
 
 // Annotations (DESIGN.md "Annotations"): numbered notes a human draws on an image before sending it
-// to the agent, ports of protocol.ts's AnnotationSource, AnnotationMark, MessageAnnotation and
+// to the agent, ports of protocol.ts's AnnotationMark, AnnotationPage, AttachmentAnnotation and
 // BrowserScreenshot.
 
 /// `MAX_ANNOTATION_MARKS`: most notes one image takes.
@@ -20,101 +20,8 @@ public struct AnnotationViewport: Codable, Sendable, Equatable, Hashable {
     }
 }
 
-/// Where an annotated image came from, discriminated by `kind`. An unknown `kind` decodes to
-/// `.unknown(kind:raw:)` and re-encodes `raw` unchanged.
-public enum AnnotationSource: Codable, Sendable, Equatable, Hashable {
-    /// An image in the ticket's spec (`attachment:<id>`).
-    case attachment(id: String, name: String)
-    /// One of the ticket's prompt attachments (Ticket.promptAttachments[index]).
-    case promptAttachment(index: Int, name: String)
-    /// A file sent with an earlier message (that transcript entry's attachments[index]).
-    case messageAttachment(entryId: String, index: Int, name: String)
-    /// An image that was waiting in a composer or a New session, annotated before it was sent (it
-    /// takes that file's place).
-    case file(name: String)
-    /// A screenshot of a session browser tab (BrowserScreenshot).
-    case browser(url: String, title: String, tabId: Int, viewport: AnnotationViewport, scale: Double)
-    case unknown(kind: String, raw: JSONValue)
-
-    /// The wire discriminator.
-    public var kind: String {
-        switch self {
-        case .attachment: "attachment"
-        case .promptAttachment: "prompt-attachment"
-        case .messageAttachment: "message-attachment"
-        case .file: "file"
-        case .browser: "browser"
-        case let .unknown(kind, _): kind
-        }
-    }
-
-    /// The file name the annotator's header shows (a browser page's title, else its URL).
-    public var displayName: String {
-        switch self {
-        case let .attachment(_, name), let .promptAttachment(_, name), let .messageAttachment(_, _, name), let .file(name): name
-        case let .browser(url, title, _, _, _): title.isEmpty ? url : title
-        case .unknown: ""
-        }
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: AnyCodingKey.self)
-        let kind = try c.decode(String.self, forKey: "kind")
-        switch kind {
-        case "attachment":
-            self = .attachment(id: try c.decode(String.self, forKey: "id"), name: try c.decode(String.self, forKey: "name"))
-        case "prompt-attachment":
-            self = .promptAttachment(index: try c.decode(Int.self, forKey: "index"), name: try c.decode(String.self, forKey: "name"))
-        case "message-attachment":
-            self = .messageAttachment(
-                entryId: try c.decode(String.self, forKey: "entryId"),
-                index: try c.decode(Int.self, forKey: "index"),
-                name: try c.decode(String.self, forKey: "name")
-            )
-        case "file":
-            self = .file(name: try c.decode(String.self, forKey: "name"))
-        case "browser":
-            self = .browser(
-                url: try c.decode(String.self, forKey: "url"),
-                title: try c.decode(String.self, forKey: "title"),
-                tabId: try c.decode(Int.self, forKey: "tabId"),
-                viewport: try c.decode(AnnotationViewport.self, forKey: "viewport"),
-                scale: try c.decode(Double.self, forKey: "scale")
-            )
-        default: self = .unknown(kind: kind, raw: try JSONValue(from: decoder))
-        }
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        if case let .unknown(_, raw) = self { return try raw.encode(to: encoder) }
-        var c = encoder.container(keyedBy: AnyCodingKey.self)
-        try c.encode(kind, forKey: "kind")
-        switch self {
-        case let .attachment(id, name):
-            try c.encode(id, forKey: "id")
-            try c.encode(name, forKey: "name")
-        case let .promptAttachment(index, name):
-            try c.encode(index, forKey: "index")
-            try c.encode(name, forKey: "name")
-        case let .messageAttachment(entryId, index, name):
-            try c.encode(entryId, forKey: "entryId")
-            try c.encode(index, forKey: "index")
-            try c.encode(name, forKey: "name")
-        case let .file(name):
-            try c.encode(name, forKey: "name")
-        case let .browser(url, title, tabId, viewport, scale):
-            try c.encode(url, forKey: "url")
-            try c.encode(title, forKey: "title")
-            try c.encode(tabId, forKey: "tabId")
-            try c.encode(viewport, forKey: "viewport")
-            try c.encode(scale, forKey: "scale")
-        case .unknown: break
-        }
-    }
-}
-
 /// One numbered note. `x`/`y` is the anchor the arrow points at, `tailX`/`tailY` where the arrow
-/// starts (where the number sits); both in the annotated image's pixels. No tail: a plain tap, with
+/// starts (where the number sits); both in the image's pixels. No tail: a plain tap, with
 /// the number on the anchor.
 public struct AnnotationMark: Codable, Sendable, Equatable, Hashable {
     public var n: Int
@@ -134,22 +41,42 @@ public struct AnnotationMark: Codable, Sendable, Equatable, Hashable {
     }
 }
 
-/// Numbered notes on one image sent with a message: MessageBody.attachments[attachment].
-public struct MessageAnnotation: Codable, Sendable, Equatable, Hashable {
-    public var attachment: Int
-    public var source: AnnotationSource
-    /// The annotated image's size in pixels.
+/// The page a browser screenshot shows (BrowserScreenshot), so the agent can find the marks on it
+/// in CSS pixels.
+public struct AnnotationPage: Codable, Sendable, Equatable, Hashable {
+    public var url: String
+    public var title: String
+    public var tabId: Int
+    /// The page's viewport in CSS pixels.
+    public var viewport: AnnotationViewport
+    /// Device pixels per CSS pixel.
+    public var scale: Double
+
+    public init(url: String, title: String, tabId: Int, viewport: AnnotationViewport, scale: Double) {
+        self.url = url
+        self.title = title
+        self.tabId = tabId
+        self.viewport = viewport
+        self.scale = scale
+    }
+}
+
+/// A human's numbered notes on an image attachment (PromptAttachment.annotation). Metadata only:
+/// the image file is never changed, and the apps draw the marks over it.
+public struct AttachmentAnnotation: Codable, Sendable, Equatable, Hashable {
+    /// The image's size in pixels; the marks are in these pixels.
     public var width: Double
     public var height: Double
     /// Numbered 1…n in order.
     public var marks: [AnnotationMark]
+    /// Set when the image is a screenshot of a session browser tab.
+    public var page: AnnotationPage?
 
-    public init(attachment: Int, source: AnnotationSource, width: Double, height: Double, marks: [AnnotationMark]) {
-        self.attachment = attachment
-        self.source = source
+    public init(width: Double, height: Double, marks: [AnnotationMark], page: AnnotationPage? = nil) {
         self.width = width
         self.height = height
         self.marks = marks
+        self.page = page
     }
 }
 
@@ -182,8 +109,8 @@ public struct BrowserScreenshot: Codable, Sendable, Equatable {
     /// The PNG's bytes (nil when `data` isn't base64).
     public var png: Data? { Data(base64Encoded: data, options: .ignoreUnknownCharacters) }
 
-    /// Where the annotated screenshot came from, for MessageAnnotation.source.
-    public var source: AnnotationSource {
-        .browser(url: url, title: title, tabId: tabId, viewport: viewport, scale: scale)
+    /// The page it shows, for AttachmentAnnotation.page.
+    public var page: AnnotationPage {
+        AnnotationPage(url: url, title: title, tabId: tabId, viewport: viewport, scale: scale)
     }
 }

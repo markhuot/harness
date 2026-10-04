@@ -66,6 +66,35 @@ struct PromptAttachmentsTests {
         #expect(PromptAttachments.isImage(name: c.input.name, path: c.input.path) == c.output)
     }
 
+    struct AnnotateInput: Decodable, Sendable {
+        let list: [PromptAttachment]
+        let input: PromptAttachmentInput
+        let annotation: AttachmentAnnotation?
+        let max: Int?
+    }
+
+    struct AnnotateOutput: Decodable, Sendable, Equatable {
+        let list: [PromptAttachment]
+        let skipped: Bool
+    }
+
+    @Test(arguments: Fixture.cases("promptAttachments", "annotatePromptAttachmentCases", input: AnnotateInput.self, output: AnnotateOutput.self))
+    func annotate(_ c: Fixture.Case<AnnotateInput, AnnotateOutput>) {
+        let r = c.input.max.map { PromptAttachments.annotate(c.input.list, c.input.input, annotation: c.input.annotation, max: $0) }
+            ?? PromptAttachments.annotate(c.input.list, c.input.input, annotation: c.input.annotation)
+        #expect(AnnotateOutput(list: r.list, skipped: r.skipped) == c.output, "\(c.name)")
+    }
+
+    @Test(arguments: Fixture.cases("promptAttachments", "specAttachmentIdOfCases", input: String.self, output: String?.self))
+    func specAttachmentIdOf(_ c: Fixture.Case<String, String?>) {
+        #expect(PromptAttachments.specAttachmentId(of: c.input) == c.output, "\(c.name)")
+    }
+
+    @Test func specAttachmentPathRoundTrips() {
+        #expect(PromptAttachments.specAttachmentPath("att_9") == "attachment:att_9")
+        #expect(PromptAttachments.specAttachmentId(of: PromptAttachments.specAttachmentPath("att_9")) == "att_9")
+    }
+
     @Test(arguments: Fixture.cases("promptAttachments", "pastedImageNameCases", input: String?.self, output: String.self))
     func pastedImageName(_ c: Fixture.Case<String?, String>) {
         #expect(PromptAttachments.pastedImageName(c.input) == c.output)
@@ -166,36 +195,42 @@ struct MessageAttachmentsTests {
         #expect(m.isEmpty)
     }
 
-    static func note(_ name: String) -> MessageAnnotation {
-        MessageAnnotation(attachment: 0, source: .file(name: name), width: 10, height: 10, marks: [AnnotationMark(n: 1, x: 1, y: 1, message: name)])
+    static func note(_ message: String) -> AttachmentAnnotation {
+        AttachmentAnnotation(width: 10, height: 10, marks: [AnnotationMark(n: 1, x: 1, y: 1, message: message)])
     }
 
-    @Test func notesStayOnTheirImagesAsTheListChanges() {
+    /// The notes live on the attachment itself: annotating a waiting file edits it in place (it
+    /// keeps its place and name), another image is added at the end, and removing or clearing
+    /// takes the notes with the file.
+    @Test func annotatingSetsTheNotesOnTheAttachmentItself() {
         let m = MessageAttachments()
         m.add([Self.input("/u/a.png"), Self.input("/u/b.png")])
-        #expect(m.addAnnotated(Self.input("/u/annotated-x.png"), annotation: Self.note("x.png")))
-        #expect(m.annotation(at: 2)?.source == .file(name: "x.png"))
-        // The same file again isn't added twice.
-        #expect(!m.addAnnotated(Self.input("/u/annotated-x.png"), annotation: Self.note("x.png")))
-        m.replace(at: 0, with: Self.input("/u/annotated-a.png"), annotation: Self.note("a.png"))
-        #expect(m.list.map(\.path) == ["/u/annotated-a.png", "/u/b.png", "/u/annotated-x.png"])
-        #expect(m.annotations.map(\.attachment) == [0, 2])
-        // Removing one without notes moves the later notes up with their files.
-        m.remove(at: 1)
-        #expect(m.outgoingAnnotations.map(\.attachment) == [0, 1])
-        #expect(m.annotation(at: 1)?.source == .file(name: "x.png"))
-        // Removing an annotated one drops its notes.
-        m.remove(at: 0)
-        #expect(m.outgoingAnnotations.map(\.attachment) == [0])
-        m.clear()
-        #expect(m.annotations.isEmpty)
+        #expect(m.annotate(PromptAttachmentInput(path: "/u/b.png"), annotation: Self.note("b")))
+        #expect(m.list.map(\.path) == ["/u/a.png", "/u/b.png"])
+        #expect(m.list[1].annotation == Self.note("b"))
+        #expect(m.list[1].name == "b.png")
+        // Annotated again: replaced in place, not added twice.
+        #expect(m.annotate(PromptAttachmentInput(path: "/u/b.png"), annotation: Self.note("again")))
+        #expect(m.count == 2 && m.list[1].annotation == Self.note("again"))
+        // A spec image comes in by reference, at the end.
+        #expect(m.annotate(PromptAttachmentInput(path: PromptAttachments.specAttachmentPath("att_1"), name: "mock.png"), annotation: Self.note("spec")))
+        #expect(m.list.last == PromptAttachment(path: "attachment:att_1", name: "mock.png", source: .file, annotation: Self.note("spec")))
+        // The body carries each file's notes with it.
+        #expect(m.inputs.map(\.annotation) == [nil, Self.note("again"), Self.note("spec")])
+        // nil takes the notes off and leaves the file.
+        m.annotate(PromptAttachmentInput(path: "/u/b.png"), annotation: nil)
+        #expect(m.list[1].annotation == nil && m.count == 3)
+        m.remove(at: 2)
+        #expect(m.inputs.allSatisfy { $0.annotation == nil })
     }
 
-    @Test func aFullListTakesNoAnnotatedImage() {
+    @Test func aFullListTakesNoNewAnnotatedImageButStillEditsOneInIt() {
         let m = MessageAttachments()
         m.add((0..<maxPromptAttachments).map { Self.input("/u/\($0).png") })
-        #expect(!m.addAnnotated(Self.input("/u/annotated.png"), annotation: Self.note("a.png")))
-        #expect(m.annotations.isEmpty)
+        #expect(!m.annotate(Self.input("/u/new.png"), annotation: Self.note("x")))
+        #expect(m.count == maxPromptAttachments && m.list.allSatisfy { $0.annotation == nil })
+        #expect(m.annotate(Self.input("/u/3.png"), annotation: Self.note("x")))
+        #expect(m.list[3].annotation == Self.note("x"))
     }
 
     /// The body leaves `source` to the service, which decides it from the path.

@@ -183,62 +183,19 @@ struct AnnotationsFixtureTests {
         #expect(Annotations.notesLabel(c.input) == c.output)
     }
 
-    // Keeping annotations on their attachments as a message's or New session's list changes.
-
-    struct ListIndex: Decodable, Sendable {
-        let list: [MessageAnnotation]
-        let index: Int
-    }
-
-    struct WithInput: Decodable, Sendable {
-        let list: [MessageAnnotation]
-        let index: Int
-        let a: MessageAnnotation?
-    }
-
-    struct WithinInput: Decodable, Sendable {
-        let list: [MessageAnnotation]
-        let count: Int
-    }
-
     struct SameInput: Decodable, Sendable {
-        let a: [MessageAnnotation]
-        let b: [MessageAnnotation]
+        let a: AttachmentAnnotation?
+        let b: AttachmentAnnotation?
     }
 
-    struct MarksFromInput: Decodable, Sendable {
-        let width: Double
-        let height: Double
-        let marks: [AnnotationMark]
+    @Test(arguments: Fixture.cases("annotations", "sameAnnotationCases", input: SameInput.self, output: Bool.self))
+    func sameAnnotation(_ c: Fixture.Case<SameInput, Bool>) {
+        #expect(Annotations.same(c.input.a, c.input.b) == c.output, "\(c.name)")
+        #expect(Annotations.same(c.input.b, c.input.a) == c.output, "\(c.name), swapped")
     }
 
-    @Test(arguments: Fixture.cases("annotations", "annotationForCases", input: ListIndex.self, output: JSONValue.self))
-    func annotationFor(_ c: Fixture.Case<ListIndex, JSONValue>) throws {
-        try expectJSONMatchesTS(Annotations.annotation(for: c.input.index, in: c.input.list), c.output)
-    }
-
-    @Test(arguments: Fixture.cases("annotations", "withAnnotationCases", input: WithInput.self, output: JSONValue.self))
-    func withAnnotation(_ c: Fixture.Case<WithInput, JSONValue>) throws {
-        try expectJSONMatchesTS(Annotations.with(c.input.list, at: c.input.index, c.input.a), c.output)
-    }
-
-    @Test(arguments: Fixture.cases("annotations", "annotationsWithoutCases", input: ListIndex.self, output: JSONValue.self))
-    func annotationsWithout(_ c: Fixture.Case<ListIndex, JSONValue>) throws {
-        try expectJSONMatchesTS(Annotations.without(c.input.list, at: c.input.index), c.output)
-    }
-
-    @Test(arguments: Fixture.cases("annotations", "annotationsWithinCases", input: WithinInput.self, output: JSONValue.self))
-    func annotationsWithin(_ c: Fixture.Case<WithinInput, JSONValue>) throws {
-        try expectJSONMatchesTS(Annotations.within(c.input.list, count: c.input.count), c.output)
-    }
-
-    @Test(arguments: Fixture.cases("annotations", "sameAnnotationsCases", input: SameInput.self, output: Bool.self))
-    func sameAnnotations(_ c: Fixture.Case<SameInput, Bool>) {
-        #expect(Annotations.same(c.input.a, c.input.b) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("annotations", "draftMarksFromCases", input: MarksFromInput.self, output: [Mark].self))
-    func draftMarksFrom(_ c: Fixture.Case<MarksFromInput, [Mark]>) {
-        Self.expectMarks(Annotations.draftMarks(width: c.input.width, height: c.input.height, marks: c.input.marks), c.output, c.name)
+    @Test(arguments: Fixture.cases("annotations", "draftMarksFromCases", input: AttachmentAnnotation.self, output: [Mark].self))
+    func draftMarksFrom(_ c: Fixture.Case<AttachmentAnnotation, [Mark]>) {
+        Self.expectMarks(Annotations.draftMarks(from: c.input), c.output, c.name)
     }
 }

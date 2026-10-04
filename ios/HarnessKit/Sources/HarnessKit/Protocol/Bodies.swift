@@ -142,9 +142,6 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     /// machine, each existing now (400 otherwise), at most `maxPromptAttachments`. Pastes and files
     /// from another device go through POST /uploads first.
     public var promptAttachments: [PromptAttachmentInput]?
-    /// Notes on images among `promptAttachments` (Ticket.promptAnnotations), validated like
-    /// MessageBody.annotations.
-    public var promptAnnotations: [MessageAnnotation]?
 
     public init(
         projectId: String, spec: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
@@ -152,7 +149,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
         parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
-        draft: Bool? = nil, promptAttachments: [PromptAttachmentInput]? = nil, promptAnnotations: [MessageAnnotation]? = nil
+        draft: Bool? = nil, promptAttachments: [PromptAttachmentInput]? = nil
     ) {
         self.projectId = projectId
         self.spec = spec
@@ -174,7 +171,6 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         self.externalRef = externalRef
         self.draft = draft
         self.promptAttachments = promptAttachments
-        self.promptAnnotations = promptAnnotations
     }
 }
 
@@ -221,11 +217,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var projectId: String?
     /// Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
     /// ones the draft already had are kept as they are, even when their file has gone missing.
-    /// A PATCH that changes this list without `promptAnnotations` clears the draft's annotations, so
-    /// none is left pointing at another file.
     public var promptAttachments: [PromptAttachmentInput]?
-    /// Drafts only (409 otherwise): the whole new list of notes on images among the prompt attachments.
-    public var promptAnnotations: [MessageAnnotation]?
 
     public init(
         title: String? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
@@ -233,7 +225,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
         kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil,
-        promptAttachments: [PromptAttachmentInput]? = nil, promptAnnotations: [MessageAnnotation]? = nil
+        promptAttachments: [PromptAttachmentInput]? = nil
     ) {
         self.title = title
         self.spec = spec
@@ -254,7 +246,6 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         self.useWorktree = useWorktree
         self.projectId = projectId
         self.promptAttachments = promptAttachments
-        self.promptAnnotations = promptAnnotations
     }
 }
 
@@ -294,17 +285,11 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// The agent gets their paths, and images inline. Not allowed while a tool approval waits (a
     /// message then answers it as a deny).
     public var attachments: [PromptAttachmentInput]?
-    /// Numbered notes on images among `attachments` (DESIGN.md "Annotations"), at most one per
-    /// attachment. The service writes them into the agent's prompt as a numbered list, and the
-    /// transcript entry keeps them. 400 when an entry names no image attachment or its marks are
-    /// malformed.
-    public var annotations: [MessageAnnotation]?
 
-    public init(text: String, move: Bool? = nil, attachments: [PromptAttachmentInput]? = nil, annotations: [MessageAnnotation]? = nil) {
+    public init(text: String, move: Bool? = nil, attachments: [PromptAttachmentInput]? = nil) {
         self.text = text
         self.move = move
         self.attachments = attachments
-        self.annotations = annotations
     }
 }
 

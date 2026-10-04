@@ -181,39 +181,32 @@ public final class NewSessionEditor {
         let current = local.promptAttachments ?? []
         let result = PromptAttachments.add(current, added)
         if !PromptAttachments.same(result.list, current) {
-            // The notes go along, or the patch would clear them.
-            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list), promptAnnotations: local.promptAnnotations ?? []))
+            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list)))
         }
         return result.skipped
     }
 
-    /// Take the attachment at `index` off the prompt, with its notes; later notes move up with their files.
+    /// Take the attachment at `index` off the prompt (with its notes).
     public func removeAttachment(at index: Int) {
         guard let local else { return }
         let current = local.promptAttachments ?? []
         guard current.indices.contains(index) else { return }
-        edit(UpdateTicketBody(
-            promptAttachments: PromptAttachments.inputsKeepingSource(PromptAttachments.remove(current, at: index)),
-            promptAnnotations: Annotations.without(local.promptAnnotations ?? [], at: index)
-        ))
+        edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(PromptAttachments.remove(current, at: index))))
     }
 
-    /// Put `replacement` in place of the attachment at `index` (an image annotated in the New
-    /// session), with its notes (nil: none).
-    public func replaceAttachment(at index: Int, with replacement: PromptAttachmentInput, annotation: MessageAnnotation?) {
-        guard let local else { return }
-        var list = local.promptAttachments ?? []
-        guard list.indices.contains(index) else { return }
-        list[index] = PromptAttachments.fromInput(replacement)
-        edit(UpdateTicketBody(
-            promptAttachments: PromptAttachments.inputsKeepingSource(list),
-            promptAnnotations: Annotations.with(local.promptAnnotations ?? [], at: index, annotation)
-        ))
-    }
-
-    /// The notes on the prompt's attachment at `index`, if it has any.
-    public func annotation(at index: Int) -> MessageAnnotation? {
-        Annotations.annotation(for: index, in: local?.promptAnnotations ?? [])
+    /// Annotate `input` (DESIGN.md "Annotations"): the prompt's attachment with its path gets
+    /// `annotation` in place (nil takes it off), or it's added at the end with it. The notes are
+    /// metadata on the attachment, saved with the draft like any other attachment change. False
+    /// when it wasn't there and the prompt is full.
+    @discardableResult
+    public func annotateAttachment(_ input: PromptAttachmentInput, annotation: AttachmentAnnotation?) -> Bool {
+        guard let local else { return false }
+        let current = local.promptAttachments ?? []
+        let result = PromptAttachments.annotate(current, input, annotation: annotation)
+        if !PromptAttachments.same(result.list, current) {
+            edit(UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource(result.list)))
+        }
+        return !result.skipped
     }
 
     /// Move the draft to another project: its branch picks start over, and a Default model and the

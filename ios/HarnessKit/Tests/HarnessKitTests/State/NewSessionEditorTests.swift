@@ -44,9 +44,8 @@ struct NewSessionEditorTests {
             t.id = "t1"
             t.spec = body.spec
             t.promptAttachments = body.promptAttachments.map { $0.map { a in
-                PromptAttachments.fromInput(PromptAttachmentInput(path: a.path, name: a.name, source: a.path.hasPrefix("/up/") ? .upload : .file))
+                PromptAttachments.fromInput(PromptAttachmentInput(path: a.path, name: a.name, source: a.path.hasPrefix("/up/") ? .upload : .file, annotation: a.annotation))
             } } ?? []
-            t.promptAnnotations = body.promptAnnotations ?? []
             t.updatedAt = stamp()
             server = t
             return t
@@ -438,25 +437,31 @@ extension NewSessionEditorTests {
         #expect(r.editor.local?.promptAttachments?.map(\.path) == ["/Users/me/x.png"])
     }
 
-    static func note(_ name: String, _ message: String = "here") -> MessageAnnotation {
-        MessageAnnotation(attachment: 0, source: .file(name: name), width: 100, height: 50, marks: [AnnotationMark(n: 1, x: 10, y: 5, message: message)])
+    static func note(_ message: String = "here") -> AttachmentAnnotation {
+        AttachmentAnnotation(width: 100, height: 50, marks: [AnnotationMark(n: 1, x: 10, y: 5, message: message)])
     }
 
-    @Test func annotatingAnAttachmentReplacesItInPlaceAndSavesItsNotes() async {
+    /// Annotating a waiting image edits that attachment in place (same file, same place) and saves
+    /// the notes with the draft's attachments; the image itself is untouched.
+    @Test func annotatingAnAttachmentSetsItsNotesInPlaceAndSavesThem() async {
         let r = Rig()
         r.editor.begin(projectId: "p1", candidates: [])
         r.editor.addAttachments(Self.uploads(["a.png", "b.png", "c.pdf"]))
         await Self.drain()
-        r.editor.replaceAttachment(at: 1, with: PromptAttachmentInput(path: "/up/annotated-b.png", name: "annotated-b.png", source: .upload), annotation: Self.note("b.png"))
+        let b = r.editor.local!.promptAttachments![1]
+        #expect(r.editor.annotateAttachment(PromptAttachmentInput(path: b.path, name: b.name), annotation: Self.note()))
         await r.wait()
-        #expect(r.editor.local?.promptAttachments?.map(\.name) == ["a.png", "annotated-b.png", "c.pdf"])
-        #expect(r.api.patches.last?.promptAnnotations?.map(\.attachment) == [1])
-        #expect(r.api.server?.promptAnnotations?.first?.source == .file(name: "b.png"))
-        #expect(r.editor.annotation(at: 1)?.marks.first?.message == "here")
-        #expect(r.editor.annotation(at: 0) == nil)
-        // Out of range: nothing changes.
-        r.editor.replaceAttachment(at: 9, with: PromptAttachmentInput(path: "/up/x.png"), annotation: nil)
-        #expect(r.editor.local?.promptAttachments?.count == 3)
+        #expect(r.editor.local?.promptAttachments?.map(\.path) == r.api.server?.promptAttachments?.map(\.path))
+        #expect(r.editor.local?.promptAttachments?.map(\.name) == ["a.png", "b.png", "c.pdf"])
+        #expect(r.editor.local?.promptAttachments?[1].source == .upload)
+        #expect(r.api.patches.last?.promptAttachments?[1].annotation == Self.note())
+        #expect(r.api.server?.promptAttachments?[1].annotation == Self.note())
+        #expect(r.api.server?.promptAttachments?[0].annotation == nil)
+        // Edited again: still one file, new notes.
+        r.editor.annotateAttachment(PromptAttachmentInput(path: b.path), annotation: Self.note("moved"))
+        await r.wait()
+        #expect(r.api.server?.promptAttachments?.count == 3)
+        #expect(r.api.server?.promptAttachments?[1].annotation?.marks.first?.message == "moved")
     }
 
     @Test func addingAndRemovingKeepEachNoteOnItsImage() async {
@@ -464,19 +469,16 @@ extension NewSessionEditorTests {
         r.editor.begin(projectId: "p1", candidates: [])
         r.editor.addAttachments(Self.uploads(["a.png", "b.png", "c.png"]))
         await Self.drain()
-        r.editor.replaceAttachment(at: 2, with: PromptAttachmentInput(path: "/up/annotated-c.png", name: "annotated-c.png", source: .upload), annotation: Self.note("c.png"))
-        // Adding more doesn't clear the notes (a patch of attachments alone would).
+        let c = r.editor.local!.promptAttachments![2]
+        r.editor.annotateAttachment(PromptAttachmentInput(path: c.path), annotation: Self.note("c"))
         r.editor.addAttachments(Self.uploads(["d.png"]))
-        #expect(r.editor.annotation(at: 2)?.source == .file(name: "c.png"))
-        // Removing a file before it moves the note up with its image.
+        #expect(r.editor.local?.promptAttachments?[2].annotation == Self.note("c"))
         r.editor.removeAttachment(at: 0)
         await r.wait()
-        #expect(r.editor.local?.promptAnnotations?.map(\.attachment) == [1])
-        #expect(r.api.server?.promptAnnotations?.map(\.attachment) == [1])
-        #expect(r.api.server?.promptAttachments?[1].name == "annotated-c.png")
-        // Removing the annotated one drops its notes.
+        #expect(r.api.server?.promptAttachments?.map(\.name) == ["b.png", "c.png", "d.png"])
+        #expect(r.api.server?.promptAttachments?.map { $0.annotation != nil } == [false, true, false])
         r.editor.removeAttachment(at: 1)
         await r.wait()
-        #expect(r.api.server?.promptAnnotations == [])
+        #expect(r.api.server?.promptAttachments?.allSatisfy { $0.annotation == nil } == true)
     }
 }

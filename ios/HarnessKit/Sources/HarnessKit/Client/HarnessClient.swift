@@ -199,16 +199,13 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/submit", body: body)
     }
 
-    /// `move` is only sent when true, `attachments` and `annotations` only when there are some. The
-    /// message goes to the agent and shows in the Transcript (with its attachments and notes); it
-    /// never goes into Activity.
+    /// `move` is only sent when true, `attachments` only when there are some (each with its notes,
+    /// PromptAttachmentInput.annotation). The message goes to the agent and shows in the Transcript
+    /// (with its attachments); it never goes into Activity.
     public func sendMessage(
-        _ key: String, text: String, move: Bool = false, attachments: [PromptAttachmentInput] = [], annotations: [MessageAnnotation] = []
+        _ key: String, text: String, move: Bool = false, attachments: [PromptAttachmentInput] = []
     ) async throws -> Ticket {
-        let body = MessageBody(
-            text: text, move: move ? true : nil, attachments: attachments.isEmpty ? nil : attachments,
-            annotations: annotations.isEmpty ? nil : annotations
-        )
+        let body = MessageBody(text: text, move: move ? true : nil, attachments: attachments.isEmpty ? nil : attachments)
         return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
 

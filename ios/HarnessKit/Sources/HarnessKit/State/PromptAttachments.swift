@@ -18,23 +18,26 @@ public enum PromptAttachments {
     /// unless it says otherwise.
     public static func fromInput(_ a: PromptAttachmentInput) -> PromptAttachment {
         let name = a.name.map(JSCompat.trim).flatMap { $0.isEmpty ? nil : $0 } ?? fileBaseName(a.path)
-        return PromptAttachment(path: a.path, name: name, source: a.source ?? .file)
+        return PromptAttachment(path: a.path, name: name, source: a.source ?? .file, annotation: a.annotation)
     }
 
-    /// The list as a create or PATCH body sends it (the service decides `source` itself).
+    /// The list as a create or PATCH body sends it (the service decides `source` itself), each
+    /// with its notes.
     public static func inputs(_ list: [PromptAttachment]) -> [PromptAttachmentInput] {
-        list.map { PromptAttachmentInput(path: $0.path, name: $0.name) }
+        list.map { PromptAttachmentInput(path: $0.path, name: $0.name, annotation: $0.annotation) }
     }
 
     /// The list as inputs that keep `source`, for a local edit (`applyTicketPatch` would otherwise
     /// turn every upload into "file" until the service answers).
     public static func inputsKeepingSource(_ list: [PromptAttachment]) -> [PromptAttachmentInput] {
-        list.map { PromptAttachmentInput(path: $0.path, name: $0.name, source: $0.source) }
+        list.map { PromptAttachmentInput(path: $0.path, name: $0.name, source: $0.source, annotation: $0.annotation) }
     }
 
-    /// Same files, same names, same order.
+    /// Same files, same names, same annotations, same order.
     public static func same(_ a: [PromptAttachment], _ b: [PromptAttachment]) -> Bool {
-        a.count == b.count && zip(a, b).allSatisfy { jsEqual($0.path, $1.path) && jsEqual($0.name, $1.name) }
+        a.count == b.count && zip(a, b).allSatisfy {
+            jsEqual($0.path, $1.path) && jsEqual($0.name, $1.name) && Annotations.same($0.annotation, $1.annotation)
+        }
     }
 
     /// `list` with `added` appended: a path already in the list (or twice in `added`) is attached
@@ -55,6 +58,39 @@ public enum PromptAttachments {
             out.append(fromInput(a))
         }
         return (out, skipped)
+    }
+
+    /// `annotatePromptAttachment`: `list` with `input` annotated (DESIGN.md "Annotations"). The
+    /// attachment with the same path gets `annotation` (nil takes it off), or `input` is added at the
+    /// end when it isn't there yet. `skipped` is true when it wasn't there and the list was full.
+    public static func annotate(
+        _ list: [PromptAttachment], _ input: PromptAttachmentInput, annotation: AttachmentAnnotation?, max: Int = maxPromptAttachments
+    ) -> (list: [PromptAttachment], skipped: Bool) {
+        func set(_ a: PromptAttachment) -> PromptAttachment {
+            var out = a
+            out.annotation = annotation
+            return out
+        }
+        if let i = list.firstIndex(where: { jsEqual($0.path, input.path) }) {
+            var out = list
+            out[i] = set(list[i])
+            return (out, false)
+        }
+        if list.count >= max { return (list, true) }
+        return (list + [set(fromInput(input))], false)
+    }
+
+    /// The reference a message sends for one of the ticket's spec images (`attachment:<id>`); the
+    /// service stores its file's path.
+    public static func specAttachmentPath(_ id: String) -> String { "attachment:\(id)" }
+
+    /// The spec image id an attachment still refers to by `attachment:<id>` (one waiting to be
+    /// sent), or nil.
+    public static func specAttachmentId(of path: String) -> String? {
+        let prefix = Array("attachment:".unicodeScalars)
+        let scalars = Array(path.unicodeScalars)
+        guard scalars.starts(with: prefix), scalars.count > prefix.count else { return nil }
+        return string(scalars[prefix.count...])
     }
 
     /// `list` without the attachment at `index` (unchanged when there's none).

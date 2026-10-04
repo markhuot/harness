@@ -167,7 +167,7 @@ public enum Annotations {
         }
     }
 
-    /// The marks as a message sends them (MessageAnnotation.marks): numbered 1…n in order, in pixels
+    /// The marks as an attachment keeps them (AttachmentAnnotation.marks): numbered 1…n in order, in pixels
     /// of the `width`×`height` image, with trimmed messages.
     public static func marksForMessage(_ marks: [DraftMark], width: Double, height: Double) -> [AnnotationMark] {
         marks.enumerated().map { i, m in
@@ -185,9 +185,9 @@ public enum Annotations {
         "\(count) \(count == 1 ? "note" : "notes")"
     }
 
-    /// The marks of a sent or waiting annotation, back as fractions of its image, so the annotator
-    /// can reopen them to edit (over the original image, which has the same size as the annotated one).
-    public static func draftMarks(from a: MessageAnnotation) -> [DraftMark] {
+    /// The marks of an annotation, back as fractions of its image, so the annotator can reopen
+    /// them to edit (the image is untouched, so they still sit where they were drawn).
+    public static func draftMarks(from a: AttachmentAnnotation) -> [DraftMark] {
         draftMarks(width: a.width, height: a.height, marks: a.marks)
     }
 
@@ -200,43 +200,8 @@ public enum Annotations {
         }
     }
 
-    // A message (or New session) keeps its annotations beside its attachments, each naming its
-    // attachment by index. These keep them pointed at the right file as the list changes.
-
-    /// The annotation on `attachments[index]`, if it has one.
-    public static func annotation(for index: Int, in annotations: [MessageAnnotation]) -> MessageAnnotation? {
-        annotations.first { $0.attachment == index }
-    }
-
-    /// `annotations` with the one on `attachments[index]` set to `a` (its own `attachment` is
-    /// ignored; nil removes it), in attachment order.
-    public static func with(_ annotations: [MessageAnnotation], at index: Int, _ a: MessageAnnotation?) -> [MessageAnnotation] {
-        var rest = annotations.filter { $0.attachment != index }
-        if var a {
-            a.attachment = index
-            rest.append(a)
-        }
-        // A stable sort, as Array.prototype.sort is.
-        return rest.enumerated().sorted { ($0.element.attachment, $0.offset) < ($1.element.attachment, $1.offset) }.map(\.element)
-    }
-
-    /// `annotations` once `attachments[index]` is removed: its own goes, and later ones move up an index.
-    public static func without(_ annotations: [MessageAnnotation], at index: Int) -> [MessageAnnotation] {
-        annotations.filter { $0.attachment != index }.map { a in
-            guard a.attachment > index else { return a }
-            var out = a
-            out.attachment -= 1
-            return out
-        }
-    }
-
-    /// Only the annotations whose attachment is still in a list of `count` (what a send or save carries).
-    public static func within(_ annotations: [MessageAnnotation], count: Int) -> [MessageAnnotation] {
-        annotations.filter { $0.attachment >= 0 && $0.attachment < count }
-    }
-
-    /// Same annotations, same order, same contents.
-    public static func same(_ a: [MessageAnnotation], _ b: [MessageAnnotation]) -> Bool {
+    /// `sameAnnotation`: both absent, or the same size, page and marks.
+    public static func same(_ a: AttachmentAnnotation?, _ b: AttachmentAnnotation?) -> Bool {
         a == b
     }
 
@@ -261,91 +226,12 @@ public enum Annotations {
         return out
     }
 
-    /// The annotation each image of a sent message carries, by attachment index (the Transcript's
-    /// "N notes" under that image). Entries naming no attachment in range, and empty ones, are left out.
-    public static func byAttachment(_ annotations: [MessageAnnotation]?, attachments: Int) -> [Int: MessageAnnotation] {
-        var out: [Int: MessageAnnotation] = [:]
-        for a in annotations ?? [] where a.attachment >= 0 && a.attachment < attachments && !a.marks.isEmpty && out[a.attachment] == nil {
-            out[a.attachment] = a
-        }
-        return out
-    }
-
-    /// The largest picture that still goes to the agent inline (the API takes 5 MB of base64 per
-    /// image; 3.75 MB of bytes is that once encoded). The Mac app's INLINE_IMAGE_LIMIT.
-    public static let inlineImageLimit = Int(3.75 * 1024 * 1024)
-
-    /// The JPEG qualities tried, best first, when the PNG is too big.
-    public static let jpegQualities: [Double] = [0.9, 0.8, 0.7, 0.6, 0.5]
-
     /// How many steps Undo keeps (the Mac app's HISTORY_LIMIT).
     public static let historyLimit = 100
-
-    /// An encoded picture: its bytes, and whether they're a JPEG (else a PNG).
-    public struct Encoded: Sendable, Equatable {
-        public var data: Data
-        public var jpeg: Bool
-
-        public init(data: Data, jpeg: Bool) {
-            self.data = data
-            self.jpeg = jpeg
-        }
-    }
-
-    /// The annotated picture as a PNG, or when that's over `limit` as the best JPEG that fits (none
-    /// fits: the smallest one tried, and the service decides what to do with it). `encode(nil)` is
-    /// the PNG, `encode(q)` a JPEG at quality q; nil when it couldn't encode. The Mac app's
-    /// encodeWithinLimit.
-    public static func encodeWithinLimit(limit: Int = inlineImageLimit, _ encode: (Double?) -> Data?) -> Encoded? {
-        let png = encode(nil)
-        if let png, png.count <= limit { return Encoded(data: png, jpeg: false) }
-        var smallest = png.map { Encoded(data: $0, jpeg: false) }
-        for q in jpegQualities {
-            guard let jpeg = encode(q) else { continue }
-            if jpeg.count <= limit { return Encoded(data: jpeg, jpeg: true) }
-            if smallest == nil || jpeg.count < smallest!.data.count { smallest = Encoded(data: jpeg, jpeg: true) }
-        }
-        return smallest
-    }
 
     /// `history` with `snapshot` pushed, keeping the newest historyLimit.
     public static func pushHistory<T>(_ history: [T], _ snapshot: T) -> [T] {
         let next = history + [snapshot]
         return next.count > historyLimit ? Array(next.suffix(historyLimit)) : next
-    }
-
-    // Names, as the Mac app gives them (app/src/renderer/state/annotator.ts), so the agent sees the
-    // same file names from either app.
-
-    /// A file's name without its folders and extension ("/a/Screen Shot.jpeg" → "Screen Shot"); a
-    /// dot that isn't an extension ("release 1.2") stays.
-    public static func stripExtension(_ name: String) -> String {
-        let leaf = name.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init) ?? ""
-        return leaf.replacingOccurrences(of: #"\.[A-Za-z][A-Za-z0-9]{0,4}\z"#, with: "", options: .regularExpression)
-    }
-
-    /// The file name of the annotated picture: `annotated-<base>.png` (or .jpg), the base made safe
-    /// for a file name.
-    public static func annotatedName(_ base: String, jpeg: Bool) -> String {
-        let ext = jpeg ? "jpg" : "png"
-        var safe = base.replacingOccurrences(of: #"[^A-Za-z0-9_.-]+"#, with: "-", options: .regularExpression)
-        safe = safe.replacingOccurrences(of: #"^[-.]+|[-.]+\z"#, with: "", options: .regularExpression)
-        safe = String(safe.prefix(80))
-        return "annotated-\(safe.isEmpty ? "image" : safe).\(ext)"
-    }
-
-    /// A browser page's name for its picture: the host, else the title, else "page".
-    public static func browserShotName(url: String, title: String) -> String {
-        if let host = URL(string: url)?.host(percentEncoded: false), !host.isEmpty { return host.lowercased() }
-        let t = JSCompat.trim(title)
-        return t.isEmpty ? "page" : t
-    }
-
-    /// The annotated picture's file name for an image from `source`.
-    public static func annotatedName(_ source: AnnotationSource, jpeg: Bool) -> String {
-        switch source {
-        case let .browser(url, title, _, _, _): annotatedName(browserShotName(url: url, title: title), jpeg: jpeg)
-        default: annotatedName(stripExtension(source.displayName), jpeg: jpeg)
-        }
     }
 }

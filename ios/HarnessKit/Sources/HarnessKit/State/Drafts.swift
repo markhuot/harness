@@ -81,9 +81,6 @@ public enum Drafts {
         if patch.useWorktree.isPresent { next.useWorktree = patch.useWorktree }
         if let projectId = patch.projectId { next.projectId = projectId }
         if let attachments = patch.promptAttachments { next.promptAttachments = attachments.map(PromptAttachments.fromInput) }
-        // As the service does: new attachments without their annotations clear them.
-        if let annotations = patch.promptAnnotations { next.promptAnnotations = annotations }
-        else if patch.promptAttachments != nil { next.promptAnnotations = [] }
         return next
     }
 
@@ -132,8 +129,7 @@ public enum Drafts {
             skipHumanReview: t.skipHumanReview == true,
             dependsOn: t.dependsOn.isEmpty ? nil : t.dependsOn,
             draft: true,
-            promptAttachments: (t.promptAttachments ?? []).isEmpty ? nil : PromptAttachments.inputs(t.promptAttachments ?? []),
-            promptAnnotations: (t.promptAttachments ?? []).isEmpty || (t.promptAnnotations ?? []).isEmpty ? nil : t.promptAnnotations
+            promptAttachments: (t.promptAttachments ?? []).isEmpty ? nil : PromptAttachments.inputs(t.promptAttachments ?? [])
         )
     }
 
@@ -154,11 +150,8 @@ public enum Drafts {
         if (next.skipAgentReview == true) != (prev.skipAgentReview == true) { p.skipAgentReview = next.skipAgentReview == true }
         if (next.skipHumanReview == true) != (prev.skipHumanReview == true) { p.skipHumanReview = next.skipHumanReview == true }
         if !next.dependsOn.elementsEqual(prev.dependsOn, by: Branches.jsEqual) { p.dependsOn = next.dependsOn }
-        let attachmentsChanged = !PromptAttachments.same(next.promptAttachments ?? [], prev.promptAttachments ?? [])
-        if attachmentsChanged { p.promptAttachments = PromptAttachments.inputs(next.promptAttachments ?? []) }
-        // The service clears annotations when the attachments change without them, so they go along.
-        if attachmentsChanged || !Annotations.same(next.promptAnnotations ?? [], prev.promptAnnotations ?? []) {
-            p.promptAnnotations = next.promptAnnotations ?? []
+        if !PromptAttachments.same(next.promptAttachments ?? [], prev.promptAttachments ?? []) {
+            p.promptAttachments = PromptAttachments.inputs(next.promptAttachments ?? [])
         }
         return p == UpdateTicketBody() ? nil : p
     }

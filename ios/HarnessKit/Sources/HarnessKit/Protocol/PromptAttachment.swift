@@ -11,25 +11,32 @@ public struct PromptAttachment: Codable, Sendable, Equatable, Hashable {
     /// "upload": bytes the service stored with POST /uploads (a paste, or anything from the
     /// iPhone/iPad), deleted with the ticket.
     public var source: PromptAttachmentSource
+    /// The human's numbered notes on this image (DESIGN.md "Annotations"); the file itself is untouched.
+    public var annotation: AttachmentAnnotation?
 
-    public init(path: String, name: String, source: PromptAttachmentSource = .file) {
+    public init(path: String, name: String, source: PromptAttachmentSource = .file, annotation: AttachmentAnnotation? = nil) {
         self.path = path
         self.name = name
         self.source = source
+        self.annotation = annotation
     }
 }
 
 /// A prompt attachment as clients send it: the name defaults to the file's. `source` is ignored by
 /// the service, which decides it from where the file is; clients keep it in their local copy.
 public struct PromptAttachmentInput: Codable, Sendable, Equatable {
+    /// An absolute path on the service's machine, or `attachment:<id>` for one of the ticket's spec
+    /// images (the service stores its file's path).
     public var path: String
     public var name: String?
     public var source: PromptAttachmentSource?
+    public var annotation: AttachmentAnnotation?
 
-    public init(path: String, name: String? = nil, source: PromptAttachmentSource? = nil) {
+    public init(path: String, name: String? = nil, source: PromptAttachmentSource? = nil, annotation: AttachmentAnnotation? = nil) {
         self.path = path
         self.name = name
         self.source = source
+        self.annotation = annotation
     }
 }
 
