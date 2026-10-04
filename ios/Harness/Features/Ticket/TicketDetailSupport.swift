@@ -51,6 +51,9 @@ extension EnvironmentValues {
     @Entry var ticketDetailHero: TicketDetailHeroCollapse?
     /// `openTab(Tabs.subagentTabRoute(id))` from inside a ticket tab body.
     @Entry var ticketDetailOpenTab: TicketDetailTabOpener?
+    /// The ticket whose tab bodies these are: images in them can be annotated and sent to its agent
+    /// (AnnotatorView). nil outside a ticket (a New session, the composer's pending list).
+    @Entry var annotationTicketKey: String?
 }
 
 extension View {

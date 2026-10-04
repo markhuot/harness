@@ -6,12 +6,17 @@ import SwiftUI
 /// Full-screen pager over the attachments in a piece of markdown: ✕,
 /// the file name and "2 of 4 · 1.2 MB" on top; pages swipe sideways (a select haptic each),
 /// images pinch-zoom 1–4× or double-tap to 2.5× (paging stops while zoomed), videos play with the
-/// system controls while their page shows, and pulling a page down (or ✕) closes it.
+/// system controls while their page shows, and pulling a page down (or ✕) closes it. Inside a
+/// ticket (`\.annotationTicketKey`), a caller that says where its images came from (`annotate`) gets
+/// an Annotate button on the right of the header once the page's image has loaded; it opens the
+/// annotator on that image, and a send closes the viewer and opens the Transcript.
 struct AttachmentViewer: View {
     let attachments: [Attachment]
     /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. Prompt
     /// attachments (Ticket.promptAttachments) pass their own URLs.
     let url: (@MainActor (Attachment) -> String?)?
+    /// Where an image came from, for the annotator (nil: that page can't be annotated).
+    let annotate: (@MainActor (Attachment) -> AnnotationSource?)?
     let onClose: () -> Void
 
     @State private var position: Int?
@@ -20,14 +25,21 @@ struct AttachmentViewer: View {
     @State private var shown = false
     @State private var closing = false
     @State private var slide: CGFloat = 0
+    @State private var loaded = AttachmentViewerLoaded()
+    @State private var annotating: AnnotationRequest?
 
     // Hosted pages don't inherit the environment, so the viewer hands them these.
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.palette) private var c
+    @Environment(\.annotationTicketKey) private var ticketKey
 
-    init(attachments: [Attachment], start: Int, url: (@MainActor (Attachment) -> String?)? = nil, onClose: @escaping () -> Void) {
+    init(
+        attachments: [Attachment], start: Int, url: (@MainActor (Attachment) -> String?)? = nil,
+        annotate: (@MainActor (Attachment) -> AnnotationSource?)? = nil, onClose: @escaping () -> Void
+    ) {
         self.attachments = attachments
         self.url = url
+        self.annotate = annotate
         self.onClose = onClose
         _position = State(initialValue: Attachments.clampPage(Double(start), count: attachments.count))
     }
@@ -58,7 +70,7 @@ struct AttachmentViewer: View {
                 )
                 .ignoresSafeArea()
                 .offset(y: slide)
-                AttachmentViewerHeader(attachments: attachments, index: index, pull: pull, close: close)
+                AttachmentViewerHeader(attachments: attachments, index: index, pull: pull, close: close, annotate: annotateAction)
                     .padding(.top, safe.top)
                     .frame(height: header, alignment: .bottom)
                     .ignoresSafeArea(edges: .top)
@@ -74,6 +86,29 @@ struct AttachmentViewer: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(false)
         .onAppear { withAnimation(.easeOut(duration: 0.2)) { shown = true } }
+        .annotator($annotating) {
+            // Sent: the viewer goes too, so the Transcript shows the message.
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { onClose() }
+        }
+    }
+
+    private func pageUrl(_ a: Attachment) -> String? {
+        url.map { $0(a) } ?? AttachmentMedia.url(store, a.id)
+    }
+
+    /// The header's Annotate: inside a ticket, on an image page whose image has loaded, when the
+    /// caller says where it came from.
+    private var annotateAction: (() -> Void)? {
+        guard let ticketKey, let annotate, attachments.indices.contains(index) else { return nil }
+        let a = attachments[index]
+        guard a.kind == .image, let source = annotate(a), let u = pageUrl(a), loaded.urls.contains(u),
+              let image = AttachmentMedia.shared.cached(u) else { return nil }
+        return {
+            haptic(.tap)
+            annotating = AnnotationRequest(key: ticketKey, source: source, image: image)
+        }
     }
 
     @ViewBuilder
@@ -86,7 +121,7 @@ struct AttachmentViewer: View {
         if a.kind == .video {
             AttachmentVideoPage(attachment: a, current: current, insets: insets, events: events)
         } else {
-            AttachmentImagePage(attachment: a, url: url.map { $0(a) } ?? AttachmentMedia.url(store, a.id), insets: insets, events: events)
+            AttachmentImagePage(attachment: a, url: pageUrl(a), insets: insets, events: events, loaded: loaded)
         }
     }
 
@@ -118,6 +153,13 @@ private struct AttachmentStoreEnvironment: ViewModifier {
     }
 }
 
+/// The image URLs the viewer's pages have loaded (the header offers Annotate on those).
+@MainActor
+@Observable
+final class AttachmentViewerLoaded {
+    var urls: Set<String> = []
+}
+
 /// How far the current page is pulled down. Only the backdrop and header read it, so a pull
 /// redraws them and not the pager.
 @MainActor
@@ -142,6 +184,8 @@ private struct AttachmentViewerHeader: View {
     let index: Int
     let pull: AttachmentViewerPull
     let close: () -> Void
+    /// Opens the annotator on the page's image; nil: no Annotate button.
+    let annotate: (() -> Void)?
 
     var body: some View {
         let current = attachments.indices.contains(index) ? attachments[index] : nil
@@ -168,7 +212,19 @@ private struct AttachmentViewerHeader: View {
             }
             .lineLimit(1)
             .frame(maxWidth: .infinity)
-            Color.clear.frame(width: 36, height: 36)
+            if let annotate {
+                Button(action: annotate) {
+                    Image(systemName: "pencil.and.scribble")
+                        .font(.scaled(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.white.opacity(0.14), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Annotate")
+            } else {
+                Color.clear.frame(width: 36, height: 36)
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 56)
@@ -183,6 +239,7 @@ private struct AttachmentImagePage: View {
     let url: String?
     let insets: UIEdgeInsets
     let events: AttachmentPageEvents
+    let loaded: AttachmentViewerLoaded
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -201,8 +258,11 @@ private struct AttachmentImagePage: View {
             }
         }
         .task(id: url) {
-            guard let url, image == nil else { return }
-            do { image = try await AttachmentMedia.shared.image(url) } catch { if !Task.isCancelled { failed = true } }
+            guard let url else { return }
+            if image == nil {
+                do { image = try await AttachmentMedia.shared.image(url) } catch { if !Task.isCancelled { failed = true } }
+            }
+            if image != nil || AttachmentMedia.shared.cached(url) != nil { loaded.urls.insert(url) }
         }
     }
 

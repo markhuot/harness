@@ -16,6 +16,14 @@ enum PromptAttachmentRemote: Equatable {
         case let .message(entryId, index): api.messageAttachmentUrl(entryId: entryId, index: index)
         }
     }
+
+    /// Where an annotated copy of it came from (MessageAnnotation.source).
+    func annotationSource(name: String) -> AnnotationSource {
+        switch self {
+        case let .prompt(_, index): .promptAttachment(index: index, name: name)
+        case let .message(entryId, index): .messageAttachment(entryId: entryId, index: index, name: name)
+        }
+    }
 }
 
 /// One attachment (a ticket's prompt attachment, or one going with or sent with a message) as the
@@ -232,7 +240,8 @@ private struct PromptAttachmentUploadingRow: View {
 
 /// A read-only list whose rows open: images in the full-screen viewer (paging through the list's
 /// images), other files downloaded into Quick Look. The Spec tab's prompt attachments and a sent
-/// message's attachments in the Transcript. `downloading` is on while a file is being fetched.
+/// message's attachments in the Transcript, whose images the viewer offers to annotate.
+/// `downloading` is on while a file is being fetched.
 struct OpenablePromptAttachmentList: View {
     let tiles: [PromptAttachmentTile]
     @Binding var downloading: Bool
@@ -263,6 +272,10 @@ struct OpenablePromptAttachmentList: View {
                 url: { a in
                     guard let api, let i = Int(a.id), remotes.indices.contains(i) else { return nil }
                     return remotes[i]?.url(api)
+                },
+                annotate: { a in
+                    guard let i = Int(a.id), remotes.indices.contains(i) else { return nil }
+                    return remotes[i]?.annotationSource(name: a.name)
                 }
             ) {
                 var t = Transaction()

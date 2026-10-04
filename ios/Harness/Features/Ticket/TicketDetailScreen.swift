@@ -147,6 +147,7 @@ private struct TicketDetailBody: View {
                     hero.show()
                     onTab(t)
                 })
+                .environment(\.annotationTicketKey, ticket.key)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {

@@ -63,7 +63,7 @@ struct TicketDetailSpecTab: View {
                                        message: ticket.status == .planning ? "The planning agent writes it. You can also write it in Details." : "This revision is empty.")
                                 .padding(.top, 20)
                         } else {
-                            MarkdownView(text: body)
+                            MarkdownView(text: body, annotatable: true)
                         }
                     } else {
                         Spinner().frame(maxWidth: .infinity).padding(30)

@@ -75,7 +75,7 @@ struct TranscriptEntryRow: View {
     var body: some View {
         let time = transcriptTime(entry.createdAt)
         switch entry.content {
-        case let .text(text, attachments) where entry.role == .user:
+        case let .text(text, attachments, annotations) where entry.role == .user:
             VStack(alignment: .trailing, spacing: 4) {
                 TranscriptWho(icon: "user", label: "You", time: time)
                 // A message of only attachments has no bubble.
@@ -88,13 +88,13 @@ struct TranscriptEntryRow: View {
                     }
                 }
                 if let attachments, !attachments.isEmpty {
-                    TranscriptMessageAttachments(entryId: entry.id, list: attachments)
+                    TranscriptMessageAttachments(entryId: entry.id, list: attachments, annotations: annotations)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-        case let .text(text, _) where entry.role == .system:
+        case let .text(text, _, _) where entry.role == .system:
             MarkdownView(text: text, size: 13.5, color: c.text2).padding(.horizontal, 6)
-        case let .text(text, _):
+        case let .text(text, _, _):
             VStack(alignment: .leading, spacing: 4) {
                 TranscriptWho(icon: "sparkle", label: who, time: time)
                 MarkdownView(text: text)
@@ -132,10 +132,13 @@ struct TranscriptEntryRow: View {
 
 /// The files sent with a message, under its bubble: the shared read-only list (thumbnails, a
 /// missing state once a file is gone from the Mac), images opening full screen and other files in
-/// Quick Look, served from GET /transcript/:entryId/attachments/:index.
+/// Quick Look, served from GET /transcript/:entryId/attachments/:index. An image sent with
+/// numbered notes (MessageBody.annotations) gets a compact "3 notes" disclosure under the list that
+/// opens to the numbered notes.
 struct TranscriptMessageAttachments: View {
     let entryId: String
     let list: [PromptAttachment]
+    var annotations: [MessageAnnotation]?
 
     @Environment(\.palette) private var c
     @State private var downloading = false
@@ -144,14 +147,80 @@ struct TranscriptMessageAttachments: View {
         let tiles = list.enumerated().map { i, a in
             PromptAttachmentTile(attachment: a, index: i, remote: .message(entryId: entryId, index: i))
         }
-        OpenablePromptAttachmentList(tiles: tiles, downloading: $downloading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(c.accentSoft.opacity(0.5), in: .rect(cornerRadius: 14, style: .continuous))
-            .overlay(alignment: .topTrailing) {
-                if downloading { ProgressView().controlSize(.mini).padding(6) }
+        let notes = Annotations.byAttachment(annotations, attachments: list.count).sorted { $0.key < $1.key }
+        VStack(alignment: .leading, spacing: 2) {
+            OpenablePromptAttachmentList(tiles: tiles, downloading: $downloading)
+            ForEach(notes, id: \.key) { index, annotation in
+                TranscriptAnnotationNotes(name: list[index].name, annotation: annotation, named: list.count > 1)
             }
-            .frame(maxWidth: 320)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(c.accentSoft.opacity(0.5), in: .rect(cornerRadius: 14, style: .continuous))
+        .overlay(alignment: .topTrailing) {
+            if downloading { ProgressView().controlSize(.mini).padding(6) }
+        }
+        .frame(maxWidth: 320)
+    }
+}
+
+/// "3 notes" (with the image's name when the message had several files); tapping it lists each
+/// number with its note.
+struct TranscriptAnnotationNotes: View {
+    let name: String
+    let annotation: MessageAnnotation
+    let named: Bool
+
+    @Environment(\.palette) private var c
+    @State private var open = false
+
+    var body: some View {
+        let label = Annotations.notesLabel(annotation.marks.count)
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                haptic(.select)
+                withAnimation(.easeOut(duration: 0.18)) { open.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .rotationEffect(.degrees(open ? 90 : 0))
+                    Image(systemName: "pencil.and.scribble").font(.system(size: 11, weight: .semibold))
+                    Text(named ? "\(label) on \(name)" : label)
+                        .font(.scaled(size: 12.5, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .foregroundStyle(c.accentText)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(named ? "\(label) on \(name)" : label)
+            .accessibilityValue(open ? "Expanded" : "Collapsed")
+            if open {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(annotation.marks, id: \.n) { m in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text("\(m.n)")
+                                .font(.scaled(size: 11, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 20, height: 20)
+                                .background(c.accent, in: .circle)
+                                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4 }
+                            Text(m.message.isEmpty ? "(no note)" : m.message)
+                                .font(.scaled(size: 13.5))
+                                .foregroundStyle(m.message.isEmpty ? c.text3 : c.text)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(.bottom, 6)
+                .transition(.opacity)
+            }
+        }
     }
 }
 

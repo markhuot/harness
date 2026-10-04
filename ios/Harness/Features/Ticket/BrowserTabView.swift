@@ -6,14 +6,18 @@ import SwiftUI
 /// (base64 JPEG) are letterboxed into the stage and swapped only once decoded, so a new frame never
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
 /// field carries the keyboard. The page viewport follows the stage size, sent once the
-/// subscription is confirmed and only on change.
+/// subscription is confirmed and only on change. Annotate (in the toolbar) takes a screenshot of the
+/// shown tab (GET /browser/:sessionId/screenshot) and opens it in the annotator.
 struct BrowserTabView: View {
     let ticket: Ticket
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var model = BrowserTabModel()
+    @State private var annotating: AnnotationRequest?
+    @State private var capturing = false
     @State private var urlDraft = ""
     @State private var urlSelection: TextSelection?
     @FocusState private var editingUrl: Bool
@@ -39,6 +43,7 @@ struct BrowserTabView: View {
             .frame(width: 1, height: 1)
             .opacity(0)
             .accessibilityHidden(true))
+        .annotator($annotating)
         .task(id: Subscription(sessionId: sessionId, epoch: store.epoch, socket: store.socketGeneration)) {
             await model.run(sessionId: sessionId, store: store, client: client)
         }
@@ -84,6 +89,9 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "refresh", label: "Reload", disabled: model.empty) { model.command(.reload) }
             BrowserBarButton(icon: "edit", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
+            }
+            BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing, disabled: model.frame == nil || capturing) {
+                annotate()
             }
             BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
                 model.newTab()
@@ -182,6 +190,25 @@ struct BrowserTabView: View {
         }
     }
 
+    /// A screenshot of the shown tab, opened in the annotator.
+    private func annotate() {
+        guard let client, !capturing else { return }
+        capturing = true
+        let id = sessionId
+        let tab = model.selection.shown
+        let key = ticket.key
+        Task {
+            defer { capturing = false }
+            guard let shot = await actions.run(nil, { try await client.browserScreenshot(id, tabId: tab) }) else { return }
+            guard let data = shot.png, let image = UIImage(data: data) else {
+                haptic(.error)
+                toasts.show("Couldn't read the page's screenshot.", kind: .error)
+                return
+            }
+            annotating = AnnotationRequest(key: key, source: shot.source, image: image)
+        }
+    }
+
     private func navigate() async {
         let url = Format.normalizeUrl(urlDraft)
         guard !url.isEmpty, let client else { return }
@@ -251,8 +278,12 @@ struct BrowserTabChip: View {
 /// A toolbar icon button: 34 pt, tap haptic, accent tint when active.
 struct BrowserBarButton: View {
     let icon: String
+    /// An SF Symbol to draw instead of the shared `icon`.
+    var systemImage: String?
     let label: String
     var active = false
+    /// A spinner in place of the icon (while its action is under way).
+    var busy = false
     var disabled = false
     let action: () -> Void
     @Environment(\.palette) private var c
@@ -262,7 +293,13 @@ struct BrowserBarButton: View {
             haptic(.tap)
             action()
         } label: {
-            Image(icon: icon)
+            Group {
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: systemImage ?? Icons.symbol(icon))
+                }
+            }
                 .font(.scaled(size: 17, weight: .semibold))
                 .foregroundStyle(active ? c.accentText : c.text2)
                 .frame(width: 34, height: 34)
@@ -271,7 +308,7 @@ struct BrowserBarButton: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1)
+        .opacity(disabled && !busy ? 0.35 : 1)
         .accessibilityLabel(label)
     }
 }

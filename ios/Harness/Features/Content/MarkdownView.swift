@@ -26,6 +26,8 @@ struct MarkdownView: View {
     var color: Color?
     /// Where relative file links open (the ticket's folder, else the project's).
     var linkContext = FileLinkContext()
+    /// The viewer offers Annotate on its images (a ticket's spec; AttachmentViewer).
+    var annotatable = false
 
     @Environment(\.palette) private var c
     @Environment(BoardStore.self) private var store: BoardStore?
@@ -59,7 +61,8 @@ struct MarkdownView: View {
         .tint(c.accentText)
         .modifier(ContentLinkHandling(override: linkContext))
         .fullScreenCover(item: $open) { start in
-            AttachmentViewer(attachments: media.map(attachment), start: start.index) {
+            AttachmentViewer(attachments: media.map(attachment), start: start.index,
+                             annotate: annotatable ? { a in .attachment(id: a.id, name: a.name) } : nil) {
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { open = nil }
