@@ -1065,6 +1065,31 @@ export interface BrowserScreenshot {
   tabId: number;
   url: string;
   title: string;
+  /** How far the page was scrolled when it was captured, in CSS pixels (BrowserElementQuery checks it). */
+  scroll: { x: number; y: number };
+}
+
+/**
+ * POST /browser/:sessionId/element: what's under a point of a captured screenshot, so an
+ * annotation's mark can name it (AnnotationMark.path and .text). `url` and `scroll` are the
+ * screenshot's: when the tab has since navigated or scrolled, the answer is null rather than
+ * whatever is there now.
+ */
+export interface BrowserElementQuery {
+  tabId: number;
+  /** The point in the page's CSS pixels (the screenshot's pixels divided by its scale). */
+  x: number;
+  y: number;
+  url: string;
+  scroll: { x: number; y: number };
+}
+
+/** The element under a point of the page (BrowserElementQuery), or null when there's none or the page moved on. */
+export interface BrowserElement {
+  /** A CSS selector that finds it (an id when it has a unique one, else a tag/nth-of-type chain from the nearest id or body). */
+  path: string;
+  /** Its visible text, whitespace collapsed, at most MAX_ANNOTATION_TEXT characters ("" when it has none). */
+  text: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,6 +1108,13 @@ export interface AnnotationMark {
   tailX?: number;
   tailY?: number;
   message: string;
+  /**
+   * On a browser screenshot (AttachmentAnnotation.page): a CSS selector for the element under the
+   * anchor and its visible text (BrowserElement), so the agent can find it in the page and the
+   * source. Absent when the page couldn't tell (it had moved on) or on other images.
+   */
+  path?: string;
+  text?: string;
 }
 
 /** The page a browser screenshot shows (BrowserScreenshot), so the agent can find the marks on it in CSS pixels. */
@@ -1112,6 +1144,10 @@ export interface AttachmentAnnotation {
 
 export const MAX_ANNOTATION_MARKS = 50;
 export const MAX_ANNOTATION_MESSAGE = 2000;
+/** Longest AnnotationMark.text (the anchored element's visible text), in characters. */
+export const MAX_ANNOTATION_TEXT = 200;
+/** Longest AnnotationMark.path (a CSS selector), in characters. */
+export const MAX_ANNOTATION_PATH = 1000;
 
 // ---------------------------------------------------------------------------
 // WebSocket messages

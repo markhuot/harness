@@ -44,6 +44,8 @@ import type {
   WatcherBody,
   BrowserState,
   BrowserScreenshot,
+  BrowserElement,
+  BrowserElementQuery,
   PluginInfo,
   PluginTab,
   NetworkStatus,
@@ -385,6 +387,10 @@ export class HarnessClient {
   /** A PNG of the tab's viewport (`tabId` omitted: the lowest open tab), to annotate. */
   browserScreenshot(sessionId: string, tabId?: number) {
     return this.request<BrowserScreenshot>("GET", `/browser/${sessionId}/screenshot${tabId === undefined ? "" : `?tab=${tabId}`}`);
+  }
+  /** The element under a point of a captured screenshot (null when the tab has moved on since). */
+  browserElementAt(sessionId: string, query: BrowserElementQuery) {
+    return this.request<BrowserElement | null>("POST", `/browser/${sessionId}/element`, query);
   }
   browserNavigate(sessionId: string, url: string, tabId?: number) {
     return this.request<BrowserState>("POST", `/browser/${sessionId}/navigate`, tabId === undefined ? { url } : { url, tabId });

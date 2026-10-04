@@ -297,7 +297,15 @@ export const AnnotationPage: P.AnnotationPage[] = [
 
 export const AttachmentAnnotation: P.AttachmentAnnotation[] = [
   { width: 1280, height: 800, marks: AnnotationMark },
-  { width: 2560, height: 1600, marks: [{ n: 1, x: 1280, y: 800, tailX: 1400, tailY: 640, message: "Center this" }], page: AnnotationPage[0]! },
+  {
+    width: 2560,
+    height: 1600,
+    marks: [
+      { n: 1, x: 1280, y: 800, tailX: 1400, tailY: 640, message: "Center this", path: "#login > form > button:nth-of-type(2)", text: "Sign in" },
+      { n: 2, x: 40, y: 1500, message: "", path: "body > footer", text: "" },
+    ],
+    page: AnnotationPage[0]!,
+  },
   { width: 640, height: 480, marks: [{ n: 1, x: 0, y: 479, message: "" }] },
 ];
 
@@ -311,8 +319,19 @@ export const BrowserScreenshot: P.BrowserScreenshot[] = [
     tabId: 3,
     url: "http://localhost:3000/login",
     title: "Log in",
+    scroll: { x: 0, y: 0 },
   },
-  { data: "iVBORw0KGgo=", width: 1170, height: 2532, viewport: { width: 390, height: 844 }, scale: 3, tabId: 1, url: "about:blank", title: "" },
+  { data: "iVBORw0KGgo=", width: 1170, height: 2532, viewport: { width: 390, height: 844 }, scale: 3, tabId: 1, url: "about:blank", title: "", scroll: { x: 0, y: 1240.5 } },
+];
+
+export const BrowserElementQuery: P.BrowserElementQuery[] = [
+  { tabId: 3, x: 640, y: 400, url: "http://localhost:3000/login", scroll: { x: 0, y: 0 } },
+  { tabId: 1, x: 12.5, y: 300.25, url: "about:blank", scroll: { x: 0, y: 1240.5 } },
+];
+
+export const BrowserElement: P.BrowserElement[] = [
+  { path: "#login > form > button:nth-of-type(2)", text: "Sign in" },
+  { path: "body > div:nth-of-type(3) > img", text: "" },
 ];
 
 const annotatedSpecImage: P.Attachment = {

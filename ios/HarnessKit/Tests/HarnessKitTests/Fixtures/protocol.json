@@ -260,7 +260,17 @@
           "y": 800,
           "tailX": 1400,
           "tailY": 640,
-          "message": "Center this"
+          "message": "Center this",
+          "path": "#login > form > button:nth-of-type(2)",
+          "text": "Sign in"
+        },
+        {
+          "n": 2,
+          "x": 40,
+          "y": 1500,
+          "message": "",
+          "path": "body > footer",
+          "text": ""
         }
       ],
       "page": {
@@ -345,6 +355,38 @@
       "name": "harness/web-3",
       "lastCommitAt": 1759104000000,
       "checkedOutAt": null
+    }
+  ],
+  "BrowserElement": [
+    {
+      "path": "#login > form > button:nth-of-type(2)",
+      "text": "Sign in"
+    },
+    {
+      "path": "body > div:nth-of-type(3) > img",
+      "text": ""
+    }
+  ],
+  "BrowserElementQuery": [
+    {
+      "tabId": 3,
+      "x": 640,
+      "y": 400,
+      "url": "http://localhost:3000/login",
+      "scroll": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "tabId": 1,
+      "x": 12.5,
+      "y": 300.25,
+      "url": "about:blank",
+      "scroll": {
+        "x": 0,
+        "y": 1240.5
+      }
     }
   ],
   "BrowserInput": [
@@ -436,7 +478,11 @@
       "scale": 2,
       "tabId": 3,
       "url": "http://localhost:3000/login",
-      "title": "Log in"
+      "title": "Log in",
+      "scroll": {
+        "x": 0,
+        "y": 0
+      }
     },
     {
       "data": "iVBORw0KGgo=",
@@ -449,7 +495,11 @@
       "scale": 3,
       "tabId": 1,
       "url": "about:blank",
-      "title": ""
+      "title": "",
+      "scroll": {
+        "x": 0,
+        "y": 1240.5
+      }
     }
   ],
   "BrowserState": [
@@ -1413,7 +1463,17 @@
                 "y": 800,
                 "tailX": 1400,
                 "tailY": 640,
-                "message": "Center this"
+                "message": "Center this",
+                "path": "#login > form > button:nth-of-type(2)",
+                "text": "Sign in"
+              },
+              {
+                "n": 2,
+                "x": 40,
+                "y": 1500,
+                "message": "",
+                "path": "body > footer",
+                "text": ""
               }
             ],
             "page": {
@@ -2176,7 +2236,17 @@
                 "y": 800,
                 "tailX": 1400,
                 "tailY": 640,
-                "message": "Center this"
+                "message": "Center this",
+                "path": "#login > form > button:nth-of-type(2)",
+                "text": "Sign in"
+              },
+              {
+                "n": 2,
+                "x": 40,
+                "y": 1500,
+                "message": "",
+                "path": "body > footer",
+                "text": ""
               }
             ],
             "page": {
@@ -3207,7 +3277,17 @@
                     "y": 800,
                     "tailX": 1400,
                     "tailY": 640,
-                    "message": "Center this"
+                    "message": "Center this",
+                    "path": "#login > form > button:nth-of-type(2)",
+                    "text": "Sign in"
+                  },
+                  {
+                    "n": 2,
+                    "x": 40,
+                    "y": 1500,
+                    "message": "",
+                    "path": "body > footer",
+                    "text": ""
                   }
                 ],
                 "page": {
@@ -3730,7 +3810,17 @@
                 "y": 800,
                 "tailX": 1400,
                 "tailY": 640,
-                "message": "Center this"
+                "message": "Center this",
+                "path": "#login > form > button:nth-of-type(2)",
+                "text": "Sign in"
+              },
+              {
+                "n": 2,
+                "x": 40,
+                "y": 1500,
+                "message": "",
+                "path": "body > footer",
+                "text": ""
               }
             ],
             "page": {
