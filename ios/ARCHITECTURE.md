@@ -454,9 +454,44 @@ is) to the store, never a single window's.
   A closed window's Router and scene can outlive it, but an activation request for its destroyed
   session does nothing, so WindowDirectory only reuses an entry whose scene is still attached and
   whose session is in `UIApplication.openSessions` (`Entry.isOpen`); otherwise it opens a new
-  window. "Open in New Window" (the card's menu, the ticket's More menu) is
-  `openWindow(id: SceneID.ticket, value:)`. Compact width (iPhone, narrow Split View) pushes as
-  before.
+  window. "Open in New Window" (the card's menu, the ticket's More menu, a tab's menu) goes
+  through `WindowDirectory.openTicket` too, so it brings an open window forward rather than
+  opening a second. Compact width (iPhone, narrow Split View) pushes as before.
+- **Pinned windows (tear-off).** `TicketWindowValue` has `pinned` and `browserTab`, and its `tab`
+  can be `TicketWindowValue.composer`. A pinned window is one torn-off thing: a ticket tab, one
+  browser tab (`browserTab`; the whole Browser tab when nil, chip strip and all), or the composer.
+  TicketWindowContent renders it as `TicketDetailScreen(pinned:)`: the hero collapsed to its title
+  line (the approval card still shows), then only that tab's body (`TicketTabBody`, the same view
+  the pager uses, so everything works as in the ticket), or only the composer. No tab strip,
+  pager or composer otherwise; a pinned browser tab has no chip strip or New tab button, and
+  shows "This tab was closed" when its tab goes. Its More menu has Return to ticket.
+  Windows are unique by `TicketWindowValue.identity`: (key) for a full window, (key, tab,
+  browserTab) for a pinned one. `openTicket` looks a pinned window up among
+  `UIApplication.openSessions` by the value each saves in its session's `userInfo`. A drag spawns
+  its scene without asking the app, so a new ticket window whose value is already open (another
+  session with the same identity) activates that one and destroys itself.
+- **What's torn off.** `WindowDirectory` is `@Observable` and publishes `pinned`, every open
+  pinned window's value, re-read from `openSessions` when a ticket window saves its value
+  (`remember`) and when a scene connects or disconnects. A disconnected scene doesn't count (UIKit
+  can keep listing its session a moment longer, and the system may let a background one go; it
+  counts again when it reconnects), and sessions that were never connected after a relaunch do
+  count. `tornOff(key)` gives a ticket's `TornOffTabs` (HarnessKit: whole tabs, browser tab ids,
+  the composer). TicketDetailBody (a full ticket window or the pushed screen) shows a
+  `TornOffPlaceholder` for a torn-off tab's page, `ComposerReturnBar` in the composer's slot, and
+  BrowserTabView the placeholder over the stage when the selected chip's tab is torn off; torn-off
+  chips carry a window mark. **Return to this window** calls `WindowDirectory.close(value)`
+  (`requestSceneSessionDestruction`, and the session stops counting at once) and selects the tab
+  here.
+- **Drag out.** `TicketWindowDrag.provider(value)` builds an `NSItemProvider` registering the
+  window's NSUserActivity (`WindowDirectory.activity`), so a drop outside the window has iPadOS
+  open that window. `.tearOff(value, tornOff:onReturn:)` (Features/Ticket/TearOff.swift) adds the
+  drag and the Open in New Window / Return to this window context menu to the tab chips
+  (TicketDetailTabStrip), the browser chips (`BrowserTabChip`) and the composer's grip
+  (`ComposerGrip`); `BoardTicketCard` adds only the drag (`.tearOffDrag`, drafts excluded), since
+  its menu already has Open in New Window. All of it is gated on `\.canTearOff`, which
+  `sceneChrome` sets to `supportsMultipleWindows && horizontalSizeClass == .regular`: nothing drags,
+  the menu items are hidden and there's no grip on iPhone or at compact width. The board has no
+  drop destination, so a card's drag never moves it between columns.
 - **A ticket window's Router** has the `.ticket` scope: `root` is its ticket, pushes (sub-tickets,
   files, triage) land on its own stack, sheets are its own, and a section link (`.tab`, such as
   harness://board) goes to `onSectionLink`, which WindowDirectory sends to the last active main
@@ -471,6 +506,12 @@ is) to the store, never a single window's.
 - **External links** (`onOpenURL`) prefer a main window (`handlesExternalEvents(preferring:)` on
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.
+
+`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold),
+picks Open in New Window, expects the pinned window (its title "KEY · Transcript"), brings the
+ticket's window back with its link and expects "Transcript is in another window", then presses
+Return to this window and expects the pinned window gone and the transcript back. AXe can't drive
+a drag (its touch events don't move), so drag-to-window is checked by hand.
 
 `sim-check --ipad`'s `ticket-window` check taps a card, expects its window (AXe also lists the
 board behind a prominent window, so it looks for the ticket's key and tab strip), then sends the

@@ -3,9 +3,11 @@ import SwiftUI
 
 /// A board card with everything the desktop card shows. Touch and hold
 /// opens the context menu (move between columns, reorder, open the parent, copy the key); VoiceOver
-/// gets the moves as custom actions; the card drags by its key onto another card (to sit above it)
-/// or onto a status chip. A draft (a New session saved before launch) is dashed and dimmed with a
-/// Draft badge, opens in the New session editor, and offers Discard instead of the moves.
+/// gets the moves as custom actions. On iPad at regular width a card also drags out of the window
+/// into a ticket window of its own (TearOff.swift); the board has no drop destination, so a drag
+/// never moves it between columns (that's the menu's Move to …). A draft (a New session saved
+/// before launch) is dashed and dimmed with a Draft badge, opens in the New session editor, offers
+/// Discard instead of the moves, and doesn't drag.
 struct BoardTicketCard: View {
     let ticket: Ticket
     let showProject: Bool
@@ -15,7 +17,6 @@ struct BoardTicketCard: View {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.supportsMultipleWindows) private var multipleWindows
 
     var body: some View {
@@ -25,6 +26,7 @@ struct BoardTicketCard: View {
         Button { open() } label: { card(state: state, parent: parent) }
             .buttonStyle(BoardCardPressStyle())
             .contextMenu { menu(parent: parent) }
+            .modifier(CardDrag(ticket: t))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t))
             .accessibilityHint(t.draft == true ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to move it.")
@@ -160,7 +162,7 @@ struct BoardTicketCard: View {
         // iPad: the ticket in a window of its own (Windows.swift).
         if multipleWindows && t.draft != true {
             Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                openWindow(id: SceneID.ticket, value: TicketWindowValue(key: t.key, tab: nil))
+                WindowDirectory.shared.openTicket(TicketWindowValue(key: t.key, tab: nil), from: nil)
             }
         }
     }
@@ -186,6 +188,19 @@ struct BoardTicketCard: View {
             case .copyKey:
                 Button("Copy key", systemImage: "doc.on.doc") { UIPasteboard.general.string = t.key }
             }
+        }
+    }
+}
+
+/// A launched ticket's card drags out into its ticket window; a draft's doesn't drag.
+private struct CardDrag: ViewModifier {
+    let ticket: Ticket
+
+    func body(content: Content) -> some View {
+        if ticket.draft == true {
+            content
+        } else {
+            content.tearOffDrag(TicketWindowValue(key: ticket.key, tab: nil))
         }
     }
 }

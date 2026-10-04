@@ -7,19 +7,38 @@ import SwiftUI
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
 /// field carries the keyboard. The page viewport follows the stage size, sent once the
 /// subscription is confirmed and only on change.
+///
+/// Each view is its own viewer on the socket (BrowserTabModel.viewer), so a pinned window (iPad)
+/// showing one browser tab (`pinnedTab`: no chip strip, no New tab) streams alongside this one. A
+/// chip drags out into such a window; while it's torn off, selecting it here shows Return to this
+/// window over the stage.
 struct BrowserTabView: View {
     let ticket: Ticket
+    var pinnedTab: Int?
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
-    @State private var model = BrowserTabModel()
+    @State private var model: BrowserTabModel
     @State private var urlDraft = ""
     @State private var urlSelection: TextSelection?
     @FocusState private var editingUrl: Bool
     @State private var typing = false
 
+    init(ticket: Ticket, pinnedTab: Int? = nil) {
+        self.ticket = ticket
+        self.pinnedTab = pinnedTab
+        _model = State(initialValue: BrowserTabModel(pinnedTab: pinnedTab))
+    }
+
     private var sessionId: String { ticket.sessionId }
+
+    /// The pinned tab closed (or the service moved this view off it).
+    private var pinnedGone: Bool {
+        guard let pinnedTab, let state = model.state else { return false }
+        if let tabs = state.tabs { return !tabs.contains { $0.id == pinnedTab } }
+        return false
+    }
     private var client: HarnessClient? { store.api }
 
     private struct Subscription: Hashable {
@@ -85,11 +104,13 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "edit", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
             }
-            BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
-                model.newTab()
-                // Like Safari: a new tab starts in the address bar.
-                urlDraft = ""
-                editingUrl = true
+            if pinnedTab == nil {
+                BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
+                    model.newTab()
+                    // Like Safari: a new tab starts in the address bar.
+                    urlDraft = ""
+                    editingUrl = true
+                }
             }
         }
         .padding(6)
@@ -101,15 +122,18 @@ struct BrowserTabView: View {
 
     /// The open tabs, once there are two or more; the shown one is highlighted and kept in view.
     @ViewBuilder private var tabStrip: some View {
-        let tabs = BrowserTabSelection.strip(model.state)
+        let tabs = pinnedTab == nil ? BrowserTabSelection.strip(model.state) : []
+        let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         if !tabs.isEmpty {
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(tabs) { tab in
+                            let away = tornOff.browserTabs.contains(tab.id)
                             BrowserTabChip(
-                                tab: tab, current: tab.id == model.selection.shown,
+                                tab: tab, current: tab.id == model.selection.shown, away: away,
                                 select: { model.selectTab(tab.id) }, close: { model.closeTab(tab.id) })
+                                .tearOff(.pinned(ticket.key, .browser, browserTab: tab.id), tornOff: away) { model.selectTab(tab.id) }
                                 .id(tab.id)
                         }
                     }
@@ -163,7 +187,13 @@ struct BrowserTabView: View {
                     cancelled: { model.touchCancelled() })
                     .accessibilityElement()
                     .accessibilityLabel("Browser page. Tap to click, drag to scroll, hold then drag to select.")
-                if model.empty {
+                if let window = tornOffShown {
+                    TornOffPlaceholder(value: window, name: model.state?.tabs?.first { $0.id == window.browserTab }.map(BrowserTabSelection.label) ?? "This tab")
+                } else if pinnedGone {
+                    EmptyState(icon: "globe", title: "This tab was closed", message: "Close this window, or open another tab from the ticket's Browser tab.")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(c.bgSunken)
+                } else if model.empty {
                     EmptyState(icon: "globe", title: "No browser yet",
                                message: "When the agent opens a page it appears here. You can also enter a URL above.")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -180,6 +210,12 @@ struct BrowserTabView: View {
                 model.setStage(CGSize(width: size.width.rounded(), height: size.height.rounded()))
             }
         }
+    }
+
+    /// The browser tab shown here is torn off into a window of its own (not in that window itself).
+    private var tornOffShown: TicketWindowValue? {
+        guard pinnedTab == nil, let shown = model.selection.shown else { return nil }
+        return WindowDirectory.shared.tornOff(ticket.key).window(ticket.key, tab: .browser, browserTab: shown)
     }
 
     private func navigate() async {
@@ -199,6 +235,8 @@ struct BrowserTabView: View {
 struct BrowserTabChip: View {
     let tab: BrowserTab
     let current: Bool
+    /// Torn off into a window of its own.
+    var away = false
     let select: () -> Void
     let close: () -> Void
     @Environment(\.palette) private var c
@@ -209,6 +247,7 @@ struct BrowserTabChip: View {
         let label = BrowserTabSelection.label(tab)
         HStack(spacing: 6) {
             if tab.loading { Spinner().controlSize(.mini) }
+            if away { Image(systemName: "macwindow").font(.scaled(size: 10)).foregroundStyle(current ? c.accentText : c.text3) }
             Text(label)
                 .font(.scaled(size: 12.5, weight: current ? .semibold : .regular))
                 .italic(dimmed)
@@ -243,7 +282,7 @@ struct BrowserTabChip: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(current ? [.isButton, .isSelected] : .isButton)
-        .accessibilityValue(dimmed ? "Suspended, reloads when opened" : "")
+        .accessibilityValue([dimmed ? "Suspended, reloads when opened" : nil, away ? "In another window" : nil].compactMap { $0 }.joined(separator: ", "))
         .accessibilityAction { select() }
     }
 }

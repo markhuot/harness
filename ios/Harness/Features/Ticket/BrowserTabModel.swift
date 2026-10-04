@@ -26,6 +26,11 @@ final class BrowserTabModel {
     /// The stage's size (points), from the view's geometry.
     private(set) var stage: CGSize = .zero
 
+    /// A pinned window's browser tab: the view starts on it and never switches.
+    let pinnedTab: Int?
+    /// This view's viewer id on the socket, so another window's view of the same session (a
+    /// torn-off browser tab) watches its own tab instead of switching this one.
+    let viewer = UUID().uuidString.lowercased()
     @ObservationIgnored private var send: (BrowserInput) -> Void = { _ in }
     @ObservationIgnored private weak var store: BoardStore?
     @ObservationIgnored private var sessionId: String?
@@ -44,6 +49,11 @@ final class BrowserTabModel {
         toPage: { [weak self] p in self?.toPage(p) },
         scale: { [weak self] in self?.pageScale() ?? 1 }))
 
+    init(pinnedTab: Int? = nil) {
+        self.pinnedTab = pinnedTab
+        selection = BrowserTabSelection(shown: pinnedTab)
+    }
+
     /// What's drawn: the frame letterboxed into the stage (zero before the first frame).
     var drawn: Format.Rect {
         guard let frame else { return Format.Rect(x: 0, y: 0, w: 0, h: 0) }
@@ -60,25 +70,26 @@ final class BrowserTabModel {
     func run(sessionId: String, store: BoardStore, client: HarnessClient?) async {
         // A resubscribe (reconnect, foregrounding) comes back to the tab it was on; another
         // session starts on its lowest tab.
-        if sessionId != self.sessionId { selection = BrowserTabSelection() }
+        if sessionId != self.sessionId { selection = BrowserTabSelection(shown: pinnedTab) }
         self.sessionId = sessionId
         self.store = store
         state = nil
         dropFrame()
         gate.reset()
-        send = { [weak store] input in store?.sendBrowserInput(sessionId, input) }
+        let viewer = viewer
+        send = { [weak store] input in store?.sendBrowserInput(sessionId, viewer: viewer, input) }
         let tab = selection.shown
-        store.subscribeBrowser(sessionId, tabId: tab)
+        store.subscribeBrowser(sessionId, tabId: tab, viewer: viewer)
         let off = store.onEvent { [weak self] event in
-            guard let self else { return }
+            guard let self, isBrowserEvent(event, for: sessionId, viewerId: viewer) else { return }
             switch event {
-            case let .browserFrame(id, tabId, data, width, height) where id == sessionId:
+            case let .browserFrame(_, tabId, data, width, height, _):
                 // Frames still in flight from the tab just left.
                 guard self.selection.accepts(frameTabId: tabId) else { return }
                 self.lastFrameAt = Self.now()
                 if !self.live { self.live = true }
                 self.receiveFrame(data: data, width: width, height: height)
-            case let .browserState(id, s) where id == sessionId:
+            case let .browserState(_, s, _):
                 self.receive(s)
                 if self.gate.confirm() { self.scheduleResize(ms: 100) }
             default: break
@@ -92,7 +103,7 @@ final class BrowserTabModel {
             if isLive != live { live = isLive }
         }
         off()
-        store.unsubscribeBrowser(sessionId)
+        store.unsubscribeBrowser(sessionId, viewer: viewer)
         resizeTask?.cancel()
         wheelTask?.cancel()
         wheel = WheelCoalescer()
@@ -132,7 +143,7 @@ final class BrowserTabModel {
             s.loading = t.loading
             state = s
         }
-        store?.subscribeBrowser(sessionId, tabId: id)
+        store?.subscribeBrowser(sessionId, tabId: id, viewer: viewer)
     }
 
     /// Open a blank tab; the service moves this viewer to it (learnt from the next browser.state).
@@ -143,7 +154,7 @@ final class BrowserTabModel {
     /// Close tab `id`. When it's the one shown the service moves this viewer to the lowest open tab.
     func closeTab(_ id: Int) {
         guard let sessionId else { return }
-        store?.sendBrowserInput(sessionId, tabId: id, .closeTab)
+        store?.sendBrowserInput(sessionId, tabId: id, viewer: viewer, .closeTab)
     }
 
     private func receiveFrame(data: String, width: Int, height: Int) {

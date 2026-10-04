@@ -25,9 +25,11 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     case watcherUpserted(watcher: Watcher)
     case watcherDeleted(id: String)
     case settingsUpdated(settings: PublicSettings)
-    /// `tabId`: the tab the frame is from (services before browser tabs omit it).
-    case browserFrame(sessionId: String, tabId: Int? = nil, data: String, width: Int, height: Int)
-    case browserState(sessionId: String, state: BrowserState)
+    /// `tabId`: the tab the frame is from (services before browser tabs omit it). `viewerId`: the
+    /// viewer the frame/state is for, echoed from its `browser.subscribe` (nil when it sent none,
+    /// or from services before viewers).
+    case browserFrame(sessionId: String, tabId: Int? = nil, data: String, width: Int, height: Int, viewerId: String? = nil)
+    case browserState(sessionId: String, state: BrowserState, viewerId: String? = nil)
     /// The service's code on disk changed since it started (or changed back)
     case serviceStatus(status: ServiceStatus)
     case unknown(kind: String, raw: JSONValue)
@@ -95,8 +97,10 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case "browser.frame":
             self = .browserFrame(
                 sessionId: try field("sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"), data: try field("data"),
-                width: try field("width"), height: try field("height"))
-        case "browser.state": self = .browserState(sessionId: try field("sessionId"), state: try field("state"))
+                width: try field("width"), height: try field("height"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
+        case "browser.state":
+            self = .browserState(
+                sessionId: try field("sessionId"), state: try field("state"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
         case "service.status": self = .serviceStatus(status: try field("status"))
         default: self = .unknown(kind: kind, raw: try JSONValue(from: decoder))
         }
@@ -130,15 +134,17 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
             try c.encodeIfPresent(createdAt, forKey: "createdAt")
         case let .watcherUpserted(watcher): try c.encode(watcher, forKey: "watcher")
         case let .settingsUpdated(settings): try c.encode(settings, forKey: "settings")
-        case let .browserFrame(sessionId, tabId, data, width, height):
+        case let .browserFrame(sessionId, tabId, data, width, height, viewerId):
             try c.encode(sessionId, forKey: "sessionId")
             try c.encodeIfPresent(tabId, forKey: "tabId")
             try c.encode(data, forKey: "data")
             try c.encode(width, forKey: "width")
             try c.encode(height, forKey: "height")
-        case let .browserState(sessionId, state):
+            try c.encodeIfPresent(viewerId, forKey: "viewerId")
+        case let .browserState(sessionId, state, viewerId):
             try c.encode(sessionId, forKey: "sessionId")
             try c.encode(state, forKey: "state")
+            try c.encodeIfPresent(viewerId, forKey: "viewerId")
         case let .serviceStatus(status): try c.encode(status, forKey: "status")
         case .unknown: break
         }
@@ -153,11 +159,13 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
 public enum ClientMessage: Codable, Sendable, Equatable {
     case hello(client: String)
     /// Watch a session's browser. `tabId` picks the tab (nil, or a tab that has closed: the lowest
-    /// open one); subscribing again with another `tabId` switches this socket to that tab.
-    case browserSubscribe(sessionId: String, tabId: Int? = nil)
-    case browserUnsubscribe(sessionId: String)
-    /// `tabId`: the tab the input is for (nil: the tab this socket watches).
-    case browserInput(sessionId: String, tabId: Int? = nil, input: BrowserInput)
+    /// open one); subscribing again with another `tabId` switches this viewer to that tab.
+    /// `viewerId` names one viewer on this socket (up to 64 of `[A-Za-z0-9_.:-]`), so one socket can
+    /// watch several tabs of a session at once; without it the socket is a single viewer.
+    case browserSubscribe(sessionId: String, tabId: Int? = nil, viewerId: String? = nil)
+    case browserUnsubscribe(sessionId: String, viewerId: String? = nil)
+    /// `tabId`: the tab the input is for (nil: the tab this viewer watches).
+    case browserInput(sessionId: String, tabId: Int? = nil, input: BrowserInput, viewerId: String? = nil)
     case ping
     case unknown(type: String, raw: JSONValue)
 
@@ -178,12 +186,16 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         switch type {
         case "hello": self = .hello(client: try c.decode(String.self, forKey: "client"))
         case "browser.subscribe":
-            self = .browserSubscribe(sessionId: try c.decode(String.self, forKey: "sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"))
-        case "browser.unsubscribe": self = .browserUnsubscribe(sessionId: try c.decode(String.self, forKey: "sessionId"))
+            self = .browserSubscribe(
+                sessionId: try c.decode(String.self, forKey: "sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"),
+                viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
+        case "browser.unsubscribe":
+            self = .browserUnsubscribe(
+                sessionId: try c.decode(String.self, forKey: "sessionId"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
         case "browser.input":
             self = .browserInput(
                 sessionId: try c.decode(String.self, forKey: "sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"),
-                input: try c.decode(BrowserInput.self, forKey: "input"))
+                input: try c.decode(BrowserInput.self, forKey: "input"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
         case "ping": self = .ping
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
@@ -195,15 +207,18 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         try c.encode(type, forKey: "type")
         switch self {
         case let .hello(client): try c.encode(client, forKey: "client")
-        case let .browserSubscribe(sessionId, tabId):
+        case let .browserSubscribe(sessionId, tabId, viewerId):
             try c.encode(sessionId, forKey: "sessionId")
             try c.encodeIfPresent(tabId, forKey: "tabId")
-        case let .browserUnsubscribe(sessionId):
+            try c.encodeIfPresent(viewerId, forKey: "viewerId")
+        case let .browserUnsubscribe(sessionId, viewerId):
             try c.encode(sessionId, forKey: "sessionId")
-        case let .browserInput(sessionId, tabId, input):
+            try c.encodeIfPresent(viewerId, forKey: "viewerId")
+        case let .browserInput(sessionId, tabId, input, viewerId):
             try c.encode(sessionId, forKey: "sessionId")
             try c.encodeIfPresent(tabId, forKey: "tabId")
             try c.encode(input, forKey: "input")
+            try c.encodeIfPresent(viewerId, forKey: "viewerId")
         case .ping, .unknown: break
         }
     }

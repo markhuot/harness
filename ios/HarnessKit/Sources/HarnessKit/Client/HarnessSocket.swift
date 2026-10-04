@@ -85,9 +85,9 @@ public actor HarnessSocket {
     private var closed = false
     private var connected = false
     private var backoff = ReconnectBackoff()
-    /// Session → the tab it's on (nil: the lowest open one), ordered so re-subscribes go out in the
-    /// order they were made.
-    private var browserSubs: [(sessionId: String, tabId: Int?)] = []
+    /// One entry per viewer (session + viewer id, nil for a socket-wide viewer) with the tab it's on
+    /// (nil: the lowest open one), ordered so re-subscribes go out in the order they were made.
+    private var browserSubs: [BrowserSubscription] = []
 
     public init(url: String, factory: @escaping WebSocketFactory = URLSessionWebSocketConnection.factory, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
         self.url = url
@@ -117,7 +117,7 @@ public actor HarnessSocket {
                 // isn't lost (at worst it's sent twice, which the service tolerates).
                 open = true
                 for sub in browserSubs {
-                    try await conn.send(Self.encode(.browserSubscribe(sessionId: sub.sessionId, tabId: sub.tabId)))
+                    try await conn.send(Self.encode(.browserSubscribe(sessionId: sub.sessionId, tabId: sub.tabId, viewerId: sub.viewerId)))
                 }
                 backoff.reset()
                 setConnected(true)
@@ -143,7 +143,7 @@ public actor HarnessSocket {
         // The service moves a subscription between tabs itself (newTab, closing the watched tab):
         // follow it, so a reconnect comes back to the same tab. TS leaves this to its caller
         // (noteBrowserTab).
-        if case let .browserState(sessionId, state) = event { noteBrowserTab(sessionId, tabId: state.tabId) }
+        if case let .browserState(sessionId, state, viewerId) = event { noteBrowserTab(sessionId, tabId: state.tabId, viewerId: viewerId) }
         eventsOut.yield(event)
     }
 
@@ -165,27 +165,33 @@ public actor HarnessSocket {
     }
 
     /// Stream this session's browser frames; again with another `tabId` switches tabs. Remembered
-    /// (with its tab) and re-sent on every reconnect.
-    public func subscribeBrowser(_ sessionId: String, tabId: Int? = nil) async {
-        if let i = browserSubs.firstIndex(where: { $0.sessionId == sessionId }) {
+    /// (with its tab) and re-sent on every reconnect. `viewerId` names this view, so several views
+    /// of one session (torn-off browser tabs) each watch their own tab over this one socket.
+    public func subscribeBrowser(_ sessionId: String, tabId: Int? = nil, viewerId: String? = nil) async {
+        if let i = browserSubs.firstIndex(where: { $0.is(sessionId, viewerId) }) {
             browserSubs[i].tabId = tabId
         } else {
-            browserSubs.append((sessionId, tabId))
+            browserSubs.append(BrowserSubscription(sessionId: sessionId, viewerId: viewerId, tabId: tabId))
         }
-        await send(.browserSubscribe(sessionId: sessionId, tabId: tabId))
+        await send(.browserSubscribe(sessionId: sessionId, tabId: tabId, viewerId: viewerId))
     }
 
-    /// Remember the tab a session's subscription is on, for reconnects (no-op when not subscribed).
-    public func noteBrowserTab(_ sessionId: String, tabId: Int?) {
-        if let i = browserSubs.firstIndex(where: { $0.sessionId == sessionId }) { browserSubs[i].tabId = tabId }
+    /// Remember the tab a viewer's subscription is on, for reconnects (no-op when not subscribed).
+    /// A state without a viewer (an older service) moves every viewer of the session, since that
+    /// service has only one subscription per socket.
+    public func noteBrowserTab(_ sessionId: String, tabId: Int?, viewerId: String? = nil) {
+        for i in browserSubs.indices where browserSubs[i].sessionId == sessionId && (viewerId == nil || browserSubs[i].viewerId == viewerId) {
+            browserSubs[i].tabId = tabId
+        }
     }
 
-    /// The tab each remembered subscription is on, in subscription order (for tests).
-    var browserSubscriptions: [(sessionId: String, tabId: Int?)] { browserSubs }
+    /// Every remembered subscription, in subscription order (for tests).
+    var browserSubscriptions: [BrowserSubscription] { browserSubs }
 
-    public func unsubscribeBrowser(_ sessionId: String) async {
-        browserSubs.removeAll { $0.sessionId == sessionId }
-        await send(.browserUnsubscribe(sessionId: sessionId))
+    /// Stop this viewer's stream; other viewers of the session keep theirs.
+    public func unsubscribeBrowser(_ sessionId: String, viewerId: String? = nil) async {
+        browserSubs.removeAll { $0.is(sessionId, viewerId) }
+        await send(.browserUnsubscribe(sessionId: sessionId, viewerId: viewerId))
     }
 
     /// Stop for good: closes the connection, interrupts a reconnect wait, then finishes `events`
@@ -194,5 +200,27 @@ public actor HarnessSocket {
         closed = true
         current?.close()
         runner.withLock { $0?.cancel() }
+    }
+}
+
+/// One remembered `browser.subscribe`: a viewer of a session's browser and the tab it's on.
+struct BrowserSubscription: Sendable, Equatable {
+    var sessionId: String
+    var viewerId: String?
+    var tabId: Int?
+
+    func `is`(_ sessionId: String, _ viewerId: String?) -> Bool { self.sessionId == sessionId && self.viewerId == viewerId }
+}
+
+/// Whether a browser.frame/browser.state event is for this viewer of `sessionId`: the port of
+/// `isBrowserEventFor` in shared/src/client.ts. An event that names a viewer is for that viewer
+/// only; one without (an older service, or a viewer that sent no id) is for every viewer of the
+/// session.
+public func isBrowserEvent(_ event: HarnessEvent, for sessionId: String, viewerId: String?) -> Bool {
+    switch event {
+    case let .browserFrame(id, _, _, _, _, v), let .browserState(id, _, v):
+        id == sessionId && (v == nil || v == viewerId)
+    default:
+        false
     }
 }
