@@ -176,6 +176,10 @@ try {
     saved.map((a) => a.path).join() === [diagram, gonePng, goneTxt, upload.path].join() && saved[3]!.source === "upload" && saved[0]!.source === "file",
     JSON.stringify(saved),
   );
+  const rowsIn = (scope: string) =>
+    js<{ w: number; h: number; nameLeft: number }[]>(`[...document.querySelectorAll('${scope} .prompt-attachment-row')].map(el => { const m = el.querySelector(".prompt-attachment-row-media").getBoundingClientRect(); return { w: m.width, h: m.height, nameLeft: Math.round(el.querySelector(".prompt-attachment-name").getBoundingClientRect().left) }; })`);
+  const draftRows = await rowsIn('[data-testid="draft-pane"]');
+  check("the draft lists attachments the Spec tab's way: one row each, same-size squares, names in a straight line", draftRows.length > 0 && draftRows.every((r) => r.w === 32 && r.h === 32 && r.nameLeft === draftRows[0]!.nameLeft), JSON.stringify(draftRows));
   await shot("draft");
 
   // --- Launch it (Plan first), then lose two files on disk.
@@ -206,8 +210,8 @@ try {
     "the attachments sit below the spec",
     await js<boolean>(`(() => { const d = document.querySelector('[data-testid="spec-doc"]'), a = document.querySelector('[data-testid="spec-prompt-attachments"]'); return !!d && !!a && !!(d.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) && a.getBoundingClientRect().top >= d.getBoundingClientRect().bottom; })()`),
   );
-  const rows = await js<{ w: number; h: number; nameLeft: number }[]>(`[...document.querySelectorAll('[data-testid="spec-prompt-attachments"] .prompt-attachment-row')].map(el => { const m = el.querySelector(".prompt-attachment-row-media").getBoundingClientRect(); return { w: m.width, h: m.height, nameLeft: Math.round(el.querySelector(".prompt-attachment-name").getBoundingClientRect().left) }; })`);
-  check("one row each, thumbnails and icons the same size, names in a straight line", rows.length === 4 && rows.every((r) => r.w === rows[0]!.w && r.h === rows[0]!.h && r.nameLeft === rows[0]!.nameLeft), JSON.stringify(rows));
+  const rows = await rowsIn('[data-testid="spec-prompt-attachments"]');
+  check("one row each, thumbnails and icons the same size as the draft's, names in a straight line", rows.length === 4 && rows.every((r) => r.w === 32 && r.h === 32 && r.nameLeft === rows[0]!.nameLeft), JSON.stringify(rows));
   await shot("spec-missing");
 
   // Clicking an image opens the lightbox on it.

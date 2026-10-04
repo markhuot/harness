@@ -42,7 +42,7 @@ import { focusPaneBy } from "../components/paneFocus";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { isFileDrag, isLocalService, limitMessage, planFiles } from "../state/promptAttachmentFiles";
-import { forgetPreview, PaperclipIcon, PromptAttachmentStrip, rememberPreview, type PendingUpload } from "../components/PromptAttachments";
+import { forgetPreview, PaperclipIcon, PromptAttachmentList, rememberPreview, type PendingUpload } from "../components/PromptAttachments";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -452,7 +452,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           onPaste={paste}
         />
 
-        <PromptAttachmentStrip items={view?.promptAttachments ?? []} ticketKey={session?.saved?.key ?? null} served={session?.saved?.promptAttachments} onRemove={removeAttachment} pending={pending}>
+        <PromptAttachmentList items={view?.promptAttachments ?? []} ticketKey={session?.saved?.key ?? null} served={session?.saved?.promptAttachments} onRemove={removeAttachment} pending={pending}>
           <button
             type="button"
             className="btn btn-ghost btn-sm prompt-attach-btn"
@@ -462,7 +462,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
             title="Attach files (or drop them here, or paste an image)"
           >
             <PaperclipIcon size={13} />
-            {view?.promptAttachments?.length || pending.length ? null : "Attach files"}
+            {view?.promptAttachments?.length || pending.length ? "Attach more" : "Attach files"}
           </button>
           <input
             ref={fileInput}
@@ -475,7 +475,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
               e.target.value = "";
             }}
           />
-        </PromptAttachmentStrip>
+        </PromptAttachmentList>
 
         {view && project && (
           <div className={`draft-options ${optionsOpen ? "open" : ""}`}>

@@ -1564,96 +1564,111 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--text-2);
 }
 
-/* Prompt attachments (components/PromptAttachments.tsx): thumbnails and file chips under a draft's
-   prompt, and read-only on the Spec tab. A missing file is a dimmed, dashed chip. */
-.prompt-attachments {
+/* Prompt attachments (components/PromptAttachments.tsx): one vertical list under a draft's prompt
+   (editable) and at the bottom of the Spec tab (read-only). Every row starts with the same 32px
+   square (a thumbnail or a file icon), so the names line up. A missing file is dimmed, with a
+   dashed square. */
+.prompt-attachment-list-wrap {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
-.prompt-attachment {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  max-width: 260px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev);
-  color: var(--text-2);
-  font-size: 12px;
-}
-.prompt-attachment-open {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+.prompt-attachment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* The rows' hover padding hangs outside, so the squares line up with the text around them. */
+  width: calc(100% + 12px);
+  margin: 0 -6px;
   padding: 0;
+  list-style: none;
+}
+/* Under a draft's prompt, a long list scrolls instead of squeezing the prompt. */
+.draft-body .prompt-attachment-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.prompt-attachment-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+.prompt-attachment-row:hover {
+  background: var(--bg-hover);
+}
+.prompt-attachment-row-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 6px;
   border: 0;
   background: none;
-  color: inherit;
+  color: var(--text);
   font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+button.prompt-attachment-row-main {
   cursor: pointer;
 }
-.prompt-attachment.chip-file:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
+button.prompt-attachment-row-main:disabled {
+  cursor: default;
+}
+.prompt-attachment-row-media {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+}
+.prompt-attachment-row-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.prompt-attachment-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .prompt-attachment-name {
   min-width: 0;
 }
-.prompt-attachment.thumb {
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  overflow: hidden;
-  background: var(--bg-sunken);
-}
-.prompt-attachment.thumb .prompt-attachment-open,
-.prompt-attachment.thumb img {
-  width: 100%;
-  height: 100%;
-}
-.prompt-attachment.thumb img {
-  object-fit: cover;
-  display: block;
-}
-.prompt-attachment.missing {
-  height: auto;
-  min-height: 28px;
-  max-width: 340px;
-  padding: 4px 8px;
-  flex-wrap: wrap;
-  row-gap: 0;
-  border-style: dashed;
-  background: transparent;
-  color: var(--text-3);
-  opacity: 0.85;
-}
-.prompt-attachment.missing .prompt-attachment-name {
-  color: var(--text-2);
-  text-decoration: line-through;
-  text-decoration-color: var(--text-3);
-}
 .prompt-attachment-note {
-  flex-basis: 100%;
   font-size: 11px;
   color: var(--text-3);
 }
-.prompt-attachment.pending {
+.prompt-attachment-row.pending .prompt-attachment-name {
   color: var(--text-3);
+}
+.prompt-attachment-row.missing .prompt-attachment-row-media {
+  border-style: dashed;
+  background: transparent;
+}
+.prompt-attachment-row.missing .prompt-attachment-name {
+  color: var(--text-2);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-3);
 }
 .prompt-attachment-remove {
   flex: none;
   display: grid;
   place-items: center;
-  width: 16px;
-  height: 16px;
-  margin-right: -3px;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -1664,28 +1679,6 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 .prompt-attachment-remove:hover {
   background: var(--border);
   color: var(--text);
-}
-/* On a thumbnail the × sits in the corner, over the image. */
-.prompt-attachment.thumb .prompt-attachment-remove {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  margin: 0;
-  background: rgb(0 0 0 / 0.55);
-  color: #fff;
-  opacity: 0;
-}
-.prompt-attachment.thumb:hover .prompt-attachment-remove,
-.prompt-attachment.thumb .prompt-attachment-remove:focus-visible {
-  opacity: 1;
-}
-.prompt-attachment.missing:has(.prompt-attachment-remove) {
-  padding-right: 26px;
-}
-.prompt-attachment.missing .prompt-attachment-remove {
-  position: absolute;
-  top: 4px;
-  right: 4px;
 }
 .prompt-attach-btn {
   color: var(--text-3);
@@ -1724,71 +1717,6 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   gap: 6px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
-}
-/* The Spec tab's list: every row starts with the same 32px square (a thumbnail or a file icon), so
-   the names line up. */
-.prompt-attachment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.prompt-attachment-row-open {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-width: 0;
-  padding: 4px 6px;
-  margin: 0 -6px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.prompt-attachment-row-open:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.prompt-attachment-row-open:disabled {
-  cursor: default;
-}
-.prompt-attachment-row-media {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-sunken);
-  color: var(--text-3);
-}
-.prompt-attachment-row-media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.prompt-attachment-row-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.prompt-attachment-row.missing .prompt-attachment-row-media {
-  border-style: dashed;
-  background: transparent;
-}
-.prompt-attachment-row.missing .prompt-attachment-name {
-  color: var(--text-2);
-  text-decoration: line-through;
-  text-decoration-color: var(--text-3);
 }
 
 /* The ticket settings rows (components/TicketSettings.tsx), in Details and a draft's Options. */
