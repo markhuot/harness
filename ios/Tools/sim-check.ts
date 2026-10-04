@@ -1811,6 +1811,41 @@ function screens(s: Seeded): Screen[] {
               await until("main window back", async () => onBoard(await labels(udid)), 10000);
             },
           } satisfies Screen,
+          // A tab torn off into a window of its own (its chip's menu → Open in New Window): the
+          // ticket's window shows Return to this window in its place, and pressing it closes the
+          // pinned window and shows the tab here again.
+          {
+            name: "ticket-tear-off",
+            url: `harness://ticket/${k(s.hello)}?tab=transcript`,
+            seconds: 14,
+            ready: (l: string[]) => ticketShown(l, s.hello.key),
+            prepare: async (udid: string) => {
+              const key = s.hello.key;
+              await tapWhere(udid, "Transcript", { longPress: 1.2 });
+              await tapWhere(udid, "Open in New Window");
+              await until("the pinned window up", async () => (await labels(udid)).includes(`${key} · Transcript`), 10000);
+              moved(udid);
+              await Bun.sleep(800);
+              await shot(udid, "ticket-tear-off-window");
+              // Back to the ticket's own window (open: the link brings it forward on its Transcript).
+              await simctl("openurl", udid, `harness://ticket/${k(s.hello)}?tab=transcript`);
+              await until("the placeholder in the ticket's window", async () => (await labels(udid)).includes("Transcript is in another window"), 10000);
+              await Bun.sleep(800);
+            },
+            after: async (udid: string) => {
+              const key = s.hello.key;
+              await tapWhere(udid, "Return to this window");
+              const closed = await until("the pinned window closed and the tab back", async () => {
+                const l = await labels(udid);
+                return !l.includes(`${key} · Transcript`) && !l.includes("Transcript is in another window") && ticketShown(l, key);
+              }, 10000).catch((e) => e as Error);
+              await Bun.sleep(800);
+              await shot(udid, "ticket-tear-off-returned");
+              if (closed instanceof Error) throw closed;
+              await simctl("openurl", udid, BOARD);
+              await until("main window back", async () => onBoard(await labels(udid)), 10000);
+            },
+          } satisfies Screen,
         ]
       : []),
   ];

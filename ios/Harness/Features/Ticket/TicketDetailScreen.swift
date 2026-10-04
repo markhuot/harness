@@ -340,7 +340,9 @@ private struct TicketPinnedHeader: ViewModifier {
                         Text(name).font(.scaled(size: 17)).foregroundStyle(c.text2)
                     }
                     .lineLimit(1)
-                    .accessibilityElement(children: .combine)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(label) · \(name)")
+                    .accessibilityAddTraits(.isHeader)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {

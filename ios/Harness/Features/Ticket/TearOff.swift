@@ -92,11 +92,14 @@ struct TornOffPlaceholder: View {
 
     var body: some View {
         EmptyState(title: "\(name) is in another window", message: "It's open in a window of its own.", systemImage: "macwindow") {
+            // EmptyState dims its whole content, actions included: the buttons set their own colors.
             Button("Return to this window") { TearOff.returnHere(value, then: onReturn) }
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(c.onAccent)
                 .accessibilityIdentifier("tornOff.return")
             Button("Show its window") { WindowDirectory.shared.openTicket(value, from: nil) }
                 .buttonStyle(.bordered)
+                .foregroundStyle(c.accentText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(c.bg)
