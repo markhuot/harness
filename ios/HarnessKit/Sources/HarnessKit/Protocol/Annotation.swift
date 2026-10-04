@@ -29,6 +29,9 @@ public enum AnnotationSource: Codable, Sendable, Equatable, Hashable {
     case promptAttachment(index: Int, name: String)
     /// A file sent with an earlier message (that transcript entry's attachments[index]).
     case messageAttachment(entryId: String, index: Int, name: String)
+    /// An image that was waiting in a composer or a New session, annotated before it was sent (it
+    /// takes that file's place).
+    case file(name: String)
     /// A screenshot of a session browser tab (BrowserScreenshot).
     case browser(url: String, title: String, tabId: Int, viewport: AnnotationViewport, scale: Double)
     case unknown(kind: String, raw: JSONValue)
@@ -39,6 +42,7 @@ public enum AnnotationSource: Codable, Sendable, Equatable, Hashable {
         case .attachment: "attachment"
         case .promptAttachment: "prompt-attachment"
         case .messageAttachment: "message-attachment"
+        case .file: "file"
         case .browser: "browser"
         case let .unknown(kind, _): kind
         }
@@ -47,7 +51,7 @@ public enum AnnotationSource: Codable, Sendable, Equatable, Hashable {
     /// The file name the annotator's header shows (a browser page's title, else its URL).
     public var displayName: String {
         switch self {
-        case let .attachment(_, name), let .promptAttachment(_, name), let .messageAttachment(_, _, name): name
+        case let .attachment(_, name), let .promptAttachment(_, name), let .messageAttachment(_, _, name), let .file(name): name
         case let .browser(url, title, _, _, _): title.isEmpty ? url : title
         case .unknown: ""
         }
@@ -67,6 +71,8 @@ public enum AnnotationSource: Codable, Sendable, Equatable, Hashable {
                 index: try c.decode(Int.self, forKey: "index"),
                 name: try c.decode(String.self, forKey: "name")
             )
+        case "file":
+            self = .file(name: try c.decode(String.self, forKey: "name"))
         case "browser":
             self = .browser(
                 url: try c.decode(String.self, forKey: "url"),
@@ -93,6 +99,8 @@ public enum AnnotationSource: Codable, Sendable, Equatable, Hashable {
         case let .messageAttachment(entryId, index, name):
             try c.encode(entryId, forKey: "entryId")
             try c.encode(index, forKey: "index")
+            try c.encode(name, forKey: "name")
+        case let .file(name):
             try c.encode(name, forKey: "name")
         case let .browser(url, title, tabId, viewport, scale):
             try c.encode(url, forKey: "url")

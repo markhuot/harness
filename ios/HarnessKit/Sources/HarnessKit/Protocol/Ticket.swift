@@ -90,6 +90,10 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// inline. One can go missing later (moved or deleted); GET /tickets/:key/prompt-attachments/:index
     /// answers 404 for it then. Optional so older payloads decode; the service always sends it.
     public var promptAttachments: [PromptAttachment]?
+    /// The human's numbered notes on images among `promptAttachments` (DESIGN.md "Annotations"),
+    /// each indexing that list. They go with the first message: its run's prompt lists them.
+    /// Optional so older payloads decode.
+    public var promptAnnotations: [MessageAnnotation]?
     /// Why the ticket is blocked (question for the human), when status = blocked
     @Nullable public var blockedReason: String?
     /// True while any agent run for this ticket is queued or running
@@ -120,7 +124,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [PromptAttachment]? = nil, blockedReason: String? = nil, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [PromptAttachment]? = nil, promptAnnotations: [MessageAnnotation]? = nil, blockedReason: String? = nil, busy: Bool = false,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
         createdAt: Timestamp, updatedAt: Timestamp
@@ -156,6 +160,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.hasChanges = hasChanges
         self.draft = draft
         self.promptAttachments = promptAttachments
+        self.promptAnnotations = promptAnnotations
         self.blockedReason = blockedReason
         self.busy = busy
         self.pendingApproval = pendingApproval

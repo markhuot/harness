@@ -100,6 +100,37 @@ struct DraftsTests {
         #expect(t.createdAt >= before && t.createdAt <= Date().timeIntervalSince1970 * 1000)
     }
 
+    /// promptAttachments.test.ts: "annotations go with the attachments they point at, and new
+    /// attachments without them clear them".
+    @Test func annotationsGoWithTheirAttachmentsAndNewAttachmentsWithoutThemClearThem() {
+        let project = Project(id: "p1", key: "WEB", name: "web", path: "/w", nextSeq: 1, useWorktrees: true, createdAt: 0, updatedAt: 0)
+        let shot = PromptAttachment(path: "/d/shot.png", name: "shot.png", source: .file)
+        let notes = PromptAttachment(path: "/d/notes.pdf", name: "notes.pdf", source: .file)
+        let note = MessageAnnotation(attachment: 0, source: .file(name: "shot.png"), width: 10, height: 10, marks: [AnnotationMark(n: 1, x: 1, y: 1, message: "here")])
+        var a = Drafts.blankDraftTicket(project: project, settings: nil, key: "WEB-1", now: 0)
+        a.promptAttachments = [shot]
+        // Only the annotations changed.
+        var onlyNotes = a
+        onlyNotes.promptAnnotations = [note]
+        #expect(Drafts.draftPatch(a, onlyNotes) == UpdateTicketBody(promptAnnotations: [note]))
+        // The list changed: its annotations ride along, so the service doesn't clear them.
+        var b = onlyNotes
+        b.promptAttachments = [shot, notes]
+        #expect(Drafts.draftPatch(onlyNotes, b) == UpdateTicketBody(
+            promptAttachments: [PromptAttachmentInput(path: shot.path, name: shot.name), PromptAttachmentInput(path: notes.path, name: notes.name)],
+            promptAnnotations: [note]
+        ))
+        // Removing every attachment sends an empty list of notes too.
+        var none = a
+        none.promptAttachments = []
+        #expect(Drafts.draftPatch(a, none) == UpdateTicketBody(promptAttachments: [], promptAnnotations: []))
+        #expect(Drafts.draftCreateBody(b, project: project).promptAnnotations == [note])
+        #expect(Drafts.draftCreateBody(a, project: project).promptAnnotations == nil)
+        // A patch with new attachments and no annotations clears them, as the service does.
+        #expect(Drafts.applyTicketPatch(b, UpdateTicketBody(promptAttachments: [PromptAttachmentInput(path: notes.path)])).promptAnnotations == [])
+        #expect(Drafts.applyTicketPatch(b, UpdateTicketBody(spec: "x")).promptAnnotations == [note])
+    }
+
     @Test(arguments: Fixture.cases("stateDrafts", "draftReviewSkipsPatchCases", input: DRSkipsInput.self, output: JSONValue.self))
     func draftReviewSkipsPatch(_ c: Fixture.Case<DRSkipsInput, JSONValue>) throws {
         try expectJSONMatchesTS(Drafts.draftReviewSkipsPatch(c.input.ticket, from: c.input.from, to: c.input.to), c.output)

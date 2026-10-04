@@ -96,11 +96,6 @@ struct AnnotationsTests {
         #expect(Annotations.setMessage(marks, at: 1, "new") == [Self.click(0.1, 0.1, "a"), Self.click(0.2, 0.2, "new")])
     }
 
-    @Test func sentMarksComeBackAsDraftsInNumberOrder() {
-        let sent = [AnnotationMark(n: 2, x: 500, y: 250, message: "b"), AnnotationMark(n: 1, x: 100, y: 50, tailX: 0, tailY: 500, message: "a")]
-        #expect(Annotations.drafts(sent, width: Self.W, height: Self.H) == [Self.arrow(0.1, 0.1, 0, 1, "a"), Self.click(0.5, 0.5, "b")])
-    }
-
     @Test func theMarkLimitStopsAtFifty() {
         #expect(Annotations.canAdd(Array(repeating: Self.click(0, 0), count: maxAnnotationMarks - 1)))
         #expect(!Annotations.canAdd(Array(repeating: Self.click(0, 0), count: maxAnnotationMarks)))
@@ -112,13 +107,6 @@ struct AnnotationsTests {
         // 1999 units, then an emoji (2 units) that would cross the limit.
         let crossing = String(repeating: "a", count: maxAnnotationMessage - 1) + "😀"
         #expect(Annotations.clampMessage(crossing) == String(repeating: "a", count: maxAnnotationMessage - 1))
-    }
-
-    @Test func sendNeedsAMarkNoSendInFlightAndNoApprovalWaiting() {
-        #expect(Annotations.canSend(marks: 1, sending: false, approvalPending: false))
-        #expect(!Annotations.canSend(marks: 0, sending: false, approvalPending: false))
-        #expect(!Annotations.canSend(marks: 1, sending: true, approvalPending: false))
-        #expect(!Annotations.canSend(marks: 1, sending: false, approvalPending: true))
     }
 
     @Test func annotationsAreFoundByAttachmentSkippingOutOfRangeAndEmptyOnes() {

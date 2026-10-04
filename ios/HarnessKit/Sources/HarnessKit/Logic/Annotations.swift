@@ -185,15 +185,62 @@ public enum Annotations {
         "\(count) \(count == 1 ? "note" : "notes")"
     }
 
-    // MARK: Phone-only rules around the shared ones
+    /// The marks of a sent or waiting annotation, back as fractions of its image, so the annotator
+    /// can reopen them to edit (over the original image, which has the same size as the annotated one).
+    public static func draftMarks(from a: MessageAnnotation) -> [DraftMark] {
+        draftMarks(width: a.width, height: a.height, marks: a.marks)
+    }
 
-    /// The marks back as drafts (fractions of the image), e.g. to redraw a sent annotation.
-    public static func drafts(_ marks: [AnnotationMark], width: Double, height: Double) -> [DraftMark] {
-        marks.sorted { $0.n < $1.n }.map { m in
-            let tail: Point? = if let tx = m.tailX, let ty = m.tailY { toUnit(Point(x: tx, y: ty), width: width, height: height) } else { nil }
-            return DraftMark(anchor: toUnit(Point(x: m.x, y: m.y), width: width, height: height), tail: tail, message: m.message)
+    /// `draftMarksFrom` on a width, height and marks (marks stay in their order).
+    public static func draftMarks(width: Double, height: Double, marks: [AnnotationMark]) -> [DraftMark] {
+        marks.map { m in
+            let unit = { (x: Double, y: Double) in toUnit(Point(x: x, y: y), width: width, height: height) }
+            let tail: Point? = if let tx = m.tailX, let ty = m.tailY { unit(tx, ty) } else { nil }
+            return DraftMark(anchor: unit(m.x, m.y), tail: tail, message: m.message)
         }
     }
+
+    // A message (or New session) keeps its annotations beside its attachments, each naming its
+    // attachment by index. These keep them pointed at the right file as the list changes.
+
+    /// The annotation on `attachments[index]`, if it has one.
+    public static func annotation(for index: Int, in annotations: [MessageAnnotation]) -> MessageAnnotation? {
+        annotations.first { $0.attachment == index }
+    }
+
+    /// `annotations` with the one on `attachments[index]` set to `a` (its own `attachment` is
+    /// ignored; nil removes it), in attachment order.
+    public static func with(_ annotations: [MessageAnnotation], at index: Int, _ a: MessageAnnotation?) -> [MessageAnnotation] {
+        var rest = annotations.filter { $0.attachment != index }
+        if var a {
+            a.attachment = index
+            rest.append(a)
+        }
+        // A stable sort, as Array.prototype.sort is.
+        return rest.enumerated().sorted { ($0.element.attachment, $0.offset) < ($1.element.attachment, $1.offset) }.map(\.element)
+    }
+
+    /// `annotations` once `attachments[index]` is removed: its own goes, and later ones move up an index.
+    public static func without(_ annotations: [MessageAnnotation], at index: Int) -> [MessageAnnotation] {
+        annotations.filter { $0.attachment != index }.map { a in
+            guard a.attachment > index else { return a }
+            var out = a
+            out.attachment -= 1
+            return out
+        }
+    }
+
+    /// Only the annotations whose attachment is still in a list of `count` (what a send or save carries).
+    public static func within(_ annotations: [MessageAnnotation], count: Int) -> [MessageAnnotation] {
+        annotations.filter { $0.attachment >= 0 && $0.attachment < count }
+    }
+
+    /// Same annotations, same order, same contents.
+    public static func same(_ a: [MessageAnnotation], _ b: [MessageAnnotation]) -> Bool {
+        a == b
+    }
+
+    // MARK: Phone-only rules around the shared ones
 
     /// Whether another mark fits (MAX_ANNOTATION_MARKS).
     public static func canAdd(_ marks: [DraftMark]) -> Bool {
@@ -212,12 +259,6 @@ public enum Annotations {
             units += n
         }
         return out
-    }
-
-    /// What the annotator's Send needs: at least one mark, nothing in flight, no tool approval
-    /// waiting (a message then answers it, and the service refuses attachments with it).
-    public static func canSend(marks: Int, sending: Bool, approvalPending: Bool) -> Bool {
-        marks > 0 && !sending && !approvalPending
     }
 
     /// The annotation each image of a sent message carries, by attachment index (the Transcript's
