@@ -238,7 +238,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     // Older apps still send `log`; messages go to the transcript only, so it's ignored.
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments });
   });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();
@@ -453,6 +453,21 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
         try {
           const found = opts.orchestrator.promptAttachmentFile(decodeURIComponent(promptFile[1]!), decodeURIComponent(promptFile[2]!));
+          if (!found) return json({ error: "The attached file is missing" }, 404);
+          return await serveFile(req, found.path, found.mimeType, "no-cache");
+        } catch (err) {
+          if (err instanceof HarnessError) return json({ error: err.message }, err.status);
+          return json({ error: "The attached file is missing" }, 404);
+        }
+      }
+
+      // Files sent with a message (a transcript entry's attachments), the same way.
+      const messageFile = /^\/transcript\/([^/]+)\/attachments\/([^/]+)$/.exec(path);
+      if (messageFile && (req.method === "GET" || req.method === "HEAD")) {
+        const token = opts.tokens.get();
+        if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
+        try {
+          const found = opts.orchestrator.messageAttachmentFile(decodeURIComponent(messageFile[1]!), decodeURIComponent(messageFile[2]!));
           if (!found) return json({ error: "The attached file is missing" }, 404);
           return await serveFile(req, found.path, found.mimeType, "no-cache");
         } catch (err) {

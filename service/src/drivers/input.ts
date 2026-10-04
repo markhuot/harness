@@ -2,13 +2,24 @@
 // pushes; the driver takes them into the live conversation and reports when its agent has
 // actually seen each one. Whatever is still undelivered when the run ends becomes a queued run.
 
+import type { PromptAttachment } from "@harness/shared";
+import type { RunImage } from "../prompt-attachments";
+
 export interface SteerMessage {
   /** Unique per message (claude-code sends it as the stream-json uuid and matches the CLI's replay) */
   id: string;
   text: string;
+  /** Images attached to the message that go inline with it (their paths are in `text`) */
+  images?: RunImage[];
 }
 
-type Entry = SteerMessage & { taken: boolean; original: string };
+/** A message as the human sent it: its words and the files attached to it. */
+export interface SentMessage {
+  text: string;
+  attachments: readonly PromptAttachment[];
+}
+
+type Entry = SteerMessage & { taken: boolean; original: SentMessage };
 
 export class RunInput {
   private entries: Entry[] = [];
@@ -17,12 +28,12 @@ export class RunInput {
 
   /**
    * Add a message for the running agent. False once the run stopped taking input. `original` is
-   * what the human wrote when `text` has more in it (@-mentioned files attached); a message that
-   * goes undelivered is queued as written, and its run attaches the files again.
+   * what the human sent when `text` has more in it (@-mentioned files and attachments listed); a
+   * message that goes undelivered is queued as sent, and its run attaches the files again.
    */
-  push(text: string, original = text): boolean {
+  push(text: string, original: SentMessage = { text, attachments: [] }, images?: RunImage[]): boolean {
     if (this.closed) return false;
-    this.entries.push({ id: crypto.randomUUID(), text, original, taken: false });
+    this.entries.push({ id: crypto.randomUUID(), text, ...(images?.length ? { images } : {}), original, taken: false });
     for (const cb of this.listeners) cb();
     return true;
   }
@@ -33,7 +44,7 @@ export class RunInput {
     for (const e of this.entries) {
       if (e.taken) continue;
       e.taken = true;
-      out.push({ id: e.id, text: e.text });
+      out.push(steer(e));
     }
     return out;
   }
@@ -48,7 +59,7 @@ export class RunInput {
 
   /** Taken by the driver but not yet seen by the agent */
   inFlight(): SteerMessage[] {
-    return this.entries.filter((e) => e.taken).map(({ id, text }) => ({ id, text }));
+    return this.entries.filter((e) => e.taken).map(steer);
   }
 
   /** Any message not yet delivered (taken or not) */
@@ -72,8 +83,10 @@ export class RunInput {
     return this.closed;
   }
 
-  /** Every message not delivered, as the human wrote it, in the order they were pushed. */
-  undelivered(): string[] {
+  /** Every message not delivered, as the human sent it, in the order they were pushed. */
+  undelivered(): SentMessage[] {
     return this.entries.map((e) => e.original);
   }
 }
+
+const steer = (e: Entry): SteerMessage => ({ id: e.id, text: e.text, ...(e.images ? { images: e.images } : {}) });

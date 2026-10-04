@@ -100,6 +100,23 @@ public enum TicketDetailLogic {
         Format.composerPlaceholder[t.status] ?? "Message the agent…"
     }
 
+    // MARK: Message attachments
+
+    /// Whether the composer offers its attach (+) button: not while a tool approval waits, since a
+    /// message then answers the approval as a deny and the service refuses attachments with it.
+    public static func acceptsMessageAttachments(_ t: Ticket) -> Bool {
+        t.pendingApproval == nil
+    }
+
+    /// Whether Send goes: there's text or at least one attachment, nothing is still uploading, no
+    /// send is in flight, and no attachment would go with a message that answers a waiting tool
+    /// approval (the service refuses that).
+    public static func canSendMessage(text: String, attachments: Int, uploading: Int, sending: Bool, approvalPending: Bool) -> Bool {
+        guard !sending, uploading == 0 else { return false }
+        if attachments > 0 { return !approvalPending }
+        return !trim(text).isEmpty
+    }
+
     /// "1 ticket waiting on you" / "3 tickets waiting on you".
     public static func waitingOnYou(_ n: Int) -> String {
         "\(n) ticket\(n == 1 ? "" : "s") waiting on you"

@@ -9,6 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Messages to a ticket can carry attachments. A (+) button at the left of the message box lets you
+  attach files the same way a New session does: on the Mac, choose files or paste an image (you can
+  also drop files on the message box or paste an image into it); on iPhone and iPad, attach from
+  Photos, Files or the clipboard, or drag files in on iPad. Attachments are listed above the message
+  box, each with a remove button, until you send. A message can be just attachments, and the agent
+  sees attached images along with your message.
+- The Transcript shows the files sent with each message under it, with thumbnails. A file that was
+  moved or deleted afterwards shows as missing.
+
 ## [app-20261004.0031](https://github.com/markhuot/harness/releases/tag/app-20261004.0031) - 2026-10-04
 
 ### Added

@@ -6,12 +6,18 @@ import SwiftUI
 /// the ticket first and the hint about what a message does. The switch and hint show only while
 /// writing: once the field is focused, and after a blur only while it holds a message. A message
 /// goes to the agent and shows in the Transcript, never in Activity, so a send that goes through
-/// opens the Transcript from any tab (Tabs.tabAfterSend). The field and send button
-/// are Liquid Glass floating over the tab, with no bar of their own.
+/// opens the Transcript from any tab (Tabs.tabAfterSend). The attach (+) button, field and send
+/// button are Liquid Glass floating over the tab, with no bar of their own. Files picked from (+)
+/// (or dropped on the ticket) upload first and wait in a short list over the field, each removable,
+/// and go with the next message; there's no (+) while a tool approval waits, since a message then
+/// answers it.
 struct TicketDetailComposer: View {
     let ticket: Ticket
     /// The tab on screen
     let tab: TicketTab
+    /// The files going with the next message
+    let outgoing: MessageAttachments
+    let uploader: PromptAttachmentUploader
     /// Shows a tab of the ticket: the Transcript once a message went through
     let onTab: (TicketTab) -> Void
 
@@ -28,10 +34,16 @@ struct TicketDetailComposer: View {
         let switchLabel = Format.moveSwitchLabel(ticket)
         let move = switchLabel != nil && moveFirst
         let hint = Format.composerHint(ticket, move: move)
-        let writing = focused || !TicketDetailLogic.trim(text).isEmpty
-        let attention = ticket.status == .blocked
         let empty = TicketDetailLogic.trim(text).isEmpty
+        let writing = focused || !empty || !outgoing.isEmpty
+        let attention = ticket.status == .blocked
+        let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
+        let canSend = TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
+                                                       sending: sending, approvalPending: !accepts)
         VStack(spacing: 4) {
+            if !outgoing.isEmpty || !uploader.pending.isEmpty {
+                attachmentTray(accepts: accepts)
+            }
             if writing && (switchLabel != nil || !hint.isEmpty) {
                 HStack(spacing: 8) {
                     if let switchLabel {
@@ -56,6 +68,9 @@ struct TicketDetailComposer: View {
                 .padding(.horizontal, 6)
             }
             HStack(alignment: .bottom, spacing: 8) {
+                if accepts {
+                    attachButton
+                }
                 MentionTextEditor(text: $text,
                                   placeholder: TicketDetailLogic.composerPlaceholder(ticket),
                                   ticketKey: ticket.key,
@@ -69,7 +84,7 @@ struct TicketDetailComposer: View {
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
                                                             glass: true))
-                sendButton(active: focused || !empty, disabled: empty || sending) { send(move: move) }
+                sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send(move: move) }
             }
         }
         .padding(.horizontal, 12)
@@ -80,7 +95,7 @@ struct TicketDetailComposer: View {
     /// Prominent accent glass while writing (focused, or holding a message), plain glass with a dimmed
     /// arrow otherwise. Focused but empty it stays prominent and ignores taps rather than `.disabled`,
     /// which would grey the glass out.
-    @ViewBuilder private func sendButton(active: Bool, disabled: Bool, action: @escaping () -> Void) -> some View {
+    @ViewBuilder private func sendButton(active: Bool, disabled: Bool, hint: String, action: @escaping () -> Void) -> some View {
         let label = Group {
             if sending {
                 ProgressView()
@@ -95,7 +110,7 @@ struct TicketDetailComposer: View {
                 .buttonBorderShape(.circle)
                 .tint(c.accent)
                 .accessibilityLabel("Send")
-                .accessibilityHint(disabled ? "Write a message first" : "")
+                .accessibilityHint(disabled ? hint : "")
         } else {
             Button(action: action) { label.foregroundStyle(c.text3) }
                 .buttonStyle(.glass)
@@ -105,19 +120,83 @@ struct TicketDetailComposer: View {
         }
     }
 
+    /// Why Send ignores a tap (VoiceOver's hint).
+    private func sendHint(empty: Bool, accepts: Bool) -> String {
+        if !uploader.pending.isEmpty { return "Wait for the attachments to upload" }
+        if !outgoing.isEmpty && !accepts { return "Remove the attachments to answer the approval" }
+        return empty ? "Write a message first" : ""
+    }
+
+    /// The (+) button: a glass circle the send button's size, opening the Attach menu (Photos,
+    /// Files, Paste). Off while sending and once the list is full.
+    private var attachButton: some View {
+        let full = outgoing.count + uploader.pending.count >= maxPromptAttachments
+        return Menu {
+            PromptAttachmentMenuItems(uploader: uploader, target: outgoing)
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(full || sending ? c.text3 : c.text)
+                .frame(width: 30, height: 30)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .disabled(full || sending)
+        .accessibilityLabel("Attach")
+        .accessibilityValue(outgoing.isEmpty ? "" : "\(outgoing.count) of \(maxPromptAttachments) attached")
+    }
+
+    /// The files going with the message, over the field: the shared list with a remove button per
+    /// row and a spinner row per upload, in a glass card that scrolls past about three rows so it
+    /// doesn't cover the tab.
+    private func attachmentTray(accepts: Bool) -> some View {
+        let tiles = outgoing.list.enumerated().map { i, a in
+            PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.path])
+        }
+        let rows = tiles.count + uploader.pending.count
+        // A row is 44 tall with 4 between; three and a bit show before it scrolls.
+        let height = min(CGFloat(rows) * 48 - 4, 156)
+        return VStack(alignment: .leading, spacing: 4) {
+            ScrollView {
+                PromptAttachmentList(
+                    tiles: tiles,
+                    pending: uploader.pending,
+                    onRemove: sending ? nil : { outgoing.remove(at: $0.index) }
+                )
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .frame(height: height)
+            if !accepts {
+                Text("Attachments can't go with an answer to the approval.")
+                    .font(.scaled(size: 12))
+                    .foregroundStyle(c.red)
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 2)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Attachments")
+    }
+
     private func send(move: Bool) {
         let body = TicketDetailLogic.trim(text)
-        guard !body.isEmpty, !sending else { return }
+        let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
+        guard TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
+                                               sending: sending, approvalPending: !accepts) else { return }
+        let attachments = outgoing.inputs
         let key = ticket.key
         sending = true
         Task {
             // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
-            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move) }
+            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move, attachments: attachments) }
             sending = false
             if ok != nil {
                 haptic(.success)
                 text = ""
                 moveFirst = false
+                outgoing.clear()
             }
             let next = Tabs.tabAfterSend(tab, sent: ok != nil)
             if next != tab { onTab(next) }

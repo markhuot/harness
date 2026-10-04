@@ -171,8 +171,8 @@ export function displayToolName(name: string): string {
 }
 
 /**
- * The first user message's content: the prompt alone, or with the ticket's attached images as
- * image blocks after it (DESIGN.md "Prompt attachments"), the shape the Messages API takes.
+ * A user message's content: the prompt (or a steered message) alone, or with its attached images
+ * as image blocks after it (DESIGN.md "Prompt attachments"), the shape the Messages API takes.
  */
 export function userContent(prompt: string, images: RunImage[] | undefined): string | unknown[] {
   if (!images?.length) return prompt;
@@ -965,7 +965,7 @@ export class ClaudeCodeDriver implements Driver {
     // Human messages sent mid-run go straight to the CLI, which takes them in at its next tool
     // boundary (or starts a new turn with them once the current one ends).
     const writeInput = () => {
-      if (stdinOpen && req.input) for (const m of req.input.take()) writeUser(m.text, m.id);
+      if (stdinOpen && req.input) for (const m of req.input.take()) writeUser(userContent(m.text, m.images), m.id);
     };
     const closeStdin = () => {
       if (waitTimer) clearTimeout(waitTimer);
@@ -991,7 +991,7 @@ export class ClaudeCodeDriver implements Driver {
     let promptTaken = false;
     writeUser(userContent(req.prompt, req.images), promptId);
     // Messages written to a previous attempt (a failed --resume) that its CLI never took in.
-    for (const m of req.input?.inFlight() ?? []) writeUser(m.text, m.id);
+    for (const m of req.input?.inFlight() ?? []) writeUser(userContent(m.text, m.images), m.id);
     writeInput();
     const unsubscribe = req.input?.onPush(writeInput);
     const buffered: DriverEvent[] = [];

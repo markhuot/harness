@@ -1143,6 +1143,29 @@
     {
       "text": "Back to work",
       "move": false
+    },
+    {
+      "text": "",
+      "attachments": [
+        {
+          "path": "/Users/mark/Desktop/shot.png"
+        },
+        {
+          "path": "/Users/mark/notes.pdf",
+          "name": "Notes",
+          "source": "file"
+        }
+      ]
+    },
+    {
+      "text": "See attached",
+      "move": true,
+      "attachments": [
+        {
+          "path": "/Users/mark/.harness/uploads/ab12/shot.png",
+          "name": "shot.png"
+        }
+      ]
     }
   ],
   "ModelInfo": [
@@ -1826,6 +1849,25 @@
       "createdAt": 1759190400000,
       "startedAt": 1759190401000,
       "endedAt": 1759190403000
+    },
+    {
+      "id": "run_11",
+      "sessionId": "ses_31",
+      "kind": "chat",
+      "status": "running",
+      "driver": "claude-code",
+      "prompt": "",
+      "error": null,
+      "createdAt": 1759190400000,
+      "startedAt": 1759190401000,
+      "endedAt": null,
+      "attachments": [
+        {
+          "path": "/Users/mark/.harness/uploads/ab12/shot.png",
+          "name": "shot.png",
+          "source": "upload"
+        }
+      ]
     }
   ],
   "ServerMessage": [
@@ -2735,6 +2777,25 @@
           "createdAt": 1759190400000,
           "startedAt": 1759190401000,
           "endedAt": 1759190403000
+        },
+        {
+          "id": "run_11",
+          "sessionId": "ses_31",
+          "kind": "chat",
+          "status": "running",
+          "driver": "claude-code",
+          "prompt": "",
+          "error": null,
+          "createdAt": 1759190400000,
+          "startedAt": 1759190401000,
+          "endedAt": null,
+          "attachments": [
+            {
+              "path": "/Users/mark/.harness/uploads/ab12/shot.png",
+              "name": "shot.png",
+              "source": "upload"
+            }
+          ]
         }
       ],
       "dependents": [
@@ -3166,6 +3227,22 @@
     {
       "type": "error",
       "text": "Rate limited; retrying in 30s"
+    },
+    {
+      "type": "text",
+      "text": "",
+      "attachments": [
+        {
+          "path": "/Users/mark/.harness/uploads/ab12/shot.png",
+          "name": "shot.png",
+          "source": "upload"
+        },
+        {
+          "path": "/Users/mark/notes.pdf",
+          "name": "Notes",
+          "source": "file"
+        }
+      ]
     }
   ],
   "TranscriptEntry": [
@@ -3246,6 +3323,30 @@
         "isError": false
       },
       "createdAt": 1759190400030
+    },
+    {
+      "id": "ent_5",
+      "sessionId": "ses_31",
+      "runId": "run_11",
+      "seq": 5,
+      "role": "user",
+      "content": {
+        "type": "text",
+        "text": "",
+        "attachments": [
+          {
+            "path": "/Users/mark/.harness/uploads/ab12/shot.png",
+            "name": "shot.png",
+            "source": "upload"
+          },
+          {
+            "path": "/Users/mark/notes.pdf",
+            "name": "Notes",
+            "source": "file"
+          }
+        ]
+      },
+      "createdAt": 1759190400040
     }
   ],
   "UpdateProjectBody": [

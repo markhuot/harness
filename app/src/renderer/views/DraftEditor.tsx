@@ -8,10 +8,9 @@
 // same TicketSettings rows as a ticket's Details, collapsed to a one-line summary), then Plan first
 // (⇧⌘↩) and Start session (⌘↩).
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
-import { MAX_PROMPT_ATTACHMENTS, type Project, type PromptAttachmentInput, type Ticket, type UpdateTicketBody } from "@harness/shared";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent } from "react";
+import { type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
 import {
-  addPromptAttachments,
   blankDraftTicket,
   composerProject,
   draftReviewSkipsPatch,
@@ -22,7 +21,6 @@ import {
   optionsNeedAttention,
   predictedTicketKey,
   projectDriver,
-  removePromptAttachment,
   sortedProjects,
   ticketBranchHint,
   ticketChoice,
@@ -41,8 +39,8 @@ import { registerDraftCloser } from "../components/draftClose";
 import { focusPaneBy } from "../components/paneFocus";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
-import { isFileDrag, isLocalService, limitMessage, planFiles } from "../state/promptAttachmentFiles";
-import { forgetPreview, PaperclipIcon, PromptAttachmentList, rememberPreview, type PendingUpload } from "../components/PromptAttachments";
+import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
+import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -242,81 +240,11 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
     session.edit(patch);
   };
 
-  // Prompt attachments: files on disk go in by path, anything else (pasted image data, an image
-  // dragged out of a browser) is uploaded first. Uploads on their way show as pending chips.
-  const [pending, setPending] = useState<PendingUpload[]>([]);
-  const [dropping, setDropping] = useState(false);
-  const dragDepth = useRef(0);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const attachInputs = (s: DraftSession, inputs: PromptAttachmentInput[], skippedBefore = 0) => {
-    const current = s.local.promptAttachments ?? [];
-    const { list, skipped } = addPromptAttachments(current, inputs);
-    if (list.length !== current.length) s.edit({ promptAttachments: list });
-    const message = limitMessage(skipped + skippedBefore, MAX_PROMPT_ATTACHMENTS);
-    if (message) toast(message, "error");
-  };
-  /** Attach `files`; false when none of them was something to attach (a paste then pastes as usual). */
-  const attachFiles = (files: File[], uploadAny: boolean): boolean => {
-    const s = session;
-    if (!s || !files.length) return false;
-    const plan = planFiles(files, (f) => window.harness?.pathForFile(f) ?? null, { uploadAny, local: isLocalService(client.baseUrl) });
-    if (!plan.byPath.length && !plan.uploads.length) return false;
-    for (const { input, file } of plan.byPath) rememberPreview(input.path, file);
-    // Room left once the files on disk are in (and the uploads already on their way): the rest isn't uploaded at all.
-    const room = Math.max(0, MAX_PROMPT_ATTACHMENTS - (s.local.promptAttachments?.length ?? 0) - plan.byPath.length - pending.length);
-    const uploads = plan.uploads.slice(0, room);
-    attachInputs(s, plan.byPath.map((p) => p.input), plan.uploads.length - uploads.length);
-    for (const u of uploads) {
-      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setPending((p) => [...p, { id, name: u.name }]);
-      client
-        .uploadPromptAttachment(u.file, u.name, u.mimeType)
-        .then(
-          (a) => {
-            rememberPreview(a.path, u.file);
-            attachInputs(s, [a]);
-          },
-          (e: unknown) => toast(`Couldn't attach ${u.name}: ${e instanceof Error ? e.message : String(e)}`, "error"),
-        )
-        .finally(() => setPending((p) => p.filter((x) => x.id !== id)));
-    }
-    return true;
-  };
-  const removeAttachment = (index: number) => {
-    if (!session) return;
-    const list = session.local.promptAttachments ?? [];
-    const gone = list[index];
-    session.edit({ promptAttachments: removePromptAttachment(list, index) });
-    if (gone) forgetPreview(gone.path);
-  };
-  const paste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
-    // Text pastes as text; files (a Finder copy, a screenshot) are attached instead.
-    const files = Array.from(e.clipboardData?.files ?? []);
-    if (files.length && attachFiles(files, false)) e.preventDefault();
-  };
-  const dragOver = (e: DragEvent) => {
-    if (!session || !isFileDrag(e.dataTransfer?.types)) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  };
-  const dragEnter = (e: DragEvent) => {
-    if (!session || !isFileDrag(e.dataTransfer?.types)) return;
-    dragOver(e);
-    dragDepth.current++;
-    setDropping(true);
-  };
-  const dragLeave = (e: DragEvent) => {
-    if (!isFileDrag(e.dataTransfer?.types)) return;
-    dragDepth.current = Math.max(0, dragDepth.current - 1);
-    if (!dragDepth.current) setDropping(false);
-  };
-  const drop = (e: DragEvent) => {
-    if (!isFileDrag(e.dataTransfer?.types)) return;
-    e.preventDefault();
-    dragDepth.current = 0;
-    setDropping(false);
-    attachFiles(Array.from(e.dataTransfer.files), true);
-  };
+  // Prompt attachments: the draft's promptAttachments, added to by the paperclip, drops and pastes.
+  const attach = usePromptAttachmentInput({
+    target: session && { get: () => session.local.promptAttachments ?? [], set: (list) => session.edit({ promptAttachments: list }) },
+  });
+  const { pending, dropping } = attach;
 
   const owner = `draft:${paneId}`;
   useCommands(owner, {
@@ -343,10 +271,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
       data-draft-key={key ?? undefined}
       {...keysArea("ticket", owner)}
       onKeyDown={keys}
-      onDragEnter={dragEnter}
-      onDragOver={dragOver}
-      onDragLeave={dragLeave}
-      onDrop={drop}
+      {...attach.dropProps}
     >
       <div className="view-header detail-titlebar draft-titlebar">
         <PaneGrip paneId={paneId} chip={key ?? "New session"} title={view?.title || view?.spec.split("\n")[0] || "Draft"} />
@@ -449,31 +374,28 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           onValueChange={(v) => session?.edit({ spec: v })}
           search={searchFiles}
           searchCommands={searchCommands}
-          onPaste={paste}
+          onPaste={attach.onPaste}
         />
 
-        <PromptAttachmentList items={view?.promptAttachments ?? []} ticketKey={session?.saved?.key ?? null} served={session?.saved?.promptAttachments} onRemove={removeAttachment} pending={pending}>
+        <PromptAttachmentList items={view?.promptAttachments ?? []} ticketKey={session?.saved?.key ?? null} served={session?.saved?.promptAttachments} onRemove={attach.remove} pending={pending}>
           <button
             type="button"
             className="btn btn-ghost btn-sm prompt-attach-btn"
             data-testid="prompt-attach"
             disabled={!session}
-            onClick={() => fileInput.current?.click()}
+            onClick={attach.pickFiles}
             title="Attach files (or drop them here, or paste an image)"
           >
             <PaperclipIcon size={13} />
             {view?.promptAttachments?.length || pending.length ? "Attach more" : "Attach files"}
           </button>
           <input
-            ref={fileInput}
+            ref={attach.fileInput}
             type="file"
             multiple
             hidden
             data-testid="prompt-attach-input"
-            onChange={(e) => {
-              attachFiles(Array.from(e.target.files ?? []), true);
-              e.target.value = "";
-            }}
+            onChange={attach.onFilesPicked}
           />
         </PromptAttachmentList>
 

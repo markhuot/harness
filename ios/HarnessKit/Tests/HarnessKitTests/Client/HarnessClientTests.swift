@@ -160,6 +160,15 @@ struct HarnessClientRequestTests {
         #expect(path(t) == "/tickets/NY-1/messages")
     }
 
+    /// `attachments` only when there are some; the text may be empty then.
+    @Test func sendMessageSendsAttachmentsOnlyWhenThereAreSome() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        _ = try await client(t).sendMessage("NY-1", text: "hi", attachments: [])
+        #expect(try bodyJSON(t.last) == json(#"{"text":"hi"}"#))
+        _ = try await client(t).sendMessage("NY-1", text: "", attachments: [PromptAttachmentInput(path: "/u/a.png", name: "a.png"), PromptAttachmentInput(path: "/u/b.pdf")])
+        #expect(try bodyJSON(t.last) == json(#"{"text":"","attachments":[{"path":"/u/a.png","name":"a.png"},{"path":"/u/b.pdf"}]}"#))
+    }
+
     @Test func specRoutes() async throws {
         let t = FakeTransport(status: 200, body: try envelope(.array([])))
         _ = try await client(t).specRevisions("NY-1")
@@ -360,6 +369,19 @@ struct HarnessClientPromptAttachmentTests {
         #expect(await client(t).promptAttachmentExists(key: "NY-1", index: 0) == true)
         #expect(t.last?.method == "HEAD")
         #expect(path(t) == "/tickets/NY-1/prompt-attachments/0?token=tok")
+    }
+
+    @Test func messageAttachmentUrlEncodesEntryAndToken() {
+        let c = client(token: "t&k=1 /")
+        #expect(c.messageAttachmentUrl(entryId: "ent 1/x", index: 2) == "\(base)/transcript/ent%201%2Fx/attachments/2?token=t%26k%3D1%20%2F")
+    }
+
+    @Test func fileExistsProbesAMessageAttachment() async throws {
+        let t = FakeTransport(status: 404, body: "")
+        let c = client(t)
+        #expect(await c.fileExists(c.messageAttachmentUrl(entryId: "ent_5", index: 1)) == false)
+        #expect(t.last?.method == "HEAD")
+        #expect(path(t) == "/transcript/ent_5/attachments/1?token=tok")
     }
 
     @Test func existsIsFalseOnlyOn404() async throws {

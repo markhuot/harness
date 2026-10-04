@@ -8,7 +8,7 @@ import type { RunImage } from "../prompt-attachments";
 
 export type { RunImage };
 
-export { RunInput, type SteerMessage } from "./input";
+export { RunInput, type SentMessage, type SteerMessage } from "./input";
 
 /**
  * What a driver knows about a sub-agent (DESIGN.md "Sub-agents"). The first report for an id

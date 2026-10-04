@@ -122,9 +122,14 @@ private struct TicketDetailBody: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
     @State private var height: CGFloat = 800
+    /// The files going with the next message, and their uploads: here rather than in the composer,
+    /// so a drop anywhere on the ticket attaches.
+    @State private var outgoing = MessageAttachments()
+    @State private var uploader = PromptAttachmentUploader()
 
     var body: some View {
         let state = store.state
+        let attachTarget: (any PromptAttachmentTarget)? = TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
         VStack(spacing: 0) {
@@ -145,8 +150,10 @@ private struct TicketDetailBody: View {
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TicketDetailComposer(ticket: ticket, tab: shown, onTab: onTab).id(ticket.id)
+            TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, onTab: onTab).id(ticket.id)
         }
+        .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
+        .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
     }
 

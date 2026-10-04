@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { Run, RunKind, RunStatus } from "@harness/shared";
-import { newId, now } from "./util";
+import type { PromptAttachment, Run, RunKind, RunStatus } from "@harness/shared";
+import { fromJson, newId, now } from "./util";
 
 interface RunRow {
   id: string;
@@ -9,24 +9,29 @@ interface RunRow {
   status: string;
   driver: string;
   prompt: string;
+  attachments: string;
   error: string | null;
   created_at: number;
   started_at: number | null;
   ended_at: number | null;
 }
 
-const toRun = (r: RunRow): Run => ({
-  id: r.id,
-  sessionId: r.session_id,
-  kind: r.kind as RunKind,
-  status: r.status as RunStatus,
-  driver: r.driver,
-  prompt: r.prompt,
-  error: r.error,
-  createdAt: r.created_at,
-  startedAt: r.started_at,
-  endedAt: r.ended_at,
-});
+const toRun = (r: RunRow): Run => {
+  const attachments = fromJson<PromptAttachment[]>(r.attachments, []);
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    kind: r.kind as RunKind,
+    status: r.status as RunStatus,
+    driver: r.driver,
+    prompt: r.prompt,
+    ...(attachments.length ? { attachments } : {}),
+    error: r.error,
+    createdAt: r.created_at,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+  };
+};
 
 export class RunRepo {
   constructor(private db: Database) {}
@@ -45,14 +50,16 @@ export class RunRepo {
     return (this.db.query("SELECT * FROM runs WHERE status IN ('queued','running') ORDER BY created_at, rowid").all() as RunRow[]).map(toRun);
   }
 
-  create(input: { sessionId: string; kind: RunKind; driver: string; prompt: string }): Run {
+  /** `attachments`: the files the human attached to the message the run answers. */
+  create(input: { sessionId: string; kind: RunKind; driver: string; prompt: string; attachments?: readonly PromptAttachment[] }): Run {
     const id = newId();
+    const { attachments, ...rest } = input;
     this.db
       .query(
-        `INSERT INTO runs (id, session_id, kind, status, driver, prompt, error, created_at, started_at, ended_at)
-         VALUES ($id, $sessionId, $kind, 'queued', $driver, $prompt, NULL, $t, NULL, NULL)`,
+        `INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, error, created_at, started_at, ended_at)
+         VALUES ($id, $sessionId, $kind, 'queued', $driver, $prompt, $attachments, NULL, $t, NULL, NULL)`,
       )
-      .run({ id, ...input, t: now() });
+      .run({ id, ...rest, attachments: JSON.stringify(attachments ?? []), t: now() });
     return this.get(id)!;
   }
 

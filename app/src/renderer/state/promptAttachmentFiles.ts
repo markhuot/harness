@@ -68,9 +68,53 @@ export function isLocalService(baseUrl: string): boolean {
 export const isFileDrag = (types: readonly string[] | null | undefined) => !!types && Array.from(types).includes("Files");
 
 /** The toast when the limit left some out, or null when everything fit. */
-export function limitMessage(skipped: number, max: number): string | null {
+export function limitMessage(skipped: number, max: number, what = "a session"): string | null {
   if (skipped <= 0) return null;
-  return `${skipped === 1 ? "1 file wasn't" : `${skipped} files weren't`} attached: a session takes at most ${max}.`;
+  return `${skipped === 1 ? "1 file wasn't" : `${skipped} files weren't`} attached: ${what} takes at most ${max}.`;
+}
+
+/** The shape of navigator.clipboard.read()'s items that clipboardImageFiles reads. */
+export interface ClipboardItemLike {
+  readonly types: readonly string[];
+  getType(type: string): Promise<Blob>;
+}
+
+/**
+ * The images on the clipboard (a screenshot, an image copied in a browser) as Files, one per item
+ * that carries one, for the composer's "Paste image". Named "image.<ext>" like a paste event's, so
+ * planFiles names them the way it names a pasted image.
+ */
+export async function clipboardImageFiles(items: readonly ClipboardItemLike[]): Promise<File[]> {
+  const out: File[] = [];
+  for (const item of items) {
+    const type = item.types.find((t) => t.toLowerCase().startsWith("image/"));
+    if (!type) continue;
+    const blob = await item.getType(type);
+    const ext = type.slice("image/".length).split(/[+;]/)[0] || "png";
+    out.push(new File([blob], `image.${ext}`, { type }));
+  }
+  return out;
+}
+
+/** What a ticket's message composer has: what's typed, what's attached, and what's on its way. */
+export interface ComposerDraft {
+  text: string;
+  attachments: number;
+  /** Uploads on their way (they'd be left out of a message sent now) */
+  pending: number;
+  sending: boolean;
+  /** A tool approval waits: a message answers it (as a deny), and can't carry attachments then. */
+  approvalPending: boolean;
+}
+
+/**
+ * Whether Send is enabled: something to send (text, or at least one attachment) and nothing in the
+ * way (an upload still going, a send in flight, or attachments while an approval waits).
+ */
+export function composerCanSend(d: ComposerDraft): boolean {
+  if (d.sending || d.pending > 0) return false;
+  if (d.attachments > 0 && d.approvalPending) return false;
+  return !!d.text.trim() || d.attachments > 0;
 }
 
 /** The label and tooltip of an attachment whose file is gone. */

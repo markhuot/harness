@@ -2,7 +2,7 @@
 
 import { reviewPassed, type BrowserState, type CommandMatch, type DriverInfo, type ModelInfo } from "@harness/shared";
 import { onTempCleanup, tempDir } from "@harness/shared/testing";
-import { executeTool, type Driver, type DriverEvent, type RunRequest } from "../drivers/types";
+import { executeTool, type Driver, type DriverEvent, type RunRequest, type SteerMessage } from "../drivers/types";
 import { outputKey, watcherProject, watcherTicket } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
 import { ensureHome } from "../config";
@@ -113,6 +113,8 @@ export class FakeDriver implements Driver {
   /** Off by default, so a test opts in to messages reaching the running agent */
   supportsSteering = false;
   calls: RecordedCall[] = [];
+  /** Every steered message a run took in, as the driver got it */
+  steeredMessages: SteerMessage[] = [];
   running = 0;
   maxRunning = 0;
   rejectsLeft = 0;
@@ -207,6 +209,7 @@ export class FakeDriver implements Driver {
     if (!req.input || req.prompt.includes("/deaf")) return;
     for (const m of req.input.take()) {
       req.input.delivered(m.id);
+      this.steeredMessages.push(m);
       yield { type: "text", text: `Steered: ${m.text}` };
     }
   }

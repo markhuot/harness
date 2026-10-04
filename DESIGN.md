@@ -1360,12 +1360,13 @@ GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPa
 GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
-POST   /tickets/:key/start | /messages {text, move?} | /review | /reopen | /complete | /cancel | /agent-review
+POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review
 GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
 GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
 GET    /tickets/:key/spec/revisions/:rev?diff=<other>   → SpecRevision, or SpecDiff with diff
 GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
 GET    /tickets/:key/prompt-attachments/:index   (the attached file; bearer or ?token=; HEAD too; 404 when gone)
+GET    /transcript/:entryId/attachments/:index   (a file sent with that message, the same way)
 POST   /uploads?name=        (raw bytes → PromptAttachment under uploads/; see "Prompt attachments")
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
@@ -1750,7 +1751,28 @@ ticket keeps working after one is moved or deleted.
   thumbnail, or a file icon) and then the name, so the names line up. A missing file's row is
   dimmed, with a dashed square and "Missing — was at <path>" under the name. An image opens the
   lightbox (Mac) or full-screen viewer (iOS); another file is revealed in Finder (Mac) or opens in
-  Quick Look (iOS).
+  Quick Look (iOS). The Transcript uses it read-only too, under a message sent with attachments.
+- **Message attachments.** A message to a ticket can carry files the same way:
+  `MessageBody.attachments` (`PromptAttachmentInput[]`, validated by `normalizePromptAttachments`
+  against an empty list, so every path must exist). The text may then be empty. While a tool
+  approval waits they're refused with a 409, since that message answers the approval as a deny.
+  The human message's transcript entry carries them (`{ type: "text", text, attachments }`), and
+  `GET`/`HEAD /transcript/:entryId/attachments/:index` serves each file the way the ticket's are
+  (`HarnessClient.messageAttachmentUrl`, 404 once it's gone). A queued run keeps them in
+  `runs.attachments` (migration 29, `Run.attachments`), so they survive a restart, and its
+  `<attachments>` block and inline images come from them (with the ticket's own on its first run).
+  A message steered into a running agent gets the block in its text and its images in
+  `SteerMessage.images`: claude-code writes them as image blocks in the stream-json user message,
+  anthropic-api puts them after the message's text block. A steered message the run never took in
+  is queued with its attachments (`RunInput.undelivered` returns `{ text, attachments }`).
+  Uploads sent with a message count as referenced for the startup sweep and for another ticket's
+  deletion, and go when their ticket is deleted. In both apps the composer has a (+) button at its
+  left: on the Mac it offers Choose files… and Paste image, and the composer takes drops and image
+  pastes too (`usePromptAttachmentInput`, shared with the draft editor). On iOS it offers Photos,
+  Files and Paste, and iPad takes drops, like the New session. The attachments are listed above the
+  field with × to remove each before sending. Send works with attachments alone, waits for uploads
+  to finish, and the (+) is hidden while a tool approval waits. `app/scripts/composer-attachments-check.ts`
+  drives the Mac flow against the real service.
 
 **File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
 mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path

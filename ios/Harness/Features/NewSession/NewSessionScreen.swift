@@ -221,8 +221,8 @@ private struct NewSessionEditorView: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .modifier(PromptAttachmentDrop(editor: editor, uploader: uploader))
-        .modifier(PromptAttachmentPickers(editor: editor, uploader: uploader))
+        .modifier(PromptAttachmentDrop(target: editor, uploader: uploader))
+        .modifier(PromptAttachmentPickers(target: editor, uploader: uploader))
     }
 
     // MARK: Decisions (HarnessKit's NewSessionEditor makes them; these read the live state)

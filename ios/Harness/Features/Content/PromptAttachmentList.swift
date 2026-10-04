@@ -1,17 +1,33 @@
 import HarnessKit
+import QuickLook
 import SwiftUI
 import UIKit
 
-/// One prompt attachment (Ticket.promptAttachments) as the list draws it.
+/// Where the service serves an attachment's file.
+enum PromptAttachmentRemote: Equatable {
+    /// A ticket's prompt attachment: GET /tickets/:key/prompt-attachments/:index
+    case prompt(key: String, index: Int)
+    /// A file sent with a message: GET /transcript/:entryId/attachments/:index
+    case message(entryId: String, index: Int)
+
+    func url(_ api: HarnessClient) -> String {
+        switch self {
+        case let .prompt(key, index): api.promptAttachmentUrl(key: key, index: index)
+        case let .message(entryId, index): api.messageAttachmentUrl(entryId: entryId, index: index)
+        }
+    }
+}
+
+/// One attachment (a ticket's prompt attachment, or one going with or sent with a message) as the
+/// list draws it.
 struct PromptAttachmentTile: Identifiable {
     let attachment: PromptAttachment
     /// Its place in the list it came from (what removing it takes out)
     let index: Int
     /// A thumbnail of bytes this device uploaded, drawn before the service has the draft
     var local: UIImage?
-    /// The ticket and index the service serves it at (GET /tickets/:key/prompt-attachments/:index),
-    /// once it's saved
-    var remote: (key: String, index: Int)?
+    /// Where the service serves it, once it's saved (nil: only on this device so far)
+    var remote: PromptAttachmentRemote?
 
     var id: String { attachment.path }
     var isImage: Bool { PromptAttachments.isImage(attachment) }
@@ -35,11 +51,11 @@ enum PromptAttachmentCheck {
 
     @MainActor
     static func run(_ tile: PromptAttachmentTile, url: String?, api: HarnessClient?) async -> Result? {
-        guard let remote = tile.remote, let url, let api else { return nil }
+        guard tile.remote != nil, let url, let api else { return nil }
         if tile.isImage {
             if tile.local != nil {
                 // Drawn from this device's bytes; still find out when the file is gone.
-                return await api.promptAttachmentExists(key: remote.key, index: remote.index) == false ? Result(missing: true) : Result()
+                return await api.fileExists(url) == false ? Result(missing: true) : Result()
             }
             do {
                 return Result(image: try await AttachmentMedia.shared.image(url), missing: false)
@@ -49,12 +65,12 @@ enum PromptAttachmentCheck {
                 return Task.isCancelled ? nil : Result(failed: true)
             }
         }
-        return Result(missing: await api.promptAttachmentExists(key: remote.key, index: remote.index) == false)
+        return Result(missing: await api.fileExists(url) == false)
     }
 }
 
-/// Prompt attachments as a vertical list, the same in the New session (editable) and at the bottom
-/// of the Spec tab (read-only): one row each, a same-size square (the image's thumbnail, or a file
+/// Attachments as a vertical list, the same in the New session and the message composer (editable),
+/// and at the bottom of the Spec tab and under a sent message in the Transcript (read-only): one row each, a same-size square (the image's thumbnail, or a file
 /// icon) then the name, so the names line up. Each saved one is checked against the service: an
 /// image whose file 404s, or a file whose HEAD 404s, shows dimmed with the path it was at.
 /// `onRemove` adds a remove button to each row, `pending` adds a spinner row per upload in flight,
@@ -95,7 +111,7 @@ private struct PromptAttachmentRow: View {
     @State private var failed = false
 
     private var url: String? {
-        tile.remote.flatMap { store?.api?.promptAttachmentUrl(key: $0.key, index: $0.index) }
+        tile.remote.flatMap { remote in store?.api.map(remote.url) }
     }
 
     var body: some View {
@@ -211,5 +227,73 @@ private struct PromptAttachmentUploadingRow: View {
         .frame(minHeight: 44)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Uploading \(name)")
+    }
+}
+
+/// A read-only list whose rows open: images in the full-screen viewer (paging through the list's
+/// images), other files downloaded into Quick Look. The Spec tab's prompt attachments and a sent
+/// message's attachments in the Transcript. `downloading` is on while a file is being fetched.
+struct OpenablePromptAttachmentList: View {
+    let tiles: [PromptAttachmentTile]
+    @Binding var downloading: Bool
+
+    @Environment(BoardStore.self) private var store
+    @Environment(ToastCenter.self) private var toasts
+    @State private var viewing: AttachmentViewerStart?
+    @State private var preview: URL?
+
+    var body: some View {
+        let images = tiles.filter(\.isImage)
+        PromptAttachmentList(tiles: tiles, onOpen: { tile in
+            if tile.isImage {
+                guard let i = images.firstIndex(where: { $0.index == tile.index }) else { return }
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { viewing = AttachmentViewerStart(index: i) }
+            } else {
+                open(tile)
+            }
+        })
+        .fullScreenCover(item: $viewing) { start in
+            let api = store.api
+            let remotes = images.map(\.remote)
+            AttachmentViewer(
+                attachments: images.enumerated().map { i, tile in Attachment(id: String(i), kind: .image, mimeType: "", name: tile.attachment.name, size: 0) },
+                start: start.index,
+                url: { a in
+                    guard let api, let i = Int(a.id), remotes.indices.contains(i) else { return nil }
+                    return remotes[i]?.url(api)
+                }
+            ) {
+                var t = Transaction()
+                t.disablesAnimations = true
+                withTransaction(t) { viewing = nil }
+            }
+        }
+        .quickLookPreview($preview)
+    }
+
+    /// Download a file into a temporary folder under its own name, then show it in Quick Look.
+    private func open(_ tile: PromptAttachmentTile) {
+        guard !downloading, let api = store.api, let remote = tile.remote, let url = URL(string: remote.url(api)) else { return }
+        downloading = true
+        let name = tile.attachment.name
+        Task {
+            defer { downloading = false }
+            do {
+                let (temp, response) = try await URLSession.shared.download(from: url)
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                    throw HarnessAPIError(status: http.statusCode, message: http.statusCode == 404 ? "The file is gone from the Mac." : HTTPURLResponse.localizedString(forStatusCode: http.statusCode))
+                }
+                let dir = FileManager.default.temporaryDirectory.appendingPathComponent("prompt-attachments/\(UUID().uuidString)", isDirectory: true)
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let dest = dir.appendingPathComponent(name.isEmpty ? "file" : name)
+                try FileManager.default.moveItem(at: temp, to: dest)
+                preview = dest
+            } catch {
+                haptic(.error)
+                toasts.show("Couldn't open \(name): \(localizedErrorMessage(error))", kind: .error)
+            }
+        }
     }
 }

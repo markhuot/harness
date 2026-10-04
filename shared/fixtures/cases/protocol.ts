@@ -280,6 +280,7 @@ export const Run: P.Run[] = [
   { ...run, id: "run_8", kind: "review", status: "queued", startedAt: null },
   { ...run, id: "run_9", kind: "chat", status: "cancelled", endedAt: T0 + 2_000 },
   { ...run, id: "run_10", kind: "complete", status: "succeeded", endedAt: T0 + 3_000 },
+  { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" }] },
 ];
 
 export const ToolResultContent: P.ToolResultContent[] = [
@@ -297,6 +298,14 @@ export const TranscriptContent: P.TranscriptContent[] = [
   { type: "status", text: "Moved to review" },
   { type: "status", text: "Denied: rm -rf node_modules", permission: PermissionDecisionLog[0]! },
   { type: "error", text: "Rate limited; retrying in 30s" },
+  {
+    type: "text",
+    text: "",
+    attachments: [
+      { path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" },
+      { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" },
+    ],
+  },
 ];
 
 export const TranscriptEntry: P.TranscriptEntry[] = [
@@ -304,6 +313,7 @@ export const TranscriptEntry: P.TranscriptEntry[] = [
   { id: "ent_2", sessionId: "ses_31", runId: "run_7", subagentId: "toolu_09", seq: 2, role: "assistant", content: TranscriptContent[2]!, createdAt: T0 + 10 },
   { id: "ent_3", sessionId: "ses_31", runId: null, seq: 3, role: "system", content: TranscriptContent[7]!, createdAt: T0 + 20 },
   { id: "ent_4", sessionId: "ses_31", runId: "run_7", seq: 4, role: "tool", content: TranscriptContent[4]!, createdAt: T0 + 30 },
+  { id: "ent_5", sessionId: "ses_31", runId: "run_11", seq: 5, role: "user", content: TranscriptContent[9]!, createdAt: T0 + 40 },
 ];
 
 export const Subagent: P.Subagent[] = [
@@ -866,6 +876,8 @@ export const MessageBody: P.MessageBody[] = [
   { text: "Use Double for timestamps" },
   { text: "Re-open please", move: true },
   { text: "Back to work", move: false },
+  { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }] },
+  { text: "See attached", move: true, attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
 ];
 
 export const ReopenBody: P.ReopenBody[] = [{ notes: "The enum test is tautological" }];

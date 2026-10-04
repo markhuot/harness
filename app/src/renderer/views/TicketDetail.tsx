@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, resolveBaseBranch, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, resolveBaseBranch, type CompletionAction, type PromptAttachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   AGENTS_LIVE_LABEL,
@@ -54,6 +54,9 @@ import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAll
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { liveRelatedTickets, remoteKeyMatches } from "../state/remoteIds";
+import { composerCanSend } from "../state/promptAttachmentFiles";
+import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
+import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
 
 /** What a command's tooltip adds: " (⇧⌘])", or nothing for a command without keys. */
 const keyHint = (id: string) => {
@@ -620,12 +623,20 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
   );
 }
 
-/** The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the answer appear. */
+/**
+ * The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the
+ * answer appear. (+) attaches files the way a New session does (pick, or paste an image; drops and
+ * ⌘V of files work too); they show above the input until the message goes, and go with it.
+ */
 function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => void }) {
   const { client } = useStore();
   const act = useAction();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<PromptAttachment[]>([]);
+  // Uploads finish after their render: they read and write the latest list.
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
@@ -633,7 +644,19 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
   const [moveFirst, setMoveFirst] = useState(false);
   const switchLabel = moveSwitchLabel(ticket);
   const move = !!switchLabel && moveFirst;
-  const hint = composerHint(ticket, move);
+  // A message while a tool approval waits answers it (as a deny), and the service won't take files with it.
+  const approvalPending = !!ticket.pendingApproval;
+  const setList = (list: PromptAttachment[]) => {
+    attachmentsRef.current = list;
+    setAttachments(list);
+  };
+  const attach = usePromptAttachmentInput({
+    target: { get: () => attachmentsRef.current, set: setList },
+    enabled: !approvalPending,
+    what: "a message",
+  });
+  const hint = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : composerHint(ticket, move);
+  const canSend = composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
 
   useEffect(() => {
     const el = ref.current;
@@ -648,41 +671,82 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
   }, [ticket.status]);
 
   const send = async () => {
+    if (!canSend) return;
     const body = text.trim();
-    if (!body || sending) return;
+    const files = attachments;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { move }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move, ...(files.length ? { attachments: files } : {}) }));
     setSending(false);
     if (ok) {
       setText("");
+      // Only what went: anything attached while it was sending stays for the next message.
+      setList(attachmentsRef.current.filter((a) => !files.includes(a)));
       setMoveFirst(false);
       onSent();
     }
   };
 
   return (
-    <div className={`composer ${ticket.status === "blocked" ? "attention" : ""}`}>
-      <MentionTextarea
-        ref={ref}
-        rows={1}
-        className="composer-input"
-        placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
-        value={text}
-        onValueChange={setText}
-        search={searchFiles}
-        searchCommands={searchCommands}
-        placement="above"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            void send();
-          } else if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-            // Back to the pane (its current tab); a second Escape then closes the pane as usual.
-            e.preventDefault();
-            ref.current?.closest(".detail")?.querySelector<HTMLElement>("[data-pane-autofocus]")?.focus();
-          }
-        }}
-      />
+    <div
+      className={`composer ${ticket.status === "blocked" ? "attention" : ""} ${attach.dropping ? "dropping" : ""}`}
+      data-testid="composer"
+      {...attach.dropProps}
+    >
+      <PromptAttachmentList items={attachments} ticketKey={null} onRemove={attach.remove} pending={attach.pending} />
+      <div className="composer-row">
+        {!approvalPending && (
+          <MenuButton
+            align="left"
+            trigger={(toggle, open) => (
+              <button
+                type="button"
+                className="btn btn-ghost btn-icon composer-attach"
+                data-testid="composer-attach"
+                aria-expanded={open}
+                onClick={toggle}
+                title="Attach files (or drop them here, or paste an image)"
+                aria-label="Attach"
+              >
+                <Icon name="plus" size={16} strokeWidth={2} />
+              </button>
+            )}
+          >
+            {(closeMenu) => (
+              <>
+                <button data-testid="composer-attach-files" onClick={() => (closeMenu(), attach.pickFiles())}>
+                  <PaperclipIcon /> Choose files…
+                </button>
+                <button data-testid="composer-attach-paste" onClick={() => (closeMenu(), void attach.pasteFromClipboard())}>
+                  <Icon name="image" /> Paste image
+                </button>
+              </>
+            )}
+          </MenuButton>
+        )}
+        <input ref={attach.fileInput} type="file" multiple hidden data-testid="composer-attach-input" onChange={attach.onFilesPicked} />
+        <MentionTextarea
+          ref={ref}
+          rows={1}
+          className="composer-input"
+          placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
+          value={text}
+          onValueChange={setText}
+          search={searchFiles}
+          searchCommands={searchCommands}
+          placement="above"
+          onPaste={attach.onPaste}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void send();
+            } else if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+              // Back to the pane (its current tab); a second Escape then closes the pane as usual.
+              e.preventDefault();
+              ref.current?.closest(".detail")?.querySelector<HTMLElement>("[data-pane-autofocus]")?.focus();
+            }
+          }}
+        />
+      </div>
       <div className="composer-bar">
         {switchLabel && <Switch checked={move} onChange={setMoveFirst} label={switchLabel} />}
         {hint && (
@@ -692,10 +756,16 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
         )}
         <div className="grow" />
         <span className="kbd">{MOD}↩</span>
-        <button className="btn btn-primary btn-sm btn-icon" disabled={!text.trim() || sending} onClick={send} title="Send">
+        <button className="btn btn-primary btn-sm btn-icon" data-testid="composer-send" disabled={!canSend} onClick={send} title="Send">
           {sending ? <span className="spinner" /> : <Icon name="arrowUp" strokeWidth={2.25} />}
         </button>
       </div>
+      {attach.dropping && (
+        <div className="draft-drop-hint" data-testid="composer-drop-hint" aria-hidden>
+          <PaperclipIcon size={18} />
+          Drop to attach
+        </div>
+      )}
     </div>
   );
 }

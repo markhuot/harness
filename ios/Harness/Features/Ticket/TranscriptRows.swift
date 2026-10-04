@@ -75,20 +75,26 @@ struct TranscriptEntryRow: View {
     var body: some View {
         let time = transcriptTime(entry.createdAt)
         switch entry.content {
-        case let .text(text) where entry.role == .user:
+        case let .text(text, attachments) where entry.role == .user:
             VStack(alignment: .trailing, spacing: 4) {
                 TranscriptWho(icon: "user", label: "You", time: time)
-                // Shrinks to fit a short message; a table or code block needs a definite width.
-                TranscriptBubbleWidth(fraction: 0.92, fill: MarkdownView.scrollsSideways(text)) {
-                    MarkdownView(text: text)
-                        .padding(11)
-                        .background(c.accentSoft, in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 4))
+                // A message of only attachments has no bubble.
+                if !TicketDetailLogic.trim(text).isEmpty || (attachments ?? []).isEmpty {
+                    // Shrinks to fit a short message; a table or code block needs a definite width.
+                    TranscriptBubbleWidth(fraction: 0.92, fill: MarkdownView.scrollsSideways(text)) {
+                        MarkdownView(text: text)
+                            .padding(11)
+                            .background(c.accentSoft, in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 4))
+                    }
+                }
+                if let attachments, !attachments.isEmpty {
+                    TranscriptMessageAttachments(entryId: entry.id, list: attachments)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
-        case let .text(text) where entry.role == .system:
+        case let .text(text, _) where entry.role == .system:
             MarkdownView(text: text, size: 13.5, color: c.text2).padding(.horizontal, 6)
-        case let .text(text):
+        case let .text(text, _):
             VStack(alignment: .leading, spacing: 4) {
                 TranscriptWho(icon: "sparkle", label: who, time: time)
                 MarkdownView(text: text)
@@ -121,6 +127,31 @@ struct TranscriptEntryRow: View {
         case .toolCall, .unknown:
             EmptyView()
         }
+    }
+}
+
+/// The files sent with a message, under its bubble: the shared read-only list (thumbnails, a
+/// missing state once a file is gone from the Mac), images opening full screen and other files in
+/// Quick Look, served from GET /transcript/:entryId/attachments/:index.
+struct TranscriptMessageAttachments: View {
+    let entryId: String
+    let list: [PromptAttachment]
+
+    @Environment(\.palette) private var c
+    @State private var downloading = false
+
+    var body: some View {
+        let tiles = list.enumerated().map { i, a in
+            PromptAttachmentTile(attachment: a, index: i, remote: .message(entryId: entryId, index: i))
+        }
+        OpenablePromptAttachmentList(tiles: tiles, downloading: $downloading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(c.accentSoft.opacity(0.5), in: .rect(cornerRadius: 14, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if downloading { ProgressView().controlSize(.mini).padding(6) }
+            }
+            .frame(maxWidth: 320)
     }
 }
 
