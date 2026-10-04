@@ -19,6 +19,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   sees attached images along with your message.
 - The Transcript shows the files sent with each message under it, with thumbnails. A file that was
   moved or deleted afterwards shows as missing.
+- You can annotate images and send them to the agent. Open any image in a spec, a New session
+  attachment on the Spec tab or a file sent with a message, and choose Annotate. In the Browser tab,
+  Annotate takes a picture of the page. Click to drop a numbered marker, or press and drag to draw an
+  arrow pointing at the spot. Each number gets its own note, listed next to the image (below it on
+  iPhone) so nothing covers what you're pointing at. Sending gives the agent the image with your
+  arrows and numbers on it, plus the numbered notes with where each one points. The Transcript shows
+  the notes under the image.
 
 ## [app-20261004.0031](https://github.com/markhuot/harness/releases/tag/app-20261004.0031) - 2026-10-04
 
