@@ -159,8 +159,10 @@ struct TicketDetailComposer: View {
             PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.path], remote: .waiting(a))
         }
         let rows = tiles.count + uploader.pending.count
-        // A row is 44 tall with 4 between; three and a bit show before it scrolls.
-        let height = min(CGFloat(rows) * 48 - 4, 156)
+        // A row is 44 tall with 4 between, and an annotated one has its "N notes" line (about 26)
+        // under it; three and a bit show before it scrolls.
+        let notes = tiles.filter { $0.annotation != nil }.count
+        let height = min(CGFloat(rows) * 48 - 4 + CGFloat(notes) * 26, 182)
         return VStack(alignment: .leading, spacing: 4) {
             ScrollView {
                 EditablePromptAttachmentList(

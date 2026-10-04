@@ -39,7 +39,11 @@ struct PromptAttachmentTile: Identifiable {
     var remote: PromptAttachmentRemote?
 
     var id: String { attachment.path }
-    var isImage: Bool { PromptAttachments.isImage(attachment) }
+    /// Previewed as an image: by its extension, or because it's annotated or refers to a spec image
+    /// (`attachment:<id>`, whose name is the image's alt text, often without an extension).
+    var isImage: Bool {
+        PromptAttachments.isImage(attachment) || attachment.annotation != nil || PromptAttachments.specAttachmentId(of: attachment.path) != nil
+    }
     /// The human's notes on it (drawn over its thumbnail, listed under its row)
     var annotation: AttachmentAnnotation? { attachment.annotation.flatMap { $0.marks.isEmpty ? nil : $0 } }
     /// The file as a message or New session sends it, for annotating it.
