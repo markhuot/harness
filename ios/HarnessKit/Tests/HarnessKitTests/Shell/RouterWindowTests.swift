@@ -143,9 +143,94 @@ struct TicketWindowValueTests {
         #expect(TicketWindowValue(route: .ticket(key: "A-1", tab: .details))?.route == .ticket(key: "A-1", tab: .details))
     }
 
+    @Test func pinnedWindowsRoundTripThroughUserInfo() {
+        let values: [TicketWindowValue] = [
+            .pinned("A-1", .transcript), .pinned("A-1", .browser), .pinned("A-1", .browser, browserTab: 3),
+            .pinned("A-1", TicketWindowValue.composer), .pinned("A-1", "plugin:x:y"),
+        ]
+        for v in values {
+            #expect(TicketWindowValue(userInfo: v.userInfo) == v, "\(v)")
+        }
+        #expect(TicketWindowValue.pinned("A-1", .browser, browserTab: 3).userInfo == ["key": "A-1", "tab": "browser", "pinned": "1", "browserTab": "3"])
+    }
+
+    @Test func theComposerIsOnlyEverAPinnedWindow() {
+        // A full window asked for the composer opens on the default tab instead.
+        #expect(TicketWindowValue(key: "A-1", tab: TicketWindowValue.composer).tab == nil)
+        #expect(TicketWindowValue(userInfo: ["key": "A-1", "tab": "composer"]) == TicketWindowValue(key: "A-1", tab: nil))
+        #expect(TicketWindowValue(userInfo: ["key": "A-1", "tab": "composer", "pinned": "1"])?.tab == TicketWindowValue.composer)
+        // Its route is the ticket on its default tab: there is no composer tab to link to.
+        #expect(TicketWindowValue.pinned("A-1", TicketWindowValue.composer).route == .ticket(key: "A-1", tab: nil))
+    }
+
+    @Test func aPinnedValueNeedsATabAndOnlyTheBrowserKeepsABrowserTab() {
+        #expect(!TicketWindowValue(key: "A-1", tab: nil, pinned: true).pinned)
+        #expect(TicketWindowValue(userInfo: ["key": "A-1", "pinned": "1"]) == TicketWindowValue(key: "A-1", tab: nil))
+        #expect(TicketWindowValue(userInfo: ["key": "A-1", "tab": "nope", "pinned": "1"])?.pinned == false)
+        #expect(TicketWindowValue.pinned("A-1", .spec, browserTab: 2).browserTab == nil)
+        #expect(TicketWindowValue(key: "A-1", tab: .browser, browserTab: 2).browserTab == nil)
+        #expect(TicketWindowValue(userInfo: ["key": "A-1", "tab": "browser", "pinned": "1", "browserTab": "x"])?.browserTab == nil)
+    }
+
+    @Test func identityIsTheTicketForAFullWindowAndTheTabForAPinnedOne() {
+        let full = TicketWindowValue(key: "a-1", tab: .spec)
+        #expect(full.sameWindow(as: TicketWindowValue(key: "A-1", tab: .transcript)))
+        #expect(!full.sameWindow(as: .pinned("A-1", .spec)))
+        #expect(TicketWindowValue.pinned("a-1", .spec).sameWindow(as: .pinned("A-1", .spec)))
+        #expect(!TicketWindowValue.pinned("A-1", .spec).sameWindow(as: .pinned("A-1", .transcript)))
+        #expect(!TicketWindowValue.pinned("A-1", .spec).sameWindow(as: .pinned("A-2", .spec)))
+        #expect(!TicketWindowValue.pinned("A-1", .browser).sameWindow(as: .pinned("A-1", .browser, browserTab: 1)))
+        #expect(!TicketWindowValue.pinned("A-1", .browser, browserTab: 1).sameWindow(as: .pinned("A-1", .browser, browserTab: 2)))
+        #expect(TicketWindowValue.pinned("A-1", .browser, browserTab: 1).sameWindow(as: .pinned("A-1", .browser, browserTab: 1)))
+    }
+
+    @Test func aValueSavedBeforePinnedWindowsDecodesAsAFullWindow() throws {
+        let old = try JSONDecoder().decode(TicketWindowValue.self, from: Data(#"{"key":"A-1","tab":"details"}"#.utf8))
+        #expect(old == TicketWindowValue(key: "A-1", tab: .details))
+        let v = TicketWindowValue.pinned("A-1", .browser, browserTab: 4)
+        #expect(try JSONDecoder().decode(TicketWindowValue.self, from: JSONEncoder().encode(v)) == v)
+    }
+
     @Test func theSceneMatchIsInNoLink() {
         for link in ["harness://ticket/A-1", "harness://board", "harness://inbox/x"] {
             #expect(!link.contains(TicketWindowValue.sceneMatch))
         }
+    }
+}
+
+@Suite("TornOffTabs")
+struct TornOffTabsTests {
+    @Test func collectsOneTicketsPinnedWindows() {
+        let open: [TicketWindowValue] = [
+            TicketWindowValue(key: "A-1", tab: .transcript), // the full window: not torn off
+            .pinned("a-1", .transcript), .pinned("A-1", .browser, browserTab: 2), .pinned("A-1", TicketWindowValue.composer),
+            .pinned("A-2", .spec), .pinned("A-10", .details),
+        ]
+        let t = TornOffTabs(open, key: "A-1")
+        #expect(t.tabs == [.transcript])
+        #expect(t.browserTabs == [2])
+        #expect(t.composer)
+        #expect(!t.isEmpty)
+        #expect(TornOffTabs(open, key: "A-3").isEmpty)
+        #expect(TornOffTabs(open, key: "A-2").tabs == [.spec])
+    }
+
+    @Test func aWholeBrowserTabIsATabAndAPinnedBrowserTabIsNot() {
+        let whole = TornOffTabs([.pinned("A-1", .browser)], key: "A-1")
+        #expect(whole.tabs == [.browser] && whole.browserTabs.isEmpty)
+        #expect(whole.window("A-1", tab: .browser) == .pinned("A-1", .browser))
+        let one = TornOffTabs([.pinned("A-1", .browser, browserTab: 5)], key: "A-1")
+        #expect(one.tabs.isEmpty)
+        #expect(one.window("A-1", tab: .browser) == nil)
+        #expect(one.window("A-1", tab: .browser, browserTab: 5) == .pinned("A-1", .browser, browserTab: 5))
+        #expect(one.window("A-1", tab: .browser, browserTab: 6) == nil)
+    }
+
+    @Test func windowNamesThePinnedWindowToCloseOrNil() {
+        let t = TornOffTabs([.pinned("A-1", .spec), .pinned("A-1", TicketWindowValue.composer)], key: "A-1")
+        #expect(t.window("A-1", tab: .spec) == .pinned("A-1", .spec))
+        #expect(t.window("A-1", tab: TicketWindowValue.composer) == .pinned("A-1", TicketWindowValue.composer))
+        #expect(t.window("A-1", tab: .activity) == nil)
+        #expect(TornOffTabs.none.window("A-1", tab: TicketWindowValue.composer) == nil)
     }
 }
