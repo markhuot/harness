@@ -431,9 +431,13 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     if (!shot) return;
     annotator.open({
       name: shot.title || shot.url,
-      baseName: browserShotName(shot.url, shot.title),
-      source: { kind: "browser", url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale },
+      page: { url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale },
       load: async () => new Blob([Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0))], { type: "image/png" }),
+      // The screenshot as it is, uploaded once the notes are added (a frozen page closed unannotated leaves nothing behind).
+      input: async (png) => {
+        const a = await client.uploadPromptAttachment(png, `${browserShotName(shot.url, shot.title)}.png`, "image/png");
+        return { path: a.path, name: a.name, source: a.source };
+      },
     });
   };
 

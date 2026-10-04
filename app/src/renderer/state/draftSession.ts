@@ -12,7 +12,6 @@
 
 import type { CreateTicketBody, SubmitTicketBody, Ticket, UpdateTicketBody } from "@harness/shared";
 import { applyTicketPatch, draftCreateBody, draftIsEmpty, draftPatch, samePromptAttachments } from "@harness/shared/state";
-import type { AnnotatedOriginal } from "./annotator";
 
 type DraftProject = Parameters<typeof draftCreateBody>[1];
 type DraftSettings = Parameters<typeof draftIsEmpty>[2];
@@ -73,12 +72,6 @@ export class DraftSession {
   closing = false;
   /** A submit or discard is on its way */
   busy = false;
-  /**
-   * What the draft's annotated pictures were made from (by path), to reopen them with their marks.
-   * In memory only: a draft opened again later shows its notes, but its annotated pictures can't be
-   * reopened to edit (DESIGN.md "Annotations").
-   */
-  readonly annotationOriginals = new Map<string, AnnotatedOriginal>();
   /** Bumped on every change, for useSyncExternalStore */
   version = 0;
   private listeners = new Set<() => void>();

@@ -1,8 +1,9 @@
-// Drawing an annotator's marks (DESIGN.md "Annotations"): the same code draws them on screen, over
-// the image at its displayed size, and into the picture sent to the agent, at the image's own size,
-// so the two look alike. The geometry comes from @harness/shared/state; only the canvas calls are here.
+// Drawing an annotation's marks (DESIGN.md "Annotations") over an image: in the annotator, over a
+// thumbnail in an attachment row, and in the lightbox. The image itself is never drawn on; the
+// marks are metadata on its attachment. The geometry comes from @harness/shared/state; only the
+// canvas calls are here.
 
-import { annotationStyle, arrowGeometry, badgeCenter, toSurface, type DraftMark, type Point } from "@harness/shared/state";
+import { annotationStyle, arrowGeometry, badgeCenter, toSurface, type AnnotationStyle, type DraftMark, type Point } from "@harness/shared/state";
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -11,13 +12,15 @@ export interface DrawOptions {
   color: string;
   /** The mark whose message field has the focus: drawn with a halo (on screen only). */
   selected?: number | null;
+  /** Sizes to draw with; default: annotationStyle for the surface (a thumbnail passes its own). */
+  style?: AnnotationStyle;
 }
 
 const OUTLINE = "#fff";
 
 /** The marks over a `width`×`height` surface whose top-left is the context's origin. */
 export function drawAnnotations(ctx: Ctx, marks: readonly DraftMark[], width: number, height: number, opts: DrawOptions) {
-  const style = annotationStyle(width, height);
+  const style = opts.style ?? annotationStyle(width, height);
   const at = (p: Point) => toSurface(p, width, height);
   ctx.save();
   ctx.lineCap = "round";

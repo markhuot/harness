@@ -4,11 +4,11 @@
 // token swaps them for working ones.
 
 import { useEffect, useState } from "react";
-import type { Attachment } from "@harness/shared";
+import type { Attachment, AttachmentAnnotation } from "@harness/shared";
 import { stepAttachment } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { offersAnnotate } from "../state/annotator";
 import { offerTarget, useAnnotate, type AnnotateOffer } from "./Annotator";
+import { ImageAnnotation } from "./AnnotationOverlay";
 import { Icon } from "./Icon";
 import { Modal } from "./bits";
 
@@ -25,9 +25,9 @@ export function Missing({ name }: { name: string }) {
 /**
  * One attachment at a time over the app. ← and → (or the side buttons) step through the list (the
  * images in a piece of markdown); Esc or the backdrop closes. `urlOf` reads one from somewhere other
- * than the spec's attachments (a prompt attachment). Inside an AnnotateScope, `annotate` offers
- * an image for annotating (where it came from, and where the annotated picture goes), and the bar
- * offers Annotate for it.
+ * than the spec's attachments (a prompt attachment). `annotationOf` gives an image's notes, drawn
+ * over it. Inside an AnnotateScope, `annotate` offers an image for annotating (its attachment, and
+ * where the notes go), and the bar offers Annotate for it.
  */
 export function Lightbox({
   list,
@@ -36,6 +36,7 @@ export function Lightbox({
   onClose,
   urlOf,
   annotate,
+  annotationOf,
 }: {
   list: Attachment[];
   index: number;
@@ -43,6 +44,7 @@ export function Lightbox({
   onClose: () => void;
   urlOf?: (a: Attachment, index: number) => string;
   annotate?: (a: Attachment, index: number) => AnnotateOffer | null;
+  annotationOf?: (a: Attachment, index: number) => AttachmentAnnotation | undefined;
 }) {
   const { client } = useStore();
   // Callers render this only with a non-empty list.
@@ -53,7 +55,10 @@ export function Lightbox({
   const many = list.length > 1;
   const annotator = useAnnotate();
   const offer = annotate?.(a, at) ?? null;
-  const canAnnotate = offersAnnotate({ scoped: !!annotator, kind: a.kind, failed: failed === url, offered: !!offer });
+  // An image that loaded, where there's a message to add it to.
+  const canAnnotate = !!annotator && !!offer && a.kind === "image" && failed !== url;
+  const annotation = a.kind === "image" ? annotationOf?.(a, at) : undefined;
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
   const step = (delta: number) => onIndex(stepAttachment(index, delta, list.length));
 
   useEffect(() => {
@@ -75,7 +80,10 @@ export function Lightbox({
         {failed === url ? (
           <Missing name={a.name} />
         ) : a.kind === "image" ? (
-          <img key={url} src={url} alt={a.name} onError={() => setFailed(url)} />
+          <>
+            <img key={url} ref={setImg} src={url} alt={a.name} onError={() => setFailed(url)} />
+            {annotation && annotation.marks.length > 0 && <ImageAnnotation key={url} annotation={annotation} img={img} />}
+          </>
         ) : (
           <video key={url} src={url} controls autoPlay playsInline onError={() => setFailed(url)} />
         )}
@@ -104,7 +112,7 @@ export function Lightbox({
           <button
             className="btn btn-ghost btn-sm"
             data-testid="lightbox-annotate"
-            title="Number spots on this image and add it to your message with a note on each"
+            title={annotation ? "Edit the numbered notes on this image, for your message" : "Number spots on this image and add it to your message with a note on each"}
             onClick={() => {
               onClose();
               annotator!.open(offerTarget(url, a.name, offer!));

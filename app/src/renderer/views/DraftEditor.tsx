@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent } from "react";
 import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
 import {
-  annotationFor,
+  annotatePromptAttachment,
   blankDraftTicket,
   composerProject,
   draftReviewSkipsPatch,
@@ -42,8 +42,7 @@ import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
 import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
-import { AnnotateScope, type AnnotateOffer } from "../components/Annotator";
-import { carryAnnotations, pendingSource, withAnnotatedImage, type AnnotatedImage } from "../state/annotator";
+import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -244,33 +243,23 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   };
 
   // Prompt attachments: the draft's promptAttachments, added to by the paperclip, drops and pastes.
-  // Their notes (promptAnnotations) stay on their pictures as the list changes.
+  // An annotation is metadata on its attachment, so it goes wherever the attachment goes.
   const attach = usePromptAttachmentInput({
     target: session && {
       get: () => session.local.promptAttachments ?? [],
-      set: (list) => session.edit({ promptAttachments: list, promptAnnotations: carryAnnotations(session.local.promptAttachments ?? [], list, session.local.promptAnnotations ?? []) }),
+      set: (list) => session.edit({ promptAttachments: list }),
     },
   });
   /**
-   * Annotate on an image waiting in the draft: the annotated picture takes its place, with its notes.
-   * One annotated earlier reopens with its marks while this editor still has its original; a draft
-   * opened again later shows the notes but doesn't offer to edit them (the original isn't kept).
+   * Add to message in the annotator: the notes go on that attachment of the draft in place (an
+   * image waiting here), or it's added with them (one from elsewhere). The image is never changed,
+   * so a reopened draft's notes can always be edited again.
    */
-  const annotateOffer = (index: number, a: PromptAttachment): AnnotateOffer | null => {
-    if (!session) return null;
-    const annotations = session.local.promptAnnotations ?? [];
-    const original = session.annotationOriginals.get(a.path);
-    if (annotationFor(annotations, index) && !original) return null;
-    return {
-      source: pendingSource(annotations, index, a),
-      original,
-      onAdd: (image: AnnotatedImage) => {
-        const next = withAnnotatedImage({ attachments: session.local.promptAttachments ?? [], annotations: session.local.promptAnnotations ?? [] }, image, a.path, MAX_PROMPT_ATTACHMENTS);
-        if (!next) throw new Error(`a session takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
-        session.annotationOriginals.set(image.attachment.path, image.original);
-        session.edit({ promptAttachments: next.attachments, promptAnnotations: next.annotations });
-      },
-    };
+  const annotateDraft = (a: AnnotatedAttachment) => {
+    if (!session) throw new Error("the session isn't ready");
+    const next = annotatePromptAttachment(session.local.promptAttachments ?? [], a.input, a.annotation);
+    if (next.skipped) throw new Error(`a session takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
+    session.edit({ promptAttachments: next.list });
   };
   const { pending, dropping } = attach;
 
@@ -405,15 +394,14 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           onPaste={attach.onPaste}
         />
 
-        <AnnotateScope>
+        <AnnotateScope onAdd={annotateDraft} annotationOf={(path) => session?.local.promptAttachments?.find((x) => x.path === path)?.annotation}>
         <PromptAttachmentList
           items={view?.promptAttachments ?? []}
           ticketKey={session?.saved?.key ?? null}
           served={session?.saved?.promptAttachments}
           onRemove={attach.remove}
           pending={pending}
-          annotations={view?.promptAnnotations}
-          annotate={annotateOffer}
+          annotate={(a) => ({ input: { path: a.path, name: a.name }, annotation: a.annotation, onAdd: annotateDraft })}
         >
           <button
             type="button"

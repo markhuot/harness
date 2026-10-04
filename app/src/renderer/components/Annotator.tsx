@@ -1,62 +1,71 @@
 // The annotator (DESIGN.md "Annotations"): an image (a spec image, a prompt attachment, a file sent
 // with a message, a frozen browser page, or a file waiting in the composer or a New session) with
-// numbered notes drawn on it. Pressing on the image sets an anchor and dragging pulls out an arrow
+// numbered notes drawn over it. Pressing on the image sets an anchor and dragging pulls out an arrow
 // whose head points at it; a plain click numbers the spot itself. Each number gets its own message
-// in the list beside the image (never over it). Add to message burns the arrows and numbers into
-// the picture, uploads it, and hands it with its notes to a message being written: annotations
-// never go to the agent on their own, the human sends them with the message they write.
+// in the list beside the image (never over it). Add to message hands the attachment and its
+// annotation (the marks in the image's pixels: metadata, the image is never changed) to a message
+// being written: annotations never go to the agent on their own, the human sends them with the
+// message they write.
 //
 // AnnotateScope sets where Add to message goes by default (a ticket's composer) and offers
 // Annotate inside it (useAnnotate). A target can name its own destination (a file waiting in the
-// composer or a New session is replaced in place).
+// composer or a New session is annotated in place).
 
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { MAX_ANNOTATION_MARKS, type AnnotationSource } from "@harness/shared";
-import { annotationStyle, fitRect, hitTestMarks, isAnnotationDrag, marksForMessage, moveMark, removeMark, setMarkMessage, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
+import { MAX_ANNOTATION_MARKS, type AnnotationPage, type AttachmentAnnotation, type PromptAttachmentInput } from "@harness/shared";
+import { annotationStyle, draftMarksFrom, fitRect, hitTestMarks, isAnnotationDrag, moveMark, removeMark, setMarkMessage, specAttachmentIdOf, toUnit, type DraftMark, type MarkHit, type Point } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { annotatedName, emptyHistory, encodeWithinLimit, endRun, hasAnnotatorWork, recordChange, sourceBaseName, undo, type AnnotatedImage, type AnnotatedOriginal, type AnnotatorSnapshot } from "../state/annotator";
+import { annotationFromMarks, emptyHistory, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
 import { rememberPreview } from "./PromptAttachments";
 import { accentColor, drawAnnotations } from "./annotationDraw";
 import { Icon } from "./Icon";
 import { MOD, Modal } from "./bits";
 import "./annotator.css";
 
-/** An image to annotate: where it came from (kept with the notes), how to read its bytes, and where the result goes. */
+/** What Add to message hands on: the attachment, and its notes (null: none, which takes them off). */
+export interface AnnotatedAttachment {
+  input: PromptAttachmentInput;
+  annotation: AttachmentAnnotation | null;
+}
+
+/** An image to annotate: how to read its bytes, the attachment its notes go on, and where they go. */
 export interface AnnotateTarget {
   /** Shown in the header. */
   name: string;
-  /** The annotated file is `annotated-<base>.png`; default: the source's name without its extension. */
-  baseName?: string;
-  source: AnnotationSource;
   load: () => Promise<Blob>;
-  /** Marks to start with (reopening a picture annotated earlier, over its original). */
-  initialMarks?: DraftMark[];
-  /** Where Add to message puts the picture; default: the scope's (the ticket's composer). Throws to keep the annotator open. */
-  onAdd?: (image: AnnotatedImage) => void;
+  /**
+   * The attachment the annotation goes on (a spec image as `attachment:<id>`, any other file by
+   * its path); or, for an image that isn't a file yet (a browser screenshot), made from its bytes
+   * on Add (uploaded then).
+   */
+  input: PromptAttachmentInput | ((image: Blob) => Promise<PromptAttachmentInput>);
+  /** The browser page a screenshot shows. */
+  page?: AnnotationPage;
+  /** The notes it has already: reopened to edit. */
+  annotation?: AttachmentAnnotation;
+  /** Where Add to message puts it; default: the scope's (the ticket's composer). Throws to keep the annotator open. */
+  onAdd?: (a: AnnotatedAttachment) => void;
 }
 
-/** What a lightbox item offers Annotate with: where it came from, the original to reopen (its marks), and where the result goes. */
+/** What a lightbox item offers Annotate with: its attachment, its notes, and where the result goes. */
 export interface AnnotateOffer {
-  source: AnnotationSource;
-  original?: AnnotatedOriginal;
-  onAdd?: (image: AnnotatedImage) => void;
+  input: PromptAttachmentInput;
+  annotation?: AttachmentAnnotation;
+  onAdd?: (a: AnnotatedAttachment) => void;
 }
 
-/** A target read from a URL (the service's, with the token in the query, or a blob: preview), or from the offer's original. */
+/** A target read from a URL (the service's, with the token in the query, or a blob: preview). */
 export function offerTarget(url: string, name: string, offer: AnnotateOffer): AnnotateTarget {
-  const { original } = offer;
   return {
     name,
-    source: offer.source,
+    input: offer.input,
+    annotation: offer.annotation,
     onAdd: offer.onAdd,
-    initialMarks: original?.marks,
-    load: original
-      ? async () => original.blob
-      : async () => {
-          const res = await fetch(url);
-          if (!res.ok) throw new Error(res.status === 404 ? "The image is gone" : `HTTP ${res.status}`);
-          return res.blob();
-        },
+    load: async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.status === 404 ? "The image is gone" : `HTTP ${res.status}`);
+      return res.blob();
+    },
   };
 }
 
@@ -71,13 +80,25 @@ export function useAnnotate(): AnnotateScopeValue | null {
   return useContext(AnnotateContext);
 }
 
-/** Offers Annotate to everything inside; `onAdd` takes the pictures of targets that don't name their own destination. */
-export function AnnotateScope({ onAdd, children }: { onAdd?: (image: AnnotatedImage) => void; children: ReactNode }) {
+/**
+ * Offers Annotate to everything inside. `onAdd` takes the annotations of targets that don't name
+ * their own destination; `annotationOf` says what notes that destination has on a file already
+ * (one waiting in the composer), so annotating it again from anywhere edits those.
+ */
+export function AnnotateScope({ onAdd, annotationOf, children }: { onAdd?: (a: AnnotatedAttachment) => void; annotationOf?: (path: string) => AttachmentAnnotation | undefined; children: ReactNode }) {
   const [target, setTarget] = useState<{ t: AnnotateTarget; n: number } | null>(null);
   const opened = useRef(0);
-  const value = useMemo<AnnotateScopeValue>(() => ({ open: (t) => setTarget({ t, n: ++opened.current }) }), []);
-  const fallback = useRef(onAdd);
-  fallback.current = onAdd;
+  const fallback = useRef({ onAdd, annotationOf });
+  fallback.current = { onAdd, annotationOf };
+  const value = useMemo<AnnotateScopeValue>(
+    () => ({
+      open: (t) => {
+        const waiting = !t.onAdd && typeof t.input !== "function" ? fallback.current.annotationOf?.(t.input.path) : undefined;
+        setTarget({ t: waiting ? { ...t, annotation: waiting } : t, n: ++opened.current });
+      },
+    }),
+    [],
+  );
   return (
     <AnnotateContext.Provider value={value}>
       {children}
@@ -86,10 +107,10 @@ export function AnnotateScope({ onAdd, children }: { onAdd?: (image: AnnotatedIm
           key={target.n}
           target={target.t}
           onClose={() => setTarget(null)}
-          onAdd={(image) => {
-            const to = target.t.onAdd ?? fallback.current;
+          onAdd={(a) => {
+            const to = target.t.onAdd ?? fallback.current.onAdd;
             if (!to) throw new Error("There's no message to add it to");
-            to(image);
+            to(a);
             setTarget(null);
           }}
         />
@@ -102,13 +123,13 @@ type Drag = { kind: "new"; start: Point } | { kind: "move"; hit: MarkHit; start:
 
 const isTextField = (el: Element | null) => el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type !== "checkbox") || (el instanceof HTMLElement && el.isContentEditable);
 
-function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose: () => void; onAdd: (image: AnnotatedImage) => void }) {
-  const { client, toast } = useStore();
-  /** The image as loaded (kept as the original, to reopen with the marks) and decoded. */
+function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose: () => void; onAdd: (a: AnnotatedAttachment) => void }) {
+  const { toast } = useStore();
+  /** The image as loaded and decoded. */
   const [image, setImage] = useState<{ blob: Blob; bitmap: ImageBitmap } | null>(null);
   const bitmap = image?.bitmap ?? null;
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [initialMarks] = useState<DraftMark[]>(() => target.initialMarks ?? []);
+  const [initialMarks] = useState<DraftMark[]>(() => (target.annotation ? draftMarksFrom(target.annotation) : []));
   const [marks, setMarks] = useState<DraftMark[]>(initialMarks);
   // ⌘Z's steps; nothing on screen shows them, so a ref.
   const history = useRef(emptyHistory());
@@ -127,7 +148,8 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
   const cur = useRef<AnnotatorSnapshot>({ marks });
   cur.current = { marks };
 
-  const canAdd = !!bitmap && marks.length > 0 && !adding;
+  // Every mark of a reopened annotation deleted: Add takes its notes off.
+  const canAdd = !!bitmap && !adding && (marks.length > 0 || initialMarks.length > 0);
 
   // ------------------------------------------------------------------ loading and layout
 
@@ -335,31 +357,11 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
     if (!canAdd || !image) return;
     setAdding(true);
     try {
-      const W = image.bitmap.width;
-      const H = image.bitmap.height;
-      const canvas = new OffscreenCanvas(W, H);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(image.bitmap, 0, 0);
-      drawAnnotations(ctx, marks, W, H, { color });
-      const blob = await encodeWithinLimit(async (type, quality) => {
-        if (type === "image/png") return canvas.convertToBlob({ type });
-        // JPEG has no transparency: what's see-through goes on white, not black.
-        const flat = new OffscreenCanvas(W, H);
-        const fctx = flat.getContext("2d")!;
-        fctx.fillStyle = "#fff";
-        fctx.fillRect(0, 0, W, H);
-        fctx.drawImage(canvas, 0, 0);
-        return flat.convertToBlob({ type, quality });
-      });
-      const name = annotatedName(target.baseName ?? sourceBaseName(target.source), blob.type);
-      const attachment = await client.uploadPromptAttachment(blob, name, blob.type);
-      // The row shows the picture at once, without a round trip.
-      rememberPreview(attachment.path, blob);
-      onAdd({
-        attachment,
-        annotation: { source: target.source, width: W, height: H, marks: marksForMessage(marks, W, H) },
-        original: { blob: image.blob, marks },
-      });
+      const { width, height } = image.bitmap;
+      const input = typeof target.input === "function" ? await target.input(image.blob) : target.input;
+      // The row shows the picture at once, without a round trip (a spec image's is served by its id).
+      if (!specAttachmentIdOf(input.path)) rememberPreview(input.path, image.blob);
+      onAdd({ input, annotation: annotationFromMarks(marks, width, height, target.page ?? target.annotation?.page) });
     } catch (e) {
       toast(`Couldn't add the annotations: ${e instanceof Error ? e.message : String(e)}`, "error");
       setAdding(false);
@@ -443,7 +445,7 @@ function Annotator({ target, onClose, onAdd }: { target: AnnotateTarget; onClose
             </ol>
           )}
           <footer className="annotator-foot">
-            <span className="muted annotator-foot-hint">Added to your message with its notes, for you to say why and send.</span>
+            <span className="muted annotator-foot-hint">Added to your message with its notes, for you to say why and send. The image itself isn't changed.</span>
             <div className="annotator-actions">
               <button className="btn btn-sm" data-testid="annotator-cancel" onClick={requestClose} disabled={adding}>
                 Cancel

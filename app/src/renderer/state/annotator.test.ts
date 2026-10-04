@@ -1,25 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { MessageAnnotation, PromptAttachment } from "@harness/shared";
+import type { AnnotationPage } from "@harness/shared";
 import type { DraftMark } from "@harness/shared/state";
-import {
-  annotatedName,
-  browserShotName,
-  carryAnnotations,
-  stripExtension,
-  emptyHistory,
-  encodeWithinLimit,
-  endRun,
-  hasAnnotatorWork,
-  HISTORY_LIMIT,
-  offersAnnotate,
-  pendingSource,
-  recordChange,
-  sourceBaseName,
-  undo,
-  withAnnotatedImage,
-  type AnnotatorSnapshot,
-  type Encode,
-} from "./annotator";
+import { annotationFromMarks, browserShotName, coverRect, emptyHistory, endRun, hasAnnotatorWork, HISTORY_LIMIT, recordChange, undo, type AnnotatorSnapshot } from "./annotator";
 
 const mark = (x: number, message = ""): DraftMark => ({ anchor: { x, y: 0.5 }, tail: null, message });
 const snap = (marks: DraftMark[]): AnnotatorSnapshot => ({ marks });
@@ -83,147 +65,56 @@ describe("undo history", () => {
     expect(hasAnnotatorWork([mark(0.5, "too tight!")], reopened)).toBe(true);
     expect(hasAnnotatorWork([mark(0.6, "too tight")], reopened)).toBe(true);
     expect(hasAnnotatorWork([...reopened, mark(0.1)], reopened)).toBe(true);
-    // Every mark deleted: nothing left to add, so nothing to lose.
-    expect(hasAnnotatorWork([], reopened)).toBe(false);
+    // Every mark of a reopened annotation deleted: Add would take its notes off, so closing loses that.
+    expect(hasAnnotatorWork([], reopened)).toBe(true);
   });
 });
 
-describe("encodeWithinLimit", () => {
-  const encoder = (sizes: Record<string, number>) => {
-    const calls: string[] = [];
-    const encode: Encode = async (type, quality) => {
-      const k = type === "image/png" ? "png" : `jpeg@${quality}`;
-      calls.push(k);
-      return new Blob([new Uint8Array(sizes[k] ?? 0)], { type });
-    };
-    return { encode, calls };
-  };
+describe("annotationFromMarks", () => {
+  const page: AnnotationPage = { url: "http://127.0.0.1:5173/", title: "App", tabId: 2, viewport: { width: 640, height: 400 }, scale: 2 };
+  const marks: DraftMark[] = [
+    { anchor: { x: 0.5, y: 0.25 }, tail: { x: 0.1, y: 0.1 }, message: "  too tight  " },
+    { anchor: { x: 1, y: 1 }, tail: null, message: "" },
+  ];
 
-  test("a PNG within the limit goes as is, without trying JPEG", async () => {
-    const { encode, calls } = encoder({ png: 100 });
-    const out = await encodeWithinLimit(encode, 100);
-    expect(out.type).toBe("image/png");
-    expect(calls).toEqual(["png"]);
+  test("the marks in the image's pixels, numbered in order, messages trimmed", () => {
+    expect(annotationFromMarks(marks, 1280, 800)).toEqual({
+      width: 1280,
+      height: 800,
+      marks: [
+        { n: 1, x: 640, y: 200, tailX: 128, tailY: 80, message: "too tight" },
+        { n: 2, x: 1280, y: 800, message: "" },
+      ],
+    });
   });
 
-  test("a PNG over the limit becomes the best-quality JPEG that fits", async () => {
-    const { encode, calls } = encoder({ png: 500, "jpeg@0.9": 150, "jpeg@0.8": 90, "jpeg@0.7": 50 });
-    const out = await encodeWithinLimit(encode, 100);
-    expect(out.type).toBe("image/jpeg");
-    expect(out.size).toBe(90);
-    expect(calls).toEqual(["png", "jpeg@0.9", "jpeg@0.8"]);
+  test("a screenshot keeps its page; re-annotating keeps the page it had", () => {
+    expect(annotationFromMarks(marks, 1280, 800, page)?.page).toEqual(page);
+    expect(annotationFromMarks(marks, 1280, 800, null)).not.toHaveProperty("page");
   });
 
-  test("when nothing fits, the smallest attempt goes", async () => {
-    const { encode } = encoder({ png: 500, "jpeg@0.9": 400, "jpeg@0.8": 300, "jpeg@0.7": 250, "jpeg@0.6": 260, "jpeg@0.5": 280 });
-    const out = await encodeWithinLimit(encode, 100);
-    expect(out.size).toBe(250);
+  test("no marks left: null, which takes the notes off the attachment", () => {
+    expect(annotationFromMarks([], 1280, 800, page)).toBeNull();
   });
 });
 
-describe("names", () => {
-  test("annotated-<base>, with the extension the encoding has, made safe for a file name", () => {
-    expect(annotatedName("mockup", "image/png")).toBe("annotated-mockup.png");
-    expect(annotatedName("Screen Shot 2026", "image/jpeg")).toBe("annotated-Screen-Shot-2026.jpg");
-    expect(annotatedName("127.0.0.1", "image/png")).toBe("annotated-127.0.0.1.png");
-    expect(annotatedName("", "image/png")).toBe("annotated-image.png");
-    expect(annotatedName("???", "image/png")).toBe("annotated-image.png");
+describe("coverRect", () => {
+  test("a wide image fills the height and overflows left and right, centred", () => {
+    const r = coverRect(32, 32, 1280, 800);
+    expect([r.x, r.y, r.w, r.h].map((v) => Math.round(v * 100) / 100)).toEqual([-9.6, 0, 51.2, 32]);
   });
-
-  test("stripExtension drops a file's extension and folders, not a version or an address", () => {
-    expect(stripExtension("/Users/me/Shots/Screen Shot.jpeg")).toBe("Screen Shot");
-    expect(stripExtension("mockup.png")).toBe("mockup");
-    expect(stripExtension("Settings mockup")).toBe("Settings mockup");
-    expect(stripExtension("release 1.2")).toBe("release 1.2");
+  test("a tall image fills the width and overflows top and bottom", () => {
+    expect(coverRect(40, 20, 100, 200)).toEqual({ x: 0, y: -30, w: 40, h: 80 });
   });
+  test("an image of no size covers the box as is (nothing to scale)", () => {
+    expect(coverRect(32, 32, 0, 800)).toEqual({ x: 0, y: 0, w: 32, h: 32 });
+  });
+});
 
+describe("browserShotName", () => {
   test("a browser page is named by its host, else its title", () => {
     expect(browserShotName("http://127.0.0.1:5173/settings", "Settings")).toBe("127.0.0.1");
     expect(browserShotName("about:blank", "Blank")).toBe("Blank");
     expect(browserShotName("not a url", "  ")).toBe("page");
-  });
-});
-
-describe("offersAnnotate", () => {
-  const base = { scoped: true, kind: "image" as const, failed: false, offered: true };
-  test("an image that loaded, where there's a message to add it to, offered by its list", () => expect(offersAnnotate(base)).toBe(true));
-  test("not outside an annotate scope", () => expect(offersAnnotate({ ...base, scoped: false })).toBe(false));
-  test("not a video", () => expect(offersAnnotate({ ...base, kind: "video" })).toBe(false));
-  test("not one that failed to load", () => expect(offersAnnotate({ ...base, failed: true })).toBe(false));
-  test("not when its list doesn't offer it (a reopened draft's annotated picture)", () => expect(offersAnnotate({ ...base, offered: false })).toBe(false));
-});
-
-describe("sourceBaseName", () => {
-  test("a file or attachment by its name without the extension; a browser page by its host", () => {
-    expect(sourceBaseName({ kind: "file", name: "Screen Shot.png" })).toBe("Screen Shot");
-    expect(sourceBaseName({ kind: "attachment", id: "a1", name: "Settings mockup" })).toBe("Settings mockup");
-    expect(sourceBaseName({ kind: "message-attachment", entryId: "e", index: 0, name: "annotated-mockup.png" })).toBe("annotated-mockup");
-    expect(sourceBaseName({ kind: "browser", url: "http://127.0.0.1:5173/x", title: "X", tabId: 1, viewport: { width: 1, height: 1 }, scale: 1 })).toBe("127.0.0.1");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The annotated picture in a message
-// ---------------------------------------------------------------------------
-
-const file = (name: string): PromptAttachment => ({ path: `/tmp/${name}`, name, source: "upload" });
-const note = (attachment: number, message: string): MessageAnnotation => ({
-  attachment,
-  source: { kind: "file", name: `f${attachment}.png` },
-  width: 100,
-  height: 50,
-  marks: [{ n: 1, x: 10, y: 10, message }],
-});
-const msgs = (as: MessageAnnotation[]) => as.map((a) => `${a.attachment}:${a.marks[0]!.message}`);
-
-describe("carryAnnotations", () => {
-  const [a, b, c] = [file("a.png"), file("b.png"), file("c.png")];
-  test("a file removed: its notes go, the later ones move up", () => {
-    expect(msgs(carryAnnotations([a, b, c], [a, c], [note(1, "on b"), note(2, "on c")]))).toEqual(["1:on c"]);
-  });
-  test("a send that took the first files: what's left keeps its notes at its new index", () => {
-    const d = file("d.png");
-    // a and b went; d was attached while the message was on its way, then c's notes stay with c.
-    expect(msgs(carryAnnotations([a, b, c, d], [c, d], [note(0, "on a"), note(2, "on c"), note(3, "on d")]))).toEqual(["0:on c", "1:on d"]);
-  });
-  test("files added at the end leave the notes where they are", () => {
-    expect(msgs(carryAnnotations([a, b], [a, b, c], [note(1, "on b")]))).toEqual(["1:on b"]);
-  });
-  test("a note pointing past the list (a stale index) is dropped", () => {
-    expect(carryAnnotations([a], [a], [note(3, "nowhere")])).toEqual([]);
-  });
-  test("the result is in attachment order, whatever order the notes came in", () => {
-    expect(msgs(carryAnnotations([a, b, c], [c, b, a], [note(0, "on a"), note(2, "on c")]))).toEqual(["0:on c", "2:on a"]);
-  });
-});
-
-describe("withAnnotatedImage", () => {
-  const [a, b, c] = [file("a.png"), file("b.png"), file("c.png")];
-  const shot = file("annotated-b.png");
-  const image = { attachment: shot, annotation: { source: { kind: "file" as const, name: "b.png" }, width: 100, height: 50, marks: [{ n: 1, x: 1, y: 1, message: "new" }] } };
-
-  test("re-annotating a waiting file replaces it in place with its notes, the other notes untouched", () => {
-    const out = withAnnotatedImage({ attachments: [a, b, c], annotations: [note(0, "on a"), note(1, "old b"), note(2, "on c")] }, image, b.path, 10)!;
-    expect(out.attachments.map((x) => x.name)).toEqual(["a.png", "annotated-b.png", "c.png"]);
-    expect(msgs(out.annotations)).toEqual(["0:on a", "1:new", "2:on c"]);
-  });
-  test("from elsewhere (or the file it replaced is gone): it goes at the end", () => {
-    const out = withAnnotatedImage({ attachments: [a], annotations: [note(0, "on a")] }, image, "/tmp/gone.png", 10)!;
-    expect(out.attachments.map((x) => x.name)).toEqual(["a.png", "annotated-b.png"]);
-    expect(msgs(out.annotations)).toEqual(["0:on a", "1:new"]);
-    expect(withAnnotatedImage({ attachments: [], annotations: [] }, image, null, 10)!.annotations[0]!.attachment).toBe(0);
-  });
-  test("a full list takes no new picture, but a replacement still fits", () => {
-    expect(withAnnotatedImage({ attachments: [a, b], annotations: [] }, image, null, 2)).toBeNull();
-    expect(withAnnotatedImage({ attachments: [a, b], annotations: [] }, image, b.path, 2)!.attachments).toHaveLength(2);
-  });
-});
-
-describe("pendingSource", () => {
-  test("a plain waiting file is its own source; an annotated one keeps the source it was first annotated from", () => {
-    expect(pendingSource([], 0, file("shot.png"))).toEqual({ kind: "file", name: "shot.png" });
-    const fromSpec: MessageAnnotation = { ...note(1, "x"), source: { kind: "attachment", id: "att1", name: "Settings mockup" } };
-    expect(pendingSource([fromSpec], 1, file("annotated-Settings-mockup.png"))).toEqual(fromSpec.source);
-    expect(pendingSource([fromSpec], 0, file("other.png"))).toEqual({ kind: "file", name: "other.png" });
   });
 });

@@ -5,16 +5,19 @@
 // line up. A file can go missing after it was attached (moved or deleted on disk): an image that
 // won't load, or a file the service answers 404 for, shows dimmed with where it was. Clicking an
 // image opens the lightbox, clicking a file reveals it in Finder. An annotated image (DESIGN.md
-// "Annotations") lists its numbered notes under its row, behind "N notes".
+// "Annotations") shows its marks over the thumbnail (and in the lightbox) and lists its numbered
+// notes under its row, behind "N notes". A spec image waiting to be sent (`attachment:<id>`) is
+// read from the spec's attachments.
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { Attachment, MessageAnnotation, PromptAttachment } from "@harness/shared";
-import { annotationFor, annotationNotesLabel, promptAttachmentIsImage } from "@harness/shared/state";
+import type { Attachment, AttachmentAnnotation, PromptAttachment } from "@harness/shared";
+import { annotationNotesLabel, promptAttachmentIsImage, specAttachmentIdOf } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { attachmentSource, isFileDrag, missingLabel } from "../state/promptAttachmentFiles";
 import { Icon } from "./Icon";
 import { Lightbox } from "./Attachments";
 import type { AnnotateOffer } from "./Annotator";
+import { ThumbnailAnnotation } from "./AnnotationOverlay";
 
 // ---------------------------------------------------------------------------
 // Previews
@@ -108,7 +111,6 @@ export function PromptAttachmentList({
   served,
   onRemove,
   pending = [],
-  annotations,
   annotate,
   children,
 }: {
@@ -123,17 +125,19 @@ export function PromptAttachmentList({
   onRemove?: (index: number) => void;
   /** Uploads on their way (pastes), shown as spinner rows at the end */
   pending?: readonly PendingUpload[];
-  /** The notes on images in `items` (by index): each annotated row shows "N notes" */
-  annotations?: readonly MessageAnnotation[];
-  /** How the lightbox offers Annotate for the image at `index` (of `items`), or null where it doesn't */
-  annotate?: (index: number, a: PromptAttachment) => AnnotateOffer | null;
+  /** How the lightbox offers Annotate for the image `a` (one of `items`), or null where it doesn't */
+  annotate?: (a: PromptAttachment) => AnnotateOffer | null;
   /** Controls under the rows (the editor's Attach files button) */
   children?: ReactNode;
 }) {
   const { client } = useStore();
   const [open, setOpen] = useState<number | null>(null);
   const urlAt = urlOf ?? (ticketKey ? (i: number) => client.promptAttachmentUrl(ticketKey, i) : null);
-  const sourceOf = (a: PromptAttachment): Source => attachmentSource(a, previews.get(a.path), served === undefined ? items : served, urlAt);
+  const sourceOf = (a: PromptAttachment): Source => {
+    const specId = specAttachmentIdOf(a.path);
+    if (specId && !previews.has(a.path)) return { url: client.attachmentUrl(specId), local: false };
+    return attachmentSource(a, previews.get(a.path), served === undefined ? items : served, urlAt);
+  };
 
   // The lightbox steps through the images that have something to show.
   const images = items.filter((a) => promptAttachmentIsImage(a) && sourceOf(a));
@@ -151,7 +155,6 @@ export function PromptAttachmentList({
               source={sourceOf(a)}
               onOpen={promptAttachmentIsImage(a) ? () => setOpen(images.indexOf(a)) : undefined}
               onRemove={onRemove && (() => onRemove(i))}
-              annotation={annotations && annotationFor(annotations, i)}
             />
           ))}
           {pending.map((p) => (
@@ -176,16 +179,17 @@ export function PromptAttachmentList({
           onIndex={setOpen}
           onClose={() => setOpen(null)}
           urlOf={(_x, idx) => sourceOf(images[idx]!)!.url}
-          annotate={annotate && ((_x, idx) => annotate(items.indexOf(images[idx]!), images[idx]!))}
+          annotate={annotate && ((_x, idx) => annotate(images[idx]!))}
+          annotationOf={(_x, idx) => images[idx]?.annotation}
         />
       )}
     </div>
   );
 }
 
-function AttachmentRow({ a, source, onOpen, onRemove, annotation }: { a: PromptAttachment; source: Source; onOpen?: () => void; onRemove?: () => void; annotation?: MessageAnnotation }) {
+function AttachmentRow({ a, source, onOpen, onRemove }: { a: PromptAttachment; source: Source; onOpen?: () => void; onRemove?: () => void }) {
   const image = promptAttachmentIsImage(a);
-  const notes = annotation && annotation.marks.length > 0 ? annotation : null;
+  const notes = a.annotation && a.annotation.marks.length > 0 ? a.annotation : null;
   const url = source?.url ?? null;
   const { missing, failedAt } = useMissing(a, source);
   const label = missing ? missingLabel(a) : null;
@@ -200,7 +204,16 @@ function AttachmentRow({ a, source, onOpen, onRemove, annotation }: { a: PromptA
         aria-label={label ? `${a.name}: ${label}` : image ? `Open ${a.name}` : `${a.name}, reveal in Finder`}
         onClick={image && url ? onOpen : () => void window.harness?.revealInFinder(a.path)}
       >
-        <span className="prompt-attachment-row-media">{image && url && !missing ? <img src={url} alt="" onError={() => failedAt(url)} draggable={false} /> : icon}</span>
+        <span className="prompt-attachment-row-media">
+          {image && url && !missing ? (
+            <>
+              <img src={url} alt="" onError={() => failedAt(url)} draggable={false} />
+              {notes && <ThumbnailAnnotation annotation={notes} />}
+            </>
+          ) : (
+            icon
+          )}
+        </span>
         <span className="prompt-attachment-row-text">
           <span className="prompt-attachment-name truncate">{a.name}</span>
           {label && <span className="prompt-attachment-note truncate">{label}</span>}
@@ -217,10 +230,10 @@ function AttachmentRow({ a, source, onOpen, onRemove, annotation }: { a: PromptA
 }
 
 /** "N notes" under an annotated image; opens to its numbered list (what goes, or went, to the agent). */
-export function AnnotationNotes({ annotation }: { annotation: MessageAnnotation }) {
+function AnnotationNotes({ annotation }: { annotation: AttachmentAnnotation }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="t-annotations" data-testid="annotation-notes" data-attachment={annotation.attachment}>
+    <div className="t-annotations" data-testid="annotation-notes">
       <button type="button" className="t-annotations-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
         {annotationNotesLabel(annotation.marks.length)}

@@ -154,8 +154,7 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
             <PromptAttachmentList
               ticketKey={ticket.key}
               items={ticket.promptAttachments}
-              annotations={ticket.promptAnnotations}
-              annotate={(index, a) => ({ source: { kind: "prompt-attachment", index, name: a.name } })}
+              annotate={(a) => ({ input: { path: a.path, name: a.name }, annotation: a.annotation })}
             />
           </section>
         )}
