@@ -1,0 +1,471 @@
+// The annotator (DESIGN.md "Annotations"): an image from a ticket (a spec image, a prompt
+// attachment, a file sent with a message, a frozen browser page) with numbered notes drawn on it.
+// Pressing on the image sets an anchor and dragging pulls out an arrow whose head points at it; a
+// plain click numbers the spot itself. Each number gets its own message in the list beside the
+// image (never over it). Send to agent burns the arrows and numbers into the picture, uploads it and
+// sends it with the numbered list.
+//
+// AnnotateScope wraps a ticket's tab body: inside it, the lightbox and the browser pane offer
+// Annotate (useAnnotate). Outside it (a draft, the composer's pending list) they don't.
+
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { MAX_ANNOTATION_MARKS, type AnnotationSource, type Ticket } from "@harness/shared";
+import {
+  annotationStyle,
+  composerHint,
+  fitRect,
+  hitTestMarks,
+  isAnnotationDrag,
+  marksForMessage,
+  moveMark,
+  moveSwitchLabel,
+  removeMark,
+  setMarkMessage,
+  toUnit,
+  type DraftMark,
+  type MarkHit,
+  type Point,
+} from "@harness/shared/state";
+import { useStore } from "../state/store";
+import { annotatedName, emptyHistory, encodeWithinLimit, endRun, hasAnnotatorWork, recordChange, undo, type AnnotatorSnapshot } from "../state/annotator";
+import { accentColor, drawAnnotations } from "./annotationDraw";
+import { Icon } from "./Icon";
+import { MOD, Modal, Switch } from "./bits";
+import "./annotator.css";
+
+/** An image to annotate: where it came from (sent with the notes) and how to read its bytes. */
+export interface AnnotateTarget {
+  /** Shown in the header, and the base of the annotated file's name. */
+  name: string;
+  source: AnnotationSource;
+  load: () => Promise<Blob>;
+}
+
+/** A target read from a URL (the service's, with the token in the query, or a blob: preview). */
+export function urlTarget(url: string, name: string, source: AnnotationSource): AnnotateTarget {
+  return {
+    name,
+    source,
+    load: async () => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(res.status === 404 ? "The image is gone" : `HTTP ${res.status}`);
+      return res.blob();
+    },
+  };
+}
+
+interface AnnotateScopeValue {
+  open: (t: AnnotateTarget) => void;
+}
+
+const AnnotateContext = createContext<AnnotateScopeValue | null>(null);
+
+/** The ticket's annotator, or null where Annotate isn't offered. */
+export function useAnnotate(): AnnotateScopeValue | null {
+  return useContext(AnnotateContext);
+}
+
+/** Offers Annotate to everything inside; `onSent` runs once a set of notes went (the ticket shows its Transcript). */
+export function AnnotateScope({ ticket, onSent, children }: { ticket: Ticket; onSent: () => void; children: ReactNode }) {
+  const [target, setTarget] = useState<{ t: AnnotateTarget; n: number } | null>(null);
+  const opened = useRef(0);
+  const value = useMemo<AnnotateScopeValue>(() => ({ open: (t) => setTarget({ t, n: ++opened.current }) }), []);
+  return (
+    <AnnotateContext.Provider value={value}>
+      {children}
+      {target && (
+        <Annotator
+          key={target.n}
+          ticket={ticket}
+          target={target.t}
+          onClose={() => setTarget(null)}
+          onSent={() => {
+            setTarget(null);
+            onSent();
+          }}
+        />
+      )}
+    </AnnotateContext.Provider>
+  );
+}
+
+type Drag = { kind: "new"; start: Point } | { kind: "move"; hit: MarkHit; start: Point; before: AnnotatorSnapshot; moved: boolean };
+
+const isTextField = (el: Element | null) => el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && el.type !== "checkbox") || (el instanceof HTMLElement && el.isContentEditable);
+
+function Annotator({ ticket, target, onClose, onSent }: { ticket: Ticket; target: AnnotateTarget; onClose: () => void; onSent: () => void }) {
+  const { client, toast } = useStore();
+  const [bitmap, setBitmap] = useState<ImageBitmap | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [marks, setMarks] = useState<DraftMark[]>([]);
+  const [note, setNote] = useState("");
+  // ⌘Z's steps; nothing on screen shows them, so a ref.
+  const history = useRef(emptyHistory());
+  const [selected, setSelected] = useState<number | null>(null);
+  /** The arrow being pulled out (fractions of the image), once the press has moved far enough. */
+  const [live, setLive] = useState<{ anchor: Point; tail: Point } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [moveFirst, setMoveFirst] = useState(false);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const stageRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fields = useRef<(HTMLTextAreaElement | null)[]>([]);
+  const focusAfter = useRef<number | null>(null);
+  const drag = useRef<Drag | null>(null);
+  const color = useMemo(accentColor, []);
+  // Pointer and key handlers read the latest state.
+  const cur = useRef<AnnotatorSnapshot>({ marks, note });
+  cur.current = { marks, note };
+
+  const switchLabel = moveSwitchLabel(ticket);
+  const move = !!switchLabel && moveFirst;
+  const approvalPending = !!ticket.pendingApproval;
+  const canSend = !!bitmap && marks.length > 0 && !sending && !approvalPending;
+  const hint = approvalPending ? "Annotations can go once the approval is answered" : composerHint(ticket, move);
+
+  // ------------------------------------------------------------------ loading and layout
+
+  useEffect(() => {
+    let live = true;
+    let loaded: ImageBitmap | null = null;
+    // Bytes, not an <img>: an image from another origin drawn to a canvas would taint it.
+    target
+      .load()
+      .then((blob) => createImageBitmap(blob))
+      .then(
+        (b) => {
+          loaded = b;
+          if (live) setBitmap(b);
+          else b.close();
+        },
+        (e: unknown) => live && setLoadError(e instanceof Error ? e.message : String(e)),
+      );
+    return () => {
+      live = false;
+      loaded?.close();
+    };
+  }, [target]);
+
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => setBox({ w: stage.clientWidth, h: stage.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(stage);
+    return () => ro.disconnect();
+  }, []);
+
+  const fit = useMemo(() => {
+    if (!bitmap) return { x: 0, y: 0, w: 0, h: 0 };
+    // Never blown up past the image's own size (in CSS pixels on this screen).
+    const dpr = window.devicePixelRatio || 1;
+    const r = fitRect(Math.min(box.w, bitmap.width / dpr), Math.min(box.h, bitmap.height / dpr), bitmap.width, bitmap.height);
+    return { ...r, w: Math.max(1, Math.floor(r.w)), h: Math.max(1, Math.floor(r.h)) };
+  }, [bitmap, box]);
+
+  // ------------------------------------------------------------------ drawing
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !bitmap) return;
+    const dpr = window.devicePixelRatio || 1;
+    const pw = Math.round(fit.w * dpr);
+    const ph = Math.round(fit.h * dpr);
+    if (canvas.width !== pw || canvas.height !== ph) {
+      canvas.width = pw;
+      canvas.height = ph;
+    }
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, fit.w, fit.h);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bitmap, 0, 0, fit.w, fit.h);
+    const shown = live ? [...marks, { anchor: live.anchor, tail: live.tail, message: "" }] : marks;
+    drawAnnotations(ctx, shown, fit.w, fit.h, { color, selected });
+  }, [bitmap, fit, marks, live, selected, color]);
+
+  // A new mark's field takes the focus once it's rendered.
+  useEffect(() => {
+    if (focusAfter.current === null) return;
+    const el = fields.current[focusAfter.current];
+    focusAfter.current = null;
+    el?.focus();
+  }, [marks]);
+
+  // ------------------------------------------------------------------ changes
+
+  /** Apply a change, remembering the state before it for ⌘Z. */
+  const change = useCallback((next: Partial<AnnotatorSnapshot>, key: string | null = null) => {
+    history.current = recordChange(key === null ? endRun(history.current) : history.current, cur.current, key);
+    if (next.marks) setMarks(next.marks);
+    if (next.note !== undefined) setNote(next.note);
+  }, []);
+
+  const remove = useCallback(
+    (i: number) => {
+      change({ marks: removeMark(cur.current.marks, i) });
+      setSelected(null);
+    },
+    [change],
+  );
+
+  const undoLast = useCallback(() => {
+    const u = undo(history.current);
+    if (!u) return;
+    history.current = u.history;
+    setMarks(u.state.marks);
+    setNote(u.state.note);
+    setSelected(null);
+  }, []);
+  const endTyping = () => void (history.current = endRun(history.current));
+
+  const focusField = (i: number) => {
+    setSelected(i);
+    fields.current[i]?.focus();
+  };
+
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
+  const requestClose = useCallback(() => {
+    if (sending) return;
+    if (hasAnnotatorWork(cur.current) && !confirm("Discard these annotations?")) return;
+    onClose();
+  }, [onClose, sending]);
+
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const typing = isTextField(document.activeElement);
+      if (e.key === "z" && e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && !typing) {
+        e.preventDefault();
+        e.stopPropagation();
+        undoLast();
+      } else if ((e.key === "Delete" || e.key === "Backspace") && !typing && !e.metaKey && selectedRef.current !== null) {
+        e.preventDefault();
+        e.stopPropagation();
+        remove(selectedRef.current);
+      }
+    };
+    // Capture: ahead of the app's own shortcuts.
+    addEventListener("keydown", on, true);
+    return () => removeEventListener("keydown", on, true);
+  }, [undoLast, remove]);
+
+  // ------------------------------------------------------------------ pointer
+
+  const local = (e: { clientX: number; clientY: number }): Point => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const unit = (p: Point) => toUnit(p, fit.w, fit.h);
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0 || !bitmap || sending) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    // Off any message field, so Delete and ⌘Z act on the marks.
+    e.currentTarget.focus();
+    const p = local(e);
+    const hit = hitTestMarks(cur.current.marks, p, fit.w, fit.h, annotationStyle(fit.w, fit.h));
+    if (hit) {
+      setSelected(hit.index);
+      drag.current = { kind: "move", hit, start: p, before: cur.current, moved: false };
+    } else {
+      drag.current = { kind: "new", start: p };
+    }
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    const p = local(e);
+    if (!d) {
+      // Hover: a grab hand over a mark that a press would move.
+      const over = hitTestMarks(cur.current.marks, p, fit.w, fit.h, annotationStyle(fit.w, fit.h));
+      e.currentTarget.style.cursor = over ? "grab" : "crosshair";
+      return;
+    }
+    if (d.kind === "move") {
+      if (!d.moved && !isAnnotationDrag(d.start, p)) return;
+      d.moved = true;
+      e.currentTarget.style.cursor = "grabbing";
+      setMarks(moveMark(d.before.marks, d.hit, unit(p)));
+    } else {
+      setLive(isAnnotationDrag(d.start, p) ? { anchor: unit(d.start), tail: unit(p) } : null);
+    }
+  };
+
+  const onPointerUp = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const d = drag.current;
+    drag.current = null;
+    setLive(null);
+    if (!d) return;
+    const p = local(e);
+    if (d.kind === "move") {
+      if (d.moved) history.current = recordChange(endRun(history.current), d.before);
+      else focusField(d.hit.index);
+      return;
+    }
+    const list = cur.current.marks;
+    if (list.length >= MAX_ANNOTATION_MARKS) {
+      toast(`An image takes up to ${MAX_ANNOTATION_MARKS} notes.`, "error");
+      return;
+    }
+    const mark: DraftMark = { anchor: unit(d.start), tail: isAnnotationDrag(d.start, p) ? unit(p) : null, message: "" };
+    change({ marks: [...list, mark] });
+    setSelected(list.length);
+    focusAfter.current = list.length;
+  };
+
+  const onPointerCancel = () => {
+    const d = drag.current;
+    drag.current = null;
+    setLive(null);
+    if (d?.kind === "move" && d.moved) setMarks(d.before.marks);
+  };
+
+  // ------------------------------------------------------------------ send
+
+  const send = async () => {
+    if (!canSend || !bitmap) return;
+    setSending(true);
+    try {
+      const W = bitmap.width;
+      const H = bitmap.height;
+      const canvas = new OffscreenCanvas(W, H);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(bitmap, 0, 0);
+      drawAnnotations(ctx, marks, W, H, { color });
+      const blob = await encodeWithinLimit(async (type, quality) => {
+        if (type === "image/png") return canvas.convertToBlob({ type });
+        // JPEG has no transparency: what's see-through goes on white, not black.
+        const flat = new OffscreenCanvas(W, H);
+        const fctx = flat.getContext("2d")!;
+        fctx.fillStyle = "#fff";
+        fctx.fillRect(0, 0, W, H);
+        fctx.drawImage(canvas, 0, 0);
+        return flat.convertToBlob({ type, quality });
+      });
+      const name = annotatedName(target.name, blob.type);
+      const file = await client.uploadPromptAttachment(blob, name, blob.type);
+      await client.sendMessage(ticket.key, note.trim(), {
+        move,
+        attachments: [file],
+        annotations: [{ attachment: 0, source: target.source, width: W, height: H, marks: marksForMessage(marks, W, H) }],
+      });
+      onSent();
+    } catch (e) {
+      toast(`Couldn't send the annotations: ${e instanceof Error ? e.message : String(e)}`, "error");
+      setSending(false);
+    }
+  };
+
+  const sendKeys = (e: ReactKeyboardEvent) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      void send();
+    }
+  };
+
+  return (
+    <Modal onClose={requestClose} className="annotator">
+      <div className="annotator-body" data-testid="annotator">
+        <div className="annotator-stage" ref={stageRef}>
+          {loadError ? (
+            <div className="annotator-error">
+              <Icon name="alert" size={16} />
+              <span>Couldn't load the image: {loadError}</span>
+            </div>
+          ) : !bitmap ? (
+            <span className="spinner" />
+          ) : (
+            <canvas
+              ref={canvasRef}
+              className="annotator-canvas"
+              data-testid="annotator-canvas"
+              tabIndex={0}
+              aria-label={`${target.name}: click to number a spot, drag to point an arrow at it`}
+              style={{ width: fit.w, height: fit.h }}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerCancel}
+            />
+          )}
+        </div>
+        <aside className="annotator-side" data-testid="annotator-side">
+          <header className="annotator-head">
+            <strong>Annotate</strong>
+            <span className="muted truncate" title={target.name}>
+              {target.name}
+            </span>
+            <div className="grow" />
+            <button className="btn btn-ghost btn-icon btn-sm" aria-label="Close" title="Close (Esc)" onClick={requestClose}>
+              <Icon name="x" />
+            </button>
+          </header>
+          <p className="annotator-hint muted">Click to number a spot, or drag to point an arrow at it. Drag a number to move it.</p>
+          {marks.length === 0 ? (
+            <div className="annotator-empty muted">No notes yet</div>
+          ) : (
+            <ol className="annotator-list" data-testid="annotator-list" aria-label="Notes">
+              {marks.map((m, i) => (
+                <li key={i} className={`annotator-row${selected === i ? " on" : ""}`} data-testid="annotator-row" data-n={i + 1}>
+                  <button type="button" className="annotator-badge" tabIndex={-1} aria-label={`Note ${i + 1}`} onClick={() => focusField(i)}>
+                    {i + 1}
+                  </button>
+                  <textarea
+                    ref={(el) => {
+                      fields.current[i] = el;
+                    }}
+                    className="annotator-message"
+                    data-testid="annotator-message"
+                    rows={2}
+                    placeholder={`What about ${i + 1}?`}
+                    value={m.message}
+                    disabled={sending}
+                    onFocus={() => setSelected(i)}
+                    onBlur={endTyping}
+                    onChange={(e) => change({ marks: setMarkMessage(cur.current.marks, i, e.target.value) }, `message:${i}`)}
+                    onKeyDown={sendKeys}
+                  />
+                  <button type="button" className="annotator-remove" data-testid="annotator-remove" aria-label={`Delete note ${i + 1}`} title={`Delete note ${i + 1}`} onClick={() => remove(i)} disabled={sending}>
+                    <Icon name="x" size={12} strokeWidth={2.25} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+          <label className="annotator-note">
+            <span>Note</span>
+            <textarea
+              data-testid="annotator-note"
+              rows={3}
+              placeholder="Anything else for the agent (optional)"
+              value={note}
+              disabled={sending}
+              onBlur={endTyping}
+              onChange={(e) => change({ note: e.target.value }, "note")}
+              onKeyDown={sendKeys}
+            />
+          </label>
+          <footer className="annotator-foot">
+            {switchLabel && <Switch checked={move} onChange={setMoveFirst} label={switchLabel} disabled={sending} />}
+            {hint && <span className="muted annotator-foot-hint">{hint}</span>}
+            <div className="annotator-actions">
+              <button className="btn btn-sm" data-testid="annotator-cancel" onClick={requestClose} disabled={sending}>
+                Cancel
+              </button>
+              <button className="btn btn-primary btn-sm" data-testid="annotator-send" disabled={!canSend} onClick={() => void send()} title={`Send to agent (${MOD}↩)`}>
+                {sending ? <span className="spinner" /> : <Icon name="send" size={13} />}
+                Send to agent
+              </button>
+            </div>
+          </footer>
+        </aside>
+      </div>
+    </Modal>
+  );
+}

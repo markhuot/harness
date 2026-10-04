@@ -4,9 +4,11 @@
 // token swaps them for working ones.
 
 import { useEffect, useState } from "react";
-import type { Attachment } from "@harness/shared";
+import type { AnnotationSource, Attachment } from "@harness/shared";
 import { stepAttachment } from "@harness/shared/state";
 import { useStore } from "../state/store";
+import { offersAnnotate } from "../state/annotator";
+import { urlTarget, useAnnotate } from "./Annotator";
 import { Icon } from "./Icon";
 import { Modal } from "./bits";
 
@@ -23,7 +25,8 @@ export function Missing({ name }: { name: string }) {
 /**
  * One attachment at a time over the app. ← and → (or the side buttons) step through the list (the
  * images in a piece of markdown); Esc or the backdrop closes. `urlOf` reads one from somewhere other
- * than the spec's attachments (a prompt attachment).
+ * than the spec's attachments (a prompt attachment). Inside a ticket (AnnotateScope), `annotate`
+ * says where an image came from, and the bar offers Annotate for it.
  */
 export function Lightbox({
   list,
@@ -31,12 +34,14 @@ export function Lightbox({
   onIndex,
   onClose,
   urlOf,
+  annotate,
 }: {
   list: Attachment[];
   index: number;
   onIndex: (i: number) => void;
   onClose: () => void;
   urlOf?: (a: Attachment, index: number) => string;
+  annotate?: (a: Attachment, index: number) => AnnotationSource | null;
 }) {
   const { client } = useStore();
   // Callers render this only with a non-empty list.
@@ -45,6 +50,9 @@ export function Lightbox({
   const url = urlOf ? urlOf(a, at) : client.attachmentUrl(a.id);
   const [failed, setFailed] = useState<string | null>(null);
   const many = list.length > 1;
+  const annotator = useAnnotate();
+  const source = annotate?.(a, at) ?? null;
+  const canAnnotate = offersAnnotate({ scoped: !!annotator, kind: a.kind, failed: failed === url, hasSource: !!source });
   const step = (delta: number) => onIndex(stepAttachment(index, delta, list.length));
 
   useEffect(() => {
@@ -91,6 +99,19 @@ export function Lightbox({
           </span>
         )}
         <div className="grow" />
+        {canAnnotate && (
+          <button
+            className="btn btn-ghost btn-sm"
+            data-testid="lightbox-annotate"
+            title="Number spots on this image and send notes on them to the agent"
+            onClick={() => {
+              onClose();
+              annotator!.open(urlTarget(url, a.name, source!));
+            }}
+          >
+            <Icon name="edit" /> Annotate
+          </button>
+        )}
         <button className="btn btn-ghost btn-icon btn-sm" aria-label="Close" title="Close (Esc)" onClick={onClose}>
           <Icon name="x" />
         </button>

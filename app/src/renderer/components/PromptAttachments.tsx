@@ -7,7 +7,7 @@
 // image opens the lightbox, clicking a file reveals it in Finder.
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { Attachment, PromptAttachment } from "@harness/shared";
+import type { AnnotationSource, Attachment, PromptAttachment } from "@harness/shared";
 import { promptAttachmentIsImage } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { attachmentSource, isFileDrag, missingLabel } from "../state/promptAttachmentFiles";
@@ -106,6 +106,7 @@ export function PromptAttachmentList({
   served,
   onRemove,
   pending = [],
+  annotate,
   children,
 }: {
   items: readonly PromptAttachment[];
@@ -119,6 +120,8 @@ export function PromptAttachmentList({
   onRemove?: (index: number) => void;
   /** Uploads on their way (pastes), shown as spinner rows at the end */
   pending?: readonly PendingUpload[];
+  /** Where the image at `index` (of `items`) came from, so the lightbox offers Annotate for it (a ticket's Spec tab, the Transcript; not the editors) */
+  annotate?: (index: number, a: PromptAttachment) => AnnotationSource;
   /** Controls under the rows (the editor's Attach files button) */
   children?: ReactNode;
 }) {
@@ -167,6 +170,7 @@ export function PromptAttachmentList({
           onIndex={setOpen}
           onClose={() => setOpen(null)}
           urlOf={(_x, idx) => sourceOf(images[idx]!)!.url}
+          annotate={annotate && ((_x, idx) => annotate(items.indexOf(images[idx]!), images[idx]!))}
         />
       )}
     </div>

@@ -30,6 +30,7 @@ import {
 } from "@harness/shared/state";
 import { Icon, isIconName } from "../components/Icon";
 import { FileLinkScope } from "../components/Markdown";
+import { AnnotateScope } from "../components/Annotator";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, Switch, TicketKey } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
@@ -276,6 +277,7 @@ export function TicketDetail({
       </nav>
       <div className="detail-body">
         <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
+        <AnnotateScope ticket={ticket} onSent={() => setTab(tabAfterSend(tab, true))}>
         {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
         {tab === "activity" && <ActivityTab ticket={ticket} />}
         {tab === "children" && <ChildrenTab ticket={ticket} />}
@@ -296,6 +298,7 @@ export function TicketDetail({
             <div className="spinner" />
           </div>
         )}
+        </AnnotateScope>
         </FileLinkScope>
       </div>
       <MessageComposer ticket={ticket} key={ticket.id} onSent={() => setTab(tabAfterSend(tab, true))} />

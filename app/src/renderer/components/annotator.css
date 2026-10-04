@@ -1,0 +1,247 @@
+/* The annotator (components/Annotator.tsx): the image on the left, the numbered notes beside it on
+   the right. Only the arrows and numbers are drawn over the image. */
+
+.overlay.annotator {
+  align-items: stretch;
+  padding: 24px;
+  background: rgb(0 0 0 / 0.78);
+}
+.overlay.annotator .modal {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+.annotator-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: 20px;
+}
+.annotator-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.annotator-canvas {
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  background: var(--bg-sunken);
+}
+.annotator-canvas:focus {
+  outline: none;
+}
+.annotator-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.annotator-stage > .spinner {
+  border-color: rgb(255 255 255 / 0.25);
+  border-top-color: #fff;
+}
+.annotator-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text-2);
+}
+
+.annotator-side {
+  width: 320px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.annotator-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 0 14px;
+  min-width: 0;
+}
+.annotator-head .truncate {
+  min-width: 0;
+  font-size: 12px;
+}
+.annotator-hint {
+  margin: 6px 14px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.annotator-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  border-top: 1px solid var(--border);
+}
+.annotator-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 8px;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+.annotator-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--radius);
+}
+.annotator-row.on {
+  background: var(--accent-soft);
+}
+.annotator-badge {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.annotator-message,
+.annotator-note textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.annotator-message:focus,
+.annotator-note textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.annotator-remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 4px;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.annotator-remove:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.annotator-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.annotator-note textarea {
+  color: var(--text);
+}
+.annotator-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--border);
+}
+.annotator-foot-hint {
+  font-size: 12px;
+}
+.annotator-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* The Transcript's "N notes" under an annotated image sent with a message. */
+.t-annotations {
+  margin-top: 4px;
+  font-size: 12px;
+}
+.t-annotations-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.t-annotations-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.t-annotations-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.t-annotations-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.t-annotations-n {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.t-annotations-list .empty-message {
+  color: var(--text-3);
+  font-style: italic;
+}

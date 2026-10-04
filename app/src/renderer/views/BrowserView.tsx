@@ -7,6 +7,8 @@ import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
+import { useAnnotate } from "../components/Annotator";
+import { browserShotName } from "../state/annotator";
 import { isAppChord } from "../state/keys";
 import { confirmsClose, confirmsNewTab, confirmsSwitch, frameIsForView, tabLabel, tabTooltip, type ViewTab } from "../state/browserTabs";
 import "./browser.css";
@@ -48,6 +50,8 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
   const expecting = useRef<{ accepts: (s: BrowserState) => boolean; until: number } | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const annotator = useAnnotate();
+  const [shooting, setShooting] = useState(false);
 
   const send = useCallback(
     (input: BrowserInput) => {
@@ -417,6 +421,21 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
 
   const empty = !hasFrame && !state;
 
+  /** Freeze the page as it is now (a screenshot from the service) and annotate that. */
+  const annotatePage = async () => {
+    if (!annotator || shooting) return;
+    const tabId = typeof viewTab.current === "number" ? viewTab.current : state?.tabId;
+    setShooting(true);
+    const shot = await act(() => client.browserScreenshot(sessionId, tabId));
+    setShooting(false);
+    if (!shot) return;
+    annotator.open({
+      name: browserShotName(shot.url, shot.title),
+      source: { kind: "browser", url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale },
+      load: async () => new Blob([Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0))], { type: "image/png" }),
+    });
+  };
+
   return (
     <div className="browser">
       {tabs && tabs.length > 1 && (
@@ -488,6 +507,17 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
         {tabs && (
           <button className="btn btn-ghost btn-icon btn-sm" title="New tab" aria-label="New tab" data-testid="browser-new-tab" onClick={newTab}>
             <Icon name="plus" />
+          </button>
+        )}
+        {annotator && (
+          <button
+            className="btn btn-ghost btn-sm"
+            data-testid="browser-annotate"
+            title="Freeze this page and number spots on it to send to the agent"
+            disabled={!hasFrame || shooting || viewTab.current === "pending"}
+            onClick={() => void annotatePage()}
+          >
+            {shooting ? <span className="spinner" /> : <Icon name="edit" />} Annotate
           </button>
         )}
         <span className={`browser-live ${live ? "on" : ""}`} title={live ? "Receiving frames" : "Idle"}>

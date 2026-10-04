@@ -151,7 +151,7 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
         {!!ticket.promptAttachments?.length && (
           <section className="spec-prompt-attachments" data-testid="spec-prompt-attachments">
             <span className="section-title">Attachments</span>
-            <PromptAttachmentList ticketKey={ticket.key} items={ticket.promptAttachments} />
+            <PromptAttachmentList ticketKey={ticket.key} items={ticket.promptAttachments} annotate={(index, a) => ({ kind: "prompt-attachment", index, name: a.name })} />
           </section>
         )}
       </div>

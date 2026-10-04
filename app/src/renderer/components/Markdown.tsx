@@ -332,7 +332,9 @@ function MarkdownFrame({ media, className, children }: { media: Media[]; classNa
   return (
     <MediaScopeContext.Provider value={scope}>
       <div className={`md selectable ${className ?? ""}`}>{children}</div>
-      {open !== null && list.length > 0 && <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} />}
+      {open !== null && list.length > 0 && (
+        <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} annotate={(a) => ({ kind: "attachment", id: a.id, name: a.name })} />
+      )}
     </MediaScopeContext.Provider>
   );
 }
