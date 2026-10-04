@@ -1780,36 +1780,35 @@ ticket keeps working after one is moved or deleted.
   the tab's viewport with its CSS viewport size and device scale, `BrowserScreenshot`, from
   `BrowserService.capture`; 404 when the tab doesn't exist, and a suspended tab reloads first), an
   image waiting in the ticket's composer, or an image attached to a New session. Annotations never
-  speak to the agent on their own: they augment a message. Pressing on the image sets an anchor
-  and dragging pulls out an arrow whose head points at it; the number sits at the arrow's tail, or
-  on the anchor for a plain click. The rules for drawing and editing marks (the click/drag
-  threshold, hit-testing, the arrow's geometry, the style that scales with the image so the sent
-  picture matches the screen) and for keeping each annotation on its attachment as the list
-  changes (`withAnnotation`, `annotationsWithout`, `annotationsWithin`) live in
-  `shared/src/state/annotations.ts`, mirrored in HarnessKit's `Annotations.swift` and checked
+  speak to the agent on their own: they augment a message. And they never change the image: an
+  annotation is metadata on the attachment, `PromptAttachment.annotation`
+  (`AttachmentAnnotation`: the image's pixel size, the marks numbered 1…n in those pixels, and for
+  a browser screenshot the page's URL, title, tab, CSS viewport and scale). There's one attachment
+  record for a New session (`promptAttachments`), a message (`MessageBody.attachments`), a queued
+  run (`runs.attachments`) and a transcript entry, so the annotation travels with the file through
+  all of them with no fields of its own. Pressing on the image sets an anchor and dragging pulls
+  out an arrow whose head points at it; the number sits at the arrow's tail, or on the anchor for a
+  plain click. The rules for drawing and editing marks (the click/drag threshold, hit-testing, the
+  arrow's geometry, the style that scales with the image) and for annotating an attachment in a
+  list (`annotatePromptAttachment`: the same file is annotated in place, another is added) live in
+  `shared/src/state/annotations.ts` and `promptAttachments.ts`, mirrored in HarnessKit and checked
   against computed fixtures. The notes are listed beside the image (Mac, iPad) or below it
-  (iPhone), never on it. **Add to message** draws the marks into the image at its full size,
-  uploads it (`POST /uploads`) and puts it, with its annotation, into the message being written:
-  on a ticket, the composer's waiting attachments (an image already waiting there is replaced in
-  place); in a New session, the draft's prompt attachments (replaced in place). Waiting annotated
-  images show their notes, and the app keeps the original and the marks in memory so they can be
-  edited until the message goes; a draft reopened later shows its notes but can't re-edit them.
-  An annotation is `MessageAnnotation`: the index of its attachment, its source (spec attachment,
-  prompt attachment, message attachment, browser tab, or `file` for an image that was waiting in a
-  composer or New session), its pixel size, and the marks numbered 1…n in its pixels. A message
-  carries them in `MessageBody.annotations`; a New session in `Ticket.promptAnnotations`
-  (migration 31; set by `CreateTicketBody` and, on drafts, `UpdateTicketBody`, where changing
-  `promptAttachments` without `promptAnnotations` clears them). The service validates them
-  (`normalizeAnnotations` in `service/src/annotations.ts`: an image attachment each, judged by its
-  first bytes, numbering in order, points inside the image; 400 otherwise) and, not the apps,
-  writes the agent's text (`formatAnnotations`): an `<annotations>` block before the
-  `<attachments>` block naming the image, where it came from, and one line per mark with its
-  position in pixels and as a share of the image, plus CSS pixels for a browser page since the
-  agent drives the page in those. A message's transcript entry keeps `annotations` next to
-  `attachments` (its text stays the human's), a queued run keeps them in `runs.annotations`
-  (migration 30, `Run.annotations`), and a New session's go with its first run. The Transcript, the
-  composer and the Spec tab's attachment list show an "N notes" line under an annotated image that
-  expands to the list. `app/scripts/annotate-check.ts` drives the Mac flow against the real service.
+  (iPhone), never on it. **Add to message** puts the attachment, with its annotation, into the
+  message being written: on a ticket, the composer's waiting attachments; in a New session, the
+  draft's. A spec image is referenced, not copied: its input path is `attachment:<id>`, which the
+  service resolves to that spec image's stored file (only the ticket's own; 400 otherwise). A
+  browser screenshot is uploaded as is. Since the image is untouched, an annotation can be reopened
+  and edited at any time before the message goes, and the apps draw the marks over the image
+  wherever an annotated attachment shows (thumbnails, the lightbox or viewer), with an "N notes"
+  line that opens to the list: the composer, the New session, the Spec tab's attachment list and
+  the Transcript. The service validates each annotation in `normalizePromptAttachments` (an image
+  by its first bytes, marks in order and inside the image, message length, a well-formed page;
+  400 otherwise; a kept attachment whose file went missing isn't re-checked) and, not the apps,
+  writes the agent's text: the `<attachments>` block lists each annotated image's notes under its
+  path, with each mark's position in pixels and as a share of the image, plus CSS pixels for a
+  browser page since the agent drives the page in those. The image goes to the agent inline,
+  unchanged. `get_ticket` lists each prompt attachment's notes. `app/scripts/annotate-check.ts`
+  drives the Mac flow against the real service.
 
 **File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
 mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path

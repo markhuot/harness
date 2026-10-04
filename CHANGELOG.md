@@ -23,11 +23,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   on the Spec tab or a file sent with a message, and choose Annotate. In the Browser tab, Annotate
   takes a picture of the page. Click to drop a numbered marker, or press and drag to draw an arrow
   pointing at the spot. Each number gets its own note, listed next to the image (below it on
-  iPhone) so nothing covers what you're pointing at. Add to message puts the annotated image in the
-  message box, where you can write why before you send it. Images attached to a New session or
-  waiting in the message box can be annotated too, and their notes show under them. The agent gets
-  the image with your arrows and numbers on it, plus the numbered notes with where each one points.
-  The Transcript and the Spec tab show the notes under the image.
+  iPhone) so nothing covers what you're pointing at. Add to message puts the image in the message
+  box, where you can write why before you send it. Images attached to a New session or waiting in
+  the message box can be annotated too, and you can reopen an annotation to change it until you
+  send. The image itself is never changed: your arrows and numbers are drawn over it wherever it
+  shows, with its notes underneath, and the agent gets the image along with the numbered notes and
+  where each one points.
 
 ## [app-20261004.0031](https://github.com/markhuot/harness/releases/tag/app-20261004.0031) - 2026-10-04
 
