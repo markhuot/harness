@@ -131,7 +131,7 @@ function TornTab({
   const subagents = subagentsOf(state, ticket.sessionId);
   const tab = composer ? null : effectiveTabWithChanges(content.tab as TicketTab, { conductor: isConductor(ticket), workdir: ticket.workdir, pluginTabs, subagents });
   // The tab doesn't apply to this ticket (any more): there's nothing to show.
-  const gone = tab !== null && tornId({ tab }) !== tornId(content);
+  const gone = tab !== null && tornId({ tab }) !== tornId({ tab: content.tab });
   const name = tornTabName(content.tab, pluginTabs);
   const browser: BrowserOpts = pinned
     ? { pinnedTab: content.browserTab, onPinnedClosed: onClose, onTitle: setBrowserTitle }
