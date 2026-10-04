@@ -238,7 +238,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     // Older apps still send `log`; messages go to the transcript only, so it's ignored.
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments, annotations: b?.annotations });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments });
   });
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();

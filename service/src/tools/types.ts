@@ -92,7 +92,7 @@ export interface BoardTicketDetail {
   attachments: { id: string; name: string; kind: "image" | "video"; path: string }[];
   /**
    * Files the human attached to the ticket's first message, where they are on disk; missing once
-   * moved or deleted. notes: the numbered notes the human drew on an image (Ticket.promptAnnotations).
+   * moved or deleted. notes: the numbered notes the human drew on an image (PromptAttachment.annotation).
    */
   promptAttachments: { name: string; path: string; missing: boolean; notes?: string[] }[];
   /** Last N text/status/error entries, oldest first; present only when requested */

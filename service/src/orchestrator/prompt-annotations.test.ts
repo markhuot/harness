@@ -1,12 +1,11 @@
-// Annotations on a ticket's prompt attachments (Ticket.promptAnnotations, DESIGN.md
-// "Annotations"): validated on create and on a draft's PATCH, cleared when a PATCH changes the
-// attachments without them, fixed once launched, and listed in the first run's prompt before its
-// <attachments> block.
+// Annotations on a New session's prompt attachments (PromptAttachment.annotation, DESIGN.md
+// "Annotations"): checked on create and on a draft's PATCH, saved or cleared per attachment, and
+// listed under their file in the first run's <attachments> block and by get_ticket.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HarnessClient, type MessageAnnotation } from "@harness/shared";
+import { HarnessApiError, HarnessClient, type AttachmentAnnotation, type PromptAttachment, type Ticket } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { executeTool } from "../drivers/types";
@@ -27,135 +26,109 @@ function setup() {
     writeFileSync(p, data);
     return p;
   };
-  return { ...h, web, file };
+  const specImage = (t: Ticket, id: string) => {
+    const a = { id, kind: "image" as const, mimeType: "image/png", name: "mockup.png", size: 1, width: 40, height: 20 };
+    mkdirSync(h.paths.attachmentsDir, { recursive: true });
+    h.store.attachments.add(t.id, [a]);
+    const path = h.orch.attachmentFilePath(a);
+    writeFileSync(path, png(40, 20));
+    return path;
+  };
+  return { ...h, web, file, specImage };
 }
 
-const note = (attachment: number, message = "Bigger"): MessageAnnotation => ({
-  attachment,
-  source: { kind: "file", name: "shot.png" },
-  width: 40,
-  height: 20,
-  marks: [{ n: 1, x: 10, y: 5, tailX: 30, tailY: 15, message }],
-});
+const note = (message = "Bigger"): AttachmentAnnotation => ({ width: 40, height: 20, marks: [{ n: 1, x: 10, y: 5, tailX: 30, tailY: 15, message }] });
 
 describe("creating and editing", () => {
-  test("a ticket keeps its notes on an image among its attachments; one on a file it doesn't have is refused", async () => {
+  test("a New session keeps an annotation on its image; on a file that isn't one, or malformed, it's refused", async () => {
     const h = setup();
     const notes = h.file("notes.md", "# notes");
     const shot = h.file("shot.png", png(40, 20));
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: notes }, { path: shot }], promptAnnotations: [note(1)] });
-    expect(t.promptAnnotations).toEqual([note(1)]);
-    expect(h.store.tickets.get(t.id)!.promptAnnotations).toEqual([note(1)]);
-    // Index 2 is past the list; index 0 is the markdown file.
-    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: shot }], promptAnnotations: [note(2)] })).rejects.toMatchObject({ status: 400 });
-    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: notes }, { path: shot }], promptAnnotations: [note(0)] })).rejects.toMatchObject({ status: 400 });
-    // Without attachments there's nothing to annotate.
-    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAnnotations: [note(0)] })).rejects.toMatchObject({ status: 400 });
+    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: notes }, { path: shot, annotation: note() }] });
+    const expected: PromptAttachment[] = [
+      { path: notes, name: "notes.md", source: "file" },
+      { path: shot, name: "shot.png", source: "file", annotation: note() },
+    ];
+    expect(t.promptAttachments).toEqual(expected);
+    expect(h.store.tickets.get(t.id)!.promptAttachments).toEqual(expected);
+    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: notes, annotation: note() }] })).rejects.toMatchObject({ status: 400 });
+    await expect(h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: shot, annotation: { ...note(), width: 0 } }] })).rejects.toMatchObject({ status: 400 });
   });
 
-  test("a ticket created without them has none", async () => {
+  test("a create can't name a spec image: a new ticket has none", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true });
-    expect(t.promptAnnotations).toEqual([]);
+    const err = await h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ path: "attachment:att_1" }] }).catch((e) => e);
+    expect(err).toMatchObject({ status: 400 });
+    expect((err as Error).message).toMatch(/new ticket has no spec images/);
   });
 
-  test("a draft PATCH changing the attachments without the notes clears them; with them, keeps them", async () => {
+  test("a draft PATCH saves, changes and clears the annotation on one attachment, leaving the others", async () => {
     const h = setup();
-    const shot = h.file("shot.png", png(40, 20));
-    const other = h.file("other.png", png(40, 20));
-    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: shot }], promptAnnotations: [note(0)] });
-    // Something else changed: the notes stay.
-    expect((await h.orch.updateTicket(d.key, { title: "Renamed" })).promptAnnotations).toEqual([note(0)]);
-    // A file was added in front, with the notes moved along.
-    const moved = await h.orch.updateTicket(d.key, { promptAttachments: [{ path: other }, { path: shot }], promptAnnotations: [note(1)] });
-    expect(moved.promptAnnotations).toEqual([note(1)]);
-    // The list changed without them: none is left pointing at another file.
-    const cleared = await h.orch.updateTicket(d.key, { promptAttachments: [{ path: shot }] });
-    expect(cleared.promptAnnotations).toEqual([]);
-    expect(h.store.tickets.get(d.id)!.promptAnnotations).toEqual([]);
-    // Notes alone, against the list it has.
-    expect((await h.orch.updateTicket(d.key, { promptAnnotations: [note(0, "Again")] })).promptAnnotations).toEqual([note(0, "Again")]);
-    await expect(h.orch.updateTicket(d.key, { promptAnnotations: [note(1)] })).rejects.toMatchObject({ status: 400 });
+    const a = h.file("a.png", png(40, 20));
+    const b = h.file("b.png", png(40, 20));
+    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: a }, { path: b, annotation: note("On b") }] });
+    const annotations = (t: Ticket) => t.promptAttachments!.map((x) => x.annotation?.marks[0]!.message ?? null);
+    // Something else changed: the annotations stay.
+    expect(annotations(await h.orch.updateTicket(d.key, { title: "Renamed" }))).toEqual([null, "On b"]);
+    expect(annotations(await h.orch.updateTicket(d.key, { promptAttachments: [{ path: a, annotation: note("On a") }, { path: b, annotation: note("On b") }] }))).toEqual(["On a", "On b"]);
+    expect(annotations(await h.orch.updateTicket(d.key, { promptAttachments: [{ path: a, annotation: note("Changed") }, { path: b }] }))).toEqual(["Changed", null]);
     // A refused PATCH changed nothing.
-    expect(h.store.tickets.get(d.id)!.promptAnnotations).toEqual([note(0, "Again")]);
+    await expect(h.orch.updateTicket(d.key, { promptAttachments: [{ path: a }, { path: b, annotation: { ...note(), marks: [] } }] })).rejects.toMatchObject({ status: 400 });
+    expect(annotations(h.store.tickets.get(d.id)!)).toEqual(["Changed", null]);
   });
 
-  test("a kept annotated file that has gone missing doesn't fail a PATCH; a newly annotated one is still checked", async () => {
+  test("a kept attachment whose file has gone missing keeps a changed annotation; its shape is still checked", async () => {
     const h = setup();
-    const gone = h.file("gone.bin", png(40, 20));
-    const text = h.file("text.bin", "not an image");
-    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: gone }, { path: text }], promptAnnotations: [note(0)] });
+    const gone = h.file("gone.png", png(40, 20));
+    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: gone, annotation: note() }] });
     rmSync(gone);
-    // Unreadable with no image extension, it would fail a fresh check.
-    const t = await h.orch.updateTicket(d.key, { promptAttachments: [{ path: gone }, { path: text }], promptAnnotations: [note(0, "Still")] });
-    expect(t.promptAnnotations).toEqual([note(0, "Still")]);
-    await expect(h.orch.updateTicket(d.key, { promptAnnotations: [note(0), note(1)] })).rejects.toMatchObject({ status: 400 });
+    const t = await h.orch.updateTicket(d.key, { promptAttachments: [{ path: gone, annotation: note("Still") }] });
+    expect(t.promptAttachments![0]!.annotation).toEqual(note("Still"));
+    await expect(h.orch.updateTicket(d.key, { promptAttachments: [{ path: gone, annotation: { ...note(), marks: [{ n: 2, x: 1, y: 1, message: "" }] } }] })).rejects.toMatchObject({ status: 400 });
   });
 
-  test("a launched ticket's notes are fixed", async () => {
+  test("a draft can take one of its own spec images as attachment:<id>, not another ticket's", async () => {
     const h = setup();
-    const shot = h.file("shot.png", png(40, 20));
-    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true, promptAttachments: [{ path: shot }] });
-    const launched = await h.orch.submitTicket(d.key, { start: false });
-    await expect(h.orch.updateTicket(launched.key, { promptAnnotations: [note(0)] })).rejects.toMatchObject({ status: 409 });
-    await h.orch.idle();
+    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", draft: true });
+    const other = await h.orch.createTicket({ projectId: h.web.id, spec: "Other", draft: true });
+    const stored = h.specImage(d, "att_mine");
+    h.specImage(other, "att_theirs");
+    const t = await h.orch.updateTicket(d.key, { promptAttachments: [{ path: "attachment:att_mine", annotation: note() }] });
+    expect(t.promptAttachments).toEqual([{ path: stored, name: "mockup.png", source: "file", annotation: note() }]);
+    await expect(h.orch.updateTicket(d.key, { promptAttachments: [{ path: "attachment:att_theirs" }] })).rejects.toMatchObject({ status: 400 });
+    await expect(h.orch.updateTicket(d.key, { promptAttachments: [{ path: "attachment:att_nope" }] })).rejects.toMatchObject({ status: 400 });
   });
 });
 
 describe("the first run", () => {
-  test("reads the notes before its <attachments> block; later runs don't", async () => {
+  test("lists the notes under their file in <attachments>; later runs don't", async () => {
     const h = setup();
     const notes = h.file("notes.md", "# notes");
     const shot = h.file("shot.png", png(40, 20));
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Fix it", start: true, promptAttachments: [{ path: notes }, { path: shot }], promptAnnotations: [note(1)] });
+    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Fix it", start: true, promptAttachments: [{ path: notes }, { path: shot, annotation: note() }] });
     await h.orch.idle();
-    const first = h.driver.calls[0]!.prompt;
-    const ann = first.indexOf("<annotations>");
-    const att = first.indexOf("<attachments>");
-    expect(ann).toBeGreaterThan(0);
-    expect(att).toBeGreaterThan(ann);
-    expect(first.slice(ann, att)).toContain(`${shot} (40×20 px) is the attached image "shot.png"`);
-    expect(first).toContain("1. (10, 5) px, 25% across, 25% down, arrow from (30, 15) px: Bigger");
+    const lines = h.driver.calls[0]!.prompt.split("\n");
+    const at = lines.indexOf(`- ${shot} (image, included in this message)`);
+    expect(at).toBeGreaterThan(lines.indexOf("<attachments>"));
+    expect(lines.slice(at + 1, at + 3)).toEqual(["  40×20 px. Notes:", "  1. (10, 5) px, 25% across, 25% down, arrow from (30, 15) px: Bigger"]);
 
     await h.orch.sendMessage(t.key, "One more thing");
     await h.orch.idle();
     const later = h.driver.calls.slice(1).filter((c) => c.kind !== "review");
     expect(later.length).toBeGreaterThan(0);
-    for (const c of later) expect(c.prompt).not.toContain("<annotations>");
-  });
-
-  test("with a message's own files too, each note names its own file in the combined list", async () => {
-    const h = setup();
-    const ticketShot = h.file("ticket.png", png(40, 20));
-    const msgNotes = h.file("msg.md", "# notes");
-    const msgShot = h.file("msg.png", png(40, 20));
-    // The first run fails, so the next one is still the first to get through and carries both.
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "Fix it /fail boom", start: true, promptAttachments: [{ path: ticketShot }], promptAnnotations: [note(0, "Ticket note")] });
-    await h.orch.idle();
-    await h.orch.sendMessage(t.key, "Also this", { attachments: [{ path: msgNotes }, { path: msgShot }], annotations: [note(1, "Message note")] });
-    await h.orch.idle();
-    const chat = h.driver.calls.at(-1)!.prompt;
-    expect(chat.match(/<annotations>/g)).toHaveLength(1);
-    const block = chat.slice(chat.indexOf("<annotations>"), chat.indexOf("<attachments>"));
-    // Index 1 of the message's files is msg.png, not the ticket's second file (there is none) or msg.md.
-    expect(block).toMatch(new RegExp(`${ticketShot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(40×20 px\\)[^\\n]*\\n1\\.[^\\n]*Ticket note`));
-    expect(block).toMatch(new RegExp(`${msgShot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\(40×20 px\\)[^\\n]*\\n1\\.[^\\n]*Message note`));
-    expect(block).not.toContain(msgNotes);
-    // The chat's transcript entry has only the message's own notes.
-    const entry = h.store.transcript.list(t.sessionId).filter((e) => e.role === "user").at(-1)!.content;
-    expect(entry).toMatchObject({ text: "Also this", annotations: [note(1, "Message note")] });
+    for (const c of later) expect(c.prompt).not.toContain("Notes:");
   });
 });
 
 describe("agent tools", () => {
-  test("get_ticket lists each annotated file's notes", async () => {
+  test("get_ticket lists each annotated prompt attachment's notes", async () => {
     const h = setup();
     const own = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", start: false });
     await h.orch.idle();
     const notes = h.file("notes.md", "# notes");
     const shot = h.file("shot.png", png(40, 20));
-    const two: MessageAnnotation = { ...note(1), marks: [...note(1).marks, { n: 2, x: 40, y: 20, message: "" }] };
-    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", start: false, promptAttachments: [{ path: notes }, { path: shot }], promptAnnotations: [two] });
+    const two: AttachmentAnnotation = { ...note(), marks: [...note().marks, { n: 2, x: 40, y: 20, message: "" }] };
+    const d = await h.orch.createTicket({ projectId: h.web.id, spec: "Look", start: false, promptAttachments: [{ path: notes }, { path: shot, annotation: two }] });
     await h.orch.idle();
     const ctx = fakeContext({ runKind: "work", ticket: own, cwd: h.home, session: fakeSession({ id: own.sessionId, key: own.key, ticketId: own.id }), ops: h.orch.ops });
     const got = await executeTool(toolsForRun("work", h.driver), "get_ticket", { key: d.key }, ctx);
@@ -174,7 +147,7 @@ describe("over HTTP", () => {
     harness = null;
   });
 
-  test("POST and PATCH /tickets take promptAnnotations, and the ticket sends them back", async () => {
+  test("POST and PATCH /tickets carry an attachment's annotation, and refuse a malformed one", async () => {
     const home = tempHome("harness-prompt-ann-http-");
     harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
     const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
@@ -183,9 +156,12 @@ describe("over HTTP", () => {
     mkdirSync(dir, { recursive: true });
     const project = await client.createProject({ path: dir, key: "WEB" });
     const up = await client.uploadPromptAttachment(new Blob([png(40, 20)], { type: "image/png" }), "Pasted image", "image/png");
-    const t = await client.createTicket({ projectId: project.id, spec: "Look", draft: true, promptAttachments: [{ path: up.path }], promptAnnotations: [note(0)] });
-    expect((await client.getTicket(t.key)).ticket.promptAnnotations).toEqual([note(0)]);
-    const patched = await client.updateTicket(t.key, { promptAttachments: [{ path: up.path }] });
-    expect(patched.promptAnnotations).toEqual([]);
+    const t = await client.createTicket({ projectId: project.id, spec: "Look", draft: true, promptAttachments: [{ path: up.path, annotation: note() }] });
+    expect((await client.getTicket(t.key)).ticket.promptAttachments![0]!.annotation).toEqual(note());
+    const cleared = await client.updateTicket(t.key, { promptAttachments: [{ path: up.path }] });
+    expect(cleared.promptAttachments![0]).not.toHaveProperty("annotation");
+    const bad = await client.updateTicket(t.key, { promptAttachments: [{ path: up.path, annotation: { ...note(), marks: [{ n: 1, x: 10, y: 5, tailX: 30, message: "" }] } }] }).catch((e) => e);
+    expect((bad as HarnessApiError).status).toBe(400);
+    expect((bad as HarnessApiError).message).toMatch(/tailX and tailY go together/);
   });
 });

@@ -8,6 +8,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { randomUUID } from "node:crypto";
 import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type PromptAttachmentInput } from "@harness/shared";
 import { HarnessError } from "./orchestrator/errors";
+import { ANNOTATIONS_INTRO, annotationLines, normalizeAnnotation } from "./annotations";
 
 /** Largest upload POST /uploads takes. */
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -81,27 +82,51 @@ export function storeUpload(uploadsDir: string, bytes: Uint8Array, rawName: stri
   return { path, name, source: "upload" };
 }
 
+/** A spec image of the ticket (`attachment:<id>`), resolved to its stored file, or null when it has none by that id. */
+export type SpecImageLookup = (id: string) => { path: string; name: string } | null;
+
+const SPEC_IMAGE_PREFIX = "attachment:";
+
 /**
- * Validate a create or PATCH's prompt attachments. `previous` is what the ticket has now: an
+ * Validate a create, PATCH or message's attachments. `previous` is what the ticket has now: an
  * attachment it already had stays even when its file is gone (a reopened draft shouldn't fail to
  * save), and only new paths have to be absolute files that exist. A path listed twice is kept
  * once. The source is decided here, from where the file is.
+ *
+ * A path may be `attachment:<id>`, one of the ticket's own spec images (`specImage` looks it up;
+ * without one, as for a ticket being created, it's refused): it's referenced where it's stored,
+ * never copied. Each attachment's annotation (DESIGN.md "Annotations") is checked: the file must be
+ * an image by its first bytes, except a kept one whose file has gone missing, whose annotation
+ * still has to be well-formed.
  */
-export function normalizePromptAttachments(raw: unknown, previous: readonly PromptAttachment[], uploadsDir: string): PromptAttachment[] {
+export function normalizePromptAttachments(raw: unknown, previous: readonly PromptAttachment[], uploadsDir: string, specImage?: SpecImageLookup): PromptAttachment[] {
   if (!Array.isArray(raw)) throw new HarnessError(400, "promptAttachments must be a list of { path, name? }");
   const known = new Map(previous.map((a) => [a.path, a]));
   const out: PromptAttachment[] = [];
   const seen = new Set<string>();
-  for (const item of raw as PromptAttachmentInput[]) {
-    const path = item && typeof item === "object" && typeof item.path === "string" ? item.path : null;
+  for (const [i, item] of (raw as PromptAttachmentInput[]).entries()) {
+    let path = item && typeof item === "object" && typeof item.path === "string" ? item.path : null;
     if (!path) throw new HarnessError(400, "Each prompt attachment needs a path");
     if (item.name !== undefined && typeof item.name !== "string") throw new HarnessError(400, "A prompt attachment's name must be a string");
+    let name = item.name?.trim() || null;
+    if (path.startsWith(SPEC_IMAGE_PREFIX)) {
+      const id = path.slice(SPEC_IMAGE_PREFIX.length);
+      if (!specImage) throw new HarnessError(400, `${path}: a new ticket has no spec images to attach`);
+      const found = id ? specImage(id) : null;
+      if (!found) throw new HarnessError(400, `${path} isn't one of this ticket's spec images`);
+      path = found.path;
+      name ??= found.name;
+    }
     if (seen.has(path)) continue;
     seen.add(path);
-    const name = item.name?.trim() || null;
+    const at = `attachments[${i}] (${name ?? basename(path)})`;
+    const annotation = item.annotation === undefined || item.annotation === null ? undefined : normalizeAnnotation(item.annotation, at);
     const had = known.get(path);
     if (had) {
-      out.push({ ...had, name: name ?? had.name });
+      // Kept as it was; a changed annotation is checked against the file while it's still there.
+      if (annotation && promptAttachmentFile(had)) mustBeImage(path, at);
+      const { annotation: _old, ...rest } = had;
+      out.push({ ...rest, name: name ?? had.name, ...(annotation ? { annotation } : {}) });
       continue;
     }
     if (!isAbsolute(path)) throw new HarnessError(400, `A prompt attachment's path must be absolute: ${path}`);
@@ -112,10 +137,22 @@ export function normalizePromptAttachments(raw: unknown, previous: readonly Prom
       throw new HarnessError(400, `Attachment not found: ${path}`);
     }
     if (!st.isFile()) throw new HarnessError(400, `Attachment isn't a file: ${path}`);
-    out.push({ path, name: name ?? basename(path), source: isUploadPath(uploadsDir, path) ? "upload" : "file" });
+    if (annotation) mustBeImage(path, at);
+    out.push({ path, name: name ?? basename(path), source: isUploadPath(uploadsDir, path) ? "upload" : "file", ...(annotation ? { annotation } : {}) });
   }
   if (out.length > MAX_PROMPT_ATTACHMENTS) throw new HarnessError(400, `At most ${MAX_PROMPT_ATTACHMENTS} attachments`);
   return out;
+}
+
+/** 400 unless the file is a PNG, JPEG, GIF or WebP by its first bytes (only images take notes). */
+function mustBeImage(path: string, at: string): void {
+  let type: RunImage["mediaType"] | null = null;
+  try {
+    type = sniffImage(readHead(path, 16));
+  } catch {
+    /* unreadable: not an image we can show */
+  }
+  if (!type) throw new HarnessError(400, `${at}: only a PNG, JPEG, GIF or WebP image can be annotated`);
 }
 
 /** The attachment's file when it's still there (a regular file), else null. */
@@ -224,9 +261,10 @@ export function runAttachments(list: readonly PromptAttachment[]): RunAttachment
   const lines: string[] = [];
   for (const a of list) {
     const file = promptAttachmentFile(a);
+    const notes = a.annotation ? annotationLines(a.annotation).map((l) => `  ${l}`) : [];
     if (!file) {
       missing.push(a);
-      lines.push(`- ${a.path} (missing: it was moved or deleted after it was attached)`);
+      lines.push(`- ${a.path} (missing: it was moved or deleted after it was attached)`, ...notes);
       continue;
     }
     attached.push(a.name);
@@ -244,13 +282,14 @@ export function runAttachments(list: readonly PromptAttachment[]): RunAttachment
         }
       }
     }
-    lines.push(`- ${a.path}${inline ? " (image, included in this message)" : ""}`);
+    lines.push(`- ${a.path}${inline ? " (image, included in this message)" : ""}`, ...notes);
   }
   const block = [
     "",
     "",
     "<attachments>",
     "The human attached these files to this request. Open any of them with your file tools; images marked as included are also in this message.",
+    ...(list.some((a) => a.annotation) ? [ANNOTATIONS_INTRO] : []),
     ...lines,
     "</attachments>",
   ].join("\n");

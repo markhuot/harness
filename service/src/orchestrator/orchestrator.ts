@@ -36,7 +36,6 @@ import type {
   ActivityKind,
   ActivityMeta,
   Attachment,
-  MessageAnnotation,
   PromptAttachment,
   SpecConflict,
   SpecDiff,
@@ -128,8 +127,8 @@ import {
 } from "./worktree";
 import { readFileDiff, readFileView } from "./file-view";
 import { attachMentions, searchPaths, type SearchOptions } from "./files";
-import { formatAnnotations, normalizeAnnotations } from "../annotations";
-import { normalizePromptAttachments, promptAttachmentFile, removeUploadDirs, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../prompt-attachments";
+import { compactNotes } from "../annotations";
+import { normalizePromptAttachments, promptAttachmentFile, type SpecImageLookup, removeUploadDirs, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../prompt-attachments";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import {
   applySettingsPatch,
@@ -298,12 +297,7 @@ export const PROMPT_ACTIVITY_ENTRIES = 5;
 export const STEER_FALLBACK_STATUS = "Couldn't reach the running agent; queued for the next run";
 
 /** A human message's transcript entry: its words, and the files sent with it when there are any. */
-const messageContent = (m: SentMessage): TranscriptContent => ({
-  type: "text",
-  text: m.text,
-  ...(m.attachments.length ? { attachments: [...m.attachments] } : {}),
-  ...(m.annotations?.length ? { annotations: [...m.annotations] } : {}),
-});
+const messageContent = (m: SentMessage): TranscriptContent => ({ type: "text", text: m.text, ...(m.attachments.length ? { attachments: [...m.attachments] } : {}) });
 export const MAX_AGENT_REJECTIONS = 3;
 /** Classifier denials of an already-allowed tool retried without a human, before asking one */
 export const MAX_AUTO_RETRIES = 3;
@@ -1191,7 +1185,6 @@ export class Orchestrator {
     if (requestedBranch && project.isGit === false) throw badRequest(`branch ${requestedBranch} needs a git repository; ${project.path} isn't one`);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     const promptAttachments = body.promptAttachments === undefined ? [] : normalizePromptAttachments(body.promptAttachments, [], this.paths.uploadsDir);
-    const promptAnnotations = body.promptAnnotations === undefined ? [] : normalizeAnnotations(body.promptAnnotations, promptAttachments);
     let parentId: string | null = null;
     if (body.parentId) {
       const parent = this.store.tickets.get(body.parentId) ?? this.store.tickets.getByKey(body.parentId);
@@ -1237,7 +1230,6 @@ export class Orchestrator {
         skipHumanReview,
         draft,
         promptAttachments,
-        promptAnnotations,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
@@ -1311,7 +1303,7 @@ export class Orchestrator {
   async updateTicket(key: string, body: UpdateTicketBody, as: SpecAuthorship = { author: "human" }): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     let ticket = this.requireTicket(key);
-    for (const field of ["kind", "useWorktree", "projectId", "promptAttachments", "promptAnnotations"] as const) {
+    for (const field of ["kind", "useWorktree", "projectId", "promptAttachments"] as const) {
       if (body[field] !== undefined && !ticket.draft) throw conflict(`${ticket.key} isn't a draft: its ${field} is fixed once it has launched`);
     }
     if (ticket.draft && body.status !== undefined && body.status !== ticket.status) {
@@ -1342,18 +1334,8 @@ export class Orchestrator {
       }
     }
     if (body.kind !== undefined && body.kind !== ticket.kind) patch.kind = body.kind;
-    if (body.promptAttachments !== undefined) patch.promptAttachments = normalizePromptAttachments(body.promptAttachments, ticket.promptAttachments ?? [], this.paths.uploadsDir);
-    if (body.promptAnnotations !== undefined) {
-      // Checked against the list this PATCH leaves. A file the draft already had annotated (same
-      // path) isn't sniffed again, like normalizePromptAttachments keeps paths without re-checking
-      // them: a kept file that has gone missing since mustn't make the save fail. A new
-      // annotation, or one now on another file, is checked in full.
-      const before = ticket.promptAttachments ?? [];
-      const kept = new Set((ticket.promptAnnotations ?? []).flatMap((a) => (before[a.attachment] ? [before[a.attachment]!.path] : [])));
-      patch.promptAnnotations = normalizeAnnotations(body.promptAnnotations, patch.promptAttachments ?? before, kept);
-    } else if (body.promptAttachments !== undefined) {
-      // New attachments without their annotations clear them, so none is left on another file.
-      patch.promptAnnotations = [];
+    if (body.promptAttachments !== undefined) {
+      patch.promptAttachments = normalizePromptAttachments(body.promptAttachments, ticket.promptAttachments ?? [], this.paths.uploadsDir, this.specImages(ticket));
     }
     if (useWorktree !== undefined) {
       patch.useWorktree = useWorktree;
@@ -1546,12 +1528,11 @@ export class Orchestrator {
    * The message goes to the agent and the transcript, never to Activity (older apps' `log` flag is
    * ignored).
    */
-  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; annotations?: unknown } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown } = {}): Promise<Ticket> {
     if (text !== undefined && typeof text !== "string") throw badRequest("text must be a string");
     text = text ?? "";
     const ticket = this.requireTicket(key);
-    const attachments = opts.attachments === undefined || opts.attachments === null ? [] : normalizePromptAttachments(opts.attachments, [], this.paths.uploadsDir);
-    const annotations = this.messageAnnotations(opts.annotations, opts.attachments, attachments);
+    const attachments = opts.attachments === undefined || opts.attachments === null ? [] : normalizePromptAttachments(opts.attachments, [], this.paths.uploadsDir, this.specImages(ticket));
     if (!text.trim() && !attachments.length) throw badRequest("text is required");
     this.notDraft(ticket, "messaged (it has no agent yet)");
     if (ticket.pendingApproval) {
@@ -1561,7 +1542,7 @@ export class Orchestrator {
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
-    const sent: SentMessage = { text, attachments, ...(annotations.length ? { annotations } : {}) };
+    const sent = { text, attachments };
     switch (ticket.status) {
       case "planning":
         await this.steerOrEnqueue(ticket.sessionId, "plan", sent);
@@ -1582,12 +1563,12 @@ export class Orchestrator {
           undefined,
           { by: "human", line: "Sent back to work with a message" },
         );
-        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text, undefined, { attachments, annotations });
+        this.enqueueRun(ticket.sessionId, this.workKind(ticket), text, undefined, { attachments });
         break;
       case "done":
         if (opts.move) {
           this.addActivity(ticket, "reopened", "human", "Re-opened by a message", this.moveMeta(ticket, "in_progress"));
-          await this.reopen(ticket, text, "Re-opened by human message", sent);
+          await this.reopen(ticket, text, "Re-opened by human message", attachments);
         } else await this.chat(ticket, sent);
         break;
       case "blocked":
@@ -1597,21 +1578,12 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
-  /**
-   * A message's annotations (DESIGN.md "Annotations"), validated against the attachments sent
-   * with it. Each entry's `attachment` indexes the attachments as sent (`raw`), which can list a
-   * file twice; it's moved onto that file's place in the normalized list.
-   */
-  private messageAnnotations(raw: unknown, rawAttachments: unknown, attachments: readonly PromptAttachment[]): MessageAnnotation[] {
-    if (raw === undefined || raw === null) return [];
-    if (Array.isArray(raw) && raw.length && !attachments.length) throw badRequest("annotations need the images they annotate in attachments");
-    if (!Array.isArray(raw) || !Array.isArray(rawAttachments)) return normalizeAnnotations(raw, attachments);
-    const remapped = raw.map((a) => {
-      const sentPath = a && typeof a === "object" && Number.isInteger(a.attachment) ? rawAttachments[a.attachment]?.path : undefined;
-      const at = typeof sentPath === "string" ? attachments.findIndex((f) => f.path === sentPath) : -1;
-      return at >= 0 ? { ...a, attachment: at } : a;
-    });
-    return normalizeAnnotations(remapped, attachments);
+  /** The ticket's own spec images by id, for an attachment given as `attachment:<id>`. */
+  private specImages(ticket: Ticket): SpecImageLookup {
+    return (id) => {
+      const a = this.store.attachments.listByTicket(ticket.id).find((x) => x.id === id);
+      return a && a.kind === "image" ? { path: this.attachmentFilePath(a), name: a.name } : null;
+    };
   }
 
   /**
@@ -1649,10 +1621,10 @@ export class Orchestrator {
    * transcript note when there was a running agent it couldn't reach.
    */
   private async steerOrEnqueue(sessionId: string, kind: RunKind, message: SentMessage): Promise<void> {
-    const { text, attachments, annotations } = message;
+    const { text, attachments } = message;
     const active = [...this.active.values()].find((a) => a.run.sessionId === sessionId && !a.cancelled);
     if (!active) {
-      this.enqueueRun(sessionId, kind, text, undefined, { attachments, annotations });
+      this.enqueueRun(sessionId, kind, text, undefined, { attachments });
       return;
     }
     const input = active.input;
@@ -1662,14 +1634,14 @@ export class Orchestrator {
       const withFiles = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
       const attached = this.withAttachments(sessionId, active.run.id, attachments);
       const ticketId = this.store.sessions.get(sessionId)?.ticketId;
-      const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null) + formatAnnotations(annotations, attachments) + (attached?.block ?? "");
+      const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null) + (attached?.block ?? "");
       if (input.push(prompt, message, attached?.images)) return;
       // The run stopped taking input while the mentions were read.
-      const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true, attachments, annotations });
+      const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true, attachments });
       this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
       return;
     }
-    const run = this.enqueueRun(sessionId, kind, text, undefined, { attachments, annotations });
+    const run = this.enqueueRun(sessionId, kind, text, undefined, { attachments });
     this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
   }
 
@@ -1688,9 +1660,9 @@ export class Orchestrator {
    * Done → in progress. Both reviews start over, and begin() recreates the worktree when the
    * complete run removed it.
    */
-  private async reopen(ticket: Ticket, prompt: string, note: string, message?: Omit<SentMessage, "text">): Promise<Ticket> {
+  private async reopen(ticket: Ticket, prompt: string, note: string, attachments: readonly PromptAttachment[] = []): Promise<Ticket> {
     this.autoRetries.delete(ticket.id);
-    await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note, message);
+    await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note, attachments);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -2547,11 +2519,8 @@ ${numberLines(r.body)}`;
       specBaselineRevision: t.specBaselineRevision ?? null,
       activity: this.store.activity.listBySession(t.sessionId).map((e) => ({ kind: e.kind, author: e.author, body: e.body, meta: e.meta, createdAt: e.createdAt })),
       attachments: this.store.attachments.listByTicket(t.id).map((a) => ({ id: a.id, name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
-      promptAttachments: (t.promptAttachments ?? []).map((a, i) => {
-        // The human's numbered notes on it (Ticket.promptAnnotations), one line each with the pixel it marks.
-        const notes = (t.promptAnnotations ?? []).find((n) => n.attachment === i)?.marks.map((m) => `${m.n}. (${Math.round(m.x)}, ${Math.round(m.y)}) px: ${m.message || "(no note)"}`);
-        return { name: a.name, path: a.path, missing: !promptAttachmentFile(a), ...(notes?.length ? { notes } : {}) };
-      }),
+      // Each with the human's numbered notes on it (PromptAttachment.annotation), one line per note.
+      promptAttachments: (t.promptAttachments ?? []).map((a) => ({ name: a.name, path: a.path, missing: !promptAttachmentFile(a), ...(a.annotation ? { notes: compactNotes(a.annotation) } : {}) })),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
     if (n > 0) {
@@ -3574,7 +3543,7 @@ ${numberLines(r.body)}`;
    * Prepare the workdir, move to in_progress and enqueue the first work/conductor run. A worktree
    * that has gone missing (removed by the complete run of a ticket now re-opened) is recreated.
    */
-  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress", message?: Omit<SentMessage, "text">) {
+  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress", attachments: readonly PromptAttachment[] = []) {
     this.notDraft(ticket, "started");
     if (this.starting.has(ticket.id)) return;
     this.starting.add(ticket.id);
@@ -3596,7 +3565,7 @@ ${numberLines(r.body)}`;
       this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
       const line = fresh.status === "planning" ? "Work started" : note === "Moved to in progress" ? "" : note;
       this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note, undefined, { line });
-      this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt, undefined, { attachments: message?.attachments, annotations: message?.annotations });
+      this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt, undefined, { attachments });
     } finally {
       this.starting.delete(ticket.id);
     }
@@ -3871,25 +3840,17 @@ ${numberLines(r.body)}`;
 
   /**
    * skipTranscript: the prompt is already in the transcript (a steered message that fell back to
-   * the queue). attachments: files the human attached to the message, sent with the run's prompt;
-   * annotations: the human's notes on images among them.
+   * the queue). attachments: files the human attached to the message, sent with the run's prompt.
    */
-  private enqueueRun(
-    sessionId: string,
-    kind: RunKind,
-    prompt: string,
-    lock?: string,
-    opts: { skipTranscript?: boolean; attachments?: readonly PromptAttachment[]; annotations?: readonly MessageAnnotation[] } = {},
-  ): Run {
+  private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string, opts: { skipTranscript?: boolean; attachments?: readonly PromptAttachment[] } = {}): Run {
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (ticket?.draft) throw conflict(`${ticket.key} is a draft: nothing runs on it until it's submitted`);
     const driver = ticket?.driver ?? session.driver;
     const attachments = opts.attachments ?? [];
-    const annotations = opts.annotations ?? [];
-    const run = this.store.runs.create({ sessionId, kind, driver, prompt, attachments, annotations });
+    const run = this.store.runs.create({ sessionId, kind, driver, prompt, attachments });
     this.bus.emit({ kind: "run.upserted", run });
-    if (!opts.skipTranscript) this.append(sessionId, run.id, "user", messageContent({ text: prompt, attachments, annotations }));
+    if (!opts.skipTranscript) this.append(sessionId, run.id, "user", messageContent({ text: prompt, attachments }));
     this.touchSession(sessionId);
     this.queue.enqueue({ runId: run.id, sessionId, kind, lock });
     return run;
@@ -3962,11 +3923,7 @@ ${numberLines(r.body)}`;
     if (status !== "cancelled") {
       for (const message of unseen) {
         try {
-          const next = this.enqueueRun(session.id, run.kind, message.text, undefined, {
-            skipTranscript: true,
-            attachments: message.attachments,
-            annotations: message.annotations,
-          });
+          const next = this.enqueueRun(session.id, run.kind, message.text, undefined, { skipTranscript: true, attachments: message.attachments });
           this.appendStatus(session.id, next.id, STEER_FALLBACK_STATUS);
         } catch (err) {
           this.log(`couldn't queue an undelivered message for ${session.id}: ${errMsg(err)}`);
@@ -4021,19 +3978,9 @@ ${numberLines(r.body)}`;
         // The ticket's attachments go with its first run that gets through (the agent's
         // conversation keeps them after that).
         const firstRun = !this.store.runs.listBySession(session.id).some((r) => r.id !== run.id && r.status === "succeeded" && MENTION_RUN_KINDS.has(r.kind));
-        const ticketFiles = ticket && firstRun ? (ticket.promptAttachments ?? []) : [];
-        const runFiles = run.attachments ?? [];
-        const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...ticketFiles, ...runFiles]) : null;
-        // The notes on those files, in one block before them: the ticket's (its first message's)
-        // index its prompt attachments and the run's index its message's, so the run's move past
-        // the ticket's to name the right file in the combined list.
-        const noteList = [
-          ...(ticket && firstRun ? (ticket.promptAnnotations ?? []) : []),
-          ...(run.annotations ?? []).map((a) => ({ ...a, attachment: a.attachment + ticketFiles.length })),
-        ];
+        const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...(ticket && firstRun ? (ticket.promptAttachments ?? []) : []), ...(run.attachments ?? [])]) : null;
         // The transcript keeps the human's words; the agent also reads when to unblock.
-        const notes = MENTION_RUN_KINDS.has(run.kind) ? formatAnnotations(noteList, [...ticketFiles, ...runFiles]) : "";
-        const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + notes + (attached?.block ?? "");
+        const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + (attached?.block ?? "");
         active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
         const req: RunRequest = {

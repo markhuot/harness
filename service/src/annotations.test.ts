@@ -1,27 +1,26 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type MessageAnnotation, type PromptAttachment } from "@harness/shared";
+import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type PromptAttachment } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { formatAnnotations, normalizeAnnotations } from "./annotations";
+import { annotationLines, compactNotes, normalizeAnnotation } from "./annotations";
+import { normalizePromptAttachments, runAttachments } from "./prompt-attachments";
 import { png } from "./testing/media";
 
 const dir = tempDir("harness-annotations-");
-mkdirSync(dir, { recursive: true });
-const file = (name: string, data: Uint8Array | string): PromptAttachment => {
+const uploads = join(dir, "uploads");
+mkdirSync(uploads, { recursive: true });
+const write = (name: string, data: Uint8Array | string) => {
   const path = join(dir, name);
   writeFileSync(path, data);
-  return { path, name, source: "file" };
+  return path;
 };
-const shot = file("shot.png", png(200, 100));
-const notes = file("notes.md", "# notes");
+const shot = write("shot.png", png(200, 100));
+const notes = write("notes.md", "# notes");
 // The extension says image; the bytes say otherwise.
-const fake = file("fake.png", "not an image");
-const files = [shot, notes, fake];
+const fake = write("fake.png", "not an image");
 
 const good = () => ({
-  attachment: 0,
-  source: { kind: "attachment", id: "att_1", name: "mockup.png" },
   width: 200,
   height: 100,
   marks: [
@@ -32,12 +31,13 @@ const good = () => ({
 const withMark = (patch: Record<string, unknown>, i = 0) => {
   const a = good();
   a.marks[i] = { ...a.marks[i]!, ...patch } as (typeof a.marks)[number];
-  return [a];
+  return a;
 };
+const page = { url: "http://localhost:3000/login", title: "Sign in", tabId: 2, viewport: { width: 1280, height: 800 }, scale: 1 };
 const rejects = (raw: unknown, pattern: RegExp) => {
   let err: unknown;
   try {
-    normalizeAnnotations(raw, files);
+    normalizeAnnotation(raw, "attachments[0]");
   } catch (e) {
     err = e;
   }
@@ -45,72 +45,40 @@ const rejects = (raw: unknown, pattern: RegExp) => {
   expect((err as Error).message).toMatch(pattern);
 };
 
-describe("normalizeAnnotations", () => {
-  test("keeps a good entry, trims messages, drops unknown fields, and keeps a click without a tail tail-less", () => {
-    const raw = [{ ...good(), extra: 1, source: { ...good().source, junk: true } }];
-    (raw[0]!.marks[1] as Record<string, unknown>).tailX = null;
-    (raw[0]!.marks[1] as Record<string, unknown>).tailY = null;
-    expect(normalizeAnnotations(raw, files)).toEqual([
-      {
-        attachment: 0,
-        source: { kind: "attachment", id: "att_1", name: "mockup.png" },
-        width: 200,
-        height: 100,
-        marks: [
-          { n: 1, x: 50, y: 25, tailX: 150, tailY: 75, message: "Make this bigger" },
-          { n: 2, x: 200, y: 100, message: "" },
-        ],
-      },
-    ]);
+describe("normalizeAnnotation", () => {
+  test("keeps a good one, trims messages, drops unknown fields, and keeps a click without a tail tail-less", () => {
+    const raw = { ...good(), extra: 1, page: { ...page, junk: true } };
+    (raw.marks[1] as Record<string, unknown>).tailX = null;
+    (raw.marks[1] as Record<string, unknown>).tailY = null;
+    expect(normalizeAnnotation(raw, "a")).toEqual({
+      width: 200,
+      height: 100,
+      marks: [
+        { n: 1, x: 50, y: 25, tailX: 150, tailY: 75, message: "Make this bigger" },
+        { n: 2, x: 200, y: 100, message: "" },
+      ],
+      page,
+    });
+    expect(normalizeAnnotation({ ...good(), page: null }, "a")).not.toHaveProperty("page");
   });
 
-  test("accepts each source kind", () => {
-    const sources = [
-      { kind: "prompt-attachment", index: 0, name: "a.png" },
-      { kind: "message-attachment", entryId: "e1", index: 2, name: "b.png" },
-      { kind: "file", name: "c.png" },
-      { kind: "browser", url: "http://x.test/", title: "X", tabId: 2, viewport: { width: 100, height: 50 }, scale: 2 },
-    ];
-    for (const source of sources) expect(normalizeAnnotations([{ ...good(), source }], files)[0]!.source).toEqual(source as MessageAnnotation["source"]);
-  });
-
-  test("refuses anything but a list", () => {
-    rejects({}, /must be a list/);
-    rejects("x", /must be a list/);
-  });
-
-  test("refuses an attachment index that isn't one of the message's files, or one annotated twice", () => {
-    rejects([{ ...good(), attachment: 3 }], /index of a file/);
-    rejects([{ ...good(), attachment: -1 }], /index of a file/);
-    rejects([{ ...good(), attachment: 0.5 }], /index of a file/);
-    rejects([{ ...good(), attachment: "0" }], /index of a file/);
-    rejects([good(), good()], /annotated twice/);
-  });
-
-  test("refuses a file that isn't an image, by its bytes", () => {
-    rejects([{ ...good(), attachment: 1 }], /notes\.md isn't a PNG/);
-    rejects([{ ...good(), attachment: 2 }], /fake\.png isn't a PNG/);
-  });
-
-  test("a kept image isn't sniffed again, but any other file still is", () => {
-    // A draft's kept file may have gone missing since it was saved: its path says it was checked.
-    expect(normalizeAnnotations([{ ...good(), attachment: 2 }], files, new Set([fake.path]))[0]!.attachment).toBe(2);
-    expect(() => normalizeAnnotations([{ ...good(), attachment: 2 }], files, new Set([shot.path]))).toThrow(/fake\.png isn't a PNG/);
+  test("refuses anything but an object", () => {
+    rejects([], /annotation must be/);
+    rejects("x", /annotation must be/);
   });
 
   test("refuses a size that isn't positive whole pixels", () => {
-    rejects([{ ...good(), width: 0 }], /width and height/);
-    rejects([{ ...good(), height: 10.5 }], /width and height/);
-    rejects([{ ...good(), width: "200" }], /width and height/);
+    rejects({ ...good(), width: 0 }, /width and height/);
+    rejects({ ...good(), height: 10.5 }, /width and height/);
+    rejects({ ...good(), width: "200" }, /width and height/);
   });
 
   test("refuses no marks and too many", () => {
-    rejects([{ ...good(), marks: [] }], /at least one/);
-    rejects([{ ...good(), marks: undefined }], /at least one/);
+    rejects({ ...good(), marks: [] }, /at least one/);
+    rejects({ ...good(), marks: undefined }, /at least one/);
     const many = Array.from({ length: MAX_ANNOTATION_MARKS + 1 }, (_, i) => ({ n: i + 1, x: 1, y: 1, message: "" }));
-    rejects([{ ...good(), marks: many }], new RegExp(`at most ${MAX_ANNOTATION_MARKS}`));
-    const most = many.slice(0, MAX_ANNOTATION_MARKS);
-    expect(normalizeAnnotations([{ ...good(), marks: most }], files)[0]!.marks).toHaveLength(MAX_ANNOTATION_MARKS);
+    rejects({ ...good(), marks: many }, new RegExp(`at most ${MAX_ANNOTATION_MARKS}`));
+    expect(normalizeAnnotation({ ...good(), marks: many.slice(0, MAX_ANNOTATION_MARKS) }, "a").marks).toHaveLength(MAX_ANNOTATION_MARKS);
   });
 
   test("refuses numbers that aren't 1…k in order", () => {
@@ -118,7 +86,7 @@ describe("normalizeAnnotations", () => {
     rejects(withMark({ n: 3 }, 1), /numbered 1, 2, 3/);
     const a = good();
     a.marks.reverse();
-    rejects([a], /numbered/);
+    rejects(a, /numbered/);
   });
 
   test("refuses a point or an arrow start outside the image, and half a tail", () => {
@@ -136,66 +104,123 @@ describe("normalizeAnnotations", () => {
     rejects(withMark({ message: 5 }), /message must be a string/);
     rejects(withMark({ message: "x".repeat(MAX_ANNOTATION_MESSAGE + 1) }), /over 2000 characters/);
     // Trimmed before it's measured.
-    expect(normalizeAnnotations(withMark({ message: ` ${"x".repeat(MAX_ANNOTATION_MESSAGE)} ` }), files)[0]!.marks[0]!.message).toHaveLength(MAX_ANNOTATION_MESSAGE);
+    expect(normalizeAnnotation(withMark({ message: ` ${"x".repeat(MAX_ANNOTATION_MESSAGE)} ` }), "a").marks[0]!.message).toHaveLength(MAX_ANNOTATION_MESSAGE);
   });
 
-  test("refuses a malformed source for its kind", () => {
+  test("refuses a malformed page", () => {
     const bad: unknown[] = [
-      undefined,
-      { kind: "nope", name: "a" },
-      { kind: "attachment", name: "a" },
-      { kind: "attachment", id: "x" },
-      { kind: "prompt-attachment", index: -1, name: "a" },
-      { kind: "message-attachment", index: 0, name: "a" },
-      { kind: "message-attachment", entryId: "e", index: 1.5, name: "a" },
-      { kind: "file" },
-      { kind: "file", name: 3 },
-      { kind: "browser", title: "t", tabId: 1, viewport: { width: 1, height: 1 }, scale: 1 },
-      { kind: "browser", url: "u", title: "t", tabId: 0, viewport: { width: 1, height: 1 }, scale: 1 },
-      { kind: "browser", url: "u", title: "t", tabId: 1, viewport: { width: 1 }, scale: 1 },
-      { kind: "browser", url: "u", title: "t", tabId: 1, viewport: { width: 1, height: 1 }, scale: 0 },
+      "http://x",
+      { ...page, url: "" },
+      { ...page, title: 3 },
+      { ...page, tabId: 0 },
+      { ...page, tabId: 1.5 },
+      { ...page, viewport: { width: 1 } },
+      { ...page, viewport: { width: 0, height: 1 } },
+      { ...page, scale: 0 },
+      { ...page, scale: "1" },
     ];
-    for (const source of bad) rejects([{ ...good(), source }], /source/);
+    for (const p of bad) rejects({ ...good(), page: p }, /page/);
   });
 });
 
-describe("formatAnnotations", () => {
-  test("nothing for no annotations", () => {
-    expect(formatAnnotations(undefined, files)).toBe("");
-    expect(formatAnnotations([], files)).toBe("");
+describe("annotationLines", () => {
+  test("an image: its size, then one line per note with pixels and percentages", () => {
+    const lines = annotationLines(normalizeAnnotation(good(), "a"));
+    expect(lines).toEqual([
+      "200×100 px. Notes:",
+      "1. (50, 25) px, 25% across, 25% down, arrow from (150, 75) px: Make this bigger",
+      "2. (200, 100) px, 100% across, 100% down: (no note)",
+    ]);
   });
 
-  test("a spec image: its file, size and origin, then one line per note with pixels and percentages", () => {
-    const [a] = normalizeAnnotations([good()], files);
-    const text = formatAnnotations([a!], files);
-    expect(text.startsWith("\n\n<annotations>\n")).toBe(true);
-    expect(text.endsWith("\n</annotations>")).toBe(true);
-    expect(text).toContain(`${shot.path} (200×100 px) is the spec image "mockup.png". The human drew the numbered notes below onto it.`);
-    expect(text).toContain("1. (50, 25) px, 25% across, 25% down, arrow from (150, 75) px: Make this bigger");
-    expect(text).toContain("2. (200, 100) px, 100% across, 100% down: (no note)");
-    expect(text).not.toContain("CSS");
-  });
-
-  test("a browser page: the page, tab and viewport, and every point in CSS pixels at its scale", () => {
-    const source = { kind: "browser", url: "http://localhost:3000/login", title: "Sign in", tabId: 2, viewport: { width: 100, height: 50 }, scale: 2 };
+  test("a browser page: the tab, title, URL and viewport, and every point in CSS pixels at its scale", () => {
+    // A page zoomed so a CSS pixel is 1.5 image pixels.
     const marks = [
       { n: 1, x: 41, y: 30, message: "" },
       { n: 2, x: 100, y: 50, tailX: 181, tailY: 9, message: "Wrong colour\nshould be blue" },
     ];
-    const [a] = normalizeAnnotations([{ attachment: 0, source, width: 200, height: 100, marks }], files);
-    const text = formatAnnotations([a!], files);
-    expect(text).toContain(
-      `${shot.path} (200×100 px) is a screenshot of browser tab 2, "Sign in" at http://localhost:3000/login (viewport 100×50 CSS px at 2× scale).`,
+    const lines = annotationLines(normalizeAnnotation({ width: 200, height: 100, marks, page: { ...page, viewport: { width: 133.33, height: 66.67 }, scale: 1.5 } }, "a"));
+    expect(lines[0]).toBe(
+      'A screenshot of browser tab 2 "Sign in" http://localhost:3000/login (viewport 133.33×66.67 CSS px at 1.5× scale), 200×100 px. Points are in the image\'s pixels, then in the page\'s CSS pixels (what browser tools and page coordinates use). Notes:',
     );
-    // 41 / 2 = 20.5 rounds to 21; a click has no arrow.
-    expect(text).toContain("1. (41, 30) px = (21, 15) CSS px, 21% across, 30% down: (no note)");
-    expect(text).toContain("2. (100, 50) px = (50, 25) CSS px, 50% across, 50% down, arrow from (181, 9) px = (91, 5) CSS px: Wrong colour\n   should be blue");
+    // 41 / 1.5 = 27.33 → 27; a click has no arrow.
+    expect(lines[1]).toBe("1. (41, 30) px = (27, 20) CSS px, 21% across, 30% down: (no note)");
+    expect(lines[2]).toBe("2. (100, 50) px = (67, 33) CSS px, 50% across, 50% down, arrow from (181, 9) px = (121, 6) CSS px: Wrong colour\n   should be blue");
   });
 
-  test("names where each other kind of image came from", () => {
-    const of = (source: unknown) => formatAnnotations(normalizeAnnotations([{ ...good(), source }], files), files);
-    expect(of({ kind: "prompt-attachment", index: 0, name: "brief.png" })).toContain(`is the ticket's attached file "brief.png"`);
-    expect(of({ kind: "message-attachment", entryId: "e", index: 0, name: "old.png" })).toContain(`is the file "old.png" sent with an earlier message`);
-    expect(of({ kind: "file", name: "Screenshot 1.png" })).toContain(`${shot.path} (200×100 px) is the attached image "Screenshot 1.png". The human drew`);
+  test("get_ticket's compact form", () => {
+    expect(compactNotes(normalizeAnnotation(good(), "a"))).toEqual(["1. (50, 25) px: Make this bigger", "2. (200, 100) px: (no note)"]);
+  });
+});
+
+describe("normalizePromptAttachments with annotations", () => {
+  const annotated = (path: string, annotation: unknown = good()) => ({ path, annotation });
+
+  test("carries a checked annotation on its attachment, and none on the rest", () => {
+    const list = normalizePromptAttachments([{ path: notes }, annotated(shot)], [], uploads);
+    expect(list).toEqual([
+      { path: notes, name: "notes.md", source: "file" },
+      { path: shot, name: "shot.png", source: "file", annotation: normalizeAnnotation(good(), "a") },
+    ]);
+  });
+
+  test("refuses an annotation on a file that isn't an image by its bytes, and a malformed one", () => {
+    expect(() => normalizePromptAttachments([annotated(notes)], [], uploads)).toThrow(/notes\.md\): only a PNG, JPEG, GIF or WebP image can be annotated/);
+    expect(() => normalizePromptAttachments([annotated(fake)], [], uploads)).toThrow(/fake\.png\): only a PNG/);
+    expect(() => normalizePromptAttachments([{ path: notes }, annotated(shot, withMark({ x: 999 }))], [], uploads)).toThrow(/attachments\[1\] \(shot\.png\), mark 1: the point/);
+  });
+
+  test("a kept attachment whose file has gone missing keeps a new annotation unsniffed, but its shape is still checked", () => {
+    const gone = write("gone.png", png(200, 100));
+    const previous = normalizePromptAttachments([annotated(gone)], [], uploads);
+    rmSync(gone);
+    const changed = { ...good(), marks: [{ n: 1, x: 1, y: 1, message: "Moved" }] };
+    expect(normalizePromptAttachments([annotated(gone, changed)], previous, uploads)[0]!.annotation!.marks[0]!.message).toBe("Moved");
+    expect(() => normalizePromptAttachments([annotated(gone, withMark({ n: 5 }))], previous, uploads)).toThrow(/numbered/);
+    // Sent without one, the kept attachment drops it.
+    expect(normalizePromptAttachments([{ path: gone }], previous, uploads)[0]).not.toHaveProperty("annotation");
+    // A kept file that's still there is sniffed when it gets an annotation.
+    const kept = normalizePromptAttachments([{ path: fake }], [], uploads);
+    expect(() => normalizePromptAttachments([annotated(fake)], kept, uploads)).toThrow(/only a PNG/);
+  });
+
+  test("attachment:<id> is the ticket's spec image, referenced where it's stored", () => {
+    const lookup = (id: string) => (id === "att_1" ? { path: shot, name: "mockup.png" } : null);
+    expect(normalizePromptAttachments([annotated("attachment:att_1")], [], uploads, lookup)).toEqual([
+      { path: shot, name: "mockup.png", source: "file", annotation: normalizeAnnotation(good(), "a") },
+    ]);
+    expect(normalizePromptAttachments([{ path: "attachment:att_1", name: "Renamed.png" }], [], uploads, lookup)[0]!.name).toBe("Renamed.png");
+    expect(() => normalizePromptAttachments([{ path: "attachment:att_9" }], [], uploads, lookup)).toThrow(/attachment:att_9 isn't one of this ticket's spec images/);
+    expect(() => normalizePromptAttachments([{ path: "attachment:" }], [], uploads, lookup)).toThrow(/isn't one of this ticket's/);
+    // Without a ticket (one being created) there's nothing it could be.
+    expect(() => normalizePromptAttachments([{ path: "attachment:att_1" }], [], uploads)).toThrow(/a new ticket has no spec images/);
+  });
+});
+
+describe("runAttachments", () => {
+  test("lists each annotated file's notes under its path, with the intro said once", () => {
+    const list: PromptAttachment[] = normalizePromptAttachments([{ path: notes }, { path: shot, annotation: good() }, { path: write("b.png", png(40, 20)), annotation: { width: 40, height: 20, marks: [{ n: 1, x: 4, y: 2, message: "Here" }], page } }], [], uploads);
+    const { block } = runAttachments(list)!;
+    const lines = block.split("\n");
+    expect(block.match(/The human drew numbered notes/g)).toHaveLength(1);
+    const at = lines.indexOf(`- ${shot} (image, included in this message)`);
+    expect(lines.slice(at + 1, at + 4)).toEqual([
+      "  200×100 px. Notes:",
+      "  1. (50, 25) px, 25% across, 25% down, arrow from (150, 75) px: Make this bigger",
+      "  2. (200, 100) px, 100% across, 100% down: (no note)",
+    ]);
+    expect(lines[lines.indexOf(`- ${notes}`) + 1]).toBe(`- ${shot} (image, included in this message)`);
+    expect(block).toContain('  A screenshot of browser tab 2 "Sign in" http://localhost:3000/login (viewport 1280×800 CSS px at 1× scale), 40×20 px.');
+    expect(block).toContain("  1. (4, 2) px = (4, 2) CSS px, 10% across, 10% down: Here");
+  });
+
+  test("a missing annotated file still has its notes; no annotations, no intro", () => {
+    const gone = write("gone2.png", png(200, 100));
+    const list = normalizePromptAttachments([{ path: gone, annotation: good() }], [], uploads);
+    rmSync(gone);
+    const lines = runAttachments(list)!.block.split("\n");
+    const at = lines.indexOf(`- ${gone} (missing: it was moved or deleted after it was attached)`);
+    expect(lines[at + 1]).toBe("  200×100 px. Notes:");
+    expect(runAttachments([{ path: shot, name: "shot.png", source: "file" }])!.block).not.toContain("numbered notes");
   });
 });

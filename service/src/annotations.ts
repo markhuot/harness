@@ -1,75 +1,25 @@
-// Annotations (DESIGN.md "Annotations"): numbered notes a human draws on an image sent with a
-// message. The image file already has the numbers and arrows drawn into it; the marks come along
-// as data too, so the agent reads each note next to the exact pixel it points at.
+// Annotations (DESIGN.md "Annotations"): numbered notes a human draws on an image attachment.
+// They're metadata on the attachment (PromptAttachment.annotation); the image file is never
+// changed. The service checks their shape here and writes what the agent reads about them, so it
+// reads each note next to the exact pixel it points at.
 
-import { closeSync, openSync, readSync } from "node:fs";
-import {
-  MAX_ANNOTATION_MARKS,
-  MAX_ANNOTATION_MESSAGE,
-  type AnnotationMark,
-  type AnnotationSource,
-  type MessageAnnotation,
-  type PromptAttachment,
-} from "@harness/shared";
+import { MAX_ANNOTATION_MARKS, MAX_ANNOTATION_MESSAGE, type AnnotationMark, type AnnotationPage, type AttachmentAnnotation } from "@harness/shared";
 import { badRequest } from "./orchestrator/errors";
-import { sniffImage } from "./prompt-attachments";
-
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
-
-/** Whether an attachment is an image the agent can be shown: by its first bytes, else (unreadable) its name. */
-function isImage(a: PromptAttachment): boolean {
-  try {
-    const fd = openSync(a.path, "r");
-    try {
-      const head = Buffer.alloc(16);
-      const n = readSync(fd, head, 0, 16, 0);
-      return sniffImage(head.subarray(0, n)) !== null;
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    const ext = /\.([^./]+)$/.exec(a.name)?.[1] ?? /\.([^./]+)$/.exec(a.path)?.[1];
-    return !!ext && IMAGE_EXTENSIONS.has(ext.toLowerCase());
-  }
-}
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const positiveInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0;
-const indexInt = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
 const positive = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-function source(raw: unknown, at: string): AnnotationSource {
-  if (!isObject(raw)) throw badRequest(`${at}: source is required`);
-  const name = (): string => {
-    if (typeof raw.name !== "string") throw badRequest(`${at}: source.name must be a string`);
-    return raw.name;
-  };
-  switch (raw.kind) {
-    case "attachment":
-      if (typeof raw.id !== "string" || !raw.id) throw badRequest(`${at}: an attachment source needs its id`);
-      return { kind: "attachment", id: raw.id, name: name() };
-    case "prompt-attachment":
-      if (!indexInt(raw.index)) throw badRequest(`${at}: a prompt-attachment source needs its index`);
-      return { kind: "prompt-attachment", index: raw.index, name: name() };
-    case "message-attachment":
-      if (typeof raw.entryId !== "string" || !raw.entryId) throw badRequest(`${at}: a message-attachment source needs its entryId`);
-      if (!indexInt(raw.index)) throw badRequest(`${at}: a message-attachment source needs its index`);
-      return { kind: "message-attachment", entryId: raw.entryId, index: raw.index, name: name() };
-    case "file":
-      return { kind: "file", name: name() };
-    case "browser": {
-      if (typeof raw.url !== "string" || !raw.url) throw badRequest(`${at}: a browser source needs its url`);
-      if (typeof raw.title !== "string") throw badRequest(`${at}: a browser source's title must be a string`);
-      if (!positiveInt(raw.tabId)) throw badRequest(`${at}: a browser source needs its tabId`);
-      const vp = raw.viewport;
-      if (!isObject(vp) || !positive(vp.width) || !positive(vp.height)) throw badRequest(`${at}: a browser source needs its viewport { width, height }`);
-      if (!positive(raw.scale)) throw badRequest(`${at}: a browser source's scale must be a positive number`);
-      return { kind: "browser", url: raw.url, title: raw.title, tabId: raw.tabId, viewport: { width: vp.width, height: vp.height }, scale: raw.scale };
-    }
-    default:
-      throw badRequest(`${at}: source.kind must be attachment, prompt-attachment, message-attachment, file or browser`);
-  }
+function page(raw: unknown, at: string): AnnotationPage {
+  if (!isObject(raw)) throw badRequest(`${at}: page must be { url, title, tabId, viewport, scale }`);
+  if (typeof raw.url !== "string" || !raw.url) throw badRequest(`${at}: page needs its url`);
+  if (typeof raw.title !== "string") throw badRequest(`${at}: page.title must be a string`);
+  if (!positiveInt(raw.tabId)) throw badRequest(`${at}: page needs its tabId`);
+  const vp = raw.viewport;
+  if (!isObject(vp) || !positive(vp.width) || !positive(vp.height)) throw badRequest(`${at}: page needs its viewport { width, height }`);
+  if (!positive(raw.scale)) throw badRequest(`${at}: page.scale must be a positive number`);
+  return { url: raw.url, title: raw.title, tabId: raw.tabId, viewport: { width: vp.width, height: vp.height }, scale: raw.scale };
 }
 
 function mark(raw: unknown, i: number, width: number, height: number, at: string): AnnotationMark {
@@ -97,88 +47,54 @@ function mark(raw: unknown, i: number, width: number, height: number, at: string
 }
 
 /**
- * Validate a message's annotations (MessageBody.annotations) against the attachments sent with it,
- * and return a clean copy (known fields only, messages trimmed). Throws a 400 on anything
- * malformed: each entry names one image among `attachments`, at most once, with 1…MAX marks
- * numbered in order, every point inside the image.
- *
- * `keptImages` are paths already accepted as annotated images (a draft's, saved earlier): those
- * aren't sniffed again, so a kept file that has since gone missing doesn't fail the save.
+ * Check one attachment's annotation and return a clean copy (known fields only, messages
+ * trimmed). Throws a 400 on anything malformed: a positive whole-pixel size, 1…MAX marks numbered
+ * in order with every point inside the image, an arrow's tail given whole or not at all, and a
+ * well-formed page when there is one. Whether the file is an image is the caller's to check.
  */
-export function normalizeAnnotations(raw: unknown, attachments: readonly PromptAttachment[], keptImages: ReadonlySet<string> = new Set()): MessageAnnotation[] {
-  if (!Array.isArray(raw)) throw badRequest("annotations must be a list");
-  const seen = new Set<number>();
-  return raw.map((item, k): MessageAnnotation => {
-    const at = `annotations[${k}]`;
-    if (!isObject(item)) throw badRequest(`${at}: must be { attachment, source, width, height, marks }`);
-    const index = item.attachment;
-    if (!indexInt(index) || index >= attachments.length) throw badRequest(`${at}: attachment must be the index of a file sent with the message`);
-    if (seen.has(index)) throw badRequest(`${at}: attachment ${index} is annotated twice`);
-    seen.add(index);
-    const file = attachments[index]!;
-    if (!keptImages.has(file.path) && !isImage(file)) throw badRequest(`${at}: ${file.name} isn't a PNG, JPEG, GIF or WebP image`);
-    const { width, height } = item;
-    if (!positiveInt(width) || !positiveInt(height)) throw badRequest(`${at}: width and height must be positive whole numbers of pixels`);
-    if (!Array.isArray(item.marks) || item.marks.length === 0) throw badRequest(`${at}: marks must list at least one note`);
-    if (item.marks.length > MAX_ANNOTATION_MARKS) throw badRequest(`${at}: at most ${MAX_ANNOTATION_MARKS} marks`);
-    return {
-      attachment: index,
-      source: source(item.source, at),
-      width,
-      height,
-      marks: item.marks.map((m, i) => mark(m, i, width, height, at)),
-    };
-  });
+export function normalizeAnnotation(raw: unknown, at: string): AttachmentAnnotation {
+  if (!isObject(raw)) throw badRequest(`${at}: annotation must be { width, height, marks, page? }`);
+  const { width, height } = raw;
+  if (!positiveInt(width) || !positiveInt(height)) throw badRequest(`${at}: annotation width and height must be positive whole numbers of pixels`);
+  if (!Array.isArray(raw.marks) || raw.marks.length === 0) throw badRequest(`${at}: annotation marks must list at least one note`);
+  if (raw.marks.length > MAX_ANNOTATION_MARKS) throw badRequest(`${at}: at most ${MAX_ANNOTATION_MARKS} annotation marks`);
+  return {
+    width,
+    height,
+    marks: raw.marks.map((m, i) => mark(m, i, width, height, at)),
+    ...(raw.page !== undefined && raw.page !== null ? { page: page(raw.page, at) } : {}),
+  };
 }
 
 const fmt = (n: number) => String(Number(n.toFixed(2)));
 const px = (x: number, y: number) => `(${Math.round(x)}, ${Math.round(y)})`;
 const pct = (v: number, of: number) => `${Math.round((v / of) * 100)}%`;
 
-function origin(s: AnnotationSource): string {
-  switch (s.kind) {
-    case "attachment":
-      return `the spec image "${s.name}"`;
-    case "prompt-attachment":
-      return `the ticket's attached file "${s.name}"`;
-    case "message-attachment":
-      return `the file "${s.name}" sent with an earlier message`;
-    case "file":
-      return `the attached image "${s.name}"`;
-    case "browser":
-      return `a screenshot of browser tab ${s.tabId}, "${s.title}" at ${s.url} (viewport ${fmt(s.viewport.width)}×${fmt(s.viewport.height)} CSS px at ${fmt(s.scale)}× scale)`;
-  }
-}
-
-function markLine(m: AnnotationMark, a: MessageAnnotation): string {
-  const s = a.source;
-  const css = (x: number, y: number) => (s.kind === "browser" ? ` = ${px(x / s.scale, y / s.scale)} CSS px` : "");
-  const where = `${px(m.x, m.y)} px${css(m.x, m.y)}, ${pct(m.x, a.width)} across, ${pct(m.y, a.height)} down`;
-  const arrow = m.tailX !== undefined && m.tailY !== undefined ? `, arrow from ${px(m.tailX, m.tailY)} px${css(m.tailX, m.tailY)}` : "";
-  const note = m.message ? m.message.replace(/\r?\n/g, "\n   ") : "(no note)";
-  return `${m.n}. ${where}${arrow}: ${note}`;
-}
+/** Said once in an `<attachments>` block that has an annotated image. */
+export const ANNOTATIONS_INTRO =
+  "The human drew numbered notes on some images; each one's notes are listed under it. A note with an arrow points from its number at the spot listed; one without sits on that spot. (x, y) counts from the image's top-left corner.";
 
 /**
- * What the agent reads about a message's annotations: one paragraph per annotated image (its
- * path, size and where it came from) and one line per numbered note, with the point it marks.
- * Goes in the prompt before the `<attachments>` block. Empty when there are none.
+ * What the agent reads about one annotated image, to go under its path: a line on its size (and,
+ * for a browser screenshot, the page it shows), then one line per numbered note with the point it
+ * marks, in the image's pixels, as a share of the image, and in the page's CSS pixels for a page.
  */
-export function formatAnnotations(annotations: readonly MessageAnnotation[] | undefined, attachments: readonly PromptAttachment[]): string {
-  if (!annotations?.length) return "";
-  const blocks = annotations.map((a) => {
-    const file = attachments[a.attachment];
-    const head = `${file?.path ?? `attachment ${a.attachment}`} (${a.width}×${a.height} px) is ${origin(a.source)}. The human drew the numbered notes below onto it.`;
-    const note = a.source.kind === "browser" ? "\nPoints are in the image's pixels, then in the page's CSS pixels (what browser tools and page coordinates use)." : "";
-    return [head + note, ...a.marks.map((m) => markLine(m, a))].join("\n");
+export function annotationLines(a: AttachmentAnnotation): string[] {
+  const p = a.page;
+  const css = (x: number, y: number) => (p ? ` = ${px(x / p.scale, y / p.scale)} CSS px` : "");
+  const head = p
+    ? `A screenshot of browser tab ${p.tabId} "${p.title}" ${p.url} (viewport ${fmt(p.viewport.width)}×${fmt(p.viewport.height)} CSS px at ${fmt(p.scale)}× scale), ${a.width}×${a.height} px. Points are in the image's pixels, then in the page's CSS pixels (what browser tools and page coordinates use). Notes:`
+    : `${a.width}×${a.height} px. Notes:`;
+  const marks = a.marks.map((m) => {
+    const where = `${px(m.x, m.y)} px${css(m.x, m.y)}, ${pct(m.x, a.width)} across, ${pct(m.y, a.height)} down`;
+    const arrow = m.tailX !== undefined && m.tailY !== undefined ? `, arrow from ${px(m.tailX, m.tailY)} px${css(m.tailX, m.tailY)}` : "";
+    const note = m.message ? m.message.replace(/\r?\n/g, "\n   ") : "(no note)";
+    return `${m.n}. ${where}${arrow}: ${note}`;
   });
-  return [
-    "",
-    "",
-    "<annotations>",
-    "Each number on an annotated image is a note. A note with an arrow points from its number at the spot listed; one without sits on that spot. (x, y) counts from the image's top-left corner.",
-    "",
-    blocks.join("\n\n"),
-    "</annotations>",
-  ].join("\n");
+  return [head, ...marks];
+}
+
+/** The notes as get_ticket lists them: one compact line each with the pixel it marks. */
+export function compactNotes(a: AttachmentAnnotation): string[] {
+  return a.marks.map((m) => `${m.n}. (${Math.round(m.x)}, ${Math.round(m.y)}) px: ${m.message || "(no note)"}`);
 }

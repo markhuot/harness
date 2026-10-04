@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { MessageAnnotation, PromptAttachment, Run, RunKind, RunStatus } from "@harness/shared";
+import type { PromptAttachment, Run, RunKind, RunStatus } from "@harness/shared";
 import { fromJson, newId, now } from "./util";
 
 interface RunRow {
@@ -10,7 +10,6 @@ interface RunRow {
   driver: string;
   prompt: string;
   attachments: string;
-  annotations: string;
   error: string | null;
   created_at: number;
   started_at: number | null;
@@ -19,7 +18,6 @@ interface RunRow {
 
 const toRun = (r: RunRow): Run => {
   const attachments = fromJson<PromptAttachment[]>(r.attachments, []);
-  const annotations = fromJson<MessageAnnotation[]>(r.annotations, []);
   return {
     id: r.id,
     sessionId: r.session_id,
@@ -28,7 +26,6 @@ const toRun = (r: RunRow): Run => {
     driver: r.driver,
     prompt: r.prompt,
     ...(attachments.length ? { attachments } : {}),
-    ...(annotations.length ? { annotations } : {}),
     error: r.error,
     createdAt: r.created_at,
     startedAt: r.started_at,
@@ -53,23 +50,16 @@ export class RunRepo {
     return (this.db.query("SELECT * FROM runs WHERE status IN ('queued','running') ORDER BY created_at, rowid").all() as RunRow[]).map(toRun);
   }
 
-  /** `attachments`: the files the human attached to the message the run answers; `annotations`: their notes on those images. */
-  create(input: {
-    sessionId: string;
-    kind: RunKind;
-    driver: string;
-    prompt: string;
-    attachments?: readonly PromptAttachment[];
-    annotations?: readonly MessageAnnotation[];
-  }): Run {
+  /** `attachments`: the files the human attached to the message the run answers. */
+  create(input: { sessionId: string; kind: RunKind; driver: string; prompt: string; attachments?: readonly PromptAttachment[] }): Run {
     const id = newId();
-    const { attachments, annotations, ...rest } = input;
+    const { attachments, ...rest } = input;
     this.db
       .query(
-        `INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, annotations, error, created_at, started_at, ended_at)
-         VALUES ($id, $sessionId, $kind, 'queued', $driver, $prompt, $attachments, $annotations, NULL, $t, NULL, NULL)`,
+        `INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, error, created_at, started_at, ended_at)
+         VALUES ($id, $sessionId, $kind, 'queued', $driver, $prompt, $attachments, NULL, $t, NULL, NULL)`,
       )
-      .run({ id, ...rest, attachments: JSON.stringify(attachments ?? []), annotations: JSON.stringify(annotations ?? []), t: now() });
+      .run({ id, ...rest, attachments: JSON.stringify(attachments ?? []), t: now() });
     return this.get(id)!;
   }
 

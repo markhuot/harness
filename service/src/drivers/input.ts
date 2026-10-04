@@ -2,7 +2,7 @@
 // pushes; the driver takes them into the live conversation and reports when its agent has
 // actually seen each one. Whatever is still undelivered when the run ends becomes a queued run.
 
-import type { MessageAnnotation, PromptAttachment } from "@harness/shared";
+import type { PromptAttachment } from "@harness/shared";
 import type { RunImage } from "../prompt-attachments";
 
 export interface SteerMessage {
@@ -17,8 +17,6 @@ export interface SteerMessage {
 export interface SentMessage {
   text: string;
   attachments: readonly PromptAttachment[];
-  /** The human's numbered notes on images among `attachments` */
-  annotations?: readonly MessageAnnotation[];
 }
 
 type Entry = SteerMessage & { taken: boolean; original: SentMessage };

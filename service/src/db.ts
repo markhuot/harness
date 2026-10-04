@@ -627,16 +627,6 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE runs ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';
   `,
-  // 30: annotations (DESIGN.md "Annotations"): the human's numbered notes on images among the
-  //     run's attachments, as JSON MessageAnnotation[], listed in its prompt.
-  `
-  ALTER TABLE runs ADD COLUMN annotations TEXT NOT NULL DEFAULT '[]';
-  `,
-  // 31: prompt annotations (DESIGN.md "Annotations"): the human's numbered notes on images among
-  //     the ticket's prompt attachments, as JSON MessageAnnotation[], listed in its first run's prompt.
-  `
-  ALTER TABLE tickets ADD COLUMN prompt_annotations TEXT NOT NULL DEFAULT '[]';
-  `,
 ];
 
 /**

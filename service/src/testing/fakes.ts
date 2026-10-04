@@ -54,11 +54,11 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     async screenshot() {
       return "";
     },
-    /** A 1280×800 CSS px viewport on a 2× screen. */
+    /** A 1280×800 CSS px viewport at 1× (the browser's device scale). */
     async capture(sessionId) {
       const s = states.get(sessionId);
       if (!s) throw new Error("This session has no open tabs.");
-      return { data: png(2560, 1600).toString("base64"), width: 2560, height: 1600, viewport: { width: 1280, height: 800 }, scale: 2, tabId: 1, url: s.url, title: s.title };
+      return { data: png(1280, 800).toString("base64"), width: 1280, height: 800, viewport: { width: 1280, height: 800 }, scale: 1, tabId: 1, url: s.url, title: s.title };
     },
     async input() {},
     async subscribe(sessionId, subscriberId, onFrame, onState, opts) {
