@@ -65,6 +65,18 @@ import {
   updatePanes,
   watchPaneStore,
   zoneAt,
+  dropInStore,
+  popIn,
+  popOut,
+  popOutContent,
+  popoutScope,
+  popoutShowing,
+  returnTab,
+  setTornTab,
+  tabContent,
+  tornOffTabs,
+  type DragSource,
+  type TornTab,
   type FileContent,
   type PaneContent,
   type PaneLeaf,
@@ -99,7 +111,9 @@ const label = (l: PaneLeaf) =>
         ? `+${l.content.id}`
         : l.content.kind === "file"
           ? `@${l.content.path}${l.content.startLine ? `:${l.content.startLine}${l.content.endLine ? `-${l.content.endLine}` : ""}` : ""}${l.content.tab === "diff" ? "(diff)" : ""}`
-          : `$${l.content.sessionId}`;
+          : l.content.kind === "ticketTab"
+            ? `${l.content.ticketKey}/${l.content.tab}${l.content.browserTab !== undefined ? `#${l.content.browserTab}` : ""}`
+            : `$${l.content.sessionId}`;
 const r = (n: number) => Math.round(n * 1000) / 1000;
 /** A compact picture of a tree: row[board .6, col[A .5, B .5] .4] */
 function shape(n: PaneNode): string {
@@ -1605,5 +1619,272 @@ describe("file panes", () => {
     });
     const parsed = parsePanes(junk);
     expect(shape(parsed.root)).toBe("row[board 0.5, @c.ts 0.5]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Torn-off tabs
+// ---------------------------------------------------------------------------
+
+describe("torn-off tabs", () => {
+  /** A torn-off tab's leaf; its id names it ("A-1/transcript", "A-1/browser#3"). */
+  const TT = (key: string, tab: TornTab, browserTab?: number): PaneLeaf => ({
+    type: "leaf",
+    id: `${key}/${tab}${browserTab !== undefined ? `#${browserTab}` : ""}`,
+    content: tabContent({ ticketKey: key, tab, browserTab }),
+  });
+  const tabDrag = (ticketKey: string, tab: TornTab, browserTab?: number): DragSource => ({ kind: "tab", ticketKey, tab, ...(browserTab !== undefined ? { browserTab } : {}) });
+  const pop = (leaf: PaneLeaf): PaneState => ({ root: leaf, focusedId: leaf.id, zoomedId: null });
+  const tabOf = (s: PaneState | undefined, id: string) => {
+    const c = s && findLeaf(s.root, id)?.content;
+    return c && (c.kind === "ticket" || c.kind === "ticketTab") ? c.tab : null;
+  };
+
+  test("normalize keeps one pane per ticket and tab, and per ticket and browser tab", () => {
+    const s = normalize(
+      st(
+        row("r", [
+          B,
+          TT("A-1", "transcript"),
+          { ...TT("A-1", "transcript"), id: "dup" },
+          TT("A-2", "transcript"),
+          TT("A-1", "agents"),
+          // A sub-agent's transcript is the Agents tab's: the same torn-off tab.
+          { ...TT("A-1", "agent:x"), id: "dup-agent" },
+          TT("A-1", "browser"),
+          TT("A-1", "browser", 3),
+          { ...TT("A-1", "browser", 3), id: "dup-pin" },
+          TT("A-1", "browser", 4),
+          TT("A-1", "composer"),
+          { ...TT("A-1", "composer"), id: "dup-composer" },
+        ]),
+      ),
+    );
+    expect(valid(s) && leaves(s.root).map((l) => l.id)).toEqual(["B", "A-1/transcript", "A-2/transcript", "A-1/agents", "A-1/browser", "A-1/browser#3", "A-1/browser#4", "A-1/composer"]);
+  });
+
+  test("checkPanes catches a tab torn off twice", () => {
+    expect(checkPanes(st(row("r", [B, TT("A-1", "spec"), { ...TT("A-1", "spec"), id: "x" }])))).toEqual(["A-1 · Spec is torn off twice"]);
+    expect(checkPanes(st(row("r", [B, TT("A-1", "browser", 2), { ...TT("A-1", "browser", 2), id: "x" }])))).toEqual(["A-1 · Browser tab is torn off twice"]);
+    // The ticket pane and its torn-off tab are different panes.
+    expect(checkPanes(st(row("r", [B, T("A-1", "transcript"), TT("A-1", "transcript")])))).toEqual([]);
+  });
+
+  test("a tab dropped beside its ticket docks there; dropped again it moves, never duplicates", () => {
+    const start = st(row("r", [B, T("A-1"), T("A-2")]));
+    const once = valid(applyDrop(start, tabDrag("A-1", "transcript"), "A-1", "right"));
+    expect(shape(once.root)).toBe("row[board 0.333, A-1 0.167, A-1/transcript 0.167, A-2 0.333]");
+    const id = once.focusedId!;
+    expect(label(findLeaf(once.root, id)!)).toBe("A-1/transcript");
+    const twice = valid(applyDrop(once, tabDrag("A-1", "transcript"), "A-2", "bottom"));
+    expect(shape(twice.root)).toBe("row[board 0.333, A-1 0.25, col[A-2 0.5, A-1/transcript 0.5] 0.417]");
+    expect(twice.focusedId).toBe(id);
+    // dropContent dedupes the same way.
+    const again = valid(dropContent(twice, "B", "left", tabContent({ ticketKey: "A-1", tab: "transcript" })));
+    expect(leaves(again.root).filter((l) => l.content.kind === "ticketTab")).toHaveLength(1);
+  });
+
+  test("a torn-off Agents pane on a sub-agent moves as the Agents tab, keeping the sub-agent", () => {
+    const start = st(row("r", [B, T("A-1"), TT("A-1", "agent:x")]));
+    const s = valid(applyDrop(start, tabDrag("A-1", "agents"), "B", "bottom"));
+    expect(leaves(s.root).map(label)).toEqual(["board", "A-1/agent:x", "A-1"]);
+  });
+
+  test("a pinned browser tab and the whole Browser tab are separate panes", () => {
+    const s = valid(applyDrop(st(row("r", [B, T("A-1")])), tabDrag("A-1", "browser", 2), "A-1", "right"));
+    const both = valid(applyDrop(s, tabDrag("A-1", "browser"), "A-1", "bottom"));
+    expect(leaves(both.root).map(label).sort()).toEqual(["A-1", "A-1/browser", "A-1/browser#2", "board"]);
+    // A browserTab only goes with the Browser tab.
+    expect(tabContent({ ticketKey: "A-1", tab: "spec", browserTab: 2 })).toEqual({ kind: "ticketTab", ticketKey: "A-1", tab: "spec" });
+  });
+
+  test("tornOffTabs: in the board's tree, in a pop-out, and not torn off; another board doesn't count", () => {
+    const store: PaneStore = {
+      scopes: {
+        a: st(row("r", [B, T("A-1"), TT("A-1", "transcript"), TT("A-2", "spec")])),
+        b: st(row("r2", [{ ...B, id: "B2" }, TT("A-1", "details")])),
+        [popoutScope("w1")]: pop(TT("A-1", "browser", 3)),
+        [popoutScope("w2")]: pop(TT("A-1", "composer")),
+      },
+    };
+    const torn = tornOffTabs(store, "A-1", "a");
+    expect([...torn.keys()].sort()).toEqual(["browser:3", "composer", "transcript"]);
+    expect(torn.get("transcript")).toMatchObject({ scope: "a", leafId: "A-1/transcript", window: false });
+    expect(torn.get("browser:3")).toMatchObject({ scope: popoutScope("w1"), window: true });
+    expect(torn.has("details")).toBe(false);
+    expect(torn.has("spec")).toBe(false);
+    expect([...tornOffTabs(store, "A-1", "b").keys()].sort()).toEqual(["browser:3", "composer", "details"]);
+    expect(tornOffTabs(store, "A-9", "a").size).toBe(0);
+  });
+
+  test("Return to this window closes the pane and shows the tab in the ticket pane, focused", () => {
+    const store: PaneStore = { scopes: { a: st(row("r", [B, T("A-1", "spec"), TT("A-1", "transcript")]), "B") } };
+    const next = returnTab(store, "a", "A-1", "transcript");
+    expect(leaves(next.scopes.a!.root).map(label)).toEqual(["board", "A-1"]);
+    expect(tabOf(next.scopes.a, "A-1")).toBe("transcript");
+    expect(next.scopes.a!.focusedId).toBe("A-1");
+    // Not torn off: nothing to return.
+    expect(returnTab(store, "a", "A-1", "details")).toBe(store);
+  });
+
+  test("Return to this window closes a pop-out window, and reaches a ticket pane that's popped out too", () => {
+    const store: PaneStore = {
+      scopes: {
+        a: st(row("r", [B, T("A-2")])),
+        [popoutScope("w1")]: pop(TT("A-1", "browser", 3)),
+        [popoutScope("w2")]: pop(T("A-1", "spec")),
+      },
+    };
+    const next = returnTab(store, "a", "A-1", "browser:3");
+    expect(next.scopes[popoutScope("w1")]).toBeUndefined();
+    // A browser tab comes back on the Browser tab.
+    expect(tabOf(next.scopes[popoutScope("w2")], "A-1")).toBe("browser");
+    expect(next.scopes.a).toBe(store.scopes.a);
+  });
+
+  test("the composer tears off like a tab, and comes back without changing the ticket's tab", () => {
+    const start: PaneStore = { scopes: { a: st(row("r", [B, T("A-1", "transcript")])) } };
+    const torn = dropInStore(start, "a", tabDrag("A-1", "composer"), "A-1", "bottom");
+    expect(valid(torn.scopes.a!) && shape(torn.scopes.a!.root)).toBe("row[board 0.5, col[A-1 0.5, A-1/composer 0.5] 0.5]");
+    // There's no composer tab to leave: the ticket stays on its Transcript.
+    expect(tabOf(torn.scopes.a, "A-1")).toBe("transcript");
+    expect([...tornOffTabs(torn, "A-1", "a").keys()]).toEqual(["composer"]);
+    const back = returnTab(torn, "a", "A-1", "composer");
+    expect(leaves(back.scopes.a!.root).map(label)).toEqual(["board", "A-1"]);
+    expect(tabOf(back.scopes.a, "A-1")).toBe("transcript");
+    // Its pane is as narrow as a ticket's, and as short as any pane.
+    expect(minSize(TT("A-1", "composer"), "row")).toBe(360);
+    expect(minSize(TT("A-1", "composer"), "column")).toBe(200);
+  });
+
+  test("tearing off the tab the ticket pane shows moves the ticket pane to the first tab still there", () => {
+    const start: PaneStore = { scopes: { a: st(row("r", [B, T("A-1", "transcript")])), [popoutScope("w")]: pop(TT("A-1", "spec")) } };
+    const next = dropInStore(start, "a", tabDrag("A-1", "transcript"), "A-1", "right");
+    expect(tabOf(next.scopes.a, "A-1")).toBe("activity");
+    // Another tab torn off leaves the ticket where it is.
+    const other = dropInStore(start, "a", tabDrag("A-1", "details"), "A-1", "right");
+    expect(tabOf(other.scopes.a, "A-1")).toBe("transcript");
+  });
+
+  test("dropping a tab (or a ticket) that's in a pop-out brings it back from that window instead of opening it twice", () => {
+    const store: PaneStore = {
+      scopes: {
+        a: st(row("r", [B, T("A-2")])),
+        [popoutScope("w1")]: pop(TT("A-1", "agent:x")),
+        [popoutScope("w2")]: pop(T("A-3", "details")),
+      },
+    };
+    const tab = dropInStore(store, "a", tabDrag("A-1", "agents"), "A-2", "right");
+    expect(tab.scopes[popoutScope("w1")]).toBeUndefined();
+    expect(leaves(tab.scopes.a!.root).map(label)).toEqual(["board", "A-2", "A-1/agent:x"]);
+    const card = dropInStore(store, "a", { kind: "ticket", ticketKey: "A-3" }, "A-2", "right");
+    expect(card.scopes[popoutScope("w2")]).toBeUndefined();
+    expect(ticketLeafByKey(card.scopes.a!.root, "A-3")!.content).toEqual(ticketContent("A-3", "details" as "spec"));
+    // A drop that does nothing leaves the store as it is.
+    expect(dropInStore(store, "a", { kind: "pane", leafId: "A-2" }, "A-2", "left")).toBe(store);
+  });
+
+  test("pruneTickets closes torn-off tabs with their ticket; renameTicketKey follows the rename", () => {
+    const s = st(row("r", [B, T("A-1"), TT("A-1", "transcript"), TT("A-2", "spec")]), "A-1/transcript");
+    expect(leaves(valid(pruneTickets(s, (k) => k !== "A-1")).root).map(label)).toEqual(["board", "A-2/spec"]);
+    const renamed = valid(renameTicketKey(s, "A-1", "B-1"));
+    expect(leaves(renamed.root).map(label)).toEqual(["board", "B-1", "B-1/transcript", "A-2/spec"]);
+    expect(renamed.focusedId).toBe("A-1/transcript");
+    // The new key's tab is already torn off: the old one closes, and the focus goes to the survivor.
+    const clash = valid(renameTicketKey(st(row("r", [B, TT("A-1", "spec"), TT("B-1", "spec")]), "A-1/spec"), "A-1", "B-1"));
+    expect(leaves(clash.root).map(label)).toEqual(["board", "B-1/spec"]);
+    expect(clash.focusedId).toBe("B-1/spec");
+  });
+
+  test("closing the ticket pane leaves its torn-off tabs open", () => {
+    const s = valid(closePane(st(row("r", [B, T("A-1"), TT("A-1", "transcript")])), "A-1"));
+    expect(leaves(s.root).map(label)).toEqual(["board", "A-1/transcript"]);
+  });
+
+  test("Escape closes a focused torn-off tab", () => {
+    expect(leaves(escapePanes(st(row("r", [B, TT("A-1", "spec")]), "A-1/spec")).root).map(label)).toEqual(["board"]);
+  });
+
+  test("a focused torn-off tab mirrors its ticket in the route: the ticket pane's tab, or the Spec", () => {
+    expect(focusedTicket(st(row("r", [B, T("A-1", "details"), TT("A-1", "transcript")]), "A-1/transcript"))).toEqual({ ticketKey: "A-1", tab: "details" });
+    expect(focusedTicket(st(row("r", [B, TT("A-1", "transcript")]), "A-1/transcript"))).toEqual({ ticketKey: "A-1", tab: "spec" });
+  });
+
+  test("setTornTab moves inside the torn-off tab, never to another tab", () => {
+    const s = st(row("r", [B, TT("A-1", "agents"), TT("A-1", "browser", 1)]));
+    expect(tabOf(setTornTab(s, "A-1/agents", "agent:abc"), "A-1/agents")).toBe("agent:abc");
+    expect(setTornTab(s, "A-1/agents", "transcript")).toBe(s);
+    expect(setTornTab(s, "A-1/browser#1", "browser")).toBe(s);
+    expect(setTornTab(s, "B", "agents")).toBe(s);
+  });
+
+  test("torn-off panes persist; unknown tabs and a stray browserTab are dropped", () => {
+    const s = st(row("r", [B, T("A-1"), TT("A-1", "composer"), TT("A-1", "browser", 2), TT("A-1", "plugin:git:log")]));
+    const back = parsePanes(serializePanes(s));
+    expect(shape(back.root)).toBe(shape(normalize(s).root));
+    const junk = parsePanes(
+      JSON.stringify({
+        root: {
+          type: "split",
+          id: "r",
+          dir: "row",
+          children: [
+            B,
+            { type: "leaf", id: "x", content: { kind: "ticketTab", ticketKey: "A-1", tab: "nope" } },
+            { type: "leaf", id: "y", content: { kind: "ticketTab", ticketKey: "", tab: "spec" } },
+            { type: "leaf", id: "z", content: { kind: "ticketTab", ticketKey: "A-1", tab: "spec", browserTab: 3 } },
+            { type: "leaf", id: "w", content: { kind: "ticketTab", ticketKey: "A-1", tab: "browser", browserTab: -1 } },
+            { type: "leaf", id: "v", content: { kind: "ticketTab", ticketKey: "A-1", tab: "summaries" } },
+          ],
+        },
+      }),
+    );
+    expect(leaves(junk.root).map(label)).toEqual(["board", "A-1/spec", "A-1/browser"]);
+  });
+
+  test("popOut and popIn move a torn-off pane to a window and back", () => {
+    const store: PaneStore = { scopes: { a: st(row("r", [B, T("A-1"), TT("A-1", "transcript")])) } };
+    const out = popOut(store, "a", "A-1/transcript", "w1");
+    expect(out.scopes[popoutScope("w1")]!.root).toEqual(TT("A-1", "transcript"));
+    expect(tornOffTabs(out, "A-1", "a").get("transcript")!.window).toBe(true);
+    const back = popIn(out, "w1", "a");
+    expect(back.scopes[popoutScope("w1")]).toBeUndefined();
+    expect(leaves(back.scopes.a!.root).map(label).sort()).toEqual(["A-1", "A-1/transcript", "board"]);
+  });
+
+  describe("popOutContent", () => {
+    const base: PaneStore = { scopes: { a: st(row("r", [B, T("A-1", "details"), TT("A-1", "transcript")])) } };
+
+    test("an open ticket moves into the window with its pane, rather than open twice", () => {
+      const next = popOutContent(base, "a", { kind: "ticket", ticketKey: "A-1", tab: "spec" }, "w1");
+      expect(next.scopes[popoutScope("w1")]!.root).toEqual(T("A-1", "details"));
+      expect(leaves(next.scopes.a!.root).map(label)).toEqual(["board", "A-1/transcript"]);
+    });
+
+    test("a closed ticket gets a new pane, with an id no scope uses", () => {
+      const next = popOutContent(base, "a", { kind: "ticket", ticketKey: "A-2", tab: "spec" }, "w1");
+      const leaf = next.scopes[popoutScope("w1")]!.root as PaneLeaf;
+      expect(leaf.content).toEqual(ticketContent("A-2"));
+      expect(["B", "A-1", "A-1/transcript", "r"]).not.toContain(leaf.id);
+      expect(next.scopes.a).toBe(base.scopes.a);
+    });
+
+    test("a tab already torn off moves; a new one leaves its ticket pane's tab", () => {
+      const moved = popOutContent(base, "a", tabContent({ ticketKey: "A-1", tab: "transcript" }), "w1");
+      expect(moved.scopes[popoutScope("w1")]!.root).toEqual(TT("A-1", "transcript"));
+      expect(leaves(moved.scopes.a!.root).map(label)).toEqual(["board", "A-1"]);
+      const fresh = popOutContent(base, "a", tabContent({ ticketKey: "A-1", tab: "details" }), "w2");
+      expect(label(fresh.scopes[popoutScope("w2")]!.root as PaneLeaf)).toBe("A-1/details");
+      expect(tabOf(fresh.scopes.a, "A-1")).toBe("spec");
+    });
+
+    test("the board, a New session, content already in a window and a taken id don't pop out", () => {
+      expect(popOutContent(base, "a", { kind: "board" }, "w1")).toBe(base);
+      expect(popOutContent(base, "a", newComposeContent(), "w1")).toBe(base);
+      const out = popOutContent(base, "a", { kind: "ticket", ticketKey: "A-2", tab: "spec" }, "w1");
+      expect(popOutContent(out, "a", { kind: "ticket", ticketKey: "A-2", tab: "spec" }, "w2")).toBe(out);
+      expect(popoutShowing(out, { kind: "ticket", ticketKey: "A-2", tab: "spec" })!.scope).toBe(popoutScope("w1"));
+      expect(popOutContent(out, "a", { kind: "ticket", ticketKey: "A-3", tab: "spec" }, "w1")).toBe(out);
+    });
   });
 });
