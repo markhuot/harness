@@ -1,0 +1,1727 @@
+{
+  "annotationNotesLabelCases": [
+    {
+      "name": "zero",
+      "input": 0,
+      "output": "0 notes"
+    },
+    {
+      "name": "one",
+      "input": 1,
+      "output": "1 note"
+    },
+    {
+      "name": "two",
+      "input": 2,
+      "output": "2 notes"
+    },
+    {
+      "name": "many",
+      "input": 50,
+      "output": "50 notes"
+    }
+  ],
+  "annotationStyleCases": [
+    {
+      "name": "the reference size",
+      "input": {
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "badgeRadius": 13,
+        "fontSize": 15,
+        "lineWidth": 3.5,
+        "outline": 2,
+        "headLength": 16,
+        "headHalfWidth": 9
+      }
+    },
+    {
+      "name": "a tall image uses its height",
+      "input": {
+        "width": 600,
+        "height": 1800
+      },
+      "output": {
+        "badgeRadius": 26,
+        "fontSize": 30,
+        "lineWidth": 7,
+        "outline": 4,
+        "headLength": 32,
+        "headHalfWidth": 18
+      }
+    },
+    {
+      "name": "a retina screenshot",
+      "input": {
+        "width": 2560,
+        "height": 1600
+      },
+      "output": {
+        "badgeRadius": 36.97777777777778,
+        "fontSize": 42.66666666666667,
+        "lineWidth": 9.955555555555556,
+        "outline": 5.688888888888889,
+        "headLength": 45.51111111111111,
+        "headHalfWidth": 25.6
+      }
+    },
+    {
+      "name": "a small image keeps the floor",
+      "input": {
+        "width": 320,
+        "height": 240
+      },
+      "output": {
+        "badgeRadius": 9.75,
+        "fontSize": 11.25,
+        "lineWidth": 2.625,
+        "outline": 1.5,
+        "headLength": 12,
+        "headHalfWidth": 6.75
+      }
+    },
+    {
+      "name": "just above the floor",
+      "input": {
+        "width": 700,
+        "height": 100
+      },
+      "output": {
+        "badgeRadius": 10.11111111111111,
+        "fontSize": 11.666666666666666,
+        "lineWidth": 2.7222222222222223,
+        "outline": 1.5555555555555556,
+        "headLength": 12.444444444444445,
+        "headHalfWidth": 7
+      }
+    },
+    {
+      "name": "exactly at the floor",
+      "input": {
+        "width": 675,
+        "height": 675
+      },
+      "output": {
+        "badgeRadius": 9.75,
+        "fontSize": 11.25,
+        "lineWidth": 2.625,
+        "outline": 1.5,
+        "headLength": 12,
+        "headHalfWidth": 6.75
+      }
+    },
+    {
+      "name": "an empty surface",
+      "input": {
+        "width": 0,
+        "height": 0
+      },
+      "output": {
+        "badgeRadius": 9.75,
+        "fontSize": 11.25,
+        "lineWidth": 2.625,
+        "outline": 1.5,
+        "headLength": 12,
+        "headHalfWidth": 6.75
+      }
+    }
+  ],
+  "arrowGeometryCases": [
+    {
+      "name": "a horizontal arrow",
+      "input": {
+        "tail": {
+          "x": 100,
+          "y": 100
+        },
+        "anchor": {
+          "x": 300,
+          "y": 100
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "line": [
+          {
+            "x": 113,
+            "y": 100
+          },
+          {
+            "x": 288.8,
+            "y": 100
+          }
+        ],
+        "head": [
+          {
+            "x": 300,
+            "y": 100
+          },
+          {
+            "x": 284,
+            "y": 109
+          },
+          {
+            "x": 284,
+            "y": 91
+          }
+        ]
+      }
+    },
+    {
+      "name": "pointing up and left",
+      "input": {
+        "tail": {
+          "x": 400,
+          "y": 300
+        },
+        "anchor": {
+          "x": 100,
+          "y": 0
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "line": [
+          {
+            "x": 390.80761184457486,
+            "y": 290.80761184457486
+          },
+          {
+            "x": 107.91959594928935,
+            "y": 7.919595949289332
+          }
+        ],
+        "head": [
+          {
+            "x": 100,
+            "y": 0
+          },
+          {
+            "x": 117.67766952966369,
+            "y": 4.949747468305832
+          },
+          {
+            "x": 104.94974746830584,
+            "y": 17.67766952966369
+          }
+        ]
+      }
+    },
+    {
+      "name": "a diagonal on a retina image",
+      "input": {
+        "tail": {
+          "x": 1000,
+          "y": 200
+        },
+        "anchor": {
+          "x": 1600,
+          "y": 1000
+        },
+        "width": 2560,
+        "height": 1600
+      },
+      "output": {
+        "line": [
+          {
+            "x": 1022.1866666666667,
+            "y": 229.58222222222224
+          },
+          {
+            "x": 1580.8853333333334,
+            "y": 974.5137777777778
+          }
+        ],
+        "head": [
+          {
+            "x": 1600,
+            "y": 1000
+          },
+          {
+            "x": 1552.2133333333334,
+            "y": 978.9511111111111
+          },
+          {
+            "x": 1593.1733333333334,
+            "y": 948.2311111111111
+          }
+        ]
+      }
+    },
+    {
+      "name": "too short for an arrow",
+      "input": {
+        "tail": {
+          "x": 100,
+          "y": 100
+        },
+        "anchor": {
+          "x": 110,
+          "y": 110
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": null
+    },
+    {
+      "name": "exactly the cutoff is too short",
+      "input": {
+        "tail": {
+          "x": 0,
+          "y": 0
+        },
+        "anchor": {
+          "x": 21,
+          "y": 0
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": null
+    },
+    {
+      "name": "just past the cutoff",
+      "input": {
+        "tail": {
+          "x": 0,
+          "y": 0
+        },
+        "anchor": {
+          "x": 21.01,
+          "y": 0
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "line": [
+          {
+            "x": 13,
+            "y": 0
+          },
+          {
+            "x": 9.810000000000002,
+            "y": 0
+          }
+        ],
+        "head": [
+          {
+            "x": 21.01,
+            "y": 0
+          },
+          {
+            "x": 5.010000000000002,
+            "y": 9
+          },
+          {
+            "x": 5.010000000000002,
+            "y": -9
+          }
+        ]
+      }
+    },
+    {
+      "name": "the same point",
+      "input": {
+        "tail": {
+          "x": 50,
+          "y": 50
+        },
+        "anchor": {
+          "x": 50,
+          "y": 50
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": null
+    }
+  ],
+  "hitTestMarksCases": [
+    {
+      "name": "no marks",
+      "input": {
+        "marks": [],
+        "p": {
+          "x": 10,
+          "y": 10
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": null
+    },
+    {
+      "name": "a tap's badge",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 455,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 0,
+        "part": "badge"
+      }
+    },
+    {
+      "name": "just outside a badge",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 467.1,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": null
+    },
+    {
+      "name": "the edge of a badge counts",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 467,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 0,
+        "part": "badge"
+      }
+    },
+    {
+      "name": "an arrow's tail is its badge",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.6,
+              "y": 0.6
+            },
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 540,
+          "y": 360
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 0,
+        "part": "badge"
+      }
+    },
+    {
+      "name": "an arrow's anchor",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.6,
+              "y": 0.6
+            },
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 190,
+          "y": 125
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 0,
+        "part": "anchor"
+      }
+    },
+    {
+      "name": "a badge beats an anchor under it",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "message": ""
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 450,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 1,
+        "part": "badge"
+      }
+    },
+    {
+      "name": "a badge beats a later mark's anchor",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 450,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 0,
+        "part": "badge"
+      }
+    },
+    {
+      "name": "a later badge beats an earlier one",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          },
+          {
+            "anchor": {
+              "x": 0.51,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 452,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 1,
+        "part": "badge"
+      }
+    },
+    {
+      "name": "a later anchor beats an earlier one",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "message": ""
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.9,
+              "y": 0.1
+            },
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 452,
+          "y": 300
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": {
+        "index": 1,
+        "part": "anchor"
+      }
+    },
+    {
+      "name": "the anchor radius floor on a small image",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 172,
+          "y": 120
+        },
+        "width": 320,
+        "height": 240
+      },
+      "output": {
+        "index": 0,
+        "part": "anchor"
+      }
+    },
+    {
+      "name": "a miss",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": ""
+          },
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.3,
+              "y": 0.3
+            },
+            "message": ""
+          }
+        ],
+        "p": {
+          "x": 800,
+          "y": 500
+        },
+        "width": 900,
+        "height": 600
+      },
+      "output": null
+    }
+  ],
+  "isAnnotationDragCases": [
+    {
+      "name": "no movement",
+      "input": {
+        "start": {
+          "x": 10,
+          "y": 10
+        },
+        "end": {
+          "x": 10,
+          "y": 10
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "just under the threshold",
+      "input": {
+        "start": {
+          "x": 10,
+          "y": 10
+        },
+        "end": {
+          "x": 15.9,
+          "y": 10
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "exactly the threshold",
+      "input": {
+        "start": {
+          "x": 10,
+          "y": 10
+        },
+        "end": {
+          "x": 16,
+          "y": 10
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "a diagonal 3-4-5 under it",
+      "input": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 3,
+          "y": 4
+        }
+      },
+      "output": false
+    },
+    {
+      "name": "a diagonal past it",
+      "input": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": -6,
+          "y": -8
+        }
+      },
+      "output": true
+    },
+    {
+      "name": "a custom threshold",
+      "input": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 3,
+          "y": 4
+        },
+        "threshold": 5
+      },
+      "output": true
+    },
+    {
+      "name": "under a custom threshold",
+      "input": {
+        "start": {
+          "x": 0,
+          "y": 0
+        },
+        "end": {
+          "x": 3,
+          "y": 4
+        },
+        "threshold": 5.01
+      },
+      "output": false
+    }
+  ],
+  "marksForMessageCases": [
+    {
+      "name": "none",
+      "input": {
+        "marks": [],
+        "width": 640,
+        "height": 480
+      },
+      "output": []
+    },
+    {
+      "name": "numbered in order, trimmed",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "width": 640,
+        "height": 480
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 64,
+          "y": 48,
+          "message": "one"
+        },
+        {
+          "n": 2,
+          "x": 320,
+          "y": 240,
+          "message": "two",
+          "tailX": 480,
+          "tailY": 120
+        },
+        {
+          "n": 3,
+          "x": 576,
+          "y": 432,
+          "message": "three"
+        }
+      ]
+    },
+    {
+      "name": "rounded to whole pixels (half rounds up)",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.00078125,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.3337,
+              "y": 0.6669
+            },
+            "message": "round"
+          }
+        ],
+        "width": 640,
+        "height": 3
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 1,
+          "y": 2,
+          "message": "round",
+          "tailX": 214,
+          "tailY": 2
+        }
+      ]
+    },
+    {
+      "name": "the far edge",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 1,
+              "y": 1
+            },
+            "tail": {
+              "x": 0,
+              "y": 0
+            },
+            "message": "corner"
+          }
+        ],
+        "width": 1170,
+        "height": 2532
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 1170,
+          "y": 2532,
+          "message": "corner",
+          "tailX": 0,
+          "tailY": 0
+        }
+      ]
+    },
+    {
+      "name": "whitespace-only becomes empty",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": null,
+            "message": " \t\n "
+          }
+        ],
+        "width": 100,
+        "height": 100
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 50,
+          "y": 50,
+          "message": ""
+        }
+      ]
+    }
+  ],
+  "moveMarkCases": [
+    {
+      "name": "an arrow's badge moves its tail",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.4,
+              "y": 0.4
+            },
+            "message": "first"
+          },
+          {
+            "anchor": {
+              "x": 0.7,
+              "y": 0.7
+            },
+            "tail": null,
+            "message": "second"
+          }
+        ],
+        "hit": {
+          "index": 0,
+          "part": "badge"
+        },
+        "to": {
+          "x": 0.5,
+          "y": 0.1
+        }
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.2,
+            "y": 0.2
+          },
+          "tail": {
+            "x": 0.5,
+            "y": 0.1
+          },
+          "message": "first"
+        },
+        {
+          "anchor": {
+            "x": 0.7,
+            "y": 0.7
+          },
+          "tail": null,
+          "message": "second"
+        }
+      ]
+    },
+    {
+      "name": "an arrow's anchor moves its anchor",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.4,
+              "y": 0.4
+            },
+            "message": "first"
+          },
+          {
+            "anchor": {
+              "x": 0.7,
+              "y": 0.7
+            },
+            "tail": null,
+            "message": "second"
+          }
+        ],
+        "hit": {
+          "index": 0,
+          "part": "anchor"
+        },
+        "to": {
+          "x": 0.25,
+          "y": 0.3
+        }
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.25,
+            "y": 0.3
+          },
+          "tail": {
+            "x": 0.4,
+            "y": 0.4
+          },
+          "message": "first"
+        },
+        {
+          "anchor": {
+            "x": 0.7,
+            "y": 0.7
+          },
+          "tail": null,
+          "message": "second"
+        }
+      ]
+    },
+    {
+      "name": "a tap's badge moves its anchor",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.4,
+              "y": 0.4
+            },
+            "message": "first"
+          },
+          {
+            "anchor": {
+              "x": 0.7,
+              "y": 0.7
+            },
+            "tail": null,
+            "message": "second"
+          }
+        ],
+        "hit": {
+          "index": 1,
+          "part": "badge"
+        },
+        "to": {
+          "x": 0.9,
+          "y": 0.05
+        }
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.2,
+            "y": 0.2
+          },
+          "tail": {
+            "x": 0.4,
+            "y": 0.4
+          },
+          "message": "first"
+        },
+        {
+          "anchor": {
+            "x": 0.9,
+            "y": 0.05
+          },
+          "tail": null,
+          "message": "second"
+        }
+      ]
+    },
+    {
+      "name": "past the edges is clamped",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.4,
+              "y": 0.4
+            },
+            "message": "first"
+          },
+          {
+            "anchor": {
+              "x": 0.7,
+              "y": 0.7
+            },
+            "tail": null,
+            "message": "second"
+          }
+        ],
+        "hit": {
+          "index": 0,
+          "part": "badge"
+        },
+        "to": {
+          "x": -0.4,
+          "y": 1.7
+        }
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.2,
+            "y": 0.2
+          },
+          "tail": {
+            "x": 0,
+            "y": 1
+          },
+          "message": "first"
+        },
+        {
+          "anchor": {
+            "x": 0.7,
+            "y": 0.7
+          },
+          "tail": null,
+          "message": "second"
+        }
+      ]
+    },
+    {
+      "name": "an index out of range changes nothing",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.2,
+              "y": 0.2
+            },
+            "tail": {
+              "x": 0.4,
+              "y": 0.4
+            },
+            "message": "first"
+          },
+          {
+            "anchor": {
+              "x": 0.7,
+              "y": 0.7
+            },
+            "tail": null,
+            "message": "second"
+          }
+        ],
+        "hit": {
+          "index": 5,
+          "part": "badge"
+        },
+        "to": {
+          "x": 0.5,
+          "y": 0.5
+        }
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.2,
+            "y": 0.2
+          },
+          "tail": {
+            "x": 0.4,
+            "y": 0.4
+          },
+          "message": "first"
+        },
+        {
+          "anchor": {
+            "x": 0.7,
+            "y": 0.7
+          },
+          "tail": null,
+          "message": "second"
+        }
+      ]
+    }
+  ],
+  "removeMarkCases": [
+    {
+      "name": "the first renumbers the rest",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": 0,
+        "width": 640,
+        "height": 480
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 320,
+          "y": 240,
+          "message": "two",
+          "tailX": 480,
+          "tailY": 120
+        },
+        {
+          "n": 2,
+          "x": 576,
+          "y": 432,
+          "message": "three"
+        }
+      ]
+    },
+    {
+      "name": "the middle",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": 1,
+        "width": 640,
+        "height": 480
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 64,
+          "y": 48,
+          "message": "one"
+        },
+        {
+          "n": 2,
+          "x": 576,
+          "y": 432,
+          "message": "three"
+        }
+      ]
+    },
+    {
+      "name": "the last",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": 2,
+        "width": 640,
+        "height": 480
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 64,
+          "y": 48,
+          "message": "one"
+        },
+        {
+          "n": 2,
+          "x": 320,
+          "y": 240,
+          "message": "two",
+          "tailX": 480,
+          "tailY": 120
+        }
+      ]
+    },
+    {
+      "name": "out of range",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": 3,
+        "width": 640,
+        "height": 480
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 64,
+          "y": 48,
+          "message": "one"
+        },
+        {
+          "n": 2,
+          "x": 320,
+          "y": 240,
+          "message": "two",
+          "tailX": 480,
+          "tailY": 120
+        },
+        {
+          "n": 3,
+          "x": 576,
+          "y": 432,
+          "message": "three"
+        }
+      ]
+    },
+    {
+      "name": "negative",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": -1,
+        "width": 640,
+        "height": 480
+      },
+      "output": [
+        {
+          "n": 1,
+          "x": 64,
+          "y": 48,
+          "message": "one"
+        },
+        {
+          "n": 2,
+          "x": 320,
+          "y": 240,
+          "message": "two",
+          "tailX": 480,
+          "tailY": 120
+        },
+        {
+          "n": 3,
+          "x": 576,
+          "y": 432,
+          "message": "three"
+        }
+      ]
+    }
+  ],
+  "setMarkMessageCases": [
+    {
+      "name": "replaces one",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": 1,
+        "message": "Make this blue"
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.1,
+            "y": 0.1
+          },
+          "tail": null,
+          "message": " one "
+        },
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "tail": {
+            "x": 0.75,
+            "y": 0.25
+          },
+          "message": "Make this blue"
+        },
+        {
+          "anchor": {
+            "x": 0.9,
+            "y": 0.9
+          },
+          "tail": null,
+          "message": "three\n"
+        }
+      ]
+    },
+    {
+      "name": "out of range",
+      "input": {
+        "marks": [
+          {
+            "anchor": {
+              "x": 0.1,
+              "y": 0.1
+            },
+            "tail": null,
+            "message": " one "
+          },
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "tail": {
+              "x": 0.75,
+              "y": 0.25
+            },
+            "message": "two"
+          },
+          {
+            "anchor": {
+              "x": 0.9,
+              "y": 0.9
+            },
+            "tail": null,
+            "message": "three\n"
+          }
+        ],
+        "index": 7,
+        "message": "nope"
+      },
+      "output": [
+        {
+          "anchor": {
+            "x": 0.1,
+            "y": 0.1
+          },
+          "tail": null,
+          "message": " one "
+        },
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "tail": {
+            "x": 0.75,
+            "y": 0.25
+          },
+          "message": "two"
+        },
+        {
+          "anchor": {
+            "x": 0.9,
+            "y": 0.9
+          },
+          "tail": null,
+          "message": "three\n"
+        }
+      ]
+    }
+  ],
+  "toUnitCases": [
+    {
+      "name": "inside",
+      "input": {
+        "p": {
+          "x": 320,
+          "y": 120
+        },
+        "width": 640,
+        "height": 480
+      },
+      "output": {
+        "x": 0.5,
+        "y": 0.25
+      }
+    },
+    {
+      "name": "the far corner",
+      "input": {
+        "p": {
+          "x": 640,
+          "y": 480
+        },
+        "width": 640,
+        "height": 480
+      },
+      "output": {
+        "x": 1,
+        "y": 1
+      }
+    },
+    {
+      "name": "left of and above the image",
+      "input": {
+        "p": {
+          "x": -20,
+          "y": -1
+        },
+        "width": 640,
+        "height": 480
+      },
+      "output": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "past the right and bottom",
+      "input": {
+        "p": {
+          "x": 900,
+          "y": 481
+        },
+        "width": 640,
+        "height": 480
+      },
+      "output": {
+        "x": 1,
+        "y": 1
+      }
+    },
+    {
+      "name": "a zero-size surface",
+      "input": {
+        "p": {
+          "x": 10,
+          "y": 10
+        },
+        "width": 0,
+        "height": 0
+      },
+      "output": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "a zero width only",
+      "input": {
+        "p": {
+          "x": 10,
+          "y": 240
+        },
+        "width": 0,
+        "height": 480
+      },
+      "output": {
+        "x": 0,
+        "y": 0.5
+      }
+    }
+  ]
+}

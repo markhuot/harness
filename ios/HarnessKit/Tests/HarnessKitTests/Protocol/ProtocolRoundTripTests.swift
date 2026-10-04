@@ -33,6 +33,10 @@ struct ProtocolRoundTripTests {
         "Attachment": rt(Attachment.self),
         "PromptAttachment": rt(PromptAttachment.self),
         "PromptAttachmentInput": rt(PromptAttachmentInput.self),
+        "AnnotationSource": rt(AnnotationSource.self),
+        "AnnotationMark": rt(AnnotationMark.self),
+        "MessageAnnotation": rt(MessageAnnotation.self),
+        "BrowserScreenshot": rt(BrowserScreenshot.self),
         "ActivityMeta": rt(ActivityMeta.self),
         "ActivityEntry": rt(ActivityEntry.self),
         "SpecRevisionInfo": rt(SpecRevisionInfo.self),
@@ -222,6 +226,7 @@ struct ProtocolRoundTripTests {
         "BrowserInput": disc(BrowserInput.self) { if case .unknown = $0 { nil } else { $0.type } },
         "PluginHostMessage": disc(PluginHostMessage.self) { if case .unknown = $0 { nil } else { $0.type } },
         "PluginFrameMessage": disc(PluginFrameMessage.self) { if case .unknown = $0 { nil } else { $0.type } },
+        "AnnotationSource": disc(AnnotationSource.self) { if case .unknown = $0 { nil } else { $0.kind } },
     ]
 
     /// Each union's samples cover every discriminator TS declares, and Swift knows each one.
@@ -260,6 +265,7 @@ struct ProtocolRoundTripTests {
         "BrowserInput": { if case .unknown = try JSONDecoder().decode(BrowserInput.self, from: $0) { true } else { false } },
         "PluginHostMessage": { if case .unknown = try JSONDecoder().decode(PluginHostMessage.self, from: $0) { true } else { false } },
         "PluginFrameMessage": { if case .unknown = try JSONDecoder().decode(PluginFrameMessage.self, from: $0) { true } else { false } },
+        "AnnotationSource": { if case .unknown = try JSONDecoder().decode(AnnotationSource.self, from: $0) { true } else { false } },
         "Ticket": {
             let t = try JSONDecoder().decode(Ticket.self, from: $0)
             return !t.status.isKnown && !t.kind.isKnown && !t.agentReview.isKnown && !t.humanReview.isKnown

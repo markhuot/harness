@@ -274,6 +274,53 @@ const run: P.Run = {
   endedAt: null,
 };
 
+// Annotations (DESIGN.md "Annotations"): numbered notes drawn on an image sent with a message.
+const browserSource: P.AnnotationSource = {
+  kind: "browser",
+  url: "http://localhost:3000/login",
+  title: "Log in",
+  tabId: 3,
+  viewport: { width: 1280, height: 800 },
+  scale: 2,
+};
+
+export const AnnotationSource: P.AnnotationSource[] = [
+  { kind: "attachment", id: "att_1", name: "after.png" },
+  { kind: "prompt-attachment", index: 0, name: "shot.png" },
+  { kind: "message-attachment", entryId: "ent_5", index: 1, name: "Pasted image.png" },
+  browserSource,
+  { kind: "browser", url: "about:blank", title: "", tabId: 1, viewport: { width: 390, height: 844 }, scale: 3 },
+];
+
+export const AnnotationMark: P.AnnotationMark[] = [
+  { n: 1, x: 412, y: 188, tailX: 520, tailY: 96, message: "This button should be blue" },
+  { n: 2, x: 64, y: 700, message: "Typo: \"Sumbit\"" },
+];
+
+const messageAnnotation: P.MessageAnnotation = { attachment: 0, source: AnnotationSource[0]!, width: 1280, height: 800, marks: AnnotationMark };
+
+export const MessageAnnotation: P.MessageAnnotation[] = [
+  messageAnnotation,
+  { attachment: 1, source: browserSource, width: 2560, height: 1600, marks: [{ n: 1, x: 1280, y: 800, tailX: 1400, tailY: 640, message: "Center this" }] },
+  { attachment: 2, source: AnnotationSource[2]!, width: 640, height: 480, marks: [{ n: 1, x: 0, y: 479, message: "Cut off here" }] },
+];
+
+export const BrowserScreenshot: P.BrowserScreenshot[] = [
+  {
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    width: 2560,
+    height: 1600,
+    viewport: { width: 1280, height: 800 },
+    scale: 2,
+    tabId: 3,
+    url: "http://localhost:3000/login",
+    title: "Log in",
+  },
+  { data: "iVBORw0KGgo=", width: 1170, height: 2532, viewport: { width: 390, height: 844 }, scale: 3, tabId: 1, url: "about:blank", title: "" },
+];
+
+const annotatedUpload: P.PromptAttachment = { path: "/Users/mark/.harness/uploads/cd34/annotated-after.png", name: "annotated-after.png", source: "upload" };
+
 export const Run: P.Run[] = [
   run,
   { ...run, id: "run_6", kind: "plan", status: "failed", error: "Driver exited with code 1", endedAt: T0 + 9_000 },
@@ -281,6 +328,7 @@ export const Run: P.Run[] = [
   { ...run, id: "run_9", kind: "chat", status: "cancelled", endedAt: T0 + 2_000 },
   { ...run, id: "run_10", kind: "complete", status: "succeeded", endedAt: T0 + 3_000 },
   { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" }] },
+  { ...run, id: "run_12", kind: "chat", prompt: "Fix the marked spots.", attachments: [annotatedUpload], annotations: [messageAnnotation] },
 ];
 
 export const ToolResultContent: P.ToolResultContent[] = [
@@ -306,6 +354,7 @@ export const TranscriptContent: P.TranscriptContent[] = [
       { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" },
     ],
   },
+  { type: "text", text: "Fix the marked spots.", attachments: [annotatedUpload], annotations: MessageAnnotation.slice(0, 2) },
 ];
 
 export const TranscriptEntry: P.TranscriptEntry[] = [
@@ -878,6 +927,11 @@ export const MessageBody: P.MessageBody[] = [
   { text: "Back to work", move: false },
   { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }] },
   { text: "See attached", move: true, attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
+  {
+    text: "Fix the marked spots.",
+    attachments: [{ path: annotatedUpload.path, name: annotatedUpload.name, source: "upload" }, { path: "/Users/mark/Desktop/shot.png" }],
+    annotations: [messageAnnotation, { ...MessageAnnotation[1]!, attachment: 1 }],
+  },
 ];
 
 export const ReopenBody: P.ReopenBody[] = [{ notes: "The enum test is tautological" }];
@@ -986,6 +1040,7 @@ export const discriminators: Record<string, string[]> = {
   BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, newTab: true, closeTab: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),
+  AnnotationSource: all<P.AnnotationSource["kind"]>({ attachment: true, "prompt-attachment": true, "message-attachment": true, browser: true }),
 };
 
 // ---------------------------------------------------------------------------
@@ -1008,6 +1063,7 @@ export const forwardCompat: { type: string; samples: unknown[] }[] = [
   { type: "BrowserInput", samples: [{ type: "touch", points: [{ x: 1, y: 2 }] }] },
   { type: "PluginHostMessage", samples: [{ type: "harness:locale", locale: "de-DE" }] },
   { type: "PluginFrameMessage", samples: [{ type: "harness:resize", height: 400 }] },
+  { type: "AnnotationSource", samples: [{ kind: "region", page: 2, rect: { x: 10, y: 20, width: 300, height: 200 }, name: "spec.pdf" }] },
   {
     type: "Ticket",
     samples: [{ ...plainTicket, status: "archived", kind: "epic", agentReview: "escalated", humanReview: "waived", permissionMode: "yolo", completionAction: "deploy" }],
