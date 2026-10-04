@@ -215,6 +215,22 @@ public enum Conductor {
         deps.filter { !$0.done }.map(\.key)
     }
 
+    /// Dependencies an auto-start ticket is waiting on: it was started (or created to start on its
+    /// own) while they were open, so it sits in planning and the service starts it once they're
+    /// done. Empty when it isn't waiting. Only loaded, unfinished dependencies count: an unknown key
+    /// is usually an older done ticket, and the service treats a deleted one as done.
+    public static func autoStartWaitingOn(_ t: Ticket, _ deps: [DepState]) -> [String] {
+        guard t.draft != true, t.autoStart, t.status == .planning else { return [] }
+        return deps.filter { $0.state == .pending }.map(\.key)
+    }
+
+    /// The waiting card's clock and the disabled Start button: "Starts on its own once A and B are done".
+    public static func autoStartTitle(_ keys: [String]) -> String {
+        guard let last = keys.last else { return "Starts on its own once its dependencies are done" }
+        let list = keys.count > 1 ? "\(keys.dropLast().joined(separator: ", ")) and \(last)" : last
+        return "Starts on its own once \(list) \(keys.count > 1 ? "are" : "is") done"
+    }
+
     /// Depth in the sibling dependency graph, by upper-cased key: 0 = depends on no sibling, n = 1 +
     /// deepest sibling dep. Deps outside the set are ignored; cycles are cut (a ticket revisited
     /// mid-walk counts as 0).

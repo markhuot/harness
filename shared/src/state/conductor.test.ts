@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { Ticket } from "../index";
 import {
   attentionOf,
+  autoStartTitle,
+  autoStartWaitingOn,
   childrenOfTicket,
   dependencyDepths,
   depStates,
@@ -166,6 +168,28 @@ describe("dependencies", () => {
     const renamed = tk({ key: "NEW-1", status: "done" });
     const viaAlias = depStates(rec(renamed), tk({ key: "X-1", dependsOn: ["old-1"] }), { "OLD-1": renamed.id });
     expect(viaAlias.map((d) => [d.state, d.ticket?.key])).toEqual([["done", "NEW-1"]]);
+  });
+
+  test("autoStartWaitingOn: only a submitted auto-start ticket in planning, and only loaded open deps", () => {
+    const open = tk({ key: "A-1", status: "in_progress" });
+    const done = tk({ key: "A-2", status: "done" });
+    const waiting = tk({ key: "A-3", autoStart: true, dependsOn: ["A-1", "A-2", "A-99"] });
+    const deps = (t: Ticket) => depStates(rec(open, done), t);
+    expect(autoStartWaitingOn(waiting, deps(waiting))).toEqual(["A-1"]);
+    // Not started (no autoStart), a draft, or already past planning: not waiting.
+    for (const t of [{ ...waiting, autoStart: false }, { ...waiting, draft: true }, { ...waiting, status: "in_progress" as const }]) {
+      expect(autoStartWaitingOn(t, deps(t))).toEqual([]);
+    }
+    // Every dep done or unloaded: the service starts it (or already has), so nothing to wait on.
+    const ready = tk({ key: "A-4", autoStart: true, dependsOn: ["A-2", "A-99"] });
+    expect(autoStartWaitingOn(ready, deps(ready))).toEqual([]);
+  });
+
+  test("autoStartTitle lists the keys", () => {
+    expect(autoStartTitle(["A-1"])).toBe("Starts on its own once A-1 is done");
+    expect(autoStartTitle(["A-1", "A-2"])).toBe("Starts on its own once A-1 and A-2 are done");
+    expect(autoStartTitle(["A-1", "A-2", "A-3"])).toBe("Starts on its own once A-1, A-2 and A-3 are done");
+    expect(autoStartTitle([])).toBe("Starts on its own once its dependencies are done");
   });
 
   test("depths follow sibling chains, ignore outside deps and survive cycles", () => {

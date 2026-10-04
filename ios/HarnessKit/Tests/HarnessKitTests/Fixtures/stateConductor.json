@@ -1,4 +1,552 @@
 {
+  "autoStartCases": [
+    {
+      "name": "waiting on the open deps only",
+      "input": {
+        "tickets": {
+          "id-S-1": {
+            "id": "id-S-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-1",
+            "spec": "",
+            "status": "in_progress",
+            "sessionId": "s-S-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 63,
+            "createdAt": 63,
+            "updatedAt": 63,
+            "key": "S-1"
+          },
+          "id-S-2": {
+            "id": "id-S-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-2",
+            "spec": "",
+            "status": "done",
+            "sessionId": "s-S-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 64,
+            "createdAt": 64,
+            "updatedAt": 64,
+            "key": "S-2"
+          },
+          "id-S-3": {
+            "id": "id-S-3",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-3",
+            "spec": "",
+            "status": "review",
+            "sessionId": "s-S-3",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 65,
+            "createdAt": 65,
+            "updatedAt": 65,
+            "key": "S-3"
+          }
+        },
+        "ticket": {
+          "id": "id-S-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-4",
+          "spec": "",
+          "status": "planning",
+          "sessionId": "s-S-4",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "S-1",
+            "s-2",
+            "S-3",
+            "S-99"
+          ],
+          "autoStart": true,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 66,
+          "createdAt": 66,
+          "updatedAt": 66,
+          "key": "S-4"
+        }
+      },
+      "output": {
+        "waitingOn": [
+          "S-1",
+          "S-3"
+        ],
+        "title": "Starts on its own once S-1 and S-3 are done"
+      }
+    },
+    {
+      "name": "one open dep",
+      "input": {
+        "tickets": {
+          "id-S-1": {
+            "id": "id-S-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-1",
+            "spec": "",
+            "status": "in_progress",
+            "sessionId": "s-S-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 63,
+            "createdAt": 63,
+            "updatedAt": 63,
+            "key": "S-1"
+          },
+          "id-S-2": {
+            "id": "id-S-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-2",
+            "spec": "",
+            "status": "done",
+            "sessionId": "s-S-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 64,
+            "createdAt": 64,
+            "updatedAt": 64,
+            "key": "S-2"
+          }
+        },
+        "ticket": {
+          "id": "id-S-5",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-5",
+          "spec": "",
+          "status": "planning",
+          "sessionId": "s-S-5",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "S-1",
+            "S-2"
+          ],
+          "autoStart": true,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 67,
+          "createdAt": 67,
+          "updatedAt": 67,
+          "key": "S-5"
+        }
+      },
+      "output": {
+        "waitingOn": [
+          "S-1"
+        ],
+        "title": "Starts on its own once S-1 is done"
+      }
+    },
+    {
+      "name": "all done or unloaded",
+      "input": {
+        "tickets": {
+          "id-S-2": {
+            "id": "id-S-2",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-2",
+            "spec": "",
+            "status": "done",
+            "sessionId": "s-S-2",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 64,
+            "createdAt": 64,
+            "updatedAt": 64,
+            "key": "S-2"
+          }
+        },
+        "ticket": {
+          "id": "id-S-6",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-6",
+          "spec": "",
+          "status": "planning",
+          "sessionId": "s-S-6",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "S-2",
+            "S-99"
+          ],
+          "autoStart": true,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 68,
+          "createdAt": 68,
+          "updatedAt": 68,
+          "key": "S-6"
+        }
+      },
+      "output": {
+        "waitingOn": [],
+        "title": null
+      }
+    },
+    {
+      "name": "no autoStart",
+      "input": {
+        "tickets": {
+          "id-S-1": {
+            "id": "id-S-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-1",
+            "spec": "",
+            "status": "in_progress",
+            "sessionId": "s-S-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 63,
+            "createdAt": 63,
+            "updatedAt": 63,
+            "key": "S-1"
+          }
+        },
+        "ticket": {
+          "id": "id-S-7",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-7",
+          "spec": "",
+          "status": "planning",
+          "sessionId": "s-S-7",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "S-1"
+          ],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 69,
+          "createdAt": 69,
+          "updatedAt": 69,
+          "key": "S-7"
+        }
+      },
+      "output": {
+        "waitingOn": [],
+        "title": null
+      }
+    },
+    {
+      "name": "draft",
+      "input": {
+        "tickets": {
+          "id-S-1": {
+            "id": "id-S-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-1",
+            "spec": "",
+            "status": "in_progress",
+            "sessionId": "s-S-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 63,
+            "createdAt": 63,
+            "updatedAt": 63,
+            "key": "S-1"
+          }
+        },
+        "ticket": {
+          "id": "id-S-8",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-8",
+          "spec": "",
+          "status": "planning",
+          "sessionId": "s-S-8",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "S-1"
+          ],
+          "autoStart": true,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 70,
+          "createdAt": 70,
+          "updatedAt": 70,
+          "key": "S-8",
+          "draft": true
+        }
+      },
+      "output": {
+        "waitingOn": [],
+        "title": null
+      }
+    },
+    {
+      "name": "already in progress",
+      "input": {
+        "tickets": {
+          "id-S-1": {
+            "id": "id-S-1",
+            "projectId": "p1",
+            "kind": "task",
+            "title": "S-1",
+            "spec": "",
+            "status": "in_progress",
+            "sessionId": "s-S-1",
+            "driver": "claude-code",
+            "parentId": null,
+            "dependsOn": [],
+            "autoStart": false,
+            "agentReview": "pending",
+            "humanReview": "pending",
+            "externalRef": null,
+            "workdir": null,
+            "branch": null,
+            "blockedReason": null,
+            "busy": false,
+            "pendingApproval": null,
+            "allowedTools": [],
+            "position": 63,
+            "createdAt": 63,
+            "updatedAt": 63,
+            "key": "S-1"
+          }
+        },
+        "ticket": {
+          "id": "id-S-9",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-9",
+          "spec": "",
+          "status": "in_progress",
+          "sessionId": "s-S-9",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [
+            "S-1"
+          ],
+          "autoStart": true,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 71,
+          "createdAt": 71,
+          "updatedAt": 71,
+          "key": "S-9"
+        }
+      },
+      "output": {
+        "waitingOn": [],
+        "title": null
+      }
+    },
+    {
+      "name": "no dependencies",
+      "input": {
+        "tickets": {},
+        "ticket": {
+          "id": "id-S-10",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "S-10",
+          "spec": "",
+          "status": "planning",
+          "sessionId": "s-S-10",
+          "driver": "claude-code",
+          "parentId": null,
+          "dependsOn": [],
+          "autoStart": true,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "position": 72,
+          "createdAt": 72,
+          "updatedAt": 72,
+          "key": "S-10"
+        }
+      },
+      "output": {
+        "waitingOn": [],
+        "title": null
+      }
+    }
+  ],
+  "autoStartTitleCases": [
+    {
+      "name": "none",
+      "input": [],
+      "output": "Starts on its own once its dependencies are done"
+    },
+    {
+      "name": "one",
+      "input": [
+        "A-1"
+      ],
+      "output": "Starts on its own once A-1 is done"
+    },
+    {
+      "name": "two",
+      "input": [
+        "A-1",
+        "A-2"
+      ],
+      "output": "Starts on its own once A-1 and A-2 are done"
+    },
+    {
+      "name": "three",
+      "input": [
+        "A-1",
+        "A-2",
+        "A-3"
+      ],
+      "output": "Starts on its own once A-1, A-2 and A-3 are done"
+    }
+  ],
   "boardWeightCases": [
     {
       "name": "blocked with approval",
@@ -1828,9 +2376,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 65,
-          "createdAt": 65,
-          "updatedAt": 65,
+          "position": 75,
+          "createdAt": 75,
+          "updatedAt": 75,
           "key": "G-3"
         },
         {
@@ -1856,9 +2404,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 64,
-          "createdAt": 64,
-          "updatedAt": 64,
+          "position": 74,
+          "createdAt": 74,
+          "updatedAt": 74,
           "key": "G-2"
         },
         {
@@ -1884,9 +2432,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 63,
-          "createdAt": 63,
-          "updatedAt": 63,
+          "position": 73,
+          "createdAt": 73,
+          "updatedAt": 73,
           "key": "G-1"
         },
         {
@@ -1912,9 +2460,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 66,
-          "createdAt": 66,
-          "updatedAt": 66,
+          "position": 76,
+          "createdAt": 76,
+          "updatedAt": 76,
           "key": "G-4"
         },
         {
@@ -1940,9 +2488,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 67,
-          "createdAt": 67,
-          "updatedAt": 67,
+          "position": 77,
+          "createdAt": 77,
+          "updatedAt": 77,
           "key": "G-5"
         }
       ],
@@ -1980,9 +2528,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 67,
-          "createdAt": 67,
-          "updatedAt": 67,
+          "position": 77,
+          "createdAt": 77,
+          "updatedAt": 77,
           "key": "G-5"
         },
         {
@@ -2008,9 +2556,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 66,
-          "createdAt": 66,
-          "updatedAt": 66,
+          "position": 76,
+          "createdAt": 76,
+          "updatedAt": 76,
           "key": "G-4"
         }
       ],
@@ -2045,9 +2593,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 68,
-          "createdAt": 68,
-          "updatedAt": 68,
+          "position": 78,
+          "createdAt": 78,
+          "updatedAt": 78,
           "key": "g-6"
         },
         {
@@ -2074,9 +2622,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 65,
-          "createdAt": 65,
-          "updatedAt": 65,
+          "position": 75,
+          "createdAt": 75,
+          "updatedAt": 75,
           "key": "G-3"
         },
         {
@@ -2102,9 +2650,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 64,
-          "createdAt": 64,
-          "updatedAt": 64,
+          "position": 74,
+          "createdAt": 74,
+          "updatedAt": 74,
           "key": "G-2"
         },
         {
@@ -2130,9 +2678,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 63,
-          "createdAt": 63,
-          "updatedAt": 63,
+          "position": 73,
+          "createdAt": 73,
+          "updatedAt": 73,
           "key": "G-1"
         }
       ],
@@ -2169,9 +2717,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 69,
-          "createdAt": 69,
-          "updatedAt": 69,
+          "position": 79,
+          "createdAt": 79,
+          "updatedAt": 79,
           "key": "G-7"
         }
       ],
@@ -2205,9 +2753,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 73,
-          "createdAt": 73,
-          "updatedAt": 73,
+          "position": 83,
+          "createdAt": 83,
+          "updatedAt": 83,
           "key": "G-11"
         },
         {
@@ -2233,9 +2781,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 70,
-          "createdAt": 70,
-          "updatedAt": 70,
+          "position": 80,
+          "createdAt": 80,
+          "updatedAt": 80,
           "key": "G-8"
         },
         {
@@ -2261,9 +2809,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 71,
-          "createdAt": 71,
-          "updatedAt": 71,
+          "position": 81,
+          "createdAt": 81,
+          "updatedAt": 81,
           "key": "G-9"
         },
         {
@@ -2289,9 +2837,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 72,
-          "createdAt": 72,
-          "updatedAt": 72,
+          "position": 82,
+          "createdAt": 82,
+          "updatedAt": 82,
           "key": "G-10"
         }
       ],
@@ -2328,9 +2876,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 71,
-          "createdAt": 71,
-          "updatedAt": 71,
+          "position": 81,
+          "createdAt": 81,
+          "updatedAt": 81,
           "key": "G-9"
         },
         {
@@ -2356,9 +2904,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 72,
-          "createdAt": 72,
-          "updatedAt": 72,
+          "position": 82,
+          "createdAt": 82,
+          "updatedAt": 82,
           "key": "G-10"
         },
         {
@@ -2384,9 +2932,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 70,
-          "createdAt": 70,
-          "updatedAt": 70,
+          "position": 80,
+          "createdAt": 80,
+          "updatedAt": 80,
           "key": "G-8"
         },
         {
@@ -2412,9 +2960,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 73,
-          "createdAt": 73,
-          "updatedAt": 73,
+          "position": 83,
+          "createdAt": 83,
+          "updatedAt": 83,
           "key": "G-11"
         }
       ],
@@ -2456,9 +3004,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 76,
-          "createdAt": 76,
-          "updatedAt": 76,
+          "position": 86,
+          "createdAt": 86,
+          "updatedAt": 86,
           "key": "L-3"
         },
         {
@@ -2484,9 +3032,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 74,
+          "position": 84,
           "createdAt": 1,
-          "updatedAt": 74,
+          "updatedAt": 84,
           "key": "L-1"
         },
         {
@@ -2510,9 +3058,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 77,
+          "position": 87,
           "createdAt": 1,
-          "updatedAt": 77,
+          "updatedAt": 87,
           "key": "L-4"
         },
         {
@@ -2536,9 +3084,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 75,
+          "position": 85,
           "createdAt": 2,
-          "updatedAt": 75,
+          "updatedAt": 85,
           "key": "L-2"
         },
         {
@@ -2562,9 +3110,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 78,
+          "position": 88,
           "createdAt": 2,
-          "updatedAt": 78,
+          "updatedAt": 88,
           "key": "L-5"
         },
         {
@@ -2588,9 +3136,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 79,
+          "position": 89,
           "createdAt": 1,
-          "updatedAt": 79,
+          "updatedAt": 89,
           "key": "L-6"
         },
         {
@@ -2620,9 +3168,9 @@
             "requestedAt": 1
           },
           "allowedTools": [],
-          "position": 80,
+          "position": 90,
           "createdAt": 2,
-          "updatedAt": 80,
+          "updatedAt": 90,
           "key": "L-7"
         }
       ],
@@ -2680,9 +3228,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 81,
+          "position": 91,
           "createdAt": 5,
-          "updatedAt": 81,
+          "updatedAt": 91,
           "key": "L-8"
         },
         {
@@ -2706,9 +3254,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 82,
+          "position": 92,
           "createdAt": 3,
-          "updatedAt": 82,
+          "updatedAt": 92,
           "key": "L-9"
         }
       ],
@@ -2748,9 +3296,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 83,
+          "position": 93,
           "createdAt": 0,
-          "updatedAt": 83,
+          "updatedAt": 93,
           "key": "L-10"
         },
         {
@@ -2774,9 +3322,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 85,
+          "position": 95,
           "createdAt": 4,
-          "updatedAt": 85,
+          "updatedAt": 95,
           "key": "L-12"
         },
         {
@@ -2802,9 +3350,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 74,
+          "position": 84,
           "createdAt": 1,
-          "updatedAt": 74,
+          "updatedAt": 84,
           "key": "L-1"
         },
         {
@@ -2836,9 +3384,9 @@
             "requestedAt": 1
           },
           "allowedTools": [],
-          "position": 84,
+          "position": 94,
           "createdAt": 9,
-          "updatedAt": 84,
+          "updatedAt": 94,
           "key": "L-11"
         },
         {
@@ -2862,9 +3410,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 75,
+          "position": 85,
           "createdAt": 2,
-          "updatedAt": 75,
+          "updatedAt": 85,
           "key": "L-2"
         }
       ],
@@ -2905,9 +3453,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 86,
+          "position": 96,
           "createdAt": 4,
-          "updatedAt": 86,
+          "updatedAt": 96,
           "key": "L-13"
         },
         {
@@ -2931,9 +3479,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 85,
+          "position": 95,
           "createdAt": 4,
-          "updatedAt": 85,
+          "updatedAt": 95,
           "key": "L-12"
         }
       ],
@@ -2971,9 +3519,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 85,
+          "position": 95,
           "createdAt": 4,
-          "updatedAt": 85,
+          "updatedAt": 95,
           "key": "L-12"
         },
         {
@@ -2997,9 +3545,9 @@
           "busy": false,
           "pendingApproval": null,
           "allowedTools": [],
-          "position": 86,
+          "position": 96,
           "createdAt": 4,
-          "updatedAt": 86,
+          "updatedAt": 96,
           "key": "L-13"
         }
       ],
