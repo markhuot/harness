@@ -6,7 +6,7 @@ import { boardLeaf, equalizePanes, escapePanes, findLeaf, focusPane, layoutPanes
 import { GLOBAL_OWNER, useCommands } from "./commands";
 import { hasDraftCloser, requestClosePane } from "./draftClose";
 import { focusPaneBy, focusSidebar } from "./paneFocus";
-import { popOutToWindow } from "./paneHeader";
+import { popOutToWindow } from "./popoutOpen";
 
 
 const inSidebar = () => !!document.activeElement?.closest("#app-sidebar");
@@ -57,7 +57,7 @@ export function usePaneCommands(scope: string | null, sidebarOpen: boolean) {
     },
     "pane.zoom": !!scope && (() => focusPaneBy(scope!, (s) => toggleZoom(s))),
     "pane.equalize": !!scope && (() => updatePanes(scope!, equalizePanes)),
-    // The focused ticket or terminal into a window of its own (in that window, ⇧⌘O puts it back:
+    // The focused pane (anything but the board) into a window of its own (in that window, ⇧⌘O puts it back:
     // components/PopoutWindow.tsx).
     "pane.popout":
       !!scope &&

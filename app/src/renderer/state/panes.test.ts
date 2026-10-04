@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ALL_SCOPE } from "@harness/shared/state";
+import { ALL_SCOPE, type TicketTab } from "@harness/shared/state";
 import {
   applyDrop,
   boardLeaf,
@@ -89,7 +89,7 @@ import {
 
 // Builders: leaf ids are the ticket key (or "B" for the board) so shapes and focus read naturally.
 const B: PaneLeaf = { type: "leaf", id: "B", content: { kind: "board" } };
-const T = (key: string, tab: "spec" | "transcript" = "spec"): PaneLeaf => ({ type: "leaf", id: key, content: { kind: "ticket", ticketKey: key, tab } });
+const T = (key: string, tab: TicketTab = "spec"): PaneLeaf => ({ type: "leaf", id: key, content: { kind: "ticket", ticketKey: key, tab } });
 const split = (dir: "row" | "column", id: string, children: PaneNode[], sizes?: number[]): PaneSplit => ({
   type: "split",
   id,
@@ -101,7 +101,7 @@ const row = (id: string, children: PaneNode[], sizes?: number[]) => split("row",
 const col = (id: string, children: PaneNode[], sizes?: number[]) => split("column", id, children, sizes);
 const st = (root: PaneNode, focusedId: string | null = null, zoomedId: string | null = null): PaneState => ({ root, focusedId, zoomedId });
 
-const ticketContent = (key: string, tab: "spec" | "transcript" = "spec"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
+const ticketContent = (key: string, tab: TicketTab = "spec"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
 const label = (l: PaneLeaf) =>
   l.content.kind === "board"
     ? "board"
@@ -1779,7 +1779,7 @@ describe("torn-off tabs", () => {
     expect(leaves(tab.scopes.a!.root).map(label)).toEqual(["board", "A-2", "A-1/agent:x"]);
     const card = dropInStore(store, "a", { kind: "ticket", ticketKey: "A-3" }, "A-2", "right");
     expect(card.scopes[popoutScope("w2")]).toBeUndefined();
-    expect(ticketLeafByKey(card.scopes.a!.root, "A-3")!.content).toEqual(ticketContent("A-3", "details" as "spec"));
+    expect(ticketLeafByKey(card.scopes.a!.root, "A-3")!.content).toEqual(ticketContent("A-3", "details"));
     // A drop that does nothing leaves the store as it is.
     expect(dropInStore(store, "a", { kind: "pane", leafId: "A-2" }, "A-2", "left")).toBe(store);
   });

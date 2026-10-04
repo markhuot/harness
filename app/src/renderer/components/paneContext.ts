@@ -32,6 +32,15 @@ export const PopoutContext = createContext<PopoutInfo | null>(null);
 export const usePopout = () => useContext(PopoutContext);
 
 /**
+ * The board this window belongs to: the workspace's scope, or in a pop-out window the board it
+ * came from. Torn-off tabs and drags out to a window are asked across that board and the pop-outs.
+ */
+export function useBoardScope(): string {
+  const scope = usePaneScope();
+  return usePopout()?.fromScope ?? scope;
+}
+
+/**
  * Open a ticket from inside a pane: it replaces this pane's content (or focuses the pane it's
  * already open in). Outside a pane it's an ordinary link to the ticket, and without a store (Markdown
  * rendered on its own, as in tests) there's nowhere to go.

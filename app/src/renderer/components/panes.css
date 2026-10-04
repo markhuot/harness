@@ -289,6 +289,105 @@ html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.acti
   text-overflow: ellipsis;
   font-weight: 500;
 }
+/* A tab's name, when a tab (or the composer, or a browser chip) is what's dragged. */
+.drag-chip-tab {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Torn-off tabs (views/TicketTabPane.tsx, components/TornOff.tsx). */
+.torn-mark {
+  display: inline-flex;
+  color: var(--accent);
+  opacity: 0.85;
+}
+.tab.torn:not(.on) {
+  color: color-mix(in srgb, var(--text-3) 70%, transparent);
+}
+.torn-placeholder {
+  gap: 10px;
+}
+.torn-placeholder .btn {
+  margin-top: 4px;
+}
+.torn-titlebar .torn-tab-name {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: var(--bg-active);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.torn-titlebar .torn-browser-title {
+  min-width: 0;
+  font-size: 12px;
+}
+.torn-approval {
+  flex: none;
+  padding: 10px 14px 0;
+}
+/* The composer torn off: it fills its pane, the input taking whatever height there is. */
+.torn-composer .composer-fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 0;
+}
+.composer-fill .composer-row {
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+.composer-fill .composer-row .composer-input {
+  max-height: none;
+  height: auto;
+}
+.composer-fill .composer-attach {
+  align-self: flex-end;
+}
+/* Where the composer was, while it's torn off. */
+.composer-return {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12px;
+  color: var(--accent);
+}
+/* The composer's grip on its top edge: drag it off like a tab. */
+.composer-grip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: 56px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  z-index: 1;
+}
+.composer-grip-bar {
+  width: 32px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background 0.12s;
+}
+.composer-grip:hover .composer-grip-bar {
+  background: var(--text-3);
+}
 
 /* A ticket pane's header grip: drag it onto another pane's half to move the pane there. */
 .pane-grip {
