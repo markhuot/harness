@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { attachmentSource, isFileDrag, isLocalService, limitMessage, planFiles } from "./promptAttachmentFiles";
+import { pastedImageName } from "@harness/shared/state";
+import { attachmentSource, clipboardImageFiles, composerCanSend, isFileDrag, isLocalService, limitMessage, planFiles } from "./promptAttachmentFiles";
 
 type F = { name: string; type: string; path?: string };
 const pathOf = (f: F) => f.path ?? null;
@@ -90,5 +91,47 @@ describe("messages and drags", () => {
     expect(isFileDrag(["application/x-harness-ticket"])).toBe(false);
     expect(isFileDrag(["text/plain"])).toBe(false);
     expect(isFileDrag(null)).toBe(false);
+  });
+});
+
+describe("the composer", () => {
+  const base = { text: "", attachments: 0, pending: 0, sending: false, approvalPending: false };
+  test("sends text alone, attachments alone, but not nothing (whitespace is nothing)", () => {
+    expect(composerCanSend({ ...base, text: "hi" })).toBe(true);
+    expect(composerCanSend({ ...base, attachments: 1 })).toBe(true);
+    expect(composerCanSend(base)).toBe(false);
+    expect(composerCanSend({ ...base, text: "  \n " })).toBe(false);
+  });
+  test("waits for uploads still on their way and for a send in flight", () => {
+    expect(composerCanSend({ ...base, text: "hi", pending: 1 })).toBe(false);
+    expect(composerCanSend({ ...base, attachments: 2, pending: 1 })).toBe(false);
+    expect(composerCanSend({ ...base, text: "hi", sending: true })).toBe(false);
+  });
+  test("while an approval waits, text still answers it but attachments can't go", () => {
+    expect(composerCanSend({ ...base, text: "no, use the other file", approvalPending: true })).toBe(true);
+    expect(composerCanSend({ ...base, text: "see this", attachments: 1, approvalPending: true })).toBe(false);
+  });
+  test("the limit toast names what it applies to", () => {
+    expect(limitMessage(2, 20, "a message")).toBe("2 files weren't attached: a message takes at most 20.");
+  });
+});
+
+describe("clipboardImageFiles", () => {
+  const item = (types: string[]) => ({ types, getType: async (t: string) => new Blob([`bytes of ${t}`], { type: t }) });
+  test("one File per item carrying an image, named like a pasted image, with that image's bytes", async () => {
+    const files = await clipboardImageFiles([item(["text/plain"]), item(["text/html", "image/png"]), item(["image/jpeg"])]);
+    expect(files.map((f) => [f.name, f.type])).toEqual([
+      ["image.png", "image/png"],
+      ["image.jpeg", "image/jpeg"],
+    ]);
+    expect(await files[0]!.text()).toBe("bytes of image/png");
+  });
+  test("nothing for a clipboard of text", async () => {
+    expect(await clipboardImageFiles([item(["text/plain", "text/html"])])).toEqual([]);
+  });
+  test("and the result plans as pasted image uploads (no path behind them)", async () => {
+    const files = await clipboardImageFiles([item(["image/svg+xml"])]);
+    const plan = planFiles(files, () => null, { uploadAny: false, local: true });
+    expect(plan.uploads.map((u) => [u.name, u.mimeType])).toEqual([[pastedImageName("image/svg+xml"), "image/svg+xml"]]);
   });
 });
