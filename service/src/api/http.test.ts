@@ -311,6 +311,22 @@ describe("http api", () => {
     expect(h.orchestrator.settings().claudeOauthToken).toBeNull();
   });
 
+  test("the GitHub Copilot token is write-only: trimmed, never sent back, cleared by null or blank", async () => {
+    const { client, h } = await boot();
+    expect((await client.getSettings()).copilotGithubTokenSet).toBe(false);
+    const after = await client.updateSettings({ copilotGithubToken: "  github_pat_secret \n" });
+    expect(after.copilotGithubTokenSet).toBe(true);
+    expect(JSON.stringify(await client.getSettings())).not.toContain("github_pat_secret");
+    expect(h.orchestrator.settings().copilotGithubToken).toBe("github_pat_secret");
+    await client.updateSettings({ ...(await client.getSettings()), maxConcurrentRuns: 3 });
+    expect(h.orchestrator.settings().copilotGithubToken).toBe("github_pat_secret");
+    await expect(client.updateSettings({ copilotGithubToken: 42 as unknown as string })).rejects.toMatchObject({ status: 400 });
+    expect((await client.updateSettings({ copilotGithubToken: "  " })).copilotGithubTokenSet).toBe(false);
+    await client.updateSettings({ copilotGithubToken: "again" });
+    expect((await client.updateSettings({ copilotGithubToken: null })).copilotGithubTokenSet).toBe(false);
+    expect(h.orchestrator.settings().copilotGithubToken).toBeNull();
+  });
+
   test("GET /prompts lists every prompt; PATCH /settings { prompts } overrides, refuses typos, and resets", async () => {
     const { client } = await boot();
     const before = await client.listPrompts();

@@ -788,6 +788,13 @@ export interface Settings {
    */
   claudeOauthToken?: string | null;
   /**
+   * GitHub token the github-copilot driver passes to the CLI as COPILOT_GITHUB_TOKEN (a
+   * fine-grained personal access token with the "Copilot Requests" permission, or `gh auth token`),
+   * so runs don't depend on the login the CLI keeps in the Keychain. null → the CLI's own login.
+   * Never sent back to clients (copilotGithubTokenSet instead); optional like claudeOauthToken.
+   */
+  copilotGithubToken?: string | null;
+  /**
    * Default base branch (projects and tickets may override it): what completed tickets merge into
    * and new ticket branches start from. A valid git branch name; default "main". The service
    * always sends it; optional so clients tolerate an older service without it.
@@ -1006,10 +1013,12 @@ export interface Health extends Partial<ServiceStatus> {
   release?: string | null;
 }
 
-export type PublicSettings = Omit<Settings, "anthropicApiKey" | "claudeOauthToken"> & {
+export type PublicSettings = Omit<Settings, "anthropicApiKey" | "claudeOauthToken" | "copilotGithubToken"> & {
   anthropicApiKeySet: boolean;
   /** Whether a claudeOauthToken is stored. Services from before it omit it. */
   claudeOauthTokenSet?: boolean;
+  /** Whether a copilotGithubToken is stored. Services from before it omit it. */
+  copilotGithubTokenSet?: boolean;
 };
 
 /**

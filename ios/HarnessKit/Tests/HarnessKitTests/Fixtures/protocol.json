@@ -984,7 +984,8 @@
           "run.review": null
         },
         "anthropicApiKeySet": true,
-        "claudeOauthTokenSet": true
+        "claudeOauthTokenSet": true,
+        "copilotGithubTokenSet": true
       }
     },
     {
@@ -1701,7 +1702,8 @@
         "run.review": null
       },
       "anthropicApiKeySet": true,
-      "claudeOauthTokenSet": true
+      "claudeOauthTokenSet": true,
+      "copilotGithubTokenSet": true
     },
     {
       "defaultDriver": "anthropic-api",
@@ -1739,7 +1741,8 @@
         "run.review": null
       },
       "anthropicApiKeySet": true,
-      "claudeOauthTokenSet": false
+      "claudeOauthTokenSet": false,
+      "copilotGithubTokenSet": false
     }
   ],
   "RelatedTicket": [
@@ -2040,6 +2043,7 @@
       },
       "anthropicApiKey": "sk-ant-api03-redacted",
       "claudeOauthToken": "sk-ant-oat01-redacted",
+      "copilotGithubToken": "github_pat_redacted",
       "baseBranch": "main",
       "listen": {
         "mode": "tailscale"
@@ -2078,6 +2082,7 @@
       },
       "anthropicApiKey": "sk-ant-api03-redacted",
       "claudeOauthToken": "sk-ant-oat01-redacted",
+      "copilotGithubToken": "github_pat_redacted",
       "baseBranch": "main",
       "listen": {
         "mode": "tailscale"
@@ -2101,6 +2106,12 @@
     },
     {
       "claudeOauthToken": "sk-ant-oat01-new"
+    },
+    {
+      "copilotGithubToken": null
+    },
+    {
+      "copilotGithubToken": "github_pat_new"
     },
     {
       "prompts": {
@@ -4062,7 +4073,8 @@
             "run.review": null
           },
           "anthropicApiKeySet": true,
-          "claudeOauthTokenSet": true
+          "claudeOauthTokenSet": true,
+          "copilotGithubTokenSet": true
         }
       ]
     }

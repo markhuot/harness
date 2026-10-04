@@ -497,6 +497,7 @@ const settings: P.Settings = {
   watcherModels: { "anthropic-api": "claude-haiku-4-5", "claude-code": null },
   anthropicApiKey: "sk-ant-api03-redacted",
   claudeOauthToken: "sk-ant-oat01-redacted",
+  copilotGithubToken: "github_pat_redacted",
   baseBranch: "main",
   listen: { mode: "tailscale" },
   browserIdleTabMinutes: 5,
@@ -509,13 +510,13 @@ export const Settings: P.Settings[] = [
   { ...settings, watcherDriver: null, classifier: "anthropic-api", browserIdleTabMinutes: 0 },
 ];
 
-const { anthropicApiKey: _key, claudeOauthToken: _token, ...settingsWithoutKey } = settings;
-const publicSettings: P.PublicSettings = { ...settingsWithoutKey, anthropicApiKeySet: true, claudeOauthTokenSet: true };
+const { anthropicApiKey: _key, claudeOauthToken: _token, copilotGithubToken: _ghToken, ...settingsWithoutKey } = settings;
+const publicSettings: P.PublicSettings = { ...settingsWithoutKey, anthropicApiKeySet: true, claudeOauthTokenSet: true, copilotGithubTokenSet: true };
 
 export const PublicSettings: P.PublicSettings[] = [
   publicSettings,
   { defaultDriver: "anthropic-api", maxConcurrentRuns: 1, permissionMode: "ask", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKeySet: false },
-  { ...publicSettings, watcherDriver: null, claudeOauthTokenSet: false },
+  { ...publicSettings, watcherDriver: null, claudeOauthTokenSet: false, copilotGithubTokenSet: false },
 ];
 
 /** PATCH /settings bodies (`Partial<Settings>`). */
@@ -524,6 +525,8 @@ export const SettingsPatch: Partial<P.Settings>[] = [
   { anthropicApiKey: "sk-ant-new" },
   { claudeOauthToken: null },
   { claudeOauthToken: "sk-ant-oat01-new" },
+  { copilotGithubToken: null },
+  { copilotGithubToken: "github_pat_new" },
   { prompts: { "system.intro": null, "run.work_start": "Begin {{ticketKey}}." } },
   { defaultModels: { "claude-code": null }, reviewModels: { "anthropic-api": "claude-opus-4-1" }, watcherModels: { "claude-code": null } },
   { watcherDriver: null, maxConcurrentRuns: 8, permissionMode: "ask", classifier: "anthropic-api", browserIdleTabMinutes: 30 },

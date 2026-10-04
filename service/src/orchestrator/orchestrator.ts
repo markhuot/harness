@@ -669,6 +669,7 @@ export class Orchestrator {
     this.store.settings.set(applySettingsPatch(current, patch));
     if (patch.anthropicApiKey !== undefined) this.modelCatalog.invalidate("anthropic-api");
     if (patch.claudeOauthToken !== undefined) this.modelCatalog.invalidate("claude-code");
+    if (patch.copilotGithubToken !== undefined) this.modelCatalog.invalidate("github-copilot");
     const pub = this.publicSettings();
     this.bus.emit({ kind: "settings.updated", settings: pub });
     this.queue.pump();
@@ -3107,8 +3108,8 @@ ${numberLines(r.body)}`;
   async updateSettings_(ctx: ToolContext, patch: Record<string, unknown>, dryRun = false): Promise<PublicSettings> {
     this.configWriter(ctx);
     // Secrets never pass through a model; the legacy/echo keys aren't for tools either.
-    const secrets = ["anthropicApiKey", "claudeOauthToken"];
-    for (const k of [...secrets, "anthropicApiKeySet", "claudeOauthTokenSet", "claudePermissionMode"]) {
+    const secrets = ["anthropicApiKey", "claudeOauthToken", "copilotGithubToken"];
+    for (const k of [...secrets, "anthropicApiKeySet", "claudeOauthTokenSet", "copilotGithubTokenSet", "claudePermissionMode"]) {
       if (patch && k in patch) throw new Error(`${k} can't be changed with a tool${secrets.includes(k) ? ": ask the human to enter it in Settings" : ""}.`);
     }
     return this.asToolError(() => {

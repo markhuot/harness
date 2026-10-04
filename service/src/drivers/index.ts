@@ -2,11 +2,13 @@ import type { Settings } from "@harness/shared";
 import { AnthropicApiDriver } from "./anthropic-api";
 import { ClaudeCodeDriver } from "./claude-code";
 import { DummyDriver } from "./dummy";
+import { GitHubCopilotDriver } from "./github-copilot";
 import type { Driver } from "./types";
 
 export { AnthropicApiDriver } from "./anthropic-api";
 export { ClaudeCodeDriver } from "./claude-code";
 export { DummyDriver } from "./dummy";
+export { GitHubCopilotDriver } from "./github-copilot";
 
 /** The env var that adds the dummy driver to a real service; test scripts set it, installs don't. */
 export const DUMMY_DRIVER_ENV = "HARNESS_DUMMY_DRIVER";
@@ -16,7 +18,11 @@ export function dummyDriverEnabled(env: Record<string, string | undefined>): boo
 }
 
 export function createDrivers(deps: { settings: () => Settings; env?: Record<string, string | undefined> }): Driver[] {
-  const drivers: Driver[] = [new ClaudeCodeDriver({ settings: deps.settings }), new AnthropicApiDriver({ settings: deps.settings })];
+  const drivers: Driver[] = [
+    new ClaudeCodeDriver({ settings: deps.settings }),
+    new AnthropicApiDriver({ settings: deps.settings }),
+    new GitHubCopilotDriver({ settings: deps.settings }),
+  ];
   if (dummyDriverEnabled(deps.env ?? process.env)) drivers.push(new DummyDriver());
   return drivers;
 }

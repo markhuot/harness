@@ -29,7 +29,7 @@ outlives the app (see "Service supervision").
 | `service/src/db.ts`, `service/src/store/*` | SQLite schema + repositories |
 | `service/src/events.ts` | In-process event bus (`HarnessEvent`) |
 | `service/src/orchestrator/*` | State machine, run queue, scheduler, conductor, triage, watchers, prompts, worktrees |
-| `service/src/drivers/*` | `Driver` implementations: `dummy`, `claude-code`, `anthropic-api` |
+| `service/src/drivers/*` | `Driver` implementations: `dummy`, `claude-code`, `anthropic-api`, `github-copilot` |
 | `service/src/tools/*` | Tool definitions + `toolsForRun()` |
 | `service/src/browser/*` | CDP client + `BrowserService` implementation |
 | `service/src/api/*` | HTTP routes, WebSocket, MCP endpoint |
@@ -879,7 +879,7 @@ client state, not service state.
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
-| Settings | Anthropic API key, long-lived Claude token | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` and `claudeOauthTokenSet` |
+| Settings | Anthropic API key, long-lived Claude token, GitHub Copilot token | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` and `claudeOauthTokenSet` |
 | Settings | network status, pairing QR, token copy or rotation, pairing and switching Macs on the iPhone | none | they hand out access to the service itself, or are device-local |
 | Drivers | list drivers and models, refresh models | `list_drivers` | |
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
@@ -988,6 +988,24 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   HARNESS-139's completion run started sim-check in the background and was marked done.
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
+- **github-copilot** — wraps the GitHub Copilot CLI (`copilot -p <prompt> --output-format json`,
+  verified against 1.0.91). Driver state is `{ sessionId }`: the driver picks a UUID on the first
+  run and passes `--session-id` every run, which creates the session or resumes it. Sessions live in
+  `$COPILOT_HOME/session-state`, not per workdir, so a moved workdir still resumes. Harness tools come
+  from `--additional-mcp-config` as the `harness` server; the CLI names them `harness-<tool>` and the
+  driver reports them under their own names. There's no system-prompt flag, so the run's system
+  prompt goes in front of the prompt inside `<harness_instructions>`. Prompt mode reads no stdin,
+  so the driver doesn't steer, and attached images aren't sent (the prompt lists their paths).
+  Permissions: auto → `--allow-all-tools`; ask → `--allow-tool write` plus the ticket's grants
+  (`bash` → `shell`, edits → `write`, a one-time grant of a simple command → `shell(<command>)`);
+  read-only and plan runs → `--deny-tool write --deny-tool shell`. The harness server is always
+  allowed and `--no-ask-user` is always set. A call the rules don't allow fails with
+  `error.code: "denied"`, which the driver reports as `permission_denied`, so it becomes a pending
+  approval. Usage carries no tokens or cost: Copilot bills premium requests. A GitHub token in
+  Settings (`copilotGithubToken`, write-only like `claudeOauthToken`; clients see
+  `copilotGithubTokenSet`) goes to every CLI call as `COPILOT_GITHUB_TOKEN`, which the CLI prefers
+  over its Keychain login. A run that fails to sign in marks the driver signed out until a run gets
+  through, a login finishes or the token changes.
 
 ### Permissions
 
@@ -1151,6 +1169,8 @@ change invalidates. `GET /drivers` does not include models (listing can spawn th
   to is marked `default`. On failure: the aliases `sonnet`, `opus`, `fable`, `haiku` plus the error.
 - **anthropic-api**: `GET /v1/models` (SDK `models.list`, all pages) with the stored key; no key →
   error. Default model when none is chosen: `claude-sonnet-5`.
+- **github-copilot**: the `model` list in `copilot help config` (no tokens spent), after `auto`
+  (Copilot picks), which is the default. On failure: a short built-in list plus the error.
 - **dummy**: `dummy-fast` (default) and `dummy-slow` (10× the per-word delay, ≥ 50 ms); any other
   model fails the run.
 

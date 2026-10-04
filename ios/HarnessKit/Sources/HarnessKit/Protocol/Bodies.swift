@@ -389,6 +389,8 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var anthropicApiKey: Patch<String>
     /// Long-lived Claude token for the claude-code driver; `.null` (or "") clears it.
     public var claudeOauthToken: Patch<String>
+    /// GitHub token for the github-copilot driver; `.null` (or "") clears it.
+    public var copilotGithubToken: Patch<String>
     public var baseBranch: String?
     public var listen: ListenSetting?
     public var browserIdleTabMinutes: Int?
@@ -400,7 +402,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         classifier: ClassifierBackend? = nil, defaultModels: [String: String?]? = nil,
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
-        claudeOauthToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
+        claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
         prompts: [String: String?]? = nil
     ) {
         self.defaultDriver = defaultDriver
@@ -413,6 +415,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         self.watcherModels = watcherModels
         self.anthropicApiKey = anthropicApiKey
         self.claudeOauthToken = claudeOauthToken
+        self.copilotGithubToken = copilotGithubToken
         self.baseBranch = baseBranch
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
