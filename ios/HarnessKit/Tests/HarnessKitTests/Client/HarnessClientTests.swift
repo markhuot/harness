@@ -169,6 +169,24 @@ struct HarnessClientRequestTests {
         #expect(try bodyJSON(t.last) == json(#"{"text":"","attachments":[{"path":"/u/a.png","name":"a.png"},{"path":"/u/b.pdf"}]}"#))
     }
 
+    /// `annotations` only when there are some, next to the attachment they describe.
+    @Test func sendMessageSendsAnnotationsOnlyWhenThereAreSome() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        let shot = PromptAttachmentInput(path: "/u/shot-annotated.png", name: "shot-annotated.png")
+        _ = try await client(t).sendMessage("NY-1", text: "", attachments: [shot], annotations: [])
+        #expect(try bodyJSON(t.last) == json(#"{"text":"","attachments":[{"path":"/u/shot-annotated.png","name":"shot-annotated.png"}]}"#))
+        let note = MessageAnnotation(
+            attachment: 0, source: .messageAttachment(entryId: "ent_5", index: 1, name: "shot.png"), width: 800, height: 600,
+            marks: [AnnotationMark(n: 1, x: 10, y: 20, tailX: 100, tailY: 120, message: "this"), AnnotationMark(n: 2, x: 5, y: 6, message: "that")]
+        )
+        _ = try await client(t).sendMessage("NY-1", text: "Fix these", move: true, attachments: [shot], annotations: [note])
+        #expect(try bodyJSON(t.last) == json(#"""
+        {"text":"Fix these","move":true,"attachments":[{"path":"/u/shot-annotated.png","name":"shot-annotated.png"}],
+         "annotations":[{"attachment":0,"source":{"kind":"message-attachment","entryId":"ent_5","index":1,"name":"shot.png"},"width":800,"height":600,
+         "marks":[{"n":1,"x":10,"y":20,"tailX":100,"tailY":120,"message":"this"},{"n":2,"x":5,"y":6,"message":"that"}]}]}
+        """#))
+    }
+
     @Test func specRoutes() async throws {
         let t = FakeTransport(status: 200, body: try envelope(.array([])))
         _ = try await client(t).specRevisions("NY-1")
@@ -259,6 +277,19 @@ struct HarnessClientRequestTests {
         let nav = FakeTransport(status: 200, body: try envelope(protocolSample("BrowserState")))
         _ = try await client(nav).browserNavigate("ses_1", url: "http://localhost:3000/", tabId: 2)
         #expect(try bodyJSON(nav.last) == json(#"{"url":"http://localhost:3000/","tabId":2}"#))
+    }
+
+    @Test func browserScreenshotAsksForTheTabOnlyWhenGiven() async throws {
+        let body = #"{"data":{"data":"iVBORw0KGgo=","width":2560,"height":1600,"viewport":{"width":1280,"height":800},"scale":2,"tabId":3,"url":"http://localhost:3000/","title":"Home"}}"#
+        let t = FakeTransport(status: 200, body: body)
+        let shot = try await client(t).browserScreenshot("ses_1", tabId: 3)
+        #expect(path(t) == "/browser/ses_1/screenshot?tab=3")
+        #expect(t.last?.method == "GET")
+        #expect(shot.width == 2560 && shot.viewport == AnnotationViewport(width: 1280, height: 800) && shot.scale == 2)
+        #expect(shot.png?.starts(with: [0x89, 0x50, 0x4E, 0x47]) == true)
+        #expect(shot.source == .browser(url: "http://localhost:3000/", title: "Home", tabId: 3, viewport: AnnotationViewport(width: 1280, height: 800), scale: 2))
+        _ = try await client(t).browserScreenshot("ses_1")
+        #expect(path(t) == "/browser/ses_1/screenshot")
     }
 
     @Test func decodesData() async throws {

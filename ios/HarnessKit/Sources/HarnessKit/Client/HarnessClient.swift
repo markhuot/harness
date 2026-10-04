@@ -199,10 +199,16 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/submit", body: body)
     }
 
-    /// `move` is only sent when true, `attachments` only when there are some. The message goes to
-    /// the agent and shows in the Transcript (with its attachments); it never goes into Activity.
-    public func sendMessage(_ key: String, text: String, move: Bool = false, attachments: [PromptAttachmentInput] = []) async throws -> Ticket {
-        let body = MessageBody(text: text, move: move ? true : nil, attachments: attachments.isEmpty ? nil : attachments)
+    /// `move` is only sent when true, `attachments` and `annotations` only when there are some. The
+    /// message goes to the agent and shows in the Transcript (with its attachments and notes); it
+    /// never goes into Activity.
+    public func sendMessage(
+        _ key: String, text: String, move: Bool = false, attachments: [PromptAttachmentInput] = [], annotations: [MessageAnnotation] = []
+    ) async throws -> Ticket {
+        let body = MessageBody(
+            text: text, move: move ? true : nil, attachments: attachments.isEmpty ? nil : attachments,
+            annotations: annotations.isEmpty ? nil : annotations
+        )
         return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
 
@@ -431,6 +437,11 @@ public final class HarnessClient: Sendable {
     /// nil when the session has no browser. `tabId` nil: the lowest open tab.
     public func browserState(_ sessionId: String, tabId: Int? = nil) async throws -> BrowserState? {
         try await request("GET", "/browser/\(sessionId)" + (tabId.map { "?tab=\($0)" } ?? ""))
+    }
+
+    /// A PNG of the tab's viewport (`tabId` nil: the lowest open tab), to annotate.
+    public func browserScreenshot(_ sessionId: String, tabId: Int? = nil) async throws -> BrowserScreenshot {
+        try await request("GET", "/browser/\(sessionId)/screenshot" + (tabId.map { "?tab=\($0)" } ?? ""))
     }
 
     /// Load `url` in tab `tabId` (nil: the lowest open tab).

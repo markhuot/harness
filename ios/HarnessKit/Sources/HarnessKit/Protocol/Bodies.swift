@@ -285,11 +285,17 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// The agent gets their paths, and images inline. Not allowed while a tool approval waits (a
     /// message then answers it as a deny).
     public var attachments: [PromptAttachmentInput]?
+    /// Numbered notes on images among `attachments` (DESIGN.md "Annotations"), at most one per
+    /// attachment. The service writes them into the agent's prompt as a numbered list, and the
+    /// transcript entry keeps them. 400 when an entry names no image attachment or its marks are
+    /// malformed.
+    public var annotations: [MessageAnnotation]?
 
-    public init(text: String, move: Bool? = nil, attachments: [PromptAttachmentInput]? = nil) {
+    public init(text: String, move: Bool? = nil, attachments: [PromptAttachmentInput]? = nil, annotations: [MessageAnnotation]? = nil) {
         self.text = text
         self.move = move
         self.attachments = attachments
+        self.annotations = annotations
     }
 }
 

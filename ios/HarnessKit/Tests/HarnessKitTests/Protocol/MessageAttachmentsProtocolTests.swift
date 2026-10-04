@@ -21,7 +21,7 @@ struct MessageAttachmentsProtocolTests {
 
     @Test func textWithAttachmentsKeepsThemInOrder() throws {
         let c = try decode(TranscriptContent.self, #"{"type":"text","text":"","attachments":[{"path":"/u/a.png","name":"a.png","source":"upload"},{"path":"/x/notes.pdf","name":"Notes","source":"file"}]}"#)
-        guard case let .text(text, attachments) = c else {
+        guard case let .text(text, attachments, _) = c else {
             Issue.record("not text: \(c)")
             return
         }

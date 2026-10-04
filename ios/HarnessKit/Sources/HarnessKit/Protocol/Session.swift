@@ -48,6 +48,8 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
     /// Files the human attached to the message this run answers (MessageBody.attachments), sent
     /// with its prompt. Optional so clients tolerate an older service.
     public var attachments: [PromptAttachment]?
+    /// Numbered notes on images among `attachments` (MessageBody.annotations), listed in its prompt.
+    public var annotations: [MessageAnnotation]?
     @Nullable public var error: String?
     public var createdAt: Timestamp
     @Nullable public var startedAt: Timestamp?
@@ -55,7 +57,7 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
 
     public init(
         id: String, sessionId: String, kind: RunKind, status: RunStatus, driver: String, prompt: String,
-        attachments: [PromptAttachment]? = nil,
+        attachments: [PromptAttachment]? = nil, annotations: [MessageAnnotation]? = nil,
         error: String? = nil, createdAt: Timestamp, startedAt: Timestamp? = nil, endedAt: Timestamp? = nil
     ) {
         self.id = id
@@ -65,6 +67,7 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
         self.driver = driver
         self.prompt = prompt
         self.attachments = attachments
+        self.annotations = annotations
         self.error = error
         self.createdAt = createdAt
         self.startedAt = startedAt
@@ -77,8 +80,9 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
 public enum TranscriptContent: Codable, Sendable, Equatable {
     /// `attachments`: on a human message (role user), the files sent with it, served at
     /// GET /transcript/:entryId/attachments/:index (HarnessClient.messageAttachmentUrl). nil when
-    /// the message had none (or an older service sent it).
-    case text(text: String, attachments: [PromptAttachment]? = nil)
+    /// the message had none (or an older service sent it). `annotations`: the human's numbered notes
+    /// on some of those images (MessageBody.annotations).
+    case text(text: String, attachments: [PromptAttachment]? = nil, annotations: [MessageAnnotation]? = nil)
     case thinking(text: String)
     case toolCall(callId: String, name: String, input: JSONValue)
     case toolResult(callId: String, name: String, output: [ToolResultContent], isError: Bool)
@@ -108,7 +112,8 @@ public enum TranscriptContent: Codable, Sendable, Equatable {
         case "text":
             self = .text(
                 text: try c.decode(String.self, forKey: "text"),
-                attachments: try c.decodeIfPresent([PromptAttachment].self, forKey: "attachments")
+                attachments: try c.decodeIfPresent([PromptAttachment].self, forKey: "attachments"),
+                annotations: try c.decodeIfPresent([MessageAnnotation].self, forKey: "annotations")
             )
         case "thinking": self = .thinking(text: try c.decode(String.self, forKey: "text"))
         case "tool_call":
@@ -139,9 +144,10 @@ public enum TranscriptContent: Codable, Sendable, Equatable {
         var c = encoder.container(keyedBy: AnyCodingKey.self)
         try c.encode(type, forKey: "type")
         switch self {
-        case let .text(text, attachments):
+        case let .text(text, attachments, annotations):
             try c.encode(text, forKey: "text")
             try c.encodeIfPresent(attachments, forKey: "attachments")
+            try c.encodeIfPresent(annotations, forKey: "annotations")
         case let .thinking(text), let .error(text):
             try c.encode(text, forKey: "text")
         case let .toolCall(callId, name, input):
