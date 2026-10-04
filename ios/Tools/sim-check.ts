@@ -1179,6 +1179,15 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
     if (!(await switchShown())) throw new Error("no switch once focused");
+    // Turned on, the hint goes away; the switch must stay at the left rather than center in the row.
+    const switchX = async () => (await nodes(udid)).find((n) => n.AXLabel === "Move to in progress")?.frame.x;
+    const offX = await switchX();
+    await tapWhere(udid, (l) => l === "Move to in progress");
+    await Bun.sleep(400);
+    const onX = await switchX();
+    await tapWhere(udid, (l) => l === "Move to in progress");
+    if (offX == null || onX == null) throw new Error("lost the switch while toggling it");
+    if (Math.abs(onX - offX) > 4) throw new Error(`the switch moved from x=${offX} to x=${onX} when turned on`);
     await dismiss(top);
     await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
