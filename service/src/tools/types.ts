@@ -216,6 +216,11 @@ export interface HarnessOps {
   // --- any ticket run ---
   /** A short Activity note on the ticket (post_note). */
   postNote(ctx: ToolContext, note: string): Promise<void>;
+  /**
+   * A status line in the ticket's transcript, for the human following along (a browser_run job's
+   * log). Not in Activity, and the agent doesn't see it.
+   */
+  statusLine(ctx: ToolContext, text: string): Promise<void>;
   /** The ticket's spec (a revision, else the current one), with numbered lines (read_spec). */
   readSpec(ctx: ToolContext, revision?: number): Promise<string>;
 

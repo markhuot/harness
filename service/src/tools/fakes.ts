@@ -80,6 +80,7 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
   };
   const defaults: Required<OpsImpl> = {
     postNote: async () => {},
+    statusLine: async () => {},
     readSpec: async () => "Revision 1\n   1\t",
     editSpec: async () => "Spec updated to revision 2.",
     updateSpec: async () => "Spec updated to revision 2.",

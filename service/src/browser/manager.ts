@@ -1700,7 +1700,8 @@ export class BrowserManager implements BrowserService {
         if (met) return finish(true, `${describeCondition(c)} after ${seconds(elapsed)}; now at ${tab.url}`);
         if (Date.now() >= deadline) {
           const busy = check?.busy ?? ((await this.evalValue(tab, `document.querySelectorAll('[aria-busy="true"]').length`).catch(() => 0)) as number);
-          const pending = inFlight(tab, Date.now());
+          // Every open request, long polls included: one of them may be what the page waits on.
+          const pending = inFlight(tab, Date.now(), true);
           const lines = [
             `Timed out after ${seconds(elapsed)} waiting for ${describeCondition(c)}.`,
             `Now at ${tab.url}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
@@ -1863,10 +1864,10 @@ function waitCheckExpression(c: WaitCondition): string {
   })()`;
 }
 
-/** Requests that keep a page from being idle: still loading, and not open so long they're a long poll or a stream. */
-function inFlight(tab: Tab, now: number): (BrowserRequest & { at: number })[] {
+/** Requests that keep a page from being idle: still loading, and not open so long they're a long poll or a stream (`all`: those too). */
+function inFlight(tab: Tab, now: number, all = false): (BrowserRequest & { at: number })[] {
   return [...tab.requests.values()].filter(
-    (r) => r.durationMs === undefined && r.failure === undefined && r.type !== "WebSocket" && r.type !== "EventSource" && now - r.at < IDLE_IGNORE_AFTER_MS,
+    (r) => r.durationMs === undefined && r.failure === undefined && r.type !== "WebSocket" && r.type !== "EventSource" && (all || now - r.at < IDLE_IGNORE_AFTER_MS),
   );
 }
 

@@ -3,7 +3,8 @@
 import type { RunKind, Ticket } from "@harness/shared";
 import type { Driver } from "../drivers/types";
 import { getTicket, listInbox, listProjects, listTickets, searchTickets } from "./board";
-import { browserClick, browserCloseTab, browserContent, browserEval, browserOpen, browserResize, browserScreenshot, browserTabs, browserType } from "./browser";
+import { browserClick, browserCloseTab, browserContent, browserEval, browserOpen, browserResize, browserScreenshot, browserTabs, browserType, browserWait } from "./browser";
+import { browserRun, browserRunStatus, browserRunStop } from "./browser-run";
 import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
 import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
@@ -16,6 +17,7 @@ import type { ToolDefinition } from "./types";
 export * from "./board";
 export * from "./board-write";
 export * from "./browser";
+export * from "./browser-run";
 export * from "./conductor";
 export * from "./config";
 export * from "./native";
@@ -24,7 +26,21 @@ export * from "./ticket";
 export * from "./triage";
 export { defineGatedTool, defineTool, validateInput } from "./util";
 
-export const browserTools: ToolDefinition[] = [browserOpen, browserTabs, browserResize, browserCloseTab, browserContent, browserClick, browserType, browserEval, browserScreenshot];
+export const browserTools: ToolDefinition[] = [
+  browserOpen,
+  browserTabs,
+  browserResize,
+  browserCloseTab,
+  browserContent,
+  browserClick,
+  browserType,
+  browserEval,
+  browserScreenshot,
+  browserWait,
+  browserRun,
+  browserRunStatus,
+  browserRunStop,
+];
 /** Read-only board tools: every run kind gets these (DESIGN.md "Tools"). */
 export const boardTools: ToolDefinition[] = [listTickets, getTicket, searchTickets, listProjects, listInbox];
 /** Board tools that change other tickets: work and conductor runs only (DESIGN.md "Board changes by agents"). */
