@@ -9,7 +9,12 @@ import Observation
 @MainActor
 @Observable
 public final class MessageAttachments {
-    public private(set) var list: [Attachment] = []
+    public private(set) var list: [Attachment] = [] {
+        didSet { if !PromptAttachments.same(oldValue, list), !replacing { onChange?() } }
+    }
+    /// The list changed by an edit (add, annotate, remove, clear): the message draft saves it.
+    @ObservationIgnored public var onChange: (() -> Void)?
+    @ObservationIgnored private var replacing = false
 
     public init(_ list: [Attachment] = []) {
         self.list = list
@@ -43,6 +48,13 @@ public final class MessageAttachments {
 
     public func clear() {
         list = []
+    }
+
+    /// Show `next` (the saved draft from another device) without counting it as an edit.
+    public func replace(_ next: [Attachment]) {
+        replacing = true
+        list = next
+        replacing = false
     }
 
     /// The list as POST /tickets/:key/messages sends it: each attachment whole, with its notes.

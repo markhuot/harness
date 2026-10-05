@@ -262,6 +262,12 @@ export interface Ticket {
    * fixtures type-check; the service always sends it.
    */
   promptAttachments?: Attachment[];
+  /**
+   * The message the human is writing to the ticket's agent, saved as they type (DESIGN.md
+   * "Message drafts") so it can be finished on another device. null when there is none; sending
+   * a message from an app clears it. Optional so older services and fixtures type-check.
+   */
+  messageDraft?: MessageDraft | null;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /**
@@ -1509,6 +1515,35 @@ export interface MessageBody {
    * message then answers it as a deny).
    */
   attachments?: AttachmentInput[];
+}
+
+/**
+ * A ticket's unsent message (Ticket.messageDraft, DESIGN.md "Message drafts"): one per ticket,
+ * the same one in every app.
+ */
+export interface MessageDraft {
+  text: string;
+  /** The files waiting to go with it, each with its notes */
+  attachments: Attachment[];
+  /**
+   * The editor that saved it (MessageDraftBody.origin): an editor skips its own saves coming back
+   * and takes only other devices'. null when the saver didn't say.
+   */
+  origin: string | null;
+  /** When it was saved (ms) */
+  updatedAt: number;
+}
+
+/**
+ * PUT /tickets/:key/message-draft: the whole draft, replacing the saved one. Empty text and no
+ * attachments clear it.
+ */
+export interface MessageDraftBody {
+  text: string;
+  /** At most MAX_PROMPT_ATTACHMENTS, as MessageBody.attachments takes them */
+  attachments?: AttachmentInput[];
+  /** An id for the editor saving it, unique per open editor (MessageDraft.origin) */
+  origin?: string;
 }
 
 /** The `data` of PATCH /tickets/:key's 409 when baseRevision isn't the current spec revision. */

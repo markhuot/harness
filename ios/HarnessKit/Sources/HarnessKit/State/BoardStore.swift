@@ -91,6 +91,9 @@ public final class BoardStore {
     @ObservationIgnored private var nextListener = 0
     @ObservationIgnored private var backgrounded = false
     @ObservationIgnored private var closed = false
+    /// Each ticket's message draft (DESIGN.md "Message drafts"), by ticket id: one per ticket for
+    /// the store's life, so leaving a ticket keeps what's typed.
+    @ObservationIgnored private var messageDrafts: [String: MessageDraftSync] = [:]
 
     /// - Parameters:
     ///   - boardProject: the board's filter at launch (prefs.boardProject: a project id or a group's scope)
@@ -411,6 +414,28 @@ public final class BoardStore {
     public func setBoardScope(_ board: String?) {
         scope = Paging.scopeOf(board)
         loader.ensureFirstPage(board)
+    }
+
+    /// The ticket's message draft (DESIGN.md "Message drafts"): made the first time its composer
+    /// shows, from the ticket's saved draft, and kept for the store's life.
+    public func messageDraft(for t: Ticket) -> MessageDraftSync {
+        if let had = messageDrafts[t.id] {
+            had.key = t.key
+            return had
+        }
+        let client = client
+        let made = MessageDraftSync(
+            key: t.key,
+            stored: t.messageDraft.optional,
+            save: { key, body in
+                guard let api = client as? HarnessClient else { throw MessageDraftError.offline }
+                return try await api.saveMessageDraft(key, body)
+            },
+            onSaved: { [weak self] in self?.dispatch(.tickets([$0])) },
+            timers: timers
+        )
+        messageDrafts[t.id] = made
+        return made
     }
 
     /// A ticket's detail merged into the store (shared with the background fetches for that key).

@@ -96,7 +96,7 @@ function withCors(res: Response, origin: string | null): Response {
 
 function preflight(origin: string | null): Response {
   const headers: Record<string, string> = {
-    "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization, content-type",
     "access-control-max-age": "600",
     vary: "Origin",
@@ -246,8 +246,9 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     // Older apps still send `log`; messages go to the transcript only, so it's ignored. They may
     // also send `move` (their composer's switch, since removed), which still moves the ticket.
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments, fromApp: true });
   });
+  add("PUT", "/tickets/:key/message-draft", async ({ params, body }) => o.saveMessageDraft(params.key!, await body()));
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();
     if (b?.decision !== "approve" && b?.decision !== "request_changes") throw new HarnessError(400, "decision must be approve or request_changes");

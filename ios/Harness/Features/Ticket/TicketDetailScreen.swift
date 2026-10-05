@@ -132,9 +132,6 @@ private struct TicketDetailBody: View {
     @State private var height: CGFloat = 800
     /// Bumped to focus the composer's field (an annotated image just joined the message).
     @State private var focusComposer = 0
-    /// The files going with the next message, and their uploads: here rather than in the composer,
-    /// so a drop anywhere on the ticket attaches.
-    @State private var outgoing = MessageAttachments()
     @State private var uploader = PromptAttachmentUploader()
     /// Where the composer starts and the tab's page ends, on screen: the pages run on under the
     /// composer's glass, so their content gets the overlap as a bottom inset instead.
@@ -157,6 +154,10 @@ private struct TicketDetailBody: View {
 
     var body: some View {
         let state = store.state
+        // The message being written (DESIGN.md "Message drafts"), saved to the ticket as it's typed.
+        // Its files are here rather than in the composer, so a drop anywhere on the ticket attaches.
+        let draft = store.messageDraft(for: ticket)
+        let outgoing = draft.attachments
         let attachTarget: (any PromptAttachmentTarget)? = TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
@@ -203,7 +204,7 @@ private struct TicketDetailBody: View {
                 } else {
                     VStack(spacing: 0) {
                         ComposerGrip(ticketKey: ticket.key)
-                        TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
+                        TicketDetailComposer(ticket: ticket, tab: shown, draft: draft, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
                     }
                 }
             }
@@ -332,12 +333,13 @@ private struct TicketPinnedBody: View {
     @State private var height: CGFloat = 800
     /// A sub-agent or task the pinned Agents & tasks tab opened.
     @State private var agentTab: TicketTab?
-    @State private var outgoing = MessageAttachments()
     @State private var uploader = PromptAttachmentUploader()
 
     private var isComposer: Bool { tab == TicketWindowValue.composer }
 
     var body: some View {
+        let draft = store.messageDraft(for: ticket)
+        let outgoing = draft.attachments
         let attachTarget: (any PromptAttachmentTarget)? = isComposer && TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         VStack(spacing: 0) {
             TicketDetailHero(ticket: ticket, compactTab: true, maxHeight: height * 0.45)
@@ -358,7 +360,7 @@ private struct TicketPinnedBody: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isComposer {
                 // `.transcript`: a send has no tab to move to here.
-                TicketDetailComposer(ticket: ticket, tab: .transcript, outgoing: outgoing, uploader: uploader, onTab: { _ in }).id(ticket.id)
+                TicketDetailComposer(ticket: ticket, tab: .transcript, draft: draft, uploader: uploader, onTab: { _ in }).id(ticket.id)
             }
         }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))

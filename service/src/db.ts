@@ -668,6 +668,11 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN resume_at INTEGER;
   `,
+  // 33: tickets.message_draft: the message the human is writing to the ticket's agent (DESIGN.md
+  //     "Message drafts"), as JSON { text, attachments, origin, updatedAt }. NULL when there is none.
+  `
+  ALTER TABLE tickets ADD COLUMN message_draft TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

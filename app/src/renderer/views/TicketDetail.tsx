@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
+import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
 import {
   AGENTS_LIVE_LABEL,
   annotateAttachment,
@@ -873,6 +874,11 @@ interface ComposerAnnotate {
  */
 const ticketComposers = new Map<string, ComposerAnnotate>();
 
+// A reload or the window closing mid-debounce: every message draft sends what it hasn't yet, as a
+// keepalive request (it outlives the page). pagehide covers what beforeunload misses.
+addEventListener("beforeunload", () => void unloadMessageDrafts());
+addEventListener("pagehide", () => void unloadMessageDrafts());
+
 /** The ticket's composer in this window; torn off into a window of its own, it can't take notes from here. */
 function composerFor(ticketKey: string): ComposerAnnotate {
   const c = ticketComposers.get(ticketKey);
@@ -891,11 +897,33 @@ function composerFor(ticketKey: string): ComposerAnnotate {
  * New session's Start session), sends the files with their notes.
  */
 export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket: Ticket; onSent: () => void; grip?: ReactNode; fill?: boolean }) {
-  const { client } = useStore();
+  const { client, dispatch, toast } = useStore();
   const act = useAction();
-  const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  // The blur reads the newest copy, not the one this render saw.
+  const ticketRef = useRef(ticket);
+  ticketRef.current = ticket;
+  // The text and files live in the ticket's message draft session (state/messageDraftSession.ts):
+  // saved to the service as they're typed, and kept across remounts.
+  const draft = messageDraftSession(ticket, {
+    save: (key, body) => client.saveMessageDraft(key, body),
+    upsert: (t) => dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: t } }),
+    error: (m) => toast(m, "error"),
+    keepalive: (path, body) =>
+      void fetch(client.baseUrl + path, {
+        method: "PUT",
+        keepalive: true,
+        headers: { authorization: `Bearer ${client.token}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }).catch(() => {}),
+  });
+  useSyncExternalStore(draft.subscribe, () => draft.version);
+  const { text, attachments } = draft.value;
+  const setText = (t: string) => draft.edit({ text: t });
+  // Another device's edit (or its send) shows here, unless this one is being typed in.
+  useEffect(() => draft.sync(ticket.messageDraft), [draft, ticket.messageDraft]);
+  // Unmounting with the input focused sends no blur: the draft isn't being typed in anymore.
+  useEffect(() => () => draft.focus(false, ticketRef.current.messageDraft), [draft]);
   // Uploads finish after their render: they read and write the latest list.
   const listRef = useRef(attachments);
   listRef.current = attachments;
@@ -906,7 +934,7 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   const approvalPending = !!ticket.pendingApproval;
   const setList = (next: Attachment[]) => {
     listRef.current = next;
-    setAttachments(next);
+    draft.edit({ attachments: next });
   };
   /** Add to message: the notes go on the same attachment (by id) waiting here, or it's added with them. */
   const annotate = (a: AnnotatedAttachment) => {
@@ -954,15 +982,17 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
     const body = text.trim();
     const files = attachments;
     setSending(true);
+    // No draft save may land after the message: the service clears the draft when it goes.
+    await draft.beforeSend();
     // Each file carries its notes (Attachment.annotation).
     const ok = await act(() => client.sendMessage(ticket.key, body, files.length ? { attachments: attachmentInputs(files) } : {}));
     setSending(false);
     if (ok) {
-      setText("");
+      dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: ok } });
       // Only what went: anything attached while it was sending stays for the next message.
-      setList(listRef.current.filter((a) => !files.includes(a)));
+      draft.sent(files);
       onSent();
-    }
+    } else draft.sendFailed();
   };
 
   // Its own Annotate scope: a waiting image's lightbox annotates it here, also when the composer
@@ -1019,6 +1049,8 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
           placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
           value={text}
           onValueChange={setText}
+          onFocus={() => draft.focus(true, ticket.messageDraft)}
+          onBlur={() => draft.focus(false, ticketRef.current.messageDraft)}
           search={searchFiles}
           searchCommands={searchCommands}
           placement="above"

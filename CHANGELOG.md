@@ -25,11 +25,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   checks the service every 15 minutes on its own and refreshes right away while the app is open,
   and when it can't reach your Mac it keeps showing the last tickets it saw along with how old
   they are.
+- A message you're writing to a ticket's agent is saved as you type, so you can start a reply on
+  your iPhone and finish it on your Mac, or the other way around. It keeps its attached files and
+  their notes too. Another device's version shows up in the message box whenever you aren't typing
+  in it, and sending the message clears it everywhere.
 
 ### Fixed
 
 - On iPad, New session closes once the ticket is created. It used to stay open behind the new
   ticket's window.
+- On iPhone and iPad, typing in New session's prompt and in a ticket's message box no longer gets
+  rewritten mid-word when a save finishes or the board updates. Autocorrections and the keyboard's
+  suggestions stay put while you type.
 
 ## [app-20261005.1909](https://github.com/markhuot/harness/releases/tag/app-20261005.1909) - 2026-10-05
 

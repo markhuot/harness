@@ -7,6 +7,13 @@ import SwiftUI
 /// that starts the text completes the same way. The service attaches mentioned files to the
 /// agent's prompt; the agent expands commands itself.
 ///
+/// The field is uncontrolled while it's being typed in: it keeps its own copy of the text (`buffer`)
+/// and draws in `MentionField`, an Equatable view that redraws only when its own inputs change. A
+/// parent redrawing (a save coming back, any socket event) never sets the text view's text or
+/// selection, which would cancel an autocorrection or inline prediction iOS is showing and rewrite
+/// what's under the caret. Typing goes out to `text`; `text` comes back into the field only when it
+/// changes to something the field didn't type (a send clearing it, another device's draft).
+///
 /// The lookups search the ticket's folder (`ticketKey`: ticketFiles/ticketCommands) or the
 /// project's (`projectId`: projectFiles/projectCommands for `commandDriver`), unless the caller
 /// passes its own `search`/`searchCommands`. `suggestionsEdge` puts the list above the field for a
@@ -52,9 +59,17 @@ struct MentionTextEditor: View {
     @State private var caret = MentionCaret.none
     @State private var selection: TextSelection?
     @State private var items: [MentionItem] = []
+    /// The field's own text (nil until it's typed in or told otherwise: `text` until then)
+    @State private var buffer: String?
+    /// Bumped when the field has to take a text or selection it didn't make itself
+    @State private var revision = 0
+
+    /// What the field shows.
+    private var current: String { buffer ?? text }
 
     var body: some View {
-        let target = PickerLogic.mentionTarget(text, caret: caret, commands: commands)
+        let value = current
+        let target = PickerLogic.mentionTarget(value, caret: caret, commands: commands)
         let shown = target == nil ? [] : items
         VStack(spacing: 8) {
             if suggestionsEdge == .top { suggestions(shown, target: target) }
@@ -62,50 +77,40 @@ struct MentionTextEditor: View {
             if suggestionsEdge == .bottom { suggestions(shown, target: target) }
         }
         .task(id: target?.lookup) { await lookup(target) }
+        .onChange(of: selection) { _, sel in
+            guard let range = Self.range(sel) else { return }
+            caret = caret.onSelection(start: PickerLogic.utf16Offset(range.lowerBound, in: value), end: PickerLogic.utf16Offset(range.upperBound, in: value))
+        }
+        .onChange(of: text) { _, next in
+            // Typing comes back as what the field already has; anything else came from outside.
+            if let buffer, next.unicodeScalars.elementsEqual(buffer.unicodeScalars) { return }
+            buffer = next
+            revision += 1
+        }
+        .onChange(of: focused) { _, now in onFocusChange?(now) }
     }
 
     private var field: some View {
-        TextField("", text: $text, selection: $selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
-            .font(.scaled(size: 16))
-            .foregroundStyle(c.text)
-            .lineLimit(1...maxLines)
-            .frame(minHeight: minHeight, alignment: .topLeading)
-            .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))
-            .background {
-                if let box = fieldBox {
-                    if box.glass {
-                        Color.clear.glassEffect(.regular.interactive(), in: .rect(cornerRadius: box.cornerRadius))
-                    } else {
-                        RoundedRectangle(cornerRadius: box.cornerRadius).fill(box.fill)
-                    }
-                    if let border = box.border {
-                        RoundedRectangle(cornerRadius: box.cornerRadius).strokeBorder(border)
-                    }
-                } else if boxed {
-                    RoundedRectangle(cornerRadius: 12).fill(c.bgElev)
-                    RoundedRectangle(cornerRadius: 12).strokeBorder(c.border)
-                }
-            }
-            .onChange(of: selection) { _, sel in
-                guard let range = Self.range(sel) else { return }
-                caret = caret.onSelection(start: PickerLogic.utf16Offset(range.lowerBound, in: text), end: PickerLogic.utf16Offset(range.upperBound, in: text))
-            }
-            .focused($focused)
-            .onSubmitShortcut(onSubmit)
-            .onChange(of: focused) { _, now in onFocusChange?(now) }
-            .accessibilityLabel(fieldLabel ?? placeholder)
-            .task(id: focusRequest) {
-                guard focusRequest > 0 else { return }
-                // After the annotator's cover has gone.
-                try? await Task.sleep(for: .milliseconds(450))
-                focused = true
-            }
-            .task {
-                guard autofocus else { return }
-                // A sheet's field takes focus once the sheet has finished sliding up.
-                try? await Task.sleep(for: .milliseconds(350))
-                focused = true
-            }
+        EquatableView(content: MentionField(
+            text: Binding(get: { buffer ?? text }, set: { next in
+                buffer = next
+                text = next
+            }),
+            selection: $selection,
+            focused: $focused,
+            revision: revision,
+            placeholder: placeholder,
+            placeholderColor: placeholderColor,
+            minHeight: minHeight,
+            maxLines: maxLines,
+            boxed: boxed,
+            fieldBox: fieldBox,
+            fieldLabel: fieldLabel,
+            autofocus: autofocus,
+            focusRequest: focusRequest
+        ))
+        // Out here, not in MentionField: the Equatable field would keep an old closure.
+        .onSubmitShortcut(onSubmit)
     }
 
     @ViewBuilder private func suggestions(_ shown: [MentionItem], target: MentionTarget?) -> some View {
@@ -128,9 +133,11 @@ struct MentionTextEditor: View {
     }
 
     private func pick(_ item: MentionItem, target: MentionTarget?) {
-        guard let target, let next = PickerLogic.pickMention(text, target: target, item: item) else { return }
+        guard let target, let next = PickerLogic.pickMention(current, target: target, item: item) else { return }
         haptic(.select)
         let before = caret.at
+        buffer = next.text
+        revision += 1
         text = next.text
         caret = MentionCaret.onPick(next.caret, before: before)
         selection = TextSelection(insertionPoint: PickerLogic.index(utf16: next.caret, in: next.text))
@@ -185,8 +192,73 @@ struct MentionTextEditor: View {
     }
 }
 
+/// MentionTextEditor's text field. Equatable on everything but its bindings, so a parent redrawing
+/// with the same look leaves the text view alone (see MentionTextEditor); `revision` redraws it when
+/// the editor hands it a text or selection it didn't type.
+private struct MentionField: View, Equatable {
+    let text: Binding<String>
+    let selection: Binding<TextSelection?>
+    let focused: FocusState<Bool>.Binding
+    let revision: Int
+    let placeholder: String
+    let placeholderColor: Color?
+    let minHeight: CGFloat
+    let maxLines: Int
+    let boxed: Bool
+    let fieldBox: MentionFieldBox?
+    let fieldLabel: String?
+    let autofocus: Bool
+    let focusRequest: Int
+
+    @Environment(\.palette) private var c
+
+    nonisolated static func == (a: MentionField, b: MentionField) -> Bool {
+        a.revision == b.revision && a.placeholder == b.placeholder && a.placeholderColor == b.placeholderColor
+            && a.minHeight == b.minHeight && a.maxLines == b.maxLines && a.boxed == b.boxed && a.fieldBox == b.fieldBox
+            && a.fieldLabel == b.fieldLabel && a.autofocus == b.autofocus && a.focusRequest == b.focusRequest
+    }
+
+    var body: some View {
+        TextField("", text: text, selection: selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
+            .font(.scaled(size: 16))
+            .foregroundStyle(c.text)
+            .lineLimit(1...maxLines)
+            .frame(minHeight: minHeight, alignment: .topLeading)
+            .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))
+            .background {
+                if let box = fieldBox {
+                    if box.glass {
+                        Color.clear.glassEffect(.regular.interactive(), in: .rect(cornerRadius: box.cornerRadius))
+                    } else {
+                        RoundedRectangle(cornerRadius: box.cornerRadius).fill(box.fill)
+                    }
+                    if let border = box.border {
+                        RoundedRectangle(cornerRadius: box.cornerRadius).strokeBorder(border)
+                    }
+                } else if boxed {
+                    RoundedRectangle(cornerRadius: 12).fill(c.bgElev)
+                    RoundedRectangle(cornerRadius: 12).strokeBorder(c.border)
+                }
+            }
+            .focused(focused)
+            .accessibilityLabel(fieldLabel ?? placeholder)
+            .task(id: focusRequest) {
+                guard focusRequest > 0 else { return }
+                // After the annotator's cover has gone.
+                try? await Task.sleep(for: .milliseconds(450))
+                focused.wrappedValue = true
+            }
+            .task {
+                guard autofocus else { return }
+                // A sheet's field takes focus once the sheet has finished sliding up.
+                try? await Task.sleep(for: .milliseconds(350))
+                focused.wrappedValue = true
+            }
+    }
+}
+
 /// The field's box when the caller draws its own (MentionTextEditor `fieldBox`).
-struct MentionFieldBox {
+struct MentionFieldBox: Equatable {
     var fill: Color = .clear
     /// nil draws no border
     var border: Color?

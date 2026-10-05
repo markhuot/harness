@@ -18,6 +18,7 @@ import type {
   Health,
   HumanReviewBody,
   MessageBody,
+  MessageDraftBody,
   ReopenBody,
   ApprovalBody,
   BranchInfo,
@@ -223,6 +224,10 @@ export class HarnessClient {
       ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
     };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
+  }
+  /** Save the message being written to the ticket (Ticket.messageDraft); empty clears it. */
+  saveMessageDraft(key: string, body: MessageDraftBody) {
+    return this.request<Ticket>("PUT", `/tickets/${key}/message-draft`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);

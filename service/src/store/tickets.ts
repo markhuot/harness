@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, ExternalRef, PendingApproval, PermissionMode, Attachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, Attachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
 import { isCompletionAction } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
@@ -45,6 +45,7 @@ interface TicketRow {
   draft?: number;
   prompt_attachments?: string;
   resume_at?: number | null;
+  message_draft?: string | null;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -254,6 +255,7 @@ export class TicketRepo {
       draft: bool(r.draft ?? 0),
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),
       resumeAt: r.resume_at ?? null,
+      messageDraft: fromJson<MessageDraft | null>(r.message_draft ?? null, null),
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
@@ -545,6 +547,15 @@ export class TicketRepo {
       this.db.query(`UPDATE tickets SET ${[...sets, "updated_at = $t"].join(", ")} WHERE id = $id`).run(params);
       if (patch.dependsOn) this.setDeps(id, patch.dependsOn);
     })();
+    return this.get(id);
+  }
+
+  /**
+   * Save the ticket's message draft (null clears it). Not a change to the ticket itself, so
+   * updated_at stays put.
+   */
+  setMessageDraft(id: string, draft: MessageDraft | null): Ticket | null {
+    this.db.query("UPDATE tickets SET message_draft = $draft WHERE id = $id").run({ id, draft: draft ? toJson(draft) : null });
     return this.get(id);
   }
 

@@ -210,6 +210,11 @@ public final class HarnessClient: Sendable {
         return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
 
+    /// Save the message being written to the ticket (Ticket.messageDraft); empty clears it.
+    public func saveMessageDraft(_ key: String, _ body: MessageDraftBody) async throws -> Ticket {
+        try await request("PUT", "/tickets/\(key)/message-draft", body: body)
+    }
+
     public func humanReview(_ key: String, _ body: HumanReviewBody) async throws -> Ticket {
         try await request("POST", "/tickets/\(key)/review", body: body)
     }

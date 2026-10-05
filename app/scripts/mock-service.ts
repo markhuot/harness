@@ -52,6 +52,7 @@ import type { CompletionAction } from "@harness/shared";
 import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
 // The real diff, so the Spec tab's history shows what the service would send.
 import { unifiedDiff } from "../../service/src/spec";
+import { attachmentFromInput } from "@harness/shared/state";
 
 const PORT = Number(process.env.MOCK_PORT ?? 7799);
 /** The bearer token; POST /token/rotate replaces it (the old one 401s from then on). */
@@ -1724,6 +1725,16 @@ async function route(req: Request, url: URL): Promise<Response> {
       const other = specRevisionOf(t, diff, "diff");
       return ok({ from: other.rev, to: rev.rev, diff: unifiedDiff(other.body, rev.body, `${t.key} spec rev ${other.rev}`, `${t.key} spec rev ${rev.rev}`) } satisfies SpecDiff);
     }
+    if (method === "PUT" && c === "message-draft") {
+      // Mirrors the service: the whole draft, last write wins; empty clears it.
+      if (t.draft) throw new HttpError(409, `${t.key} is a draft; submit it first`);
+      const body = await readBody(req);
+      const text = typeof body.text === "string" ? body.text : "";
+      const files = Array.isArray(body.attachments) ? body.attachments.map(attachmentFromInput) : [];
+      t.messageDraft = text || files.length ? { text, attachments: files, origin: typeof body.origin === "string" ? body.origin : null, updatedAt: now() } : null;
+      upsertTicket(t, false);
+      return ok(t);
+    }
     if (method === "POST") {
       const body = await readBody(req);
       if (c === "submit") {
@@ -1758,6 +1769,8 @@ async function route(req: Request, url: URL): Promise<Response> {
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");
+          // Mirrors the service: an app's send uses up the ticket's message draft.
+          t.messageDraft = null;
           // Mirrors the service: the message and the agent's answer are in the transcript only
           // (an older app's `log` is ignored).
           // Mirrors the service: planning → the plan run, in progress → the work, and blocked,
