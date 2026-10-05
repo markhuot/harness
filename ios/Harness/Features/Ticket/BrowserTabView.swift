@@ -108,7 +108,7 @@ struct BrowserTabView: View {
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(c.border, lineWidth: 0.5))
             .padding(.horizontal, 4)
             BrowserBarButton(icon: "refresh", label: "Reload", disabled: model.empty) { model.command(.reload) }
-            BrowserBarButton(icon: "edit", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
+            BrowserBarButton(icon: "", systemImage: typing ? "keyboard.chevron.compact.down" : "keyboard", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
             }
             BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
