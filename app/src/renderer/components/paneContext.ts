@@ -5,6 +5,7 @@
 import { createContext, useCallback, useContext } from "react";
 import { ALL_SCOPE, type TicketTab } from "@harness/shared/state";
 import { replaceContent, updatePanes } from "../state/panes";
+import { boardRoute, paneScopeOf } from "../state/route";
 import { useOptionalStore } from "../state/store";
 
 export interface PaneInfo {
@@ -51,12 +52,12 @@ export function useOpenTicket(): (key: string, tab?: TicketTab) => void {
   const scope = usePaneScope();
   const store = useOptionalStore();
   const navigate = store?.navigate;
-  const projectId = store?.route.view === "board" ? store.route.projectId : null;
+  const board = (store && paneScopeOf(store.route)) ?? ALL_SCOPE;
   return useCallback(
     (key: string, tab: TicketTab = "spec") => {
       if (paneId) updatePanes(scope, (s) => replaceContent(s, paneId, { kind: "ticket", ticketKey: key, tab }));
-      else navigate?.({ view: "board", projectId, ticketKey: key, tab });
+      else navigate?.(boardRoute(board, key, tab));
     },
-    [paneId, scope, navigate, projectId],
+    [paneId, scope, navigate, board],
   );
 }

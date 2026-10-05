@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, type FileLink, type HarnessEvent, type HarnessSocket } from "@harness/shared";
+import { HarnessClient, projectGroups, type FileLink, type HarnessEvent, type HarnessSocket } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -12,8 +12,9 @@ import {
   needsFirstDonePage,
   reducer,
   ALL_SCOPE,
+  groupScope,
   scopeOf,
-  scopeProject,
+  scopeQuery,
   SEARCH_DEBOUNCE_MS,
   SEARCH_PAGE_SIZE,
   unresolvedKeys,
@@ -21,7 +22,7 @@ import {
   type Snapshot,
   type State,
 } from "@harness/shared/state";
-import { formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
+import { boardRoute, formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
 import {
   closedSessions,
   focusedTicket,
@@ -73,8 +74,13 @@ export interface Store {
   toast: (message: string, kind?: "error" | "info") => void;
   /** After POST /token/rotate: switch to the new token (the client and socket are rebuilt). */
   reconnect: (rotatedToken: string) => Promise<void>;
-  /** The board's project scope (null = all projects), validated against loaded projects */
+  /** The board's project (null = all projects or a group's board), validated against loaded projects */
   boardProjectId: string | null;
+  /**
+   * The board's scope (paging.ts): its project's id, groupScope(name) on a group's board, or
+   * ALL_SCOPE. What the board's columns, Done paging and search are for.
+   */
+  boardScope: string;
   /** Next page of the Done column for the current board scope (no-op while one is in flight) */
   loadMoreDone: () => void;
   /** Board filter box: instant local matches, then a debounced server search ("" clears) */
@@ -209,7 +215,7 @@ async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snaps
     client.listProjects(),
     Promise.all([
       client.listTickets(undefined, { status: LIVE_STATUSES }),
-      client.ticketPage({ status: "done", projectId: scopeProject(scope), limit: DONE_PAGE_SIZE }),
+      client.ticketPage({ status: "done", ...scopeQuery(scope), limit: DONE_PAGE_SIZE }),
     ]).then(
       ([tickets, page]) => ({ tickets, donePage: { scope, page } }),
       async () => ({ tickets: await client.listTickets(), donePage: undefined }),
@@ -224,7 +230,16 @@ async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snaps
 
 /** The board's project filter, once it names a project that exists (else all projects). */
 export function boardProjectOf(state: State, route: Route): string | null {
-  return route.view === "board" && route.projectId && state.projects[route.projectId] ? route.projectId : null;
+  return route.view === "board" && !route.group && route.projectId && state.projects[route.projectId] ? route.projectId : null;
+}
+
+/**
+ * The board's scope: a group's (even one no project carries any more: its board is empty, not
+ * every ticket), else the validated project's, else All projects.
+ */
+export function boardScopeOf(state: State, route: Route): string {
+  if (route.view === "board" && route.group) return groupScope(route.group);
+  return scopeOf(boardProjectOf(state, route));
 }
 
 /** Run async jobs with bounded concurrency. */
@@ -262,21 +277,26 @@ export function StoreProvider({
   const stateRef = useRef(state);
   stateRef.current = state;
   const boardProjectId = boardProjectOf(state, route);
-  const boardRef = useRef(boardProjectId);
-  boardRef.current = boardProjectId;
+  const boardScope = boardScopeOf(state, route);
+  const boardRef = useRef(boardScope);
+  boardRef.current = boardScope;
   // Which Done scope a snapshot pages: the board's (the last one seen while elsewhere). Before
   // projects load the route's project can't be validated yet, so trust it.
-  const scopeRef = useRef(scopeOf(route.view === "board" ? route.projectId : null));
-  if (route.view === "board") scopeRef.current = state.ready ? scopeOf(boardProjectId) : scopeOf(route.projectId);
+  const scopeRef = useRef(paneScopeOf(route) ?? ALL_SCOPE);
+  if (route.view === "board") scopeRef.current = state.ready ? boardScope : paneScopeOf(route)!;
+  // Whether the service pages Done: the snapshot's own donePage tells us (none → the old full list).
+  const pagingSeen = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
       const snapshot = await loadSnapshot(client, scopeRef.current);
       dispatch({ type: "snapshot", snapshot });
+      pagingSeen.current = !!snapshot.donePage;
       // Panes of boards whose project is gone (removed while the app was closed) go, except the
       // one on screen: a link to a missing project still shows a board. Pop-outs follow their
       // windows instead (App.tsx).
-      const known = new Set(snapshot.projects.map((p) => p.id));
+      // A group's board goes once no project carries the group.
+      const known = new Set([...snapshot.projects.map((p) => p.id), ...projectGroups(snapshot.projects).map(groupScope)]);
       const shown = paneScopeOf(parseRoute(location.hash));
       retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope) || isPopoutScope(scope));
       // Board cards show the latest Activity entry; backfill for tickets that are still moving
@@ -340,7 +360,7 @@ export function StoreProvider({
       if (append && !cursor) return;
       dispatch({ type: "donePage.request", scope });
       try {
-        const page = await client.ticketPage({ status: "done", projectId: scopeProject(scope), limit: DONE_PAGE_SIZE, cursor });
+        const page = await client.ticketPage({ status: "done", ...scopeQuery(scope), limit: DONE_PAGE_SIZE, cursor });
         dispatch({ type: "donePage", scope, page, append, cursor });
       } catch (e) {
         dispatch({ type: "donePage.error", scope, error: (e as Error).message });
@@ -350,17 +370,17 @@ export function StoreProvider({
   );
   const loadMoreDone = useCallback(() => {
     if (stateRef.current.search) return;
-    const projectId = boardRef.current;
-    if (canLoadMoreDone(stateRef.current, projectId)) void pageDone(scopeOf(projectId), true);
+    const scope = boardRef.current;
+    if (canLoadMoreDone(stateRef.current, scope)) void pageDone(scope, true);
   }, [pageDone]);
-  // A scope we haven't paged yet (switching projects, or after a reconnect reset) gets its first page.
-  const pagedOnce = !!state.donePaging[scopeOf(boardProjectId)];
+  // A scope we haven't paged yet (switching boards, a project changing group, or after a reconnect
+  // reset) gets its first page.
+  const pagedOnce = !!state.donePaging[boardScope];
   useEffect(() => {
-    if (route.view !== "board" || !needsFirstDonePage(stateRef.current, boardProjectId)) return;
-    // Only services with paging: the snapshot's own donePage tells us (none → the old full list).
-    if (Object.keys(stateRef.current.donePaging).length === 0) return;
-    void pageDone(scopeOf(boardProjectId), false);
-  }, [route.view, boardProjectId, state.ready, pagedOnce, pageDone]);
+    if (route.view !== "board" || !needsFirstDonePage(stateRef.current, boardScope)) return;
+    if (!pagingSeen.current) return;
+    void pageDone(boardScope, false);
+  }, [route.view, boardScope, state.ready, pagedOnce, pageDone]);
 
   // --- Search --------------------------------------------------------------------------------
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -371,7 +391,7 @@ export function StoreProvider({
       if (append && !cursor) return;
       dispatch({ type: "search.request", q, scope });
       try {
-        const page = await client.searchTickets({ q, projectId: scopeProject(scope), limit: SEARCH_PAGE_SIZE, cursor });
+        const page = await client.searchTickets({ q, ...scopeQuery(scope), limit: SEARCH_PAGE_SIZE, cursor });
         dispatch({ type: "search.results", q, scope, page, append });
       } catch (e) {
         dispatch({ type: "search.error", q, scope, error: (e as Error).message });
@@ -382,7 +402,7 @@ export function StoreProvider({
   const setSearch = useCallback(
     (raw: string) => {
       const q = raw.trim();
-      const scope = scopeOf(boardRef.current);
+      const scope = boardRef.current;
       const cur = stateRef.current.search;
       if (cur && cur.q === q && cur.scope === scope && cur.ids !== null) return;
       if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -464,7 +484,7 @@ export function StoreProvider({
       // scopeRef is the board on screen, or the last one shown while elsewhere.
       const scope = projectId === undefined ? terminalScope(r, scopeRef.current) : scopeOf(projectId);
       updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(terminalCwd(scope, stateRef.current.projects))));
-      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "spec" });
+      if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate],
   );
@@ -474,7 +494,7 @@ export function StoreProvider({
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
       updatePanes(scope, (s) => openComposePane(s, null, newComposeContent(projectId)));
-      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "spec" });
+      if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate],
   );
@@ -487,7 +507,7 @@ export function StoreProvider({
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
       updatePanes(scope, (s) => openFilePane(s, content));
-      if (paneScopeOf(r) !== scope) navigate({ view: "board", projectId: scopeProject(scope) ?? null, ticketKey: null, tab: "spec" });
+      if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate, toast],
   );
@@ -506,6 +526,7 @@ export function StoreProvider({
       toast,
       reconnect,
       boardProjectId,
+      boardScope,
       loadMoreDone,
       setSearch,
       loadMoreSearch,
@@ -519,7 +540,7 @@ export function StoreProvider({
       openCompose,
       openFile,
     }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, serviceDeferred, serviceDownSince, retryService, restartService, openTerminal, openCompose, openFile],
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, boardScope, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, serviceDeferred, serviceDownSince, retryService, restartService, openTerminal, openCompose, openFile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

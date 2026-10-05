@@ -23,7 +23,7 @@ import type {
 import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
 import { dispatchedKey } from "./format";
-import { adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
+import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
   entries: TranscriptEntry[];
@@ -667,6 +667,19 @@ export function isReady(t: Ticket): boolean {
 
 export function sortedProjects(state: State): Project[] {
   return Object.values(state.projects).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The projects a New session on `board` (a project id, a scope, or null) should prefer, best first,
+ * for composerProject: the board's project; on a group's board the last used project if it's in
+ * the group, else the group's first by name; then the last used anywhere.
+ */
+export function composerCandidates(state: State, board: string | null, last: string | null): (string | null)[] {
+  const group = board ? scopeGroup(board) : null;
+  if (group === null) return [board === ALL_SCOPE ? null : board, last];
+  const members = sortedProjects(state).filter((p) => p.group === group);
+  const lastInGroup = members.find((p) => p.id === last)?.id ?? null;
+  return [lastInGroup, members[0]?.id ?? null, last];
 }
 
 /**

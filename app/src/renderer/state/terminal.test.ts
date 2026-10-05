@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ALL_SCOPE } from "@harness/shared/state";
+import { ALL_SCOPE, groupScope } from "@harness/shared/state";
 import { THEMES } from "@harness/shared/themes";
 import type { TerminalExit, TerminalSession } from "../../main/types";
 import { appOwnsKey, createAttach, exitLabel, menuKey, terminalColors, terminalCwd, terminalScope } from "./terminal";
@@ -11,8 +11,9 @@ describe("terminalCwd", () => {
     expect(terminalCwd("p1", projects)).toBe("/Users/me/Sites/harness");
   });
 
-  test("All projects, a project that isn't loaded, or one without a path opens at home", () => {
+  test("All projects, a group's board, a project that isn't loaded, or one without a path opens at home", () => {
     expect(terminalCwd(ALL_SCOPE, projects)).toBe("~");
+    expect(terminalCwd(groupScope("p1"), projects)).toBe("~");
     expect(terminalCwd("gone", projects)).toBe("~");
     expect(terminalCwd("p2", projects)).toBe("~");
   });
@@ -22,6 +23,7 @@ describe("terminalScope", () => {
   test("the board on screen", () => {
     expect(terminalScope({ view: "board", projectId: "p1", ticketKey: "A-1", tab: "spec" }, "p9")).toBe("p1");
     expect(terminalScope({ view: "board", projectId: null, ticketKey: null, tab: "spec" }, "p9")).toBe(ALL_SCOPE);
+    expect(terminalScope({ view: "board", projectId: null, group: "Work", ticketKey: null, tab: "spec" }, "p9")).toBe(groupScope("Work"));
   });
 
   test("a project's settings page opens on that project's board", () => {

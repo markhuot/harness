@@ -3,8 +3,8 @@
 // the composer out, Open in New Window), and putting a pop-out back on its board. The store side is
 // state/panes.ts ("Pop-out windows"); main.ts owns the windows.
 
-import type { Project } from "@harness/shared";
-import { ALL_SCOPE, scopeProject } from "@harness/shared/state";
+import { projectGroups, type Project } from "@harness/shared";
+import { ALL_SCOPE, scopeGroup } from "@harness/shared/state";
 import {
   canPopOut,
   findLeaf,
@@ -23,7 +23,7 @@ import {
 } from "../state/panes";
 
 const leavesOf = (s: PaneState) => leaves(s.root).map((l) => l.id);
-import { formatRoute } from "../state/route";
+import { boardRoute, formatRoute } from "../state/route";
 import type { PopoutInfo } from "./paneContext";
 import { paneElement } from "./paneFocus";
 
@@ -81,11 +81,13 @@ export function popOutContentToWindow(boardScope: string, content: PaneContent, 
 }
 
 /**
- * Put a pop-out's pane back on the board it came from (All projects if that project is gone), and
+ * Put a pop-out's pane back on the board it came from (All projects if that project or group is gone), and
  * bring the main window forward on that board. The pop-out window closes once its pane is gone.
  */
 export function popBackIn({ id, fromScope }: PopoutInfo, projects: Readonly<Record<string, Project>>) {
-  const to = fromScope === ALL_SCOPE || projects[fromScope] ? fromScope : ALL_SCOPE;
+  const group = scopeGroup(fromScope);
+  const exists = group !== null ? projectGroups(Object.values(projects)).includes(group) : fromScope === ALL_SCOPE || !!projects[fromScope];
+  const to = exists ? fromScope : ALL_SCOPE;
   popInPane(id, to);
-  void window.harness?.popout.showMain(formatRoute({ view: "board", projectId: scopeProject(to) ?? null, ticketKey: null, tab: "spec" }));
+  void window.harness?.popout.showMain(formatRoute(boardRoute(to)));
 }

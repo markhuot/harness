@@ -13,6 +13,7 @@ import { MAX_PROMPT_ATTACHMENTS, type Project, type Ticket, type UpdateTicketBod
 import {
   annotateAttachment,
   blankDraftTicket,
+  composerCandidates,
   composerProject,
   draftReviewSkipsPatch,
   modelCacheFor,
@@ -27,6 +28,7 @@ import {
   ticketChoice,
 } from "@harness/shared/state";
 import { useAction, useStore } from "../state/store";
+import { paneScopeOf } from "../state/route";
 import { closePane, composeToTicket, findLeaf, getPaneStore, renameTicketKey, setTab, toggleZoom, updateAllPanes, updatePanes, type ComposeContent } from "../state/panes";
 import { DraftSession, dropDraftSession, paneDraftSession, releaseDraftSession, unloadDraftSessions, type DraftDeps } from "../state/draftSession";
 import { MenuButton, MOD, Modal } from "../components/bits";
@@ -106,8 +108,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const routeProject = route.view === "board" ? route.projectId : null;
-  const composeProject = compose ? composerProject(state, compose.projectId ?? "", [routeProject, readLast()]) : "";
+  const composeProject = compose ? composerProject(state, compose.projectId ?? "", composerCandidates(state, paneScopeOf(route), readLast())) : "";
   const deps: DraftDeps = {
     client,
     project: (id) => stateRef.current.projects[id],
