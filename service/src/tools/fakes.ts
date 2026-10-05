@@ -181,6 +181,17 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
       (current = { sessionId, tabId: opts?.tab ?? (opts?.newTab ? 2 : 1), url, title: `Title of ${url}`, loading: false }),
     state: async () => current,
     tabs: async () => (current ? [{ id: current.tabId ?? 1, url: current.url, title: current.title, loading: false }] : []),
+    tabInfo: async (_sessionId: string, tab: number) => ({
+      id: tab,
+      url: current?.url ?? "about:blank",
+      title: current?.title ?? "",
+      loading: false,
+      size: { device: "desktop", width: 1280, height: 800, responsive: false },
+      requests: [],
+      console: [],
+    }),
+    resize: async (sessionId: string, _change: unknown, opts?: { tab?: number }) =>
+      current ?? { sessionId, tabId: opts?.tab ?? 1, url: "about:blank", title: "", loading: false },
     closeTab: async () => {},
     content: async () => "Example page text",
     click: async () => {},
