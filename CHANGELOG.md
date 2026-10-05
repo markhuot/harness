@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.0103](https://github.com/markhuot/harness/releases/tag/app-20261005.0103) - 2026-10-05
+
 ### Added
 
 - Tear off a ticket's tabs. On the Mac, drag any tab of a ticket (Spec, Transcript, Details,
@@ -24,6 +26,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   File panes now have the pop-out button too. On iPad, drag a board card out of the window to open
   its ticket in a new window. Dragging a card doesn't move it to another column; Move to … in its
   menu still does that.
+- You can annotate images as part of a message. Open any image in a spec, a New session attachment
+  on the Spec tab or a file sent with a message, and choose Annotate. In the Browser tab, Annotate
+  takes a picture of the page. Click to drop a numbered marker, or press and drag to draw an arrow
+  pointing at the spot. Each number gets its own note, listed next to the image (below it on
+  iPhone) so nothing covers what you're pointing at. Add to message puts the image in the message
+  box, where you can write why before you send it. Images attached to a New session or waiting in
+  the message box can be annotated too, and you can reopen an annotation to change it until you
+  send. The image itself is never changed: your arrows and numbers are drawn over it wherever it
+  shows, with its notes underneath, and the agent gets the image along with the numbered notes and
+  where each one points. On a browser page, each marker also names the element it points at (shown
+  under its note, like `#save · "Save"`), so the agent can find it in the page and the code.
 
 ### Changed
 
@@ -33,6 +46,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, the "Move to in progress" switch over the message box stays at the left when
+  you turn it on, instead of jumping to the middle.
 - A completion that fails partway (a spend limit, a crash) leaves the ticket in Review with its
   agent review still approved, instead of moving it to Blocked. Approve it again to finish landing
   it. A conductor's child stays approved, and its conductor completes it again.
@@ -63,17 +78,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Planning, so you can tell it will start on its own once they finish. Its Start button reads
   "Starts automatically" and is turned off, and hovering it (or VoiceOver) names the tickets it's
   waiting on. Mac, iPhone and iPad.
-- You can annotate images as part of a message. Open any image in a spec, a New session attachment
-  on the Spec tab or a file sent with a message, and choose Annotate. In the Browser tab, Annotate
-  takes a picture of the page. Click to drop a numbered marker, or press and drag to draw an arrow
-  pointing at the spot. Each number gets its own note, listed next to the image (below it on
-  iPhone) so nothing covers what you're pointing at. Add to message puts the image in the message
-  box, where you can write why before you send it. Images attached to a New session or waiting in
-  the message box can be annotated too, and you can reopen an annotation to change it until you
-  send. The image itself is never changed: your arrows and numbers are drawn over it wherever it
-  shows, with its notes underneath, and the agent gets the image along with the numbered notes and
-  where each one points. On a browser page, each marker also names the element it points at (shown
-  under its note, like `#save · "Save"`), so the agent can find it in the page and the code.
 
 ### Changed
 
@@ -84,8 +88,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- On iPhone and iPad, the "Move to in progress" switch over the message box stays at the left when
-  you turn it on, instead of jumping to the middle.
 - On iPhone and iPad, a ticket's tabs (Spec, Activity, Transcript and the rest) scroll under the
   message box again, so you can see the content through its glass. The last line still scrolls up
   clear of the message box.
