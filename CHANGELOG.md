@@ -25,6 +25,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   its ticket in a new window. Dragging a card doesn't move it to another column; Move to … in its
   menu still does that.
 
+### Fixed
+
+- A completion that fails partway (a spend limit, a crash) leaves the ticket in Review with its
+  agent review still approved, instead of moving it to Blocked. Approve it again to finish landing
+  it. A conductor's child stays approved, and its conductor completes it again.
+- A ticket whose worktree went missing keeps working: its agent runs from the project checkout and
+  is told the worktree is gone, so it can put it back, instead of every agent review failing with
+  "Working directory does not exist".
+- A failed agent review now shows in the ticket's Activity, with the reason, instead of leaving the
+  ticket in Review with nothing running and no word why.
+
 ## [app-20261004.2203](https://github.com/markhuot/harness/releases/tag/app-20261004.2203) - 2026-10-04
 
 ### Added

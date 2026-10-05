@@ -183,6 +183,11 @@ export async function hasChangesToLand(workdir: string, branch: string, base: st
   return r.code === 0 ? Number(r.stdout) > 0 : null;
 }
 
+/** Whether `commit` (a branch or sha) is already in `into`; false when either is missing. */
+export async function isAncestor(repo: string, commit: string, into: string): Promise<boolean> {
+  return (await git(["merge-base", "--is-ancestor", commit, into], repo)).code === 0;
+}
+
 /**
  * How many of the ticket's commits on `from` aren't on `into` (0 when either is missing). With
  * `base`, commits the base branch already has don't count: they arrive with the merge anyway.
