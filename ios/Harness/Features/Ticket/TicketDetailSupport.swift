@@ -1,4 +1,5 @@
 import HarnessKit
+import os
 import SwiftUI
 
 // Pieces the ticket screen shares with its tab bodies:
@@ -7,51 +8,111 @@ import SwiftUI
 
 /// The ticket hero's collapse: HeroCollapse's rules fed by the tab body's
 /// scroll gestures. `show()` brings it back (another tab, news on the ticket); `measured` takes the
-/// hero's height while it's shown, which is how much room hiding it gives the tab body.
+/// hero's height while it's shown.
 ///
-/// A toggle changes the layout once, without animation (`hidden`), and animates only `progress`,
-/// which HeroSlide turns into a render-time offset of the tab strip and pager. Animating the hero's
-/// frame instead re-lays out the pager and the tab body's scroll view on every frame, which drops
-/// frames on a long spec.
+/// Hiding or showing the hero changes no layout. The tab strip and pager are always laid out as if
+/// the hero were gone, under it, and sit `distance` lower while it shows (HeroSlide, a render-time
+/// offset); a toggle animates only that offset, and the tab bodies keep the hero's room at their
+/// end (`distance` as a bottom inset). Changing the layout instead re-laid out the tab body twice
+/// per toggle, as the slide started and as it ended, which on a long transcript dropped frames.
+///
+/// Only TicketHeroSlot, HeroSlide and HeroRoom read its state, never the ticket screen's body: a
+/// toggle runs in the middle of a scroll, and re-rendering the screen from there redrew every tab
+/// body on the frame the slide starts.
 @MainActor
 @Observable
 final class TicketDetailHeroCollapse {
-    /// The hero takes no room: changes at once.
     private(set) var hidden = false
     /// 1 hidden, 0 shown, animated between them: how far the slide has gone.
     private(set) var progress: Double = 0
-    /// How far the tab strip slides: the hero's height when it last toggled.
+    /// The hero's height (while it last showed): how far below it the tab strip sits while it shows,
+    /// and the room the tab bodies keep at their end.
     private(set) var distance: Double = 0
+    /// The slide is under way. A global frame read inside the sliding views moves with the slide's
+    /// offset until it ends, so geometry the screen lays out from ignores readings until then.
+    @ObservationIgnored private(set) var sliding = false
+    /// The pager's paging scroll view (PagerYieldsToBackSwipe finds it), whose layer the slide runs on.
+    @ObservationIgnored weak var pager: UIView?
     @ObservationIgnored private var state = HeroCollapse.shown
-    @ObservationIgnored private var heroHeight: Double = 0
+    @ObservationIgnored private var slides = 0
+
+    private static let slideDuration = 0.22
 
     func send(_ e: CollapseEvent) {
-        let next = HeroCollapse.step(state, e, heroHeight: heroHeight)
+        let next = HeroCollapse.step(state, e, heroHeight: distance)
         state = next
         guard next.hidden != hidden else { return }
+        // Instruments' Points of Interest: each toggle, to line up with the hitches around it.
+        Self.signposter.emitEvent("Hero toggle", "\(next.hidden ? "hide" : "show")")
         var instant = Transaction(animation: nil)
         instant.disablesAnimations = true
-        withTransaction(instant) {
-            hidden = next.hidden
-            distance = heroHeight
+        withTransaction(instant) { hidden = next.hidden }
+        // The pager takes its new place at once (PagerSlide) and slides there on its layer, an
+        // additive Core Animation the render server runs: moving it through SwiftUI instead
+        // recomputed the geometry and hit testing of every view in the tab body on every frame,
+        // which a long transcript couldn't keep up with. Additive, so a slide cut short by the next
+        // toggle carries on from where it was.
+        if let layer = pager?.layer, distance > 0 {
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = next.hidden ? distance : -distance
+            slide.toValue = 0.0
+            slide.isAdditive = true
+            slide.duration = Self.slideDuration
+            // SwiftUI's easeInOut, so the pager keeps pace with the tab strip.
+            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.42, 0, 0.58, 1)
+            layer.add(slide, forKey: nil)
         }
-        withAnimation(.easeInOut(duration: 0.22)) { progress = next.hidden ? 1 : 0 }
+        slides += 1
+        let slide = slides
+        sliding = true
+        withAnimation(.easeInOut(duration: Self.slideDuration), completionCriteria: .removed) {
+            progress = next.hidden ? 1 : 0
+        } completion: { [weak self] in
+            guard let self, slide == slides else { return }
+            sliding = false
+        }
     }
 
     func show() { send(.show) }
 
     func measured(_ height: Double) {
-        if !state.hidden { heroHeight = height }
+        guard !state.hidden, height != distance else { return }
+        var instant = Transaction(animation: nil)
+        instant.disablesAnimations = true
+        withTransaction(instant) { distance = height }
+    }
+
+    /// Where the tab strip and pager sit below their layout once a slide is over.
+    var restingOffset: Double { hidden ? 0 : distance }
+
+    private static let signposter = OSSignposter(subsystem: "com.markhuot.harness", category: .pointsOfInterest)
+}
+
+/// On the hero: hidden, it keeps drawing under the tab strip and pager, which cover it (HeroSlide),
+/// but takes no taps and is out of VoiceOver.
+struct TicketHeroSlot: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+
+    func body(content: Content) -> some View {
+        content
+            .allowsHitTesting(!hero.hidden)
+            .accessibilityHidden(hero.hidden)
     }
 }
 
-/// On the tab strip and pager under the hero: keeps them where they were drawn when the hero's
-/// room appears or goes at once, then slides them the rest of the way as `progress` animates. Only
+/// On the tab strip: `distance` lower while the hero shows, sliding up over it as it hides. Only
 /// `progress` is interpolated, and only into a visual effect, so no frame of the slide lays
-/// anything out.
-struct HeroSlide: ViewModifier, Animatable {
+/// anything out. The strip is small; the pager below it slides on its layer instead (PagerSlide).
+struct HeroSlide: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+
+    func body(content: Content) -> some View {
+        content.modifier(HeroSlideOffset(progress: hero.progress, distance: hero.distance))
+    }
+}
+
+private struct HeroSlideOffset: ViewModifier, Animatable {
     var progress: Double
-    let hidden: Bool
     let distance: Double
 
     nonisolated var animatableData: Double {
@@ -60,10 +121,31 @@ struct HeroSlide: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
-        // Hidden: the layout moved up `distance`, so start that far down. Shown: it moved down, so
-        // start that far up.
-        let y = distance * ((hidden ? 1 : 0) - progress)
+        let y = distance * (1 - progress)
         content.visualEffect { c, _ in c.offset(y: y) }
+    }
+}
+
+/// On the pager: `distance` lower while the hero shows, changed at once on a toggle (no SwiftUI
+/// animation); the hero collapse slides it on its layer.
+struct PagerSlide: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+
+    func body(content: Content) -> some View {
+        let y = hero.restingOffset
+        content.visualEffect { c, _ in c.offset(y: y) }
+    }
+}
+
+/// On a tab page: its bottom inset, the composer's overlap plus the hero's room. While the hero
+/// shows, the page sits `distance` lower, so its last `distance` is below the screen; keeping that
+/// room at the end at all times means a toggle changes no inset (and lays nothing out).
+struct HeroRoom: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+    let overlap: CGFloat
+
+    func body(content: Content) -> some View {
+        content.safeAreaPadding(.bottom, overlap + hero.distance)
     }
 }
 
@@ -82,6 +164,54 @@ struct TicketDetailTabOpener: Sendable {
     let open: @MainActor @Sendable (TicketTab) -> Void
 
     @MainActor func callAsFunction(_ tab: TicketTab) { open(tab) }
+}
+
+/// The ticket screen's callbacks for its tab bodies (the tab opener, the annotation sink, the
+/// annotator opener), made once and kept for the screen's life. Closures never compare equal, so
+/// fresh ones on each render would redraw every view that reads them: a transcript row, the spec's
+/// markdown. These call through to whatever the screen set last (`update`), so they stay current.
+@MainActor
+final class TicketDetailRelay {
+    private var hero: TicketDetailHeroCollapse?
+    private var onTab: (TicketTab) -> Void = { _ in }
+    private var annotate: (AnnotationRequest) -> Void = { _ in }
+    private var focusComposer: () -> Void = {}
+    private var cachedSink: (holder: ObjectIdentifier, sink: AnnotationSink)?
+
+    func update(hero: TicketDetailHeroCollapse, onTab: @escaping (TicketTab) -> Void,
+                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void) {
+        self.hero = hero
+        self.onTab = onTab
+        self.annotate = annotate
+        self.focusComposer = focusComposer
+    }
+
+    private(set) lazy var tabOpener = TicketDetailTabOpener { [weak self] t in
+        self?.hero?.show()
+        self?.onTab(t)
+    }
+
+    private(set) lazy var annotatorOpener = AnnotatorOpener { [weak self] in self?.annotate($0) }
+
+    /// Annotated images join the next message, their notes on the attachment itself (a file already
+    /// waiting there is edited in place), never sent on their own; the field takes focus so the
+    /// human can say why.
+    func sink(outgoing: MessageAttachments, uploader: PromptAttachmentUploader, toasts: ToastCenter) -> AnnotationSink {
+        if let cachedSink, cachedSink.holder == ObjectIdentifier(outgoing) { return cachedSink.sink }
+        let sink = AnnotationSink(current: { a in
+            outgoing.list.first { $0.id == a.id }?.annotation
+        }, add: { [weak self] added in
+            guard outgoing.annotate(added.attachment, annotation: added.annotation) else {
+                haptic(.warning)
+                toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
+                return
+            }
+            if let data = added.uploaded { Task { await uploader.keepUploaded(data, for: added.attachment) } }
+            self?.focusComposer()
+        })
+        cachedSink = (ObjectIdentifier(outgoing), sink)
+        return sink
+    }
 }
 
 extension EnvironmentValues {

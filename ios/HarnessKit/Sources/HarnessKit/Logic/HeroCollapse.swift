@@ -5,9 +5,12 @@ import Foundation
 // back, like Safari's toolbars. The tab strip stays put, so the hero reads as the top of the page
 // scrolling off.
 //
-// Only a gesture (a drag and the momentum after it) toggles it, and at most once: hiding the hero
-// grows the tab body's viewport, and UIKit then clamps an offset that was near the bottom, which
-// would otherwise read as scrolling back and bring the hero straight back.
+// Only a gesture (a drag and the momentum after it) toggles it, and at most once per gesture.
+//
+// The tab body keeps the hero's room at its end (the ticket screen slides the body over the hero
+// instead of resizing it), so at the very end the hero comes back, like Safari's toolbars at the
+// end of a page, and a hide that would land there doesn't happen: hidden, that room would show as
+// a gap above the composer.
 
 /// The hero's state: hidden, and the gesture that may toggle it.
 public struct Collapse: Codable, Equatable, Sendable {
@@ -56,9 +59,18 @@ public enum HeroCollapse {
 
     public static let shown = Collapse(hidden: false, live: false, anchor: 0)
 
+    /// How close to the end (pt) counts as at the end.
+    static let endSlop = 1.0
+
     /// The offset inside the scrollable range: bounces past either end don't count as scrolling.
     private static func clamped(_ m: ScrollMetrics) -> Double {
         min(max(m.offset, 0), max(0, m.contentHeight - m.viewportHeight))
+    }
+
+    /// Scrolled to the end of a body that scrolls at all.
+    private static func atEnd(_ m: ScrollMetrics) -> Bool {
+        let range = m.contentHeight - m.viewportHeight
+        return range > 0 && clamped(m) >= range - endSlop
     }
 
     /// The state after an event. `heroHeight`: how much taller the tab body gets with the hero hidden.
@@ -75,15 +87,17 @@ public enum HeroCollapse {
         case .show:
             return shown
         case let .scroll(m):
-            guard s.live else { return s }
             let y = clamped(m)
+            // Any scroll that reaches the end, a gesture's or not (a transcript following new output).
+            if s.hidden && atEnd(m) { return Collapse(hidden: false, live: false, anchor: y) }
+            guard s.live else { return s }
             if s.hidden {
                 if y <= 0 || s.anchor - y >= threshold { return Collapse(hidden: false, live: false, anchor: y) }
                 next.anchor = max(s.anchor, y)
             } else {
                 // With the hero gone the body must still scroll, or nothing could bring the hero back.
                 let room = m.contentHeight - m.viewportHeight - heroHeight
-                if y - s.anchor >= threshold && room >= threshold { return Collapse(hidden: true, live: false, anchor: y) }
+                if y - s.anchor >= threshold && room >= threshold && !atEnd(m) { return Collapse(hidden: true, live: false, anchor: y) }
                 next.anchor = min(s.anchor, y)
             }
         }

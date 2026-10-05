@@ -22,6 +22,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, the browser tab's button for typing into the page now shows a keyboard
   instead of a pencil, so it no longer looks like Annotate. While the keyboard is up, it shows the
   hide-keyboard symbol.
+- On iPhone and iPad, a ticket's title and buttons come back when you scroll to the very end of a
+  tab, the way Safari's toolbars do at the end of a page.
 
 ### Fixed
 
@@ -33,6 +35,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, New session's Start session and Plan first buttons keep their icons when you
   tap them. Before, the tapped button briefly turned into its text label. Now both are just
   disabled while the session launches.
+
+- On iPhone and iPad, a ticket's title and buttons slide away and come back smoothly while you
+  scroll its Spec, Transcript or other tabs. Long transcripts no longer stutter as they move.
 
 ## [app-20261005.1016](https://github.com/markhuot/harness/releases/tag/app-20261005.1016) - 2026-10-05
 
