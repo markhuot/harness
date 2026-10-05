@@ -25,8 +25,8 @@ export interface StoredBrowserTab {
   id: number;
   url: string;
   title: string;
-  /** Its input mode and viewport (never Responsive, which belongs to a live viewer). Absent: Desktop at its preset. */
-  size?: { device: BrowserDevice; width: number; height: number };
+  /** Its input mode and viewport, and whether it follows a viewer's pane (absent: it does). Absent: a new tab's, desktop Responsive. */
+  size?: { device: BrowserDevice; width: number; height: number; responsive?: boolean };
 }
 
 /**
@@ -75,6 +75,8 @@ export interface BrowserTabInfo {
   loading: boolean;
   suspended?: boolean;
   size: BrowserSize;
+  /** With size.responsive: a viewer has the tab open and it follows that viewer's pane. */
+  following?: boolean;
   /** The page's scroll position in CSS px; absent for a suspended tab or a page that didn't answer. */
   scroll?: { x: number; y: number };
   requests: BrowserRequest[];

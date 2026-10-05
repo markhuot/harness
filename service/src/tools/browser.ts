@@ -32,7 +32,7 @@ const tabLine = (tabs: BrowserTabSummary[]) =>
       ].filter(Boolean);
       return (
         `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}` +
-        (t.size ? ` [${sizeText(t.size)}]` : "") +
+        (t.size ? ` [${sizeText(t.size)}${t.size.responsive ? ", responsive" : ""}]` : "") +
         (t.loading ? " (loading)" : "") +
         (t.suspended ? " (suspended: reloads when you use it)" : "") +
         (issues.length ? ` (${issues.join(", ")})` : "")
@@ -62,7 +62,11 @@ function tabReport(t: BrowserTabInfo): string {
   lines.push(`State: ${state}`);
   lines.push(
     `Size: ${sizeText(t.size)} (${t.size.device === "mobile" ? "touch, iPhone user agent" : "mouse"})` +
-      (t.size.responsive ? ", following a human's pane (Responsive): it changes when they resize their window" : ""),
+      (t.size.responsive
+        ? t.following
+          ? ", following a human's pane (Responsive): it changes when they resize their window; browser_resize sets a size that holds still"
+          : ", Responsive: it takes the size of the next human pane that opens it; browser_resize sets a size that holds still"
+        : ""),
   );
   if (t.scroll) lines.push(`Scroll: ${t.scroll.x}, ${t.scroll.y}`);
   if (t.suspended) return lines.join("\n");
@@ -80,7 +84,7 @@ function tabReport(t: BrowserTabInfo): string {
 export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean } & SizeInput>({
   name: "browser_open",
   description:
-    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Each tab has its own mode and size (new tabs: desktop 1280×800); device, width and height set them before the page loads, e.g. new_tab with device \"mobile\" to check a phone layout. Returns the tab, final URL, page title and size; use browser_content to read the page.",
+    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Each tab has its own mode and size (new tabs: desktop, following the size of a human's pane while one has the tab open, 1280×800 otherwise); device, width and height set a size that holds still, before the page loads, e.g. new_tab with device \"mobile\" to check a phone layout. Returns the tab, final URL, page title and size; use browser_content to read the page.",
   inputSchema: schema(
     {
       url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." },
@@ -113,7 +117,7 @@ export const browserTabs = defineTool<{ tab?: number }>({
 export const browserResize = defineTool<{ tab?: number } & SizeInput>({
   name: "browser_resize",
   description:
-    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. A human following the tab with their pane (Responsive) stops following it. Resize the tabs you opened or navigated; leave a tab another agent is using alone unless it was handed to you or the human asks.",
+    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. Either way the size then holds still: the tab stops following a human's pane (Responsive), which new tabs do. Resize the tabs you opened or navigated; leave a tab another agent is using alone unless it was handed to you or the human asks.",
   inputSchema: schema({ ...SIZE, ...TAB }),
   async run({ tab, ...size }, ctx) {
     const change = sizeChange(size);

@@ -197,8 +197,8 @@ withChrome("BrowserManager (real Chrome)", () => {
       url: `${base}/`,
       title: "Home Page",
       loading: false,
-      size: { device: "desktop", width: 1280, height: 800, responsive: false },
-      tabs: [{ id: 1, url: `${base}/`, title: "Home Page", loading: false, size: { device: "desktop", width: 1280, height: 800, responsive: false } }],
+      size: { device: "desktop", width: 1280, height: 800, responsive: true },
+      tabs: [{ id: 1, url: `${base}/`, title: "Home Page", loading: false, size: { device: "desktop", width: 1280, height: 800, responsive: true } }],
     });
     expect(await browser.state("s-open")).toEqual(state);
   }, 30_000);
@@ -813,24 +813,33 @@ withChrome("BrowserManager (real Chrome)", () => {
       await browser.close("z-reset");
     }, 30_000);
 
-    test("a pane resizes the tab only while Responsive follows it; the last viewer to switch it on wins", async () => {
+    test("a new tab follows a viewer's pane; only that viewer's resizes count, and the last to switch Responsive on wins", async () => {
       await browser.open("z-resp", `${base}/page2`);
+      // No viewer: it keeps the desktop size.
+      expect((await browser.state("z-resp"))?.size).toEqual({ device: "desktop", width: 1280, height: 800, responsive: true });
+      expect((await browser.tabInfo("z-resp", 1)).following).toBe(false);
       const a: BrowserState[] = [];
       const b: BrowserState[] = [];
       await browser.subscribe("z-resp", "a", () => {}, (s) => a.push(s));
-      await browser.subscribe("z-resp", "b", () => {}, (s) => b.push(s));
-      // Opening panes resizes nothing.
+      expect(state(a).sizeOwner).toBe(true);
+      expect((await browser.tabInfo("z-resp", 1)).following).toBe(true);
       await browser.input("z-resp", { type: "resize", width: 600, height: 400 }, { subscriberId: "a" });
-      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[1280,800]");
-      // Mobile, then a switches Responsive on: it follows a's pane and stays touch.
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[600,400]");
+      // A second pane opening resizes nothing: the tab already follows a.
+      await browser.subscribe("z-resp", "b", () => {}, (s) => b.push(s));
+      await browser.input("z-resp", { type: "resize", width: 300, height: 300 }, { subscriberId: "b" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[600,400]");
+      expect([state(a).sizeOwner, state(b).sizeOwner]).toEqual([true, false]);
+      // Mobile switches it off: the phone size stays whatever the panes do.
       await browser.input("z-resp", { type: "device", device: "mobile" }, { subscriberId: "a" });
+      await until(async () => (await browser.evaluate("z-resp", "innerWidth").catch(() => "")) === "393", "mobile");
+      await browser.input("z-resp", { type: "resize", width: 640, height: 480 }, { subscriberId: "a" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[393,852]");
+      expect([state(a).sizeOwner, state(b).sizeOwner]).toEqual([false, false]);
+      // a switches it on again: it follows a's pane and stays touch.
       await browser.input("z-resp", { type: "responsive", on: true, width: 700, height: 500 }, { subscriberId: "a" });
       expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0]")).toBe("[700,500,true]");
-      expect([state(a).sizeOwner, state(b).sizeOwner]).toEqual([true, false]);
       expect(state(b).size).toEqual({ device: "mobile", width: 700, height: 500, responsive: true });
-      await browser.input("z-resp", { type: "resize", width: 720, height: 510 }, { subscriberId: "a" });
-      await browser.input("z-resp", { type: "resize", width: 300, height: 300 }, { subscriberId: "b" });
-      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[720,510]");
       // b takes over: a's pane stops counting.
       await browser.input("z-resp", { type: "responsive", on: true, width: 900, height: 600 }, { subscriberId: "b" });
       await browser.input("z-resp", { type: "resize", width: 640, height: 480 }, { subscriberId: "a" });
@@ -841,15 +850,17 @@ withChrome("BrowserManager (real Chrome)", () => {
       expect(state(b)).toMatchObject({ size: { device: "mobile", width: 1000, height: 700, responsive: false }, sizeOwner: false });
       await browser.input("z-resp", { type: "resize", width: 640, height: 480 }, { subscriberId: "b" });
       expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[1000,700]");
-      // The owner leaving switches it off and keeps the size.
+      // The owner leaving hands the tab to the viewer still on it.
       await browser.input("z-resp", { type: "responsive", on: true, width: 800, height: 520 }, { subscriberId: "b" });
       await browser.unsubscribe("z-resp", "b");
-      expect(state(a)).toMatchObject({ size: { width: 800, height: 520, responsive: false }, sizeOwner: false });
-      // So does the owner switching to another tab.
-      await browser.input("z-resp", { type: "responsive", on: true, width: 810, height: 530 }, { subscriberId: "a" });
+      expect(state(a)).toMatchObject({ size: { width: 800, height: 520, responsive: true }, sizeOwner: true });
+      await browser.input("z-resp", { type: "resize", width: 810, height: 530 }, { subscriberId: "a" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[810,530]");
+      // With nobody left on it, it keeps its size (and stays Responsive for the next viewer).
       await browser.open("z-resp", `${base}/page2`, { newTab: true });
       await browser.subscribe("z-resp", "a", () => {}, (s) => a.push(s), { tab: 2 });
-      expect((await browser.state("z-resp", { tab: 1 }))?.size).toEqual({ device: "mobile", width: 810, height: 530, responsive: false });
+      expect((await browser.state("z-resp", { tab: 1 }))?.size).toEqual({ device: "mobile", width: 810, height: 530, responsive: true });
+      expect(state(a)).toMatchObject({ tabId: 2, sizeOwner: true });
       // Without a viewer there's no pane to follow.
       await expect(browser.input("z-resp", { type: "responsive", on: true }, { tab: 1 })).rejects.toThrow(/viewer/);
       await browser.unsubscribe("z-resp", "a");
@@ -1190,15 +1201,15 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
     expect(store.rows.get("rs")).toEqual({
       nextTabId: 3,
       tabs: [
-        { id: 1, url: `${base}/?rs-1`, title: "Last words", size: { device: "desktop", width: 1280, height: 800 } },
-        { id: 2, url: `${base}/page2`, title: "Page Two", size: { device: "mobile", width: 1024, height: 1366 } },
+        { id: 1, url: `${base}/?rs-1`, title: "Last words", size: { device: "desktop", width: 1280, height: 800, responsive: true } },
+        { id: 2, url: `${base}/page2`, title: "Page Two", size: { device: "mobile", width: 1024, height: 1366, responsive: false } },
       ],
     });
 
     const second = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
     try {
       expect(await second.tabs("rs")).toEqual([
-        { id: 1, url: `${base}/?rs-1`, title: "Last words", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: false } },
+        { id: 1, url: `${base}/?rs-1`, title: "Last words", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: true } },
         { id: 2, url: `${base}/page2`, title: "Page Two", loading: false, suspended: true, size: { device: "mobile", width: 1024, height: 1366, responsive: false } },
       ]);
       expect(second.chromePid).toBeUndefined(); // listing them didn't start Chrome
@@ -1222,7 +1233,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
     await Bun.sleep(500);
     expect(isAlive(pid)).toBe(false);
     expect(service.chromePid).toBeUndefined();
-    expect(store.rows.get("sd")?.tabs).toEqual([{ id: 1, url: `${base}/?sd`, title: "Home Page", size: { device: "desktop", width: 1280, height: 800 } }]);
+    expect(store.rows.get("sd")?.tabs).toEqual([{ id: 1, url: `${base}/?sd`, title: "Home Page", size: { device: "desktop", width: 1280, height: 800, responsive: true } }]);
   }, 60_000);
 
   test("Chrome stops once no tab has a page, and the next call relaunches it", async () => {

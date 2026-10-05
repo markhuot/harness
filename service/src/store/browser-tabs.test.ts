@@ -49,21 +49,24 @@ describe("browser tabs", () => {
     s.browserTabs.save(a.id, {
       nextTabId: 3,
       tabs: [
-        { id: 1, url: "http://a/", title: "A", size: { device: "mobile", width: 1280, height: 800 } },
+        { id: 1, url: "http://a/", title: "A", size: { device: "mobile", width: 1280, height: 800, responsive: false } },
         { id: 2, url: "http://a/2", title: "B" },
+        { id: 3, url: "http://a/3", title: "C", size: { device: "desktop", width: 900, height: 700 } },
       ],
     });
     expect(s.browserTabs.load(a.id)!.tabs).toEqual([
-      { id: 1, url: "http://a/", title: "A", size: { device: "mobile", width: 1280, height: 800 } },
+      { id: 1, url: "http://a/", title: "A", size: { device: "mobile", width: 1280, height: 800, responsive: false } },
       { id: 2, url: "http://a/2", title: "B" },
+      { id: 3, url: "http://a/3", title: "C", size: { device: "desktop", width: 900, height: 700 } },
     ]);
     const bad = [
       { id: 1, url: "x", title: "", size: { device: "tablet", width: 800, height: 600 } },
       { id: 2, url: "x", title: "", size: { device: "mobile", width: "393", height: 852 } },
       { id: 3, url: "x", title: "", size: { device: "desktop", width: 0, height: 800 } },
       { id: 4, url: "x", title: "", size: "mobile" },
+      { id: 5, url: "x", title: "", size: { device: "desktop", width: 800, height: 600, responsive: "yes" } },
     ];
     s.db.query("INSERT INTO browser_tabs (session_id, next_tab_id, tabs, updated_at) VALUES ($id, 5, $tabs, 0)").run({ id: b.id, tabs: JSON.stringify(bad) });
-    expect(s.browserTabs.load(b.id)!.tabs.map((t) => t.size)).toEqual([undefined, undefined, undefined, undefined]);
+    expect(s.browserTabs.load(b.id)!.tabs.map((t) => t.size)).toEqual([undefined, undefined, undefined, undefined, { device: "desktop", width: 800, height: 600 }]);
   });
 });

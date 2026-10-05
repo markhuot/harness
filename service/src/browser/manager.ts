@@ -105,7 +105,11 @@ interface Tab {
   loading: boolean;
   /** The input mode and viewport it should have (what states report and the store keeps). */
   size: BrowserSize;
-  /** With size.responsive: the subscriber whose stage it follows (the last to switch it on). */
+  /**
+   * With size.responsive: the subscriber whose stage it follows. The last viewer to switch it on;
+   * otherwise one watching the tab (refresh hands it on when the owner leaves). None: no viewer, and
+   * the tab keeps its size.
+   */
   sizeOwner?: string;
   /** What Chrome was last told (applySize), so an unchanged size restarts nothing. */
   viewport: { width: number; height: number };
@@ -236,24 +240,25 @@ function suspendedStateOf(entry: Entry, id: number): BrowserState {
   return { sessionId: entry.sessionId, tabId: id, url: s.url, title: s.title, loading: false, suspended: true, size: storedSize(s.size), tabs: protocolTabs(entry) };
 }
 
-/** A tab as stored. Responsive belongs to a live viewer, so it isn't kept. */
+/** A tab as stored (its owner, a live viewer, isn't). */
 function record(tab: Tab): StoredBrowserTab {
-  const { device, width, height } = tab.size;
-  return { id: tab.id, url: tab.url, title: tab.title, size: { device, width, height } };
+  const { device, width, height, responsive } = tab.size;
+  return { id: tab.id, url: tab.url, title: tab.title, size: { device, width, height, responsive } };
 }
+
+/** A new tab's size: desktop, following the pane of whoever watches it (Responsive), 1280×800 until someone does. */
+const defaultSize = (): BrowserSize => ({ device: "desktop", ...BROWSER_DESKTOP, responsive: true });
 
 const clampSide = (n: number) => Math.max(BROWSER_MIN_SIDE, Math.min(BROWSER_MAX_SIDE, Math.round(n)));
 /** A requested viewport side, clamped; undefined when it isn't a usable number. */
 const side = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? clampSide(n) : undefined);
 const presetOf = (device: BrowserDevice) => (device === "mobile" ? BROWSER_MOBILE : BROWSER_DESKTOP);
 
-/** A stored tab's size; Desktop at its preset when it has none or it's unusable (a row from before sizes). */
+/** A stored tab's size; a new tab's (defaultSize) when it has none or it's unusable (a row from before sizes). */
 function storedSize(size: StoredBrowserTab["size"]): BrowserSize {
   const ok = (n: unknown) => typeof n === "number" && Number.isFinite(n);
-  if (!size || (size.device !== "desktop" && size.device !== "mobile") || !ok(size.width) || !ok(size.height)) {
-    return { device: "desktop", ...BROWSER_DESKTOP, responsive: false };
-  }
-  return { device: size.device, width: clampSide(size.width), height: clampSide(size.height), responsive: false };
+  if (!size || (size.device !== "desktop" && size.device !== "mobile") || !ok(size.width) || !ok(size.height)) return defaultSize();
+  return { device: size.device, width: clampSide(size.width), height: clampSide(size.height), responsive: size.responsive !== false };
 }
 
 /** A request that failed outright or got an error status. */
@@ -353,6 +358,7 @@ export class BrowserManager implements BrowserService {
       title: tab.title,
       loading: tab.loading,
       size: { ...tab.size },
+      ...(tab.size.responsive ? { following: tab.sizeOwner !== undefined } : {}),
       ...(scroll ? { scroll: { x: Math.round(scroll[0]), y: Math.round(scroll[1]) } } : {}),
       requests: [...tab.requests.values()].map(({ started: _s, ...r }) => r),
       console: [...tab.console],
@@ -929,7 +935,7 @@ export class BrowserManager implements BrowserService {
       const entry = opener.entry;
       this.opening++;
       // It opens in the opener's mode and size, so a mobile page's link stays mobile.
-      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser, undefined, { ...opener.size, responsive: false })
+      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser, undefined, { ...opener.size })
         .catch(() => {})
         .finally(() => this.opening--);
     });
@@ -1317,14 +1323,17 @@ export class BrowserManager implements BrowserService {
    * someone watches it, and send every subscriber its state (the tab list changed for all of them).
    */
   private async refresh(entry: Entry): Promise<void> {
-    // Responsive ends when the viewer it follows leaves the tab (unsubscribed, switched, socket gone):
-    // the tab keeps its size, and everyone sees the switch go off rather than stay on for no one.
+    // A Responsive tab follows one of the viewers watching it. When its viewer leaves (unsubscribed,
+    // switched, socket gone), the newest viewer still on the tab takes over; with none left it keeps
+    // its size until someone opens it.
     for (const tab of openTabs(entry)) {
-      if (tab.sizeOwner === undefined) continue;
-      const owner = entry.subscribers.get(tab.sizeOwner);
+      if (!tab.size.responsive) {
+        tab.sizeOwner = undefined;
+        continue;
+      }
+      const owner = tab.sizeOwner === undefined ? undefined : entry.subscribers.get(tab.sizeOwner);
       if (owner && watchedId(entry, owner) === tab.id) continue;
-      tab.sizeOwner = undefined;
-      tab.size = { ...tab.size, responsive: false };
+      tab.sizeOwner = [...entry.subscribers].filter(([, sub]) => watchedId(entry, sub) === tab.id).at(-1)?.[0];
     }
     for (const sub of entry.subscribers.values()) {
       const id = watchedId(entry, sub);

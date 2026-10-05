@@ -574,14 +574,14 @@ describe("browser tools → BrowserService", () => {
   test("browser_tabs and browser_close_tab list what is open", async () => {
     const desktop = { device: "desktop", width: 1280, height: 800, responsive: false };
     const tabs = [
-      { id: 1, url: "http://a.test/", title: "A", loading: false, size: desktop, failedRequests: 0, consoleErrors: 0 },
+      { id: 1, url: "http://a.test/", title: "A", loading: false, size: { ...desktop, responsive: true }, failedRequests: 0, consoleErrors: 0 },
       { id: 3, url: "http://c.test/", title: "", loading: true, size: { device: "mobile", width: 393, height: 852, responsive: false }, failedRequests: 2, consoleErrors: 1 },
       { id: 4, url: "http://d.test/", title: "D", loading: false, suspended: true, size: { ...desktop, width: 800 } },
     ];
     const browser = fakeBrowser({ tabs: async () => tabs });
     const ctx = fakeContext({ browser });
     const listing =
-      "Tab 1: A — http://a.test/ [desktop 1280×800]\n" +
+      "Tab 1: A — http://a.test/ [desktop 1280×800, responsive]\n" +
       "Tab 3: (untitled) — http://c.test/ [mobile 393×852] (loading) (2 failed requests, 1 console error)\n" +
       "Tab 4: D — http://d.test/ [desktop 800×800] (suspended: reloads when you use it)";
     expect(text(await tool("browser_tabs").execute({}, ctx))).toBe(listing);
@@ -601,6 +601,7 @@ describe("browser tools → BrowserService", () => {
         title: "A",
         loading: false,
         size: { device: "mobile", width: 1024, height: 1366, responsive: true },
+        following: true,
         scroll: { x: 0, y: 240 },
         requests: [
           { method: "GET", url: "http://a.test/", type: "Document", status: 200, durationMs: 12 },
@@ -619,7 +620,7 @@ describe("browser tools → BrowserService", () => {
       [
         "Tab 5: A — http://a.test/",
         "State: loaded",
-        "Size: mobile 1024×1366 (touch, iPhone user agent), following a human's pane (Responsive): it changes when they resize their window",
+        "Size: mobile 1024×1366 (touch, iPhone user agent), following a human's pane (Responsive): it changes when they resize their window; browser_resize sets a size that holds still",
         "Scroll: 0, 240",
         "",
         "Network requests since the page loaded (5; failed ones first):",
@@ -634,10 +635,10 @@ describe("browser tools → BrowserService", () => {
       ].join("\n"),
     );
     const suspended = fakeBrowser({
-      tabInfo: async () => ({ id: 2, url: "http://b.test/", title: "B", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: false }, requests: [], console: [] }),
+      tabInfo: async () => ({ id: 2, url: "http://b.test/", title: "B", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: true }, following: false, requests: [], console: [] }),
     });
     expect(text(await tool("browser_tabs").execute({ tab: 2 }, fakeContext({ browser: suspended })))).toBe(
-      "Tab 2: B — http://b.test/\nState: suspended (its page is closed; it reloads when you use it)\nSize: desktop 1280×800 (mouse)",
+      "Tab 2: B — http://b.test/\nState: suspended (its page is closed; it reloads when you use it)\nSize: desktop 1280×800 (mouse), Responsive: it takes the size of the next human pane that opens it; browser_resize sets a size that holds still",
     );
     const missing = fakeBrowser({ tabInfo: async () => { throw new Error("No browser tab 9. Open tabs: 1."); } });
     // Thrown like every browser tool's errors; the tool layer reports it to the agent.

@@ -35,10 +35,11 @@ export class BrowserTabRepo implements BrowserTabStore {
   }
 }
 
-/** A stored tab's size when it's usable; an older row (or anything else) has none, which loads as Desktop. */
+/** A stored tab's size when it's usable; an older row (or anything else) has none, which loads as a new tab's. */
 function storedSize(size: unknown): StoredBrowserTab["size"] | undefined {
   if (!size || typeof size !== "object") return undefined;
-  const { device, width, height } = size as Record<string, unknown>;
+  const { device, width, height, responsive } = size as Record<string, unknown>;
   const ok = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0;
-  return (device === "desktop" || device === "mobile") && ok(width) && ok(height) ? { device, width: width as number, height: height as number } : undefined;
+  if (!((device === "desktop" || device === "mobile") && ok(width) && ok(height))) return undefined;
+  return { device, width: width as number, height: height as number, ...(typeof responsive === "boolean" ? { responsive } : {}) };
 }
