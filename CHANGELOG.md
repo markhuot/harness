@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.1016](https://github.com/markhuot/harness/releases/tag/app-20261005.1016) - 2026-10-05
+
 ### Changed
 
 - On iPhone, the board's bottom bar and a ticket's message composer sit lower, with the same gap at
