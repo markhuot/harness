@@ -183,6 +183,10 @@ private struct TicketDetailBody: View {
             }
             // Not into the safe area: running up under the bar, it would slide down over the hero.
             .background(c.bg, ignoresSafeAreaEdges: [])
+            // One geometry group: the slide moves it as a whole, rather than SwiftUI pushing the
+            // offset down to every leaf (each text run and nested scroll view of a transcript) on
+            // every frame.
+            .geometryGroup()
             .modifier(HeroSlide(hero: hero))
             .zIndex(1)
         }
