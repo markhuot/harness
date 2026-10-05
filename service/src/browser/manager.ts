@@ -735,6 +735,10 @@ export class BrowserManager implements BrowserService {
    * from its preset size, and anything set this way switches Responsive off (last set wins).
    */
   private async setSize(tab: Tab, change: BrowserSizeChange): Promise<void> {
+    // The socket hands input over as sent: an unknown mode is refused, not stored.
+    if (change.device !== undefined && change.device !== "desktop" && change.device !== "mobile") {
+      throw new Error(`Unknown browser device "${String(change.device)}": use "desktop" or "mobile".`);
+    }
     const device = change.device ?? tab.size.device;
     const base = change.device ? presetOf(change.device) : tab.size;
     tab.size = { device, width: side(change.width) ?? base.width, height: side(change.height) ?? base.height, responsive: false };

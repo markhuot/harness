@@ -807,6 +807,9 @@ withChrome("BrowserManager (real Chrome)", () => {
       expect((await browser.state("z-reset"))?.size).toMatchObject({ width: 100, height: 4096 });
       await browser.input("z-reset", { type: "size", width: Number.NaN, height: 500 });
       expect((await browser.state("z-reset"))?.size).toMatchObject({ width: 100, height: 500 });
+      // A mode the protocol doesn't have is refused and changes nothing.
+      await expect(browser.input("z-reset", { type: "device", device: "tablet" as "mobile" })).rejects.toThrow(/Unknown browser device/);
+      expect((await browser.state("z-reset"))?.size).toEqual({ device: "mobile", width: 100, height: 500, responsive: false });
       await browser.close("z-reset");
     }, 30_000);
 
