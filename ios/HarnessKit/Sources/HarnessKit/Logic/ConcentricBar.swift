@@ -6,15 +6,26 @@ import CoreGraphics
 /// share a center. iOS has no public API for the display's corner radius, so it comes from the
 /// screen's width (its short side), which tells the iPhone families apart.
 public enum ConcentricBar {
-    /// The screen as the bar sees it: its short side and the home indicator's inset at the bottom
-    /// (the safe area without the keyboard).
+    /// The screen as the bar sees it: its size, the safe area's leading plus trailing insets, and
+    /// the home indicator's inset at the bottom (the safe area without the keyboard).
     public struct Screen: Equatable, Sendable {
-        public var shortSide: CGFloat
+        public var width: CGFloat
+        public var height: CGFloat
+        public var sideInsets: CGFloat
         public var homeIndicator: CGFloat
-        public init(shortSide: CGFloat, homeIndicator: CGFloat) {
-            self.shortSide = shortSide
+        public init(width: CGFloat, height: CGFloat, sideInsets: CGFloat = 0, homeIndicator: CGFloat) {
+            self.width = width
+            self.height = height
+            self.sideInsets = sideInsets
             self.homeIndicator = homeIndicator
         }
+
+        public var shortSide: CGFloat { min(width, height) }
+
+        /// A bar spans the screen's bottom edge, from corner to corner, only in portrait. In
+        /// landscape it sits between the side insets (and on a Plus or Pro Max, in a split view's
+        /// column), away from the corners.
+        public var portrait: Bool { height > width && sideInsets == 0 }
     }
 
     /// The bar's padding: on each side, and at the bottom measured from the safe area's edge (so
@@ -50,9 +61,10 @@ public enum ConcentricBar {
     }
 
     /// The padding that makes a bar `height` tall concentric with the screen's corners, or nil
-    /// when it can't be (no screen measured yet, or square corners): the caller keeps its own.
+    /// when it can't be (no screen measured yet, landscape, or square corners): the caller keeps
+    /// its own.
     public static func padding(_ screen: Screen?, barHeight: CGFloat) -> Padding? {
-        guard let screen, let radius = displayCornerRadius(screen) else { return nil }
+        guard let screen, screen.portrait, let radius = displayCornerRadius(screen) else { return nil }
         let margin = max(radius - barHeight / 2, minimumMargin)
         return Padding(horizontal: margin, bottom: margin - screen.homeIndicator)
     }

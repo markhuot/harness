@@ -65,7 +65,8 @@ struct TicketDetailComposer: View {
         }
         .padding(.top, 6)
         // At rest, concentric with the phone's corners (the one-line field is 44 tall, its ends
-        // round at 22); over the keyboard while writing.
+        // round at 22); over the keyboard while writing. A multi-line draft makes it taller, but its
+        // bottom row still sits where a one-line field would, so 44 holds.
         .concentricBottomPadding(barHeight: 44, raised: focused, horizontal: 12, bottom: 8)
         .animation(.snappy, value: focused)
     }

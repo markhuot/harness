@@ -7,8 +7,9 @@ extension EnvironmentValues {
     @Entry var concentricScreen: ConcentricBar.Screen?
 }
 
-/// Measures the window for `\.concentricScreen`: its short side and the home indicator's inset,
-/// without the keyboard's. Phones only, since an iPad's corners are barely rounded.
+/// Measures the window for `\.concentricScreen`: its size, side insets and the home indicator's
+/// inset, without the keyboard's. Phones only, since an iPad's corners are barely rounded;
+/// ConcentricBar leaves landscape alone.
 struct ConcentricScreenReader: ViewModifier {
     @State private var screen: ConcentricBar.Screen?
 
@@ -20,8 +21,8 @@ struct ConcentricScreenReader: ViewModifier {
                     .ignoresSafeArea(.keyboard)
                     .onGeometryChange(for: ConcentricBar.Screen.self) { g in
                         let s = g.size, i = g.safeAreaInsets
-                        return ConcentricBar.Screen(shortSide: min(s.width + i.leading + i.trailing, s.height + i.top + i.bottom),
-                                                    homeIndicator: i.bottom)
+                        return ConcentricBar.Screen(width: s.width + i.leading + i.trailing, height: s.height + i.top + i.bottom,
+                                                    sideInsets: i.leading + i.trailing, homeIndicator: i.bottom)
                     } action: { s in
                         screen = UIDevice.current.userInterfaceIdiom == .phone ? s : nil
                     }
