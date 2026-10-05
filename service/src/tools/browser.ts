@@ -5,6 +5,8 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpa
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserDevice, type BrowserSize, type ToolResultContent } from "@harness/shared";
 import type { BrowserTabInfo, BrowserTabSummary } from "../browser/types";
+import { WAIT_CONDITION_DOC, WAIT_CONDITION_PROPERTIES, checkCondition, type WaitCondition, type WaitResult } from "../browser/wait";
+import type { ToolContext, ToolResult } from "./types";
 import { defineTool, errorResult, schema } from "./util";
 
 const DEFAULT_MAX_CHARS = 20_000;
@@ -51,6 +53,50 @@ const SIZE = {
   height: { type: "integer", minimum: BROWSER_MIN_SIDE, maximum: BROWSER_MAX_SIDE, description: "Viewport height in CSS px. Alone, it keeps the tab's mode." },
 } as const;
 
+/**
+ * The wait_for every tool that acts on or reads the page takes: one condition (browser/wait.ts),
+ * one description. `when` says when it runs for that tool.
+ */
+function waitForParam(when: "after" | "before", what: string) {
+  return {
+    wait_for: {
+      type: "object",
+      properties: WAIT_CONDITION_PROPERTIES,
+      additionalProperties: false,
+      description: `Wait for the page ${when === "after" ? `after ${what}, before returning` : `before ${what}`}, instead of sleeping. The condition: ${WAIT_CONDITION_DOC}`,
+    },
+  } as const;
+}
+
+type WaitInput = { wait_for?: unknown };
+
+/** wait_for checked before anything happens, so a bad condition costs nothing. */
+function parseWaitFor(input: WaitInput): { condition?: WaitCondition; error?: string } {
+  if (input.wait_for === undefined || input.wait_for === null) return {};
+  const checked = checkCondition(input.wait_for);
+  return checked.ok ? { condition: checked.condition } : { error: `wait_for: ${checked.error}` };
+}
+
+/** The wait's line for a result: "Waited: …" or the timeout's report. */
+const waitLine = (w: WaitResult) => (w.met ? `Waited: ${w.summary}` : w.summary);
+
+/**
+ * A tool's result with its wait folded in: the text of what it did or read, plus the wait. A wait
+ * that timed out makes the result an error, but keeps what the tool did, so the agent sees both.
+ */
+function withWait(content: ToolResultContent[], wait: WaitResult | undefined, order: "after" | "before"): ToolResult {
+  if (!wait) return { content };
+  const line: ToolResultContent = { type: "text", text: waitLine(wait) };
+  const out = order === "after" ? [...content, line] : [line, ...content];
+  return wait.met ? { content: out } : { content: out, isError: true };
+}
+
+/** Run browser.waitFor for a tool's wait_for. */
+const waitOn = (ctx: ToolContext, condition: WaitCondition | undefined, tab: number | undefined) =>
+  condition ? ctx.browser.waitFor(ctx.session.id, condition, { tab }) : Promise.resolve(undefined);
+
+const text = (t: string): ToolResultContent[] => [{ type: "text", text: t }];
+
 type SizeInput = { device?: BrowserDevice; width?: number; height?: number };
 const sizeChange = ({ device, width, height }: SizeInput) =>
   device === undefined && width === undefined && height === undefined ? undefined : { device, width, height };
@@ -81,24 +127,29 @@ function tabReport(t: BrowserTabInfo): string {
   return lines.join("\n");
 }
 
-export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean } & SizeInput>({
+export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean } & SizeInput & WaitInput>({
   name: "browser_open",
   description:
-    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Each tab has its own mode and size (new tabs: desktop, following the size of a human's pane while one has the tab open, 1280×800 otherwise); device, width and height set a size that holds still, before the page loads, e.g. new_tab with device \"mobile\" to check a phone layout. Returns the tab, final URL, page title and size; use browser_content to read the page.",
+    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Each tab has its own mode and size (new tabs: desktop, following the size of a human's pane while one has the tab open, 1280×800 otherwise); device, width and height set a size that holds still, before the page loads, e.g. new_tab with device \"mobile\" to check a phone layout. Pass wait_for to wait, after the load, for what the page fills in by script. Returns the tab, final URL, page title and size; use browser_content to read the page.",
   inputSchema: schema(
     {
       url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." },
       ...TAB,
       new_tab: { type: "boolean", description: "Open a new tab for this URL instead of navigating an existing one." },
       ...SIZE,
+      ...waitForParam("after", "it loads"),
     },
     ["url"],
   ),
-  async run({ url, tab, new_tab, ...size }, ctx) {
+  async run({ url, tab, new_tab, wait_for, ...size }, ctx) {
     if (new_tab && tab !== undefined) return errorResult("Pass tab or new_tab, not both.");
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
     const change = sizeChange(size);
     const state = await ctx.browser.open(ctx.session.id, url, { tab, newTab: new_tab ?? false, ...(change ? { size: change } : {}) });
-    return `Opened ${state.url} in tab ${state.tabId}\nTitle: ${state.title || "(untitled)"}${state.size ? `\nSize: ${sizeText(state.size)}` : ""}`;
+    const waited = await waitOn(ctx, wait.condition, state.tabId);
+    const opened = `Opened ${waited?.url ?? state.url} in tab ${state.tabId}\nTitle: ${state.title || "(untitled)"}${state.size ? `\nSize: ${sizeText(state.size)}` : ""}`;
+    return withWait(text(opened), waited, "after");
   },
 });
 
@@ -114,16 +165,19 @@ export const browserTabs = defineTool<{ tab?: number }>({
   },
 });
 
-export const browserResize = defineTool<{ tab?: number } & SizeInput>({
+export const browserResize = defineTool<{ tab?: number } & SizeInput & WaitInput>({
   name: "browser_resize",
   description:
-    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. Either way the size then holds still: the tab stops following a human's pane (Responsive), which new tabs do. Resize the tabs you opened or navigated; leave a tab another agent is using alone unless it was handed to you or the human asks.",
-  inputSchema: schema({ ...SIZE, ...TAB }),
-  async run({ tab, ...size }, ctx) {
+    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. Either way the size then holds still: the tab stops following a human's pane (Responsive), which new tabs do. Resize the tabs you opened or navigated; leave a tab another agent is using alone unless it was handed to you or the human asks. Pass wait_for to wait for the layout to change (a mobile menu, say) before returning.",
+  inputSchema: schema({ ...SIZE, ...TAB, ...waitForParam("after", "resizing") }),
+  async run({ tab, wait_for, ...size }, ctx) {
     const change = sizeChange(size);
     if (!change) return errorResult("Pass device, width or height.");
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
     const state = await ctx.browser.resize(ctx.session.id, change, { tab });
-    return `Tab ${state.tabId} is ${sizeText(state.size)}${change.device ? " (reloaded)" : ""}: ${state.url}`;
+    const waited = await waitOn(ctx, wait.condition, state.tabId);
+    return withWait(text(`Tab ${state.tabId} is ${sizeText(state.size)}${change.device ? " (reloaded)" : ""}: ${waited?.url ?? state.url}`), waited, "after");
   },
 });
 
@@ -138,65 +192,112 @@ export const browserCloseTab = defineTool<{ tab: number }>({
   },
 });
 
-export const browserContent = defineTool<{ selector?: string; format?: "text" | "html"; max_chars?: number; tab?: number }>({
+export const browserContent = defineTool<{ selector?: string; format?: "text" | "html"; max_chars?: number; tab?: number } & WaitInput>({
   name: "browser_content",
   description:
-    "Read the current page. format \"text\" (default) returns visible text; \"html\" returns markup. With a CSS selector, returns the content of every matching element. Output is capped at max_chars.",
+    "Read the current page. format \"text\" (default) returns visible text; \"html\" returns markup. With a CSS selector, returns the content of every matching element. Output is capped at max_chars. Pass wait_for to wait for the page to settle (a spinner gone, a result shown) before reading.",
   inputSchema: schema({
     selector: { type: "string", description: "CSS selector to scope the content, e.g. \"main\" or \"#results li\"." },
     format: { type: "string", enum: ["text", "html"], description: "\"text\" (default) or \"html\"." },
     max_chars: { type: "integer", minimum: 1, description: `Maximum characters to return (default ${DEFAULT_MAX_CHARS}).` },
     ...TAB,
+    ...waitForParam("before", "reading it"),
   }),
-  async run({ selector, format, max_chars, tab }, ctx) {
-    const content = await ctx.browser.content(ctx.session.id, {
-      selector,
-      format: format ?? "text",
-      maxChars: max_chars ?? DEFAULT_MAX_CHARS,
-      tab,
-    });
-    return content === "" ? "(the page has no content)" : content;
+  async run({ selector, format, max_chars, tab, wait_for }, ctx) {
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    const waited = await waitOn(ctx, wait.condition, tab);
+    const read = () =>
+      ctx.browser.content(ctx.session.id, {
+        selector,
+        format: format ?? "text",
+        maxChars: max_chars ?? DEFAULT_MAX_CHARS,
+        tab,
+      });
+    // A timed-out wait still reads the page as it is, so the agent sees where it got stuck.
+    const content = waited && !waited.met ? await read().catch((e) => `(couldn't read the page: ${(e as Error).message})`) : await read();
+    return withWait(text(content === "" ? "(the page has no content)" : content), waited, "before");
   },
 });
 
-export const browserClick = defineTool<{ selector: string; tab?: number }>({
+export const browserClick = defineTool<{ selector: string; tab?: number } & WaitInput>({
   name: "browser_click",
-  description: "Click the first element matching a CSS selector.",
-  inputSchema: schema({ selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." }, ...TAB }, ["selector"]),
-  async run({ selector, tab }, ctx) {
-    await ctx.browser.click(ctx.session.id, selector, { tab });
-    const state = await ctx.browser.state(ctx.session.id, { tab });
-    return state ? `Clicked ${selector}. Now at ${state.url}` : `Clicked ${selector}.`;
+  description:
+    "Click the first element matching a CSS selector. It returns once a navigation the click starts has loaded, but not for a page that updates by script: pass wait_for to wait for the page to react (e.g. { idle: true }, or { selector: \".spinner\", state: \"gone\" }) before returning, instead of sleeping.",
+  inputSchema: schema(
+    { selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." }, ...TAB, ...waitForParam("after", "clicking") },
+    ["selector"],
+  ),
+  async run({ selector, tab, wait_for }, ctx) {
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    const report = await ctx.browser.click(ctx.session.id, selector, { tab });
+    const waited = await waitOn(ctx, wait.condition, tab);
+    const state = waited ? null : await ctx.browser.state(ctx.session.id, { tab });
+    const url = waited?.url ?? state?.url;
+    const why = [report.disabled ? "disabled" : "", report.busy ? "inside an element marked aria-busy" : ""].filter(Boolean).join(" and ");
+    const clicked =
+      `Clicked ${selector}${url ? `. Now at ${url}` : "."}` +
+      (why ? `\nIt was ${why}, so the page may have ignored the click: wait for it to be ready (wait_for { selector, state: "enabled" }) and click again.` : "");
+    return withWait(text(clicked), waited, "after");
   },
 });
 
-export const browserType = defineTool<{ selector: string; text: string; submit?: boolean; tab?: number }>({
+export const browserType = defineTool<{ selector: string; text: string; submit?: boolean; tab?: number } & WaitInput>({
   name: "browser_type",
-  description: "Focus the element matching a CSS selector and type text into it. Set submit to press Enter afterwards (e.g. to submit a form).",
+  description:
+    "Focus the element matching a CSS selector and type text into it. Set submit to press Enter afterwards (e.g. to submit a form). Pass wait_for to wait for the page to react (results shown, the next page loaded) before returning.",
   inputSchema: schema(
     {
       selector: { type: "string", minLength: 1, description: "CSS selector of an input, textarea or contenteditable element." },
       text: { type: "string", description: "Text to type." },
       submit: { type: "boolean", description: "Press Enter after typing." },
       ...TAB,
+      ...waitForParam("after", "typing"),
     },
     ["selector", "text"],
   ),
-  async run({ selector, text, submit, tab }, ctx) {
-    await ctx.browser.type(ctx.session.id, selector, text, { submit: submit ?? false, tab });
-    return submit ? `Typed into ${selector} and pressed Enter.` : `Typed into ${selector}.`;
+  async run({ selector, text: typed, submit, tab, wait_for }, ctx) {
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    await ctx.browser.type(ctx.session.id, selector, typed, { submit: submit ?? false, tab });
+    const waited = await waitOn(ctx, wait.condition, tab);
+    return withWait(text(submit ? `Typed into ${selector} and pressed Enter.` : `Typed into ${selector}.`), waited, "after");
   },
 });
 
-export const browserEval = defineTool<{ expression: string; tab?: number }>({
+export const browserEval = defineTool<{ expression: string; tab?: number } & WaitInput>({
   name: "browser_eval",
-  description: "Evaluate a JavaScript expression in the page and return its JSON-serialized result. Promises are awaited.",
+  description:
+    "Evaluate a JavaScript expression in the page and return its JSON-serialized result (objects as JSON, elements as \"tag#id.class\"). Promises are awaited. Pass wait_for to wait for the page before evaluating. The expression runs inside the page, so a navigation or reload ends it: for steps that span a reload (click, wait, click again), or loops, use browser_run, not an in-page loop.",
   inputSchema: schema(
-    { expression: { type: "string", minLength: 1, description: "JavaScript expression, e.g. \"document.querySelectorAll('a').length\"." }, ...TAB },
+    {
+      expression: { type: "string", minLength: 1, description: "JavaScript expression, e.g. \"document.querySelectorAll('a').length\"." },
+      ...TAB,
+      ...waitForParam("before", "evaluating"),
+    },
     ["expression"],
   ),
-  async run({ expression, tab }, ctx) {
-    return await ctx.browser.evaluate(ctx.session.id, expression, { tab });
+  async run({ expression, tab, wait_for }, ctx) {
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    const waited = await waitOn(ctx, wait.condition, tab);
+    if (!waited) return await ctx.browser.evaluate(ctx.session.id, expression, { tab });
+    const value = waited.met ? await ctx.browser.evaluate(ctx.session.id, expression, { tab }) : await ctx.browser.evaluate(ctx.session.id, expression, { tab }).catch((e) => `(couldn't evaluate: ${(e as Error).message})`);
+    return withWait(text(value), waited, "before");
+  },
+});
+
+export const browserWait = defineTool<WaitCondition & { tab?: number }>({
+  name: "browser_wait",
+  description:
+    `Wait until a condition holds in a tab: the same wait the wait_for param of browser_open, browser_click, browser_type, browser_resize, browser_screenshot, browser_content and browser_eval runs, without an action. Use it for pages that change on their own (a redirect after paying, a status a webhook updates, a script still filling the page) instead of sleeping. The condition: ${WAIT_CONDITION_DOC} Returns what matched and how long it took; a timeout is an error that says what the page was doing (loading, busy, requests in flight, console errors).`,
+  inputSchema: schema({ ...WAIT_CONDITION_PROPERTIES, ...TAB }),
+  async run({ tab, ...condition }, ctx) {
+    const checked = checkCondition(condition);
+    if (!checked.ok) return errorResult(checked.error);
+    const waited = await ctx.browser.waitFor(ctx.session.id, checked.condition, { tab });
+    return waited.met ? `Waited: ${waited.summary}` : errorResult(waited.summary);
   },
 });
 
@@ -268,10 +369,10 @@ export function resolveSaveTo(saveTo: string, scope: { cwd: string; scratchDir: 
   return target;
 }
 
-export const browserScreenshot = defineTool<{ save_to?: string; tab?: number }>({
+export const browserScreenshot = defineTool<{ save_to?: string; tab?: number } & WaitInput>({
   name: "browser_screenshot",
   description:
-    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec.",
+    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec. Pass wait_for so it captures the finished page, not a spinner: it waits before capturing (and still captures on a timeout, showing where the page got stuck).",
   inputSchema: schema({
     save_to: {
       type: "string",
@@ -280,11 +381,15 @@ export const browserScreenshot = defineTool<{ save_to?: string; tab?: number }>(
         "Also save the PNG here, e.g. \"screenshots/after.png\". It must be inside your working directory or this run's scratch folder, and a relative path resolves against the working directory. In read-only runs (plan, review, or a read-only ticket) only the scratch folder is allowed and relative paths resolve there. Parent folders are created; an existing file is replaced only if it is a PNG.",
     },
     ...TAB,
+    ...waitForParam("before", "capturing"),
   }),
-  async run({ save_to, tab }, ctx) {
+  async run({ save_to, tab, wait_for }, ctx) {
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
     // Check the path before taking the shot, so a refused save_to costs nothing.
     const scope = save_to ? await ctx.ops.fileOutputScope(ctx) : null;
     const path = save_to && scope ? resolveSaveTo(save_to, { cwd: ctx.cwd, ...scope }) : null;
+    const waited = await waitOn(ctx, wait.condition, tab);
     const data = await ctx.browser.screenshot(ctx.session.id, { tab });
     const content: ToolResultContent[] = [{ type: "image", data, mimeType: "image/png" }];
     if (path && scope) {
@@ -293,6 +398,6 @@ export const browserScreenshot = defineTool<{ save_to?: string; tab?: number }>(
       const inScratch = inside(realpathSync(scope.scratchDir), path);
       content.push({ type: "text", text: `Saved the screenshot to ${path}${inScratch ? " (this run's scratch folder)" : ""}` });
     }
-    return { content };
+    return withWait(content, waited, "before");
   },
 });

@@ -13,11 +13,12 @@ import {
 } from "./prompts";
 import type { ReviewContext } from "./prompts";
 import { promptTemplateError } from "./prompt-templates";
-import { nativeTools, readOnlyNativeTools } from "../tools";
+import { browserTools, nativeTools, readOnlyNativeTools } from "../tools";
+import { WAIT_CONDITION_DOC } from "../browser/wait";
 
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
 // the prompts module so a prompt that names a tool its run can't call fails here.
-const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
+const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot", "browser_wait", "browser_run", "browser_run_status", "browser_run_stop"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CHILD_TOOLS = ["review_ticket", "complete_ticket"];
@@ -165,6 +166,27 @@ describe("systemPrompt tool references", () => {
     for (const name of ["dispatch_ticket", "review_decision"]) {
       expect(text).not.toContain(`\`${name}\``);
     }
+  });
+
+  test("the Browser section's wait paragraph names exactly the tools that take wait_for, in the tools' own wording", () => {
+    const section = /## Browser\n([\s\S]*?)(?=\n## |$)/.exec(sys("work", ticket(worktree)))?.[1] ?? "";
+    const wait = section.split("\n").find((l) => l.startsWith("Wait for the page with `wait_for`")) ?? "";
+    const named = new Set([...wait.matchAll(/`(browser_\w+)`/g)].map((m) => m[1]!).filter((n) => n !== "browser_wait"));
+    const takes = browserTools.filter((t) => "wait_for" in t.inputSchema.properties).map((t) => t.name);
+    // A tool that gains wait_for without being documented here (or the other way round) fails.
+    expect([...named].sort()).toEqual(takes.sort());
+    expect(takes).not.toContain("browser_tabs");
+    expect(takes).not.toContain("browser_close_tab");
+    expect(wait).toContain("never with `sleep` in a shell");
+    // One wording for the condition: the prompt, browser_wait and every wait_for param.
+    expect(wait).toContain(WAIT_CONDITION_DOC);
+    expect(browserTools.find((t) => t.name === "browser_wait")!.description).toContain(WAIT_CONDITION_DOC);
+    for (const t of browserTools.filter((t) => takes.includes(t.name))) {
+      expect((t.inputSchema.properties.wait_for as { description: string }).description).toContain(WAIT_CONDITION_DOC);
+    }
+    const run = section.split("\n").find((l) => l.startsWith("For steps that span reloads")) ?? "";
+    expect(run).toContain("call `browser_run_status` { job } until the job isn't running");
+    expect(run).toContain("`browser_run_stop` { job }");
   });
 
   test("complete runs get no browser section", () => {

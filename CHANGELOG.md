@@ -16,6 +16,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   its own five minutes after that. Its card shows a clock, like a planning ticket waiting on its
   dependencies, and the ticket shows a "Restarts at 2:35 PM" button, on the Mac and on iPhone and
   iPad. Moving the ticket anywhere else cancels the restart.
+- Agents wait for a page to finish reacting instead of pausing for a guessed number of seconds.
+  A click can wait for the page to go quiet or for a button to disappear, and a screenshot can wait
+  for the finished page, so you see fewer stalls and fewer screenshots of spinners.
+- Agents can run a short script that drives a browser tab through several steps, such as removing
+  every item from a cart, even when the page reloads between steps. Its progress shows up in the
+  ticket's transcript as it runs, including the page's console messages and failed requests.
+
+### Fixed
+
+- An agent reading a value from a page that was reloading now gets the value, or a clear note that
+  the page moved on, instead of the word "Object".
 
 ## [app-20261005.1743](https://github.com/markhuot/harness/releases/tag/app-20261005.1743) - 2026-10-05
 

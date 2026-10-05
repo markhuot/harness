@@ -792,15 +792,19 @@ Harness tools (always exposed, via MCP for claude-code):
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
-| `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab?, device?, width?, height? }` → names the tab and its size; `tab` with `new_tab` is refused; the size is set before the page loads. See "Browser tabs" |
+| `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab?, device?, width?, height?, wait_for? }` → names the tab and its size; `tab` with `new_tab` is refused; the size is set before the page loads. See "Browser tabs" |
 | `browser_tabs` | ″ | `{ tab? }` → one line per tab: number, title, URL, mode and size, and its failed-request and console-error counts; with `tab`, that tab in full (state, size, scroll, requests failed-first, console). A suspended tab isn't reopened |
-| `browser_resize` | ″ | `{ device?, width?, height?, tab? }` (at least one): `device` resets to its preset size and reloads; `width`/`height` keep the mode. Any tab of the session ("your own tabs" is prompt guidance only); ends a viewer's Responsive |
+| `browser_resize` | ″ | `{ device?, width?, height?, tab?, wait_for? }` (at least one): `device` resets to its preset size and reloads; `width`/`height` keep the mode. Any tab of the session ("your own tabs" is prompt guidance only); ends a viewer's Responsive |
 | `browser_close_tab` | ″ | `{ tab }` |
-| `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars?, tab? }` |
-| `browser_click` | ″ | `{ selector, tab? }` |
-| `browser_type` | ″ | `{ selector, text, submit?, tab? }` |
-| `browser_eval` | ″ | `{ expression, tab? }` |
-| `browser_screenshot` | ″ | `{ save_to?, tab? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
+| `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars?, tab?, wait_for? }` |
+| `browser_click` | ″ | `{ selector, tab?, wait_for? }` → says so when the target was disabled or inside `[aria-busy]` |
+| `browser_type` | ″ | `{ selector, text, submit?, tab?, wait_for? }` |
+| `browser_eval` | ″ | `{ expression, tab?, wait_for? }` → JSON from Chrome's deep serialization (elements as `tag#id.class`, cycles as `"[Circular]"`); a navigation mid-expression is an error naming the new URL |
+| `browser_screenshot` | ″ | `{ save_to?, tab?, wait_for? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
+| `browser_wait` | ″ | `{ selector?, state?, text?, url?, idle?, timeout?, tab? }`: the `wait_for` wait without an action. See "Browser waits and scripts" |
+| `browser_run` | ″ | `{ script, tab?, timeout?, wait? }` → starts a script job, returns its number and log after `wait` s. See "Browser waits and scripts" |
+| `browser_run_status` | ″ | `{ job, wait? }` → the job's state and its new log lines; a failure adds the script line, step, URL and a screenshot |
+| `browser_run_stop` | ″ | `{ job }` |
 | `permission_prompt` | all, for drivers with `usesPermissionPromptTool` (claude-code, dummy) | `{ tool_name, input, tool_use_id }` → text JSON `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`; calls `HarnessOps.requestApproval`. Called by the CLI itself (`--permission-prompt-tool`), not the model |
 
 The five board tools (`service/src/tools/board.ts`, the `// --- board (read) ---` section of
@@ -1582,6 +1586,49 @@ target in its own headless window (so every tab paints and can screencast). Numb
   exiting since both use one profile.
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
+
+### Browser waits and scripts
+
+Agents wait for a page instead of sleeping, and run multi-step flows as scripts (HARNESS-278).
+
+- **One wait.** `WaitCondition` (`browser/wait.ts`) is `{ selector?, state?: visible | hidden |
+  gone | enabled, text?, url?, idle?, timeout? }`, every field given holding at once, and
+  `BrowserManager.waitFor` is its only implementation. It polls every 100 ms with a fresh
+  `Runtime.evaluate` (never one long in-page promise), so a navigation costs a tick, not the wait.
+  `enabled` is visible and not `:disabled`, `aria-disabled` or inside `[aria-busy=true]`; `idle`
+  is no main-frame loading and no request in flight for 500 ms, ignoring WebSockets, EventSource
+  and requests open over 5 s. The timeout is 15 s by default, at most 120 s. A timeout returns
+  (never throws) a report: the URL, loading, `aria-busy` count, the last check's counts, requests
+  in flight and console errors seen while waiting. A selector that doesn't parse fails at once.
+- **Where it runs.** `browser_open`, `browser_click`, `browser_type` and `browser_resize` take
+  `wait_for` and wait after acting; `browser_screenshot`, `browser_content` and `browser_eval` wait
+  before reading. `browser_wait` is the wait alone. `wait_for` is checked before the tool acts. A
+  timed-out wait makes the result an error that still carries what the tool did or read (a
+  screenshot is taken anyway). The wording of the condition (`WAIT_CONDITION_DOC`) is shared by
+  the tool descriptions and the Browser prompt section, and a prompt test checks the section names
+  exactly the tools whose schema has `wait_for`.
+- **Page events.** `BrowserService.watch(sessionId, listener)` streams each tab's console (every
+  level), uncaught exceptions, main-frame navigations, failed requests (not canceled ones; status
+  400+) and closes, for scripts' logs and waits' reports.
+- **Scripts.** `browser_run` (`tools/browser-run.ts`) writes the script, wrapped as
+  `export default await (async () => {…})()` on its first line so its line numbers hold, to the
+  run's scratch folder and starts it in its own process: `bun browser/script-child.ts <file>`
+  in a checkout, `harness-service browser-script <file>` in Harness.app. The child has no CDP: its
+  globals (`click`, `type`, `wait`, `evaluate`, `content`, `screenshot`, `open`, `resize`, `url`,
+  `log`, `sleep`) send calls over Bun IPC, and the service runs each through the browser tool of
+  the same name with the job's tab, so waits and errors behave exactly as for the agent. A failed
+  call rejects in the script with the tool's text and a stack made at the call site.
+- **Jobs.** One running job per tab. A job's log (at most 2,000 lines kept) holds its start,
+  each step and its result, the script's `console.*`/`log()` and raw stdout/stderr, and the tab's
+  page events. `browser_run` blocks up to `wait` s (default 20, max 60) or until the job ends;
+  `browser_run_status` blocks until a new line (gathering 300 ms more) or the end; each returns
+  the lines since the last report (at most 200). A failure, or the timeout (default 120 s, max
+  600 s), records the script line (from the stack), the failed step, the URL and a screenshot
+  saved to the scratch folder. Jobs are killed at their timeout, by `browser_run_stop`, when their
+  tab closes, when the run's signal aborts, and when the run ends (`stopBrowserJobs` in the run's
+  `finally`). The log is mirrored to the transcript as status lines, batched each second, up to
+  300 lines a job (`HarnessOps.statusLine`). There is no MCP progress: the model doesn't see
+  `notifications/progress`, and polling works on every driver.
 
 ### Activity
 

@@ -108,7 +108,7 @@ import type {
 import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
-import { GATED_TOOL_NAMES, toolsForRun } from "../tools/index";
+import { GATED_TOOL_NAMES, stopBrowserJobs, toolsForRun } from "../tools/index";
 import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
@@ -4231,6 +4231,8 @@ ${numberLines(r.body)}`;
       } finally {
         this.mcpRuns.delete(token);
         active.mcpToken = null;
+        // A browser_run script never outlives its run.
+        stopBrowserJobs(run.id);
       }
     }
     return error;
@@ -4489,6 +4491,7 @@ ${numberLines(r.body)}`;
   private buildOps(): HarnessOps {
     return {
       postNote: (c, n) => this.postNote(c, n),
+      statusLine: async (c, text) => void this.appendStatus(c.session.id, c.runId, text),
       readSpec: (c, r) => this.readSpec(c, r),
       editSpec: (c, i) => this.editSpec(c, i),
       updateSpec: (c, i) => this.updateSpec(c, i),
