@@ -217,6 +217,8 @@ try {
   n = inputs.length;
   await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: ax, y: ay, button: "left", clickCount: 1, modifiers: 1 });
   await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: ax, y: ay, button: "left", clickCount: 1, modifiers: 1 });
+  // The first click reaches the page; wait for its up to arrive, so only the second click's events count.
+  await until("the first ⌥-click's up", async () => inputs.slice(n).some((i) => i.type === "mouse" && i.action === "up"));
   const m2 = inputs.length;
   await cdp("Input.dispatchMouseEvent", { type: "mousePressed", x: ax, y: ay, button: "left", clickCount: 2, modifiers: 1 });
   await cdp("Input.dispatchMouseEvent", { type: "mouseReleased", x: ax, y: ay, button: "left", clickCount: 2, modifiers: 1 });
