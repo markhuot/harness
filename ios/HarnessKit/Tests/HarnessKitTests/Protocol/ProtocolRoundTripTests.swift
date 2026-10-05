@@ -100,7 +100,7 @@ struct ProtocolRoundTripTests {
     ]
 
     /// Exports that aren't sample lists; the tests below check them.
-    static let special: Set<String> = ["enums", "discriminators", "forwardCompat"]
+    static let special: Set<String> = ["enums", "discriminators", "forwardCompat", "BrowserSizeConstants"]
 
     /// The JSON of each sample in one export.
     static func samples(_ export: String) throws -> [Data] {
@@ -137,6 +137,25 @@ struct ProtocolRoundTripTests {
             }
             #expect(try jsonEqual(sample, reencoded), "\(export)[\(i)] changed in the round trip\n  in:  \(Self.compact(sample))\n  out: \(Self.compact(reencoded))")
         }
+    }
+
+    struct SizeConstants: Decodable {
+        struct Side: Decodable {
+            let width: Int
+            let height: Int
+        }
+        let BROWSER_DESKTOP: Side
+        let BROWSER_MOBILE: Side
+        let BROWSER_MIN_SIDE: Int
+        let BROWSER_MAX_SIDE: Int
+    }
+
+    @Test func browserSizeConstantsMatchTheTS() throws {
+        let c = try Fixture.value("protocol", "BrowserSizeConstants", as: SizeConstants.self)
+        #expect(BrowserSize.desktop == (c.BROWSER_DESKTOP.width, c.BROWSER_DESKTOP.height))
+        #expect(BrowserSize.mobile == (c.BROWSER_MOBILE.width, c.BROWSER_MOBILE.height))
+        #expect(BrowserSize.minSide == c.BROWSER_MIN_SIDE)
+        #expect(BrowserSize.maxSide == c.BROWSER_MAX_SIDE)
     }
 
     // MARK: String unions
@@ -193,6 +212,7 @@ struct ProtocolRoundTripTests {
         "MouseAction": en(MouseAction.self),
         "MouseButton": en(MouseButton.self),
         "KeyAction": en(KeyAction.self),
+        "BrowserDevice": en(BrowserDevice.self),
     ]
 
     @Test func everyStringUnionMatchesItsOpenEnum() throws {

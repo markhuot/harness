@@ -13,8 +13,16 @@ public struct BrowserState: Codable, Sendable, Equatable {
     public var suspended: Bool?
     /// Every open tab, ascending id.
     public var tabs: [BrowserTab]?
+    /// The tab's input mode and viewport. Services from before per-tab sizes omit it.
+    public var size: BrowserSize?
+    /// True only in the state sent to the viewer whose pane the tab follows (`size.responsive`):
+    /// that viewer sends its stage size as `resize` input; everyone else's `resize` is dropped.
+    public var sizeOwner: Bool?
 
-    public init(sessionId: String, tabId: Int? = nil, url: String, title: String, loading: Bool, suspended: Bool? = nil, tabs: [BrowserTab]? = nil) {
+    public init(
+        sessionId: String, tabId: Int? = nil, url: String, title: String, loading: Bool, suspended: Bool? = nil, tabs: [BrowserTab]? = nil,
+        size: BrowserSize? = nil, sizeOwner: Bool? = nil
+    ) {
         self.sessionId = sessionId
         self.tabId = tabId
         self.url = url
@@ -22,6 +30,42 @@ public struct BrowserState: Codable, Sendable, Equatable {
         self.loading = loading
         self.suspended = suspended
         self.tabs = tabs
+        self.size = size
+        self.sizeOwner = sizeOwner
+    }
+
+    /// Whether this viewer's stage size drives the tab (an older service never sends it).
+    public var ownsSize: Bool { sizeOwner ?? false }
+}
+
+/// How a tab's page is shown, per tab. `device` is the input mode; `width`/`height` are the
+/// viewport in CSS pixels, free in either mode; `responsive`: the tab follows the stage of the
+/// viewer that switched it on.
+public struct BrowserSize: Codable, Sendable, Equatable {
+    public var device: BrowserDevice
+    public var width: Int
+    public var height: Int
+    public var responsive: Bool
+
+    public init(device: BrowserDevice, width: Int, height: Int, responsive: Bool) {
+        self.device = device
+        self.width = width
+        self.height = height
+        self.responsive = responsive
+    }
+
+    /// The size the Desktop button (and every new tab) resets to.
+    public static let desktop = (width: 1280, height: 800)
+    /// The size the Mobile button resets to: an iPhone (16/17 Pro) in CSS points.
+    public static let mobile = (width: 393, height: 852)
+    /// The smallest and largest viewport side the service accepts; anything else is clamped.
+    public static let minSide = 100
+    public static let maxSide = 4096
+
+    /// A typed side held to minSide…maxSide; nil when it isn't a number.
+    public static func clampSide(_ raw: String) -> Int? {
+        guard let n = Double(raw.trimmingCharacters(in: .whitespaces)), n.isFinite else { return nil }
+        return min(maxSide, max(minSide, Int(n.rounded())))
     }
 }
 
@@ -33,13 +77,16 @@ public struct BrowserTab: Codable, Sendable, Equatable, Identifiable {
     public var loading: Bool
     /// Its page is closed to save memory; watching it or an agent using it reloads its URL. nil: false.
     public var suspended: Bool?
+    /// Its input mode and viewport. Services from before per-tab sizes omit it.
+    public var size: BrowserSize?
 
-    public init(id: Int, url: String, title: String, loading: Bool, suspended: Bool? = nil) {
+    public init(id: Int, url: String, title: String, loading: Bool, suspended: Bool? = nil, size: BrowserSize? = nil) {
         self.id = id
         self.url = url
         self.title = title
         self.loading = loading
         self.suspended = suspended
+        self.size = size
     }
 
     /// Whether its page is closed (an older service never sends it).
@@ -95,8 +142,17 @@ public enum BrowserInput: Codable, Sendable, Equatable {
     case back
     case forward
     case reload
-    /// The size of every tab in the session.
+    /// The viewer's stage size. Applied only while the tab is responsive and this viewer switched
+    /// it on (BrowserState.sizeOwner); dropped otherwise.
     case resize(width: Int, height: Int)
+    /// The Desktop | Mobile buttons: set the input mode, reset to its preset size, switch
+    /// responsive off and reload, even when the mode didn't change.
+    case device(BrowserDevice)
+    /// The width × height inputs: resize the tab, keeping its mode; switches responsive off.
+    case size(width: Int, height: Int)
+    /// The Responsive switch. On: the tab follows this viewer's stage (`width`/`height`, its
+    /// current size) and this viewer becomes the owner. Off: the tab keeps its current size.
+    case responsive(on: Bool, width: Int?, height: Int?)
     /// Open a tab (at `url`, else about:blank) and switch this socket to it.
     case newTab(url: String?)
     /// Close the input's tab (ClientMessage `browserInput`'s `tabId`); closing the last one
@@ -114,6 +170,9 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         case .forward: "forward"
         case .reload: "reload"
         case .resize: "resize"
+        case .device: "device"
+        case .size: "size"
+        case .responsive: "responsive"
         case .newTab: "newTab"
         case .closeTab: "closeTab"
         case let .unknown(type, _): type
@@ -132,6 +191,12 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         case "forward": self = .forward
         case "reload": self = .reload
         case "resize": self = .resize(width: try c.decode(Int.self, forKey: "width"), height: try c.decode(Int.self, forKey: "height"))
+        case "device": self = .device(try c.decode(BrowserDevice.self, forKey: "device"))
+        case "size": self = .size(width: try c.decode(Int.self, forKey: "width"), height: try c.decode(Int.self, forKey: "height"))
+        case "responsive":
+            self = .responsive(
+                on: try c.decode(Bool.self, forKey: "on"), width: try c.decodeIfPresent(Int.self, forKey: "width"),
+                height: try c.decodeIfPresent(Int.self, forKey: "height"))
         case "newTab": self = .newTab(url: try c.decodeIfPresent(String.self, forKey: "url"))
         case "closeTab": self = .closeTab
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
@@ -150,9 +215,14 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         switch self {
         case let .text(text): try c.encode(text, forKey: "text")
         case let .navigate(url): try c.encode(url, forKey: "url")
-        case let .resize(width, height):
+        case let .resize(width, height), let .size(width, height):
             try c.encode(width, forKey: "width")
             try c.encode(height, forKey: "height")
+        case let .device(device): try c.encode(device, forKey: "device")
+        case let .responsive(on, width, height):
+            try c.encode(on, forKey: "on")
+            try c.encodeIfPresent(width, forKey: "width")
+            try c.encodeIfPresent(height, forKey: "height")
         case let .newTab(url): try c.encodeIfPresent(url, forKey: "url")
         default: break
         }

@@ -611,3 +611,18 @@ public enum KeyAction: OpenEnum {
         }
     }
 }
+
+/// BrowserSize `device`: the tab's input mode ("desktop" = a fine pointer, "mobile" = touch
+/// emulation and an iPhone user agent)
+public enum BrowserDevice: OpenEnum {
+    case desktop, mobile
+    case unknown(String)
+    public static let allKnown: [Self] = [.desktop, .mobile]
+    public var rawValue: String {
+        switch self {
+        case .desktop: "desktop"
+        case .mobile: "mobile"
+        case let .unknown(r): r
+        }
+    }
+}

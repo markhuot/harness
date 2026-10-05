@@ -167,6 +167,72 @@ struct BrowserTypingTests {
         #expect(g.take(width: 600, height: 600) == .resize(width: 600, height: 600))
     }
 
+    private static func sized(responsive: Bool, owner: Bool?) -> BrowserState {
+        BrowserState(
+            sessionId: "s", tabId: 1, url: "about:blank", title: "", loading: false,
+            size: BrowserSize(device: .desktop, width: 1280, height: 800, responsive: responsive), sizeOwner: owner)
+    }
+
+    @Test func resizeGateKeepsDrivingAStateWithoutASize() {
+        // A service from before per-tab sizes: every viewer's stage is the tab's size, as before.
+        var g = ResizeGate()
+        _ = g.confirm()
+        g.follow(BrowserState(sessionId: "s", url: "about:blank", title: "", loading: false))
+        #expect(g.drives)
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+    }
+
+    @Test(arguments: [(false, nil), (false, false), (true, false), (true, nil)] as [(Bool, Bool?)])
+    func resizeGateSendsNothingUnlessThisViewerOwnsTheSize(_ responsive: Bool, _ owner: Bool?) {
+        var g = ResizeGate()
+        _ = g.confirm()
+        g.follow(Self.sized(responsive: responsive, owner: owner))
+        #expect(!g.drives)
+        #expect(g.take(width: 390, height: 600) == nil)
+    }
+
+    @Test func resizeGateSendsOnceThisViewerOwnsTheSize_andResendsWhenItTakesItBack() {
+        var g = ResizeGate()
+        _ = g.confirm()
+        g.follow(Self.sized(responsive: true, owner: true))
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+        #expect(g.take(width: 390, height: 600) == nil)
+        // Another window switched Responsive on: the tab follows its stage now.
+        g.follow(Self.sized(responsive: true, owner: false))
+        #expect(g.take(width: 390, height: 520) == nil)
+        // Back here: the stage goes again, even at the size sent before handing it over.
+        g.follow(Self.sized(responsive: true, owner: true))
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+    }
+
+    @Test func resizeGateResponsiveOnCarriesTheStageAndCountsAsSent() {
+        var g = ResizeGate()
+        _ = g.confirm()
+        g.follow(Self.sized(responsive: false, owner: false))
+        #expect(g.responsiveOn(width: 734.4, height: 611.6) == .responsive(on: true, width: 734, height: 612))
+        g.follow(Self.sized(responsive: true, owner: true))
+        #expect(g.take(width: 734, height: 612) == nil)
+        #expect(g.take(width: 734, height: 500) == .resize(width: 734, height: 500))
+        // No stage yet: switched on without a size, the service keeps the tab's.
+        #expect(g.responsiveOn(width: 0, height: 0) == .responsive(on: true, width: nil, height: nil))
+        #expect(g.responsiveOn(width: .nan, height: 600) == .responsive(on: true, width: nil, height: nil))
+    }
+
+    @Test func resizeGateResetDrivesAgain() {
+        var g = ResizeGate()
+        _ = g.confirm()
+        g.follow(Self.sized(responsive: false, owner: false))
+        g.reset()
+        #expect(g.drives)
+        _ = g.confirm()
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+    }
+
+    @Test(arguments: [("1280", 1280), (" 393 ", 393), ("50", 100), ("9000", 4096), ("640.6", 641), ("", nil), ("abc", nil), ("inf", nil)] as [(String, Int?)])
+    func browserSizeClampsATypedSide(_ raw: String, _ want: Int?) {
+        #expect(BrowserSize.clampSide(raw) == want)
+    }
+
     // Swift-only: Object.prototype names aren't named keys.
     @Test(arguments: ["toString", "constructor", "__proto__", "hasOwnProperty"])
     func prototypeNamesAreNotKeys(_ key: String) {
