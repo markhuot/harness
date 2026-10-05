@@ -38,8 +38,9 @@ describe("tool catalogue", () => {
     expect(props("reopen_ticket")).toEqual(["key", "notes"]);
     expect(props("dispatch_ticket")).toEqual(["base_branch", "branch", "conductor", "key", "project_key", "spec", "start", "ticket_key", "title", "url"]);
     expect(props("decline_work")).toEqual(["reason", "title"]);
-    expect(props("browser_open")).toEqual(["new_tab", "tab", "url"]);
-    expect(props("browser_tabs")).toEqual([]);
+    expect(props("browser_open")).toEqual(["device", "height", "new_tab", "tab", "url", "width"]);
+    expect(props("browser_tabs")).toEqual(["tab"]);
+    expect(props("browser_resize")).toEqual(["device", "height", "tab", "width"]);
     expect(props("browser_close_tab")).toEqual(["tab"]);
     expect(props("browser_content")).toEqual(["format", "max_chars", "selector", "tab"]);
     expect(props("browser_click")).toEqual(["selector", "tab"]);
@@ -571,14 +572,18 @@ describe("browser tools → BrowserService", () => {
   });
 
   test("browser_tabs and browser_close_tab list what is open", async () => {
+    const desktop = { device: "desktop", width: 1280, height: 800, responsive: false };
     const tabs = [
-      { id: 1, url: "http://a.test/", title: "A", loading: false },
-      { id: 3, url: "http://c.test/", title: "", loading: true },
-      { id: 4, url: "http://d.test/", title: "D", loading: false, suspended: true },
+      { id: 1, url: "http://a.test/", title: "A", loading: false, size: desktop, failedRequests: 0, consoleErrors: 0 },
+      { id: 3, url: "http://c.test/", title: "", loading: true, size: { device: "mobile", width: 393, height: 852, responsive: false }, failedRequests: 2, consoleErrors: 1 },
+      { id: 4, url: "http://d.test/", title: "D", loading: false, suspended: true, size: { ...desktop, width: 800 } },
     ];
     const browser = fakeBrowser({ tabs: async () => tabs });
     const ctx = fakeContext({ browser });
-    const listing = "Tab 1: A — http://a.test/\nTab 3: (untitled) — http://c.test/ (loading)\nTab 4: D — http://d.test/ (suspended: reloads when you use it)";
+    const listing =
+      "Tab 1: A — http://a.test/ [desktop 1280×800]\n" +
+      "Tab 3: (untitled) — http://c.test/ [mobile 393×852] (loading) (2 failed requests, 1 console error)\n" +
+      "Tab 4: D — http://d.test/ [desktop 800×800] (suspended: reloads when you use it)";
     expect(text(await tool("browser_tabs").execute({}, ctx))).toBe(listing);
     const closed = await tool("browser_close_tab").execute({ tab: 2 }, ctx);
     expect(text(closed)).toBe(`Closed tab 2.\nOpen tabs:\n${listing}`);
@@ -586,6 +591,86 @@ describe("browser tools → BrowserService", () => {
     const none = fakeBrowser({ tabs: async () => [] });
     expect(text(await tool("browser_tabs").execute({}, fakeContext({ browser: none })))).toContain("No tabs are open");
     expect(text(await tool("browser_close_tab").execute({ tab: 1 }, fakeContext({ browser: none })))).toBe("Closed tab 1. No tabs are open.");
+  });
+
+  test("browser_tabs with a tab reports it in full, failed requests first", async () => {
+    const browser = fakeBrowser({
+      tabInfo: async (_s: string, id: number) => ({
+        id,
+        url: "http://a.test/",
+        title: "A",
+        loading: false,
+        size: { device: "mobile", width: 1024, height: 1366, responsive: true },
+        scroll: { x: 0, y: 240 },
+        requests: [
+          { method: "GET", url: "http://a.test/", type: "Document", status: 200, durationMs: 12 },
+          { method: "GET", url: "http://a.test/app.js", type: "Script", status: 404, durationMs: 3 },
+          { method: "POST", url: "http://api.test/x", type: "Fetch", failure: "net::ERR_CONNECTION_REFUSED", durationMs: 1 },
+          { method: "GET", url: "http://a.test/old", type: "Fetch", failure: "canceled" },
+          { method: "GET", url: "http://a.test/slow", type: "XHR" },
+        ],
+        console: [{ level: "error", text: "boom", source: "http://a.test/app.js:3" }],
+      }),
+    });
+    const out = text(await tool("browser_tabs").execute({ tab: 5 }, fakeContext({ browser })));
+    expect(browser.calls.map((c) => c.method)).toEqual(["tabInfo"]);
+    expect(browser.calls[0]?.args).toEqual(["s_1", 5]);
+    expect(out).toBe(
+      [
+        "Tab 5: A — http://a.test/",
+        "State: loaded",
+        "Size: mobile 1024×1366 (touch, iPhone user agent), following a human's pane (Responsive): it changes when they resize their window",
+        "Scroll: 0, 240",
+        "",
+        "Network requests since the page loaded (5; failed ones first):",
+        "  GET http://a.test/app.js Script 404 3 ms",
+        "  POST http://api.test/x Fetch net::ERR_CONNECTION_REFUSED 1 ms",
+        "  GET http://a.test/ Document 200 12 ms",
+        "  GET http://a.test/old Fetch canceled",
+        "  GET http://a.test/slow XHR pending",
+        "",
+        "Console errors and warnings (1):",
+        "  error: boom (http://a.test/app.js:3)",
+      ].join("\n"),
+    );
+    const suspended = fakeBrowser({
+      tabInfo: async () => ({ id: 2, url: "http://b.test/", title: "B", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: false }, requests: [], console: [] }),
+    });
+    expect(text(await tool("browser_tabs").execute({ tab: 2 }, fakeContext({ browser: suspended })))).toBe(
+      "Tab 2: B — http://b.test/\nState: suspended (its page is closed; it reloads when you use it)\nSize: desktop 1280×800 (mouse)",
+    );
+    const missing = fakeBrowser({ tabInfo: async () => { throw new Error("No browser tab 9. Open tabs: 1."); } });
+    // Thrown like every browser tool's errors; the tool layer reports it to the agent.
+    await expect(tool("browser_tabs").execute({ tab: 9 }, fakeContext({ browser: missing }))).rejects.toThrow("No browser tab 9");
+  });
+
+  test("browser_open and browser_resize pass device, width and height through; resize needs one of them", async () => {
+    const browser = fakeBrowser({
+      resize: async (sessionId: string, change: { device?: string; width?: number }, opts: { tab?: number }) => ({
+        sessionId,
+        tabId: opts.tab ?? 1,
+        url: "http://a.test/",
+        title: "A",
+        loading: false,
+        size: { device: change.device ?? "desktop", width: change.width ?? 393, height: 852, responsive: false },
+      }),
+    });
+    const ctx = fakeContext({ browser });
+    await tool("browser_open").execute({ url: "http://a.test", new_tab: true, device: "mobile" }, ctx);
+    await tool("browser_open").execute({ url: "http://a.test", tab: 2 }, ctx);
+    expect(text(await tool("browser_resize").execute({ device: "mobile", tab: 2 }, ctx))).toBe("Tab 2 is mobile 393×852 (reloaded): http://a.test/");
+    expect(text(await tool("browser_resize").execute({ width: 1024 }, ctx))).toBe("Tab 1 is desktop 1024×852: http://a.test/");
+    const r = await tool("browser_resize").execute({ tab: 2 }, ctx);
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain("device, width or height");
+    expect((await tool("browser_resize").execute({ width: 50 }, ctx)).isError).toBe(true);
+    expect((await tool("browser_resize").execute({ device: "tablet" }, ctx)).isError).toBe(true);
+    expect(browser.calls.filter((c) => c.method !== "state").map((c) => [c.method, ...c.args.slice(1)])).toEqual([
+      ["open", "http://a.test", { tab: undefined, newTab: true, size: { device: "mobile", width: undefined, height: undefined } }],
+      ["open", "http://a.test", { tab: 2, newTab: false }],
+      ["resize", { device: "mobile", width: undefined, height: undefined }, { tab: 2 }],
+      ["resize", { device: undefined, width: 1024, height: undefined }, { tab: undefined }],
+    ]);
   });
 
   describe("browser_screenshot save_to", () => {

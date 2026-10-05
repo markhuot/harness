@@ -3,7 +3,8 @@
 
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { ToolResultContent } from "@harness/shared";
+import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserDevice, type BrowserSize, type ToolResultContent } from "@harness/shared";
+import type { BrowserTabInfo, BrowserTabSummary } from "../browser/types";
 import { defineTool, errorResult, schema } from "./util";
 
 const DEFAULT_MAX_CHARS = 20_000;
@@ -17,37 +18,108 @@ const TAB = {
   },
 } as const;
 
-const tabLine = (tabs: { id: number; url: string; title: string; loading: boolean; suspended?: boolean }[]) =>
+/** The mode and size every tab reports: "desktop 1280×800", "mobile 393×852". */
+const sizeText = (size: BrowserSize | undefined) => (size ? `${size.device} ${size.width}×${size.height}` : "");
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+const tabLine = (tabs: BrowserTabSummary[]) =>
   tabs
-    .map((t) => `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}${t.loading ? " (loading)" : ""}${t.suspended ? " (suspended: reloads when you use it)" : ""}`)
+    .map((t) => {
+      const issues = [
+        t.failedRequests ? plural(t.failedRequests, "failed request") : "",
+        t.consoleErrors ? plural(t.consoleErrors, "console error") : "",
+      ].filter(Boolean);
+      return (
+        `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}` +
+        (t.size ? ` [${sizeText(t.size)}]` : "") +
+        (t.loading ? " (loading)" : "") +
+        (t.suspended ? " (suspended: reloads when you use it)" : "") +
+        (issues.length ? ` (${issues.join(", ")})` : "")
+      );
+    })
     .join("\n");
 
-export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean }>({
+/** The device, width and height browser_open and browser_resize take. */
+const SIZE = {
+  device: {
+    type: "string",
+    enum: ["desktop", "mobile"],
+    description: `"desktop": a mouse and Chrome's own user agent, ${BROWSER_DESKTOP.width}×${BROWSER_DESKTOP.height} unless width/height say otherwise. "mobile": a touch device with an iPhone user agent (touch events, pointer: coarse; clicks arrive as taps), ${BROWSER_MOBILE.width}×${BROWSER_MOBILE.height} unless width/height say otherwise.`,
+  },
+  width: { type: "integer", minimum: BROWSER_MIN_SIDE, maximum: BROWSER_MAX_SIDE, description: "Viewport width in CSS px. Alone, it keeps the tab's mode." },
+  height: { type: "integer", minimum: BROWSER_MIN_SIDE, maximum: BROWSER_MAX_SIDE, description: "Viewport height in CSS px. Alone, it keeps the tab's mode." },
+} as const;
+
+type SizeInput = { device?: BrowserDevice; width?: number; height?: number };
+const sizeChange = ({ device, width, height }: SizeInput) =>
+  device === undefined && width === undefined && height === undefined ? undefined : { device, width, height };
+
+/** One tab in full, for browser_tabs { tab }. */
+function tabReport(t: BrowserTabInfo): string {
+  const lines = [`Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}`];
+  const state = t.suspended ? "suspended (its page is closed; it reloads when you use it)" : t.loading ? "loading" : "loaded";
+  lines.push(`State: ${state}`);
+  lines.push(
+    `Size: ${sizeText(t.size)} (${t.size.device === "mobile" ? "touch, iPhone user agent" : "mouse"})` +
+      (t.size.responsive ? ", following a human's pane (Responsive): it changes when they resize their window" : ""),
+  );
+  if (t.scroll) lines.push(`Scroll: ${t.scroll.x}, ${t.scroll.y}`);
+  if (t.suspended) return lines.join("\n");
+  const bad = t.requests.filter((r) => (r.failure !== undefined && r.failure !== "canceled") || (r.status ?? 0) >= 400);
+  const rest = t.requests.filter((r) => !bad.includes(r));
+  const req = (r: BrowserTabInfo["requests"][number]) =>
+    `  ${r.method} ${r.url} ${r.type} ${r.failure ?? r.status ?? "pending"}${r.durationMs !== undefined ? ` ${r.durationMs} ms` : ""}`;
+  lines.push("", `Network requests since the page loaded (${t.requests.length}; failed ones first):`);
+  lines.push(...(t.requests.length ? [...bad, ...rest].map(req) : ["  none"]));
+  lines.push("", `Console errors and warnings (${t.console.length}):`);
+  lines.push(...(t.console.length ? t.console.map((c) => `  ${c.level}: ${c.text}${c.source ? ` (${c.source})` : ""}`) : ["  none"]));
+  return lines.join("\n");
+}
+
+export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boolean } & SizeInput>({
   name: "browser_open",
   description:
-    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Returns the tab, final URL and page title; use browser_content to read the page.",
+    "Open a URL in this session's browser and wait for it to load. The human can watch it live. new_tab opens it in a new tab, so several pages stay open at once; the result names the tab, and you pass that number as tab to the other browser tools. Sub-agents sharing this browser should each open their own tab and use only it. Close a tab with browser_close_tab when you're done with it. Each tab has its own mode and size (new tabs: desktop 1280×800); device, width and height set them before the page loads, e.g. new_tab with device \"mobile\" to check a phone layout. Returns the tab, final URL, page title and size; use browser_content to read the page.",
   inputSchema: schema(
     {
       url: { type: "string", minLength: 1, description: "Absolute URL, e.g. \"http://localhost:3000/login\"." },
       ...TAB,
       new_tab: { type: "boolean", description: "Open a new tab for this URL instead of navigating an existing one." },
+      ...SIZE,
     },
     ["url"],
   ),
-  async run({ url, tab, new_tab }, ctx) {
+  async run({ url, tab, new_tab, ...size }, ctx) {
     if (new_tab && tab !== undefined) return errorResult("Pass tab or new_tab, not both.");
-    const state = await ctx.browser.open(ctx.session.id, url, { tab, newTab: new_tab ?? false });
-    return `Opened ${state.url} in tab ${state.tabId}\nTitle: ${state.title || "(untitled)"}`;
+    const change = sizeChange(size);
+    const state = await ctx.browser.open(ctx.session.id, url, { tab, newTab: new_tab ?? false, ...(change ? { size: change } : {}) });
+    return `Opened ${state.url} in tab ${state.tabId}\nTitle: ${state.title || "(untitled)"}${state.size ? `\nSize: ${sizeText(state.size)}` : ""}`;
   },
 });
 
-export const browserTabs = defineTool<Record<string, never>>({
+export const browserTabs = defineTool<{ tab?: number }>({
   name: "browser_tabs",
-  description: "List this session's browser tabs: number, title and URL of each. A suspended tab's page was closed to save memory; using it reloads its URL.",
-  inputSchema: schema({}),
-  async run(_input, ctx) {
+  description:
+    "List this session's browser tabs: number, title, URL, mode and size of each, and how many failed requests and console errors its page has. With tab, report that one tab in full: its state, mode and size, scroll position, the network requests since its page loaded (failed ones first) and its console errors and warnings. A suspended tab's page was closed to save memory; using it reloads its URL (browser_tabs doesn't).",
+  inputSchema: schema({ tab: { type: "integer", minimum: 1, description: "Report this tab in full instead of listing them all." } }),
+  async run({ tab }, ctx) {
+    if (tab !== undefined) return tabReport(await ctx.browser.tabInfo(ctx.session.id, tab));
     const tabs = await ctx.browser.tabs(ctx.session.id);
     return tabs.length ? tabLine(tabs) : "No tabs are open. browser_open opens tab 1.";
+  },
+});
+
+export const browserResize = defineTool<{ tab?: number } & SizeInput>({
+  name: "browser_resize",
+  description:
+    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. A human following the tab with their pane (Responsive) stops following it. Resize the tabs you opened or navigated; leave a tab another agent is using alone unless it was handed to you or the human asks.",
+  inputSchema: schema({ ...SIZE, ...TAB }),
+  async run({ tab, ...size }, ctx) {
+    const change = sizeChange(size);
+    if (!change) return errorResult("Pass device, width or height.");
+    const state = await ctx.browser.resize(ctx.session.id, change, { tab });
+    return `Tab ${state.tabId} is ${sizeText(state.size)}${change.device ? " (reloaded)" : ""}: ${state.url}`;
   },
 });
 
