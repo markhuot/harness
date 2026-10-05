@@ -523,6 +523,45 @@ The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSim
 AXe's tree go with it. That's the simulator's renderer, not the app. Reboot the device
 (`xcrun simctl shutdown`/`boot` under its lock) and rerun.
 
+## Widgets
+
+The Active tickets widget (small, medium and large, each with a Compact setting) comes from one set
+of sources, `ios/Widgets/Sources`, built twice: as `HarnessWidgets` (iOS, embedded in the app's
+PlugIns) and as `HarnessMacWidgets` (macOS 15, which `app/scripts/package.ts` builds and embeds in
+the Electron app's `Contents/PlugIns`). Everything that doesn't draw is in HarnessKit `Widgets/`:
+
+- `WidgetFeed` picks the active tickets: not done, not a draft, and in progress, blocked, in review
+  or busy (a planning ticket counts only while a run drafts its plan), most recently updated first.
+  It resolves each one into a `WidgetTicket` (display key, project key and color, approval tool,
+  blocked reason, latest news line), so the widget needs no board state. `WidgetFeed.fetch` reads
+  the same thing from the service (`GET /tickets?status=…`, `/projects`, and Activity for the first
+  three).
+- `WidgetShared` is the App Group container: `widget-host.json` (`WidgetHost`: base URL, token,
+  server name, theme ids) and `widget-snapshot.json` (the last `WidgetSnapshot`). The group is
+  `group.com.markhuot.harness` on iOS and the team-prefixed `47P4ZSALX4.com.markhuot.harness` on
+  the Mac, which a Developer ID app can use without a provisioning profile.
+- `WidgetLoad.load` is the timeline provider's whole job: with a host, fetch live and save the
+  snapshot; when the fetch fails, show the saved snapshot with its age; without a host, "Not paired".
+  The timeline asks again every 15 minutes.
+- `WidgetSyncState` decides what the iPhone/iPad app writes. `Harness/App/WidgetSync.swift` watches
+  the active server, prefs and board (at most one sync a second) and reloads the timelines only
+  when the snapshot's content or the host changes. A board that hasn't loaded keeps the saved
+  snapshot, and forgetting the server clears both files.
+
+On the Mac the Electron main process writes the host when it connects or the theme changes
+(`app/src/main/widgets.ts`; packaged builds only), and the renderer sends a signature of the
+board's open tickets so main can run `Contents/MacOS/harness-widgets-reload`
+(`Widgets/macOS/reload-widgets.swift`, at most every 5 seconds). The widget extension is sandboxed
+(`HarnessMacWidgets.entitlements`: network client and the App Group), and `sign-mac.ts` signs it
+with those entitlements. Taps open `harness://ticket/<key>`, which the iPhone app routes with
+`DeepLink` and the Mac app maps to `#/board/all/ticket/<key>` (`routeForLink`).
+
+An ad-hoc simulator build has no provisioning profile, so Xcode drops the App Group entitlement and
+`containerURL` is nil. `WidgetShared.appGroup()` falls back to the simulator's
+`SIMULATOR_SHARED_RESOURCES_DIRECTORY` there, which the app and its widget both reach. On the
+simulator, add the widget from the home screen's Edit → Add Widget; the size picker is in a
+widget's long-press menu.
+
 ## Feature slots
 
 Each later feature ticket owns the files listed for it: it replaces the placeholder body (keeping

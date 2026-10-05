@@ -68,3 +68,29 @@ test("one bundle id and name for every configuration, on the release team", () =
 test("the user-facing version is a dotted MAJOR.MINOR.PATCH (App Store Connect rejects anything else)", () => {
   expect(String(spec.settings.base.MARKETING_VERSION)).toMatch(/^\d+\.\d+\.\d+$/);
 });
+
+// XcodeGen writes an entitlements file from `properties` and overwrites it with an empty dict when
+// a target names only its path, which silently signed the widgets without their App Group.
+test("the app and its widgets share an App Group, declared where XcodeGen keeps it", () => {
+  const groups = (name: string) => spec.targets[name].entitlements.properties["com.apple.security.application-groups"];
+  expect(groups("Harness")).toEqual(["group.com.markhuot.harness"]);
+  expect(groups("HarnessWidgets")).toEqual(["group.com.markhuot.harness"]);
+  // The Mac group is team-prefixed (no provisioning profile) and matches the Electron app's.
+  expect(groups("HarnessMacWidgets")).toEqual(["47P4ZSALX4.com.markhuot.harness"]);
+  const electron = readFileSync(join(import.meta.dir, "../../app/resources/entitlements.mac.plist"), "utf8");
+  expect(electron).toContain("<string>47P4ZSALX4.com.markhuot.harness</string>");
+  // A widget extension must be sandboxed, and the Mac one reaches the service over the network.
+  const mac = spec.targets.HarnessMacWidgets.entitlements.properties;
+  expect(mac["com.apple.security.app-sandbox"]).toBe(true);
+  expect(mac["com.apple.security.network.client"]).toBe(true);
+});
+
+test("the widget extensions are WidgetKit extensions with ids inside their apps'", () => {
+  const ext = (name: string) => spec.targets[name];
+  expect(ext("HarnessWidgets").info.properties.NSExtension.NSExtensionPointIdentifier).toBe("com.apple.widgetkit-extension");
+  expect(ext("HarnessMacWidgets").info.properties.NSExtension.NSExtensionPointIdentifier).toBe("com.apple.widgetkit-extension");
+  expect(ext("HarnessWidgets").settings.base.PRODUCT_BUNDLE_IDENTIFIER).toStartWith(`${settings.base.PRODUCT_BUNDLE_IDENTIFIER}.`);
+  // The Electron app's id (APP_BUNDLE_ID in app/scripts/package.ts).
+  expect(ext("HarnessMacWidgets").settings.base.PRODUCT_BUNDLE_IDENTIFIER).toStartWith("com.markhuot.harness.app.");
+  expect(target.dependencies.map((d: { target?: string }) => d.target)).toContain("HarnessWidgets");
+});

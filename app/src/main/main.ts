@@ -3,8 +3,11 @@
 // handed it to launchd: then quitting the app leaves them running.
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, type MenuItemConstructorOptions } from "electron";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { routeForLink, WIDGET_RELOAD_HELPER, widgetGroupDir, widgetHost, WidgetReloader, writeWidgetHost } from "./widgets";
 import { nodePtySpawn } from "./pty";
 import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
 import { TerminalManager } from "./terminals";
@@ -63,7 +66,42 @@ function setConnection(next: Promise<ConnectionResult>, announce = false) {
     if (connection !== next) return;
     if (announce) broadcast("harness:connection", conn);
     watchDeferred(conn);
+    syncWidgetHost(conn);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Desktop widgets (widgets.ts)
+// ---------------------------------------------------------------------------
+
+// Only a packaged app carries the widget extension and the reload helper (scripts/package.ts). In
+// `bun run dev` the group container belongs to no signed app, and writing there would prompt.
+const widgetsBundled = app.isPackaged && existsSync(join(dirname(process.execPath), "..", "PlugIns", "HarnessMacWidgets.appex"));
+const widgetReloadHelper = join(dirname(process.execPath), WIDGET_RELOAD_HELPER);
+
+function reloadWidgets() {
+  if (!widgetsBundled || !existsSync(widgetReloadHelper)) return;
+  try {
+    spawn(widgetReloadHelper, [], { stdio: "ignore", detached: true }).on("error", () => {}).unref();
+  } catch {}
+}
+
+const widgetReloader = new WidgetReloader(reloadWidgets);
+let lastWidgetHost = "";
+
+/** Hand the widget the service it should ask (and the theme picks), and reload it when they change. */
+function syncWidgetHost(conn: ConnectionResult) {
+  if (!widgetsBundled) return;
+  const host = widgetHost(conn, themeState());
+  const sig = JSON.stringify(host);
+  if (sig === lastWidgetHost) return;
+  try {
+    writeWidgetHost(widgetGroupDir(homedir()), host);
+    lastWidgetHost = sig;
+    reloadWidgets();
+  } catch (e) {
+    console.error("could not write the widget host", e);
+  }
 }
 
 // A deferred login item (another build's service, kept while agents run) is reloaded onto this
@@ -171,6 +209,7 @@ function setThemeChoice(patch: ThemePatch) {
   }
   applyTheme(); // fires nativeTheme "updated" when the resolved theme changes
   broadcastTheme();
+  void connection?.then(syncWidgetHost); // the widget draws in the same themes
 }
 
 let lastBroadcast = "";
@@ -440,6 +479,9 @@ function buildMenu() {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("harness:getConnection", () => getConnection());
+ipcMain.on("harness:widgetsChanged", (_e, signature: unknown) => {
+  if (typeof signature === "string") widgetReloader.changed(signature);
+});
 ipcMain.handle("harness:retryService", () => getConnection(true));
 ipcMain.handle("harness:restartService", async () => {
   const conn = await getConnection();
@@ -545,6 +587,17 @@ ipcMain.handle("harness:terminal:list", () => terminalManager?.list() ?? []);
 applyTheme();
 nativeTheme.on("updated", broadcastTheme);
 
+// harness:// links (the desktop widget's tickets; Info.plist registers the scheme in packaged
+// builds). One that arrives before the window exists opens it at that route.
+let launchRoute: string | undefined;
+app.on("open-url", (e, url) => {
+  e.preventDefault();
+  const route = routeForLink(url);
+  if (!route) return;
+  if (app.isReady()) showMain(route);
+  else launchRoute = route;
+});
+
 app.whenReady().then(() => {
   // Packaged builds get the icon from the bundle; show it in the Dock during `bun run dev` too.
   if (!app.isPackaged && process.platform === "darwin") {
@@ -553,7 +606,7 @@ app.whenReady().then(() => {
   }
   buildMenu();
   void getConnection(); // start ensuring the service while the window loads
-  createWindow();
+  createWindow(launchRoute);
   // Clicking the Dock icon brings the main window back, even with only pop-outs open.
   app.on("activate", () => {
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();

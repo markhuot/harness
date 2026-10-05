@@ -38,6 +38,8 @@ targets:
     # snapshot.
     entitlements:
       path: Harness/Harness.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.markhuot.harness]
     # The syntax highlighter's JavaScriptCore bundle (Shiki, from Tools/highlighter/highlight.ts) is
     # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
     # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
@@ -117,8 +119,12 @@ targets:
     dependencies:
       - package: HarnessKit
         product: HarnessKit
+    # XcodeGen writes these files from `properties` (a path alone gets an empty dict), so the
+    # entitlements live here; the files are generated, and committed for sign-mac.ts.
     entitlements:
       path: Widgets/iOS/HarnessWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.markhuot.harness]
     info:
       path: Widgets/iOS/Info.plist
       properties:
@@ -146,8 +152,14 @@ targets:
     dependencies:
       - package: HarnessKit
         product: HarnessKit
+    # A widget extension must be sandboxed. It reaches the service on 127.0.0.1 (network.client)
+    # and reads the connection the Electron app writes into the team-prefixed App Group.
     entitlements:
       path: Widgets/macOS/HarnessMacWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups: [47P4ZSALX4.com.markhuot.harness]
     info:
       path: Widgets/macOS/Info.plist
       properties:

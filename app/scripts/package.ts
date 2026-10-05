@@ -14,6 +14,11 @@
 //   --checkout   keep build.ts's harness.json instead: the app runs the service from this
 //                checkout with bun, so a merge into it restarts the service onto the new code
 //                (`bun run install-app` does this; see README "Quick start")
+//
+// The desktop widgets ship too: ios/project.yml's HarnessMacWidgets extension, built with
+// xcodebuild into Contents/PlugIns/HarnessMacWidgets.appex (ad-hoc signed with its sandbox
+// entitlements; sign-mac.ts re-signs it with Developer ID), and the reload helper the main process
+// runs when the board changes, compiled into Contents/MacOS (src/main/widgets.ts).
 import { packager } from "@electron/packager";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -21,6 +26,7 @@ import { dirname, join, resolve } from "node:path";
 import { compileService } from "../../service/scripts/compile";
 import { BUNDLED_PLIST, buildBundledPlist } from "../../service/src/cli";
 import { SERVICE_EXECUTABLE } from "../../service/src/runtime";
+import { WIDGET_RELOAD_HELPER } from "../src/main/widgets";
 
 const APP_BUNDLE_ID = "com.markhuot.harness.app";
 
@@ -52,6 +58,45 @@ function copyNodePty(buildPath: string) {
 // Compiled before packaging, so a failed compile leaves the last app alone.
 const serviceOut = join(appDir, "out", "service");
 const compiled = fromCheckout ? null : await compileService(serviceOut);
+const widgets = buildWidgets();
+
+/** The widget extension and the reload helper, built into out/widgets. */
+function buildWidgets(): { appex: string; helper: string } {
+  const ios = join(repoRoot, "ios");
+  const out = join(appDir, "out", "widgets");
+  const env = { ...process.env };
+  // xcode-select may point at the Command Line Tools; the build needs the full Xcode.
+  const xcode = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+  if (!env.DEVELOPER_DIR && existsSync(xcode)) env.DEVELOPER_DIR = xcode;
+  const run = (cmd: string[], what: string) => {
+    const r = Bun.spawnSync(cmd, { cwd: ios, env, stdout: "pipe", stderr: "pipe" });
+    if (r.exitCode !== 0) {
+      const output = (r.stdout.toString() + r.stderr.toString()).split("\n").slice(-30).join("\n");
+      throw new Error(`${what} failed (exit ${r.exitCode}). It needs Xcode and xcodegen.\n${output}`);
+    }
+  };
+  console.log("building the desktop widgets (HarnessMacWidgets)…");
+  run(["xcodegen", "--spec", join(ios, "project.yml"), "--project", ios, "--quiet"], "xcodegen");
+  const dd = join(ios, "build", "mac-dd");
+  run([
+    "xcodebuild", "-project", join(ios, "Harness.xcodeproj"), "-scheme", "HarnessMacWidgets", "-configuration", "Release",
+    "-destination", "generic/platform=macOS", "-derivedDataPath", dd, `ARCHS=${process.arch === "arm64" ? "arm64" : "x86_64"}`,
+    // Unsigned: without a provisioning profile Xcode drops the sandbox and App Group entitlements
+    // from an ad-hoc signature, so the extension is signed below with them instead.
+    "CODE_SIGNING_ALLOWED=NO", "build",
+  ], "xcodebuild HarnessMacWidgets");
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  const appex = join(out, "HarnessMacWidgets.appex");
+  cpSync(join(dd, "Build", "Products", "Release", "HarnessMacWidgets.appex"), appex, { recursive: true, verbatimSymlinks: true });
+  // Ad-hoc, so an unsigned `install-app` build runs it; sign-mac.ts re-signs it with Developer ID.
+  const entitlements = join(ios, "Widgets", "macOS", "HarnessMacWidgets.entitlements");
+  run(["codesign", "--force", "--sign", "-", "--options", "runtime", "--entitlements", entitlements, appex], "codesign HarnessMacWidgets.appex");
+  const helper = join(out, WIDGET_RELOAD_HELPER);
+  const target = `${process.arch === "arm64" ? "arm64" : "x86_64"}-apple-macos15.0`;
+  run(["xcrun", "swiftc", "-O", "-target", target, "-o", helper, join(ios, "Widgets", "macOS", "reload-widgets.swift")], "swiftc reload-widgets");
+  return { appex, helper };
+}
 
 const keep = /^\/(package\.json|dist|resources)(\/|$)/;
 const paths = await packager({
@@ -84,9 +129,14 @@ const paths = await packager({
   icon: existsSync(icon) ? icon : undefined,
   ignore: (path: string) => path !== "" && !keep.test(path),
   darwinDarkModeSupport: true,
+  // harness://ticket/<key> from the desktop widget (src/main/widgets.ts routeForLink).
+  protocols: [{ name: "Harness", schemes: ["harness"] }],
 });
 for (const p of paths) {
   const bundle = join(p, "Harness.app", "Contents");
+  mkdirSync(join(bundle, "PlugIns"), { recursive: true });
+  cpSync(widgets.appex, join(bundle, "PlugIns", "HarnessMacWidgets.appex"), { recursive: true, verbatimSymlinks: true });
+  cpSync(widgets.helper, join(bundle, "MacOS", WIDGET_RELOAD_HELPER));
   if (compiled) {
     cpSync(compiled.executable, join(bundle, "MacOS", SERVICE_EXECUTABLE));
     const agents = join(bundle, "Library", "LaunchAgents");
