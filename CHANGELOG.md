@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Removed
+
+- The **Move to in progress** and **Re-open and move to in progress** switches over a ticket's
+  message box, on the Mac and on iPhone and iPad. A message to a ticket in review goes to its
+  agent, which moves the ticket back to in progress when it changes the work and leaves it in
+  review when it only answers. To move a ticket yourself, use **Request changes** (review) or
+  **Re-open** (done). The hint over the message box says which applies.
+
 ## [app-20261005.0103](https://github.com/markhuot/harness/releases/tag/app-20261005.0103) - 2026-10-05
 
 ### Added

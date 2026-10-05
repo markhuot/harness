@@ -963,10 +963,8 @@ export const HumanReviewBody: P.HumanReviewBody[] = [
 
 export const MessageBody: P.MessageBody[] = [
   { text: "Use Double for timestamps" },
-  { text: "Re-open please", move: true },
-  { text: "Back to work", move: false },
   { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes" }] },
-  { text: "See attached", move: true, attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
+  { text: "See attached", attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
   {
     text: "Fix the marked spots.",
     attachments: [{ id: "att_1", annotation: AttachmentAnnotation[0]! }, annotatedPage, { path: "/Users/mark/Desktop/shot.png" }],

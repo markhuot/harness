@@ -1439,14 +1439,6 @@
       "text": "Use Double for timestamps"
     },
     {
-      "text": "Re-open please",
-      "move": true
-    },
-    {
-      "text": "Back to work",
-      "move": false
-    },
-    {
       "text": "",
       "attachments": [
         {
@@ -1460,7 +1452,6 @@
     },
     {
       "text": "See attached",
-      "move": true,
       "attachments": [
         {
           "path": "/Users/mark/.harness/uploads/ab12/shot.png",

@@ -427,7 +427,7 @@ describe("ticket lifecycle", () => {
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("in_progress");
   });
 
-  test("rerun agent review; a message with move in review reopens work", async () => {
+  test("rerun agent review; an older app's message with move in review reopens work", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
@@ -945,7 +945,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Refactor auth", start: false });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "is this risky?", { move: true });
+    await h.orch.sendMessage(t.key, "is this risky?");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", spec: "1. Do is this risky?" });
     expect(runKinds(h, t)).toEqual(["plan:succeeded", "plan:succeeded"]);
@@ -978,7 +978,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(lastText(h, d.sessionId)).toContain(`Refused: ${d.key} is done: the human re-opens it`);
   });
 
-  test("in done: the ticket stays done; with move it re-opens", async () => {
+  test("in done: the ticket stays done; an older app's message with move re-opens it", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
@@ -1821,7 +1821,7 @@ describe("worktrees", () => {
     expect(existsSync(join(h.paths.worktreesDir, t.key))).toBe(false);
   });
 
-  test("a message to a done ticket with a removed worktree recreates it too", async () => {
+  test("re-opening a done ticket with a removed worktree recreates it too", async () => {
     const h = setup();
     h.driver.commitsWork = true;
     const repo = join(h.home, "repo");
@@ -1837,12 +1837,13 @@ describe("worktrees", () => {
     const done = h.orch.ticketDetail(t.key).ticket;
     git("worktree", "remove", "--force", done.workdir!);
 
-    const cur = await h.orch.sendMessage(t.key, "tweak it", { move: true });
+    const cur = await h.orch.reopenTicket(t.key, { notes: "tweak it" });
     expect(cur.status).toBe("in_progress");
     expect(existsSync(join(done.workdir!, ".git"))).toBe(true);
     await h.orch.idle();
     const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
-    expect([last.prompt, last.cwd]).toEqual(["tweak it", done.workdir!]);
+    expect(last.prompt).toContain("tweak it");
+    expect(last.cwd).toBe(done.workdir!);
   });
 });
 

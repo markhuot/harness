@@ -238,7 +238,7 @@ describe("update_branch", () => {
     // The next run works in the new worktree (and commits there), and completion leaves what the
     // harness didn't create.
     h.driver.commitsWork = true;
-    await h.orch.sendMessage(t.key, "carry on", { move: true });
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: "carry on" });
     await h.orch.idle();
     const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
     expect(realpathSync(last.cwd)).toBe(realpathSync(herdr));
@@ -260,7 +260,7 @@ describe("update_branch", () => {
     await h.git("worktree", "add", "-q", "-b", "medl-1223-ai-app", herdr);
     await h.orch.ops.updateBranch(h.ctx("work", t), { branch: "medl-1223-ai-app" });
     await h.git("worktree", "remove", herdr); // the human cleaned up their herdr worktree
-    await h.orch.sendMessage(t.key, "carry on", { move: true });
+    await h.orch.sendMessage(t.key, "carry on");
     await h.orch.idle();
     const cur = h.get(t);
     expect([cur.workdir, cur.branch]).toEqual([harnessDir, "medl-1223-ai-app"]);
@@ -279,7 +279,7 @@ describe("update_branch", () => {
     await h.git("worktree", "remove", herdr);
     const elsewhere = join(h.home, "elsewhere");
     await h.git("worktree", "add", "-q", elsewhere, "medl-1223-ai-app");
-    await h.orch.sendMessage(t.key, "carry on", { move: true });
+    await h.orch.sendMessage(t.key, "carry on");
     await h.orch.idle();
     const cur = h.get(t);
     expect(cur.status).toBe("blocked");

@@ -2,9 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// The message composer under every tab: @file mentions and /commands,
-/// a placeholder for the ticket's state (red while it's blocked on the human), the switch that moves
-/// the ticket first and the hint about what a message does. The switch and hint show only while
-/// writing: once the field is focused, and after a blur only while it holds a message. A message
+/// a placeholder for the ticket's state (red while it's blocked on the human) and the hint about
+/// what a message does. The hint shows only while writing: once the field is focused, and after a blur only while it holds a message. A message
 /// goes to the agent and shows in the Transcript, never in Activity, so a send that goes through
 /// opens the Transcript from any tab (Tabs.tabAfterSend). The attach (+) button, field and send
 /// button are Liquid Glass floating over the tab, with no bar of their own. Files picked from (+)
@@ -30,14 +29,10 @@ struct TicketDetailComposer: View {
     @Environment(\.palette) private var c
     @State private var text = ""
     @State private var sending = false
-    /// Off by default and after every send: the ticket stays where it is unless asked to move first.
-    @State private var moveFirst = false
     @State private var focused = false
 
     var body: some View {
-        let switchLabel = Format.moveSwitchLabel(ticket)
-        let move = switchLabel != nil && moveFirst
-        let hint = Format.composerHint(ticket, move: move)
+        let hint = Format.composerHint(ticket)
         let empty = TicketDetailLogic.trim(text).isEmpty
         let writing = focused || !empty || !outgoing.isEmpty
         let attention = ticket.status == .blocked
@@ -48,30 +43,13 @@ struct TicketDetailComposer: View {
             if !outgoing.isEmpty || !uploader.pending.isEmpty {
                 attachmentTray(accepts: accepts)
             }
-            if writing && (switchLabel != nil || !hint.isEmpty) {
-                HStack(spacing: 8) {
-                    if let switchLabel {
-                        Toggle(switchLabel, isOn: Binding(get: { moveFirst }, set: { on in
-                            haptic(.select)
-                            moveFirst = on
-                        }))
-                        .labelsHidden()
-                        .tint(c.accent)
-                        .scaleEffect(0.75)
-                        .frame(width: 40)
-                        Text(switchLabel).font(.scaled(size: 13)).foregroundStyle(c.text2).accessibilityHidden(true)
-                    }
-                    if !hint.isEmpty {
-                        Text(hint)
-                            .font(.scaled(size: 12))
-                            .foregroundStyle(c.text3)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: switchLabel != nil ? .trailing : .leading)
-                    }
-                }
-                // With the switch on there's no hint to fill the row, so pin it left rather than centering.
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 6)
+            if writing && !hint.isEmpty {
+                Text(hint)
+                    .font(.scaled(size: 12))
+                    .foregroundStyle(c.text3)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 6)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 if accepts {
@@ -91,7 +69,7 @@ struct TicketDetailComposer: View {
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
                                                             glass: true),
                                   focusRequest: focusRequest)
-                sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send(move: move) }
+                sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
             }
         }
         .padding(.horizontal, 12)
@@ -191,7 +169,7 @@ struct TicketDetailComposer: View {
         .accessibilityLabel("Attachments")
     }
 
-    private func send(move: Bool) {
+    private func send() {
         let body = TicketDetailLogic.trim(text)
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
         guard TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
@@ -201,12 +179,11 @@ struct TicketDetailComposer: View {
         sending = true
         Task {
             // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
-            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, move: move, attachments: attachments) }
+            let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, attachments: attachments) }
             sending = false
             if ok != nil {
                 haptic(.success)
                 text = ""
-                moveFirst = false
                 outgoing.clear()
             }
             let next = Tabs.tabAfterSend(tab, sent: ok != nil)

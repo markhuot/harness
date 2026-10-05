@@ -9091,7 +9091,7 @@ Tickets move planning → in_progress → blocked → review → done.
 
 ## This run: a message about the ticket
 The human sent a message about this ticket, which is in done. Nothing moved the ticket first: it stays where it is unless you move it. You have a work run's tools and the ticket's usual permissions: read files, search, run commands and the tests, change files and commit to the ticket's branch the way a work run would.
-The work has landed and the ticket is done, so the working directory may be the project's main checkout: change files only when they ask for it outright. A done ticket stays done: when they want the work picked back up, they turn on the composer's "Re-open and move to in progress" switch and send the message again, which re-opens the ticket.
+The work has landed and the ticket is done, so the working directory may be the project's main checkout: change files only when they ask for it outright. A done ticket stays done: when they want the work picked back up, they re-open the ticket with its Re-open button and say what to change.
 Their message is in the transcript, and so is your answer. When the answer changes what the spec says (a decision, or a new requirement the human asked for, which goes in the Goal), update the spec with \`edit_spec\` too.
 
 ## Files

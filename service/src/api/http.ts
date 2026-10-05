@@ -236,7 +236,8 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/start", ({ params }) => o.startTicket(params.key!));
   add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
-    // Older apps still send `log`; messages go to the transcript only, so it's ignored.
+    // Older apps still send `log`; messages go to the transcript only, so it's ignored. They may
+    // also send `move` (their composer's switch, since removed), which still moves the ticket.
     const b = await body();
     return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments });
   });

@@ -923,9 +923,6 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   margin-top: 7px;
   font-size: 11.5px;
 }
-.composer-bar .switch {
-  font-size: 11.5px;
-}
 /* (+) at the input's left, and the files waiting to go with the message above it. */
 .composer {
   position: relative;

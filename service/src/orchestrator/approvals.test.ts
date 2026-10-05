@@ -71,7 +71,7 @@ describe("tool permission approvals", () => {
     expect(h.driver.approvals.map((a) => a.behavior)).toEqual(["deny", "allow", "allow"]);
     expect(h.orch.ticketDetail(t.key).ticket.pendingApproval).toBeNull();
     // other tools still need approval
-    await h.orch.sendMessage(t.key, 'more /tool Bash {"command":"rm -rf x"}', { move: true });
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: 'more /tool Bash {"command":"rm -rf x"}' });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
   });

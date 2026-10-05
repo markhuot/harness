@@ -150,7 +150,7 @@ describe("classifier denials → approval cards", () => {
     expect(ticket(h, t.key).status).toBe("review"); // the retry ran and the run auto-submitted
     expect(h.store.tickets.listGrants(t.id)).toEqual([]); // grant_applied consumed it
     // one time only: the next run doesn't get it, so the same call is denied again
-    await h.orch.sendMessage(t.key, "scaffold it again", { move: true });
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: "scaffold it again" });
     await h.orch.idle();
     expect(work(h)[2]!.grants).toEqual({ tools: [], once: [] });
     expect(ticket(h, t.key).pendingApproval).toMatchObject({ toolName: "Bash", source: "classifier" });
@@ -202,7 +202,7 @@ describe("classifier denials → approval cards", () => {
     const t = await denied(h);
     await h.orch.answerApproval(t.key, { decision: "allow_tool" });
     await h.orch.idle();
-    await h.orch.sendMessage(t.key, "scaffold once more", { move: true });
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: "scaffold once more" });
     await h.orch.idle();
     // run 3 was denied (auto mode ignores bare Bash), run 4 retried it with the exact grant
     expect(work(h).map((c) => c.grants?.once.length)).toEqual([0, 1, 0, 1]);
@@ -248,7 +248,7 @@ describe("classifier denials → approval cards", () => {
     expect(ticket(h, t.key).status).toBe("review"); // ran without the prompt tool
     expect(h.store.tickets.listGrants(t.id)).toEqual([]);
     // the next run isn't handed the stale grant (which would put it in ask mode)
-    await h.orch.sendMessage(t.key, "and one more thing", { move: true });
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: "and one more thing" });
     await h.orch.idle();
     expect(work(h)[3]!.grants).toEqual({ tools: [], once: [] });
   });

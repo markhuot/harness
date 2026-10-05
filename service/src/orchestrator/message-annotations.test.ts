@@ -120,7 +120,7 @@ describe("a message's annotated attachment", () => {
     expect(h.store.runs.listBySession(t.sessionId).map((r) => r.kind)).toEqual(["work"]);
   });
 
-  test("re-opening a done ticket or sending a review one back to work carries it into the work run", async () => {
+  test("an older app's move (re-opening a done ticket, or sending a review one back to work) carries it into the work run", async () => {
     const h = setup();
     const done = await h.orch.createTicket({ projectId: h.project.id, spec: "Ship it" });
     const review = await h.orch.createTicket({ projectId: h.project.id, spec: "Ship it too" });

@@ -12,15 +12,9 @@ struct TimeInput: Decodable, Sendable {
     let now: Double
 }
 
-struct MoveSwitchInput: Decodable, Sendable {
-    let status: TicketStatus
-    let pendingApproval: PendingApproval?
-}
-
 struct ComposerHintInput: Decodable, Sendable {
     let busy: Bool
     let status: TicketStatus
-    let move: Bool?
 }
 
 struct ToolInput: Decodable, Sendable {
@@ -154,16 +148,9 @@ struct FormatTests {
         #expect(Format.tildify(c.input) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("stateFormat", "moveSwitchLabelCases", input: MoveSwitchInput.self, output: String?.self))
-    func moveSwitchLabel(_ c: Fixture.Case<MoveSwitchInput, String?>) {
-        #expect(Format.moveSwitchLabel(status: c.input.status, hasPendingApproval: c.input.pendingApproval != nil) == c.output)
-    }
-
     @Test(arguments: Fixture.cases("stateFormat", "composerHintCases", input: ComposerHintInput.self, output: String.self))
     func composerHint(_ c: Fixture.Case<ComposerHintInput, String>) {
-        let hint = c.input.move.map { Format.composerHint(busy: c.input.busy, status: c.input.status, move: $0) }
-            ?? Format.composerHint(busy: c.input.busy, status: c.input.status)
-        #expect(hint == c.output)
+        #expect(Format.composerHint(busy: c.input.busy, status: c.input.status) == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateFormat", "newSessionPlaceholderCases", input: TicketKind.self, output: String.self))

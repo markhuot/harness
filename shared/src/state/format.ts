@@ -73,35 +73,22 @@ export const COMPOSER_PLACEHOLDER: Record<TicketStatus, string> = {
 };
 
 /**
- * The composer's switch, where a message can move the ticket before its agent gets it (off by
- * default, and back off after each send): a review ticket back to in progress, a done one
- * re-opened. Elsewhere there's none: the agent moves a planning, in-progress or blocked ticket
- * itself, and a message to a ticket waiting on a tool approval answers the approval.
- */
-export function moveSwitchLabel(t: Pick<Ticket, "status" | "pendingApproval">): string | null {
-  if (t.pendingApproval) return null;
-  if (t.status === "review") return "Move to in progress";
-  if (t.status === "done") return "Re-open and move to in progress";
-  return null;
-}
-
-/**
  * Hint under the ticket message composer. While the agent is working on an in-progress or
  * planning ticket, a message goes into its run (steering); otherwise it waits for the run that's
- * going. Idle, it says what the message does to the ticket (`move`: the switch is on).
+ * going. Idle, it says what the message does to the ticket: a message never moves it, the agent
+ * does (or the human, with Request changes or Re-open).
  */
-export function composerHint(t: { busy: boolean; status: TicketStatus }, move = false): string {
+export function composerHint(t: { busy: boolean; status: TicketStatus }): string {
   if (t.busy) return t.status === "in_progress" || t.status === "planning" ? "Sent to the running agent" : "Queued behind the current run";
-  if (move) return "";
   switch (t.status) {
     case "planning":
       return "The planning agent will revise";
     case "blocked":
       return "The agent picks the work back up once this answers it";
     case "review":
-      return "Stays in review unless the agent submits it again";
+      return "Stays in review unless the agent changes the work";
     case "done":
-      return "Stays done: the agent only answers";
+      return "Stays done: the agent only answers. Re-open to change it";
     default:
       return "";
   }
