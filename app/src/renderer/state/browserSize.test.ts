@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BrowserSize } from "@harness/shared";
-import { drivesSize, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "./browserSize";
+import type { BrowserSize, BrowserState } from "@harness/shared";
+import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "./browserSize";
 
 const size = (responsive: boolean): BrowserSize => ({ device: "desktop", width: 1280, height: 800, responsive });
 
@@ -49,6 +49,24 @@ describe("takesOverSize", () => {
     expect(takesOverSize(null, following(1))).toBe(false);
     expect(takesOverSize(following(1), { tabId: 1, size: size(false), sizeOwner: true })).toBe(false);
     expect(takesOverSize(null, { tabId: 1 })).toBe(false);
+  });
+});
+
+describe("keepOwner", () => {
+  const reply = (tabId: number): BrowserState => ({ sessionId: "s", tabId, url: "https://a.test/", title: "", loading: false, size: size(true) });
+
+  test("an HTTP reply for the tab this pane owns keeps the ownership", () => {
+    expect(keepOwner(reply(1), { tabId: 1, sizeOwner: true }).sizeOwner).toBe(true);
+  });
+
+  test("a reply for another tab doesn't inherit it", () => {
+    expect(keepOwner(reply(2), { tabId: 1, sizeOwner: true }).sizeOwner).toBeUndefined();
+  });
+
+  test("with no socket state yet the reply stands as it is", () => {
+    const r = reply(1);
+    expect(keepOwner(r, null)).toBe(r);
+    expect(keepOwner(r, { tabId: 1 })).toBe(r);
   });
 });
 

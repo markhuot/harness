@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKe
 import { isBrowserEventFor, type BrowserInput, type BrowserState, type BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, panRect, toPagePoint, zoomRect, zoomScale, type Rect } from "@harness/shared/state";
-import { drivesSize, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "../state/browserSize";
+import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "../state/browserSize";
 import { toggleBrowserSizeRow, useLayout } from "../state/layout";
 import { Icon } from "../components/Icon";
 import { useAnnotate } from "../components/Annotator";
@@ -295,7 +295,7 @@ export function BrowserView({
         // Only while it still describes the tab on screen (the socket may have moved meanwhile).
         if (cancelled || !s) return;
         const tab = viewTab.current;
-        if (s.tabId === undefined || tab === undefined || tab === s.tabId) applyState(s);
+        if (s.tabId === undefined || tab === undefined || tab === s.tabId) applyState(keepOwner(s, stateRef.current));
       })
       .catch(() => {});
     return () => {
@@ -533,7 +533,7 @@ export function BrowserView({
     (document.activeElement as HTMLElement | null)?.blur();
     const tab = viewTab.current;
     const next = await act(() => client.browserNavigate(sessionId, url, typeof tab === "number" ? tab : undefined));
-    if (next && (next.tabId === undefined || viewTab.current === undefined || next.tabId === viewTab.current)) applyState(next);
+    if (next && (next.tabId === undefined || viewTab.current === undefined || next.tabId === viewTab.current)) applyState(keepOwner(next, stateRef.current));
   };
 
   const look = responsiveLook(state);

@@ -24,6 +24,16 @@ export function takesOverSize(prev: Pick<BrowserState, "tabId" | "size" | "sizeO
   return !(prev?.size?.responsive && prev.sizeOwner === true && prev.tabId === next.tabId);
 }
 
+/**
+ * A state from an HTTP reply (the first fetch, a navigate) is nobody's view, so it never says who
+ * owns Responsive: keep this pane's ownership of the same tab from its socket's last state, or a
+ * reply that lands after it would show the switch as following another window and stop the resizes.
+ */
+export function keepOwner(reply: BrowserState, current: Pick<BrowserState, "tabId" | "sizeOwner"> | null): BrowserState {
+  if (!current || current.tabId !== reply.tabId || current.sizeOwner === undefined) return reply;
+  return { ...reply, sizeOwner: current.sizeOwner };
+}
+
 /** How the Responsive switch looks: off, lit (this pane owns it) or dimmed-lit (another pane does). */
 export type ResponsiveLook = "off" | "owned" | "following";
 
