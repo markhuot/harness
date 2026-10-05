@@ -1,13 +1,14 @@
 import HarnessKit
 import SwiftUI
 
-/// Live view of the session's headless Chrome, one browser tab at a time (a strip of tab chips
-/// shows once there are two or more; + opens another). Screencast frames
+/// Live view of the session's headless Chrome, one browser tab at a time (a strip of tab chips that
+/// scrolls sideways, with + pinned at its right end to open another). Screencast frames
 /// (base64 JPEG) are letterboxed into the stage and swapped only once decoded, so a new frame never
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
 /// field carries the keyboard.
 ///
-/// Under the address bar, the tab's size (when the service has per-tab sizes): Desktop | Mobile
+/// Under the address bar, behind the toolbar's Size button (open or closed is remembered; the
+/// button shows when the service has per-tab sizes), the tab's size: Desktop | Mobile
 /// (each resets to its preset size and reloads), Responsive (the tab follows this stage, sent once
 /// the subscription is confirmed and only on change; lit dimmer when another window drives it) and
 /// W × H. Pinching the stage zooms the drawn frame 1–4× (two fingers pan it, a two-finger double
@@ -41,6 +42,8 @@ struct BrowserTabView: View {
     @FocusState private var sizeField: SizeField?
     /// Done applied the drafts, so losing focus doesn't put the old size back.
     @State private var sizeApplied = false
+    /// The size row is open (remembered across launches; starts closed).
+    @AppStorage("browserSizeRowOpen") private var sizeRowOpen = false
 
     private enum SizeField: Hashable { case width, height }
 
@@ -69,9 +72,9 @@ struct BrowserTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            if let size = model.state?.size { sizeRow(size) }
+            if sizeRowOpen, let size = model.state?.size { sizeRow(size) }
             tabStrip
-            status
+            if let title = shownTitle { status(title) }
             stage
         }
         .background(BrowserKeyField(focused: $typing, onText: model.typed, onKey: model.press)
@@ -144,17 +147,14 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "", systemImage: typing ? "keyboard.chevron.compact.down" : "keyboard", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
             }
+            if model.state?.size != nil {
+                BrowserBarButton(icon: "", systemImage: "aspectratio", label: sizeRowOpen ? "Hide size" : "Size", active: sizeRowOpen) {
+                    sizeRowOpen.toggle()
+                }
+            }
             BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
                              disabled: model.frame == nil || capturing || openAnnotator == nil || sink == nil) {
                 annotate()
-            }
-            if pinnedTab == nil {
-                BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
-                    model.newTab()
-                    // Like Safari: a new tab starts in the address bar.
-                    urlDraft = ""
-                    editingUrl = true
-                }
             }
         }
         .padding(6)
@@ -228,43 +228,61 @@ struct BrowserTabView: View {
 
     // MARK: Tabs
 
-    /// The open tabs, even a lone one (so it can be torn off); the shown one is highlighted and kept in view.
+    /// The open tabs, even a lone one (so it can be torn off), scrolling sideways when they don't
+    /// fit, with + (New tab) pinned at the right end; the shown one is highlighted and kept in view.
+    /// Not in a pinned window, nor with a service that has no tabs.
     @ViewBuilder private var tabStrip: some View {
-        let tabs = pinnedTab == nil ? BrowserTabSelection.strip(model.state) : []
-        let tornOff = WindowDirectory.shared.tornOff(ticket.key)
-        if !tabs.isEmpty {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(tabs) { tab in
-                            let away = tornOff.browserTabs.contains(tab.id)
-                            BrowserTabChip(
-                                tab: tab, current: tab.id == model.selection.shown, away: away,
-                                select: { model.selectTab(tab.id) }, close: { model.closeTab(tab.id) })
-                                .tearOff(.pinned(ticket.key, .browser, browserTab: tab.id), tornOff: away) { model.selectTab(tab.id) }
-                                .id(tab.id)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+        if pinnedTab == nil, BrowserTabSelection.supportsTabs(model.state) {
+            HStack(spacing: 0) {
+                tabChips
+                BrowserBarButton(icon: "plus", label: "New tab") {
+                    model.newTab()
+                    // Like Safari: a new tab starts in the address bar.
+                    urlDraft = ""
+                    editingUrl = true
                 }
-                .onChange(of: model.selection.shown, initial: true) { _, id in
-                    guard let id else { return }
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
-                }
+                .padding(.trailing, 4)
             }
             .background(c.bgElev)
             .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
         }
     }
 
-    private var status: some View {
-        HStack(spacing: 6) {
-            Circle().fill(model.live ? c.green : c.text3).frame(width: 7, height: 7)
-            Text(model.live ? "Live" : "Idle").font(.scaled(size: 12)).foregroundStyle(c.text3)
-            if let title = model.state?.title, !title.isEmpty, title != model.state?.url {
-                Text("· \(title)").font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
+    private var tabChips: some View {
+        let tabs = BrowserTabSelection.strip(model.state)
+        let tornOff = WindowDirectory.shared.tornOff(ticket.key)
+        return ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(tabs) { tab in
+                        let away = tornOff.browserTabs.contains(tab.id)
+                        BrowserTabChip(
+                            tab: tab, current: tab.id == model.selection.shown, away: away,
+                            select: { model.selectTab(tab.id) }, close: { model.closeTab(tab.id) })
+                            .tearOff(.pinned(ticket.key, .browser, browserTab: tab.id), tornOff: away) { model.selectTab(tab.id) }
+                            .id(tab.id)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
+            .onChange(of: model.selection.shown, initial: true) { _, id in
+                guard let id else { return }
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The page's title, when it says more than the address bar does.
+    private var shownTitle: String? {
+        guard let title = model.state?.title, !title.isEmpty, title != model.state?.url else { return nil }
+        return title
+    }
+
+    private func status(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title).font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)

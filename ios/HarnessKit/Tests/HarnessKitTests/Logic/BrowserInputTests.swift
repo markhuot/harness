@@ -167,9 +167,9 @@ struct BrowserTypingTests {
         #expect(g.take(width: 600, height: 600) == .resize(width: 600, height: 600))
     }
 
-    private static func sized(responsive: Bool, owner: Bool?) -> BrowserState {
+    private static func sized(responsive: Bool, owner: Bool?, tab: Int = 1) -> BrowserState {
         BrowserState(
-            sessionId: "s", tabId: 1, url: "about:blank", title: "", loading: false,
+            sessionId: "s", tabId: tab, url: "about:blank", title: "", loading: false,
             size: BrowserSize(device: .desktop, width: 1280, height: 800, responsive: responsive), sizeOwner: owner)
     }
 
@@ -216,6 +216,53 @@ struct BrowserTypingTests {
         // No stage yet: switched on without a size, the service keeps the tab's.
         #expect(g.responsiveOn(width: 0, height: 0) == .responsive(on: true, width: nil, height: nil))
         #expect(g.responsiveOn(width: .nan, height: 600) == .responsive(on: true, width: nil, height: nil))
+    }
+
+    @Test func resizeGateFollowSaysToSendWhenTheServiceHandsTheSizeOver() {
+        var g = ResizeGate()
+        _ = g.confirm()
+        // A new tab, Responsive, owned by another viewer: nothing to send.
+        #expect(g.follow(Self.sized(responsive: true, owner: false)) == false)
+        // That viewer left, and the service handed the tab to this one: send the stage now.
+        #expect(g.follow(Self.sized(responsive: true, owner: true)) == true)
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+        // Later states for the same tab, still owned here, ask for nothing more.
+        #expect(g.follow(Self.sized(responsive: true, owner: true)) == false)
+        #expect(g.take(width: 390, height: 600) == nil)
+    }
+
+    @Test func resizeGateFollowSaysToSendForTheFirstOwnedState() {
+        // A fresh subscription (reset drives) whose first state already names this viewer the owner.
+        var g = ResizeGate()
+        #expect(g.follow(Self.sized(responsive: true, owner: true)) == true)
+        #expect(g.take(width: 390, height: 600) == nil) // not confirmed yet
+        _ = g.confirm()
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+    }
+
+    @Test func resizeGateResendsTheStageOnMovingToAnotherOwnedTab() {
+        // Owning tab 1 at the stage's size, then moved to tab 2 (New tab), owned here too: tab 2
+        // has a size of its own, so the same stage goes again.
+        var g = ResizeGate()
+        _ = g.confirm()
+        _ = g.follow(Self.sized(responsive: true, owner: true, tab: 1))
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+        #expect(g.follow(Self.sized(responsive: true, owner: true, tab: 2)) == true)
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+        // Moved to a tab at a fixed size: nothing to send.
+        #expect(g.follow(Self.sized(responsive: false, owner: false, tab: 3)) == false)
+        #expect(g.take(width: 390, height: 600) == nil)
+    }
+
+    @Test func resizeGateFollowAsksNothingOfAStateWithoutASize() {
+        // A service from before per-tab sizes: the confirm schedules the resize, and a tab switch
+        // doesn't resend a size already sent.
+        var g = ResizeGate()
+        _ = g.confirm()
+        #expect(g.follow(BrowserState(sessionId: "s", tabId: 1, url: "about:blank", title: "", loading: false)) == false)
+        #expect(g.take(width: 390, height: 600) == .resize(width: 390, height: 600))
+        #expect(g.follow(BrowserState(sessionId: "s", tabId: 2, url: "about:blank", title: "", loading: false)) == false)
+        #expect(g.take(width: 390, height: 600) == nil)
     }
 
     @Test func resizeGateResetDrivesAgain() {
