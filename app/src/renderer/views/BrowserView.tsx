@@ -12,13 +12,15 @@
 // The pane sends its stage size only while it owns Responsive. A trackpad pinch zooms the drawn
 // frame (browserZoom), never the page.
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { isBrowserEventFor, type BrowserInput, type BrowserState, type BrowserTab } from "@harness/shared";
+import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { isBrowserEventFor, type BrowserExtension, type BrowserInput, type BrowserState, type BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, panRect, toPagePoint, zoomRect, zoomScale, type Rect } from "@harness/shared/state";
 import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "../state/browserSize";
 import { toggleBrowserSizeRow, useLayout } from "../state/layout";
 import { Icon } from "../components/Icon";
+import { MenuButton } from "../components/bits";
+import { runnableExtensions } from "@harness/shared/state";
 import { useAnnotate } from "../components/Annotator";
 import { browserShotName } from "../state/annotator";
 import { isAppChord } from "../state/keys";
@@ -70,7 +72,7 @@ export function BrowserView({
   /** The shown page's title, as it changes (a pinned tab's pane header). */
   onTitle?: (title: string) => void;
 }) {
-  const { socket, client, onEvent, epoch } = useStore();
+  const { socket, client, onEvent, epoch, navigate: go, toast } = useStore();
   const act = useAction();
   // This view's viewer: its pane's id (unique in this window), else one of its own.
   const paneId = usePane()?.paneId;
@@ -622,6 +624,42 @@ export function BrowserView({
     socket.send({ type: "browser.input", sessionId, viewerId, tabId: tab.id, input: { type: "closeTab" } });
   };
 
+  // ------------------------------------------------------------------ extensions
+
+  /** The extensions menu's entries, fetched as it opens (null while loading). */
+  const [extensions, setExtensions] = useState<BrowserExtension[] | null>(null);
+  const loadExtensions = async () => {
+    setExtensions(null);
+    try {
+      setExtensions(runnableExtensions(await client.listBrowserExtensions()));
+    } catch {
+      setExtensions([]);
+    }
+  };
+
+  /** Run an extension's toolbar button on the shown page; its popup opens as a tab, which this view switches to. */
+  const runExtension = async (ext: BrowserExtension) => {
+    const tab = typeof viewTab.current === "number" ? viewTab.current : state?.tabId;
+    const res = await act(() => client.browserExtensionAction(sessionId, ext.id, tab));
+    if (!res) return;
+    if (res.tab === null) {
+      toast(`${ext.name} ran on this page.`, "info");
+      return;
+    }
+    clearFrame();
+    viewTab.current = res.tab;
+    expectState(confirmsSwitch(res.tab));
+    editingUrl.current = false;
+    socket.subscribeBrowser(sessionId, res.tab, viewerId);
+  };
+
+  const openExtensionOptions = (ext: BrowserExtension) => {
+    clearFrame();
+    viewTab.current = "pending";
+    expectState(confirmsNewTab(tabs ?? []));
+    socket.send({ type: "browser.input", sessionId, viewerId, input: { type: "newTab", url: ext.optionsUrl } });
+  };
+
   /** Arrow keys move between tabs (and switch to them), like a native tab list. */
   const onTabKey = (e: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!tabs) return;
@@ -753,6 +791,60 @@ export function BrowserView({
           >
             <Icon name="ruler" />
           </button>
+        )}
+        {/* A pinned view shows one tab, so it can't follow a popup into a tab of its own. */}
+        {!pinned && (
+          <MenuButton
+            menuClassName="browser-extensions-menu"
+            trigger={(toggle, open) => (
+              <button
+                className={`btn btn-ghost btn-icon btn-sm ${open ? "on" : ""}`}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-label="Extensions"
+                title="Extensions: run one's toolbar button on this page"
+                data-testid="browser-extensions"
+                disabled={empty}
+                onClick={() => {
+                  if (!open) void loadExtensions();
+                  toggle();
+                }}
+              >
+                <Icon name="puzzle" />
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                {extensions === null ? (
+                  <div className="browser-extensions-note">
+                    <span className="spinner" />
+                  </div>
+                ) : extensions.length === 0 ? (
+                  <div className="browser-extensions-note">No extensions with a toolbar button</div>
+                ) : (
+                  extensions.map((ext) => (
+                    <Fragment key={ext.id}>
+                      {ext.hasAction && (
+                        <button data-testid="browser-extension-action" data-id={ext.id} onClick={() => (close(), void runExtension(ext))}>
+                          <Icon name="puzzle" /> {ext.name}
+                        </button>
+                      )}
+                      {ext.optionsUrl && (
+                        <button onClick={() => (close(), openExtensionOptions(ext))}>
+                          <Icon name="settings" /> {ext.name} options
+                        </button>
+                      )}
+                    </Fragment>
+                  ))
+                )}
+                <hr />
+                <button onClick={() => (close(), go({ view: "settings", section: "extensions" }))}>
+                  <Icon name="settings" /> Manage extensions…
+                </button>
+              </>
+            )}
+          </MenuButton>
         )}
         {annotator && (
           <button

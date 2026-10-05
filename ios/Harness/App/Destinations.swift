@@ -18,6 +18,7 @@ struct RouteScreen: View {
             case let .project(id): ProjectSettingsScreen(projectId: id)
             case let .driver(id): DriverSettingsScreen(driverId: id)
             case .prompts: PromptsScreen()
+            case .extensions: ExtensionSettingsScreen()
             case let .prompt(id): PromptDetailScreen(id: id)
             }
         }

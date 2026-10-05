@@ -398,6 +398,32 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     if (tab !== undefined && !(await browser.tabs(sessionId)).some((t) => t.id === tab)) throw new HarnessError(404, `No browser tab ${tab}`);
     return browser.open(sessionId, b.url, { tab });
   });
+  add("POST", "/browser/:sessionId/extension-action", async ({ params, body }) => {
+    const b = await body();
+    if (typeof b?.id !== "string" || !b.id) throw new HarnessError(400, "id (the extension's ID) is required");
+    const sessionId = o.getSession(params.sessionId!).id;
+    const tab = tabNumber(b.tabId);
+    if (tab !== undefined && !(await browser.tabs(sessionId)).some((t) => t.id === tab)) throw new HarnessError(404, `No browser tab ${tab}`);
+    return browser.runExtensionAction(sessionId, b.id, { tab });
+  });
+
+  add("POST", "/browser/restart", async () => (await browser.restartBrowser(), ok));
+
+  // Browser extensions, shared by every session's tabs (Settings → Extensions)
+  add("GET", "/browser-extensions", () => browser.extensions());
+  add("POST", "/browser-extensions", async ({ body }) => {
+    const b = await body();
+    if (!b || typeof b !== "object" || (typeof b.webstore !== "string" && typeof b.path !== "string")) {
+      throw new HarnessError(400, "Pass webstore (a Chrome Web Store link or extension ID) or path (an unpacked extension's folder)");
+    }
+    return browser.addExtension(typeof b.webstore === "string" ? { webstore: b.webstore } : { path: b.path });
+  });
+  add("PATCH", "/browser-extensions/:id", async ({ params, body }) => {
+    const b = await body();
+    if (typeof b?.enabled !== "boolean") throw new HarnessError(400, "enabled (true or false) is required");
+    return browser.setExtensionEnabled(params.id!, b.enabled);
+  });
+  add("DELETE", "/browser-extensions/:id", async ({ params }) => (await browser.removeExtension(params.id!), ok));
 
   // Plugins (DESIGN.md "Plugins"). /plugins/<id>/api/* and /plugins/<id>/ui/* are handled in createHttpServer.
   add("GET", "/plugins", () => plugins?.list() ?? []);

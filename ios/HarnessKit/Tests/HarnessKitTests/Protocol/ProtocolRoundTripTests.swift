@@ -39,6 +39,10 @@ struct ProtocolRoundTripTests {
         "BrowserScreenshot": rt(BrowserScreenshot.self),
         "BrowserElementQuery": rt(BrowserElementQuery.self),
         "BrowserElement": rt(BrowserElement.self),
+        "BrowserExtension": rt(BrowserExtension.self),
+        "BrowserExtensionList": rt(BrowserExtensionList.self),
+        "AddBrowserExtensionBody": rt(AddBrowserExtensionBody.self),
+        "BrowserExtensionActionResult": rt(BrowserExtensionActionResult.self),
         "ActivityMeta": rt(ActivityMeta.self),
         "ActivityEntry": rt(ActivityEntry.self),
         "SpecRevisionInfo": rt(SpecRevisionInfo.self),
@@ -215,6 +219,8 @@ struct ProtocolRoundTripTests {
         "MouseButton": en(MouseButton.self),
         "KeyAction": en(KeyAction.self),
         "BrowserDevice": en(BrowserDevice.self),
+        "BrowserExtensionSource": en(BrowserExtensionSource.self),
+        "BrowserExtensionStatus": en(BrowserExtensionStatus.self),
     ]
 
     @Test func everyStringUnionMatchesItsOpenEnum() throws {
@@ -286,6 +292,10 @@ struct ProtocolRoundTripTests {
         },
         "ToolResultContent": { if case .unknown = try JSONDecoder().decode(ToolResultContent.self, from: $0) { true } else { false } },
         "BrowserInput": { if case .unknown = try JSONDecoder().decode(BrowserInput.self, from: $0) { true } else { false } },
+        "BrowserExtension": {
+            let e = try JSONDecoder().decode(BrowserExtension.self, from: $0)
+            return !e.source.isKnown && !e.status.isKnown
+        },
         "PluginHostMessage": { if case .unknown = try JSONDecoder().decode(PluginHostMessage.self, from: $0) { true } else { false } },
         "PluginFrameMessage": { if case .unknown = try JSONDecoder().decode(PluginFrameMessage.self, from: $0) { true } else { false } },
         "Ticket": {

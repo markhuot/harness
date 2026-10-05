@@ -119,6 +119,18 @@
   flex: none;
 }
 
+.browser-extensions-menu {
+  min-width: 220px;
+}
+.browser-extensions-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
 .browser-url {
   flex: 1;
   min-width: 0;

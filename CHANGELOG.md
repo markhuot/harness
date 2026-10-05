@@ -9,6 +9,21 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The Mac app's Settings has an Extensions section for the browser your tickets use. Paste a
+  Chrome Web Store link or extension ID to install one, or add an extension you're building from
+  its folder. Each one you add has a switch to turn it off and a button to remove it. Extensions
+  your organization installs are listed too. Chrome's own install handles Web Store extensions,
+  so your organization's Chrome policy applies: an extension it doesn't allow is refused, and the
+  message says why.
+- A ticket's browser has a puzzle-piece button that lists your extensions. Choose one to run its
+  toolbar button on the page you're looking at. Its popup opens in a new tab, since the browser
+  has no toolbar of its own. Extensions with an options page can open it from the same menu.
+- On iPhone and iPad, Settings has the same Extensions screen, and a ticket's browser has the same
+  puzzle-piece button. To add an extension you're building, type the path of its folder on your
+  Mac.
+
 ## [app-20261005.2050](https://github.com/markhuot/harness/releases/tag/app-20261005.2050) - 2026-10-05
 
 ### Added

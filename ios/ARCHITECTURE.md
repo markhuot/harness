@@ -363,7 +363,7 @@ feature needs something new here, add to it without changing what's there.
   | `harness://ticket/<key>[?tab=spec\|activity\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped, and an old `summaries` opens spec; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
-  | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen |
+  | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>`, `/extensions` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen, ExtensionSettingsScreen |
   | `harness://projects[?from=search]` | Projects sheet (0.6 / large detents); on iPad (regular width), shows the sidebar column |
   | `harness://new[?projectId=\|key=]`, `/watcher[?id=]`, `/connect` | New session, Watcher, Connect sheets |
   | `harness://pair?url=&token=` | Pair sheet: waits for the Keychain, pairs, goes to the Board |
@@ -606,6 +606,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | SettingsScreen | Settings/SettingsScreen.swift | Settings | `SettingsScreen()` (placeholder already has Macs + appearance; keep both) |
 | DriverSettingsScreen | Settings/DriverSettingsScreen.swift | Settings | `DriverSettingsScreen(driverId: String)` (HARNESS-145, port of main's HARNESS-157) |
 | ProjectSettingsScreen | Settings/ProjectSettingsScreen.swift | Projects | `ProjectSettingsScreen(projectId: String)` |
+| ExtensionSettingsScreen | Settings/ExtensionSettingsScreen.swift | Settings | `ExtensionSettingsScreen()` (HARNESS-285, the Mac's Settings → Extensions) |
 | PromptsScreen | Prompts/PromptsScreen.swift | Prompts | `PromptsScreen()` |
 | PromptDetailScreen | Prompts/PromptDetailScreen.swift | Prompts | `PromptDetailScreen(id: String)` |
 | WatcherFormScreen | Watchers/WatcherFormScreen.swift | Watchers | `WatcherFormScreen(id: String?)` |

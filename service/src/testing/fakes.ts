@@ -108,6 +108,20 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     async close(sessionId) {
       closed.push(sessionId);
     },
+    async extensions() {
+      return { extensions: [], running: false };
+    },
+    async restartBrowser() {},
+    async addExtension() {
+      throw new Error("No extensions in the stub browser");
+    },
+    async setExtensionEnabled() {
+      throw new Error("No extensions in the stub browser");
+    },
+    async removeExtension() {},
+    async runExtensionAction() {
+      return { tab: null };
+    },
     async shutdown() {},
   };
 }

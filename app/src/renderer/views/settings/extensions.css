@@ -1,0 +1,39 @@
+/* Settings → Extensions */
+
+.extensions-add .input {
+  height: 28px;
+  min-height: 28px;
+}
+.extensions-add .btn {
+  flex: none;
+}
+.extensions-add-error {
+  align-items: flex-start;
+  color: var(--red);
+}
+.extensions-add-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+.extensions-waiting {
+  background: var(--bg-sunken);
+}
+.extensions-empty {
+  white-space: normal;
+}
+.extensions-others-head {
+  margin: 14px 0 8px;
+}
+.extension-icon {
+  flex: none;
+  color: var(--text-3);
+}
+.extension-row[data-status="blocked"] .extension-icon,
+.extension-row[data-status="error"] .extension-icon {
+  color: var(--red);
+}
+.extension-version {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-3);
+}

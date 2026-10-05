@@ -16,6 +16,8 @@ export interface HarnessPaths {
   logPath: string;
   worktreesDir: string;
   chromeProfileDir: string;
+  /** The browser's installed extensions: extensions.json and Web Store downloads (<id>/) */
+  chromeExtensionsDir: string;
   serviceJsonPath: string;
   /** Summary attachments, stored as <id>.<ext> */
   attachmentsDir: string;
@@ -55,6 +57,7 @@ export function harnessPaths(home: string): HarnessPaths {
     logPath: join(logsDir, "service.log"),
     worktreesDir: join(home, "worktrees"),
     chromeProfileDir: join(home, "chrome-profile"),
+    chromeExtensionsDir: join(home, "chrome-extensions"),
     serviceJsonPath: join(home, "service.json"),
     attachmentsDir: join(home, "attachments"),
     uploadsDir: join(home, "uploads"),

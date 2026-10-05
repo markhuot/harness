@@ -522,6 +522,42 @@ describe("http api", () => {
     a.socket.close();
   });
 
+  test("browser extensions: bodies are checked before they reach the browser, and each call reaches it", async () => {
+    const { client, dir, browser } = await boot();
+    const calls: unknown[] = [];
+    browser.addExtension = async (body) => (calls.push(["add", body]), { id: "x", name: "X", version: "1", source: "webstore", enabled: true, status: "pending", hasAction: false });
+    browser.setExtensionEnabled = async (id, enabled) => (calls.push(["enable", id, enabled]), { id, name: "X", version: "1", source: "webstore", enabled, status: "off", hasAction: false });
+    browser.removeExtension = async (id) => void calls.push(["remove", id]);
+    browser.restartBrowser = async () => void calls.push(["restart"]);
+    browser.runExtensionAction = async (sid, id, opts) => (calls.push(["action", sid, id, opts]), { tab: 3 });
+
+    expect(await client.listBrowserExtensions()).toEqual({ extensions: [], running: false });
+    await expect(client.addBrowserExtension({} as never)).rejects.toThrow("Pass webstore");
+    await expect(client.addBrowserExtension({ webstore: 5 } as never)).rejects.toThrow("Pass webstore");
+    await expect(client.setBrowserExtensionEnabled("x", "yes" as never)).rejects.toThrow("enabled (true or false) is required");
+    expect(calls).toEqual([]);
+
+    await client.addBrowserExtension({ webstore: "https://chromewebstore.google.com/detail/x" });
+    await client.addBrowserExtension({ path: "~/ext" });
+    await client.setBrowserExtensionEnabled("x", false);
+    await client.removeBrowserExtension("x");
+    await client.restartBrowser();
+
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false, driver: "fake" });
+    await expect(client.browserExtensionAction(t.sessionId, "")).rejects.toThrow("id (the extension's ID) is required");
+    await expect(client.browserExtensionAction(t.sessionId, "x", 4)).rejects.toThrow("No browser tab 4");
+    expect(await client.browserExtensionAction(t.sessionId, "x")).toEqual({ tab: 3 });
+    expect(calls).toEqual([
+      ["add", { webstore: "https://chromewebstore.google.com/detail/x" }],
+      ["add", { path: "~/ext" }],
+      ["enable", "x", false],
+      ["remove", "x"],
+      ["restart"],
+      ["action", t.sessionId, "x", { tab: undefined }],
+    ]);
+  });
+
   test("one socket holds several browser viewers of a session: each gets its own frames and input; one leaving keeps the other; reconnect replays both", async () => {
     const { client, dir, browser } = await boot();
     const p = await client.createProject({ path: dir });

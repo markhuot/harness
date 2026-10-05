@@ -348,6 +348,46 @@ export const BrowserElement: P.BrowserElement[] = [
   { path: "body > div:nth-of-type(3) > img", text: "" },
 ];
 
+export const BrowserExtension: P.BrowserExtension[] = [
+  {
+    id: "fmkadmapgofadopljbjfkapdkoienihi",
+    name: "React Developer Tools",
+    version: "8.0.0",
+    description: "Adds React debugging tools to the Chrome Developer Tools.",
+    source: "webstore",
+    enabled: true,
+    status: "loaded",
+    hasAction: true,
+    addedAt: T0,
+  },
+  {
+    id: "abcdefghijklmnopabcdefghijklmnop",
+    name: "My extension",
+    version: "0.1.0",
+    source: "unpacked",
+    path: "/Users/mark/code/my-extension",
+    enabled: true,
+    status: "blocked",
+    error: "Your organization's Chrome policy doesn't allow unpacked extensions in this browser.",
+    hasAction: false,
+    optionsUrl: "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",
+    addedAt: T0,
+  },
+  { id: "noondiphcddnnabmjcihcjfbhfklnnep", name: "Password Alert", version: "1.38.4", source: "chrome", byPolicy: true, enabled: true, status: "loaded", hasAction: false },
+];
+
+export const BrowserExtensionList: P.BrowserExtensionList[] = [
+  { extensions: BrowserExtension, running: true },
+  { extensions: [], running: false },
+];
+
+export const AddBrowserExtensionBody: P.AddBrowserExtensionBody[] = [
+  { webstore: "https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi" },
+  { path: "~/code/my-extension" },
+];
+
+export const BrowserExtensionActionResult: P.BrowserExtensionActionResult[] = [{ tab: 4 }, { tab: null }];
+
 const annotatedSpecImage: P.Attachment = {
   id: "att_1",
   path: "/Users/mark/.harness/attachments/att_1.png",
@@ -1096,6 +1136,8 @@ export const enums: Record<string, readonly string[]> = {
   MouseButton: all<NonNullable<Extract<P.BrowserInput, { type: "mouse" }>["button"]>>({ left: true, right: true, middle: true }),
   KeyAction: all<Extract<P.BrowserInput, { type: "key" }>["action"]>({ down: true, up: true }),
   BrowserDevice: all<P.BrowserDevice>({ desktop: true, mobile: true }),
+  BrowserExtensionSource: all<P.BrowserExtensionSource>({ webstore: true, unpacked: true, chrome: true }),
+  BrowserExtensionStatus: all<P.BrowserExtension["status"]>({ loaded: true, pending: true, off: true, blocked: true, error: true }),
 };
 
 /** The discriminators of each union, in protocol.ts order (checked against the Swift enums). */
@@ -1147,6 +1189,7 @@ export const forwardCompat: { type: string; samples: unknown[] }[] = [
   },
   { type: "ToolResultContent", samples: [{ type: "resource", uri: "file:///tmp/x.txt" }] },
   { type: "BrowserInput", samples: [{ type: "touch", points: [{ x: 1, y: 2 }] }] },
+  { type: "BrowserExtension", samples: [{ ...BrowserExtension[0], source: "enterprise", status: "updating" }] },
   { type: "PluginHostMessage", samples: [{ type: "harness:locale", locale: "de-DE" }] },
   { type: "PluginFrameMessage", samples: [{ type: "harness:resize", height: 400 }] },
   {

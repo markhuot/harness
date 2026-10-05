@@ -16,6 +16,7 @@ struct DeepLinkTests {
         ("harness://connect", .sheet(.connect)),
         ("harness://scan", .cover(.scan)),
         ("harness://prompts", .push(.prompts)),
+        ("harness://extensions", .push(.extensions)),
         ("harness://driver/claude-code", .push(.driver(id: "claude-code"))),
         ("harness://driver/anthropic%2Dapi", .push(.driver(id: "anthropic-api"))),
         ("harness://prompt/run.review", .push(.prompt(id: "run.review"))),

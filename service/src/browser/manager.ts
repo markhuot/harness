@@ -14,7 +14,10 @@ import {
   type BrowserSize,
   type BrowserState,
 } from "@harness/shared";
+import type { AddBrowserExtensionBody, BrowserExtension, BrowserExtensionActionResult, BrowserExtensionList } from "@harness/shared";
 import { imageSize } from "../attachments.ts";
+import { HarnessError } from "../orchestrator/errors.ts";
+import { ExtensionHost } from "./extension-host.ts";
 import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
@@ -56,6 +59,12 @@ export interface BrowserManagerOptions {
   tabStore?: BrowserTabStore;
   /** Clock for idle tracking (tests). */
   now?: () => number;
+  /** Where the list of extensions added in Settings is kept (extensions.json). Omitted: no extensions. */
+  extensionsDir?: string;
+  /** How long after loading an unpacked extension to watch for Chrome's policy turning it off (tests). */
+  extensionPolicyWaitMs?: number;
+  /** How long a launch waits for Chrome to install Web Store extensions (tests). */
+  extensionInstallWaitMs?: number;
 }
 
 /** How often idle tabs are swept (and Chrome stopped once no tab has a page). */
@@ -108,6 +117,11 @@ interface Tab {
   url: string;
   title: string;
   loading: boolean;
+  /**
+   * An extension's toolbar popup (runExtensionAction). Chrome sizes a popup to its content and
+   * won't emulate a viewport or device for it, so its size is measured, not set.
+   */
+  popup?: boolean;
   /** The input mode and viewport it should have (what states report and the store keeps). */
   size: BrowserSize;
   /**
@@ -314,11 +328,37 @@ export class BrowserManager implements BrowserService {
   private unsaved = new Set<string>();
   /** shutdown() is running: nothing reopens a page (a watched tab would relaunch Chrome). */
   private shuttingDown = false;
+  /** Settings → Extensions; absent without an extensions folder. */
+  private readonly extensionHost?: ExtensionHost;
 
   constructor(private readonly opts: BrowserManagerOptions) {
     this.navigationTimeoutMs = opts.navigationTimeoutMs ?? 30_000;
     this.settleTimeoutMs = opts.settleTimeoutMs ?? 10_000;
     this.now = opts.now ?? Date.now;
+    if (opts.extensionsDir) {
+      this.extensionHost = new ExtensionHost({
+        profileDir: opts.profileDir,
+        extensionsDir: opts.extensionsDir,
+        start: async () => (await this.ensureBrowser()).cdp,
+        live: () => {
+          const b = this.browser;
+          return b && !b.cdp.closed && !b.chrome.exited ? b.cdp : undefined;
+        },
+        restart: () => this.restartBrowser(),
+        hasPages: () => [...this.entries.values()].some((e) => openTabs(e).length > 0),
+        hold: async (fn) => {
+          this.opening++;
+          try {
+            return await fn();
+          } finally {
+            this.opening--;
+          }
+        },
+        now: this.now,
+        policyWaitMs: opts.extensionPolicyWaitMs,
+        installWaitMs: opts.extensionInstallWaitMs,
+      });
+    }
   }
 
   /** The running Chrome's code-sign clone directory (macOS), if attributed. */
@@ -911,6 +951,133 @@ export class BrowserManager implements BrowserService {
   }
 
   // -------------------------------------------------------------------------
+  // Extensions (every session's tabs share them; extension-host.ts)
+  // -------------------------------------------------------------------------
+
+  async extensions(): Promise<BrowserExtensionList> {
+    return this.extensionsOrThrow().list();
+  }
+
+  async addExtension(body: AddBrowserExtensionBody): Promise<BrowserExtension> {
+    return this.extensionsOrThrow().add(body);
+  }
+
+  async setExtensionEnabled(id: string, enabled: boolean): Promise<BrowserExtension> {
+    return this.extensionsOrThrow().setEnabled(id, enabled);
+  }
+
+  async removeExtension(id: string): Promise<void> {
+    return this.extensionsOrThrow().remove(id);
+  }
+
+  /**
+   * Run extension `id`'s toolbar action on a tab, as clicking its toolbar button would. A popup it
+   * opens joins the session as its next tab, at the tab's size.
+   */
+  async runExtensionAction(sessionId: string, id: string, opts: TabOption = {}): Promise<BrowserExtensionActionResult> {
+    const host = this.extensionsOrThrow();
+    const tab = await this.tab(sessionId, opts.tab);
+    const browser = await this.ensureBrowser();
+    const ext = host.runnable(id);
+    this.opening++;
+    try {
+      const { cdp } = browser;
+      const tabTarget = await this.tabTargetOf(cdp, tab.targetId, tab.url);
+      if (!tabTarget) throw new HarnessError(500, "Couldn't find Chrome's tab for this page");
+      const pages = async (): Promise<{ targetId: string; type: string; url: string }[]> => (await cdp.send("Target.getTargets")).targetInfos ?? [];
+      const before = new Set((await pages()).map((t) => t.targetId));
+      try {
+        await cdp.send("Extensions.triggerAction", { id, targetId: tabTarget });
+      } catch (e) {
+        throw new HarnessError(422, `${ext.name}'s button didn't run: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      // The popup arrives as a new page on the extension's origin (first as an empty "other" target).
+      const origin = `chrome-extension://${id}/`;
+      const deadline = this.now() + 3000;
+      while (this.now() < deadline) {
+        const popup = (await pages()).find((t) => t.type === "page" && !before.has(t.targetId) && t.url.startsWith(origin));
+        if (popup) {
+          const entry = tab.entry;
+          const opened = await this.attachTab(entry, entry.nextTabId++, popup.targetId, browser, undefined, { ...tab.size }, true);
+          this.scheduleSave(entry);
+          return { tab: opened.id };
+        }
+        await Bun.sleep(100);
+      }
+      return { tab: null };
+    } finally {
+      this.opening--;
+    }
+  }
+
+  /**
+   * Restart Chrome, so extensions waiting for it install: every tab's page closes (a watched tab
+   * reopens at once, the rest when next used). Resolves once Chrome is back and has synced its extensions.
+   */
+  async restartBrowser(): Promise<void> {
+    this.opening++;
+    try {
+      await this.launching?.catch(() => {});
+      const old = this.browser;
+      if (old) {
+        this.browser = undefined;
+        // A launch (a watched tab reopening) waits for this Chrome to be gone: one profile, one Chrome.
+        this.stopping = (async () => {
+          await old.chrome.close({ cdp: old.cdp });
+          old.cdp.close();
+        })().finally(() => {
+          this.stopping = undefined;
+        });
+        // Suspend every tab first, so each keeps its URL and reloads it in the new Chrome (as Chrome
+        // closes it reports each page destroyed, which would otherwise close the tabs for good).
+        for (const entry of this.entries.values()) {
+          this.dropTabs(openTabs(entry), "suspend");
+          this.scheduleSave(entry);
+        }
+        await this.stopping;
+      }
+      await this.ensureBrowser();
+      await this.extensionHost?.synced();
+    } finally {
+      this.opening--;
+    }
+  }
+
+  private extensionsOrThrow(): ExtensionHost {
+    if (!this.extensionHost) throw new HarnessError(404, "This service's browser doesn't support extensions");
+    return this.extensionHost;
+  }
+
+  /**
+   * Chrome's tab target holding page `pageTargetId` (Extensions.triggerAction wants the tab, not the
+   * page). CDP doesn't say which tab a page is in, so attach to tabs, likeliest (same URL) first,
+   * and auto-attach to each one's page until it's ours.
+   */
+  private async tabTargetOf(cdp: CdpClient, pageTargetId: string, url: string): Promise<string | null> {
+    const { targetInfos = [] } = await cdp.send("Target.getTargets", { filter: [{ type: "tab" }] });
+    const tabs = (targetInfos as { targetId: string; url: string }[]).sort((a, b) => Number(b.url === url) - Number(a.url === url));
+    for (const t of tabs) {
+      let sessionId: string | undefined;
+      let child: (id: string | null) => void = () => {};
+      const found = new Promise<string | null>((r) => (child = r));
+      const off = cdp.on("Target.attachedToTarget", (p, parent) => {
+        if (parent && parent === sessionId) child(p.targetInfo?.targetId ?? null);
+      });
+      try {
+        ({ sessionId } = await cdp.send("Target.attachToTarget", { targetId: t.targetId, flatten: true }));
+        await cdp.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
+        if ((await Promise.race([found, Bun.sleep(1000).then(() => null)])) === pageTargetId) return t.targetId;
+      } catch {
+        // A tab that closed meanwhile: try the next.
+      } finally {
+        off();
+        if (sessionId) await cdp.send("Target.detachFromTarget", { sessionId }).catch(() => {});
+      }
+    }
+    return null;
+  }
+
+  // -------------------------------------------------------------------------
   // Browser lifecycle
   // -------------------------------------------------------------------------
 
@@ -947,6 +1114,7 @@ export class BrowserManager implements BrowserService {
       headless,
       width: BROWSER_DESKTOP.width,
       height: BROWSER_DESKTOP.height,
+      extraArgs: this.extensionHost ? ExtensionHost.chromeArgs : undefined,
     });
     let cdp: CdpClient;
     try {
@@ -1005,6 +1173,8 @@ export class BrowserManager implements BrowserService {
     });
 
     await cdp.send("Target.setDiscoverTargets", { discover: true });
+    // Before any tab opens, so unpacked extensions' content scripts run on the first page.
+    await this.extensionHost?.launched(cdp);
     this.browser = browser;
     if (!this.sweeper) {
       this.sweeper = setInterval(() => void this.sweep(), IDLE_SWEEP_MS);
@@ -1147,7 +1317,7 @@ export class BrowserManager implements BrowserService {
    * Attach to a page target (one we created, or a popup a tab opened) and make it tab `id`.
    * `initial`: a suspended tab being reopened, whose URL and title stand until its page reports its own.
    */
-  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab, size?: BrowserSize): Promise<Tab> {
+  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab, size?: BrowserSize, popup = false): Promise<Tab> {
     const { cdp } = browser;
     let sessionId: string;
     try {
@@ -1185,8 +1355,11 @@ export class BrowserManager implements BrowserService {
       gone,
       markGone,
       offs: [],
+      popup,
     };
     this.attachListeners(tab);
+    // A popup grows to fit its content after it loads.
+    if (popup) tab.offs.push(session.on("Page.frameResized", () => void this.applySize(tab).catch(() => {})));
     try {
       await Promise.all([
         session.send("Page.enable"),
@@ -1453,12 +1626,26 @@ export class BrowserManager implements BrowserService {
    * skipped, so an unchanged size restarts nothing (a Responsive viewer resizes on every layout pass).
    */
   private async applySize(tab: Tab): Promise<void> {
+    if (tab.popup) return this.measurePopup(tab);
     const { device, width, height } = tab.size;
     const switched = tab.device !== device;
     if (!switched && tab.viewport.width === width && tab.viewport.height === height) return;
     tab.viewport = { width, height };
     tab.device = device;
     await Promise.all([this.applyViewport(tab), switched ? this.applyDevice(tab) : undefined]);
+    await this.syncScreencast(tab);
+  }
+
+  /** A popup's size is whatever Chrome gave it: report that (any size asked for doesn't apply). */
+  private async measurePopup(tab: Tab): Promise<void> {
+    const r = await tab.session.send("Runtime.evaluate", { expression: "[innerWidth, innerHeight]", returnByValue: true }).catch(() => null);
+    const [width, height] = (r?.result?.value as [number, number] | undefined) ?? [0, 0];
+    if (!(width > 0 && height > 0)) return;
+    const changed = width !== tab.viewport.width || height !== tab.viewport.height;
+    tab.viewport = { width, height };
+    tab.size = { device: "desktop", width, height, responsive: false };
+    if (!changed) return;
+    this.emitStates(tab.entry);
     await this.syncScreencast(tab);
   }
 

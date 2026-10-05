@@ -30,6 +30,28 @@ struct SettingsPromptsSection: View {
     }
 }
 
+/// Browser: the extensions every ticket's tabs share (opens ExtensionSettingsScreen).
+struct SettingsExtensionsSection: View {
+    @Environment(Router.self) private var router
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        Section {
+            SettingsButtonRow(chevron: true, action: { router.push(.extensions) }) {
+                HStack(spacing: 8) {
+                    Icon("puzzle", size: 15).foregroundStyle(c.text3)
+                    Text("Extensions").font(.scaled(size: 16)).foregroundStyle(c.text)
+                }
+            } subtitle: {
+                Text("Chrome extensions for the browser every ticket's tabs share.").font(.scaled(size: 13)).foregroundStyle(c.text3)
+            } trailing: { EmptyView() }
+            .accessibilityIdentifier("settings-extensions")
+        } header: {
+            Text("Browser")
+        }
+    }
+}
+
 /// Watchers: add, enable/pause, and a menu per watcher (Run now, Edit…, Delete).
 struct SettingsWatchersSection: View {
     @Environment(BoardStore.self) private var store

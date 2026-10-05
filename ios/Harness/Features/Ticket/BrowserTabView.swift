@@ -45,6 +45,11 @@ struct BrowserTabView: View {
     @State private var sizeApplied = false
     /// The size row is open (remembered across launches; starts closed).
     @AppStorage("browserSizeRowOpen") private var sizeRowOpen = false
+    @Environment(Router.self) private var router
+    /// The Extensions button's dialog and what it lists (loaded as it opens).
+    @State private var showingExtensions = false
+    @State private var extensionChoices: [BrowserExtension] = []
+    @State private var loadingExtensions = false
 
     private enum SizeField: Hashable { case width, height }
 
@@ -153,6 +158,13 @@ struct BrowserTabView: View {
                     sizeRowOpen.toggle()
                 }
             }
+            // A pinned view shows one tab, so it can't follow a popup into a tab of its own.
+            if pinnedTab == nil {
+                BrowserBarButton(icon: "puzzle", label: "Extensions", busy: loadingExtensions, disabled: model.empty || loadingExtensions) {
+                    Task { await openExtensions() }
+                }
+                .accessibilityIdentifier("browser-extensions")
+            }
             BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
                              disabled: model.frame == nil || capturing || openAnnotator == nil || sink == nil) {
                 annotate()
@@ -161,6 +173,15 @@ struct BrowserTabView: View {
         .padding(6)
         .background(c.bgElev)
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
+        .confirmationDialog("Extensions", isPresented: $showingExtensions, titleVisibility: .visible) {
+            ForEach(extensionChoices) { ext in
+                if ext.hasAction { Button(ext.name) { runExtension(ext) } }
+                if let options = ext.optionsUrl { Button("\(ext.name) options") { model.newTab(url: options) } }
+            }
+            Button("Manage extensions…") { router.push(.extensions) }
+        } message: {
+            Text(extensionChoices.isEmpty ? "No extensions with a toolbar button." : "Run an extension's toolbar button on this page.")
+        }
     }
 
     // MARK: Size
@@ -371,6 +392,33 @@ struct BrowserTabView: View {
             let name = "\(Annotations.browserShotName(url: shot.url, title: shot.title)).png"
             let lookup = AnnotationElementLookup(sessionId: id, screenshot: shot)
             openAnnotator?(sink.request(.upload(data: data, name: name, mimeType: "image/png"), image: image, page: shot.page, lookup: lookup))
+        }
+    }
+
+    // MARK: Extensions
+
+    /// Load the extensions whose toolbar button or options page can open, then offer them.
+    private func openExtensions() async {
+        guard let client else { return }
+        loadingExtensions = true
+        defer { loadingExtensions = false }
+        guard let list = await actions.run(nil, { try await client.listBrowserExtensions() }) else { return }
+        extensionChoices = Extensions.runnable(list)
+        showingExtensions = true
+    }
+
+    /// Run an extension's toolbar button on the shown page; its popup opens as a tab, which this view switches to.
+    private func runExtension(_ ext: BrowserExtension) {
+        guard let client else { return }
+        let id = sessionId
+        let tab = model.selection.shown
+        Task {
+            guard let res = await actions.run(nil, { try await client.browserExtensionAction(id, id: ext.id, tabId: tab) }) else { return }
+            if let popup = res.tab {
+                model.selectTab(popup)
+            } else {
+                toasts.show("\(ext.name) ran on this page.", kind: .info)
+            }
         }
     }
 

@@ -24,6 +24,8 @@ public enum Route: Hashable, Sendable {
     case driver(id: String)
     /// harness://prompts
     case prompts
+    /// harness://extensions: the browser's extensions
+    case extensions
     /// harness://prompt/<id>
     case prompt(id: String)
 }
@@ -114,6 +116,7 @@ public enum DeepLink: Equatable, Sendable {
             guard let id = tail.first, !id.isEmpty else { return nil }
             return .push(.driver(id: id))
         case "prompts": return .push(.prompts)
+        case "extensions": return .push(.extensions)
         case "prompt":
             guard let id = tail.first, !id.isEmpty else { return nil }
             return .push(.prompt(id: id))
