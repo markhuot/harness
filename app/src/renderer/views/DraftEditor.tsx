@@ -130,10 +130,6 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   const local = session?.local;
   const project = local ? state.projects[local.projectId] : state.projects[composeProject];
 
-  // The store's copy (another device's edit, or our own save coming back) when nothing is unsent.
-  useEffect(() => {
-    if (session && ticket) session.receive(ticket);
-  }, [session, ticket]);
   // Before the first save the key is a prediction, which moves with the project.
   const predicted = !session?.saved && project ? predictedTicketKey(project, (k) => !!state.tickets[k]) : null;
   useEffect(() => {

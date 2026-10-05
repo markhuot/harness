@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Typing in New session no longer gets letters put back after the cursor. On iPhone, the end of
+  a predicted word could show up after the cursor while you typed, because a saved copy of the
+  draft came back from the Mac and replaced what was in the box. New session now keeps exactly
+  what you type, on the Mac and on iPhone and iPad.
+
 ## [app-20261005.0103](https://github.com/markhuot/harness/releases/tag/app-20261005.0103) - 2026-10-05
 
 ### Added

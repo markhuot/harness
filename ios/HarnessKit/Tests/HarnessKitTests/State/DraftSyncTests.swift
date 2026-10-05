@@ -253,42 +253,6 @@ struct DraftSyncTests {
         #expect(f.calls[2].update?.spec == "Fix it there")
     }
 
-    @Test func anotherDevicesChangeAppliesOnlyWhileNothingIsUnsentAndNeverAnOlderCopy() async throws {
-        let f = FakeDraftAPI()
-        let h = Harness(f)
-        h.edit(UpdateTicketBody(spec: "Fix it"))
-        await DS.drain()
-        var theirs = try #require(f.server)
-        theirs.spec = "Their words"
-        theirs.updatedAt = 100
-        h.edit(UpdateTicketBody(spec: "Mine"))
-        #expect(h.sync.incoming(theirs) == false)
-        #expect(h.sync.local.spec == "Mine")
-        await h.sync.flush()
-        var older = theirs
-        older.updatedAt = 1
-        #expect(h.sync.incoming(older) == false)
-        #expect(h.sync.incoming(theirs) == true)
-        #expect(h.sync.local.spec == "Their words")
-        #expect(h.changes.last?.spec == "Their words")
-    }
-
-    @Test func incomingIsIgnoredBeforeTheFirstSaveAndAfterClosing() async {
-        let f = FakeDraftAPI()
-        let h = Harness(f)
-        var t = h.sync.local
-        t.spec = "Elsewhere"
-        t.updatedAt = 100
-        #expect(h.sync.incoming(t) == false)
-        h.edit(UpdateTicketBody(spec: "Fix it"))
-        await DS.drain()
-        h.sync.dispose()
-        var later = f.server!
-        later.updatedAt = 100
-        #expect(h.sync.incoming(later) == false)
-        #expect(h.changes.isEmpty)
-    }
-
     @Test func submitSavesWhatsPendingFirstThenLaunchesTheSavedKey() async throws {
         let f = FakeDraftAPI()
         let h = Harness(f)

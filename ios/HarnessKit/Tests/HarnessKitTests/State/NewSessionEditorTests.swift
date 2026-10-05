@@ -4,7 +4,7 @@ import Testing
 import struct HarnessKit.Attachment
 
 // New session's editor decisions: when it starts, the predicted key,
-// what another device's change means, the project switch, the submit gate and Cancel. A fake
+// what a launch or discard elsewhere means, the project switch, the submit gate and Cancel. A fake
 // service answers the DraftSync requests; ManualTimers stands in for the debounce.
 
 @MainActor
@@ -199,7 +199,8 @@ struct NewSessionEditorTests {
         #expect(r.editor.storeChanged(r.store.state) == .launched(key: "API-12"))
     }
 
-    @Test func anotherDevicesEditIsAdoptedOnlyWithoutUnsentEdits() async {
+    @Test func theStoresCopyNeverReplacesWhatTheUserTyped() async {
+        // Unsent edits.
         let r = Rig(reopen: "WEB-2")
         r.store.state.tickets["d1"] = Self.draft()
         r.editor.begin(projectId: nil, candidates: [])
@@ -208,16 +209,45 @@ struct NewSessionEditorTests {
         #expect(r.editor.storeChanged(r.store.state) == .none)
         #expect(r.editor.local?.spec == "Mine")
 
+        // Nothing unsent, and the store's copy is newer than anything the editor saved.
         let clean = Rig(reopen: "WEB-2")
         clean.store.state.tickets["d1"] = Self.draft()
         clean.editor.begin(projectId: nil, candidates: [])
-        clean.store.state.tickets["d1"] = Self.draft(spec: "Theirs", updatedAt: 6)
-        #expect(clean.editor.storeChanged(clean.store.state) == .adopted)
-        #expect(clean.editor.local?.spec == "Theirs")
-        // An older copy (a stale snapshot) doesn't win.
-        clean.store.state.tickets["d1"] = Self.draft(spec: "Older", updatedAt: 4)
+        var theirs = Self.draft(spec: "Theirs", updatedAt: 60)
+        theirs.promptAttachments = [Attachment(id: "att_x", path: "/Users/me/x.png", name: "x.png", kind: .image, mimeType: "image/png")]
+        clean.store.state.tickets["d1"] = theirs
         #expect(clean.editor.storeChanged(clean.store.state) == .none)
-        #expect(clean.editor.local?.spec == "Theirs")
+        #expect(clean.editor.local?.spec == "Saved")
+        #expect((clean.editor.local?.promptAttachments ?? []).isEmpty)
+        // The user's next edit is what the service gets.
+        clean.api.server = theirs
+        clean.editor.setSpec("Saved, and more")
+        await clean.wait()
+        #expect(clean.api.patches.last?.spec == "Saved, and more")
+    }
+
+    /// iOS's inline prediction can hand the field a word's predicted ending ("hello") that the next
+    /// keystroke takes back ("hel"). Both go out as saves; the first save's copy reaching the store
+    /// after the second save settled must not put the ending back after the caret.
+    @Test func aLateEchoOfAnEarlierSaveDoesntRewriteThePrompt() async {
+        let r = Rig()
+        r.editor.begin(projectId: "p1", candidates: [])
+        r.editor.setSpec("hel")
+        await Self.drain()
+        r.editor.setSpec("hello")
+        await r.wait()
+        let predicted = r.api.server!
+        #expect(predicted.spec == "hello")
+        r.editor.setSpec("hel")
+        await r.wait()
+        #expect(r.api.server?.spec == "hel")
+        #expect(r.editor.sync?.clean == true)
+        // The earlier save comes back late, stamped newer (a server clock, a refetch).
+        var late = predicted
+        late.updatedAt = 1_000
+        r.store.state.tickets[late.id] = late
+        #expect(r.editor.storeChanged(r.store.state) == .none)
+        #expect(r.editor.local?.spec == "hel")
     }
 
     @Test func ourOwnSaveComingBackThroughTheStoreChangesNothing() async {
@@ -424,18 +454,6 @@ extension NewSessionEditorTests {
         #expect(r.editor.cancelStep == .discardAndDismiss)
         try await r.editor.save().value
         #expect(r.api.ops.last == "remove WEB-4")
-    }
-
-    @Test func anotherDevicesAttachmentsAreAdopted() async {
-        let r = Rig(reopen: "WEB-2")
-        var d = Self.draft()
-        r.store.state.tickets[d.id] = d
-        #expect(r.editor.begin(projectId: nil, candidates: []) == .started)
-        d.promptAttachments = [Attachment(id: "att_x", path: "/Users/me/x.png", name: "x.png", kind: .image, mimeType: "image/png")]
-        d.updatedAt = 50
-        r.store.state.tickets[d.id] = d
-        #expect(r.editor.storeChanged(r.store.state) == .adopted)
-        #expect(r.editor.local?.promptAttachments?.map(\.path) == ["/Users/me/x.png"])
     }
 
     static func note(_ message: String = "here") -> AttachmentAnnotation {

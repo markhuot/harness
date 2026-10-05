@@ -409,8 +409,11 @@ on its dependencies), keeping its place in the column. Discarding is `DELETE /ti
 
 The editors save lazily. Nothing is sent until the draft stops being empty (`draftIsEmpty`: no
 spec and every setting inherited); then one `POST /tickets`, and after that a debounced PATCH
-of the changed fields (`draftPatch`). Incoming updates apply only when the editor has no unsent
-edits, so two devices editing one draft is last write wins. The draft helpers
+of the changed fields (`draftPatch`). An open editor never takes the service's copy of the draft:
+what the user typed is final, so a late echo of an earlier save (or another device's edit) can't
+rewrite the prompt under the caret. Two devices editing one draft is last write wins, and only
+the fields each one changed are sent. The store's copy still tells an open editor when the draft
+was launched or discarded elsewhere. The draft helpers
 (`shared/src/state/drafts.ts`) are the desktop's, and the iOS app's ports are fixture-checked
 against them.
 

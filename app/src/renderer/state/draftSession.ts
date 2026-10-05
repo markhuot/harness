@@ -6,8 +6,9 @@
 // The rules (DESIGN.md "Drafts"):
 //   • nothing is sent while the draft is empty (draftIsEmpty); the first edit that isn't creates it;
 //   • after that, edits go out as debounced PATCHes of what changed (draftPatch);
-//   • local edits win while they're unsent; the service's copy (another device's edit) is taken only
-//     when nothing is waiting to go out, so the last write wins;
+//   • the editor's state is the user's: the store's copy of the draft (a socket event, our own save
+//     echoed back, another device's edit) never replaces it, so a late echo can't rewrite the prompt
+//     under the caret, and the next save sends what the user has;
 //   • one request at a time: edits made while one is out are sent after it, rebased on its answer.
 
 import type { CreateTicketBody, SubmitTicketBody, Ticket, UpdateTicketBody } from "@harness/shared";
@@ -131,18 +132,6 @@ export class DraftSession {
   setPredictedKey(key: string) {
     if (this.saved || this.local.key === key) return;
     this.local = { ...this.local, key };
-    this.changed();
-  }
-
-  /**
-   * The store's copy of the draft changed (a socket event, another device's edit). Taken only while
-   * nothing is waiting to go out; otherwise the editor's edits win when they're sent.
-   */
-  receive(t: Ticket) {
-    if (!this.saved || t.id !== this.saved.id || t === this.saved) return;
-    if (this.timer || this.inflight || draftPatch(this.saved, this.local)) return;
-    this.saved = t;
-    this.local = t;
     this.changed();
   }
 
