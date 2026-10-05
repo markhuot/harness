@@ -239,6 +239,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | Create with `draft: true` | status `planning`, `draft` set, no run (see "Drafts") |
 | `POST /submit {start}` on a draft | `draft` cleared, then exactly what a create with that `start` does |
 | Human message in planning | a plan run that's going takes it in (see "Steering"); otherwise enqueue plan run with the message |
+| `POST /start` from planning with a dependency not done | queued, not started: `autoStart` on, status "Waiting on A, B", the ticket stays in planning until the scheduler starts it (a second `/start` changes nothing). A move to in_progress still starts it now |
 | `POST /start` (or a move to in_progress) | from planning, the current spec revision becomes the **approved baseline** (`specBaselineRevision`, status "Spec revision N approved as the baseline"); status `in_progress`; prepare workdir (a worktree when `ticket.useWorktree ?? project.useWorktrees` and the path is a git repo, else the project path); enqueue work run (`run.work_start`): "The spec is approved." + the spec |
 | Human message in in_progress | a work/conductor run that's going takes it in (see "Steering"); otherwise enqueue work run with the message |
 | Agent calls `block(question)` (in_progress, blocked or review) | status `blocked`, `blockedReason` set, a `blocked` Activity entry (`meta.question`). From blocked it replaces the question; from review both reviews reset to pending (queued agent reviews are dropped). Refused in planning and done |
