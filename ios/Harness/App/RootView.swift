@@ -21,6 +21,7 @@ struct RootView: View {
     var body: some View {
         content
             .sceneChrome(router)
+            .modifier(ConcentricScreenReader())
             // Links from outside the app land in a main window rather than a ticket window.
             .handlesExternalEvents(preferring: ["\(DeepLink.scheme)://"], allowing: ["\(DeepLink.scheme)://"])
             .background(SceneReader { s in

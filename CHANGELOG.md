@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone, the board's bottom bar and a ticket's message composer sit lower, with the same gap at
+  the bottom as at the sides, so their rounded ends follow the phone's corners the way Calendar's
+  bar does. While you type, they still rest just above the keyboard.
+
 ## [app-20261005.0236](https://github.com/markhuot/harness/releases/tag/app-20261005.0236) - 2026-10-05
 
 ### Changed

@@ -63,9 +63,11 @@ struct TicketDetailComposer: View {
                 sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
             }
         }
-        .padding(.horizontal, 12)
         .padding(.top, 6)
-        .padding(.bottom, 8)
+        // At rest, concentric with the phone's corners (the one-line field is 44 tall, its ends
+        // round at 22); over the keyboard while writing.
+        .concentricBottomPadding(barHeight: 44, raised: focused, horizontal: 12, bottom: 8)
+        .animation(.snappy, value: focused)
     }
 
     /// Prominent accent glass while writing (focused, or holding a message), plain glass with a dimmed
