@@ -3,6 +3,13 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  container: browser / inline-size;
+}
+/* A narrow pane keeps the URL and size controls; the Live label goes first. */
+@container browser (max-width: 600px) {
+  .browser-live {
+    display: none;
+  }
 }
 
 /* The session's tabs, shown once it has more than one. Chips shrink to share the width (like a
@@ -152,6 +159,63 @@
 }
 .browser-url:focus-within .browser-title {
   display: none;
+}
+
+/* Desktop | Mobile, Responsive and width × height for the shown tab. */
+.browser-size-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.browser-device button {
+  display: grid;
+  place-items: center;
+  padding: 3px 7px;
+}
+/* Lit while this pane drives the tab's size; dimmed-lit while another window does. */
+.browser-responsive.owned {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.browser-responsive.following {
+  background: var(--bg-active);
+  color: var(--accent);
+  opacity: 0.6;
+}
+.browser-size {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.browser-size:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+.browser-size-input {
+  width: 5ch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-size: 11.5px;
+  color: var(--text);
+  text-align: center;
+  user-select: text;
+}
+.browser-size-x {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 0 2px;
+}
+.browser-zoom {
+  flex: none;
+  font-size: 11px;
 }
 
 .browser-live {

@@ -1,0 +1,69 @@
+import { describe, expect, test } from "bun:test";
+import type { BrowserSize } from "@harness/shared";
+import { drivesSize, responsiveInput, responsiveLook, sideInput, wheelAction } from "./browserSize";
+
+const size = (responsive: boolean): BrowserSize => ({ device: "desktop", width: 1280, height: 800, responsive });
+
+describe("drivesSize", () => {
+  test("only the owner of a responsive tab sends its stage size", () => {
+    expect(drivesSize({ size: size(true), sizeOwner: true })).toBe(true);
+    expect(drivesSize({ size: size(true), sizeOwner: false })).toBe(false);
+    expect(drivesSize({ size: size(true) })).toBe(false);
+  });
+
+  test("a fixed-size tab is never resized by a pane, even one flagged owner", () => {
+    expect(drivesSize({ size: size(false), sizeOwner: true })).toBe(false);
+  });
+
+  test("an older service (no size) is driven by every pane; no state yet drives nothing", () => {
+    expect(drivesSize({})).toBe(true);
+    expect(drivesSize(null)).toBe(false);
+  });
+});
+
+describe("responsive switch", () => {
+  test("looks off, lit for the owner, dimmed-lit for everyone else", () => {
+    expect(responsiveLook(null)).toBe("off");
+    expect(responsiveLook({})).toBe("off");
+    expect(responsiveLook({ size: size(false), sizeOwner: true })).toBe("off");
+    expect(responsiveLook({ size: size(true), sizeOwner: true })).toBe("owned");
+    expect(responsiveLook({ size: size(true), sizeOwner: false })).toBe("following");
+  });
+
+  test("the owner switches it off; anyone else switches it on at their stage size (whole pixels)", () => {
+    expect(responsiveInput("owned", { width: 900, height: 600 })).toEqual({ type: "responsive", on: false });
+    expect(responsiveInput("off", { width: 900.4, height: 599.6 })).toEqual({ type: "responsive", on: true, width: 900, height: 600 });
+    expect(responsiveInput("following", { width: 640, height: 480 })).toEqual({ type: "responsive", on: true, width: 640, height: 480 });
+  });
+});
+
+describe("sideInput", () => {
+  test("rounds and clamps to 100–4096", () => {
+    expect(sideInput(" 1024 ", 1)).toBe(1024);
+    expect(sideInput("393.6", 1)).toBe(394);
+    expect(sideInput("12", 1)).toBe(100);
+    expect(sideInput("99999", 1)).toBe(4096);
+    expect(sideInput("-5", 1)).toBe(100);
+  });
+
+  test("text that isn't a number keeps the current side", () => {
+    expect(sideInput("", 800)).toBe(800);
+    expect(sideInput("wide", 800)).toBe(800);
+  });
+});
+
+describe("wheelAction", () => {
+  test("a pinch (ctrl wheel) zooms, in when spreading, out when pinching, zoomed or not", () => {
+    const spread = wheelAction({ ctrlKey: true, deltaX: 0, deltaY: -10 }, false);
+    const pinch = wheelAction({ ctrlKey: true, deltaX: 0, deltaY: 10 }, true);
+    expect(spread.kind).toBe("zoom");
+    expect(pinch.kind).toBe("zoom");
+    expect(spread.kind === "zoom" && spread.factor).toBeGreaterThan(1);
+    expect(pinch.kind === "zoom" && pinch.factor).toBeLessThan(1);
+  });
+
+  test("a plain scroll pans the frame against the delta while zoomed, and goes to the page at 1×", () => {
+    expect(wheelAction({ ctrlKey: false, deltaX: 4, deltaY: 20 }, true)).toEqual({ kind: "pan", dx: -4, dy: -20 });
+    expect(wheelAction({ ctrlKey: false, deltaX: 4, deltaY: 20 }, false)).toEqual({ kind: "page" });
+  });
+});
