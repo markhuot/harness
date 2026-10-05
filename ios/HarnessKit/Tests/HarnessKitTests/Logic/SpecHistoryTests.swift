@@ -4,56 +4,81 @@ import Testing
 
 @Suite("Spec history")
 struct SpecHistoryTests {
-    @Test func followsTheNewestUntilTheUserStepsBack() {
+    @Test func followsTheNewestUntilTheUserScrubsBack() {
         var s = SpecScrubber()
         #expect(s.following)
         #expect(s.shown(latest: 3) == 3)
         // A revision landing while following shows at once.
         #expect(s.shown(latest: 4) == 4)
-        s.step(-1, latest: 4)
+        s.show(3, latest: 4)
         #expect(!s.following)
         #expect(s.shown(latest: 4) == 3)
         // One landing while the user reads rev 3 doesn't move them.
         #expect(s.shown(latest: 5) == 3)
     }
 
-    @Test func steppingOrScrubbingToTheNewestFollowsAgain() {
+    @Test func scrubbingToTheNewestFollowsAgain() {
         var s = SpecScrubber()
         s.show(2, latest: 5)
         #expect(s.pinned == 2)
-        s.step(1, latest: 5)
-        s.step(1, latest: 5)
-        #expect(s.pinned == 4)
-        s.step(1, latest: 5)
+        s.show(5, latest: 5)
         #expect(s.following)
         #expect(s.shown(latest: 6) == 6)
-        s.show(3, latest: 6)
-        s.show(6, latest: 6)
-        #expect(s.following)
     }
 
     @Test func clampsToTheRevisionsThatExist() {
         var s = SpecScrubber()
         s.show(0, latest: 4)
         #expect(s.pinned == 1)
-        #expect(!s.canStep(-1, latest: 4))
-        #expect(s.canStep(1, latest: 4))
-        s.step(-1, latest: 4)
-        #expect(s.shown(latest: 4) == 1)
         s.show(99, latest: 4)
         #expect(s.following)
-        #expect(!s.canStep(1, latest: 4))
         // A pin past a newest that shrank (another service, a reset) shows the newest.
         #expect(SpecScrubber(pinned: 9).shown(latest: 3) == 3)
-        // A single revision has nowhere to go, and a bogus latest counts as one.
-        #expect(!SpecScrubber().canStep(-1, latest: 1))
+        // A bogus latest counts as one.
         #expect(SpecScrubber().shown(latest: 0) == 1)
     }
 
-    @Test func followDropsThePin() {
-        var s = SpecScrubber(pinned: 2)
-        s.follow()
-        #expect(s.following)
+    @Test func eachRevisionOwnsAnEqualSliceOfTheTimeline() {
+        #expect(SpecHistory.revisionAt(0, width: 100, latest: 4) == 1)
+        #expect(SpecHistory.revisionAt(24.9, width: 100, latest: 4) == 1)
+        #expect(SpecHistory.revisionAt(25, width: 100, latest: 4) == 2)
+        #expect(SpecHistory.revisionAt(74.9, width: 100, latest: 4) == 3)
+        #expect(SpecHistory.revisionAt(75, width: 100, latest: 4) == 4)
+        #expect(SpecHistory.revisionAt(49, width: 100, latest: 2) == 1)
+        #expect(SpecHistory.revisionAt(50, width: 100, latest: 2) == 2)
+    }
+
+    @Test func timelineClampsOffEitherEnd() {
+        #expect(SpecHistory.revisionAt(-30, width: 100, latest: 4) == 1)
+        #expect(SpecHistory.revisionAt(100, width: 100, latest: 4) == 4)
+        #expect(SpecHistory.revisionAt(400, width: 100, latest: 4) == 4)
+        // More revisions than points still land on one.
+        #expect(SpecHistory.revisionAt(60, width: 120, latest: 500) == 251)
+        #expect(SpecHistory.revisionAt(119.99, width: 120, latest: 500) == 500)
+        // One revision, or a strip that hasn't laid out yet.
+        #expect(SpecHistory.revisionAt(50, width: 100, latest: 1) == 1)
+        #expect(SpecHistory.revisionAt(50, width: 0, latest: 6) == 6)
+        #expect(SpecHistory.revisionAt(50, width: 100, latest: 0) == 1)
+    }
+
+    @Test func timelineMarksOnlyTheShownRevisionAndTheApprovedPlan() {
+        #expect((1...5).map { SpecHistory.segmentTone(rev: $0, shown: 3, baseline: nil) } == [.before, .before, .shown, .after, .after])
+        #expect(SpecHistory.segmentTone(rev: 2, shown: 4, baseline: 2) == .baseline)
+        #expect(SpecHistory.segmentTone(rev: 5, shown: 4, baseline: 5) == .baseline)
+        #expect(SpecHistory.segmentTone(rev: 3, shown: 3, baseline: 3) == .shown)
+    }
+
+    @Test func approvedPlanComesFromTheTicketElseTheRevisionList() {
+        func ticket(_ baseline: Patch<Int>) -> Ticket {
+            Ticket(id: "t1", key: "GREET-1", projectId: "p1", title: "Hi", spec: "", specBaselineRevision: baseline, status: .inProgress,
+                   sessionId: "s1", driver: "dummy", createdAt: 1, updatedAt: 1)
+        }
+        var s = BoardState()
+        let t = ticket(.null)
+        #expect(SpecHistory.baseline(s, ticket: t) == nil)
+        s.specRevisions["t1"] = [SpecRevisionInfo(rev: 1, author: .agent, note: "", createdAt: 1), SpecRevisionInfo(rev: 2, author: .human, note: "", approvedBaseline: true, createdAt: 2)]
+        #expect(SpecHistory.baseline(s, ticket: t) == 2)
+        #expect(SpecHistory.baseline(s, ticket: ticket(.value(4))) == 4)
     }
 
     @Test func showChangesComparesWithThePreviousRevision() {
@@ -65,15 +90,16 @@ struct SpecHistoryTests {
         let info = SpecRevisionInfo(rev: 7, author: .agent, note: "  Status: button color fixed ", approvedBaseline: true, createdAt: 1_000)
         let l = SpecHistory.line(rev: 7, latest: 7, info: info, now: 1_000 + 3 * 60_000)
         #expect(l.title == "Rev 7 of 7")
-        #expect(l.meta == "Agent · 3m ago")
+        #expect(l.meta == "3m ago")
         #expect(l.note == "Status: button color fixed")
         #expect(l.baseline)
-        #expect(SpecHistory.accessibilityLabel(l) == "Rev 7 of 7, Agent · 3m ago, Approved plan, Status: button color fixed")
+        #expect(SpecHistory.accessibilityLabel(l) == "Rev 7 of 7, 3m ago, Approved plan, Status: button color fixed")
         let bare = SpecHistory.line(rev: 2, latest: 5, info: nil, now: 0)
         #expect(bare == SpecHistoryLine(title: "Rev 2 of 5", meta: "", note: "", baseline: false))
-        // A revision event from an older service has no time.
+        // A revision event from an older service has no time, and the author is never named.
         let human = SpecHistory.line(rev: 3, latest: 3, info: SpecRevisionInfo(rev: 3, author: .human, note: "", createdAt: 0), now: 5)
-        #expect(human.meta == "You")
+        #expect(human.meta == "")
+        #expect(SpecHistory.accessibilityLabel(human) == "Rev 3 of 3")
     }
 
     @Test func revisionListIsRefetchedWhenItLacksTheNewest() {
