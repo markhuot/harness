@@ -855,14 +855,31 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
   });
 
-  test("resume_work is refused on a ticket that isn't in review", async () => {
+  test("resume_work is refused on a ticket that isn't in review or done", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     await h.orch.sendMessage(t.key, "Postgres /resume");
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which database?" });
-    expect(lastText(h, t.sessionId)).toContain(`Refused: ${t.key} is blocked, not in review`);
+    expect(lastText(h, t.sessionId)).toContain(`Refused: ${t.key} is blocked, not in review or done`);
+  });
+
+  test("in done: resume_work re-opens the ticket while the chat works, then it ends like a work run", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    await h.orch.sendMessage(t.key, "check Miami again /resume /hold");
+    await Bun.sleep(5);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "in_progress", agentReview: "pending", humanReview: "pending" });
+    expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "reopened", author: "agent", body: "changing it", meta: { from: "done", to: "in_progress" } });
+    h.driver.release();
+    await h.orch.idle();
+    // Left in progress, the chat auto-submits, and the agent review judges the new round.
+    expect(runKinds(h, t).slice(-2)).toEqual(["chat:succeeded", "review:succeeded"]);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
   });
 
   test("in review: block asks the human and starts the reviews over", async () => {
@@ -975,7 +992,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     await h.orch.sendMessage(d.key, "one more thing /submit");
     await h.orch.idle();
     expect(h.orch.ticketDetail(d.key).ticket.status).toBe("done");
-    expect(lastText(h, d.sessionId)).toContain(`Refused: ${d.key} is done: the human re-opens it`);
+    expect(lastText(h, d.sessionId)).toContain(`Refused: ${d.key} is done: call resume_work first to re-open it`);
   });
 
   test("in done: the ticket stays done; an older app's message with move re-opens it", async () => {
@@ -1755,6 +1772,38 @@ describe("worktrees", () => {
     expect(existsSync(join(cur.workdir!, ".git"))).toBe(true);
     expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.cwd).toBe(cur.workdir!);
     expect(new TextDecoder().decode(git("branch", "--list", "harness/*").stdout)).toContain("harness/repo-1");
+  });
+
+  test("a chat's resume_work on a done ticket recreates its removed worktree and names it", async () => {
+    const h = setup();
+    const repo = join(h.home, "repo");
+    mkdirSync(repo);
+    const git = (...args: string[]) => Bun.spawnSync(["git", ...args], { cwd: repo, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "init");
+    const p = h.orch.createProject({ path: repo, key: "repo" });
+    const t = await h.orch.createTicket({ projectId: p.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    const done = h.orch.ticketDetail(t.key).ticket;
+    git("worktree", "remove", "--force", done.workdir!);
+    git("branch", "-D", done.branch!);
+
+    const moved: string[] = [];
+    h.driver.script = async function* (req) {
+      if (req.kind !== "chat") return;
+      moved.push(await req.toolContext.ops.resumeWork(req.toolContext, "re-checking"));
+      yield { type: "text", text: "Checked." };
+    };
+    await h.orch.sendMessage(t.key, "check it again");
+    await h.orch.idle();
+    // The chat ran from the project checkout; the result points it at the recreated worktree.
+    expect(h.driver.calls.find((c) => c.kind === "chat")!.cwd).toBe(repo);
+    expect(moved).toEqual([done.workdir!]);
+    expect(existsSync(join(done.workdir!, ".git"))).toBe(true);
+    const cur = h.orch.ticketDetail(t.key).ticket;
+    expect(cur).toMatchObject({ status: "review", workdir: done.workdir, branch: "harness/repo-1" });
+    expect(h.store.sessions.get(t.sessionId)!.cwd).toBe(done.workdir!);
   });
 
   /** A git repo with one commit, as a project (worktree setting as given). */

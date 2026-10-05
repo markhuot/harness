@@ -220,14 +220,15 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).not.toContain("switch");
   });
 
-  test("a chat about a review ticket submits again only when the work changed; a done one stays done", () => {
+  test("a chat about a review ticket submits again only when the work changed; a done one re-opens only to work", () => {
     const review = sys("chat", ticket({ status: "review" }));
     expect(review).toContain("call `submit_for_review` { note, spec_is_up_to_date: true } again, which starts both reviews over");
     expect(review).not.toContain("`unblock` { note? } before");
     const done = sys("chat", ticket({ status: "done" }));
-    expect(done).toContain("re-open the ticket with its Re-open button");
-    expect(done).toContain("change files only when they ask for it outright");
+    expect(done).toContain("call `resume_work` { note? } first: it re-opens the ticket");
+    expect(done).toContain("A question answered or the work explained leaves the ticket done");
     expect(done).not.toContain("starts both reviews over");
+    expect(done).not.toContain("Re-open button");
   });
 
   test("a chat gets a work run's branch, board-changes and approval sections", () => {

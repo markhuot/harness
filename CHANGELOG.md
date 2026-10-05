@@ -11,6 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- When you message a done ticket and ask for more work (another check, a fix), the agent now
+  re-opens it: the ticket moves to In progress while it works and then to Review with its results,
+  as if you'd pressed Re-open. Before, the ticket stayed in Done, and the agent couldn't post its
+  results to the board. Questions about the finished work still leave the ticket in Done.
+
 - On iPhone and iPad, New session's Start session and Plan first buttons keep their icons when you
   tap them. Before, the tapped button briefly turned into its text label. Now both are just
   disabled while the session launches.
