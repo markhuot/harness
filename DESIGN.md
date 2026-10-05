@@ -1486,7 +1486,8 @@ target in its own headless window (so every tab paints and can screencast). Numb
   below.
 - **Sizes.** Each tab has its own `BrowserSize { device, width, height, responsive }`
   (`BrowserState.size`, `BrowserTab.size`), so an agent can keep one tab on desktop and another on
-  a phone. New tabs start as desktop at `BROWSER_DESKTOP` (1280×800); a popup opens in its opener's
+  a phone. New tabs start as desktop and Responsive at `BROWSER_DESKTOP` (1280×800), so a page
+  fills the pane of whoever has it open, as the browser always did; a popup opens in its opener's
   mode and size. `device` is the input mode: `"desktop"` is Chrome's own mouse and user agent;
   `"mobile"` sets `setDeviceMetricsOverride { mobile: true }` (so `<meta name="viewport">` applies,
   and a page without one lays out 980 wide and is shown shrunk, as on a phone), touch emulation
@@ -1506,13 +1507,16 @@ target in its own headless window (so every tab paints and can screencast). Numb
   - `resize { width, height }` is a viewer's stage size. It counts only from the owner while
     Responsive is on and is dropped otherwise, so opening a pane never resizes a tab (older apps
     keep sending it and just see the tab's size).
-  The owner gets `BrowserState.sizeOwner: true` (every other viewer `false`). Ownership ends, and
-  Responsive turns off with the size kept, when the owner unsubscribes, switches tabs or its socket
-  closes. Agents set sizes with `browser_open { device?, width?, height? }` (applied before the page
+  The owner gets `BrowserState.sizeOwner: true` (every other viewer `false`). A Responsive tab
+  without an owner (a new tab, or its owner unsubscribed, switched tabs or its socket closed) is
+  handed to the newest viewer watching it (`refresh`), which then sends its stage size; with nobody
+  watching, it keeps its size and stays Responsive for the next viewer. An agent that needs a size
+  that holds still sets one, which turns Responsive off. Agents set sizes with `browser_open { device?, width?, height? }` (applied before the page
   loads, so no reload) and `browser_resize`; either one ends a viewer's Responsive, like a button.
-  Nothing records who opened a tab: "resize your own tabs" is guidance in the run prompt. The
-  Mac pane's bar (`BrowserView`) and the phone's size row show the controls for the tab on
-  screen. Both draw the frame letterboxed, and a pinch (a trackpad pinch, `wheel` with `ctrlKey`,
+  Nothing records who opened a tab: "resize your own tabs" is guidance in the run prompt. Both
+  apps keep the controls for the tab on screen in a size row under the URL bar, shown or hidden by
+  a Size toggle beside Annotate (remembered); the bar itself has only back, forward, reload, the
+  URL and those icon buttons, and + sits at the pinned right end of the scrolling tab strip. Both draw the frame letterboxed, and a pinch (a trackpad pinch, `wheel` with `ctrlKey`,
   on the Mac) zooms the drawn frame 1–4× and pans it (`shared/src/state/browserZoom.ts`, ported to
   HarnessKit's `BrowserZoom`), so a desktop page shrunk onto a phone stays usable; the page never
   sees the pinch, and input maps through the zoomed frame.
@@ -1542,9 +1546,9 @@ target in its own headless window (so every tab paints and can screencast). Numb
     and a page that closes itself (`window.close()`) removes its tab.
   A refresh reopens any suspended tab someone watches, so a viewer is never left on a page-less tab.
 - **Storage.** Each session's tabs are kept in the `browser_tabs` table (one row per session: the
-  next tab number and every tab's id, URL, title and size (`{ device, width, height }`, never
-  Responsive, which belongs to a live viewer; a missing or broken one loads as desktop 1280×800)
-  as JSON, deleted with the session). Writes
+  next tab number and every tab's id, URL, title and size (`{ device, width, height, responsive }`,
+  never the owner, which is a live viewer; a missing or broken one loads as a new tab's) as JSON,
+  deleted with the session). Writes
   follow every state change (navigation, in-page navigation, title changes), coalesced 200 ms, and
   `shutdown` flushes them. After a restart a session's entry is loaded on first use with every tab
   suspended; listing tabs doesn't start Chrome.
