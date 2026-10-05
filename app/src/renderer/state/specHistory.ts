@@ -1,6 +1,6 @@
 // The Spec tab's history bar: which revision it shows. `pinned` is null while it follows the
-// newest revision (a spec.revised moves it along); stepping or scrubbing back pins it, and
-// coming back to the newest one follows again.
+// newest revision (a spec.revised moves it along); scrubbing back pins it, and coming back to
+// the newest one follows again.
 
 export interface SpecHistory {
   /** The revision the user scrubbed to, or null to follow the newest */
@@ -18,11 +18,6 @@ export function shownRevision(h: SpecHistory, latest: number): number {
 export function scrubTo(rev: number, latest: number): SpecHistory {
   const r = Math.max(1, Math.min(Math.round(rev), latest));
   return r >= latest ? FOLLOW_LATEST : { pinned: r };
-}
-
-/** ← / → : one revision back or forward from the one on show. */
-export function stepRevision(h: SpecHistory, latest: number, delta: number): SpecHistory {
-  return scrubTo(shownRevision(h, latest) + delta, latest);
 }
 
 /**
@@ -45,4 +40,20 @@ export function segmentTone(rev: number, shown: number, baseline: number | null 
   if (rev === shown) return "shown";
   if (rev === baseline) return "baseline";
   return rev < shown ? "before" : "after";
+}
+
+/** Scroll distance (px) that moves the timeline one revision. */
+export const WHEEL_STEP = 40;
+
+/**
+ * Scrolling over the history bar scrubs: down or right is newer, up or left older, along
+ * whichever axis moved more. `carry` is the scroll left over from earlier events (a trackpad sends
+ * many small ones). At either end the extra scroll is dropped, so scrolling back moves at once.
+ */
+export function wheelScrub(carry: number, dx: number, dy: number, shown: number, latest: number, step = WHEEL_STEP): { rev: number; carry: number } {
+  const total = carry + (Math.abs(dx) > Math.abs(dy) ? dx : dy);
+  const steps = Math.trunc(total / step);
+  const target = shown + steps;
+  const rev = Math.max(1, Math.min(latest, target));
+  return { rev, carry: rev === target ? total - steps * step : 0 };
 }

@@ -590,19 +590,23 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px 6px 8px;
+  min-height: 36px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   flex: none;
 }
 .spec-history-meta {
   color: var(--text-2);
-  margin: 0 6px 0 4px;
+  margin-right: 6px;
   min-width: 0;
 }
-.spec-history-meta strong {
-  color: var(--text);
-  font-weight: 600;
+/* The bar and its timeline, which scrolling over scrubs. Above the body, so the timeline's segments
+   can hang over the body's padding. */
+.spec-head {
+  position: relative;
+  z-index: 2;
+  flex: none;
 }
 .spec-baseline,
 .spec-history .switch,
@@ -620,8 +624,6 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 .spec-timeline {
   --seg: 3px;
   position: relative;
-  z-index: 2;
-  flex: none;
   height: 3px;
   container-type: inline-size;
   cursor: pointer;

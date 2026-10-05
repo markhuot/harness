@@ -111,14 +111,20 @@ try {
   await go(`#/board/${project.id}/ticket/${key}`);
   await until("spec tab", () => exists(".spec-doc"), 10000);
   check("a ticket opens on Spec", await js<boolean>(`document.querySelector('.tabs [data-tab=spec]')?.getAttribute('aria-selected') === 'true'`));
-  check("history bar reads Rev 6 of 6", await js<boolean>(`document.querySelector('.spec-history-meta')?.textContent.startsWith('Rev 6 of 6')`));
+  check("the timeline is on rev 6 of 6", await js<boolean>(`document.querySelector('[data-testid="spec-timeline"]')?.getAttribute('aria-valuetext').startsWith('Rev 6 of 6')`));
+  check("the bar names no count or author", await js<boolean>(`!/Rev \\d|Agent|You|Harness/.test(document.querySelector('.spec-history').textContent)`));
+  check("the bar has no step or Latest buttons", await js<boolean>(`![...document.querySelectorAll('.spec-history button')].some((b) => /Previous|Next|Latest/.test(b.textContent + (b.getAttribute('aria-label') ?? '')))`));
   check("nested list renders nested", await js<boolean>(`!!document.querySelector('.spec-doc li ul li ul li, .spec-doc li ol li ol li, .spec-doc li ul li ol li')`));
   await until("inline image loaded", () => js<boolean>(`[...document.querySelectorAll('.spec-doc img')].some((i) => i.complete && i.naturalWidth > 0)`), 10000);
   await shot("1-spec");
 
   // --- Scrub back to rev 5 (the screenshot), Show changes.
-  const meta = (rev: string) => js<boolean>(`document.querySelector('.spec-history-meta')?.textContent.startsWith(${JSON.stringify(rev)})`);
-  const prev = () => js(`document.querySelector('[aria-label="Previous revision"]').click()`);
+  // Which revision is on show, as the timeline reports it ("Rev 5 of 6 · …").
+  const meta = (rev: string) => js<boolean>(`!!document.querySelector('[data-testid="spec-timeline"]')?.getAttribute('aria-valuetext').startsWith(${JSON.stringify(rev)})`);
+  const prev = async () => {
+    await js(`document.querySelector('[data-testid="spec-timeline"]').focus()`);
+    await press("ArrowLeft", "ArrowLeft", 37);
+  };
   const toggleChanges = () => js(`[...document.querySelectorAll('.spec-history label')].find((e) => e.textContent.includes('Show changes'))?.click()`);
   await prev();
   await until("rev 5 shown", () => meta("Rev 5 of 6"), 5000);
@@ -147,8 +153,8 @@ try {
   const cur = (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
   await api<Ticket>("PATCH", `/tickets/${key}`, { spec: cur.spec + "\n", baseRevision: cur.specRevision, specNote: "Trailing newline" });
   check("pinned at rev 3 while rev 7 arrives", await until("rev 7 known", () => meta("Rev 3 of 7"), 3000));
-  await js(`[...document.querySelectorAll('.spec-history button')].find((e) => e.textContent === 'Latest')?.click()`);
-  check("Latest follows again", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
+  await press("End", "End", 35);
+  check("End follows the newest again", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
 
   // --- The revision timeline along the bar's bottom edge: one segment per revision.
   const tl = '[data-testid="spec-timeline"]';
@@ -163,7 +169,8 @@ try {
   const mouse = (type: string, p: { x: number; y: number }, buttons = 0) =>
     cdp("Input.dispatchMouseEvent", { type, x: p.x, y: p.y, button: type === "mouseMoved" && !buttons ? "none" : "left", buttons, clickCount: 1 });
   await mouse("mouseMoved", await segAt(2));
-  check("hovering names the revision under the pointer", await until("tip", () => js<boolean>(`document.querySelector('.spec-timeline-tip')?.textContent.startsWith('Rev 2 · ')`), 3000));
+  check("hovering names the revision under the pointer, with the count", await until("tip", () => js<boolean>(`document.querySelector('.spec-timeline-tip')?.textContent.startsWith('Rev 2 of 7 · ')`), 3000));
+  check("the tip names no author", await js<boolean>(`!/Agent|You|Harness/.test(document.querySelector('.spec-timeline-tip').textContent)`));
   check("hovering doesn't move the bar", await meta("Rev 7 of 7"));
   await shot("2a-timeline-hover");
   // Press on rev 6 and sweep back to rev 2: the bar and the spec follow the pointer live.
@@ -187,7 +194,6 @@ try {
   await mouse("mouseMoved", past, 1);
   await mouse("mouseReleased", past);
   check("dragging off the end follows the newest", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
-  check("…and the Latest button goes away", !(await js<boolean>(`[...document.querySelectorAll('.spec-history button')].some((e) => e.textContent === 'Latest')`)));
   await mouse("mouseMoved", { x: end.x, y: end.y + 300 });
   // The keyboard: ← → step, Home and End jump to the ends.
   await js(`document.querySelector('${tl}').focus()`);
@@ -198,6 +204,19 @@ try {
   check("the slider reports the revision", (await js<string>(`document.querySelector('${tl}').getAttribute('aria-valuenow')`)) === "2");
   await press("End", "End", 35);
   check("End follows the newest", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
+  // Scrolling over the bar scrubs: up is older, 40px a revision, and the tip shows where it is.
+  const bar = await js<{ x: number; y: number }>(`(() => { const r = document.querySelector('.spec-history-meta').getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; })()`);
+  const wheel = (deltaX: number, deltaY: number) => cdp("Input.dispatchMouseEvent", { type: "mouseWheel", x: bar.x, y: bar.y, deltaX, deltaY });
+  await mouse("mouseMoved", bar);
+  for (let i = 0; i < 6; i++) await wheel(0, -20);
+  check("scrolling up over the bar steps back", await until("rev 4", () => meta("Rev 4 of 7"), 3000));
+  check("the tip shows while scrolling", await js<boolean>(`document.querySelector('.spec-timeline-tip')?.textContent.startsWith('Rev 4 of 7')`));
+  await shot("2c-timeline-scroll");
+  await wheel(40, 0);
+  check("scrolling right steps forward", await until("rev 5", () => meta("Rev 5 of 7"), 3000));
+  await wheel(0, 2000);
+  check("scrolling down past the end follows the newest", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
+  check("the tip goes once the scrolling stops", await until("tip gone", () => js<boolean>(`!document.querySelector('.spec-timeline-tip')`), 3000));
 
   // --- Activity tab with the blocked card.
   await go(`#/board/${project.id}/ticket/${key}/activity`);

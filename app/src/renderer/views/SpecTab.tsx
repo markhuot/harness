@@ -1,20 +1,18 @@
 // The Spec tab: the ticket's living document (DESIGN.md "Spec revisions and attachments"), with a
-// history bar to step and scrub back through its revisions (a timeline along its bottom edge, one
-// segment per revision) and a Show changes toggle that keeps the rendered
-// spec and marks what the revision on show changed from the one before it (MarkdownDiff): added
-// text green, removed text red and struck through, in place.
+// history bar over it: when the revision on show was written and its note, a Show changes toggle
+// that keeps the rendered spec and marks what that revision changed from the one before it
+// (MarkdownDiff: added text green, removed text red and struck through, in place), and along its
+// bottom edge a timeline with one segment per revision, dragged or scrolled to scrub through them.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import type { SpecRevisionAuthor, SpecRevisionInfo, Ticket } from "@harness/shared";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import type { SpecRevisionInfo, Ticket } from "@harness/shared";
 import { depChipTitle, dependencyStates, diffUnchanged, specBody, specDiff } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { FOLLOW_LATEST, revisionAt, scrubTo, segmentTone, shownRevision, stepRevision, type SpecHistory } from "../state/specHistory";
+import { FOLLOW_LATEST, revisionAt, scrubTo, segmentTone, shownRevision, wheelScrub, type SpecHistory } from "../state/specHistory";
 import { Icon } from "../components/Icon";
 import { Markdown, MarkdownDiff } from "../components/Markdown";
 import { relativeTime, Switch, TicketKey, useNow } from "../components/bits";
 import { PromptAttachmentList } from "../components/PromptAttachments";
-
-const AUTHOR_LABEL: Record<SpecRevisionAuthor, string> = { agent: "Agent", human: "You", system: "Harness" };
 
 export function SpecTab({ ticket }: { ticket: Ticket }) {
   const { state, client, dispatch, epoch } = useStore();
@@ -52,58 +50,41 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
   const unchanged = diff !== undefined && diffUnchanged(diff);
   const bodyError = bodyErrors[shown] ?? (comparing ? bodyErrors[shown - 1] : undefined);
 
-  const step = (delta: number) => setHistory((h) => stepRevision(h, latest, delta));
+  const head = useRef<HTMLDivElement>(null);
 
   return (
     <div className="spec-tab">
-      <div className={`spec-history${latest > 1 ? " has-timeline" : ""}`} data-testid="spec-history">
-        <button className="btn btn-ghost btn-icon btn-sm" disabled={shown <= 1} onClick={() => step(-1)} title="Previous revision" aria-label="Previous revision">
-          <Icon name="chevronLeft" />
-        </button>
-        <button className="btn btn-ghost btn-icon btn-sm" disabled={shown >= latest} onClick={() => step(1)} title="Next revision" aria-label="Next revision">
-          <Icon name="chevronRight" />
-        </button>
-        <span className="spec-history-meta truncate">
-          <strong>
-            Rev {shown} of {latest}
-          </strong>
-          {info && (
-            <>
-              {" · "}
-              {AUTHOR_LABEL[info.author]}
-              {info.createdAt > 0 && (
-                <>
-                  {" · "}
-                  <span title={new Date(info.createdAt).toLocaleString()}>{relativeTime(info.createdAt, now)}</span>
-                </>
-              )}
-              {info.note && (
-                <>
-                  {" · "}
-                  <em>{info.note}</em>
-                </>
-              )}
-            </>
-          )}
-        </span>
-        {(info?.approvedBaseline || ticket.specBaselineRevision === shown) && (
-          <span className="chip done spec-baseline" title="The revision approved when the ticket was started">
-            <Icon name="check" size={9} strokeWidth={3} />
-            Approved plan
+      <div className="spec-head" ref={head}>
+        <div className={`spec-history${latest > 1 ? " has-timeline" : ""}`} data-testid="spec-history">
+          <span className="spec-history-meta truncate">
+            {info && info.createdAt > 0 && <span title={new Date(info.createdAt).toLocaleString()}>{relativeTime(info.createdAt, now)}</span>}
+            {info && info.createdAt > 0 && info.note && " · "}
+            {info?.note && <em>{info.note}</em>}
           </span>
+          {(info?.approvedBaseline || ticket.specBaselineRevision === shown) && (
+            <span className="chip done spec-baseline" title="The revision approved when the ticket was started">
+              <Icon name="check" size={9} strokeWidth={3} />
+              Approved plan
+            </span>
+          )}
+          <div className="grow" />
+          {showChanges && latest > 1 && (shown === 1 || unchanged) && (
+            <span className="spec-diff-note">{shown === 1 ? "First revision: nothing to compare" : `No changes from rev ${shown - 1}`}</span>
+          )}
+          {latest > 1 && <Switch checked={showChanges} onChange={setShowChanges} label="Show changes" />}
+        </div>
+        {latest > 1 && (
+          <SpecTimeline
+            shown={shown}
+            latest={latest}
+            baseline={baseline}
+            revisions={revisions}
+            now={now}
+            scrollArea={head}
+            onScrub={(rev) => setHistory(scrubTo(rev, latest))}
+          />
         )}
-        {history.pinned !== null && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setHistory(FOLLOW_LATEST)} title="Back to the newest revision">
-            Latest
-          </button>
-        )}
-        <div className="grow" />
-        {showChanges && latest > 1 && (shown === 1 || unchanged) && (
-          <span className="spec-diff-note">{shown === 1 ? "First revision: nothing to compare" : `No changes from rev ${shown - 1}`}</span>
-        )}
-        {latest > 1 && <Switch checked={showChanges} onChange={setShowChanges} label="Show changes" />}
       </div>
-      {latest > 1 && <SpecTimeline shown={shown} latest={latest} baseline={baseline} revisions={revisions} now={now} onScrub={(rev) => setHistory(scrubTo(rev, latest))} />}
       <div className="spec-body">
         {deps.length > 0 && (
           <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
@@ -153,8 +134,9 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
 /**
  * The history bar's bottom edge: one segment per revision, the one on show in the accent color and
  * the approved plan in green. Press and drag to sweep through the revisions (the spec follows
- * live), click to jump, or focus it and use ← → Home End. Hovering names the revision under the
- * pointer.
+ * live), click to jump, scroll anywhere over the bar, or focus it and use ← → Home End. Its tip
+ * ("Rev 3 of 7 · 2h ago · note") names the revision under the pointer, or the one on show while
+ * dragging or scrolling.
  */
 function SpecTimeline(props: {
   shown: number;
@@ -162,9 +144,11 @@ function SpecTimeline(props: {
   baseline: number | null;
   revisions: SpecRevisionInfo[] | undefined;
   now: number;
+  /** Scrolling over this element (the bar and the timeline) scrubs. */
+  scrollArea: RefObject<HTMLElement | null>;
   onScrub: (rev: number) => void;
 }) {
-  const { shown, latest, baseline, revisions, now, onScrub } = props;
+  const { shown, latest, baseline, revisions, now, scrollArea, onScrub } = props;
   const [dragging, setDragging] = useState(false);
   // The pointer is down: read by pointermove, which can fire before the render that sets `dragging`.
   const down = useRef(false);
@@ -178,6 +162,38 @@ function SpecTimeline(props: {
     return revisionAt(e.clientX - r.left, r.width, latest);
   };
   const scrub = (rev: number) => rev !== shown && onScrub(rev);
+  // Scrolling: the wheel listener is native and not passive, so the scroll doesn't also move
+  // whatever is under the bar; the tip shows the revision on show until the scrolling stops.
+  const [scrolling, setScrolling] = useState(false);
+  const wheel = useRef({ carry: 0, shown, latest, onScrub });
+  wheel.current = { ...wheel.current, shown, latest, onScrub };
+  useEffect(() => {
+    const el = scrollArea.current;
+    if (!el) return;
+    let quiet: ReturnType<typeof setTimeout> | undefined;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const w = wheel.current;
+      const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1;
+      const r = wheelScrub(w.carry, e.deltaX * px, e.deltaY * px, w.shown, w.latest);
+      w.carry = r.carry;
+      if (r.rev !== w.shown) {
+        w.shown = r.rev;
+        w.onScrub(r.rev);
+      }
+      setScrolling(true);
+      clearTimeout(quiet);
+      quiet = setTimeout(() => {
+        w.carry = 0;
+        setScrolling(false);
+      }, 900);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      clearTimeout(quiet);
+      el.removeEventListener("wheel", onWheel);
+    };
+  }, [scrollArea]);
   const onKeyDown = (e: KeyboardEvent) => {
     const to = { ArrowLeft: shown - 1, ArrowDown: shown - 1, ArrowRight: shown + 1, ArrowUp: shown + 1, Home: 1, End: latest }[e.key];
     if (to === undefined) return;
@@ -186,16 +202,13 @@ function SpecTimeline(props: {
   };
   const label = (rev: number) => {
     const info = revisions?.find((r) => r.rev === rev);
-    const parts = [`Rev ${rev}`];
-    if (info) {
-      parts.push(AUTHOR_LABEL[info.author]);
-      if (info.createdAt > 0) parts.push(relativeTime(info.createdAt, now));
-    }
+    const parts = [`Rev ${rev} of ${latest}`];
+    if (info && info.createdAt > 0) parts.push(relativeTime(info.createdAt, now));
     if (rev === baseline) parts.push("Approved plan");
     if (info?.note) parts.push(info.note);
     return parts.join(" · ");
   };
-  const tip = dragging ? shown : hover;
+  const tip = dragging || scrolling ? shown : hover;
   const tipText = tip === null ? "" : label(tip);
   // Center the tip under its segment, kept inside the strip near either end.
   const tipRef = useRef<HTMLDivElement>(null);
@@ -217,7 +230,7 @@ function SpecTimeline(props: {
       aria-valuemin={1}
       aria-valuemax={latest}
       aria-valuenow={shown}
-      aria-valuetext={`${label(shown)}, of ${latest}`}
+      aria-valuetext={label(shown)}
       onKeyDown={onKeyDown}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
