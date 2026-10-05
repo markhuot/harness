@@ -46,6 +46,11 @@
 //      lists its commands, a tap completes one, and the CLI gets the spec as typed; the toolbar's Plan
 //      first launches a draft in planning and lands on its Spec tab; mentions-*.png, new-session-toolbar*.png
 //
+//   --drafts: the ticket composer saves what's typed as the ticket's message draft (Ticket.messageDraft);
+//      another device's draft (a PUT with another origin) doesn't touch the field while it's being
+//      typed in, and shows once it isn't; Send clears the draft on the service; a draft saved
+//      elsewhere shows when the ticket opens; drafts-*.png
+//
 //   --attachments (needs ffmpeg): a spec with a tall, a wide and a small PNG as a row of "thumb"
 //      thumbnails and an H.264 clip as a captioned figure (stored by update_spec), plus an attachment:
 //      reference to a file that doesn't exist; checks every inline image shows in the Spec tab (the
@@ -66,7 +71,7 @@
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--attachments] [--ipad]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--ipad]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -93,8 +98,9 @@ const stickOnly = flag("stick");
 const keyboardOnly = flag("keyboard");
 const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
-const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly);
-if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions or --attachments");
+const draftsOnly = flag("drafts");
+const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly);
+if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 checkDisk();
@@ -1323,6 +1329,72 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
   });
 }
 
+/** --drafts: real typing in the composer against message drafts saved and changed on the service. */
+async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
+  const key = p.ticket.key;
+  const saved = async () => (await api<TicketDetail>("GET", `/tickets/${encodeURIComponent(key)}`)).ticket.messageDraft ?? null;
+  /** The composer's text, as VoiceOver reads its value. */
+  const field = async () => {
+    const n = (await nodes(udid)).find((x) => x.AXLabel?.startsWith("Message the agent")) as (AXNode & { AXValue?: string | null }) | undefined;
+    return n?.AXValue ?? "";
+  };
+  const fromMac = (text: string) => api<Ticket>("PUT", `/tickets/${encodeURIComponent(key)}/message-draft`, { text, origin: "sim-check-mac" });
+  const open = () => goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+  const away = () => goto(udid, `harness://board`, (l) => !l.some((x) => x.startsWith("Message the agent")));
+  let origin: string | null = null;
+
+  await check("composer: typing saves the message draft to the ticket, with the phone's origin", async () => {
+    await open();
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await axe("type", "started on the phone", "--udid", udid);
+    const d = await until("the draft saved", async () => {
+      const got = await saved();
+      return got?.text.toLowerCase() === "started on the phone" ? got : null;
+    }, 8000);
+    origin = d.origin;
+    if (!origin || origin === "sim-check-mac") throw new Error(`origin is ${JSON.stringify(origin)}`);
+    return `"${d.text}" from ${origin}`;
+  });
+
+  await check("composer: another device's draft waits while the field is being typed in", async () => {
+    await fromMac("Finished on the Mac");
+    await Bun.sleep(1200);
+    const shown = await field();
+    if (shown.toLowerCase() !== "started on the phone") throw new Error(`the field shows ${JSON.stringify(shown)}`);
+    await shootBoth(udid, "drafts-typing");
+    return shown;
+  });
+
+  await check("composer: once the field isn't being typed in, another device's draft shows", async () => {
+    await away();
+    await fromMac("Finished on the Mac, really");
+    await open();
+    const shown = await until("the Mac's draft in the field", async () => ((await field()) === "Finished on the Mac, really" ? true : null), 6000).catch(async (e) => {
+      throw new Error(`${(e as Error).message}; the field shows ${JSON.stringify(await field())}`);
+    });
+    // Taking it isn't an edit: nothing is saved back over the Mac's.
+    await Bun.sleep(1200);
+    const d = await saved();
+    if (d?.origin !== "sim-check-mac") throw new Error(`the phone saved over it: ${JSON.stringify(d)}`);
+    await shootBoth(udid, "drafts-adopted");
+    return shown ? "Finished on the Mac, really" : "";
+  });
+
+  await check("composer: Send uses the draft up on the service and empties the field", async () => {
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await axe("type", " now", "--udid", udid);
+    await until("the edit saved", async () => ((await saved())?.text === "Finished on the Mac, really now" ? true : null), 8000);
+    await tapWhere(udid, "Send");
+    await until("the draft cleared", async () => ((await saved()) === null ? true : null), 8000);
+    await until("the field emptied", async () => ((await field()) === "" ? true : null), 4000).catch(async (e) => {
+      throw new Error(`${(e as Error).message}; the field shows ${JSON.stringify(await field())}`);
+    });
+    const texts = (await api<TranscriptEntry[]>("GET", `/sessions/${p.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
+    if (!texts.includes("Finished on the Mac, really now")) throw new Error(`transcript ends ${JSON.stringify(texts.slice(-3))}`);
+    return "sent and cleared";
+  });
+}
+
 /**
  * --attachments: a ticket whose spec shows real images and a video inline, and one attachment that
  * won't load. The dummy's /tools directive calls update_spec on the fresh ticket's revision 1 with
@@ -2204,7 +2276,7 @@ try {
   );
   // The walk-through pairs as soon as its tickets exist, while their runs settle; the modes once seeded.
   const paired = walkThrough ? devices.then((udids) => ticketsUp.then(() => pairAll(udids)).then(() => udids)) : devices;
-  const [udids, seeded, paged, sticky, typing, mentioned, media] = await Promise.all([
+  const [udids, seeded, paged, sticky, typing, mentioned, media, drafting] = await Promise.all([
     paired,
     walkThrough ? timed("seed", seed) : null,
     pagingOnly ? timed("seed paging", seedPaging) : null,
@@ -2212,6 +2284,7 @@ try {
     keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up").then(async (s) => (await seedPrompts(), s))) : null,
     mentionsOnly ? timed("seed mentions", seedMentions) : null,
     attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
+    draftsOnly ? timed("seed drafts", () => seedTicket("DRFT", "Warm up")) : null,
   ]);
   if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udids[0]}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
@@ -2224,6 +2297,7 @@ try {
   if (typing) await timed("mode: keyboard", () => keyboardChecks(udid, typing));
   if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
   if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
+  if (drafting) await timed("mode: drafts", () => draftChecks(udid, drafting));
   if (seeded && !(await walk(udids, seeded))) failed = true;
   if (results.some((r) => !r[1])) failed = true;
   // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.

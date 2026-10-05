@@ -482,6 +482,40 @@ save in a draft). In a draft the Branch row also decides the worktree: the branc
 directory has checked out (`checkoutBranch`, matched on `BranchInfo.checkedOutAt`) means no
 worktree, any other branch means one (`draftBranchPatch`). Base branch shows only with a worktree.
 
+### Message drafts
+
+The message a human is writing to a ticket's agent is saved on the ticket as `Ticket.messageDraft`
+(`{ text, attachments, origin, updatedAt }`, null when there is none), so a reply started on one
+device can be finished on another. A ticket has one, because each app has one composer per ticket.
+`PUT /tickets/:key/message-draft { text, attachments?, origin? }` replaces it whole; empty text and
+no attachments clear it, and a save that changes nothing emits nothing. It's stored in
+`tickets.message_draft` without touching `updatedAt`, and every change is a `ticket.upserted`. A
+draft ticket (it has no agent yet) answers 409. Its uploads count as referenced, so the startup
+sweep keeps them, and they go when the ticket is deleted. Agents never see it: the board tools pick
+their own fields.
+
+`POST /tickets/:key/messages` from an app clears the draft once the message is delivered (a failed
+send keeps it). An agent's `message_ticket` goes through the same delivery but leaves the human's
+draft alone.
+
+The composers (`app/src/renderer/state/messageDraftSession.ts`, HarnessKit's `MessageDraftSync`)
+keep one session per ticket for the life of the window or store, save edits as debounced PUTs one
+at a time, and tag each with an `origin`, a random id per session. When the store's copy changes,
+`adoptMessageDraft` (shared/src/state/messageDrafts.ts) decides whether it replaces what the
+composer shows. It never does for the composer's own save coming back, however late, or while the
+field has focus (the input is uncontrolled while it's typed in, and the next save wins), or while
+the composer has edits it hasn't saved. Otherwise it does: another device's edit, or its send
+clearing the draft. Losing focus, including the composer going away while focused, catches up
+with the store's copy. A send first stops the debounce and waits for a PUT on its way, and nothing
+is saved until it finishes, so a late PUT can't bring back a draft the service just cleared.
+
+**Uncontrolled fields on iOS.** `MentionTextEditor` (New session's prompt and the composer) keeps
+its own copy of the text and draws its `TextField` in an Equatable child view. A parent redrawing
+(a save's answer, any socket event) used to re-apply the text and selection to the text view, which
+cancelled an autocorrection or inline prediction in progress and rewrote the text under the caret.
+Now the field redraws only when its own inputs change, and takes `text` back only when it changes
+to something the field didn't type (a send clearing it, a picked mention, another device's draft).
+
 ### Branches
 
 **Base branch** is what a ticket's work lands on when it completes, and where a new ticket
@@ -1449,6 +1483,7 @@ GET    /tickets/search?q=&projectId=&group=&limit=100&cursor=       → TicketPa
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
 POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review
+PUT    /tickets/:key/message-draft {text, attachments?, origin?}   → Ticket (see "Message drafts"; empty clears it)
 GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
 GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
 GET    /tickets/:key/spec/revisions/:rev?diff=<other>   → SpecRevision, or SpecDiff with diff

@@ -12,12 +12,16 @@ import SwiftUI
 /// answers it. An image annotated anywhere on the ticket joins that list with its notes (or an
 /// image already there gets them), and the field takes focus so the human can say why; images in
 /// the list open full screen with Annotate, which edits their notes in place.
+///
+/// The text and files are the ticket's message draft (DESIGN.md "Message drafts", MessageDraftSync):
+/// saved to the service as they're typed, so the message can be finished on another device, and
+/// replaced by another device's draft only while the field doesn't have focus.
 struct TicketDetailComposer: View {
     let ticket: Ticket
     /// The tab on screen
     let tab: TicketTab
-    /// The files going with the next message
-    let outgoing: MessageAttachments
+    /// The message being written: its text and the files going with it
+    let draft: MessageDraftSync
     let uploader: PromptAttachmentUploader
     /// Focus the field each time this changes (an annotated image just joined the message)
     var focusRequest = 0
@@ -26,10 +30,13 @@ struct TicketDetailComposer: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
-    @State private var text = ""
     @State private var sending = false
     @State private var focused = false
+
+    private var outgoing: MessageAttachments { draft.attachments }
+    private var text: String { draft.text }
 
     var body: some View {
         let empty = TicketDetailLogic.trim(text).isEmpty
@@ -46,7 +53,7 @@ struct TicketDetailComposer: View {
                 if accepts {
                     attachButton
                 }
-                MentionTextEditor(text: $text,
+                MentionTextEditor(text: Binding(get: { draft.text }, set: { draft.setText($0) }),
                                   placeholder: TicketDetailLogic.composerPlaceholder(ticket),
                                   ticketKey: ticket.key,
                                   minHeight: 0,
@@ -55,7 +62,10 @@ struct TicketDetailComposer: View {
                                   suggestionsMaxHeight: 200,
                                   fieldLabel: "Message the agent",
                                   placeholderColor: attention ? c.red : nil,
-                                  onFocusChange: { focused = $0 },
+                                  onFocusChange: { now in
+                                      focused = now
+                                      draft.focus(now, stored: ticket.messageDraft.optional)
+                                  },
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
                                                             glass: true),
@@ -69,6 +79,14 @@ struct TicketDetailComposer: View {
         // bottom row still sits where a one-line field would, so 44 holds.
         .concentricBottomPadding(barHeight: 44, raised: focused, horizontal: 12, bottom: 8)
         .animation(.snappy, value: focused)
+        // Another device's edit (or its send) shows here, unless this one is being typed in.
+        .onChange(of: ticket.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
+        .onAppear {
+            let toasts = toasts
+            draft.onError = { e in toasts.show("Couldn't save the message draft: \(localizedErrorMessage(e))", kind: .error) }
+        }
+        // Leaving the ticket with the field focused sends no blur: the draft isn't being typed in anymore.
+        .onDisappear { draft.focus(false, stored: ticket.messageDraft.optional) }
     }
 
     /// Prominent accent glass while writing (focused, or holding a message), plain glass with a dimmed
@@ -168,17 +186,23 @@ struct TicketDetailComposer: View {
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
         guard TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
                                                sending: sending, approvalPending: !accepts) else { return }
+        let files = outgoing.list
         let attachments = outgoing.inputs
         let key = ticket.key
         sending = true
         Task {
+            // No draft save may land after the message: the service clears the draft when it goes.
+            await draft.beforeSend()
             // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
             let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, attachments: attachments) }
             sending = false
-            if ok != nil {
+            if let ok {
                 haptic(.success)
-                text = ""
-                outgoing.clear()
+                store.dispatch(.tickets([ok]))
+                // Files attached while it was sending stay for the next message.
+                draft.sent(files: files)
+            } else {
+                draft.sendFailed()
             }
             let next = Tabs.tabAfterSend(tab, sent: ok != nil)
             if next != tab { onTab(next) }

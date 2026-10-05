@@ -900,6 +900,9 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   const { client, dispatch, toast } = useStore();
   const act = useAction();
   const [sending, setSending] = useState(false);
+  // The blur reads the newest copy, not the one this render saw.
+  const ticketRef = useRef(ticket);
+  ticketRef.current = ticket;
   // The text and files live in the ticket's message draft session (state/messageDraftSession.ts):
   // saved to the service as they're typed, and kept across remounts.
   const draft = messageDraftSession(ticket, {
@@ -919,13 +922,12 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   const setText = (t: string) => draft.edit({ text: t });
   // Another device's edit (or its send) shows here, unless this one is being typed in.
   useEffect(() => draft.sync(ticket.messageDraft), [draft, ticket.messageDraft]);
+  // Unmounting with the input focused sends no blur: the draft isn't being typed in anymore.
+  useEffect(() => () => draft.focus(false, ticketRef.current.messageDraft), [draft]);
   // Uploads finish after their render: they read and write the latest list.
   const listRef = useRef(attachments);
   listRef.current = attachments;
   const ref = useRef<HTMLTextAreaElement>(null);
-  // The blur reads the newest copy, not the one this render saw.
-  const ticketRef = useRef(ticket);
-  ticketRef.current = ticket;
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
   // A message while a tool approval waits answers it (as a deny), and the service won't take files with it.
