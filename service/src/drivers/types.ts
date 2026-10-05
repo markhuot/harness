@@ -4,7 +4,7 @@
 import type { CommandMatch, DriverInfo, ModelInfo, PermissionDecisionLog, PermissionMode, RunKind, SubagentKind, SubagentStatus } from "@harness/shared";
 import type { ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 import type { RunInput } from "./input";
-import type { RunImage } from "../prompt-attachments";
+import type { RunImage } from "../attachment-lists";
 
 export type { RunImage };
 

@@ -7,7 +7,7 @@
 
 import { harnessBranch, resolveBaseBranch } from "../branches";
 import type { BranchInfo, CreateTicketBody, Project, PublicSettings, Ticket, UpdateTicketBody } from "../protocol";
-import { promptAttachmentFromInput, promptAttachmentInputs, samePromptAttachments } from "./promptAttachments";
+import { attachmentFromInput, attachmentInputs, sameAttachments } from "./promptAttachments";
 import { branchChoice, branchChoiceHint, canChangeBranch, ticketHasBranch, type BranchChoice } from "./branches";
 import { permissionModeLabel } from "./format";
 import { projectDriver, ticketChoice } from "./models";
@@ -106,7 +106,7 @@ export function applyTicketPatch(t: Ticket, patch: UpdateTicketBody): Ticket {
   if (patch.kind !== undefined) next.kind = patch.kind;
   if (patch.useWorktree !== undefined) next.useWorktree = patch.useWorktree;
   if (patch.projectId !== undefined) next.projectId = patch.projectId;
-  if (patch.promptAttachments !== undefined) next.promptAttachments = patch.promptAttachments.map(promptAttachmentFromInput);
+  if (patch.promptAttachments !== undefined) next.promptAttachments = patch.promptAttachments.map(attachmentFromInput);
   return next;
 }
 
@@ -159,7 +159,7 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
     skipAgentReview: !!t.skipAgentReview,
     skipHumanReview: !!t.skipHumanReview,
     ...(t.dependsOn.length ? { dependsOn: t.dependsOn } : {}),
-    ...(t.promptAttachments?.length ? { promptAttachments: promptAttachmentInputs(t.promptAttachments) } : {}),
+    ...(t.promptAttachments?.length ? { promptAttachments: attachmentInputs(t.promptAttachments) } : {}),
   };
 }
 
@@ -184,7 +184,7 @@ export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null 
   if (!!next.skipAgentReview !== !!prev.skipAgentReview) p.skipAgentReview = !!next.skipAgentReview;
   if (!!next.skipHumanReview !== !!prev.skipHumanReview) p.skipHumanReview = !!next.skipHumanReview;
   if (!sameList(next.dependsOn, prev.dependsOn)) p.dependsOn = next.dependsOn;
-  if (!samePromptAttachments(next.promptAttachments ?? [], prev.promptAttachments ?? [])) p.promptAttachments = promptAttachmentInputs(next.promptAttachments ?? []);
+  if (!sameAttachments(next.promptAttachments ?? [], prev.promptAttachments ?? [])) p.promptAttachments = attachmentInputs(next.promptAttachments ?? []);
   return Object.keys(p).length ? p : null;
 }
 

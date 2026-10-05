@@ -51,6 +51,38 @@ extension EnvironmentValues {
     @Entry var ticketDetailHero: TicketDetailHeroCollapse?
     /// `openTab(Tabs.subagentTabRoute(id))` from inside a ticket tab body.
     @Entry var ticketDetailOpenTab: TicketDetailTabOpener?
+    /// Where an image annotated inside a ticket goes: its composer's attachments (AnnotatorView).
+    /// nil outside a ticket, where nothing offers Annotate unless it says where the image goes.
+    @Entry var annotationSink: AnnotationSink?
+    /// Opens the annotator over the ticket (TicketDetailBody presents it).
+    @Entry var openAnnotator: AnnotatorOpener?
+    /// The ticket's spec media (TicketDetail.attachments) that `attachment:<id>` in its markdown
+    /// refers to, so the viewer and the annotator get each one's own record. nil outside a ticket,
+    /// or from an older service.
+    @Entry var specAttachments: [Attachment]?
+}
+
+/// Takes an annotated image into the ticket's composer (the message being written), never
+/// sending anything itself.
+struct AnnotationSink: Sendable {
+    /// The notes the composer already holds on an attachment, so annotating it again edits them.
+    let current: @MainActor @Sendable (Attachment) -> AttachmentAnnotation?
+    let add: @MainActor @Sendable (AnnotatedAttachment) -> Void
+
+    /// Annotate `image`, the notes going on `file` in the composer. Starts from the composer's notes
+    /// on that file, else `annotation` (the notes it was sent with), so they can be edited.
+    @MainActor func request(
+        _ file: AnnotationImage, image: UIImage, page: AnnotationPage? = nil, lookup: AnnotationElementLookup? = nil, annotation: AttachmentAnnotation? = nil
+    ) -> AnnotationRequest {
+        let existing: AttachmentAnnotation? = if case let .existing(a) = file { current(a) } else { nil }
+        return AnnotationRequest(file: file, image: image, page: existing?.page ?? annotation?.page ?? page, lookup: lookup, annotation: existing ?? annotation, add: add)
+    }
+}
+
+struct AnnotatorOpener: Sendable {
+    let open: @MainActor @Sendable (AnnotationRequest) -> Void
+
+    @MainActor func callAsFunction(_ request: AnnotationRequest) { open(request) }
 }
 
 extension View {

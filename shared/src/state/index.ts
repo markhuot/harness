@@ -23,3 +23,4 @@ export * from "./promptAttachments";
 export * from "./branches";
 export * from "./drafts";
 export * from "./code";
+export * from "./annotations";

@@ -37,9 +37,9 @@ import { focusTicketComposer, MessageComposer, scrollCommands, TicketTabBody, to
 
 export function TicketTabPane({ paneId, content, zoomed }: { paneId: string; content: TicketTabContent; zoomed: boolean }) {
   const scope = usePaneScope();
-  const { ticket, missing, related, pluginTabs } = useTicketData(content.ticketKey);
+  const { ticket, missing, related, pluginTabs, specAttachments } = useTicketData(content.ticketKey);
   const close = () => updatePanes(scope, (s) => closePane(s, paneId));
-  if (ticket && !ticket.draft) return <TornTab paneId={paneId} content={content} zoomed={zoomed} ticket={ticket} related={related} pluginTabs={pluginTabs} onClose={close} />;
+  if (ticket && !ticket.draft) return <TornTab paneId={paneId} content={content} zoomed={zoomed} ticket={ticket} related={related} pluginTabs={pluginTabs} specAttachments={specAttachments} onClose={close} />;
   return (
     <aside className="detail torn-pane" {...keysArea("ticket", `ticketTab:${paneId}`)}>
       <div className="view-header detail-titlebar">
@@ -74,6 +74,7 @@ function TornTab({
   ticket,
   related,
   pluginTabs,
+  specAttachments,
   onClose,
 }: {
   paneId: string;
@@ -82,6 +83,7 @@ function TornTab({
   ticket: Ticket;
   related: ReturnType<typeof useTicketData>["related"];
   pluginTabs: ReturnType<typeof useTicketData>["pluginTabs"];
+  specAttachments: ReturnType<typeof useTicketData>["specAttachments"];
   onClose: () => void;
 }) {
   const { state } = useStore();
@@ -202,7 +204,7 @@ function TornTab({
         </div>
       ) : (
         <div className="detail-body">
-          <TicketTabBody ticket={ticket} tab={tab!} requested={content.tab as TicketTab} pluginTabs={pluginTabs} related={related} setTab={setTab} browser={browser} />
+          <TicketTabBody ticket={ticket} tab={tab!} requested={content.tab as TicketTab} pluginTabs={pluginTabs} related={related} specAttachments={specAttachments} setTab={setTab} browser={browser} />
         </div>
       )}
       {modals}

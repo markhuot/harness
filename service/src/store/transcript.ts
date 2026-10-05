@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { PromptAttachment, TranscriptContent, TranscriptEntry, TranscriptRole } from "@harness/shared";
+import type { Attachment, TranscriptContent, TranscriptEntry, TranscriptRole } from "@harness/shared";
 import { fromJson, newId, now } from "./util";
 
 interface EntryRow {
@@ -53,7 +53,7 @@ export class TranscriptRepo {
    * The files attached to human messages (a user entry's `attachments`), with the session each
    * was sent in. The upload sweep keeps these, and deleting a ticket removes its own.
    */
-  messageAttachments(sessionId?: string): { sessionId: string; attachment: PromptAttachment }[] {
+  messageAttachments(sessionId?: string): { sessionId: string; attachment: Attachment }[] {
     const where = "role = 'user' AND json_extract(content, '$.attachments') IS NOT NULL" + (sessionId ? " AND session_id = $sessionId" : "");
     const rows = this.db.query(`SELECT session_id, content FROM transcript WHERE ${where}`).all(sessionId ? { sessionId } : {}) as { session_id: string; content: string }[];
     return rows.flatMap((r) => {

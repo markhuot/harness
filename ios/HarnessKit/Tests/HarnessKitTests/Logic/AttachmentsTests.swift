@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import HarnessKit
+import struct HarnessKit.Attachment
 
 struct StepAttachmentInput: Decodable, Sendable {
     let index: Int
@@ -111,8 +112,8 @@ struct AttachmentsTests {
 
     @Test("The Attachment overload reads its kind and pixel size")
     func attachmentOverloads() {
-        let video = Attachment(id: "1", kind: .video, mimeType: "video/mp4", name: "a.mp4", size: 1)
-        let wide = Attachment(id: "2", kind: .image, mimeType: "image/png", name: "a.png", size: 1, width: 2000, height: 1000)
+        let video = Attachment(id: "1", path: "/a.mp4", name: "a.mp4", source: .spec, kind: .video, mimeType: "video/mp4", size: 1)
+        let wide = Attachment(id: "2", path: "/a.png", name: "a.png", source: .spec, kind: .image, mimeType: "image/png", size: 1, width: 2000, height: 1000)
         // No pixel size: a video falls back to 16:9 (an image would get 4:3).
         #expect(Attachments.fitSize(video, in: AttachmentSize(width: 160, height: 900)) == AttachmentSize(width: 160, height: 90))
         #expect(Attachments.fitSize(wide, in: AttachmentSize(width: 390, height: 700)) == AttachmentSize(width: 390, height: 195))

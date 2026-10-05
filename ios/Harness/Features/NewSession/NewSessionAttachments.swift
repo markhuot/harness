@@ -6,7 +6,8 @@ import SwiftUI
 // (Content/PromptAttachmentUploader.swift), with NewSessionEditor as the target.
 
 /// The New session's Attachments section: the same list as the Spec tab (with remove buttons) and the Attach menu
-/// (Photos, Files, Paste).
+/// (Photos, Files, Paste). Its images open full screen with Annotate: the notes go on that
+/// attachment, saved with the draft.
 struct NewSessionAttachmentsSection: View {
     let editor: NewSessionEditor
     let ticket: Ticket
@@ -20,10 +21,12 @@ struct NewSessionAttachmentsSection: View {
         let full = list.count + uploader.pending.count >= maxPromptAttachments
         Section {
             if !list.isEmpty || !uploader.pending.isEmpty {
-                PromptAttachmentList(
+                EditablePromptAttachmentList(
                     tiles: tiles(list),
                     pending: uploader.pending,
-                    onRemove: { editor.removeAttachment(at: $0.index) }
+                    uploader: uploader,
+                    onRemove: { editor.removeAttachment(at: $0.index) },
+                    onAnnotate: { a, annotation in editor.annotateAttachment(a, annotation: annotation) }
                 )
                 .listRowBackground(c.bgElev)
                 .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -59,13 +62,8 @@ struct NewSessionAttachmentsSection: View {
     }
 
     /// The draft's attachments as tiles: this device's thumbnail when it has one, else the
-    /// service's copy once the saved draft has it.
-    private func tiles(_ list: [PromptAttachment]) -> [PromptAttachmentTile] {
-        let saved = editor.savedId.flatMap { store.state.tickets[$0] }
-        let savedList = saved?.promptAttachments ?? []
-        return list.enumerated().map { i, a in
-            let remote = saved.flatMap { s in savedList.firstIndex { $0.path == a.path }.map { PromptAttachmentRemote.prompt(key: s.key, index: $0) } }
-            return PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.path], remote: remote)
-        }
+    /// service's copy (every attachment has its id from the start).
+    private func tiles(_ list: [Attachment]) -> [PromptAttachmentTile] {
+        list.enumerated().map { i, a in PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.id]) }
     }
 }

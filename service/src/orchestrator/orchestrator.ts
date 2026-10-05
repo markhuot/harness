@@ -36,7 +36,6 @@ import type {
   ActivityKind,
   ActivityMeta,
   Attachment,
-  PromptAttachment,
   SpecConflict,
   SpecDiff,
   SpecRevision,
@@ -128,7 +127,8 @@ import {
 } from "./worktree";
 import { readFileDiff, readFileView } from "./file-view";
 import { attachMentions, searchPaths, type SearchOptions } from "./files";
-import { normalizePromptAttachments, promptAttachmentFile, removeUploadDirs, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../prompt-attachments";
+import { compactNotes } from "../annotations";
+import { attachmentFile as fileOf, ORPHAN_UPLOAD_AGE_MS, registerFile, removeUploadDirs, resolveAttachments, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../attachment-lists";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import {
   applySettingsPatch,
@@ -141,7 +141,7 @@ import {
   validateSettingsPatch,
 } from "./settings";
 import { resolveRunModel } from "./models";
-import { attachmentPath, prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
+import { prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { activityLine } from "../activity";
 import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../spec";
 import { confineOutputPath, readSnapshot, readTaskOutput, snapshotTaskOutput, unavailable } from "../task-output";
@@ -976,6 +976,7 @@ export class Orchestrator {
       children: this.store.tickets.list({ parentId: ticket.id }),
       parent: ticket.parentId ? this.store.tickets.get(ticket.parentId) : null,
       subagents: this.store.subagents.listBySession(ticket.sessionId),
+      attachments: this.store.attachments.listByTicket(ticket.id),
     };
   }
 
@@ -1096,69 +1097,103 @@ export class Orchestrator {
   }
 
   /**
-   * The file of a ticket's prompt attachment for GET /tickets/:key/prompt-attachments/:index, or
-   * null when the index is out of range or the file is gone (moved, renamed or deleted).
+   * Legacy (iPhone apps before the attachment registry): the file of a ticket's prompt attachment
+   * for GET /tickets/:key/prompt-attachments/:index, or null when the index is out of range or the
+   * file is gone (moved, renamed or deleted). Newer apps use GET /attachments/:id.
    */
   promptAttachmentFile(key: string, rawIndex: string): { path: string; mimeType: string } | null {
     const ticket = this.requireTicket(key);
     if (!/^\d+$/.test(rawIndex)) throw badRequest("index must be a number");
     const a = (ticket.promptAttachments ?? [])[Number(rawIndex)];
-    return a ? promptAttachmentFile(a) : null;
+    return a ? fileOf(a) : null;
   }
 
   /**
-   * The file of an attachment sent with a message (transcript entry `entryId`'s attachments at
-   * `rawIndex`) for GET /transcript/:entryId/attachments/:index, or null when it's gone.
+   * Legacy, like promptAttachmentFile: the file of an attachment sent with a message (transcript
+   * entry `entryId`'s attachments at `rawIndex`) for GET /transcript/:entryId/attachments/:index,
+   * or null when it's gone.
    */
   messageAttachmentFile(entryId: string, rawIndex: string): { path: string; mimeType: string } | null {
     if (!/^\d+$/.test(rawIndex)) throw badRequest("index must be a number");
     const entry = this.store.transcript.get(entryId);
     if (!entry) throw notFound("No such transcript entry");
     const a = entry.content.type === "text" ? entry.content.attachments?.[Number(rawIndex)] : undefined;
-    return a ? promptAttachmentFile(a) : null;
+    return a ? fileOf(a) : null;
   }
 
-  /** POST /uploads: store bytes for a prompt attachment (a paste, a file from another device). */
-  uploadPromptAttachment(bytes: Uint8Array, name: string | null, mimeType: string | null): PromptAttachment {
+  /** POST /uploads: store bytes (a paste, a browser screenshot, a file from another device) and register them. */
+  uploadAttachment(bytes: Uint8Array, name: string | null, mimeType: string | null): Attachment {
     const a = storeUpload(this.paths.uploadsDir, bytes, name, mimeType);
+    this.store.attachments.add(null, [a]);
     this.log(`upload ${a.path} (${bytes.byteLength} bytes)`);
     return a;
   }
 
   /**
-   * Remove uploads no ticket refers to that are over a day old (DESIGN.md "Prompt attachments"):
-   * pastes taken back out of a draft. Runs when the service starts.
+   * POST /attachments: register a file already on the service's machine (a drop or pick on the
+   * Mac when the service is local), referenced in place. The same file registered twice is the
+   * same attachment.
    */
-  sweepUploads(): string[] {
-    const removed = sweepUploads(this.paths.uploadsDir, this.referencedUploadPaths());
+  registerAttachment(body: { path?: unknown; name?: unknown }): Attachment {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    if (typeof body.path !== "string" || !body.path) throw badRequest("path is required: an absolute path on the service's machine");
+    if (body.name !== undefined && body.name !== null && typeof body.name !== "string") throw badRequest("name must be a string");
+    return registerFile(this.store.attachments, this.paths.uploadsDir, body.path, body.name as string | null | undefined);
+  }
+
+  /** A list's attachments (AttachmentInput[]) as the list stores them; see resolveAttachments. */
+  private resolveAttachments(raw: unknown, previous: readonly Attachment[] = []): Attachment[] {
+    return resolveAttachments(raw, previous, this.store.attachments, this.paths.uploadsDir);
+  }
+
+  /**
+   * Remove what nothing uses anymore (DESIGN.md "Attachments"), when the service starts: upload
+   * folders no ticket refers to that are over a day old (pastes taken back out of a draft), and
+   * the registry rows of uploads and registered files that are gone, or that nothing refers to and
+   * are over a day old. "file" sources are only forgotten, never deleted. Returns the upload
+   * folders removed.
+   */
+  sweepUploads(at = Date.now()): string[] {
+    const referenced = this.referencedAttachments();
+    const removed = sweepUploads(this.paths.uploadsDir, referenced.paths, ORPHAN_UPLOAD_AGE_MS, at);
+    const forget = this.store.attachments
+      .listUnowned()
+      .filter((a) => !fileOf(a) || (!referenced.ids.has(a.id) && !referenced.paths.has(a.path) && at - a.createdAt >= ORPHAN_UPLOAD_AGE_MS))
+      .map((a) => a.id);
+    if (forget.length) this.store.attachments.delete(forget);
     if (removed.length) this.log(`removed ${removed.length} unused upload${removed.length === 1 ? "" : "s"}`);
     return removed;
   }
 
   /**
-   * Every prompt attachment path some ticket (drafts included) refers to, but `except`'s. Two
-   * tickets can share an upload: a conductor passes a pasted screenshot on to a child with
-   * create_ticket, so an upload folder is only removed once no ticket names it.
+   * Every attachment some ticket (drafts included) refers to, but `except`'s: by id and by path.
+   * Two tickets can share an upload: a conductor passes a pasted screenshot on to a child with
+   * create_ticket, or a human sends a file from an earlier message again, so an upload folder is
+   * only removed once nothing names it.
    */
-  private referencedUploadPaths(except?: Ticket): Set<string> {
-    const referenced = new Set<string>();
-    for (const t of this.store.tickets.list({})) if (t.id !== except?.id) for (const a of t.promptAttachments ?? []) referenced.add(a.path);
+  private referencedAttachments(except?: Ticket): { ids: Set<string>; paths: Set<string> } {
+    const ids = new Set<string>();
+    const paths = new Set<string>();
+    const add = (a: Attachment) => {
+      if (a.id) ids.add(a.id);
+      paths.add(a.path);
+    };
+    for (const t of this.store.tickets.list({})) if (t.id !== except?.id) for (const a of t.promptAttachments ?? []) add(a);
     // Files sent with messages, which a conductor can pass on the same way.
-    for (const m of this.store.transcript.messageAttachments()) if (m.sessionId !== except?.sessionId) referenced.add(m.attachment.path);
-    return referenced;
+    for (const m of this.store.transcript.messageAttachments()) if (m.sessionId !== except?.sessionId) add(m.attachment);
+    for (const m of this.store.runs.messageAttachments()) if (m.sessionId !== except?.sessionId) add(m.attachment);
+    return { ids, paths };
   }
 
-  /** Where an attachment's stored copy lives (agents read it from there). */
-  attachmentFilePath(a: Pick<Attachment, "id" | "mimeType">): string {
-    return attachmentPath(this.paths.attachmentsDir, a);
-  }
-
-  /** A ticket attachment and its stored file for GET /attachments/:id, or null when either is gone. */
-  attachmentFile(id: string): { attachment: Attachment; path: string } | null {
+  /**
+   * Any registered attachment and its file for GET /attachments/:id (spec media, uploads,
+   * registered files, files sent with messages), or null when either is gone.
+   */
+  attachmentFile(id: string): { attachment: Attachment; path: string; mimeType: string } | null {
     const attachment = this.store.attachments.get(id);
     if (!attachment) return null;
-    const path = this.attachmentFilePath(attachment);
-    return existsSync(path) ? { attachment, path } : null;
+    const file = fileOf(attachment);
+    return file ? { attachment, path: file.path, mimeType: file.mimeType } : null;
   }
 
   async createTicket(body: CreateTicketBody): Promise<Ticket> {
@@ -1185,7 +1220,7 @@ export class Orchestrator {
     }
     if (requestedBranch && project.isGit === false) throw badRequest(`branch ${requestedBranch} needs a git repository; ${project.path} isn't one`);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
-    const promptAttachments = body.promptAttachments === undefined ? [] : normalizePromptAttachments(body.promptAttachments, [], this.paths.uploadsDir);
+    const promptAttachments = body.promptAttachments === undefined ? [] : this.resolveAttachments(body.promptAttachments);
     let parentId: string | null = null;
     if (body.parentId) {
       const parent = this.store.tickets.get(body.parentId) ?? this.store.tickets.getByKey(body.parentId);
@@ -1335,7 +1370,9 @@ export class Orchestrator {
       }
     }
     if (body.kind !== undefined && body.kind !== ticket.kind) patch.kind = body.kind;
-    if (body.promptAttachments !== undefined) patch.promptAttachments = normalizePromptAttachments(body.promptAttachments, ticket.promptAttachments ?? [], this.paths.uploadsDir);
+    if (body.promptAttachments !== undefined) {
+      patch.promptAttachments = this.resolveAttachments(body.promptAttachments, ticket.promptAttachments ?? []);
+    }
     if (useWorktree !== undefined) {
       patch.useWorktree = useWorktree;
       // Without a worktree there's no branch to ask for; drop it so the draft stays valid.
@@ -1488,14 +1525,21 @@ export class Orchestrator {
     }
     this.conductorBuffer.delete(ticket.id);
     await this.browser.close(ticket.sessionId).catch(() => {});
-    const files = this.store.attachments.listByTicket(ticket.id).map((a) => attachmentPath(this.paths.attachmentsDir, a));
-    // Its upload folders, except any another ticket still uses.
-    const stillUsed = new Set(uploadDirs(this.paths.uploadsDir, [...this.referencedUploadPaths(ticket)].map((path) => ({ path, name: "", source: "upload" as const }))));
-    const sent = this.store.transcript.messageAttachments(ticket.sessionId).map((m) => m.attachment);
-    const uploads = uploadDirs(this.paths.uploadsDir, [...(ticket.promptAttachments ?? []), ...sent]).filter((d) => !stillUsed.has(d));
+    // Its spec media go with it (their rows cascade), even when another ticket's message sent one
+    // on by id: there it becomes a missing file, like a moved "file". Copying it would keep a
+    // deleted ticket's screenshots around for good.
+    const files = this.store.attachments.listByTicket(ticket.id).map((a) => a.path);
+    // Its uploads, except any another ticket still uses (by id, or by path from an older list).
+    const still = this.referencedAttachments(ticket);
+    const stillUsed = new Set(uploadDirs(this.paths.uploadsDir, [...still.paths].map((path) => ({ path, source: "upload" as const }))));
+    const sent = [...this.store.transcript.messageAttachments(ticket.sessionId), ...this.store.runs.messageAttachments().filter((m) => m.sessionId === ticket.sessionId)].map((m) => m.attachment);
+    const own = [...(ticket.promptAttachments ?? []), ...sent].filter((a) => a.source === "upload" && !still.ids.has(a.id));
+    const uploads = uploadDirs(this.paths.uploadsDir, own).filter((d) => !stillUsed.has(d));
+    const goneIds = own.filter((a) => uploads.some((d) => a.path.startsWith(d + "/"))).map((a) => a.id);
     this.store.transaction(() => {
       this.store.tickets.delete(ticket.id);
       this.store.sessions.delete(ticket.sessionId);
+      this.store.attachments.delete(goneIds);
     });
     removeAttachmentFiles(files);
     removeUploadDirs(uploads);
@@ -1531,7 +1575,7 @@ export class Orchestrator {
     if (text !== undefined && typeof text !== "string") throw badRequest("text must be a string");
     text = text ?? "";
     const ticket = this.requireTicket(key);
-    const attachments = opts.attachments === undefined || opts.attachments === null ? [] : normalizePromptAttachments(opts.attachments, [], this.paths.uploadsDir);
+    const attachments = opts.attachments === undefined || opts.attachments === null ? [] : this.resolveAttachments(opts.attachments);
     if (!text.trim() && !attachments.length) throw badRequest("text is required");
     this.notDraft(ticket, "messaged (it has no agent yet)");
     if (ticket.pendingApproval) {
@@ -1692,7 +1736,7 @@ export class Orchestrator {
    * Done → in progress. Both reviews start over, and begin() recreates the worktree when the
    * complete run removed it.
    */
-  private async reopen(ticket: Ticket, prompt: string, note: string, attachments: readonly PromptAttachment[] = []): Promise<Ticket> {
+  private async reopen(ticket: Ticket, prompt: string, note: string, attachments: readonly Attachment[] = []): Promise<Ticket> {
     this.autoRetries.delete(ticket.id);
     await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note, attachments);
     return this.store.tickets.get(ticket.id)!;
@@ -2315,7 +2359,7 @@ ${numberLines(r.body)}`;
         return this.reviseSpec(t, { body, baseRevision: w.baseRevision, note: w.note.trim(), author: "agent", runId: ctx.runId, runKind: ctx.runKind });
       });
     } catch (err) {
-      removeAttachmentFiles(stored.map((a) => attachmentPath(this.paths.attachmentsDir, a)));
+      removeAttachmentFiles(stored.map((a) => a.path));
       if (err instanceof HarnessError && err.status === 409) throw new Error(this.staleSpecMessage(this.store.tickets.get(t.id) ?? t, w.baseRevision));
       throw err;
     }
@@ -2550,8 +2594,9 @@ ${numberLines(r.body)}`;
       specRevision: t.specRevision ?? 1,
       specBaselineRevision: t.specBaselineRevision ?? null,
       activity: this.store.activity.listBySession(t.sessionId).map((e) => ({ kind: e.kind, author: e.author, body: e.body, meta: e.meta, createdAt: e.createdAt })),
-      attachments: this.store.attachments.listByTicket(t.id).map((a) => ({ id: a.id, name: a.name, kind: a.kind, path: this.attachmentFilePath(a) })),
-      promptAttachments: (t.promptAttachments ?? []).map((a) => ({ name: a.name, path: a.path, missing: !promptAttachmentFile(a) })),
+      attachments: this.store.attachments.listByTicket(t.id).map((a) => ({ id: a.id, name: a.name, kind: a.kind, path: a.path })),
+      // Each with the human's numbered notes on it (Attachment.annotation), one line per note.
+      promptAttachments: (t.promptAttachments ?? []).map((a) => ({ id: a.id, name: a.name, path: a.path, missing: !fileOf(a), ...(a.annotation ? { notes: compactNotes(a.annotation) } : {}) })),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
     if (n > 0) {
@@ -3574,7 +3619,7 @@ ${numberLines(r.body)}`;
    * Prepare the workdir, move to in_progress and enqueue the first work/conductor run. A worktree
    * that has gone missing (removed by the complete run of a ticket now re-opened) is recreated.
    */
-  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress", attachments: readonly PromptAttachment[] = []) {
+  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress", attachments: readonly Attachment[] = []) {
     this.notDraft(ticket, "started");
     if (this.starting.has(ticket.id)) return;
     this.starting.add(ticket.id);
@@ -3894,7 +3939,7 @@ ${numberLines(r.body)}`;
    * skipTranscript: the prompt is already in the transcript (a steered message that fell back to
    * the queue). attachments: files the human attached to the message, sent with the run's prompt.
    */
-  private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string, opts: { skipTranscript?: boolean; attachments?: readonly PromptAttachment[] } = {}): Run {
+  private enqueueRun(sessionId: string, kind: RunKind, prompt: string, lock?: string, opts: { skipTranscript?: boolean; attachments?: readonly Attachment[] } = {}): Run {
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (ticket?.draft) throw conflict(`${ticket.key} is a draft: nothing runs on it until it's submitted`);
@@ -4098,7 +4143,7 @@ ${numberLines(r.body)}`;
    * lists every path, and the images go inline. The transcript gets a status line for what was
    * attached, one for each missing file, and one for images sent by path only.
    */
-  private withAttachments(sessionId: string, runId: string, list: readonly PromptAttachment[]): { block: string; images: RunImage[] } | null {
+  private withAttachments(sessionId: string, runId: string, list: readonly Attachment[]): { block: string; images: RunImage[] } | null {
     try {
       const a = runAttachments(list);
       if (!a) return null;

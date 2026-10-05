@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { pastedImageName } from "@harness/shared/state";
-import { attachmentSource, clipboardImageFiles, composerCanSend, isFileDrag, isLocalService, limitMessage, planFiles } from "./promptAttachmentFiles";
+import type { Attachment } from "@harness/shared";
+import { clipboardImageFiles, composerCanSend, isFileDrag, isLocalService, limitMessage, mediaAttachment, missingLabel, planFiles, waitingAnnotation } from "./promptAttachmentFiles";
 
 type F = { name: string; type: string; path?: string };
 const pathOf = (f: F) => f.path ?? null;
@@ -13,9 +14,12 @@ describe("planFiles", () => {
   const browserImage: F = { name: "cat.jpg", type: "image/jpeg" };
   const blob: F = { name: "data.bin", type: "" };
 
-  test("files on disk go in by path, any type, keeping their name", () => {
-    const plan = planFiles([finder], pathOf, paste);
-    expect(plan.byPath.map((p) => p.input)).toEqual([{ path: "/Users/me/notes.pdf", name: "notes.pdf", source: "file" }]);
+  test("files on disk are registered by path, any type, keeping their name (a nameless one by its path's)", () => {
+    const plan = planFiles([finder, { name: "", type: "", path: "/Users/me/Makefile" }], pathOf, paste);
+    expect(plan.registers.map((p) => [p.path, p.name])).toEqual([
+      ["/Users/me/notes.pdf", "notes.pdf"],
+      ["/Users/me/Makefile", "Makefile"],
+    ]);
     expect(plan.uploads).toEqual([]);
   });
 
@@ -28,7 +32,7 @@ describe("planFiles", () => {
   });
 
   test("a paste leaves pathless non-images alone (so it pastes as usual); a drop uploads them", () => {
-    expect(planFiles([blob], pathOf, paste)).toMatchObject({ byPath: [], uploads: [], ignored: 1 });
+    expect(planFiles([blob], pathOf, paste)).toMatchObject({ registers: [], uploads: [], ignored: 1 });
     expect(planFiles([blob], pathOf, drop).uploads.map((u) => [u.name, u.mimeType])).toEqual([["data.bin", "application/octet-stream"]]);
   });
 });
@@ -41,7 +45,7 @@ describe("planFiles with a service on another machine", () => {
       { name: "", type: "", path: "/Users/me/Makefile" },
     ];
     const plan = planFiles(files, pathOf, { uploadAny: true, local: false });
-    expect(plan.byPath).toEqual([]);
+    expect(plan.registers).toEqual([]);
     expect(plan.uploads.map((u) => [u.name, u.mimeType])).toEqual([
       ["notes.pdf", "application/pdf"],
       ["image.png", "image/png"],
@@ -65,18 +69,34 @@ describe("isLocalService", () => {
   });
 });
 
-describe("attachmentSource", () => {
-  const urlAt = (i: number) => `svc/${i}`;
-  test("the fresh preview wins over the service", () => {
-    expect(attachmentSource({ path: "/a" }, "blob:1", [{ path: "/a" }], urlAt)).toEqual({ url: "blob:1", local: true });
+describe("mediaAttachment", () => {
+  const shot: Attachment = { id: "a1", path: "/h/attachments/a1.png", name: "after.png", source: "spec", kind: "image", mimeType: "image/png", width: 800, height: 600 };
+  test("a spec image the detail lists is that record (its real kind, path and name)", () => {
+    expect(mediaAttachment({ id: "a1", alt: "The board" }, [shot], "video")).toBe(shot);
   });
-  test("the service's URL is by the index in its own list, not the editor's", () => {
-    expect(attachmentSource({ path: "/b" }, undefined, [{ path: "/a" }, { path: "/b" }], urlAt)).toEqual({ url: "svc/1", local: false });
+  test("one the detail doesn't list (an older service, a newer image) is made from the markdown, keeping its id", () => {
+    expect(mediaAttachment({ id: "b2", alt: "Before" }, [shot], "image")).toEqual({ id: "b2", path: "", name: "Before", source: "spec", kind: "image", mimeType: "" });
+    expect(mediaAttachment({ id: "c3", alt: "" }, undefined, "video")).toMatchObject({ id: "c3", name: "c3", kind: "video" });
   });
-  test("nothing to show before the service has it, or before the draft is saved", () => {
-    expect(attachmentSource({ path: "/c" }, undefined, [{ path: "/a" }], urlAt)).toBeNull();
-    expect(attachmentSource({ path: "/a" }, undefined, [{ path: "/a" }], null)).toBeNull();
-    expect(attachmentSource({ path: "/a" }, undefined, null, urlAt)).toBeNull();
+  test("a made-up one has no path to say it was at", () => {
+    expect(missingLabel(mediaAttachment({ id: "c3", alt: "" }, null, "image"))).toBe("Missing");
+    expect(missingLabel(shot)).toBe("Missing — was at /h/attachments/a1.png");
+  });
+});
+
+describe("waitingAnnotation", () => {
+  const note = { width: 4, height: 3, marks: [{ n: 1, x: 1, y: 1, message: "this" }] };
+  const spec: Attachment = { id: "s1", path: "/h/attachments/s1.png", name: "Board", source: "spec", kind: "image", mimeType: "image/png", annotation: note };
+  test("the spec image waiting in the composer is found by id, even from a record without its path", () => {
+    expect(waitingAnnotation([spec], { id: "s1", path: "" })).toBe(note);
+  });
+  test("another attachment of the same path but another id isn't it", () => {
+    expect(waitingAnnotation([spec], { id: "u9", path: spec.path })).toBeUndefined();
+  });
+  test("without ids, by path; an empty path never matches", () => {
+    const loose = { ...spec, id: "" };
+    expect(waitingAnnotation([loose], { id: "", path: spec.path })).toBe(note);
+    expect(waitingAnnotation([{ ...loose, path: "" }], { id: "", path: "" })).toBeUndefined();
   });
 });
 

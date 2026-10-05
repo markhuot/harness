@@ -1,13 +1,17 @@
-// Prompt attachments (DESIGN.md "Prompt attachments"): files a human attaches to a New session.
-// Files already on disk are referenced where they are; uploads (pastes, anything from the
-// iPhone/iPad) are written once to $HARNESS_HOME/uploads/<id>/<name> and kept until their ticket
-// is deleted. Either kind can go missing later, which every reader here allows for.
+// Attachment lists (DESIGN.md "Attachments"): the files a human attaches to a New session or a
+// message, each a registered Attachment (store/attachments.ts). Files already on disk are
+// referenced where they are; uploads (pastes, anything from the iPhone/iPad) are written once to
+// $HARNESS_HOME/uploads/<id>/<name> and kept until the last ticket using them is deleted. Either
+// kind can go missing later, which every reader here allows for.
 
-import { closeSync, mkdirSync, openSync, readdirSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
-import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type PromptAttachmentInput } from "@harness/shared";
+import { MAX_PROMPT_ATTACHMENTS, type Attachment, type AttachmentInput, type AttachmentSource } from "@harness/shared";
+import { describeFile } from "./attachments";
+import { newId } from "./store/util";
 import { HarnessError } from "./orchestrator/errors";
+import { ANNOTATIONS_INTRO, annotationLines, normalizeAnnotation } from "./annotations";
 
 /** Largest upload POST /uploads takes. */
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -69,8 +73,8 @@ export function isUploadPath(uploadsDir: string, path: string): boolean {
   return relative(resolve(uploadsDir), resolve(path)).split(sep).length === 2;
 }
 
-/** Store uploaded bytes as uploads/<id>/<name> and describe them as an attachment. */
-export function storeUpload(uploadsDir: string, bytes: Uint8Array, rawName: string | null, mimeType: string | null): PromptAttachment {
+/** Store uploaded bytes as uploads/<id>/<name> and describe them as an attachment (registered by the caller). */
+export function storeUpload(uploadsDir: string, bytes: Uint8Array, rawName: string | null, mimeType: string | null): Attachment {
   if (bytes.byteLength === 0) throw new HarnessError(400, "The upload is empty");
   if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new HarnessError(413, `The upload is over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
   const name = safeUploadName(rawName, mimeType);
@@ -78,59 +82,122 @@ export function storeUpload(uploadsDir: string, bytes: Uint8Array, rawName: stri
   mkdirSync(dir, { recursive: true });
   const path = join(dir, name);
   writeFileSync(path, bytes);
-  return { path, name, source: "upload" };
+  const described = describeFile(path) ?? { kind: "file" as const, mimeType: "", size: bytes.byteLength };
+  // The client's MIME type names what the bytes can't (a PDF, a text file).
+  const given = (mimeType ?? "").split(";")[0]!.trim().toLowerCase();
+  if (described.kind === "file" && !described.mimeType && given && given !== "application/octet-stream") described.mimeType = given;
+  return { id: newId(), path, name, source: "upload", ...described };
+}
+
+/** Where registered attachments are looked up and added (the store's AttachmentRepo). */
+export interface AttachmentRegistry {
+  get(id: string): Attachment | null;
+  getByPath(path: string, source: AttachmentSource): Attachment | null;
+  add(ticketId: null, attachments: readonly Attachment[]): void;
 }
 
 /**
- * Validate a create or PATCH's prompt attachments. `previous` is what the ticket has now: an
- * attachment it already had stays even when its file is gone (a reopened draft shouldn't fail to
- * save), and only new paths have to be absolute files that exist. A path listed twice is kept
- * once. The source is decided here, from where the file is.
+ * Register a file on the service's machine (an agent's or the CLI's path, a drop on the Mac):
+ * `path` must be absolute and a file that exists now (400 otherwise). The same file registered
+ * before is the same attachment: the row with that path and source is reused. A file in the
+ * uploads folder is an "upload", one of a spec's stored media is that "spec" attachment, anything
+ * else a "file" referenced in place. `name` (trimmed) names this use; the record keeps its own.
  */
-export function normalizePromptAttachments(raw: unknown, previous: readonly PromptAttachment[], uploadsDir: string): PromptAttachment[] {
-  if (!Array.isArray(raw)) throw new HarnessError(400, "promptAttachments must be a list of { path, name? }");
-  const known = new Map(previous.map((a) => [a.path, a]));
-  const out: PromptAttachment[] = [];
+export function registerFile(registry: AttachmentRegistry, uploadsDir: string, path: string, name?: string | null): Attachment {
+  if (!isAbsolute(path)) throw new HarnessError(400, `An attachment's path must be absolute: ${path}`);
+  const described = describeFile(path);
+  if (!described) {
+    if (existsSync(path)) throw new HarnessError(400, `Attachment isn't a file: ${path}`);
+    throw new HarnessError(400, `Attachment not found: ${path}`);
+  }
+  const source: AttachmentSource = isUploadPath(uploadsDir, path) ? "upload" : registry.getByPath(path, "spec") ? "spec" : "file";
+  let record = registry.getByPath(path, source);
+  if (!record) {
+    record = { id: newId(), path, name: basename(path), source, ...described };
+    registry.add(null, [record]);
+  }
+  const trimmed = name?.trim();
+  return trimmed ? { ...record, name: trimmed } : record;
+}
+
+/**
+ * Turn a create, PATCH or message's attachments (AttachmentInput[]) into the list it stores: full
+ * Attachment records, each with this use's name and annotation. An input names its file by `id`
+ * (any registered attachment: a spec image, an upload, a registered file, a file from an earlier
+ * message; 400 for an unknown id or a file that's gone) or by `path` (registered here, see
+ * registerFile). `previous` is what the list holds now: an attachment it already has (by id, or by
+ * path) is kept as it was even when its file is gone (a reopened draft shouldn't fail to save).
+ * The same file listed twice is kept once.
+ *
+ * Each annotation (DESIGN.md "Annotations") is checked: the file must be an image by its first
+ * bytes, except a kept one whose file has gone missing, whose annotation still has to be
+ * well-formed.
+ */
+export function resolveAttachments(raw: unknown, previous: readonly Attachment[], registry: AttachmentRegistry, uploadsDir: string): Attachment[] {
+  if (!Array.isArray(raw)) throw new HarnessError(400, "attachments must be a list of { id } or { path, name? }");
+  const out: Attachment[] = [];
   const seen = new Set<string>();
-  for (const item of raw as PromptAttachmentInput[]) {
-    const path = item && typeof item === "object" && typeof item.path === "string" ? item.path : null;
-    if (!path) throw new HarnessError(400, "Each prompt attachment needs a path");
-    if (item.name !== undefined && typeof item.name !== "string") throw new HarnessError(400, "A prompt attachment's name must be a string");
-    if (seen.has(path)) continue;
-    seen.add(path);
+  for (const [i, item] of (raw as AttachmentInput[]).entries()) {
+    if (!item || typeof item !== "object") throw new HarnessError(400, "Each attachment needs an id or a path");
+    if (item.id !== undefined && item.id !== null && typeof item.id !== "string") throw new HarnessError(400, "An attachment's id must be a string");
+    if (item.path !== undefined && item.path !== null && typeof item.path !== "string") throw new HarnessError(400, "An attachment's path must be a string");
+    const id = item.id || null;
+    const path = item.path || null;
+    if (!id && !path) throw new HarnessError(400, "Each attachment needs an id or a path");
+    if (item.name !== undefined && item.name !== null && typeof item.name !== "string") throw new HarnessError(400, "An attachment's name must be a string");
     const name = item.name?.trim() || null;
-    const had = known.get(path);
+    const at = `attachments[${i}] (${name ?? (path ? basename(path) : id)})`;
+    const annotation = item.annotation === undefined || item.annotation === null ? undefined : normalizeAnnotation(item.annotation, at);
+    const had = id ? previous.find((a) => a.id === id) : previous.find((a) => a.path === path);
     if (had) {
-      out.push({ ...had, name: name ?? had.name });
+      if (seen.has(had.id)) continue;
+      seen.add(had.id);
+      // Kept as it was; a changed annotation is checked against the file while it's still there.
+      if (annotation && attachmentFile(had)) mustBeImage(had.path, at);
+      const { annotation: _old, ...rest } = had;
+      out.push({ ...rest, name: name ?? had.name, ...(annotation ? { annotation } : {}) });
       continue;
     }
-    if (!isAbsolute(path)) throw new HarnessError(400, `A prompt attachment's path must be absolute: ${path}`);
-    let st;
-    try {
-      st = statSync(path);
-    } catch {
-      throw new HarnessError(400, `Attachment not found: ${path}`);
-    }
-    if (!st.isFile()) throw new HarnessError(400, `Attachment isn't a file: ${path}`);
-    out.push({ path, name: name ?? basename(path), source: isUploadPath(uploadsDir, path) ? "upload" : "file" });
+    let record: Attachment;
+    if (id) {
+      const found = registry.get(id);
+      if (!found) throw new HarnessError(400, `Unknown attachment: ${id}`);
+      if (!attachmentFile(found)) throw new HarnessError(400, `Attachment not found: ${found.name} (was at ${found.path})`);
+      record = found;
+    } else record = registerFile(registry, uploadsDir, path!);
+    if (seen.has(record.id)) continue;
+    seen.add(record.id);
+    if (annotation) mustBeImage(record.path, at);
+    out.push({ ...record, name: name ?? record.name, ...(annotation ? { annotation } : {}) });
   }
   if (out.length > MAX_PROMPT_ATTACHMENTS) throw new HarnessError(400, `At most ${MAX_PROMPT_ATTACHMENTS} attachments`);
   return out;
 }
 
+/** 400 unless the file is a PNG, JPEG, GIF or WebP by its first bytes (only images take notes). */
+function mustBeImage(path: string, at: string): void {
+  let type: RunImage["mediaType"] | null = null;
+  try {
+    type = sniffImage(readHead(path, 16));
+  } catch {
+    /* unreadable: not an image we can show */
+  }
+  if (!type) throw new HarnessError(400, `${at}: only a PNG, JPEG, GIF or WebP image can be annotated`);
+}
+
 /** The attachment's file when it's still there (a regular file), else null. */
-export function promptAttachmentFile(a: Pick<PromptAttachment, "path">): { path: string; size: number; mimeType: string } | null {
+export function attachmentFile(a: Pick<Attachment, "path"> & { mimeType?: string }): { path: string; size: number; mimeType: string } | null {
   try {
     const st = statSync(a.path);
     if (!st.isFile()) return null;
-    return { path: a.path, size: st.size, mimeType: Bun.file(a.path).type.split(";")[0] || "application/octet-stream" };
+    return { path: a.path, size: st.size, mimeType: a.mimeType || Bun.file(a.path).type.split(";")[0] || "application/octet-stream" };
   } catch {
     return null;
   }
 }
 
 /** The upload folders of a ticket's attachments, to delete with it. Never anything outside uploads/. */
-export function uploadDirs(uploadsDir: string, list: readonly PromptAttachment[]): string[] {
+export function uploadDirs(uploadsDir: string, list: readonly Pick<Attachment, "path" | "source">[]): string[] {
   return [...new Set(list.filter((a) => a.source === "upload" && isUploadPath(uploadsDir, a.path)).map((a) => dirname(resolve(a.path))))];
 }
 
@@ -205,7 +272,7 @@ export interface RunAttachments {
   /** Names attached (inline or by path), for the transcript's status line */
   attached: string[];
   /** Attachments whose file is gone */
-  missing: PromptAttachment[];
+  missing: Attachment[];
   /** Images left out of the message (too big, or past the limit), still listed by path */
   notInline: { name: string; reason: string }[];
 }
@@ -215,18 +282,19 @@ export interface RunAttachments {
  * path (the agent can open any of them with its file tools), and the images that can go inline.
  * Missing files are named in the block so the agent knows the human meant to send them.
  */
-export function runAttachments(list: readonly PromptAttachment[]): RunAttachments | null {
+export function runAttachments(list: readonly Attachment[]): RunAttachments | null {
   if (!list.length) return null;
   const images: RunImage[] = [];
   const attached: string[] = [];
-  const missing: PromptAttachment[] = [];
+  const missing: Attachment[] = [];
   const notInline: { name: string; reason: string }[] = [];
   const lines: string[] = [];
   for (const a of list) {
-    const file = promptAttachmentFile(a);
+    const file = attachmentFile(a);
+    const notes = a.annotation ? annotationLines(a.annotation).map((l) => `  ${l}`) : [];
     if (!file) {
       missing.push(a);
-      lines.push(`- ${a.path} (missing: it was moved or deleted after it was attached)`);
+      lines.push(`- ${a.path} (missing: it was moved or deleted after it was attached)`, ...notes);
       continue;
     }
     attached.push(a.name);
@@ -244,13 +312,14 @@ export function runAttachments(list: readonly PromptAttachment[]): RunAttachment
         }
       }
     }
-    lines.push(`- ${a.path}${inline ? " (image, included in this message)" : ""}`);
+    lines.push(`- ${a.path}${inline ? " (image, included in this message)" : ""}`, ...notes);
   }
   const block = [
     "",
     "",
     "<attachments>",
     "The human attached these files to this request. Open any of them with your file tools; images marked as included are also in this message.",
+    ...(list.some((a) => a.annotation) ? [ANNOTATIONS_INTRO] : []),
     ...lines,
     "</attachments>",
   ].join("\n");

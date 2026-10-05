@@ -12,6 +12,8 @@ import { isBrowserEventFor, type BrowserInput, type BrowserState, type BrowserTa
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
+import { useAnnotate } from "../components/Annotator";
+import { browserShotName } from "../state/annotator";
 import { isAppChord } from "../state/keys";
 import { confirmsClose, confirmsNewTab, confirmsSwitch, frameIsForView, tabLabel, tabTooltip, type ViewTab } from "../state/browserTabs";
 import { returnTabPane, type TabDrag, type TornOff } from "../state/panes";
@@ -89,6 +91,8 @@ export function BrowserView({
   const expecting = useRef<{ accepts: (s: BrowserState) => boolean; until: number } | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const annotator = useAnnotate();
+  const [shooting, setShooting] = useState(false);
 
   const send = useCallback(
     (input: BrowserInput) => {
@@ -268,7 +272,7 @@ export function BrowserView({
     if (!stage || !subscribed.current) return;
     const width = Math.round(stage.clientWidth);
     const height = Math.round(stage.clientHeight);
-    const key = `${width}x${height}`;
+    const key = sizeKey(width, height);
     if (width <= 0 || height <= 0 || key === lastSize.current) return;
     lastSize.current = key;
     send({ type: "resize", width, height });
@@ -280,6 +284,25 @@ export function BrowserView({
     },
     [sendResize],
   );
+
+  /**
+   * The tab at the pane's size before a screenshot: a resize still waiting on its debounce goes
+   * now, then this waits (up to 2 s) for a frame at that size. A screenshot taken before the
+   * resize lands would show the page at its old size, and every element lookup on it would come
+   * back empty once the tab is resized under it.
+   */
+  const settleSize = useCallback(async () => {
+    const stage = stageRef.current;
+    if (!stage || !subscribed.current) return;
+    if (resizeTimer.current) {
+      clearTimeout(resizeTimer.current);
+      resizeTimer.current = null;
+    }
+    sendResize();
+    const want = sizeKey(stage.clientWidth, stage.clientHeight);
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && sizeKey(frame.current.width, frame.current.height) !== want) await new Promise((r) => setTimeout(r, 50));
+  }, [sendResize]);
 
   useEffect(() => {
     // New session or reconnect: the service-side subscription starts over.
@@ -472,6 +495,29 @@ export function BrowserView({
   const tornShown = !pinned && tear && typeof state?.tabId === "number" ? tear.torn.get(`browser:${state.tabId}`) : undefined;
   const chipDrag = (tab: BrowserTab): TabDrag => ({ kind: "tab", ticketKey: tear!.ticketKey, tab: "browser", browserTab: tab.id });
 
+  /** Freeze the page as it is now (a screenshot from the service) and annotate that. */
+  const annotatePage = async () => {
+    if (!annotator || shooting) return;
+    const tabId = typeof viewTab.current === "number" ? viewTab.current : state?.tabId;
+    setShooting(true);
+    await settleSize();
+    const shot = await act(() => client.browserScreenshot(sessionId, tabId));
+    setShooting(false);
+    if (!shot) return;
+    annotator.open({
+      name: shot.title || shot.url,
+      page: { url: shot.url, title: shot.title, tabId: shot.tabId, viewport: shot.viewport, scale: shot.scale },
+      load: async () => new Blob([Uint8Array.from(atob(shot.data), (c) => c.charCodeAt(0))], { type: "image/png" }),
+      // The screenshot as it is, uploaded once the notes are added (a frozen page closed unannotated leaves nothing behind).
+      attachment: (png) => client.uploadAttachment(png, `${browserShotName(shot.url, shot.title)}.png`, "image/png"),
+      // What each mark points at, in the page as it was captured (null once the tab has moved on).
+      // An older service sends no scroll, and has no lookup either.
+      ...(shot.scroll
+        ? { elementAt: (x: number, y: number) => client.browserElementAt(sessionId, { tabId: shot.tabId, x, y, url: shot.url, scroll: shot.scroll, viewport: shot.viewport }) }
+        : {}),
+    });
+  };
+
   return (
     <div className="browser">
       {!pinned && tabs && tabs.length > 1 && (
@@ -551,6 +597,17 @@ export function BrowserView({
             <Icon name="plus" />
           </button>
         )}
+        {annotator && (
+          <button
+            className="btn btn-ghost btn-sm"
+            data-testid="browser-annotate"
+            title="Freeze this page and number spots on it for your message"
+            disabled={!hasFrame || shooting || viewTab.current === "pending"}
+            onClick={() => void annotatePage()}
+          >
+            {shooting ? <span className="spinner" /> : <Icon name="edit" />} Annotate
+          </button>
+        )}
         <span className={`browser-live ${live ? "on" : ""}`} title={live ? "Receiving frames" : "Idle"}>
           <span className="browser-live-dot" />
           {live ? "Live" : "Idle"}
@@ -579,4 +636,9 @@ export function BrowserView({
       </div>
     </div>
   );
+}
+
+/** A tab size as the pane compares them: whole CSS pixels. */
+function sizeKey(width: number, height: number): string {
+  return `${Math.round(width)}x${Math.round(height)}`;
 }

@@ -193,8 +193,18 @@ export const Ticket: P.Ticket[] = [
     pullRequestUrl: null,
     draft: true,
     promptAttachments: [
-      { path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file" },
-      { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
+      { id: "att_31", path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file", kind: "image", mimeType: "image/png", size: 52_311 },
+      {
+        id: "att_32",
+        path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png",
+        name: "Pasted image.png",
+        source: "upload",
+        kind: "image",
+        mimeType: "image/png",
+        width: 1170,
+        height: 2532,
+        annotation: { width: 1170, height: 2532, marks: [{ n: 1, x: 585, y: 1200, tailX: 300, tailY: 900, message: "This overlaps the tab bar" }] },
+      },
     ],
     completedAt: null,
     agentReview: "skipped",
@@ -274,13 +284,78 @@ const run: P.Run = {
   endedAt: null,
 };
 
+// Annotations (DESIGN.md "Annotations"): a human's numbered notes on an image attachment.
+export const AnnotationMark: P.AnnotationMark[] = [
+  { n: 1, x: 412, y: 188, tailX: 520, tailY: 96, message: "This button should be blue" },
+  { n: 2, x: 64, y: 700, message: "Typo: \"Sumbit\"" },
+];
+
+export const AnnotationPage: P.AnnotationPage[] = [
+  { url: "http://localhost:3000/login", title: "Log in", tabId: 3, viewport: { width: 1280, height: 800 }, scale: 2 },
+  { url: "about:blank", title: "", tabId: 1, viewport: { width: 390, height: 844 }, scale: 1 },
+];
+
+export const AttachmentAnnotation: P.AttachmentAnnotation[] = [
+  { width: 1280, height: 800, marks: AnnotationMark },
+  {
+    width: 2560,
+    height: 1600,
+    marks: [
+      { n: 1, x: 1280, y: 800, tailX: 1400, tailY: 640, message: "Center this", path: "#login > form > button:nth-of-type(2)", text: "Sign in" },
+      { n: 2, x: 40, y: 1500, message: "", path: "body > footer", text: "" },
+    ],
+    page: AnnotationPage[0]!,
+  },
+  { width: 640, height: 480, marks: [{ n: 1, x: 0, y: 479, message: "" }] },
+];
+
+export const BrowserScreenshot: P.BrowserScreenshot[] = [
+  {
+    data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    width: 2560,
+    height: 1600,
+    viewport: { width: 1280, height: 800 },
+    scale: 2,
+    tabId: 3,
+    url: "http://localhost:3000/login",
+    title: "Log in",
+    scroll: { x: 0, y: 0 },
+  },
+  { data: "iVBORw0KGgo=", width: 1170, height: 2532, viewport: { width: 390, height: 844 }, scale: 3, tabId: 1, url: "about:blank", title: "", scroll: { x: 0, y: 1240.5 } },
+];
+
+export const BrowserElementQuery: P.BrowserElementQuery[] = [
+  { tabId: 3, x: 640, y: 400, url: "http://localhost:3000/login", scroll: { x: 0, y: 0 }, viewport: { width: 1280, height: 800 } },
+  { tabId: 1, x: 12.5, y: 300.25, url: "about:blank", scroll: { x: 0, y: 1240.5 }, viewport: { width: 390, height: 844 } },
+];
+
+export const BrowserElement: P.BrowserElement[] = [
+  { path: "#login > form > button:nth-of-type(2)", text: "Sign in" },
+  { path: "body > div:nth-of-type(3) > img", text: "" },
+];
+
+const annotatedSpecImage: P.Attachment = {
+  id: "att_1",
+  path: "/Users/mark/.harness/attachments/att_1.png",
+  name: "after.png",
+  source: "spec",
+  kind: "image",
+  mimeType: "image/png",
+  size: 48213,
+  width: 1280,
+  height: 800,
+  annotation: AttachmentAnnotation[0]!,
+};
+const annotatedPage: P.Attachment = { id: "att_40", path: "/Users/mark/.harness/uploads/cd34/localhost.png", name: "localhost.png", source: "upload", kind: "image", mimeType: "image/png", annotation: AttachmentAnnotation[1]! };
+
 export const Run: P.Run[] = [
   run,
   { ...run, id: "run_6", kind: "plan", status: "failed", error: "Driver exited with code 1", endedAt: T0 + 9_000 },
   { ...run, id: "run_8", kind: "review", status: "queued", startedAt: null },
   { ...run, id: "run_9", kind: "chat", status: "cancelled", endedAt: T0 + 2_000 },
   { ...run, id: "run_10", kind: "complete", status: "succeeded", endedAt: T0 + 3_000 },
-  { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" }] },
+  { ...run, id: "run_11", kind: "chat", prompt: "", attachments: [{ id: "att_41", path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload", kind: "image", mimeType: "image/png" }] },
+  { ...run, id: "run_12", kind: "chat", prompt: "Fix the marked spots.", attachments: [annotatedSpecImage, annotatedPage] },
 ];
 
 export const ToolResultContent: P.ToolResultContent[] = [
@@ -302,10 +377,11 @@ export const TranscriptContent: P.TranscriptContent[] = [
     type: "text",
     text: "",
     attachments: [
-      { path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload" },
-      { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" },
+      { id: "att_41", path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png", source: "upload", kind: "image", mimeType: "image/png" },
+      { id: "att_42", path: "/Users/mark/notes.pdf", name: "Notes", source: "file", kind: "file", mimeType: "application/pdf", size: 9_120 },
     ],
   },
+  { type: "text", text: "Fix the marked spots.", attachments: [annotatedSpecImage, annotatedPage] },
 ];
 
 export const TranscriptEntry: P.TranscriptEntry[] = [
@@ -373,16 +449,20 @@ export const TaskOutput: P.TaskOutput[] = [
 ];
 
 export const Attachment: P.Attachment[] = [
-  { id: "att_1", kind: "image", mimeType: "image/png", name: "after.png", size: 48213, width: 1280, height: 800 },
-  { id: "att_2", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 2_400_118 },
+  { id: "att_1", path: "/Users/mark/.harness/attachments/att_1.png", name: "after.png", source: "spec", kind: "image", mimeType: "image/png", size: 48213, width: 1280, height: 800 },
+  { id: "att_2", path: "/Users/mark/.harness/attachments/att_2.mp4", name: "flow.mp4", source: "spec", kind: "video", mimeType: "video/mp4", size: 2_400_118 },
+  { id: "att_31", path: "/Users/mark/Desktop/shot.png", name: "shot.png", source: "file", kind: "image", mimeType: "image/png" },
+  { id: "att_32", path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 1170, height: 2532 },
+  { id: "att_42", path: "/Users/mark/notes.pdf", name: "Notes", source: "file", kind: "file", mimeType: "" },
 ];
 
-export const PromptAttachment: P.PromptAttachment[] = [
-  { path: "/Users/mark/Desktop/shot.png", name: "shot.png", source: "file" },
-  { path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload" },
+export const AttachmentInput: P.AttachmentInput[] = [
+  { path: "/Users/mark/Desktop/shot.png" },
+  { path: "/Users/mark/notes.pdf", name: "Notes" },
+  { id: "att_1" },
+  { id: "att_1", name: "After", annotation: { width: 1280, height: 800, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] } },
+  { id: "att_32", path: "/Users/mark/.harness/uploads/upl_1/Pasted image.png", name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 1170, height: 2532 },
 ];
-
-export const PromptAttachmentInput: P.PromptAttachmentInput[] = [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }];
 
 export const ActivityMeta: P.ActivityMeta[] = [
   { question: "Should HarnessEvent decode unknown kinds or drop them?" },
@@ -855,7 +935,7 @@ export const CreateTicketBody: P.CreateTicketBody[] = [
     key: "IMPORT-1",
     externalRef,
     draft: false,
-    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }, { path: "/tmp/notes.pdf" }],
+    promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png", annotation: { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, message: "Here" }] } }, { id: "att_32" }],
   },
   { projectId: "prj_8f2c1a", spec: "", draft: true, model: null, permissionMode: null, useWorktree: null, branch: null, baseBranch: null, parentId: null, externalRef: null },
   { projectId: "prj_8f2c1a", spec: "In the checkout", useWorktree: false },
@@ -869,6 +949,7 @@ export const UpdateTicketBody: P.UpdateTicketBody[] = [
   { spec: "Draft brief" },
   { promptAttachments: [{ path: "/Users/mark/Desktop/shot.png", name: "shot.png" }] },
   { promptAttachments: [] },
+  { promptAttachments: [{ id: "att_32", annotation: { width: 1170, height: 2532, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "Here" }] } }] },
   {},
 ];
 
@@ -884,8 +965,12 @@ export const MessageBody: P.MessageBody[] = [
   { text: "Use Double for timestamps" },
   { text: "Re-open please", move: true },
   { text: "Back to work", move: false },
-  { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes", source: "file" }] },
+  { text: "", attachments: [{ path: "/Users/mark/Desktop/shot.png" }, { path: "/Users/mark/notes.pdf", name: "Notes" }] },
   { text: "See attached", move: true, attachments: [{ path: "/Users/mark/.harness/uploads/ab12/shot.png", name: "shot.png" }] },
+  {
+    text: "Fix the marked spots.",
+    attachments: [{ id: "att_1", annotation: AttachmentAnnotation[0]! }, annotatedPage, { path: "/Users/mark/Desktop/shot.png" }],
+  },
 ];
 
 export const ReopenBody: P.ReopenBody[] = [{ notes: "The enum test is tautological" }];
@@ -947,8 +1032,8 @@ export const enums: Record<string, readonly string[]> = {
   ActivityAuthor: all<P.ActivityAuthor>({ agent: true, human: true, system: true }),
   ActivityKind: ACTIVITY_KINDS satisfies readonly P.ActivityKind[],
   SpecRevisionAuthor: all<P.SpecRevisionAuthor>({ agent: true, human: true, system: true }),
-  AttachmentKind: all<P.AttachmentKind>({ image: true, video: true }),
-  PromptAttachmentSource: all<P.PromptAttachmentSource>({ file: true, upload: true }),
+  AttachmentKind: all<P.AttachmentKind>({ image: true, video: true, file: true }),
+  AttachmentSource: all<P.AttachmentSource>({ spec: true, file: true, upload: true }),
   WatcherMode: all<P.Watcher["mode"]>({ loop: true, interval: true }),
   WatcherLiveState: all<P.WatcherLive["state"]>({ running: true, waiting: true, stopped: true }),
   PromptId: PROMPT_IDS satisfies readonly P.PromptId[],

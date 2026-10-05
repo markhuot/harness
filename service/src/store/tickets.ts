@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, ExternalRef, PendingApproval, PermissionMode, PromptAttachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import type { CompletionAction, ExternalRef, PendingApproval, PermissionMode, Attachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
 import { isCompletionAction } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
@@ -114,7 +114,7 @@ export interface NewTicket {
   /** A draft (Ticket.draft): never runs until submitted */
   draft?: boolean;
   /** Ticket.promptAttachments, already validated */
-  promptAttachments?: PromptAttachment[];
+  promptAttachments?: Attachment[];
 }
 
 /** Every column but the spec, which only SpecRepo writes (a revision each time). */
@@ -146,7 +146,7 @@ export type TicketPatch = Partial<{
   draft: boolean;
   kind: TicketKind;
   useWorktree: boolean | null;
-  promptAttachments: PromptAttachment[];
+  promptAttachments: Attachment[];
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -237,7 +237,7 @@ export class TicketRepo {
       pullRequestUrl: r.pull_request_url ?? null,
       hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
-      promptAttachments: fromJson<PromptAttachment[]>(r.prompt_attachments ?? null, []),
+      promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,

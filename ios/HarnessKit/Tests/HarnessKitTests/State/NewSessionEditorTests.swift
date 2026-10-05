@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import HarnessKit
+import struct HarnessKit.Attachment
 
 // New session's editor decisions: when it starts, the predicted key,
 // what another device's change means, the project switch, the submit gate and Cancel. A fake
@@ -43,9 +44,7 @@ struct NewSessionEditorTests {
             var t = Drafts.blankDraftTicket(project: p, settings: DraftSettings(NewSessionEditorTests.settings), key: "\(p.key)-\(p.nextSeq)")
             t.id = "t1"
             t.spec = body.spec
-            t.promptAttachments = body.promptAttachments.map { $0.map { a in
-                PromptAttachments.fromInput(PromptAttachmentInput(path: a.path, name: a.name, source: a.path.hasPrefix("/up/") ? .upload : .file))
-            } } ?? []
+            t.promptAttachments = body.promptAttachments.map { $0.map(PromptAttachments.fromInput) } ?? []
             t.updatedAt = stamp()
             server = t
             return t
@@ -374,19 +373,21 @@ struct NewSessionEditorTests {
 // MARK: Prompt attachments
 
 extension NewSessionEditorTests {
-    static func uploads(_ names: [String]) -> [PromptAttachmentInput] {
-        names.map { PromptAttachmentInput(path: "/up/\($0)", name: $0, source: .upload) }
+    static func upload(_ name: String) -> Attachment {
+        Attachment(id: "up_\(name)", path: "/up/\(name)", name: name, source: .upload, kind: PromptAttachments.kindByName(name), mimeType: "")
     }
 
-    @Test func anAttachmentAloneSavesTheDraftWithItsPathAndName() async {
+    static func uploads(_ names: [String]) -> [Attachment] { names.map(upload) }
+
+    @Test func anAttachmentAloneSavesTheDraftWithTheWholeAttachment() async {
         let r = Rig()
         r.editor.begin(projectId: "p1", candidates: [])
         #expect(r.editor.cancelStep == .discardAndDismiss)
         #expect(r.editor.addAttachments(Self.uploads(["shot.png"])) == 0)
         await Self.drain()
         #expect(r.api.ops == ["create"])
-        #expect(r.api.creates.first?.promptAttachments == [PromptAttachmentInput(path: "/up/shot.png", name: "shot.png")])
-        #expect(r.editor.local?.promptAttachments == [PromptAttachment(path: "/up/shot.png", name: "shot.png", source: .upload)])
+        #expect(r.api.creates.first?.promptAttachments == [AttachmentInput(Self.upload("shot.png"))])
+        #expect(r.editor.local?.promptAttachments == [Self.upload("shot.png")])
         #expect(r.editor.cancelStep == .ask)
         // An attachment isn't a prompt: launching still needs a spec.
         #expect(!r.editor.canSubmit(r.store.state, hint: nil))
@@ -417,7 +418,7 @@ extension NewSessionEditorTests {
         r.editor.removeAttachment(at: 0)
         r.editor.removeAttachment(at: 7)
         await r.wait()
-        #expect(r.api.patches.last?.promptAttachments == [PromptAttachmentInput(path: "/up/b.pdf", name: "b.pdf")])
+        #expect(r.api.patches.last?.promptAttachments == [AttachmentInput(Self.upload("b.pdf"))])
         #expect(r.api.server?.promptAttachments?.map(\.name) == ["b.pdf"])
         r.editor.removeAttachment(at: 0)
         #expect(r.editor.cancelStep == .discardAndDismiss)
@@ -430,10 +431,55 @@ extension NewSessionEditorTests {
         var d = Self.draft()
         r.store.state.tickets[d.id] = d
         #expect(r.editor.begin(projectId: nil, candidates: []) == .started)
-        d.promptAttachments = [PromptAttachment(path: "/Users/me/x.png", name: "x.png")]
+        d.promptAttachments = [Attachment(id: "att_x", path: "/Users/me/x.png", name: "x.png", kind: .image, mimeType: "image/png")]
         d.updatedAt = 50
         r.store.state.tickets[d.id] = d
         #expect(r.editor.storeChanged(r.store.state) == .adopted)
         #expect(r.editor.local?.promptAttachments?.map(\.path) == ["/Users/me/x.png"])
+    }
+
+    static func note(_ message: String = "here") -> AttachmentAnnotation {
+        AttachmentAnnotation(width: 100, height: 50, marks: [AnnotationMark(n: 1, x: 10, y: 5, message: message)])
+    }
+
+    /// Annotating a waiting image edits that attachment in place (same file, same place) and saves
+    /// the notes with the draft's attachments; the image itself is untouched.
+    @Test func annotatingAnAttachmentSetsItsNotesInPlaceAndSavesThem() async {
+        let r = Rig()
+        r.editor.begin(projectId: "p1", candidates: [])
+        r.editor.addAttachments(Self.uploads(["a.png", "b.png", "c.pdf"]))
+        await Self.drain()
+        let b = r.editor.local!.promptAttachments![1]
+        #expect(r.editor.annotateAttachment(b, annotation: Self.note()))
+        await r.wait()
+        #expect(r.editor.local?.promptAttachments?.map(\.id) == r.api.server?.promptAttachments?.map(\.id))
+        #expect(r.editor.local?.promptAttachments?.map(\.name) == ["a.png", "b.png", "c.pdf"])
+        #expect(r.editor.local?.promptAttachments?[1].source == .upload)
+        #expect(r.api.patches.last?.promptAttachments?[1].annotation == Self.note())
+        #expect(r.api.server?.promptAttachments?[1].annotation == Self.note())
+        #expect(r.api.server?.promptAttachments?[0].annotation == nil)
+        // Edited again: still one file, new notes.
+        r.editor.annotateAttachment(b, annotation: Self.note("moved"))
+        await r.wait()
+        #expect(r.api.server?.promptAttachments?.count == 3)
+        #expect(r.api.server?.promptAttachments?[1].annotation?.marks.first?.message == "moved")
+    }
+
+    @Test func addingAndRemovingKeepEachNoteOnItsImage() async {
+        let r = Rig()
+        r.editor.begin(projectId: "p1", candidates: [])
+        r.editor.addAttachments(Self.uploads(["a.png", "b.png", "c.png"]))
+        await Self.drain()
+        let c = r.editor.local!.promptAttachments![2]
+        r.editor.annotateAttachment(c, annotation: Self.note("c"))
+        r.editor.addAttachments(Self.uploads(["d.png"]))
+        #expect(r.editor.local?.promptAttachments?[2].annotation == Self.note("c"))
+        r.editor.removeAttachment(at: 0)
+        await r.wait()
+        #expect(r.api.server?.promptAttachments?.map(\.name) == ["b.png", "c.png", "d.png"])
+        #expect(r.api.server?.promptAttachments?.map { $0.annotation != nil } == [false, true, false])
+        r.editor.removeAttachment(at: 1)
+        await r.wait()
+        #expect(r.api.server?.promptAttachments?.allSatisfy { $0.annotation == nil } == true)
     }
 }

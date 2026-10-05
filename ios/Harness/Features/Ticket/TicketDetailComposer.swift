@@ -10,7 +10,9 @@ import SwiftUI
 /// button are Liquid Glass floating over the tab, with no bar of their own. Files picked from (+)
 /// (or dropped on the ticket) upload first and wait in a short list over the field, each removable,
 /// and go with the next message; there's no (+) while a tool approval waits, since a message then
-/// answers it.
+/// answers it. An image annotated anywhere on the ticket joins that list with its notes (or an
+/// image already there gets them), and the field takes focus so the human can say why; images in
+/// the list open full screen with Annotate, which edits their notes in place.
 struct TicketDetailComposer: View {
     let ticket: Ticket
     /// The tab on screen
@@ -18,6 +20,8 @@ struct TicketDetailComposer: View {
     /// The files going with the next message
     let outgoing: MessageAttachments
     let uploader: PromptAttachmentUploader
+    /// Focus the field each time this changes (an annotated image just joined the message)
+    var focusRequest = 0
     /// Shows a tab of the ticket: the Transcript once a message went through
     let onTab: (TicketTab) -> Void
 
@@ -85,7 +89,8 @@ struct TicketDetailComposer: View {
                                   onFocusChange: { focused = $0 },
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
-                                                            glass: true))
+                                                            glass: true),
+                                  focusRequest: focusRequest)
                 sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send(move: move) }
             }
         }
@@ -153,17 +158,21 @@ struct TicketDetailComposer: View {
     /// doesn't cover the tab.
     private func attachmentTray(accepts: Bool) -> some View {
         let tiles = outgoing.list.enumerated().map { i, a in
-            PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.path])
+            PromptAttachmentTile(attachment: a, index: i, local: uploader.thumbnails[a.id])
         }
         let rows = tiles.count + uploader.pending.count
-        // A row is 44 tall with 4 between; three and a bit show before it scrolls.
-        let height = min(CGFloat(rows) * 48 - 4, 156)
+        // A row is 44 tall with 4 between, and an annotated one has its "N notes" line (about 26)
+        // under it; three and a bit show before it scrolls.
+        let notes = tiles.filter { $0.annotation != nil }.count
+        let height = min(CGFloat(rows) * 48 - 4 + CGFloat(notes) * 26, 182)
         return VStack(alignment: .leading, spacing: 4) {
             ScrollView {
-                PromptAttachmentList(
+                EditablePromptAttachmentList(
                     tiles: tiles,
                     pending: uploader.pending,
-                    onRemove: sending ? nil : { outgoing.remove(at: $0.index) }
+                    uploader: uploader,
+                    onRemove: sending ? nil : { outgoing.remove(at: $0.index) },
+                    onAnnotate: { a, annotation in outgoing.annotate(a, annotation: annotation) }
                 )
             }
             .scrollBounceBehavior(.basedOnSize)

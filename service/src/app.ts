@@ -77,7 +77,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     get: () => token,
     rotate: () => (token = rotateToken(paths)),
   };
-  const db = openDb(paths.dbPath);
+  const db = openDb(paths.dbPath, { attachmentsDir: paths.attachmentsDir, uploadsDir: paths.uploadsDir });
   const store = new Store(db);
   const bus = new EventBus();
   const settings = (): Settings => resolveSettings(store.settings.all());

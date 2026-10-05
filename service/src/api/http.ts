@@ -8,7 +8,7 @@ import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
 import { createWsHandlers, type WsData } from "./ws";
-import { MAX_UPLOAD_BYTES } from "../prompt-attachments";
+import { MAX_UPLOAD_BYTES } from "../attachment-lists";
 import type { PluginHost } from "../plugins/host";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
@@ -258,13 +258,15 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/tickets/:key/file", ({ params, url }) => o.ticketFile(params.key!, url.searchParams.get("path") ?? ""));
   add("GET", "/tickets/:key/file/diff", ({ params, url }) => o.ticketFileDiff(params.key!, url.searchParams.get("path") ?? ""));
 
-  // Prompt attachment uploads: the raw bytes as the body, the file name in ?name=.
+  // Attachment uploads: the raw bytes as the body, the file name in ?name=. Answers the registered Attachment.
   add("POST", "/uploads", async ({ req, url }) => {
     const length = Number(req.headers.get("content-length") ?? "0");
     if (length > MAX_UPLOAD_BYTES) throw new HarnessError(413, `The upload is over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
     const bytes = new Uint8Array(await req.arrayBuffer());
-    return o.uploadPromptAttachment(bytes, url.searchParams.get("name"), req.headers.get("content-type"));
+    return o.uploadAttachment(bytes, url.searchParams.get("name"), req.headers.get("content-type"));
   });
+  // Register a file already on the service's machine ({ path, name? }), referenced in place.
+  add("POST", "/attachments", async ({ body }) => o.registerAttachment((await body()) ?? {}));
 
   // Sessions
   add("GET", "/sessions", ({ url }) => {
@@ -349,6 +351,36 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/browser/:sessionId", ({ params, url }) =>
     browser.state(o.getSession(params.sessionId!).id, { tab: tabNumber(url.searchParams.get("tab")) }),
   );
+  // A PNG of the tab's viewport with its CSS size and scale, for the apps to annotate.
+  add("GET", "/browser/:sessionId/screenshot", async ({ params, url }) => {
+    const sessionId = o.getSession(params.sessionId!).id;
+    const tab = tabNumber(url.searchParams.get("tab"));
+    const tabs = await browser.tabs(sessionId);
+    if (tab !== undefined ? !tabs.some((t) => t.id === tab) : !tabs.length) throw new HarnessError(404, tab !== undefined ? `No browser tab ${tab}` : "This session has no browser tab");
+    return browser.capture(sessionId, { tab });
+  });
+  // The element under a point of a screenshot, for an annotation's mark (null once the tab moved on).
+  add("POST", "/browser/:sessionId/element", async ({ params, body }) => {
+    const b = await body();
+    const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    if (!b || typeof b !== "object") throw new HarnessError(400, "body is required: { tabId, x, y, url, scroll, viewport }");
+    const tab = tabNumber(b.tabId);
+    if (tab === undefined) throw new HarnessError(400, "tabId is required");
+    if (!finite(b.x) || !finite(b.y) || b.x < 0 || b.y < 0) throw new HarnessError(400, "x and y must be the point in the page's CSS pixels");
+    if (typeof b.url !== "string" || !b.url) throw new HarnessError(400, "url is required: the screenshot's");
+    if (!b.scroll || typeof b.scroll !== "object" || !finite(b.scroll.x) || !finite(b.scroll.y)) throw new HarnessError(400, "scroll must be the screenshot's { x, y }");
+    if (!b.viewport || typeof b.viewport !== "object" || !finite(b.viewport.width) || !finite(b.viewport.height)) throw new HarnessError(400, "viewport must be the screenshot's { width, height }");
+    const sessionId = o.getSession(params.sessionId!).id;
+    if (!(await browser.tabs(sessionId)).some((t) => t.id === tab)) throw new HarnessError(404, `No browser tab ${tab}`);
+    return browser.elementAt(sessionId, {
+      tabId: tab,
+      x: b.x,
+      y: b.y,
+      url: b.url,
+      scroll: { x: b.scroll.x, y: b.scroll.y },
+      viewport: { width: b.viewport.width, height: b.viewport.height },
+    });
+  });
   add("POST", "/browser/:sessionId/navigate", async ({ params, body }) => {
     const b = await body();
     if (typeof b?.url !== "string" || !b.url) throw new HarnessError(400, "url is required");
@@ -434,19 +466,25 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         return json({ error: "WebSocket upgrade required" }, 400);
       }
 
-      // Ticket attachments: the bearer token or ?token=, since <img> and <video> can't set headers.
-      // No other route takes the token from the query.
+      // Any attachment's file (DESIGN.md "Attachments"): the bearer token or ?token=, since <img>
+      // and <video> can't set headers. Only these GETs take the token from the query. A file that
+      // has gone missing is a 404. Spec media never change, so they're cached for good; other
+      // files are referenced in place and can change or go, so they're revalidated.
       const attachment = /^\/attachments\/([^/]+)$/.exec(path);
       if (attachment && (req.method === "GET" || req.method === "HEAD")) {
         const token = opts.tokens.get();
         if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
         const found = opts.orchestrator.attachmentFile(decodeURIComponent(attachment[1]!));
         if (!found) return json({ error: "Not found" }, 404);
-        return serveFile(req, found.path, found.attachment.mimeType);
+        try {
+          return await serveFile(req, found.path, found.mimeType, found.attachment.source === "spec" ? undefined : "no-cache");
+        } catch {
+          return json({ error: "Not found" }, 404);
+        }
       }
 
-      // A ticket's prompt attachments, the same way: the apps load previews with <img> and probe
-      // other files with HEAD. A file that has gone missing is a 404.
+      // Legacy (iPhone apps before GET /attachments/:id served every attachment): a ticket's
+      // prompt attachments by index, the same way. A file that has gone missing is a 404.
       const promptFile = /^\/tickets\/([^/]+)\/prompt-attachments\/([^/]+)$/.exec(path);
       if (promptFile && (req.method === "GET" || req.method === "HEAD")) {
         const token = opts.tokens.get();
@@ -461,7 +499,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         }
       }
 
-      // Files sent with a message (a transcript entry's attachments), the same way.
+      // Legacy too: files sent with a message (a transcript entry's attachments) by index.
       const messageFile = /^\/transcript\/([^/]+)\/attachments\/([^/]+)$/.exec(path);
       if (messageFile && (req.method === "GET" || req.method === "HEAD")) {
         const token = opts.tokens.get();

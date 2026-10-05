@@ -12,14 +12,21 @@ import SwiftUI
 /// showing one browser tab (`pinnedTab`: no chip strip, no New tab) streams alongside this one. A
 /// chip drags out into such a window; while it's torn off, selecting it here shows Return to this
 /// window over the stage.
+///
+/// Annotate (in the toolbar) takes a screenshot of the shown tab (GET /browser/:sessionId/screenshot)
+/// and opens it in the annotator.
 struct BrowserTabView: View {
     let ticket: Ticket
     var pinnedTab: Int?
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var model: BrowserTabModel
+    @Environment(\.openAnnotator) private var openAnnotator
+    @Environment(\.annotationSink) private var sink
+    @State private var capturing = false
     @State private var urlDraft = ""
     @State private var urlSelection: TextSelection?
     @FocusState private var editingUrl: Bool
@@ -103,6 +110,10 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "refresh", label: "Reload", disabled: model.empty) { model.command(.reload) }
             BrowserBarButton(icon: "edit", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
+            }
+            BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
+                             disabled: model.frame == nil || capturing || openAnnotator == nil || sink == nil) {
+                annotate()
             }
             if pinnedTab == nil {
                 BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
@@ -218,6 +229,28 @@ struct BrowserTabView: View {
         return WindowDirectory.shared.tornOff(ticket.key).window(ticket.key, tab: .browser, browserTab: shown)
     }
 
+    /// A screenshot of the shown tab, opened in the annotator.
+    private func annotate() {
+        guard let client, let sink, !capturing else { return }
+        capturing = true
+        let id = sessionId
+        let tab = model.selection.shown
+        Task {
+            defer { capturing = false }
+            await model.settleSize()
+            guard let shot = await actions.run(nil, { try await client.browserScreenshot(id, tabId: tab) }) else { return }
+            guard let data = shot.png, let image = UIImage(data: data) else {
+                haptic(.error)
+                toasts.show("Couldn't read the page's screenshot.", kind: .error)
+                return
+            }
+            // The screenshot as it is, uploaded on Add (closed without notes, it leaves nothing behind).
+            let name = "\(Annotations.browserShotName(url: shot.url, title: shot.title)).png"
+            let lookup = AnnotationElementLookup(sessionId: id, screenshot: shot)
+            openAnnotator?(sink.request(.upload(data: data, name: name, mimeType: "image/png"), image: image, page: shot.page, lookup: lookup))
+        }
+    }
+
     private func navigate() async {
         let url = Format.normalizeUrl(urlDraft)
         guard !url.isEmpty, let client else { return }
@@ -290,8 +323,12 @@ struct BrowserTabChip: View {
 /// A toolbar icon button: 34 pt, tap haptic, accent tint when active.
 struct BrowserBarButton: View {
     let icon: String
+    /// An SF Symbol to draw instead of the shared `icon`.
+    var systemImage: String?
     let label: String
     var active = false
+    /// A spinner in place of the icon (while its action is under way).
+    var busy = false
     var disabled = false
     let action: () -> Void
     @Environment(\.palette) private var c
@@ -301,7 +338,13 @@ struct BrowserBarButton: View {
             haptic(.tap)
             action()
         } label: {
-            Image(icon: icon)
+            Group {
+                if busy {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: systemImage ?? Icons.symbol(icon))
+                }
+            }
                 .font(.scaled(size: 17, weight: .semibold))
                 .foregroundStyle(active ? c.accentText : c.text2)
                 .frame(width: 34, height: 34)
@@ -310,7 +353,7 @@ struct BrowserBarButton: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-        .opacity(disabled ? 0.35 : 1)
+        .opacity(disabled && !busy ? 0.35 : 1)
         .accessibilityLabel(label)
     }
 }

@@ -57,6 +57,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   Planning, so you can tell it will start on its own once they finish. Its Start button reads
   "Starts automatically" and is turned off, and hovering it (or VoiceOver) names the tickets it's
   waiting on. Mac, iPhone and iPad.
+- You can annotate images as part of a message. Open any image in a spec, a New session attachment
+  on the Spec tab or a file sent with a message, and choose Annotate. In the Browser tab, Annotate
+  takes a picture of the page. Click to drop a numbered marker, or press and drag to draw an arrow
+  pointing at the spot. Each number gets its own note, listed next to the image (below it on
+  iPhone) so nothing covers what you're pointing at. Add to message puts the image in the message
+  box, where you can write why before you send it. Images attached to a New session or waiting in
+  the message box can be annotated too, and you can reopen an annotation to change it until you
+  send. The image itself is never changed: your arrows and numbers are drawn over it wherever it
+  shows, with its notes underneath, and the agent gets the image along with the numbered notes and
+  where each one points. On a browser page, each marker also names the element it points at (shown
+  under its note, like `#save · "Save"`), so the agent can find it in the page and the code.
 
 ### Changed
 

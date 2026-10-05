@@ -251,12 +251,12 @@ export interface Ticket {
    */
   draft?: boolean;
   /**
-   * Files the human attached to the New session (DESIGN.md "Prompt attachments"): referenced where
-   * they are on the service's machine, never copied. The first run gets their paths and the images
-   * inline. One can go missing later (moved or deleted); GET /tickets/:key/prompt-attachments/:index
-   * answers 404 for it then. Optional so fixtures type-check; the service always sends it.
+   * Files the human attached to the New session (DESIGN.md "Attachments"), each with its
+   * annotation if any. The first run gets their paths and the images inline. A "file" one can go
+   * missing later (moved or deleted); GET /attachments/:id answers 404 for it then. Optional so
+   * fixtures type-check; the service always sends it.
    */
-  promptAttachments?: PromptAttachment[];
+  promptAttachments?: Attachment[];
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /** True while any agent run for this ticket is queued or running */
@@ -388,7 +388,7 @@ export interface Run {
    * Files the human attached to the message this run answers (MessageBody.attachments), sent
    * with its prompt. Optional so clients tolerate an older service.
    */
-  attachments?: PromptAttachment[];
+  attachments?: Attachment[];
   error: string | null;
   createdAt: number;
   startedAt: number | null;
@@ -402,7 +402,7 @@ export type TranscriptContent =
    * `attachments`: on a human message (role "user"), the files sent with it. Their files are
    * served at GET /transcript/:entryId/attachments/:index (404 once one is gone).
    */
-  | { type: "text"; text: string; attachments?: PromptAttachment[] }
+  | { type: "text"; text: string; attachments?: Attachment[] }
   | { type: "thinking"; text: string }
   | { type: "tool_call"; callId: string; name: string; input: unknown }
   | { type: "tool_result"; callId: string; name: string; output: ToolResultContent[]; isError: boolean }
@@ -495,54 +495,65 @@ export type ToolResultContent =
 
 export type ActivityAuthor = "agent" | "human" | "system";
 
-export type AttachmentKind = "image" | "video";
+export type AttachmentKind = "image" | "video" | "file";
 
 /**
- * A ticket's image or video (DESIGN.md "Spec revisions and attachments"), referenced from its spec
- * as `![alt](attachment:<id>)` and served at GET /attachments/:id. It lives until the ticket is
- * deleted.
+ * Where an attachment's file lives (DESIGN.md "Attachments"):
+ * - "spec": an image or video an agent put in a spec, copied into the harness's attachments
+ *   folder; it lives until its ticket is deleted.
+ * - "file": a file that was already on disk (dropped or picked on the Mac, or a path an agent
+ *   passed), referenced in place, so it can go missing; never deleted by the harness.
+ * - "upload": bytes the service stored with POST /uploads (a paste, a browser screenshot, anything
+ *   from the iPhone/iPad), deleted with the last ticket that uses it.
+ */
+export type AttachmentSource = "spec" | "file" | "upload";
+
+/**
+ * Every file attached anywhere (DESIGN.md "Attachments"): a spec's media (referenced from the
+ * spec as `![alt](attachment:<id>)`), a New session's files (Ticket.promptAttachments), a
+ * message's files (MessageBody.attachments, the transcript entry, Run.attachments). One record,
+ * one id: GET /attachments/:id serves the file (404 once it's gone).
  */
 export interface Attachment {
   id: string;
-  kind: AttachmentKind;
-  /** e.g. "image/png", "video/mp4" */
-  mimeType: string;
-  /** The original file name, e.g. "after.png" */
+  /** Absolute path on the service's machine */
+  path: string;
+  /** Display name: the file name when it was attached ("Pasted image.png" for a paste, the alt text for spec media) */
   name: string;
-  /** Bytes */
-  size: number;
+  source: AttachmentSource;
+  kind: AttachmentKind;
+  /** e.g. "image/png", "video/mp4"; "" when unknown */
+  mimeType: string;
+  /** Bytes, when known */
+  size?: number;
   /** Pixels, when known from the file header (images only) */
   width?: number;
   height?: number;
-}
-
-/**
- * A file attached to a New session's prompt (Ticket.promptAttachments). Unlike an Attachment it
- * isn't copied: `path` is where the file is on the service's machine, so it can go missing.
- */
-export interface PromptAttachment {
-  /** Absolute path on the service's machine */
-  path: string;
-  /** Display name: the file name when it was attached ("Pasted image.png" for a paste) */
-  name: string;
   /**
-   * "file": a file that was already on disk (dropped or picked on the Mac), referenced in place.
-   * "upload": bytes the service stored with POST /uploads (a paste, or anything from the
-   * iPhone/iPad), deleted with the ticket.
+   * The human's numbered notes on this image (DESIGN.md "Annotations"). It belongs to this use of
+   * the file: the same image can carry different notes in two messages. The file itself is never
+   * changed.
    */
-  source: PromptAttachmentSource;
+  annotation?: AttachmentAnnotation;
 }
 
-export type PromptAttachmentSource = "file" | "upload";
-
 /**
- * A prompt attachment as clients send it: the name defaults to the file's. `source` is ignored by
- * the service, which decides it from where the file is; clients keep it in their local copy.
+ * An attachment as clients send it: `id` reuses an attachment the service already has (a spec
+ * image, an upload, a registered file, a file from an earlier message); `path` registers a file on
+ * the service's machine (agents and the CLI). A full Attachment is a valid input: the service reads
+ * only `id` (or `path`), `name` and `annotation`, and works out the rest itself.
  */
-export interface PromptAttachmentInput {
-  path: string;
+export interface AttachmentInput {
+  id?: string;
+  path?: string;
   name?: string;
-  source?: PromptAttachmentSource;
+  annotation?: AttachmentAnnotation;
+  source?: AttachmentSource;
+  kind?: AttachmentKind;
+  mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
 }
 
 /** Most prompt attachments one ticket takes. */
@@ -1048,6 +1059,108 @@ export interface BrowserTab {
   suspended?: boolean;
 }
 
+/**
+ * GET /browser/:sessionId/screenshot?tab=: a PNG of the tab's viewport, to annotate. `width` and
+ * `height` are the PNG's pixels; the page's CSS pixels are those divided by `scale`.
+ */
+export interface BrowserScreenshot {
+  /** base64 PNG */
+  data: string;
+  width: number;
+  height: number;
+  /** The page's viewport in CSS pixels. */
+  viewport: { width: number; height: number };
+  /** Device pixels per CSS pixel. */
+  scale: number;
+  tabId: number;
+  url: string;
+  title: string;
+  /** How far the page was scrolled when it was captured, in CSS pixels (BrowserElementQuery checks it). */
+  scroll: { x: number; y: number };
+}
+
+/**
+ * POST /browser/:sessionId/element: what's under a point of a captured screenshot, so an
+ * annotation's mark can name it (AnnotationMark.path and .text). `url`, `scroll` and `viewport`
+ * are the screenshot's: when the tab has since navigated, scrolled or been resized (a viewer's
+ * pane changed size), the answer is null rather than whatever is there now.
+ */
+export interface BrowserElementQuery {
+  tabId: number;
+  /** The point in the page's CSS pixels (the screenshot's pixels divided by its scale). */
+  x: number;
+  y: number;
+  url: string;
+  scroll: { x: number; y: number };
+  /** The screenshot's viewport in CSS pixels (BrowserScreenshot.viewport). */
+  viewport: { width: number; height: number };
+}
+
+/** The element under a point of the page (BrowserElementQuery), or null when there's none or the page moved on. */
+export interface BrowserElement {
+  /** A CSS selector that finds it (an id when it has a unique one, else a tag/nth-of-type chain from the nearest id or body). */
+  path: string;
+  /** Its visible text, whitespace collapsed, at most MAX_ANNOTATION_TEXT characters ("" when it has none). */
+  text: string;
+}
+
+// ---------------------------------------------------------------------------
+// Annotations (DESIGN.md "Annotations")
+// ---------------------------------------------------------------------------
+
+/**
+ * One numbered note. `x`/`y` is the anchor the arrow points at, `tailX`/`tailY` where the arrow
+ * starts (where the number sits); both in the image's pixels. No tail: a plain click, with the
+ * number on the anchor.
+ */
+export interface AnnotationMark {
+  n: number;
+  x: number;
+  y: number;
+  tailX?: number;
+  tailY?: number;
+  message: string;
+  /**
+   * On a browser screenshot (AttachmentAnnotation.page): a CSS selector for the element under the
+   * anchor and its visible text (BrowserElement), so the agent can find it in the page and the
+   * source. Absent when the page couldn't tell (it had moved on) or on other images.
+   */
+  path?: string;
+  text?: string;
+}
+
+/** The page a browser screenshot shows (BrowserScreenshot), so the agent can find the marks on it in CSS pixels. */
+export interface AnnotationPage {
+  url: string;
+  title: string;
+  tabId: number;
+  /** The page's viewport in CSS pixels. */
+  viewport: { width: number; height: number };
+  /** Device pixels per CSS pixel. */
+  scale: number;
+}
+
+/**
+ * A human's numbered notes on an image attachment (Attachment.annotation). Metadata only:
+ * the image file is never changed, and the apps draw the marks over it.
+ */
+export interface AttachmentAnnotation {
+  /** The image's size in pixels; the marks are in these pixels. */
+  width: number;
+  height: number;
+  /** Numbered 1…n in order. */
+  marks: AnnotationMark[];
+  /** Set when the image is a screenshot of a session browser tab. */
+  page?: AnnotationPage;
+}
+
+export const MAX_ANNOTATION_MARKS = 50;
+export const MAX_ANNOTATION_MESSAGE = 2000;
+/** Longest AnnotationMark.text (the anchored element's visible text), in characters. */
+export const MAX_ANNOTATION_TEXT = 200;
+/** Longest AnnotationMark.path (a CSS selector), in characters. */
+export const MAX_ANNOTATION_PATH = 1000;
+
 // ---------------------------------------------------------------------------
 // WebSocket messages
 // ---------------------------------------------------------------------------
@@ -1164,11 +1277,11 @@ export interface CreateTicketBody {
    */
   draft?: boolean;
   /**
-   * Files to attach to the prompt (Ticket.promptAttachments): absolute paths on the service's
-   * machine, each existing now (400 otherwise), at most MAX_PROMPT_ATTACHMENTS. Pastes and files
-   * from another device go through POST /uploads first.
+   * Files to attach to the prompt (Ticket.promptAttachments), at most MAX_PROMPT_ATTACHMENTS: by
+   * `id` (an upload, a registered file) or by `path` (existing now; 400 otherwise). Pastes and
+   * files from another device go through POST /uploads first.
    */
-  promptAttachments?: PromptAttachmentInput[];
+  promptAttachments?: AttachmentInput[];
 }
 
 export interface UpdateTicketBody {
@@ -1222,10 +1335,10 @@ export interface UpdateTicketBody {
    */
   projectId?: string;
   /**
-   * Drafts only (409 otherwise): the whole new list of prompt attachments. New paths must exist;
+   * Drafts only (409 otherwise): the whole new list of prompt attachments. New files must exist;
    * ones the draft already had are kept as they are, even when their file has gone missing.
    */
-  promptAttachments?: PromptAttachmentInput[];
+  promptAttachments?: AttachmentInput[];
 }
 
 /** POST /tickets/:key/submit: launch a draft, starting work now (start) or planning first. */
@@ -1323,11 +1436,12 @@ export interface MessageBody {
   text: string;
   /**
    * Files sent with the message (at most MAX_PROMPT_ATTACHMENTS), like a New session's
-   * promptAttachments: absolute paths on the service's machine, or what POST /uploads returned.
+   * promptAttachments: by `id` (a spec image, an upload, a registered file, a file from an earlier
+   * message) or by `path`.
    * The agent gets their paths, and images inline. Not allowed while a tool approval waits (a
    * message then answers it as a deny).
    */
-  attachments?: PromptAttachmentInput[];
+  attachments?: AttachmentInput[];
   /**
    * true: move the ticket before its agent gets the message: a review ticket back to in
    * progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
@@ -1390,6 +1504,8 @@ export interface TicketDetail {
    * ID, newest first. Absent from older services.
    */
   relatedTickets?: RelatedTicket[];
+  /** The media in the ticket's spec (source "spec"), so clients can refer to them by id. Absent from older services. */
+  attachments?: Attachment[];
 }
 
 /**

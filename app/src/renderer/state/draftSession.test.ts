@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { CreateTicketBody, Project, Ticket, UpdateTicketBody } from "@harness/shared";
-import { applyTicketPatch, blankDraftTicket } from "@harness/shared/state";
+import type { Attachment, AttachmentAnnotation, CreateTicketBody, Project, Ticket, UpdateTicketBody } from "@harness/shared";
+import { annotateAttachment, applyTicketPatch, blankDraftTicket, attachmentFromInput, removeAttachment } from "@harness/shared/state";
 import { DraftSession, dropDraftSession, paneDraftSession, rebase, releaseDraftSession, unloadDraftSessions, type DraftDeps } from "./draftSession";
 
 const projects: Record<string, Project> = {
@@ -35,7 +35,7 @@ function fakeService(auto = false) {
       list.push(p);
       if (auto) queueMicrotask(() => p.resolve(answer()));
     });
-  const createAnswer = (body: CreateTicketBody): Ticket => (server = { ...blank(), id: "t1", key: `${projects[body.projectId]!.key}-${seq}`, spec: body.spec, kind: body.kind ?? "task", model: body.model ?? null, draft: true });
+  const createAnswer = (body: CreateTicketBody): Ticket => (server = { ...blank(), id: "t1", key: `${projects[body.projectId]!.key}-${seq}`, spec: body.spec, kind: body.kind ?? "task", model: body.model ?? null, draft: true, promptAttachments: body.promptAttachments?.map(attachmentFromInput) });
   const patchAnswer = (key: string, body: UpdateTicketBody): Ticket => {
     let t = applyTicketPatch(server!, body);
     if (body.projectId && body.projectId !== server!.projectId) t = { ...t, key: `${projects[body.projectId]!.key}-${++seq}` };
@@ -196,6 +196,9 @@ describe("DraftSession: submit and discard", () => {
   });
 });
 
+/** An attachment as the service registered it. */
+const file = (id: string, name: string, extra: Partial<Attachment> = {}): Attachment => ({ id, path: `/u/${name}`, name, source: "file", kind: name.endsWith(".png") ? "image" : "file", mimeType: "", ...extra });
+
 describe("rebase", () => {
   test("keeps what the editor changed since the request, takes the rest from the service", () => {
     const sent = { ...blank(), spec: "a", permissionMode: null };
@@ -206,12 +209,12 @@ describe("rebase", () => {
   });
 
   test("an attachment added while the request was out is kept; an unchanged list takes the service's copy", () => {
-    const shot = { path: "/u/shot.png", name: "shot.png", source: "file" as const };
+    const shot = file("a1", "shot.png");
     const sent = { ...blank(), spec: "a", promptAttachments: [shot] };
-    const server = { ...sent, id: "t1", key: "WEB-4", promptAttachments: [{ ...shot, source: "upload" as const }] };
-    // Same files (new objects, as applyTicketPatch makes them): the service's copy, with its source.
+    const server = { ...sent, id: "t1", key: "WEB-4", promptAttachments: [{ ...shot, mimeType: "image/png", width: 4, height: 3 }] };
+    // Same files (new objects, as applyTicketPatch makes them): the service's copy, with what it knows of the file.
     expect(rebase(server, sent, { ...sent, promptAttachments: [{ ...shot }] }).promptAttachments).toEqual(server.promptAttachments);
-    const added = [shot, { path: "/u/notes.txt", name: "notes.txt", source: "file" as const }];
+    const added = [shot, file("a2", "notes.txt")];
     expect(rebase(server, sent, { ...sent, promptAttachments: added }).promptAttachments).toEqual(added);
   });
 });
@@ -220,15 +223,16 @@ describe("DraftSession: prompt attachments", () => {
   test("attaching a file to an empty New session saves it, with the file in the create body", async () => {
     const svc = fakeService();
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
-    s.edit({ promptAttachments: [{ path: "/Users/me/shot.png", name: "shot.png" }] });
+    const shot = file("a1", "shot.png");
+    s.edit({ promptAttachments: [shot] });
     expect(svc.creates.length).toBe(1);
-    expect((svc.creates[0]!.body as CreateTicketBody).promptAttachments).toEqual([{ path: "/Users/me/shot.png", name: "shot.png" }]);
+    expect((svc.creates[0]!.body as CreateTicketBody).promptAttachments).toEqual([shot]);
   });
 
   test("removing one PATCHes the whole remaining list", async () => {
     const svc = fakeService(true);
-    const a = { path: "/a.png", name: "a.png" };
-    const b = { path: "/b.txt", name: "b.txt" };
+    const a = file("a1", "a.png");
+    const b = file("a2", "b.txt");
     const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
     s.edit({ spec: "x", promptAttachments: [a, b] });
     await tick(20);
@@ -236,6 +240,33 @@ describe("DraftSession: prompt attachments", () => {
     await tick(20);
     expect(svc.patches.map((p) => p.body)).toEqual([{ promptAttachments: [b] }]);
     expect(s.unsent).toBe(false);
+  });
+
+  test("annotating a waiting image in place PATCHes the list with its notes, which stay on it when a file before it goes", async () => {
+    const svc = fakeService(true);
+    const a = file("a1", "a.png");
+    const b = file("a2", "b.png");
+    const note: AttachmentAnnotation = { width: 10, height: 10, marks: [{ n: 1, x: 1, y: 1, message: "here" }] };
+    const s = new DraftSession(blank(), null, svc.deps, "n1", 5);
+    s.edit({ spec: "x", promptAttachments: [a, b] });
+    await tick(20);
+    // Only the notes changed: still a change worth saving.
+    // By id: the service's copy of b (its own object) is the same file.
+    s.edit({ promptAttachments: annotateAttachment(s.local.promptAttachments ?? [], { ...b, path: "" }, note).list });
+    await tick(20);
+    s.edit({ promptAttachments: removeAttachment(s.local.promptAttachments ?? [], 0) });
+    await tick(20);
+    expect(svc.patches.map((p) => p.body)).toEqual([{ promptAttachments: [a, { ...b, annotation: note }] }, { promptAttachments: [{ ...b, annotation: note }] }]);
+    expect(s.local.promptAttachments?.[0]?.annotation).toEqual(note);
+  });
+
+  test("notes edited while a save is out are kept over the service's answer", () => {
+    const shot = file("a1", "shot.png");
+    const note: AttachmentAnnotation = { width: 10, height: 10, marks: [{ n: 1, x: 1, y: 1, message: "here" }] };
+    const sent = { ...blank(), spec: "a", promptAttachments: [shot] };
+    const server = { ...sent, id: "t1", key: "WEB-4" };
+    const local = { ...sent, promptAttachments: [{ ...shot, annotation: note }] };
+    expect(rebase(server, sent, local).promptAttachments).toEqual([{ ...shot, annotation: note }]);
   });
 });
 

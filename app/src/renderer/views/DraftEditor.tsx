@@ -9,8 +9,9 @@
 // (⇧⌘↩) and Start session (⌘↩).
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore, type KeyboardEvent } from "react";
-import { type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
+import { MAX_PROMPT_ATTACHMENTS, type Project, type Ticket, type UpdateTicketBody } from "@harness/shared";
 import {
+  annotateAttachment,
   blankDraftTicket,
   composerProject,
   draftReviewSkipsPatch,
@@ -41,6 +42,8 @@ import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
 import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
+import { waitingAnnotation } from "../state/promptAttachmentFiles";
+import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 
 const LAST_PROJECT = "harness.lastProject";
 const ADD_PROJECT = "__add";
@@ -241,9 +244,24 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   };
 
   // Prompt attachments: the draft's promptAttachments, added to by the paperclip, drops and pastes.
+  // An annotation is metadata on its attachment, so it goes wherever the attachment goes.
   const attach = usePromptAttachmentInput({
-    target: session && { get: () => session.local.promptAttachments ?? [], set: (list) => session.edit({ promptAttachments: list }) },
+    target: session && {
+      get: () => session.local.promptAttachments ?? [],
+      set: (list) => session.edit({ promptAttachments: list }),
+    },
   });
+  /**
+   * Add to message in the annotator: the notes go on that attachment of the draft in place (an
+   * image waiting here), or it's added with them (one from elsewhere). The image is never changed,
+   * so a reopened draft's notes can always be edited again.
+   */
+  const annotateDraft = (a: AnnotatedAttachment) => {
+    if (!session) throw new Error("the session isn't ready");
+    const next = annotateAttachment(session.local.promptAttachments ?? [], a.attachment, a.annotation);
+    if (next.skipped) throw new Error(`a session takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
+    session.edit({ promptAttachments: next.list });
+  };
   const { pending, dropping } = attach;
 
   const owner = `draft:${paneId}`;
@@ -377,7 +395,13 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
           onPaste={attach.onPaste}
         />
 
-        <PromptAttachmentList items={view?.promptAttachments ?? []} ticketKey={session?.saved?.key ?? null} served={session?.saved?.promptAttachments} onRemove={attach.remove} pending={pending}>
+        <AnnotateScope onAdd={annotateDraft} annotationOf={(a) => waitingAnnotation(session?.local.promptAttachments ?? [], a)}>
+        <PromptAttachmentList
+          items={view?.promptAttachments ?? []}
+          onRemove={attach.remove}
+          pending={pending}
+          annotate={(a) => ({ attachment: a, onAdd: annotateDraft })}
+        >
           <button
             type="button"
             className="btn btn-ghost btn-sm prompt-attach-btn"
@@ -398,6 +422,7 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
             onChange={attach.onFilesPicked}
           />
         </PromptAttachmentList>
+        </AnnotateScope>
 
         {view && project && (
           <div className={`draft-options ${optionsOpen ? "open" : ""}`}>

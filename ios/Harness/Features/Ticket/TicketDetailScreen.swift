@@ -127,8 +127,11 @@ private struct TicketDetailBody: View {
     let onTab: (TicketTab) -> Void
 
     @Environment(BoardStore.self) private var store
+    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var height: CGFloat = 800
+    /// Bumped to focus the composer's field (an annotated image just joined the message).
+    @State private var focusComposer = 0
     /// The files going with the next message, and their uploads: here rather than in the composer,
     /// so a drop anywhere on the ticket attaches.
     @State private var outgoing = MessageAttachments()
@@ -137,6 +140,18 @@ private struct TicketDetailBody: View {
     /// composer's glass, so their content gets the overlap as a bottom inset instead.
     @State private var composerTop: CGFloat = 0
     @State private var pageBottom: CGFloat = 0
+    /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
+    /// pager, so a page redrawing under it can't take it down.
+    @State private var annotating: AnnotationRequest?
+    /// The spec's media (the detail's attachments), refetched when a new revision may show more.
+    @State private var specAttachments: [Attachment]?
+
+    /// What has to change for the spec's media to load again.
+    private struct SpecAttachmentsTrigger: Hashable {
+        let key: String
+        let revision: Int?
+        let epoch: Int
+    }
 
     var body: some View {
         let state = store.state
@@ -159,6 +174,13 @@ private struct TicketDetailBody: View {
                     hero.show()
                     onTab(t)
                 })
+                .environment(\.annotationSink, sink)
+                .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
+                .environment(\.specAttachments, specAttachments)
+        }
+        .task(id: SpecAttachmentsTrigger(key: ticket.key, revision: ticket.specRevision, epoch: store.epoch)) {
+            guard let api = store.api, let detail = try? await api.getTicket(ticket.key), !Task.isCancelled else { return }
+            specAttachments = detail.attachments
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -169,7 +191,7 @@ private struct TicketDetailBody: View {
                 } else {
                     VStack(spacing: 0) {
                         ComposerGrip(ticketKey: ticket.key)
-                        TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, onTab: onTab).id(ticket.id)
+                        TicketDetailComposer(ticket: ticket, tab: shown, outgoing: outgoing, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
                     }
                 }
             }
@@ -178,6 +200,28 @@ private struct TicketDetailBody: View {
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
+        .annotator($annotating) { hero.show() }
+    }
+
+    /// Annotated images join the next message, their notes on the attachment itself (a file already
+    /// waiting there is edited in place), never sent on their own; the field takes focus so the
+    /// human can say why.
+    private var sink: AnnotationSink {
+        let outgoing = outgoing
+        let uploader = uploader
+        let toasts = toasts
+        let focus = { focusComposer += 1 }
+        return AnnotationSink(current: { a in
+            outgoing.list.first { $0.id == a.id }?.annotation
+        }, add: { added in
+            guard outgoing.annotate(added.attachment, annotation: added.annotation) else {
+                haptic(.warning)
+                toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
+                return
+            }
+            if let data = added.uploaded { Task { await uploader.keepUploaded(data, for: added.attachment) } }
+            focus()
+        })
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the

@@ -6,14 +6,21 @@ import {
   isUploadPath,
   MAX_INLINE_IMAGE_BYTES,
   MAX_INLINE_IMAGES,
-  normalizePromptAttachments,
+  registerFile,
+  resolveAttachments,
   runAttachments,
   safeUploadName,
   storeUpload,
   sweepUploads,
   uploadDirs,
-} from "./prompt-attachments";
+} from "./attachment-lists";
+import type { Attachment } from "@harness/shared";
+import { openDb } from "./db";
+import { Store } from "./store";
 import { gif, jpeg, png, webp } from "./testing/media";
+
+/** A list entry for a file, as the service would have registered it. */
+const att = (path: string, name = path.split("/").at(-1)!): Attachment => ({ id: `id-${name}`, path, name, source: "file", kind: "file", mimeType: "" });
 
 function dirs() {
   const root = tempDir("harness-prompt-att-");
@@ -57,10 +64,17 @@ describe("storeUpload", () => {
     const d = dirs();
     const a = storeUpload(d.uploads, png(2, 2), "Pasted image.png", "image/png");
     const b = storeUpload(d.uploads, png(2, 2), "Pasted image.png", "image/png");
-    expect(a).toMatchObject({ name: "Pasted image.png", source: "upload" });
+    expect(a).toMatchObject({ name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 2, height: 2 });
+    expect(a.id).not.toBe(b.id);
     expect(a.path).not.toBe(b.path);
     expect(isUploadPath(d.uploads, a.path)).toBe(true);
     expect(readFileSync(a.path).equals(png(2, 2))).toBe(true);
+  });
+
+  test("bytes that aren't an image or video are a file, named by the client's MIME type", () => {
+    const d = dirs();
+    expect(storeUpload(d.uploads, Buffer.from("%PDF-1.7"), "notes", "application/pdf")).toMatchObject({ name: "notes.pdf", kind: "file", mimeType: "application/pdf", size: 8 });
+    expect(storeUpload(d.uploads, Buffer.from("??"), "blob", "application/x-custom")).toMatchObject({ kind: "file", mimeType: "application/x-custom" });
   });
 
   test("refuses an empty upload", () => {
@@ -80,45 +94,82 @@ describe("isUploadPath", () => {
   });
 });
 
-describe("normalizePromptAttachments", () => {
-  test("new paths must be absolute files that exist; the name defaults to the file's and the source comes from where it is", () => {
+describe("resolveAttachments", () => {
+  const registry = () => new Store(openDb(":memory:")).attachments;
+
+  test("a path must be an absolute file that exists; it's registered once, its source from where it is", () => {
     const d = dirs();
-    const shot = d.file("shot.png");
+    const reg = registry();
+    const shot = d.file("shot.png", png(3, 2));
     const up = storeUpload(d.uploads, png(1, 1), "Pasted image.png", "image/png");
-    expect(normalizePromptAttachments([{ path: shot }, { path: up.path, name: " Paste " }], [], d.uploads)).toEqual([
-      { path: shot, name: "shot.png", source: "file" },
-      { path: up.path, name: "Paste", source: "upload" },
-    ]);
-    expect(() => normalizePromptAttachments([{ path: "shot.png" }], [], d.uploads)).toThrow(/absolute/);
-    expect(() => normalizePromptAttachments([{ path: join(d.files, "nope.png") }], [], d.uploads)).toThrow(/not found/);
-    expect(() => normalizePromptAttachments([{ path: d.files }], [], d.uploads)).toThrow(/isn't a file/);
-    expect(() => normalizePromptAttachments("x", [], d.uploads)).toThrow(/list/);
-    expect(() => normalizePromptAttachments([{ name: "a" }], [], d.uploads)).toThrow(/path/);
+    const [a, b] = resolveAttachments([{ path: shot }, { path: up.path, name: " Paste " }], [], reg, d.uploads);
+    expect(a).toEqual({ id: expect.any(String), path: shot, name: "shot.png", source: "file", kind: "image", mimeType: "image/png", size: png(3, 2).length, width: 3, height: 2 });
+    expect(b).toMatchObject({ path: up.path, name: "Paste", source: "upload" });
+    expect(reg.get(a!.id)).toEqual(a!);
+    // The record keeps the file's own name; the list keeps this use's.
+    expect(reg.get(b!.id)!.name).toBe("Pasted image.png");
+    // The same path again is the same attachment.
+    expect(resolveAttachments([{ path: shot }], [], reg, d.uploads)[0]!.id).toBe(a!.id);
+    expect(registerFile(reg, d.uploads, shot, " Renamed ")).toEqual({ ...a!, name: "Renamed" });
+    expect(() => resolveAttachments([{ path: "shot.png" }], [], reg, d.uploads)).toThrow(/absolute/);
+    expect(() => resolveAttachments([{ path: join(d.files, "nope.png") }], [], reg, d.uploads)).toThrow(/not found/);
+    expect(() => resolveAttachments([{ path: d.files }], [], reg, d.uploads)).toThrow(/isn't a file/);
+    expect(() => resolveAttachments("x", [], reg, d.uploads)).toThrow(/list/);
+    expect(() => resolveAttachments([{ name: "a" }], [], reg, d.uploads)).toThrow(/id or a path/);
+    expect(() => resolveAttachments([{ id: 7 }], [], reg, d.uploads)).toThrow(/id must be a string/);
+  });
+
+  test("an id names any registered attachment; an unknown one, or one whose file is gone, is refused", () => {
+    const d = dirs();
+    const reg = registry();
+    const spec = { id: "spec1", path: d.file("after.png", png(2, 2)), name: "After", source: "spec" as const, kind: "image" as const, mimeType: "image/png" };
+    reg.add(null, [spec]);
+    const notes = registerFile(reg, d.uploads, d.file("notes.txt", "hi"));
+    // A full Attachment is a valid input: only its id, name and annotation count.
+    const got = resolveAttachments([{ id: "spec1" }, { ...notes, path: "/elsewhere", source: "upload", kind: "image", name: "Notes" }], [], reg, d.uploads);
+    expect(got).toEqual([spec, { ...notes, name: "Notes" }]);
+    expect(() => resolveAttachments([{ id: "nope" }], [], reg, d.uploads)).toThrow(/Unknown attachment: nope/);
+    rmSync(notes.path);
+    expect(() => resolveAttachments([{ id: notes.id }], [], reg, d.uploads)).toThrow(/not found/);
+  });
+
+  test("a path to a spec's stored file is that spec attachment", () => {
+    const d = dirs();
+    const reg = registry();
+    const path = d.file("att.png", png(1, 1));
+    reg.add(null, [{ id: "s", path, name: "After", source: "spec", kind: "image", mimeType: "image/png" }]);
+    expect(resolveAttachments([{ path }], [], reg, d.uploads)[0]).toMatchObject({ id: "s", source: "spec", name: "After" });
   });
 
   test("a client can't pass a file off as an upload: the source is the service's call", () => {
     const d = dirs();
     const shot = d.file("shot.png");
-    expect(normalizePromptAttachments([{ path: shot, source: "upload" }], [], d.uploads)[0]!.source).toBe("file");
+    expect(resolveAttachments([{ path: shot, source: "upload" }], [], registry(), d.uploads)[0]!.source).toBe("file");
   });
 
-  test("an attachment the ticket already had stays even after its file is gone, and can be renamed", () => {
+  test("an attachment the list already had stays even after its file is gone, and can be renamed", () => {
     const d = dirs();
+    const reg = registry();
     const shot = d.file("shot.png");
-    const before = normalizePromptAttachments([{ path: shot }], [], d.uploads);
+    const before = resolveAttachments([{ path: shot }], [], reg, d.uploads);
     rmSync(shot);
-    expect(normalizePromptAttachments([{ path: shot, name: "Before" }], before, d.uploads)).toEqual([{ path: shot, name: "Before", source: "file" }]);
+    const kept = { ...before[0]!, name: "Before" };
+    expect(resolveAttachments([{ id: before[0]!.id, name: "Before" }], before, reg, d.uploads)).toEqual([kept]);
+    expect(resolveAttachments([{ path: shot, name: "Before" }], before, reg, d.uploads)).toEqual([kept]);
     // A missing file that wasn't attached before is still refused.
-    expect(() => normalizePromptAttachments([{ path: shot }], [], d.uploads)).toThrow(/not found/);
+    expect(() => resolveAttachments([{ path: shot }], [], reg, d.uploads)).toThrow(/not found/);
+    expect(() => resolveAttachments([{ id: before[0]!.id }], [], reg, d.uploads)).toThrow(/not found/);
   });
 
-  test("a path listed twice is kept once, and the limit counts what's left", () => {
+  test("a file listed twice is kept once, and the limit counts what's left", () => {
     const d = dirs();
+    const reg = registry();
     const shot = d.file("shot.png");
-    expect(normalizePromptAttachments([{ path: shot }, { path: shot }], [], d.uploads)).toHaveLength(1);
+    const [first] = resolveAttachments([{ path: shot }], [], reg, d.uploads);
+    expect(resolveAttachments([{ path: shot }, { id: first!.id }], [], reg, d.uploads)).toHaveLength(1);
     const many = Array.from({ length: 21 }, (_, i) => ({ path: d.file(`f${i}.txt`) }));
-    expect(() => normalizePromptAttachments(many, [], d.uploads)).toThrow(/At most 20/);
-    expect(normalizePromptAttachments(many.slice(0, 20), [], d.uploads)).toHaveLength(20);
+    expect(() => resolveAttachments(many, [], reg, d.uploads)).toThrow(/At most 20/);
+    expect(resolveAttachments(many.slice(0, 20), [], reg, d.uploads)).toHaveLength(20);
   });
 });
 
@@ -127,8 +178,8 @@ describe("uploadDirs and sweepUploads", () => {
     const d = dirs();
     const up = storeUpload(d.uploads, png(1, 1), "a.png", "image/png");
     const shot = d.file("shot.png");
-    const forged = { path: shot, name: "x", source: "upload" as const };
-    expect(uploadDirs(d.uploads, [up, { path: shot, name: "shot.png", source: "file" }, forged])).toEqual([join(d.uploads, up.path.split("/").at(-2)!)]);
+    const forged = { path: shot, source: "upload" as const };
+    expect(uploadDirs(d.uploads, [up, att(shot), forged])).toEqual([join(d.uploads, up.path.split("/").at(-2)!)]);
   });
 
   test("the sweep removes old unreferenced uploads only", () => {
@@ -160,8 +211,8 @@ describe("runAttachments", () => {
     const fake = d.file("fake.png", "not really a png");
     const notes = d.file("notes.pdf", "%PDF-1.7");
     const gone = join(d.files, "gone.png");
-    const list = [shot, photo, anim, sticker, fake, notes].map((p) => ({ path: p, name: p.split("/").at(-1)!, source: "file" as const }));
-    const r = runAttachments([...list, { path: gone, name: "gone.png", source: "file" }])!;
+    const list = [shot, photo, anim, sticker, fake, notes].map((p) => att(p));
+    const r = runAttachments([...list, att(gone)])!;
     expect(r.images.map((i) => [i.name, i.mediaType])).toEqual([
       ["shot.png", "image/png"],
       ["photo.jpg", "image/jpeg"],
@@ -182,7 +233,7 @@ describe("runAttachments", () => {
     const d = dirs();
     const big = d.file("big.png", Buffer.concat([png(1, 1), Buffer.alloc(MAX_INLINE_IMAGE_BYTES)]));
     const small = Array.from({ length: MAX_INLINE_IMAGES + 1 }, (_, i) => d.file(`s${i}.png`, png(1, 1)));
-    const r = runAttachments([big, ...small].map((p) => ({ path: p, name: p.split("/").at(-1)!, source: "file" as const })))!;
+    const r = runAttachments([big, ...small].map((p) => att(p)))!;
     expect(r.images).toHaveLength(MAX_INLINE_IMAGES);
     expect(r.notInline.map((n) => n.name)).toEqual(["big.png", `s${MAX_INLINE_IMAGES}.png`]);
     expect(r.notInline[0]!.reason).toMatch(/over 3\.75 MB/);

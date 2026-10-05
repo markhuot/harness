@@ -199,9 +199,12 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/submit", body: body)
     }
 
-    /// `move` is only sent when true, `attachments` only when there are some. The message goes to
-    /// the agent and shows in the Transcript (with its attachments); it never goes into Activity.
-    public func sendMessage(_ key: String, text: String, move: Bool = false, attachments: [PromptAttachmentInput] = []) async throws -> Ticket {
+    /// `move` is only sent when true, `attachments` only when there are some (each with its notes,
+    /// AttachmentInput.annotation). The message goes to the agent and shows in the Transcript
+    /// (with its attachments); it never goes into Activity.
+    public func sendMessage(
+        _ key: String, text: String, move: Bool = false, attachments: [AttachmentInput] = []
+    ) async throws -> Ticket {
         let body = MessageBody(text: text, move: move ? true : nil, attachments: attachments.isEmpty ? nil : attachments)
         return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
@@ -271,35 +274,23 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/tickets/\(key)/spec/revisions/\(rev)")
     }
 
-    /// Absolute URL of a ticket attachment (attachment:<id> in a spec), token in the query so an image or video view can load it.
+    /// Absolute URL of any attachment's file (Attachment.id: spec media, a New session's or a
+    /// message's files), token in the query so an image or video view can load it. 404 once the
+    /// file is gone.
     public func attachmentUrl(_ id: String) -> String {
         "\(baseUrl)/attachments/\(URIComponent.encode(id))?token=\(URIComponent.encode(token))"
     }
 
-    /// The file of a ticket's prompt attachment (Ticket.promptAttachments[index]), with the token
-    /// in the query for image loads and HEAD probes. 404 once the file is gone.
-    public func promptAttachmentUrl(key: String, index: Int) -> String {
-        "\(baseUrl)/tickets/\(URIComponent.encode(key))/prompt-attachments/\(index)?token=\(URIComponent.encode(token))"
+    /// Whether an attachment's file is still on the service's machine: a HEAD of `attachmentUrl`.
+    /// false on 404 (moved or deleted), nil when the service couldn't say, so a flaky network
+    /// doesn't mark files missing.
+    public func attachmentExists(_ id: String) async -> Bool? {
+        await fileExists(attachmentUrl(id))
     }
 
-    /// Whether a ticket's prompt attachment is still on the service's machine: a HEAD of
-    /// `promptAttachmentUrl`. false on 404 (moved, deleted, or the index is past the list), nil when
-    /// the service couldn't say (another status, or the request failed), so a flaky network doesn't
-    /// mark files missing.
-    public func promptAttachmentExists(key: String, index: Int) async -> Bool? {
-        await fileExists(promptAttachmentUrl(key: key, index: index))
-    }
-
-    /// The file of an attachment sent with a message (TranscriptContent.text `attachments[index]`
-    /// of transcript entry `entryId`), token in the query like `promptAttachmentUrl`. 404 once
-    /// it's gone.
-    public func messageAttachmentUrl(entryId: String, index: Int) -> String {
-        "\(baseUrl)/transcript/\(URIComponent.encode(entryId))/attachments/\(index)?token=\(URIComponent.encode(token))"
-    }
-
-    /// A HEAD of one of this service's file URLs (`promptAttachmentUrl`, `messageAttachmentUrl`):
-    /// true when it's there, false on 404, nil when the service couldn't say (another status, or
-    /// the request failed), so a flaky network doesn't mark files missing.
+    /// A HEAD of one of this service's file URLs (`attachmentUrl`): true when it's there, false on
+    /// 404, nil when the service couldn't say (another status, or the request failed), so a flaky
+    /// network doesn't mark files missing.
     public func fileExists(_ urlString: String) async -> Bool? {
         guard let url = URL(string: urlString) else { return nil }
         guard let res = try? await transport.send(HTTPRequest(method: "HEAD", url: url)) else { return nil }
@@ -307,17 +298,24 @@ public final class HarnessClient: Sendable {
         return res.status == 404 ? false : nil
     }
 
-    /// Store bytes (a photo, a pasted image, a file from this device) on the service's machine for a
-    /// prompt attachment: POST /uploads with the raw bytes as the body. Returns the attachment to
-    /// add to a draft's promptAttachments (source "upload"). Throws HarnessAPIError for a 400/413.
-    public func uploadPromptAttachment(data: Data, name: String, mimeType: String? = nil) async throws -> PromptAttachment {
+    /// Store bytes (a photo, a pasted image, a browser screenshot, a file from this device) on the
+    /// service's machine: POST /uploads with the raw bytes as the body. Returns the registered
+    /// attachment (source "upload", with its id) to add to a draft or a message. Throws
+    /// HarnessAPIError for a 400/413.
+    public func uploadAttachment(data: Data, name: String, mimeType: String? = nil) async throws -> Attachment {
         guard let url = URL(string: "\(baseUrl)/uploads?name=\(URIComponent.encode(name))") else { throw URLError(.badURL) }
         let type = mimeType.flatMap { $0.isEmpty ? nil : $0 } ?? "application/octet-stream"
         let headers = ["authorization": "Bearer \(token)", "content-type": type]
         let res = try await transport.send(HTTPRequest(method: "POST", url: url, headers: headers, body: data, timeout: 300))
         let text = res.body.isEmpty ? Data("{}".utf8) : res.body
         guard res.ok else { throw Self.apiError(status: res.status, body: text) }
-        return try JSONDecoder().decode(Envelope<PromptAttachment>.self, from: text).data
+        return try JSONDecoder().decode(Envelope<Attachment>.self, from: text).data
+    }
+
+    /// Register a file already on the service's machine, referenced in place: POST /attachments.
+    /// (The Mac uses it for drops and picks when the service is local; here for parity.)
+    public func registerAttachment(path: String, name: String? = nil) async throws -> Attachment {
+        try await request("POST", "/attachments", body: RegisterAttachmentBody(path: path, name: name))
     }
 
     // MARK: Sessions (ticket + triage) and transcripts
@@ -433,6 +431,17 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/browser/\(sessionId)" + (tabId.map { "?tab=\($0)" } ?? ""))
     }
 
+    /// A PNG of the tab's viewport (`tabId` nil: the lowest open tab), to annotate.
+    public func browserScreenshot(_ sessionId: String, tabId: Int? = nil) async throws -> BrowserScreenshot {
+        try await request("GET", "/browser/\(sessionId)/screenshot" + (tabId.map { "?tab=\($0)" } ?? ""))
+    }
+
+    /// The element under a point of a captured screenshot: POST /browser/:sessionId/element. nil
+    /// when there's none or the tab has moved on since (navigated or scrolled).
+    public func browserElementAt(_ sessionId: String, _ query: BrowserElementQuery) async throws -> BrowserElement? {
+        try await request("POST", "/browser/\(sessionId)/element", body: query, as: BrowserElement?.self)
+    }
+
     /// Load `url` in tab `tabId` (nil: the lowest open tab).
     public func browserNavigate(_ sessionId: String, url: String, tabId: Int? = nil) async throws -> BrowserState {
         try await request("POST", "/browser/\(sessionId)/navigate", body: NavigateBody(url: url, tabId: tabId))
@@ -470,4 +479,10 @@ public final class HarnessClient: Sendable {
     ) -> HarnessSocket {
         HarnessSocket(url: socketUrl, factory: factory, sleep: sleep)
     }
+}
+
+/// POST /attachments: a file on the service's machine, with its display name when it isn't the file's.
+struct RegisterAttachmentBody: Encodable {
+    var path: String
+    var name: String?
 }

@@ -1263,9 +1263,12 @@
               "name": " "
             },
             {
+              "id": "a2",
               "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
               "name": "Pasted image.png",
-              "source": "upload"
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ]
         }
@@ -1299,19 +1302,28 @@
         "draft": true,
         "promptAttachments": [
           {
+            "id": "",
             "path": "/Users/me/a b/notes.pdf",
             "name": "notes.pdf",
-            "source": "file"
+            "source": "file",
+            "kind": "file",
+            "mimeType": ""
           },
           {
+            "id": "",
             "path": "/x/y.png",
             "name": "y.png",
-            "source": "file"
+            "source": "file",
+            "kind": "image",
+            "mimeType": ""
           },
           {
+            "id": "a2",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
             "name": "Pasted image.png",
-            "source": "upload"
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ],
         "blockedReason": null,
@@ -1357,9 +1369,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -3342,14 +3357,20 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             },
             {
+              "id": "a2",
               "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
               "name": "Pasted image.png",
-              "source": "upload"
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -3395,12 +3416,20 @@
         "skipHumanReview": false,
         "promptAttachments": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
-            "name": "shot.png"
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-            "name": "Pasted image.png"
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       }
@@ -4873,9 +4902,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7085,9 +7117,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7129,14 +7164,20 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             },
             {
+              "id": "a2",
               "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
               "name": "Pasted image.png",
-              "source": "upload"
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7153,12 +7194,20 @@
       "output": {
         "promptAttachments": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
-            "name": "shot.png"
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a2",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-            "name": "Pasted image.png"
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       }
@@ -7195,14 +7244,20 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             },
             {
+              "id": "a2",
               "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
               "name": "Pasted image.png",
-              "source": "upload"
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7244,14 +7299,20 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a2",
               "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
               "name": "Pasted image.png",
-              "source": "upload"
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
             },
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7268,12 +7329,20 @@
       "output": {
         "promptAttachments": [
           {
+            "id": "a2",
             "path": "/Users/me/.harness/uploads/u1/Pasted image.png",
-            "name": "Pasted image.png"
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
           },
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
-            "name": "shot.png"
+            "name": "shot.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       }
@@ -7310,9 +7379,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7354,9 +7426,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7404,9 +7479,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7448,9 +7526,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "after.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,
@@ -7467,8 +7548,12 @@
       "output": {
         "promptAttachments": [
           {
+            "id": "a1",
             "path": "/Users/me/Desktop/shot.png",
-            "name": "after.png"
+            "name": "after.png",
+            "source": "file",
+            "kind": "image",
+            "mimeType": "image/png"
           }
         ]
       }
@@ -7586,9 +7671,12 @@
           "draft": true,
           "promptAttachments": [
             {
+              "id": "a1",
               "path": "/Users/me/Desktop/shot.png",
               "name": "shot.png",
-              "source": "file"
+              "source": "file",
+              "kind": "image",
+              "mimeType": "image/png"
             }
           ],
           "blockedReason": null,

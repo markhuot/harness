@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { PromptAttachment, Run, RunKind, RunStatus } from "@harness/shared";
+import type { Attachment, Run, RunKind, RunStatus } from "@harness/shared";
 import { fromJson, newId, now } from "./util";
 
 interface RunRow {
@@ -17,7 +17,7 @@ interface RunRow {
 }
 
 const toRun = (r: RunRow): Run => {
-  const attachments = fromJson<PromptAttachment[]>(r.attachments, []);
+  const attachments = fromJson<Attachment[]>(r.attachments, []);
   return {
     id: r.id,
     sessionId: r.session_id,
@@ -45,13 +45,19 @@ export class RunRepo {
     return (this.db.query("SELECT * FROM runs WHERE session_id = $sessionId ORDER BY created_at, rowid").all({ sessionId }) as RunRow[]).map(toRun);
   }
 
+  /** The files attached to runs' messages, with each run's session (like TranscriptRepo.messageAttachments). */
+  messageAttachments(): { sessionId: string; attachment: Attachment }[] {
+    const rows = this.db.query("SELECT session_id, attachments FROM runs WHERE attachments <> '[]'").all() as { session_id: string; attachments: string }[];
+    return rows.flatMap((r) => fromJson<Attachment[]>(r.attachments, []).map((attachment) => ({ sessionId: r.session_id, attachment })));
+  }
+
   /** Runs left queued/running (e.g. by a previous process). */
   listUnfinished(): Run[] {
     return (this.db.query("SELECT * FROM runs WHERE status IN ('queued','running') ORDER BY created_at, rowid").all() as RunRow[]).map(toRun);
   }
 
   /** `attachments`: the files the human attached to the message the run answers. */
-  create(input: { sessionId: string; kind: RunKind; driver: string; prompt: string; attachments?: readonly PromptAttachment[] }): Run {
+  create(input: { sessionId: string; kind: RunKind; driver: string; prompt: string; attachments?: readonly Attachment[] }): Run {
     const id = newId();
     const { attachments, ...rest } = input;
     this.db

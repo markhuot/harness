@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, resolveBaseBranch, type CompletionAction, type PromptAttachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   AGENTS_LIVE_LABEL,
+  annotateAttachment,
+  attachmentInputs,
   autoStartTitle,
   autoStartWaitingOn,
   CHANGES_LABEL,
@@ -33,7 +35,8 @@ import {
 } from "@harness/shared/state";
 import type { PluginTab as PluginTabRef } from "@harness/shared";
 import { Icon, isIconName } from "../components/Icon";
-import { FileLinkScope } from "../components/Markdown";
+import { FileLinkScope, SpecAttachmentsScope } from "../components/Markdown";
+import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 import { ModelBadge } from "../components/ModelSelect";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, Switch, TicketKey } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
@@ -76,7 +79,7 @@ import {
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { liveRelatedTickets, remoteKeyMatches } from "../state/remoteIds";
-import { composerCanSend } from "../state/promptAttachmentFiles";
+import { composerCanSend, waitingAnnotation } from "../state/promptAttachmentFiles";
 import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
 import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
 
@@ -163,6 +166,10 @@ export function useTicketData(ticketKey: string) {
   const remoteId = ticket?.externalRef?.key ?? null;
   /** The remote ID `related` was fetched for (undefined until the detail loads) */
   const relatedFor = useRef<string | null | undefined>(undefined);
+  // The spec's media (the detail's attachments), so a spec image is annotated by its record; refetched when the spec changes.
+  const [specAttachments, setSpecAttachments] = useState<Attachment[] | undefined>(undefined);
+  const specRevision = ticket?.specRevision;
+  const attachmentsFor = useRef<number | undefined>(undefined);
 
   // Detail (activity, runs, session) — refetch on reconnect.
   useEffect(() => {
@@ -174,6 +181,8 @@ export function useTicketData(ticketKey: string) {
         dispatch({ type: "detail", detail, requestedKey: ticketKey });
         setRelated(detail.relatedTickets);
         relatedFor.current = detail.ticket.externalRef?.key ?? null;
+        setSpecAttachments(detail.attachments);
+        attachmentsFor.current = detail.ticket.specRevision;
         setMissing(false);
         // An old key (from before a project rename) resolves to the ticket's current key; follow it
         // on every board (another board's panes may have it open under the old key too).
@@ -200,7 +209,23 @@ export function useTicketData(ticketKey: string) {
       cancelled = true;
     };
   }, [client, ticketKey, remoteId]);
-  return { ticket, missing, related, pluginTabs };
+  // A new spec revision can show media the detail didn't list yet.
+  useEffect(() => {
+    if (attachmentsFor.current === undefined || attachmentsFor.current === specRevision) return;
+    let cancelled = false;
+    client.getTicket(ticketKey).then(
+      (detail) => {
+        if (cancelled) return;
+        attachmentsFor.current = detail.ticket.specRevision;
+        setSpecAttachments(detail.attachments);
+      },
+      () => {},
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client, ticketKey, specRevision]);
+  return { ticket, missing, related, pluginTabs, specAttachments };
 }
 
 /** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
@@ -218,7 +243,7 @@ export function TicketDetail({
   const { state } = useStore();
   const scope = usePaneScope();
   const boardScope = useBoardScope();
-  const { ticket, missing, related, pluginTabs } = useTicketData(ticketKey);
+  const { ticket, missing, related, pluginTabs, specAttachments } = useTicketData(ticketKey);
   // Which of its tabs (and its composer) are torn off into panes or windows of their own.
   const torn = useTornOffTabs(ticket?.key ?? ticketKey, boardScope);
 
@@ -368,6 +393,7 @@ export function TicketDetail({
             requested={paneTab}
             pluginTabs={pluginTabs}
             related={related}
+            specAttachments={specAttachments}
             setTab={setTab}
             browser={{ tear: { ticketKey: ticket.key, scope, boardScope, paneId, torn } }}
           />
@@ -408,6 +434,7 @@ export function TicketTabBody({
   requested,
   pluginTabs,
   related,
+  specAttachments,
   setTab,
   browser,
 }: {
@@ -416,6 +443,8 @@ export function TicketTabBody({
   requested: TicketTab;
   pluginTabs: PluginTabRef[] | null | undefined;
   related: RelatedTicket[] | undefined;
+  /** The spec's media (TicketDetail.attachments), so a spec image is annotated as itself. */
+  specAttachments: Attachment[] | undefined;
   setTab: (t: TicketTab) => void;
   browser: BrowserOpts;
 }) {
@@ -425,7 +454,12 @@ export function TicketTabBody({
   const openAgent = parseSubagentTab(tab);
   const openedTask = openAgent ? isTask(subagentById(state, ticket.sessionId, openAgent) ?? {}) : false;
   const openSubagent = (id: string) => setTab(subagentTabRoute(id));
+  // Annotate anywhere in the tab (a spec image, a prompt attachment, a message's file, the
+  // browser) adds the image with its notes to the ticket's composer, wherever it is in this
+  // window; one already waiting there has its notes edited in place.
   return (
+    <AnnotateScope onAdd={(a) => composerFor(ticket.key).add(a)} annotationOf={(a) => ticketComposers.get(ticket.key)?.annotationOf(a)}>
+    <SpecAttachmentsScope attachments={specAttachments}>
     <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
       {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
       {tab === "activity" && <ActivityTab ticket={ticket} />}
@@ -448,6 +482,8 @@ export function TicketTabBody({
         </div>
       )}
     </FileLinkScope>
+    </SpecAttachmentsScope>
+    </AnnotateScope>
   );
 }
 
@@ -818,21 +854,43 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
   );
 }
 
+/** What a ticket's composer offers Annotate: add an image with its notes, and the notes it has on a file already. */
+interface ComposerAnnotate {
+  add: (a: AnnotatedAttachment) => void;
+  annotationOf: (a: Attachment) => Attachment["annotation"];
+}
+
+/**
+ * Each ticket's composer in this window, by ticket key: there's one per ticket, in its pane or
+ * torn off into a pane of its own, and Annotate from any of its tabs adds to it.
+ */
+const ticketComposers = new Map<string, ComposerAnnotate>();
+
+/** The ticket's composer in this window; torn off into a window of its own, it can't take notes from here. */
+function composerFor(ticketKey: string): ComposerAnnotate {
+  const c = ticketComposers.get(ticketKey);
+  if (!c) throw new Error("The message box is in another window. Bring it back to this one to add notes to your message");
+  return c;
+}
+
 /**
  * The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the
  * answer appear. (+) attaches files the way a New session does (pick, or paste an image; drops and
  * ⌘V of files work too); they show above the input until the message goes, and go with it. `grip`
  * (on its top edge) drags it off into a pane of its own; torn off, it fills that pane (`fill`).
+ * Annotate (anywhere in the ticket) adds the image here with its notes (metadata on the attachment;
+ * the image isn't changed) and focuses the input for the human to say why; annotating a waiting
+ * image again edits its notes in place. Send sends the files with their notes.
  */
 export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket: Ticket; onSent: () => void; grip?: ReactNode; fill?: boolean }) {
   const { client } = useStore();
   const act = useAction();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const [attachments, setAttachments] = useState<PromptAttachment[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   // Uploads finish after their render: they read and write the latest list.
-  const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
+  const listRef = useRef(attachments);
+  listRef.current = attachments;
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
@@ -842,12 +900,30 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   const move = !!switchLabel && moveFirst;
   // A message while a tool approval waits answers it (as a deny), and the service won't take files with it.
   const approvalPending = !!ticket.pendingApproval;
-  const setList = (list: PromptAttachment[]) => {
-    attachmentsRef.current = list;
-    setAttachments(list);
+  const setList = (next: Attachment[]) => {
+    listRef.current = next;
+    setAttachments(next);
   };
+  /** Add to message: the notes go on the same attachment (by id) waiting here, or it's added with them. */
+  const annotate = (a: AnnotatedAttachment) => {
+    const next = annotateAttachment(listRef.current, a.attachment, a.annotation);
+    if (next.skipped) throw new Error(`a message takes up to ${MAX_PROMPT_ATTACHMENTS} files`);
+    setList(next.list);
+    // Before the annotator closes, so the focus stays here: the human writes why.
+    ref.current?.focus();
+  };
+  const annotateRef = useRef<ComposerAnnotate | null>(null);
+  annotateRef.current = { add: annotate, annotationOf: (a) => waitingAnnotation(listRef.current, a) };
+  // This window's composer for the ticket while it's mounted (in its pane, or torn off into one).
+  useEffect(() => {
+    const entry: ComposerAnnotate = { add: (a) => annotateRef.current!.add(a), annotationOf: (a) => annotateRef.current!.annotationOf(a) };
+    ticketComposers.set(ticket.key, entry);
+    return () => {
+      if (ticketComposers.get(ticket.key) === entry) ticketComposers.delete(ticket.key);
+    };
+  }, [ticket.key]);
   const attach = usePromptAttachmentInput({
-    target: { get: () => attachmentsRef.current, set: setList },
+    target: { get: () => listRef.current, set: setList },
     enabled: !approvalPending,
     what: "a message",
   });
@@ -873,25 +949,34 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
     const body = text.trim();
     const files = attachments;
     setSending(true);
-    const ok = await act(() => client.sendMessage(ticket.key, body, { move, ...(files.length ? { attachments: files } : {}) }));
+    // Each file carries its notes (Attachment.annotation).
+    const ok = await act(() => client.sendMessage(ticket.key, body, { move, ...(files.length ? { attachments: attachmentInputs(files) } : {}) }));
     setSending(false);
     if (ok) {
       setText("");
       // Only what went: anything attached while it was sending stays for the next message.
-      setList(attachmentsRef.current.filter((a) => !files.includes(a)));
+      setList(listRef.current.filter((a) => !files.includes(a)));
       setMoveFirst(false);
       onSent();
     }
   };
 
+  // Its own Annotate scope: a waiting image's lightbox annotates it here, also when the composer
+  // is torn off into a pane of its own (away from the tabs' scope).
   return (
+    <AnnotateScope onAdd={annotate} annotationOf={(a) => waitingAnnotation(listRef.current, a)}>
     <div
       className={`composer ${ticket.status === "blocked" ? "attention" : ""} ${attach.dropping ? "dropping" : ""} ${fill ? "composer-fill" : ""}`}
       data-testid="composer"
       {...attach.dropProps}
     >
       {grip}
-      <PromptAttachmentList items={attachments} ticketKey={null} onRemove={attach.remove} pending={attach.pending} />
+      <PromptAttachmentList
+        items={attachments}
+        onRemove={attach.remove}
+        pending={attach.pending}
+        annotate={(a) => ({ attachment: a, onAdd: annotate })}
+      />
       <div className="composer-row">
         {!approvalPending && (
           <MenuButton
@@ -966,5 +1051,6 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
         </div>
       )}
     </div>
+    </AnnotateScope>
   );
 }

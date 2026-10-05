@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
-import { attachmentPath, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, prepareAttachments, storeAttachments } from "./attachments";
+import { attachmentPath, describeFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, prepareAttachments, storeAttachments } from "./attachments";
 import { gif, jpeg, mov, mp4, png, webm, webp } from "./testing/media";
 
 function workdir(files: Record<string, Buffer | string> = {}) {
@@ -45,8 +45,8 @@ describe("prepareAttachments", () => {
     const dir = workdir({ "shots/after.png": png(1, 1) });
     const other = workdir({ "x.png": png(2, 2) });
     const [rel, abs] = prepareAttachments(["shots/after.png", join(other, "x.png")], dir);
-    expect(rel!.source).toBe(join(dir, "shots/after.png"));
-    expect(abs!.source).toBe(join(other, "x.png"));
+    expect(rel!.from).toBe(join(dir, "shots/after.png"));
+    expect(abs!.from).toBe(join(other, "x.png"));
     // the same relative path from another cwd doesn't exist
     expect(() => prepareAttachments(["shots/after.png"], other)).toThrow(`Attachment not found: shots/after.png (looked at ${join(other, "shots/after.png")})`);
   });
@@ -87,12 +87,15 @@ describe("prepareAttachments", () => {
 });
 
 describe("storeAttachments", () => {
-  test("copies each file to <id>.<ext> and drops the source path", () => {
+  test("copies each file to <id>.<ext>; the record is spec media at its copy", () => {
     const dir = workdir({ "a.jpeg": jpeg(4, 4), "b.mov": mov() });
     const store = tempDir("harness-store-");
     const prepared = prepareAttachments(["a.jpeg", "b.mov"], dir);
     const stored = storeAttachments(join(store, "attachments"), prepared);
-    expect(stored.map((a) => "source" in a)).toEqual([false, false]);
+    expect(stored.map((a) => [a.source, a.path, "from" in a])).toEqual([
+      ["spec", join(store, "attachments", `${prepared[0]!.id}.jpg`), false],
+      ["spec", join(store, "attachments", `${prepared[1]!.id}.mov`), false],
+    ]);
     expect(readdirSync(join(store, "attachments")).sort()).toEqual([`${prepared[0]!.id}.jpg`, `${prepared[1]!.id}.mov`].sort());
     expect(readFileSync(attachmentPath(join(store, "attachments"), stored[0]!))).toEqual(jpeg(4, 4));
   });
@@ -101,8 +104,24 @@ describe("storeAttachments", () => {
     const dir = workdir({ "a.png": png(1, 1), "b.png": png(1, 1) });
     const store = join(tempDir("harness-store-"), "attachments");
     const prepared = prepareAttachments(["a.png", "b.png"], dir);
-    prepared[1]!.source = join(dir, "vanished.png"); // deleted between validation and copy
+    prepared[1]!.from = join(dir, "vanished.png"); // deleted between validation and copy
     expect(() => storeAttachments(store, prepared)).toThrow();
     expect(existsSync(attachmentPath(store, prepared[0]!))).toBe(false);
+  });
+});
+
+describe("describeFile", () => {
+  test("images by their bytes whatever the name, videos by bytes and extension, anything else is a file", () => {
+    const dir = workdir({ "shot.dat": png(12, 7), "clip.mov": mov(), "clip.m4v": mp4(), "photo.heic": mp4(), "notes.pdf": "%PDF-1.4", "fake.mp4": "hello", "blob": "x" });
+    expect(describeFile(join(dir, "shot.dat"))).toEqual({ kind: "image", mimeType: "image/png", size: png(12, 7).length, width: 12, height: 7 });
+    expect(describeFile(join(dir, "clip.mov"))).toMatchObject({ kind: "video", mimeType: "video/quicktime" });
+    expect(describeFile(join(dir, "clip.m4v"))).toMatchObject({ kind: "video", mimeType: "video/mp4" });
+    // An ftyp box alone isn't a video: HEIC images open with one too.
+    expect(describeFile(join(dir, "photo.heic"))!.kind).toBe("file");
+    expect(describeFile(join(dir, "notes.pdf"))).toEqual({ kind: "file", mimeType: "application/pdf", size: 8 });
+    expect(describeFile(join(dir, "fake.mp4"))!.kind).toBe("file");
+    expect(describeFile(join(dir, "blob"))).toEqual({ kind: "file", mimeType: "", size: 1 });
+    expect(describeFile(join(dir, "missing.png"))).toBeNull();
+    expect(describeFile(dir)).toBeNull();
   });
 });

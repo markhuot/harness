@@ -63,14 +63,14 @@ struct TicketDetailSpecTab: View {
                                        message: ticket.status == .planning ? "The planning agent writes it. You can also write it in Details." : "This revision is empty.")
                                 .padding(.top, 20)
                         } else {
-                            MarkdownView(text: body)
+                            MarkdownView(text: body, annotatable: true)
                         }
                     } else {
                         Spinner().frame(maxWidth: .infinity).padding(30)
                     }
                     if let list = ticket.promptAttachments, !list.isEmpty {
                         Divider().overlay(c.border).padding(.top, 4)
-                        TicketPromptAttachments(ticket: ticket, list: list)
+                        TicketPromptAttachments(list: list)
                     }
                 }
                 .padding(14)
@@ -224,13 +224,12 @@ private struct SpecHistoryBar: View {
 /// a vertical list: images open full screen,
 /// other files download into Quick Look. One that's gone from the Mac shows as missing.
 private struct TicketPromptAttachments: View {
-    let ticket: Ticket
-    let list: [PromptAttachment]
+    let list: [Attachment]
 
     @State private var downloading = false
 
     var body: some View {
-        let tiles = list.enumerated().map { i, a in PromptAttachmentTile(attachment: a, index: i, remote: .prompt(key: ticket.key, index: i)) }
+        let tiles = list.enumerated().map { i, a in PromptAttachmentTile(attachment: a, index: i) }
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 SectionTitle("Attachments")

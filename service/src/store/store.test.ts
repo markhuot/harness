@@ -487,7 +487,7 @@ describe("misc", () => {
 });
 
 describe("activity and ticket attachments", () => {
-  const shot = (id: string, patch: Partial<Attachment> = {}): Attachment => ({ id, kind: "image", mimeType: "image/png", name: `${id}.png`, size: 10, width: 4, height: 3, ...patch });
+  const shot = (id: string, patch: Partial<Attachment> = {}): Attachment => ({ id, path: `/h/attachments/${id}.png`, name: `${id}.png`, source: "spec", kind: "image", mimeType: "image/png", size: 10, width: 4, height: 3, ...patch });
 
   test("migration 26: the description becomes revision 1 of the spec, summaries become notes, and their attachments move to the ticket", () => {
     const db = new Database(":memory:", { strict: true });
@@ -517,7 +517,7 @@ describe("activity and ticket attachments", () => {
     shotRow.run({ id: "orphan", summary: "triage", ord: 0, name: "loose.png" });
     db.query("INSERT INTO settings (key, value) VALUES ('prompts', $v)").run({ v: JSON.stringify({ "system.summaries": "old", "system.work": "kept" }) });
 
-    migrate(db);
+    migrate(db, { attachmentsDir: "/h/attachments" });
     const s = new Store(db);
     const started = s.tickets.get("OLD-1")!;
     const planned = s.tickets.get("OLD-2")!;
@@ -531,7 +531,7 @@ describe("activity and ticket attachments", () => {
       ["second", "note", "reworked the throttle\n\n![before.png](attachment:a2)\n![after.png](attachment:a1)"],
     ]);
     expect(s.attachments.listByTicket("OLD-1").map((a) => a.id)).toEqual(["a2", "a1"]);
-    expect(s.attachments.get("a1")).toEqual({ id: "a1", kind: "image", mimeType: "image/png", name: "after.png", size: 10, width: 4, height: 3 });
+    expect(s.attachments.get("a1")).toEqual({ id: "a1", path: "/h/attachments/a1.png", name: "after.png", source: "spec", kind: "image", mimeType: "image/png", size: 10, width: 4, height: 3 });
     // A triage session's summary has no ticket to hold its attachment: the note keeps only its text.
     expect(s.activity.listBySession("tri").map((e) => [e.kind, e.body])).toEqual([["note", "dispatched"]]);
     expect(s.attachments.get("orphan")).toBeNull();
@@ -558,10 +558,10 @@ describe("activity and ticket attachments", () => {
     const t = ticketFor(s, p.id, "FOO-1");
     const other = ticketFor(s, p.id, "FOO-2");
     // ids sort the opposite way from the order given, so ordering can't come from the id
-    s.attachments.add(t.id, [shot("z"), shot("m", { kind: "video", mimeType: "video/mp4", name: "flow.mp4", width: undefined, height: undefined }), shot("a")]);
+    s.attachments.add(t.id, [shot("z"), shot("m", { path: "/h/attachments/m.mp4", kind: "video", mimeType: "video/mp4", name: "flow.mp4", width: undefined, height: undefined }), shot("a")]);
     s.attachments.add(other.id, [shot("other")]);
     expect(s.attachments.listByTicket(t.id).map((a) => a.id)).toEqual(["z", "m", "a"]);
-    expect(s.attachments.get("m")).toEqual({ id: "m", kind: "video", mimeType: "video/mp4", name: "flow.mp4", size: 10 });
+    expect(s.attachments.get("m")).toEqual({ id: "m", path: "/h/attachments/m.mp4", name: "flow.mp4", source: "spec", kind: "video", mimeType: "video/mp4", size: 10 });
     expect(s.attachments.get("nope")).toBeNull();
   });
 

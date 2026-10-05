@@ -88,7 +88,7 @@ struct TranscriptEntryRow: View {
                     }
                 }
                 if let attachments, !attachments.isEmpty {
-                    TranscriptMessageAttachments(entryId: entry.id, list: attachments)
+                    TranscriptMessageAttachments(list: attachments)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -132,18 +132,17 @@ struct TranscriptEntryRow: View {
 
 /// The files sent with a message, under its bubble: the shared read-only list (thumbnails, a
 /// missing state once a file is gone from the Mac), images opening full screen and other files in
-/// Quick Look, served from GET /transcript/:entryId/attachments/:index.
+/// Quick Look, each served from GET /attachments/:id. An image sent with notes
+/// (Attachment.annotation) shows its marks over the thumbnail and a compact "3 notes"
+/// disclosure under its row.
 struct TranscriptMessageAttachments: View {
-    let entryId: String
-    let list: [PromptAttachment]
+    let list: [Attachment]
 
     @Environment(\.palette) private var c
     @State private var downloading = false
 
     var body: some View {
-        let tiles = list.enumerated().map { i, a in
-            PromptAttachmentTile(attachment: a, index: i, remote: .message(entryId: entryId, index: i))
-        }
+        let tiles = list.enumerated().map { i, a in PromptAttachmentTile(attachment: a, index: i) }
         OpenablePromptAttachmentList(tiles: tiles, downloading: $downloading)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)

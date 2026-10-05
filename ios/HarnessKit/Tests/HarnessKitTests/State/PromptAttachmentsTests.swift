@@ -1,33 +1,33 @@
 import Foundation
 import Testing
 @testable import HarnessKit
+import struct HarnessKit.Attachment
 
 @Suite("state/promptAttachments.ts parity")
 struct PromptAttachmentsTests {
     struct SameInput: Decodable, Sendable {
-        let x: [PromptAttachment]
-        let y: [PromptAttachment]
+        let x: [Attachment]
+        let y: [Attachment]
     }
 
     struct AddInput: Decodable, Sendable {
-        let list: [PromptAttachment]
-        let added: [PromptAttachmentInput]
+        let list: [Attachment]
+        let added: [Attachment]
         let max: Int?
     }
 
     struct AddOutput: Decodable, Sendable, Equatable {
-        let list: [PromptAttachment]
+        let list: [Attachment]
         let skipped: Int
     }
 
     struct RemoveInput: Decodable, Sendable {
-        let list: [PromptAttachment]
+        let list: [Attachment]
         let index: Int
     }
 
-    struct NamePath: Decodable, Sendable {
-        let name: String
-        let path: String
+    struct KindOnly: Decodable, Sendable {
+        let kind: AttachmentKind
     }
 
     @Test(arguments: Fixture.cases("promptAttachments", "fileBaseNameCases", input: String.self, output: String.self))
@@ -35,35 +35,54 @@ struct PromptAttachmentsTests {
         #expect(PromptAttachments.fileBaseName(c.input) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("promptAttachments", "promptAttachmentFromInputCases", input: PromptAttachmentInput.self, output: PromptAttachment.self))
-    func fromInput(_ c: Fixture.Case<PromptAttachmentInput, PromptAttachment>) {
-        #expect(PromptAttachments.fromInput(c.input) == c.output)
+    @Test(arguments: Fixture.cases("promptAttachments", "attachmentFromInputCases", input: AttachmentInput.self, output: Attachment.self))
+    func fromInput(_ c: Fixture.Case<AttachmentInput, Attachment>) {
+        #expect(PromptAttachments.fromInput(c.input) == c.output, "\(c.name)")
     }
 
-    @Test(arguments: Fixture.cases("promptAttachments", "promptAttachmentInputsCases", input: [PromptAttachment].self, output: JSONValue.self))
-    func inputs(_ c: Fixture.Case<[PromptAttachment], JSONValue>) throws {
+    @Test(arguments: Fixture.cases("promptAttachments", "attachmentInputsCases", input: [Attachment].self, output: JSONValue.self))
+    func inputs(_ c: Fixture.Case<[Attachment], JSONValue>) throws {
         try expectJSONMatchesTS(PromptAttachments.inputs(c.input), c.output)
     }
 
-    @Test(arguments: Fixture.cases("promptAttachments", "samePromptAttachmentsCases", input: SameInput.self, output: Bool.self))
+    @Test(arguments: Fixture.cases("promptAttachments", "sameAttachmentsCases", input: SameInput.self, output: Bool.self))
     func same(_ c: Fixture.Case<SameInput, Bool>) {
-        #expect(PromptAttachments.same(c.input.x, c.input.y) == c.output)
+        #expect(PromptAttachments.same(c.input.x, c.input.y) == c.output, "\(c.name)")
     }
 
-    @Test(arguments: Fixture.cases("promptAttachments", "addPromptAttachmentsCases", input: AddInput.self, output: AddOutput.self))
+    @Test(arguments: Fixture.cases("promptAttachments", "addAttachmentsCases", input: AddInput.self, output: AddOutput.self))
     func add(_ c: Fixture.Case<AddInput, AddOutput>) {
         let r = c.input.max.map { PromptAttachments.add(c.input.list, c.input.added, max: $0) } ?? PromptAttachments.add(c.input.list, c.input.added)
-        #expect(AddOutput(list: r.list, skipped: r.skipped) == c.output)
+        #expect(AddOutput(list: r.list, skipped: r.skipped) == c.output, "\(c.name)")
     }
 
-    @Test(arguments: Fixture.cases("promptAttachments", "removePromptAttachmentCases", input: RemoveInput.self, output: [PromptAttachment].self))
-    func remove(_ c: Fixture.Case<RemoveInput, [PromptAttachment]>) {
+    @Test(arguments: Fixture.cases("promptAttachments", "removeAttachmentCases", input: RemoveInput.self, output: [Attachment].self))
+    func remove(_ c: Fixture.Case<RemoveInput, [Attachment]>) {
         #expect(PromptAttachments.remove(c.input.list, at: c.input.index) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("promptAttachments", "promptAttachmentIsImageCases", input: NamePath.self, output: Bool.self))
-    func isImage(_ c: Fixture.Case<NamePath, Bool>) {
-        #expect(PromptAttachments.isImage(name: c.input.name, path: c.input.path) == c.output)
+    @Test(arguments: Fixture.cases("promptAttachments", "attachmentIsImageCases", input: KindOnly.self, output: Bool.self))
+    func isImage(_ c: Fixture.Case<KindOnly, Bool>) {
+        #expect(PromptAttachments.isImage(kind: c.input.kind) == c.output)
+    }
+
+    struct AnnotateInput: Decodable, Sendable {
+        let list: [Attachment]
+        let attachment: Attachment
+        let annotation: AttachmentAnnotation?
+        let max: Int?
+    }
+
+    struct AnnotateOutput: Decodable, Sendable, Equatable {
+        let list: [Attachment]
+        let skipped: Bool
+    }
+
+    @Test(arguments: Fixture.cases("promptAttachments", "annotateAttachmentCases", input: AnnotateInput.self, output: AnnotateOutput.self))
+    func annotate(_ c: Fixture.Case<AnnotateInput, AnnotateOutput>) {
+        let r = c.input.max.map { PromptAttachments.annotate(c.input.list, c.input.attachment, annotation: c.input.annotation, max: $0) }
+            ?? PromptAttachments.annotate(c.input.list, c.input.attachment, annotation: c.input.annotation)
+        #expect(AnnotateOutput(list: r.list, skipped: r.skipped) == c.output, "\(c.name)")
     }
 
     @Test(arguments: Fixture.cases("promptAttachments", "pastedImageNameCases", input: String?.self, output: String.self))
@@ -71,26 +90,37 @@ struct PromptAttachmentsTests {
         #expect(PromptAttachments.pastedImageName(c.input) == c.output)
     }
 
+    static func file(_ id: String, _ path: String) -> Attachment {
+        Attachment(id: id, path: path, name: PromptAttachments.fileBaseName(path), source: .upload, kind: .image, mimeType: "image/png")
+    }
+
     /// The default cap is MAX_PROMPT_ATTACHMENTS (fixtures only pin an explicit `max`).
     @Test func defaultCapIsTwenty() {
-        let added = (0..<25).map { PromptAttachmentInput(path: "/\($0).png") }
+        let added = (0..<25).map { Self.file("a\($0)", "/\($0).png") }
         let r = PromptAttachments.add([], added)
         #expect(r.list.count == 20)
         #expect(r.skipped == 5)
     }
 
-    /// JS compares paths by code units: a precomposed é and e + U+0301 are two files.
+    /// JS compares ids and paths by code units: a precomposed é and e + U+0301 are two files.
     @Test func canonicallyEquivalentPathsAreDistinct() {
-        let r = PromptAttachments.add([], [PromptAttachmentInput(path: "/caf\u{E9}.png"), PromptAttachmentInput(path: "/cafe\u{301}.png")])
+        let r = PromptAttachments.add([], [Self.file("", "/caf\u{E9}.png"), Self.file("", "/cafe\u{301}.png")])
         #expect(r.list.count == 2)
     }
 
-    /// Local edits keep where a file came from; the wire body doesn't send it.
-    @Test func inputsKeepingSourceKeepsUploads() {
-        let up = PromptAttachment(path: "/u/a.png", name: "a.png", source: .upload)
-        let t = Drafts.applyTicketPatch(sample(), UpdateTicketBody(promptAttachments: PromptAttachments.inputsKeepingSource([up])))
+    /// An older service's record (no id, kind or mimeType) still decodes, its kind from its name;
+    /// one without a path doesn't.
+    @Test func anOlderServicesRecordDecodesWithDefaults() throws {
+        let old = try JSONDecoder().decode(Attachment.self, from: Data(#"{"path":"/u/a.MOV","name":"a.MOV","source":"upload"}"#.utf8))
+        #expect(old == Attachment(id: "", path: "/u/a.MOV", name: "a.MOV", source: .upload, kind: .video, mimeType: ""))
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(Attachment.self, from: Data(#"{"name":"x.png","id":"a1"}"#.utf8)) }
+    }
+
+    /// Local edits keep where a file came from: the body sends each attachment whole.
+    @Test func applyingTheDraftsOwnPatchKeepsUploads() {
+        let up = Self.file("a1", "/u/a.png")
+        let t = Drafts.applyTicketPatch(sample(), UpdateTicketBody(promptAttachments: PromptAttachments.inputs([up])))
         #expect(t.promptAttachments == [up])
-        #expect(PromptAttachments.inputs([up]).first?.source == nil)
     }
 
     private func sample() -> Ticket {
@@ -134,41 +164,81 @@ struct PromptAttachmentUploadRulesTests {
     }
 }
 
+
 @Suite("Message attachments (the composer's list)")
 @MainActor
 struct MessageAttachmentsTests {
-    static func input(_ path: String, _ name: String? = nil) -> PromptAttachmentInput { PromptAttachmentInput(path: path, name: name) }
+    static func upload(_ id: String, _ name: String) -> Attachment {
+        Attachment(id: id, path: "/u/\(id)/\(name)", name: name, source: .upload, kind: PromptAttachments.kindByName(name), mimeType: "")
+    }
 
-    @Test func addDedupesByPathAndNamesFromThePath() {
+    @Test func addDedupesByIdNotByName() {
         let m = MessageAttachments()
-        #expect(m.add([Self.input("/u/a/shot.png"), Self.input("/u/b/notes.pdf", "Notes"), Self.input("/u/a/shot.png")]) == 0)
-        #expect(m.list.map(\.name) == ["shot.png", "Notes"])
-        #expect(m.add([Self.input("/u/b/notes.pdf")]) == 0)
-        #expect(m.count == 2)
+        #expect(m.add([Self.upload("a1", "shot.png"), Self.upload("a2", "notes.pdf"), Self.upload("a1", "shot.png")]) == 0)
+        #expect(m.list.map(\.id) == ["a1", "a2"])
+        // Same name, another upload: a second file.
+        #expect(m.add([Self.upload("a3", "shot.png")]) == 0)
+        #expect(m.count == 3)
     }
 
     @Test func addStopsAtTheLimitAndCountsWhatWasLeftOut() {
         let m = MessageAttachments()
-        _ = m.add((0..<19).map { Self.input("/u/\($0).png") })
-        #expect(m.add([Self.input("/u/x.png"), Self.input("/u/y.png"), Self.input("/u/z.png")]) == 2)
+        _ = m.add((0..<19).map { Self.upload("a\($0)", "\($0).png") })
+        #expect(m.add([Self.upload("x", "x.png"), Self.upload("y", "y.png"), Self.upload("z", "z.png")]) == 2)
         #expect(m.count == maxPromptAttachments)
-        #expect(m.list.last?.path == "/u/x.png")
+        #expect(m.list.last?.id == "x")
     }
 
     @Test func removeTakesOutOnlyThatIndexAndClearEmpties() {
         let m = MessageAttachments()
-        _ = m.add([Self.input("/u/a.png"), Self.input("/u/b.png"), Self.input("/u/c.png")])
+        _ = m.add([Self.upload("a", "a.png"), Self.upload("b", "b.png"), Self.upload("c", "c.png")])
         m.remove(at: 1)
-        #expect(m.list.map(\.path) == ["/u/a.png", "/u/c.png"])
+        #expect(m.list.map(\.id) == ["a", "c"])
         m.remove(at: 7)
         #expect(m.count == 2)
         m.clear()
         #expect(m.isEmpty)
     }
 
-    /// The body leaves `source` to the service, which decides it from the path.
-    @Test func inputsDropSource() {
-        let m = MessageAttachments([PromptAttachment(path: "/u/up/a.png", name: "a.png", source: .upload)])
-        #expect(m.inputs == [PromptAttachmentInput(path: "/u/up/a.png", name: "a.png")])
+    static func note(_ message: String) -> AttachmentAnnotation {
+        AttachmentAnnotation(width: 10, height: 10, marks: [AnnotationMark(n: 1, x: 1, y: 1, message: message)])
+    }
+
+    /// The notes live on the attachment itself: annotating a waiting file edits it in place (it
+    /// keeps its place and name), a spec image is added at the end as itself (its id and source),
+    /// and removing or clearing takes the notes with the file.
+    @Test func annotatingSetsTheNotesOnTheAttachmentItself() {
+        let m = MessageAttachments()
+        m.add([Self.upload("a", "a.png"), Self.upload("b", "b.png")])
+        #expect(m.annotate(m.list[1], annotation: Self.note("b")))
+        #expect(m.list.map(\.id) == ["a", "b"])
+        #expect(m.list[1].annotation == Self.note("b"))
+        #expect(m.list[1].name == "b.png")
+        // Annotated again: replaced in place, not added twice.
+        #expect(m.annotate(Self.upload("b", "b.png"), annotation: Self.note("again")))
+        #expect(m.count == 2 && m.list[1].annotation == Self.note("again"))
+        // A spec image comes in as itself, at the end.
+        let spec = Attachment(id: "att_1", path: "/h/attachments/att_1.png", name: "Mock", source: .spec, kind: .image, mimeType: "image/png", width: 640, height: 480)
+        #expect(m.annotate(spec, annotation: Self.note("spec")))
+        var noted = spec
+        noted.annotation = Self.note("spec")
+        #expect(m.list.last == noted)
+        // The body carries each file whole, with its notes.
+        #expect(m.inputs.map(\.annotation) == [nil, Self.note("again"), Self.note("spec")])
+        #expect(m.inputs.last == AttachmentInput(noted))
+        // nil takes the notes off and leaves the file.
+        m.annotate(Self.upload("b", "b.png"), annotation: nil)
+        #expect(m.list[1].annotation == nil && m.count == 3)
+        m.remove(at: 2)
+        #expect(m.inputs.allSatisfy { $0.annotation == nil })
+    }
+
+    @Test func aFullListTakesNoNewAnnotatedImageButStillEditsOneInIt() {
+        let m = MessageAttachments()
+        m.add((0..<maxPromptAttachments).map { Self.upload("a\($0)", "\($0).png") })
+        #expect(!m.annotate(Self.upload("new", "new.png"), annotation: Self.note("x")))
+        #expect(m.count == maxPromptAttachments && m.list.allSatisfy { $0.annotation == nil })
+        #expect(m.annotate(Self.upload("a3", "3.png"), annotation: Self.note("x")))
+        #expect(m.list[3].annotation == Self.note("x"))
     }
 }

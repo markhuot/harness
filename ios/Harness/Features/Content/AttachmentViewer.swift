@@ -6,12 +6,20 @@ import SwiftUI
 /// Full-screen pager over the attachments in a piece of markdown: ✕,
 /// the file name and "2 of 4 · 1.2 MB" on top; pages swipe sideways (a select haptic each),
 /// images pinch-zoom 1–4× or double-tap to 2.5× (paging stops while zoomed), videos play with the
-/// system controls while their page shows, and pulling a page down (or ✕) closes it.
+/// system controls while their page shows, and pulling a page down (or ✕) closes it. A caller that
+/// says what annotating an image means (`annotate`: where it came from and where the result goes)
+/// gets an Annotate button on the right of the header once the page's image has loaded; it opens
+/// the annotator on that image, and Add closes the viewer. An annotated attachment (`annotation`)
+/// shows its marks over the image, zooming with it; the file itself is never changed.
 struct AttachmentViewer: View {
     let attachments: [Attachment]
-    /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. Prompt
-    /// attachments (Ticket.promptAttachments) pass their own URLs.
+    /// Where an attachment loads from; nil: GET /attachments/:id on the paired service. A
+    /// composer or New session passes this device's copy of a file it uploaded.
     let url: (@MainActor (Attachment) -> String?)?
+    /// The notes drawn over an attachment's image (nil: none).
+    let annotation: (@MainActor (Attachment) -> AttachmentAnnotation?)?
+    /// The annotator's request for a loaded image (nil: that page can't be annotated).
+    let annotate: (@MainActor (Attachment, UIImage) -> AnnotationRequest?)?
     let onClose: () -> Void
 
     @State private var position: Int?
@@ -20,14 +28,22 @@ struct AttachmentViewer: View {
     @State private var shown = false
     @State private var closing = false
     @State private var slide: CGFloat = 0
+    @State private var loaded = AttachmentViewerLoaded()
+    @State private var annotating: AnnotationRequest?
 
     // Hosted pages don't inherit the environment, so the viewer hands them these.
     @Environment(BoardStore.self) private var store: BoardStore?
     @Environment(\.palette) private var c
 
-    init(attachments: [Attachment], start: Int, url: (@MainActor (Attachment) -> String?)? = nil, onClose: @escaping () -> Void) {
+    init(
+        attachments: [Attachment], start: Int, url: (@MainActor (Attachment) -> String?)? = nil,
+        annotation: (@MainActor (Attachment) -> AttachmentAnnotation?)? = nil,
+        annotate: (@MainActor (Attachment, UIImage) -> AnnotationRequest?)? = nil, onClose: @escaping () -> Void
+    ) {
         self.attachments = attachments
         self.url = url
+        self.annotation = annotation
+        self.annotate = annotate
         self.onClose = onClose
         _position = State(initialValue: Attachments.clampPage(Double(start), count: attachments.count))
     }
@@ -58,7 +74,7 @@ struct AttachmentViewer: View {
                 )
                 .ignoresSafeArea()
                 .offset(y: slide)
-                AttachmentViewerHeader(attachments: attachments, index: index, pull: pull, close: close)
+                AttachmentViewerHeader(attachments: attachments, index: index, pull: pull, close: close, annotate: annotateAction)
                     .padding(.top, safe.top)
                     .frame(height: header, alignment: .bottom)
                     .ignoresSafeArea(edges: .top)
@@ -74,6 +90,29 @@ struct AttachmentViewer: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(false)
         .onAppear { withAnimation(.easeOut(duration: 0.2)) { shown = true } }
+        .annotator($annotating) {
+            // Added: the viewer goes too, so the composer it went to shows.
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { onClose() }
+        }
+    }
+
+    private func pageUrl(_ a: Attachment) -> String? {
+        url.map { $0(a) } ?? AttachmentMedia.url(store, a.id)
+    }
+
+    /// The header's Annotate: on an image page whose image has loaded, when the caller says what
+    /// annotating it means.
+    private var annotateAction: (() -> Void)? {
+        guard let annotate, attachments.indices.contains(index) else { return nil }
+        let a = attachments[index]
+        guard a.kind == .image, let u = pageUrl(a), loaded.urls.contains(u),
+              let image = AttachmentMedia.shared.cached(u), let request = annotate(a, image) else { return nil }
+        return {
+            haptic(.tap)
+            annotating = request
+        }
     }
 
     @ViewBuilder
@@ -86,7 +125,7 @@ struct AttachmentViewer: View {
         if a.kind == .video {
             AttachmentVideoPage(attachment: a, current: current, insets: insets, events: events)
         } else {
-            AttachmentImagePage(attachment: a, url: url.map { $0(a) } ?? AttachmentMedia.url(store, a.id), insets: insets, events: events)
+            AttachmentImagePage(attachment: a, url: pageUrl(a), annotation: annotation?(a), accent: UIColor(c.accent), insets: insets, events: events, loaded: loaded)
         }
     }
 
@@ -118,6 +157,13 @@ private struct AttachmentStoreEnvironment: ViewModifier {
     }
 }
 
+/// The image URLs the viewer's pages have loaded (the header offers Annotate on those).
+@MainActor
+@Observable
+final class AttachmentViewerLoaded {
+    var urls: Set<String> = []
+}
+
 /// How far the current page is pulled down. Only the backdrop and header read it, so a pull
 /// redraws them and not the pager.
 @MainActor
@@ -142,6 +188,8 @@ private struct AttachmentViewerHeader: View {
     let index: Int
     let pull: AttachmentViewerPull
     let close: () -> Void
+    /// Opens the annotator on the page's image; nil: no Annotate button.
+    let annotate: (() -> Void)?
 
     var body: some View {
         let current = attachments.indices.contains(index) ? attachments[index] : nil
@@ -160,15 +208,28 @@ private struct AttachmentViewerHeader: View {
                     Text(current.name)
                         .font(.scaled(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
-                    // Markdown attachments come without a size (0): only the position, then.
-                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", current.size > 0 ? Attachments.formatSize(Double(current.size)) : ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                    // Without a known size (an older service's spec media): only the position, then.
+                    let size = current.size.flatMap { $0 > 0 ? Attachments.formatSize(Double($0)) : nil } ?? ""
+                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", size].filter { !$0.isEmpty }.joined(separator: " · "))
                         .font(.scaled(size: 12.5))
                         .foregroundStyle(.white.opacity(0.6))
                 }
             }
             .lineLimit(1)
             .frame(maxWidth: .infinity)
-            Color.clear.frame(width: 36, height: 36)
+            if let annotate {
+                Button(action: annotate) {
+                    Image(systemName: "pencil.and.scribble")
+                        .font(.scaled(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.white.opacity(0.14), in: .circle)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Annotate")
+            } else {
+                Color.clear.frame(width: 36, height: 36)
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 56)
@@ -177,21 +238,29 @@ private struct AttachmentViewerHeader: View {
     }
 }
 
-/// One image fitted to the page; it zooms in its page's scroll view.
+/// One image fitted to the page; it zooms in its page's scroll view. An annotated one shows a copy
+/// with its marks drawn on (only on screen), so they zoom with the image.
 private struct AttachmentImagePage: View {
     let attachment: Attachment
     let url: String?
+    let annotation: AttachmentAnnotation?
+    let accent: UIColor
     let insets: UIEdgeInsets
     let events: AttachmentPageEvents
+    let loaded: AttachmentViewerLoaded
 
     @State private var image: UIImage?
+    @State private var marked: UIImage?
     @State private var failed = false
 
     var body: some View {
         Group {
             if failed {
                 AttachmentHostedPage(insets: insets, events: events) { AttachmentFailed(name: attachment.name, dark: true) }
-            } else if let image = image ?? url.flatMap({ AttachmentMedia.shared.cached($0) }) {
+            } else if annotation != nil && marked == nil {
+                // The marks are being drawn on (a moment): don't flash the bare image first.
+                AttachmentHostedPage(insets: insets, events: events) { Color.white.opacity(0.04) }
+            } else if let image = marked ?? image ?? url.flatMap({ AttachmentMedia.shared.cached($0) }) {
                 AttachmentPage(content: .image(image, dims: dims(image)), insets: insets, events: events)
                     .accessibilityElement()
                     .accessibilityLabel(attachment.accessibilityName)
@@ -201,8 +270,19 @@ private struct AttachmentImagePage: View {
             }
         }
         .task(id: url) {
-            guard let url, image == nil else { return }
-            do { image = try await AttachmentMedia.shared.image(url) } catch { if !Task.isCancelled { failed = true } }
+            guard let url else { return }
+            if image == nil {
+                do { image = try await AttachmentMedia.shared.image(url) } catch { if !Task.isCancelled { failed = true } }
+            }
+            if image != nil || AttachmentMedia.shared.cached(url) != nil { loaded.urls.insert(url) }
+            guard let annotation, let base = image ?? AttachmentMedia.shared.cached(url) else { return }
+            let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+            let screen = window?.bounds.size ?? CGSize(width: 390, height: 844)
+            let fit = CGSize(width: screen.width, height: max(0, screen.height - insets.top - insets.bottom))
+            let accent = accent
+            marked = await Task.detached(priority: .userInitiated) {
+                AnnotationDrawing.overlaid(base, annotation: annotation, fit: fit, accent: accent)
+            }.value ?? base
         }
     }
 

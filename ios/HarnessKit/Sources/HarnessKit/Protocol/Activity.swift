@@ -1,32 +1,5 @@
 import Foundation
 
-/// A ticket's image or video (DESIGN.md "Spec revisions and attachments"), referenced from its spec
-/// as `![alt](attachment:<id>)` and served at GET /attachments/:id. It lives until the ticket is
-/// deleted.
-public struct Attachment: Codable, Sendable, Equatable, Identifiable {
-    public var id: String
-    public var kind: AttachmentKind
-    /// e.g. "image/png", "video/mp4"
-    public var mimeType: String
-    /// The original file name, e.g. "after.png"
-    public var name: String
-    /// Bytes
-    public var size: Int
-    /// Pixels, when known from the file header (images only)
-    public var width: Int?
-    public var height: Int?
-
-    public init(id: String, kind: AttachmentKind, mimeType: String, name: String, size: Int, width: Int? = nil, height: Int? = nil) {
-        self.id = id
-        self.kind = kind
-        self.mimeType = mimeType
-        self.name = name
-        self.size = size
-        self.width = width
-        self.height = height
-    }
-}
-
 /// ActivityEntry.meta: typed extras per kind. Every field is optional.
 public struct ActivityMeta: Codable, Sendable, Equatable {
     /// blocked: the question (same as the ticket's blockedReason when it was posted)

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import HarnessKit
+import struct HarnessKit.Attachment
 
 /// Drift guard for the Swift port of shared/src/protocol.ts. Fixtures/protocol.json holds
 /// hand-written samples typed with the TS types (shared/fixtures/cases/protocol.ts); every sample
@@ -31,8 +32,13 @@ struct ProtocolRoundTripTests {
         "Subagent": rt(Subagent.self),
         "TaskOutput": rt(TaskOutput.self),
         "Attachment": rt(Attachment.self),
-        "PromptAttachment": rt(PromptAttachment.self),
-        "PromptAttachmentInput": rt(PromptAttachmentInput.self),
+        "AttachmentInput": rt(AttachmentInput.self),
+        "AnnotationMark": rt(AnnotationMark.self),
+        "AnnotationPage": rt(AnnotationPage.self),
+        "AttachmentAnnotation": rt(AttachmentAnnotation.self),
+        "BrowserScreenshot": rt(BrowserScreenshot.self),
+        "BrowserElementQuery": rt(BrowserElementQuery.self),
+        "BrowserElement": rt(BrowserElement.self),
         "ActivityMeta": rt(ActivityMeta.self),
         "ActivityEntry": rt(ActivityEntry.self),
         "SpecRevisionInfo": rt(SpecRevisionInfo.self),
@@ -172,7 +178,7 @@ struct ProtocolRoundTripTests {
         "ActivityKind": en(ActivityKind.self),
         "SpecRevisionAuthor": en(SpecRevisionAuthor.self),
         "AttachmentKind": en(AttachmentKind.self),
-        "PromptAttachmentSource": en(PromptAttachmentSource.self),
+        "AttachmentSource": en(AttachmentSource.self),
         "WatcherMode": en(WatcherMode.self),
         "WatcherLiveState": en(WatcherLiveState.self),
         "PromptId": en(PromptId.self),

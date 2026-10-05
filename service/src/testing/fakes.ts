@@ -5,12 +5,17 @@ import { onTempCleanup, tempDir } from "@harness/shared/testing";
 import { executeTool, type Driver, type DriverEvent, type RunRequest, type SteerMessage } from "../drivers/types";
 import { outputKey, watcherProject, watcherTicket } from "../drivers/dummy";
 import type { BrowserService } from "../browser/types";
+import { sameView } from "../browser/element";
 import { ensureHome } from "../config";
+import { png } from "./media";
 import { openDb } from "../db";
 import { Store } from "../store";
 import { EventBus } from "../events";
 import { Orchestrator, type OrchestratorOptions } from "../orchestrator/orchestrator";
 import { git } from "../orchestrator/worktree";
+
+/** What stubBrowser's elementAt finds under any point. */
+export const STUB_ELEMENT = { path: "#login > form > button:nth-of-type(2)", text: "Sign in" };
 
 /** A temp HARNESS_HOME, removed after the test file by the bun test preload (see bunfig.toml). */
 export function tempHome(prefix = "harness-test-") {
@@ -19,8 +24,14 @@ export function tempHome(prefix = "harness-test-") {
 
 type StubSub = { onFrame: Function; onState: Function; tab?: number };
 
-export function stubBrowser(): BrowserService & { closed: string[]; suspendedTabs: string[]; subs: Map<string, StubSub> } {
+/**
+ * `scrolls`: each session's page scroll (CSS px; 0, 0 when unset), which capture reports and
+ * elementAt checks, so a test can scroll the page after a screenshot. elementAt answers
+ * STUB_ELEMENT at any point of the page the screenshot showed.
+ */
+export function stubBrowser(): BrowserService & { closed: string[]; suspendedTabs: string[]; subs: Map<string, StubSub>; scrolls: Map<string, { x: number; y: number }> } {
   const states = new Map<string, BrowserState>();
+  const scrolls = new Map<string, { x: number; y: number }>();
   const subs = new Map<string, StubSub>();
   const closed: string[] = [];
   const suspendedTabs: string[] = [];
@@ -28,6 +39,7 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     closed,
     suspendedTabs,
     subs,
+    scrolls,
     async open(sessionId, url) {
       const s = { sessionId, tabId: 1, url, title: url, loading: false };
       states.set(sessionId, s);
@@ -52,6 +64,17 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     },
     async screenshot() {
       return "";
+    },
+    /** A 1280×800 CSS px viewport at 1× (the browser's device scale). */
+    async capture(sessionId) {
+      const s = states.get(sessionId);
+      if (!s) throw new Error("This session has no open tabs.");
+      return { data: png(1280, 800).toString("base64"), width: 1280, height: 800, viewport: { width: 1280, height: 800 }, scale: 1, tabId: 1, url: s.url, title: s.title, scroll: scrolls.get(sessionId) ?? { x: 0, y: 0 } };
+    },
+    async elementAt(sessionId, query) {
+      const s = states.get(sessionId);
+      if (!s || query.tabId !== 1) throw new Error(`No browser tab ${query.tabId}`);
+      return sameView({ href: s.url, scroll: scrolls.get(sessionId) ?? { x: 0, y: 0 }, viewport: { width: 1280, height: 800 }, element: STUB_ELEMENT }, s.url, query);
     },
     async input() {},
     async subscribe(sessionId, subscriberId, onFrame, onState, opts) {
@@ -428,7 +451,7 @@ export class FakeDriver implements Driver {
 export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?: FakeDriver; dbPath?: string } = {}) {
   const home = opts.paths?.home ?? tempHome();
   const paths = ensureHome(home);
-  const store = opts.store ?? new Store(openDb(opts.dbPath ?? ":memory:"));
+  const store = opts.store ?? new Store(openDb(opts.dbPath ?? ":memory:", { attachmentsDir: paths.attachmentsDir, uploadsDir: paths.uploadsDir }));
   const bus = opts.bus ?? new EventBus();
   const driver = opts.driver ?? new FakeDriver();
   const browser = opts.browser ?? stubBrowser();

@@ -1,22 +1,24 @@
-// Prompt attachment helpers (shared/src/state/promptAttachments.ts) for HarnessKit's
+// Attachment list helpers (shared/src/state/promptAttachments.ts) for HarnessKit's
 // State/PromptAttachments.swift.
-import type { PromptAttachment, PromptAttachmentInput } from "../../src/protocol";
+import type { Attachment, AttachmentAnnotation, AttachmentInput } from "../../src/protocol";
 import {
-  addPromptAttachments,
+  addAttachments,
+  annotateAttachment,
+  attachmentFromInput,
+  attachmentInputs,
+  attachmentIsImage,
   fileBaseName,
   pastedImageName,
-  promptAttachmentFromInput,
-  promptAttachmentInputs,
-  promptAttachmentIsImage,
-  removePromptAttachment,
-  samePromptAttachments,
+  removeAttachment,
+  sameAttachments,
 } from "../../src/state/promptAttachments";
 import { cases } from "../case";
 
-const a = (path: string, name = fileBaseName(path), source: PromptAttachment["source"] = "file"): PromptAttachment => ({ path, name, source });
-const shot = a("/Users/me/Desktop/shot.png");
-const notes = a("/Users/me/notes.pdf");
-const paste = a("/Users/me/.harness/uploads/u1/Pasted image.png", "Pasted image.png", "upload");
+const shot: Attachment = { id: "a1", path: "/Users/me/Desktop/shot.png", name: "shot.png", source: "file", kind: "image", mimeType: "image/png" };
+const notes: Attachment = { id: "a2", path: "/Users/me/notes.pdf", name: "notes.pdf", source: "file", kind: "file", mimeType: "application/pdf", size: 912 };
+const paste: Attachment = { id: "a3", path: "/Users/me/.harness/uploads/u1/Pasted image.png", name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png", width: 800, height: 600 };
+const spec: Attachment = { id: "att_1", path: "/Users/me/.harness/attachments/att_1.png", name: "After", source: "spec", kind: "image", mimeType: "image/png", width: 640, height: 480 };
+const note: AttachmentAnnotation = { width: 640, height: 480, marks: [{ n: 1, x: 10, y: 20, tailX: 200, tailY: 120, message: "here" }] };
 
 export const fileBaseNameCases = cases(fileBaseName, {
   "a file": "/a/b/shot.png",
@@ -26,57 +28,64 @@ export const fileBaseNameCases = cases(fileBaseName, {
   "spaces": "/Users/me/My Notes/a b.txt",
 });
 
-export const promptAttachmentFromInputCases = cases((i: PromptAttachmentInput) => promptAttachmentFromInput(i), {
-  "name from the path": { path: "/a/shot.png" },
-  "a given name": { path: "/a/shot.png", name: "After" },
+export const attachmentFromInputCases = cases((i: AttachmentInput) => attachmentFromInput(i), {
+  "a full attachment stays as it is": spec,
+  "an annotated one keeps its notes": { ...paste, annotation: note },
+  "a bare path: name and kind from it": { path: "/a/shot.PNG" },
+  "a video": { path: "/a/flow.mov" },
+  "another file": { path: "/a/report.pdf" },
+  "a given name, trimmed": { path: "/a/shot.png", name: " After " },
   "a blank name falls back": { path: "/a/shot.png", name: "  " },
-  "a name is trimmed": { path: "/a/shot.png", name: " After " },
-  "an upload keeps its source": { path: "/u/x.png", source: "upload" },
+  "a bare id": { id: "att_9" },
 });
 
-export const promptAttachmentInputsCases = cases((list: PromptAttachment[]) => promptAttachmentInputs(list), {
+export const attachmentInputsCases = cases((list: Attachment[]) => attachmentInputs(list), {
   none: [],
-  "path and name only": [shot, paste],
+  "each whole, annotations included": [shot, { ...spec, annotation: note }],
 });
 
-export const samePromptAttachmentsCases = cases(({ x, y }: { x: PromptAttachment[]; y: PromptAttachment[] }) => samePromptAttachments(x, y), {
+export const sameAttachmentsCases = cases(({ x, y }: { x: Attachment[]; y: Attachment[] }) => sameAttachments(x, y), {
   "both empty": { x: [], y: [] },
   same: { x: [shot, paste], y: [shot, paste] },
   reordered: { x: [shot, paste], y: [paste, shot] },
   renamed: { x: [shot], y: [{ ...shot, name: "other.png" }] },
-  "source alone doesn't count": { x: [shot], y: [{ ...shot, source: "upload" }] },
+  "another id": { x: [shot], y: [{ ...shot, id: "a9" }] },
+  "an annotation added": { x: [spec], y: [{ ...spec, annotation: note }] },
+  "an annotation changed": { x: [{ ...spec, annotation: note }], y: [{ ...spec, annotation: { ...note, marks: [{ ...note.marks[0]!, message: "there" }] } }] },
+  "size alone doesn't count": { x: [shot], y: [{ ...shot, size: 99 }] },
   longer: { x: [shot], y: [shot, paste] },
 });
 
-type AddInput = { list: PromptAttachment[]; added: PromptAttachmentInput[]; max?: number };
-export const addPromptAttachmentsCases = cases(({ list, added, max }: AddInput) => addPromptAttachments(list, added, max), {
-  "appends in order": { list: [shot], added: [{ path: notes.path }, { path: paste.path, name: paste.name, source: "upload" }] },
-  "a path already attached is skipped": { list: [shot], added: [{ path: shot.path, name: "again" }] },
-  "a path twice in one add is attached once": { list: [], added: [{ path: "/x.png" }, { path: "/x.png" }] },
-  "the limit leaves the rest out": { list: [shot, notes], added: [{ path: "/1.png" }, { path: "/2.png" }, { path: "/3.png" }], max: 3 },
-  "a duplicate past the limit isn't counted as skipped": { list: [shot], added: [{ path: shot.path }, { path: "/2.png" }], max: 1 },
+type AddInput = { list: Attachment[]; added: Attachment[]; max?: number };
+export const addAttachmentsCases = cases(({ list, added, max }: AddInput) => addAttachments(list, added, max), {
+  "appends in order": { list: [shot], added: [notes, paste] },
+  "an id already attached is skipped": { list: [shot], added: [{ ...shot, name: "again" }] },
+  "the same id at another path is the same file": { list: [shot], added: [{ ...shot, path: "/moved.png" }] },
+  "twice in one add is attached once": { list: [], added: [paste, paste] },
+  "the limit leaves the rest out": { list: [shot, notes], added: [paste, spec, { ...spec, id: "att_2" }], max: 3 },
+  "a duplicate past the limit isn't counted as skipped": { list: [shot], added: [shot, paste], max: 1 },
   "nothing added": { list: [shot], added: [] },
 });
 
-export const removePromptAttachmentCases = cases(({ list, index }: { list: PromptAttachment[]; index: number }) => removePromptAttachment(list, index), {
+type AnnotateInput = { list: Attachment[]; attachment: Attachment; annotation: AttachmentAnnotation | null; max?: number };
+export const annotateAttachmentCases = cases(({ list, attachment, annotation, max }: AnnotateInput) => annotateAttachment(list, attachment, annotation, max), {
+  "a file already there is annotated in place": { list: [shot, spec], attachment: spec, annotation: note },
+  "null takes it off and keeps the file": { list: [shot, { ...spec, annotation: note }], attachment: spec, annotation: null },
+  "another file is added with it": { list: [shot], attachment: spec, annotation: note },
+  "a full list skips a new file": { list: [shot, notes], attachment: spec, annotation: note, max: 2 },
+});
+
+export const removeAttachmentCases = cases(({ list, index }: { list: Attachment[]; index: number }) => removeAttachment(list, index), {
   first: { list: [shot, notes, paste], index: 0 },
   last: { list: [shot, notes, paste], index: 2 },
   "out of range": { list: [shot], index: 4 },
   negative: { list: [shot], index: -1 },
 });
 
-export const promptAttachmentIsImageCases = cases((x: { name: string; path: string }) => promptAttachmentIsImage(x), {
-  png: { name: "shot.png", path: "/a/shot.png" },
-  "upper-case JPG": { name: "IMG.JPG", path: "/a/IMG.JPG" },
-  jpeg: { name: "a.jpeg", path: "/a/a.jpeg" },
-  webp: { name: "a.webp", path: "/a/a.webp" },
-  gif: { name: "a.gif", path: "/a/a.gif" },
-  bmp: { name: "a.bmp", path: "/a/a.bmp" },
-  pdf: { name: "notes.pdf", path: "/a/notes.pdf" },
-  heic: { name: "IMG.heic", path: "/a/IMG.heic" },
-  "no extension": { name: "Makefile", path: "/a/Makefile" },
-  "a name without one falls back to the path": { name: "After", path: "/a/shot.png" },
-  "a dot folder isn't an extension": { name: "file", path: "/a.png/file" },
+export const attachmentIsImageCases = cases((x: Pick<Attachment, "kind">) => attachmentIsImage(x), {
+  image: { kind: "image" },
+  video: { kind: "video" },
+  file: { kind: "file" },
 });
 
 export const pastedImageNameCases = cases((m: string | null) => pastedImageName(m), {

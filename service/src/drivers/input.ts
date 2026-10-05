@@ -2,8 +2,8 @@
 // pushes; the driver takes them into the live conversation and reports when its agent has
 // actually seen each one. Whatever is still undelivered when the run ends becomes a queued run.
 
-import type { PromptAttachment } from "@harness/shared";
-import type { RunImage } from "../prompt-attachments";
+import type { Attachment } from "@harness/shared";
+import type { RunImage } from "../attachment-lists";
 
 export interface SteerMessage {
   /** Unique per message (claude-code sends it as the stream-json uuid and matches the CLI's replay) */
@@ -16,7 +16,7 @@ export interface SteerMessage {
 /** A message as the human sent it: its words and the files attached to it. */
 export interface SentMessage {
   text: string;
-  attachments: readonly PromptAttachment[];
+  attachments: readonly Attachment[];
 }
 
 type Entry = SteerMessage & { taken: boolean; original: SentMessage };

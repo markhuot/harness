@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import HarnessKit
+import struct HarnessKit.Attachment
 
 private let base = "http://127.0.0.1:7717"
 
@@ -165,8 +166,24 @@ struct HarnessClientRequestTests {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
         _ = try await client(t).sendMessage("NY-1", text: "hi", attachments: [])
         #expect(try bodyJSON(t.last) == json(#"{"text":"hi"}"#))
-        _ = try await client(t).sendMessage("NY-1", text: "", attachments: [PromptAttachmentInput(path: "/u/a.png", name: "a.png"), PromptAttachmentInput(path: "/u/b.pdf")])
-        #expect(try bodyJSON(t.last) == json(#"{"text":"","attachments":[{"path":"/u/a.png","name":"a.png"},{"path":"/u/b.pdf"}]}"#))
+        _ = try await client(t).sendMessage("NY-1", text: "", attachments: [AttachmentInput(id: "a1", name: "a.png"), AttachmentInput(path: "/u/b.pdf")])
+        #expect(try bodyJSON(t.last) == json(#"{"text":"","attachments":[{"id":"a1","name":"a.png"},{"path":"/u/b.pdf"}]}"#))
+    }
+
+    /// An image's notes ride on its attachment input; one without notes has no `annotation` key.
+    @Test func sendMessageSendsEachAttachmentsNotesWithIt() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        let note = AttachmentAnnotation(
+            width: 800, height: 600,
+            marks: [AnnotationMark(n: 1, x: 10, y: 20, tailX: 100, tailY: 120, message: "this"), AnnotationMark(n: 2, x: 5, y: 6, message: "that")]
+        )
+        let spec = Attachment(id: "att_1", path: "/h/att_1.png", name: "shot.png", source: .spec, kind: .image, mimeType: "image/png", annotation: note)
+        _ = try await client(t).sendMessage("NY-1", text: "Fix these", move: true, attachments: PromptAttachments.inputs([spec]) + [AttachmentInput(id: "a2")])
+        #expect(try bodyJSON(t.last) == json(#"""
+        {"text":"Fix these","move":true,"attachments":[{"id":"att_1","path":"/h/att_1.png","name":"shot.png","source":"spec","kind":"image","mimeType":"image/png",
+         "annotation":{"width":800,"height":600,
+         "marks":[{"n":1,"x":10,"y":20,"tailX":100,"tailY":120,"message":"this"},{"n":2,"x":5,"y":6,"message":"that"}]}},{"id":"a2"}]}
+        """#))
     }
 
     @Test func specRoutes() async throws {
@@ -261,6 +278,19 @@ struct HarnessClientRequestTests {
         #expect(try bodyJSON(nav.last) == json(#"{"url":"http://localhost:3000/","tabId":2}"#))
     }
 
+    @Test func browserScreenshotAsksForTheTabOnlyWhenGiven() async throws {
+        let body = #"{"data":{"data":"iVBORw0KGgo=","width":2560,"height":1600,"viewport":{"width":1280,"height":800},"scale":2,"tabId":3,"url":"http://localhost:3000/","title":"Home"}}"#
+        let t = FakeTransport(status: 200, body: body)
+        let shot = try await client(t).browserScreenshot("ses_1", tabId: 3)
+        #expect(path(t) == "/browser/ses_1/screenshot?tab=3")
+        #expect(t.last?.method == "GET")
+        #expect(shot.width == 2560 && shot.viewport == AnnotationViewport(width: 1280, height: 800) && shot.scale == 2)
+        #expect(shot.png?.starts(with: [0x89, 0x50, 0x4E, 0x47]) == true)
+        #expect(shot.page == AnnotationPage(url: "http://localhost:3000/", title: "Home", tabId: 3, viewport: AnnotationViewport(width: 1280, height: 800), scale: 2))
+        _ = try await client(t).browserScreenshot("ses_1")
+        #expect(path(t) == "/browser/ses_1/screenshot")
+    }
+
     @Test func decodesData() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Health")))
         let h = try await client(t).health()
@@ -329,18 +359,18 @@ struct HarnessClientErrorTests {
     }
 }
 
-@Suite("HarnessClient prompt attachments")
-struct HarnessClientPromptAttachmentTests {
-    @Test func promptAttachmentUrlEncodesKeyAndToken() {
-        let c = client(token: "t&k=1 /")
-        #expect(c.promptAttachmentUrl(key: "NY 1/x", index: 3) == "\(base)/tickets/NY%201%2Fx/prompt-attachments/3?token=t%26k%3D1%20%2F")
-    }
+@Suite("HarnessClient attachments")
+struct HarnessClientAttachmentTests {
+    static let uploaded = #"{"data":{"id":"att_7","path":"/Users/me/.harness/uploads/u1/My shot.png","name":"My shot.png","source":"upload","kind":"image","mimeType":"image/png","size":6,"width":1,"height":1}}"#
 
-    @Test func uploadSendsRawBytesWithTypeNameAndToken() async throws {
-        let t = FakeTransport(status: 200, body: #"{"data":{"path":"/Users/me/.harness/uploads/u1/My shot.png","name":"My shot.png","source":"upload"}}"#)
+    @Test func uploadSendsRawBytesWithTypeNameAndTokenAndReturnsTheRegisteredAttachment() async throws {
+        let t = FakeTransport(status: 200, body: Self.uploaded)
         let bytes = Data([0x89, 0x50, 0x4E, 0x47, 0x00, 0xFF])
-        let a = try await client(t, token: "tok").uploadPromptAttachment(data: bytes, name: "My shot&1.png", mimeType: "image/png")
-        #expect(a == PromptAttachment(path: "/Users/me/.harness/uploads/u1/My shot.png", name: "My shot.png", source: .upload))
+        let a = try await client(t, token: "tok").uploadAttachment(data: bytes, name: "My shot&1.png", mimeType: "image/png")
+        #expect(a == Attachment(
+            id: "att_7", path: "/Users/me/.harness/uploads/u1/My shot.png", name: "My shot.png", source: .upload, kind: .image,
+            mimeType: "image/png", size: 6, width: 1, height: 1
+        ))
         let r = try #require(t.last)
         #expect(r.method == "POST")
         #expect(path(t) == "/uploads?name=My%20shot%261.png")
@@ -350,44 +380,54 @@ struct HarnessClientPromptAttachmentTests {
     }
 
     @Test func uploadWithoutATypeIsOctetStream() async throws {
-        let t = FakeTransport(status: 200, body: #"{"data":{"path":"/u/a.bin","name":"a.bin","source":"upload"}}"#)
-        _ = try await client(t).uploadPromptAttachment(data: Data([1]), name: "a.bin", mimeType: "")
+        let t = FakeTransport(status: 200, body: Self.uploaded)
+        _ = try await client(t).uploadAttachment(data: Data([1]), name: "a.bin", mimeType: "")
         #expect(t.last?.headers["content-type"] == "application/octet-stream")
     }
 
     @Test func uploadTooLargeThrowsTheServicesError() async throws {
         let t = FakeTransport(status: 413, body: #"{"error":"Uploads are limited to 100 MB"}"#)
         let err = try await #require(throws: HarnessAPIError.self) {
-            try await client(t).uploadPromptAttachment(data: Data([1]), name: "big.mov", mimeType: "video/quicktime")
+            try await client(t).uploadAttachment(data: Data([1]), name: "big.mov", mimeType: "video/quicktime")
         }
         #expect(err.status == 413)
         #expect(err.message == "Uploads are limited to 100 MB")
     }
 
-    @Test func existsIsAHeadProbe() async throws {
+    /// POST /attachments with the path, and the name only when there is one.
+    @Test func registerPostsThePathAndOptionalName() async throws {
+        let t = FakeTransport(status: 200, body: Self.uploaded)
+        let a = try await client(t).registerAttachment(path: "/Users/me/shot.png")
+        #expect(a.id == "att_7")
+        #expect(t.last?.method == "POST")
+        #expect(path(t) == "/attachments")
+        #expect(try bodyJSON(t.last) == json(#"{"path":"/Users/me/shot.png"}"#))
+        _ = try await client(t).registerAttachment(path: "/Users/me/shot.png", name: "Shot")
+        #expect(try bodyJSON(t.last) == json(#"{"path":"/Users/me/shot.png","name":"Shot"}"#))
+    }
+
+    /// POST /browser/:sessionId/element with the screenshot's url, scroll and viewport; null (the page moved on) is nil.
+    @Test func browserElementAtPostsTheQueryAndReadsNull() async throws {
+        let q = BrowserElementQuery(tabId: 2, x: 120.5, y: 40, url: "http://localhost:3000/", scroll: BrowserScroll(x: 0, y: 300), viewport: AnnotationViewport(width: 402, height: 512))
+        let t = FakeTransport(status: 200, body: ##"{"data":{"path":"#save","text":"Save"}}"##)
+        #expect(try await client(t).browserElementAt("ses_1", q) == BrowserElement(path: "#save", text: "Save"))
+        #expect(t.last?.method == "POST")
+        #expect(path(t) == "/browser/ses_1/element")
+        #expect(try bodyJSON(t.last) == json(#"{"tabId":2,"x":120.5,"y":40,"url":"http://localhost:3000/","scroll":{"x":0,"y":300},"viewport":{"width":402,"height":512}}"#))
+        #expect(try await client(FakeTransport(status: 200, body: #"{"data":null}"#)).browserElementAt("ses_1", q) == nil)
+    }
+
+    @Test func existsIsAHeadOfTheAttachmentsUrl() async throws {
         let t = FakeTransport(status: 200, body: "")
-        #expect(await client(t).promptAttachmentExists(key: "NY-1", index: 0) == true)
+        #expect(await client(t).attachmentExists("att 1") == true)
         #expect(t.last?.method == "HEAD")
-        #expect(path(t) == "/tickets/NY-1/prompt-attachments/0?token=tok")
-    }
-
-    @Test func messageAttachmentUrlEncodesEntryAndToken() {
-        let c = client(token: "t&k=1 /")
-        #expect(c.messageAttachmentUrl(entryId: "ent 1/x", index: 2) == "\(base)/transcript/ent%201%2Fx/attachments/2?token=t%26k%3D1%20%2F")
-    }
-
-    @Test func fileExistsProbesAMessageAttachment() async throws {
-        let t = FakeTransport(status: 404, body: "")
-        let c = client(t)
-        #expect(await c.fileExists(c.messageAttachmentUrl(entryId: "ent_5", index: 1)) == false)
-        #expect(t.last?.method == "HEAD")
-        #expect(path(t) == "/transcript/ent_5/attachments/1?token=tok")
+        #expect(path(t) == "/attachments/att%201?token=tok")
     }
 
     @Test func existsIsFalseOnlyOn404() async throws {
-        #expect(await client(FakeTransport(status: 404, body: #"{"error":"gone"}"#)).promptAttachmentExists(key: "NY-1", index: 2) == false)
-        #expect(await client(FakeTransport(status: 500, body: "")).promptAttachmentExists(key: "NY-1", index: 2) == nil)
-        #expect(await HarnessClient(baseUrl: base, token: "tok", transport: FailingTransport()).promptAttachmentExists(key: "NY-1", index: 2) == nil)
+        #expect(await client(FakeTransport(status: 404, body: #"{"error":"gone"}"#)).attachmentExists("a") == false)
+        #expect(await client(FakeTransport(status: 500, body: "")).attachmentExists("a") == nil)
+        #expect(await HarnessClient(baseUrl: base, token: "tok", transport: FailingTransport()).attachmentExists("a") == nil)
     }
 
     struct FailingTransport: HTTPTransport {

@@ -1,20 +1,21 @@
-// Attaching files to a prompt from the Mac (DESIGN.md "Prompt attachments"), shared by the two
-// places that take them: a New session's draft editor (the list is the draft's promptAttachments)
-// and a ticket's message composer (the list goes with the next message). Files on disk go in by
-// path; anything else (pasted image data, an image dragged out of a browser, a file for a service
-// on another machine) is uploaded first, showing as a pending row until it's there. The caller owns
-// the list: `get` reads it and `set` replaces it.
+// Attaching files from the Mac (DESIGN.md "Attachments"), shared by the two places that take them:
+// a New session's draft editor (the list is the draft's promptAttachments) and a ticket's message
+// composer (the list goes with the next message). A file on disk is registered by its path when
+// the service is on this Mac; anything else (pasted image data, an image dragged out of a browser,
+// a file for a service on another machine) is uploaded. Either shows as a pending row until the
+// service answers with its Attachment, which is what the list holds. The caller owns the list:
+// `get` reads it and `set` replaces it.
 
 import { useRef, useState, type ClipboardEvent, type DragEvent } from "react";
-import { MAX_PROMPT_ATTACHMENTS, type PromptAttachment, type PromptAttachmentInput } from "@harness/shared";
-import { addPromptAttachments, removePromptAttachment } from "@harness/shared/state";
+import { MAX_PROMPT_ATTACHMENTS, type Attachment } from "@harness/shared";
+import { addAttachments, removeAttachment } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { clipboardImageFiles, isFileDrag, isLocalService, limitMessage, planFiles } from "../state/promptAttachmentFiles";
 import { forgetPreview, rememberPreview, type PendingUpload } from "./PromptAttachments";
 
 export interface PromptAttachmentTarget {
-  get: () => readonly PromptAttachment[];
-  set: (list: PromptAttachment[]) => void;
+  get: () => readonly Attachment[];
+  set: (list: Attachment[]) => void;
 }
 
 export function usePromptAttachmentInput({
@@ -36,9 +37,9 @@ export function usePromptAttachmentInput({
   const fileInput = useRef<HTMLInputElement>(null);
   const on = enabled && !!target;
 
-  const attachInputs = (t: PromptAttachmentTarget, inputs: PromptAttachmentInput[], skippedBefore = 0) => {
+  const attachAll = (t: PromptAttachmentTarget, added: Attachment[], skippedBefore = 0) => {
     const current = t.get();
-    const { list, skipped } = addPromptAttachments(current, inputs);
+    const { list, skipped } = addAttachments(current, added);
     if (list.length !== current.length) t.set(list);
     const message = limitMessage(skipped + skippedBefore, MAX_PROMPT_ATTACHMENTS, what);
     if (message) toast(message, "error");
@@ -50,23 +51,34 @@ export function usePromptAttachmentInput({
     const t = target;
     if (!t || !enabled || !files.length) return false;
     const plan = planFiles(files, (f) => window.harness?.pathForFile(f) ?? null, { uploadAny, local: isLocalService(client.baseUrl) });
-    if (!plan.byPath.length && !plan.uploads.length) return false;
-    for (const { input, file } of plan.byPath) rememberPreview(input.path, file);
-    // Room left once the files on disk are in (and the uploads already on their way): the rest isn't uploaded at all.
-    const room = Math.max(0, MAX_PROMPT_ATTACHMENTS - t.get().length - plan.byPath.length - pending.length);
-    const uploads = plan.uploads.slice(0, room);
-    attachInputs(t, plan.byPath.map((p) => p.input), plan.uploads.length - uploads.length);
-    for (const u of uploads) {
+    // A file already in the list (or twice in this batch) isn't registered again.
+    const have = new Set(t.get().map((a) => a.path));
+    const registers = plan.registers.filter((r) => !have.has(r.path) && (have.add(r.path), true));
+    if (!registers.length && !plan.uploads.length) return plan.registers.length > 0;
+    const jobs = [
+      ...registers.map((r) => ({ name: r.name, file: r.file, run: () => client.registerAttachment(r.path, r.name) })),
+      ...plan.uploads.map((u) => ({ name: u.name, file: u.file, run: () => client.uploadAttachment(u.file, u.name, u.mimeType) })),
+    ];
+    // Room left (counting what's already on its way): the rest isn't registered or uploaded at all.
+    const room = Math.max(0, MAX_PROMPT_ATTACHMENTS - t.get().length - pending.length);
+    const taken = jobs.slice(0, room);
+    const message = limitMessage(jobs.length - taken.length, MAX_PROMPT_ATTACHMENTS, what);
+    if (message) toast(message, "error");
+    // All at once, but added in the order they were dropped or picked, whichever answers first.
+    let previous: Promise<unknown> = Promise.resolve();
+    for (const job of taken) {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setPending((p) => [...p, { id, name: u.name }]);
-      client
-        .uploadPromptAttachment(u.file, u.name, u.mimeType)
+      setPending((p) => [...p, { id, name: job.name }]);
+      const running = job.run();
+      previous = previous
+        .then(() => running)
         .then(
           (a) => {
-            rememberPreview(a.path, u.file);
-            attachInputs(t, [a]);
+            // The row shows the picture from the file in hand, without a round trip.
+            rememberPreview(a.id, job.file);
+            attachAll(t, [a]);
           },
-          (e: unknown) => toast(`Couldn't attach ${u.name}: ${e instanceof Error ? e.message : String(e)}`, "error"),
+          (e: unknown) => toast(`Couldn't attach ${job.name}: ${e instanceof Error ? e.message : String(e)}`, "error"),
         )
         .finally(() => setPending((p) => p.filter((x) => x.id !== id)));
     }
@@ -77,8 +89,8 @@ export function usePromptAttachmentInput({
     if (!target) return;
     const list = target.get();
     const gone = list[index];
-    target.set(removePromptAttachment(list, index));
-    if (gone) forgetPreview(gone.path);
+    target.set(removeAttachment(list, index));
+    if (gone) forgetPreview(gone.id);
   };
 
   /** The textarea's onPaste: text pastes as text; files (a Finder copy, a screenshot) are attached instead. */

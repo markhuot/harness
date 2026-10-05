@@ -1,11 +1,11 @@
-// Files sent with a human message (DESIGN.md "Prompt attachments"): the run that answers it gets
+// Files sent with a human message (DESIGN.md "Attachments"): the run that answers it gets
 // their paths and its images inline, a running agent gets them steered in, a message the run never
 // took in keeps them in its queued run, and their uploads live as long as the ticket.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { HarnessApiError, HarnessClient, type PromptAttachment, type Ticket } from "@harness/shared";
+import { HarnessApiError, HarnessClient, type Attachment, type Ticket } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
@@ -25,8 +25,10 @@ function setup(steering = false) {
     writeFileSync(p, data);
     return p;
   };
+  /** The attachment the service registered for a file on disk. */
+  const registered = (path: string) => h.store.attachments.getByPath(path, "file")!;
   const userEntries = (t: Ticket) => h.store.transcript.list(t.sessionId).filter((e) => e.role === "user");
-  return { ...h, project, file, userEntries };
+  return { ...h, project, file, registered, userEntries };
 }
 type H = ReturnType<typeof setup>;
 
@@ -61,10 +63,14 @@ describe("a message's attachments", () => {
     expect(chat.prompt).toContain(`- ${notes}\n`);
     expect(chat.images?.map((i) => [i.name, Buffer.from(i.data, "base64").equals(png(3, 2))])).toEqual([["shot.png", true]]);
 
-    const sent: PromptAttachment[] = [
-      { path: shot, name: "shot.png", source: "file" },
-      { path: notes, name: "Notes", source: "file" },
+    const sent: Attachment[] = [
+      { ...h.registered(shot), name: "shot.png" },
+      { ...h.registered(notes), name: "Notes" },
     ];
+    expect(sent.map((a) => [a.kind, a.source])).toEqual([
+      ["image", "file"],
+      ["file", "file"],
+    ]);
     expect(h.userEntries(t).at(-1)!.content).toEqual({ type: "text", text: "This one", attachments: sent });
     expect(h.store.runs.listBySession(t.sessionId).at(-1)!.attachments).toEqual(sent);
   });
@@ -141,7 +147,7 @@ describe("steering", () => {
     expect(m!.images?.map((i) => i.name)).toEqual(["shot.png"]);
     // The review run's prompt is a user entry too, so find the message's.
     const entry = h.userEntries(t).find((e) => e.content.type === "text" && e.content.text === "Match this");
-    expect(entry?.content).toEqual({ type: "text", text: "Match this", attachments: [{ path: shot, name: "shot.png", source: "file" }] });
+    expect(entry?.content).toEqual({ type: "text", text: "Match this", attachments: [h.registered(shot)] });
   });
 
   test("a message the run never took in is queued with its attachments, and shown once", async () => {
@@ -157,7 +163,7 @@ describe("steering", () => {
     expect(next.prompt.startsWith("Match this /nosubmit")).toBe(true);
     expect(next.prompt).toContain(`- ${shot} (image, included in this message)`);
     expect(next.images?.map((i) => i.name)).toEqual(["shot.png"]);
-    expect(h.store.runs.listBySession(t.sessionId)[1]!.attachments).toEqual([{ path: shot, name: "shot.png", source: "file" }]);
+    expect(h.store.runs.listBySession(t.sessionId)[1]!.attachments).toEqual([h.registered(shot)]);
     expect(h.userEntries(t).filter((e) => e.content.type === "text" && e.content.text === "Match this /nosubmit")).toHaveLength(1);
   });
 });
@@ -166,9 +172,9 @@ describe("uploads", () => {
   test("an upload sent with a message survives the startup sweep, and goes when its ticket is deleted", async () => {
     const h = setup();
     const t = await blocked(h);
-    const sent = h.orch.uploadPromptAttachment(png(1, 1), "Pasted image.png", "image/png");
-    const stray = h.orch.uploadPromptAttachment(png(1, 1), "Stray.png", "image/png");
-    await h.orch.sendMessage(t.key, "From my phone", { attachments: [{ path: sent.path }] });
+    const sent = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
+    const stray = h.orch.uploadAttachment(png(1, 1), "Stray.png", "image/png");
+    await h.orch.sendMessage(t.key, "From my phone", { attachments: [{ id: sent.id }] });
     await h.orch.idle();
     const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     for (const p of [sent.path, stray.path]) utimesSync(dirname(p), old, old);
@@ -177,17 +183,21 @@ describe("uploads", () => {
     expect(existsSync(sent.path)).toBe(true);
     expect(existsSync(stray.path)).toBe(false);
 
+    expect(h.store.attachments.get(sent.id)).not.toBeNull();
+    expect(h.store.attachments.get(stray.id)).toBeNull();
+
     await h.orch.deleteTicket(t.key);
     expect(existsSync(sent.path)).toBe(false);
+    expect(h.store.attachments.get(sent.id)).toBeNull();
   });
 
   test("an upload a message shares with another ticket stays until neither uses it", async () => {
     const h = setup();
     const t = await blocked(h);
-    const up = h.orch.uploadPromptAttachment(png(1, 1), "Pasted image.png", "image/png");
-    await h.orch.sendMessage(t.key, "See", { attachments: [{ path: up.path }] });
+    const up = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
+    await h.orch.sendMessage(t.key, "See", { attachments: [{ id: up.id }] });
     await h.orch.idle();
-    const child = await h.orch.createTicket({ projectId: h.project.id, spec: "child", draft: true, promptAttachments: [{ path: up.path }] });
+    const child = await h.orch.createTicket({ projectId: h.project.id, spec: "child", draft: true, promptAttachments: [{ id: up.id }] });
     await h.orch.deleteTicket(t.key);
     expect(existsSync(up.path)).toBe(true);
     await h.orch.deleteTicket(child.key);
@@ -211,30 +221,28 @@ describe("over HTTP", () => {
     mkdirSync(dir, { recursive: true });
     const project = await client.createProject({ path: dir, key: "WEB" });
     const t = await client.createTicket({ projectId: project.id, spec: "Plan it", start: false });
-    const up = await client.uploadPromptAttachment(new Blob([png(2, 2)], { type: "image/png" }), "Pasted image", "image/png");
+    const up = await client.uploadAttachment(new Blob([png(2, 2)], { type: "image/png" }), "Pasted image", "image/png");
     const other = join(home, "notes.txt");
     writeFileSync(other, "hello");
 
-    await client.sendMessage(t.key, "", { attachments: [{ path: up.path }, { path: other }] });
+    await client.sendMessage(t.key, "", { attachments: [{ id: up.id }, { path: other }] });
     const entry = (await client.transcript(t.sessionId)).find((e) => e.role === "user" && e.content.type === "text" && !!e.content.attachments);
-    expect(entry?.content).toEqual({
-      type: "text",
-      text: "",
-      attachments: [
-        { path: up.path, name: "Pasted image.png", source: "upload" },
-        { path: other, name: "notes.txt", source: "file" },
-      ],
-    });
+    const sent = entry!.content.type === "text" ? entry!.content.attachments! : [];
+    expect(sent).toEqual([up, { id: expect.any(String), path: other, name: "notes.txt", source: "file", kind: "file", mimeType: "text/plain", size: 5 }]);
 
-    const img = await fetch(client.messageAttachmentUrl(entry!.id, 0));
+    const img = await fetch(client.attachmentUrl(up.id));
     expect([img.status, img.headers.get("content-type")]).toEqual([200, "image/png"]);
     expect(Buffer.from(await img.arrayBuffer()).equals(png(2, 2))).toBe(true);
-    expect((await fetch(client.messageAttachmentUrl(entry!.id, 1), { method: "HEAD" })).status).toBe(200);
+    expect((await fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(200);
+    // Legacy: by transcript entry and index, for iPhone apps from before the registry.
+    const legacy = (id: string, i: number) => `${harness!.url}/transcript/${id}/attachments/${i}?token=${harness!.token}`;
+    expect((await fetch(legacy(entry!.id, 0))).status).toBe(200);
     rmSync(other);
-    expect((await fetch(client.messageAttachmentUrl(entry!.id, 1), { method: "HEAD" })).status).toBe(404);
-    expect((await fetch(client.messageAttachmentUrl(entry!.id, 5))).status).toBe(404);
-    expect((await fetch(client.messageAttachmentUrl("nope", 0))).status).toBe(404);
-    expect((await fetch(client.messageAttachmentUrl(entry!.id, 0).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
+    expect((await fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(404);
+    expect((await fetch(legacy(entry!.id, 1), { method: "HEAD" })).status).toBe(404);
+    expect((await fetch(legacy(entry!.id, 5))).status).toBe(404);
+    expect((await fetch(legacy("nope", 0))).status).toBe(404);
+    expect((await fetch(legacy(entry!.id, 0).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
 
     const missing = await client.sendMessage(t.key, "x", { attachments: [{ path: join(home, "gone.png") }] }).catch((e) => e);
     expect(missing).toBeInstanceOf(HarnessApiError);
