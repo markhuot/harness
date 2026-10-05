@@ -163,30 +163,28 @@ private struct TicketDetailBody: View {
         let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 })
         ZStack(alignment: .top) {
             // The tab strip and pager are laid out over the hero, as if it were gone, and sit below it
-            // while it shows (HeroSlide); hiding slides them up over it. No layout changes, so a
+            // while it shows (HeroSlide, PagerSlide); hiding slides them up over it. No layout changes, so a
             // toggle mid-scroll re-lays out no tab body. The hero's state is read only in the
             // modifiers, so a toggle doesn't re-render this body either.
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
                 .modifier(TicketHeroSlot(hero: hero))
+            // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
+            // up under the bar, the strip's background would slide down over the hero.
             VStack(spacing: 0) {
                 TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs, tornOff: tornOff) { t in
                     hero.show()
                     onTab(t)
                 }
+                .background(c.bg, ignoresSafeAreaEdges: [])
+                .modifier(HeroSlide(hero: hero))
                 pager(shown, tornOff: tornOff)
                     .environment(\.ticketDetailOpenTab, relay.tabOpener)
                     .environment(\.annotationSink, relay.sink(outgoing: outgoing, uploader: uploader, toasts: toasts))
                     .environment(\.openAnnotator, relay.annotatorOpener)
                     .environment(\.specAttachments, specAttachments)
+                    .modifier(PagerSlide(hero: hero))
             }
-            // Not into the safe area: running up under the bar, it would slide down over the hero.
-            .background(c.bg, ignoresSafeAreaEdges: [])
-            // One geometry group: the slide moves it as a whole, rather than SwiftUI pushing the
-            // offset down to every leaf (each text run and nested scroll view of a transcript) on
-            // every frame.
-            .geometryGroup()
-            .modifier(HeroSlide(hero: hero))
             .zIndex(1)
         }
         .task(id: SpecAttachmentsTrigger(key: ticket.key, revision: ticket.specRevision, epoch: store.epoch)) {
@@ -237,16 +235,18 @@ private struct TicketDetailBody: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
-                    // The frame includes HeroSlide's offset, so it's taken back to the layout's
-                    // (the hero's resting offset off), and readings mid-slide, which move on every
-                    // frame, are skipped.
+                    // The frame includes PagerSlide's offset, so it's taken back to the layout's
+                    // (the hero's resting offset off). Readings while a slide is under way are
+                    // skipped.
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
                         guard page == strip, !hero.sliding else { return }
                         let laidOut = y - hero.restingOffset
                         if pageBottom != laidOut { pageBottom = laidOut }
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
-                    .background { PagerYieldsToBackSwipe() }
+                    .background { PagerYieldsToBackSwipe(hero: hero) }
+                    // Opaque, as the page slides over the hero on the pager's layer.
+                    .background(c.bg)
                     .tag(page)
             }
         }
@@ -406,17 +406,22 @@ private struct TicketPinnedHeader: ViewModifier {
 /// first page: it shuts the back swipe out, so the pager pages; on the first page it stays out of the
 /// way and the back swipe goes. A page's background, inside the paging scroll view; the gate only sees
 /// touches on the pager, so the back swipe elsewhere is untouched. It also turns off the pager's
-/// automatic safe-area insets (see `hook`).
+/// automatic safe-area insets (see `hook`) and hands the pager to the hero collapse, which slides it.
 private struct PagerYieldsToBackSwipe: UIViewRepresentable {
+    let hero: TicketDetailHeroCollapse
+
     func makeUIView(context: Context) -> Probe {
         let v = Probe()
         v.isUserInteractionEnabled = false
+        v.hero = hero
         return v
     }
 
-    func updateUIView(_ uiView: Probe, context: Context) {}
+    func updateUIView(_ uiView: Probe, context: Context) { uiView.hero = hero }
 
     final class Probe: UIView {
+        weak var hero: TicketDetailHeroCollapse?
+
         override func didMoveToWindow() {
             super.didMoveToWindow()
             guard window != nil else { return }
@@ -427,7 +432,9 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
         private func hook() {
             guard let pager = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? UIScrollView }).first(where: \.isPagingEnabled)
             else { return }
-            // While the hero shows, the pager sits lower than its layout (HeroSlide) and runs past
+            // The hero's slide runs on the pager's layer.
+            hero?.pager = pager
+            // While the hero shows, the pager sits lower than its layout (PagerSlide) and runs past
             // the screen's bottom safe area; UIKit would inset it for that, which lets the whole
             // page scroll up and down by the inset once a tab body reaches its end.
             if pager.contentInsetAdjustmentBehavior != .never {

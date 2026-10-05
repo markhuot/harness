@@ -31,8 +31,12 @@ final class TicketDetailHeroCollapse {
     /// The slide is under way. A global frame read inside the sliding views moves with the slide's
     /// offset until it ends, so geometry the screen lays out from ignores readings until then.
     @ObservationIgnored private(set) var sliding = false
+    /// The pager's paging scroll view (PagerYieldsToBackSwipe finds it), whose layer the slide runs on.
+    @ObservationIgnored weak var pager: UIView?
     @ObservationIgnored private var state = HeroCollapse.shown
     @ObservationIgnored private var slides = 0
+
+    private static let slideDuration = 0.22
 
     func send(_ e: CollapseEvent) {
         let next = HeroCollapse.step(state, e, heroHeight: distance)
@@ -43,10 +47,25 @@ final class TicketDetailHeroCollapse {
         var instant = Transaction(animation: nil)
         instant.disablesAnimations = true
         withTransaction(instant) { hidden = next.hidden }
+        // The pager takes its new place at once (PagerSlide) and slides there on its layer, an
+        // additive Core Animation the render server runs: moving it through SwiftUI instead
+        // recomputed the geometry and hit testing of every view in the tab body on every frame,
+        // which a long transcript couldn't keep up with. Additive, so a slide cut short by the next
+        // toggle carries on from where it was.
+        if let layer = pager?.layer, distance > 0 {
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = next.hidden ? distance : -distance
+            slide.toValue = 0.0
+            slide.isAdditive = true
+            slide.duration = Self.slideDuration
+            // SwiftUI's easeInOut, so the pager keeps pace with the tab strip.
+            slide.timingFunction = CAMediaTimingFunction(controlPoints: 0.42, 0, 0.58, 1)
+            layer.add(slide, forKey: nil)
+        }
         slides += 1
         let slide = slides
         sliding = true
-        withAnimation(.easeInOut(duration: 0.22), completionCriteria: .removed) {
+        withAnimation(.easeInOut(duration: Self.slideDuration), completionCriteria: .removed) {
             progress = next.hidden ? 1 : 0
         } completion: { [weak self] in
             guard let self, slide == slides else { return }
@@ -81,9 +100,9 @@ struct TicketHeroSlot: ViewModifier {
     }
 }
 
-/// On the tab strip and pager: `distance` lower while the hero shows, sliding up over it as it
-/// hides. Only `progress` is interpolated, and only into a visual effect, so no frame of the slide
-/// lays anything out.
+/// On the tab strip: `distance` lower while the hero shows, sliding up over it as it hides. Only
+/// `progress` is interpolated, and only into a visual effect, so no frame of the slide lays
+/// anything out. The strip is small; the pager below it slides on its layer instead (PagerSlide).
 struct HeroSlide: ViewModifier {
     let hero: TicketDetailHeroCollapse
 
@@ -103,6 +122,17 @@ private struct HeroSlideOffset: ViewModifier, Animatable {
 
     func body(content: Content) -> some View {
         let y = distance * (1 - progress)
+        content.visualEffect { c, _ in c.offset(y: y) }
+    }
+}
+
+/// On the pager: `distance` lower while the hero shows, changed at once on a toggle (no SwiftUI
+/// animation); the hero collapse slides it on its layer.
+struct PagerSlide: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+
+    func body(content: Content) -> some View {
+        let y = hero.restingOffset
         content.visualEffect { c, _ in c.offset(y: y) }
     }
 }
