@@ -435,8 +435,11 @@ async function fail(job: Job, failure: Failure, status: "failed" | "stopped" = "
 async function pipeLines(stream: ReadableStream<Uint8Array>, onLine: (line: string) => void): Promise<void> {
   const decoder = new TextDecoder();
   let buf = "";
+  const reader = stream.getReader();
   try {
-    for await (const chunk of stream) {
+    for (;;) {
+      const { done, value: chunk } = await reader.read();
+      if (done) break;
       buf += decoder.decode(chunk, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
