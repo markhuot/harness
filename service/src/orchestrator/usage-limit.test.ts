@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { RESUME_GRACE_MS, usageLimitResetAt, usageLimitResumeAt } from "./usage-limit";
+import { isUsageLimit, RESUME_GRACE_MS, usageLimitResetAt, usageLimitResumeAt } from "./usage-limit";
 
 // 2026-10-05 14:20 EDT (18:20 UTC), when ACAMS-33's run hit its limit.
 const NOW = Date.UTC(2026, 9, 5, 18, 20);
@@ -44,6 +44,23 @@ describe("usageLimitResetAt", () => {
     expect(usageLimitResetAt("The connection resets 3pm (America/New_York)", NOW)).toBeNull(); // no limit
     expect(usageLimitResetAt("limit · resets 13pm", NOW)).toBeNull();
     expect(usageLimitResetAt("limit · resets 3pm (Not/AZone)", NOW)).toBeNull();
+  });
+});
+
+describe("isUsageLimit", () => {
+  test("spend and usage limits, with or without a reset time", () => {
+    expect(isUsageLimit("You've hit your individual spend limit · run /usage-credits to ask your admin for a higher limit · your weekly limit resets Oct 8 at 6pm (America/New_York)")).toBe(true);
+    expect(isUsageLimit("You've hit your spend limit")).toBe(true);
+    expect(isUsageLimit("You've hit your limit")).toBe(true);
+    expect(isUsageLimit("5-hour limit reached")).toBe(true);
+    expect(isUsageLimit("Claude AI usage limit reached|1791230400")).toBe(true);
+  });
+
+  test("other failures aren't", () => {
+    expect(isUsageLimit(null)).toBe(false);
+    expect(isUsageLimit("driver crashed")).toBe(false);
+    expect(isUsageLimit("merge conflict")).toBe(false);
+    expect(isUsageLimit("Prompt is too long")).toBe(false);
   });
 });
 

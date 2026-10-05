@@ -156,7 +156,7 @@ import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "..
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
-import { clockTime, usageLimitResumeAt } from "./usage-limit";
+import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
 
 export interface ConductorChange {
   key: string;
@@ -4442,8 +4442,10 @@ ${numberLines(r.body)}`;
         return;
       }
       // A completion that fails in review keeps its approvals: blocking it would send it through
-      // in progress again, and the resubmit would reset both reviews.
-      if (run.kind === "complete" && ticket.status === "review") {
+      // in progress again, and the resubmit would reset both reviews. A usage limit blocks it
+      // anyway, like any run: it restarts (on its own, when the limit says when) and goes through
+      // review and completion again.
+      if (run.kind === "complete" && ticket.status === "review" && !isUsageLimit(error)) {
         this.addActivityLine(ticket, "failed", "system", `Completion failed: ${error ?? "no error reported"}`);
         this.completionStopped(run.sessionId, "failed", error);
         return;
@@ -4452,10 +4454,13 @@ ${numberLines(r.body)}`;
       // failed chat leaves the ticket where it is.
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete" || (run.kind === "chat" && ticket.status === "in_progress")) {
         // A usage limit that says when it resets: the ticket restarts on its own a little after.
-        const resumeAt = run.kind === "complete" ? null : usageLimitResumeAt(error, this.now());
+        const resumeAt = usageLimitResumeAt(error, this.now());
         const restart = resumeAt === null ? "" : ` Restarts on its own at ${clockTime(resumeAt)}.`;
-        this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}${restart}`, this.moveMeta(ticket, "blocked"));
-        this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed", resumeAt }, "Blocked: run failed", error ?? undefined);
+        const what = run.kind === "complete" ? "Completion failed" : "Run failed";
+        // A completion blocked in review gives its approvals back: the restart resubmits for review.
+        const reviews = run.kind === "complete" && ticket.status === "review" ? { agentReview: "pending" as const, humanReview: "pending" as const } : {};
+        this.addActivityLine(ticket, "failed", "system", `${what}: ${error ?? "no error reported"}${restart}`, this.moveMeta(ticket, "blocked"));
+        this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed", resumeAt, ...reviews }, `Blocked: ${what.toLowerCase()}`, error ?? undefined);
         if (resumeAt !== null) this.appendStatus(ticket.sessionId, run.id, `Usage limit: restarts on its own at ${clockTime(resumeAt)}`);
       } else if (run.kind === "chat") {
         this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);

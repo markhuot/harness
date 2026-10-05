@@ -54,6 +54,16 @@ export function usageLimitResetAt(error: string | null | undefined, now = Date.n
   return at;
 }
 
+/**
+ * Whether a run's error is a usage or spend limit, whether or not it says when it resets
+ * ("You've hit your individual spend limit · …", "5-hour limit reached", "usage limit reached|…").
+ */
+export function isUsageLimit(error: string | null | undefined): boolean {
+  if (!error) return false;
+  if (usageLimitResetAt(error) !== null) return true;
+  return /\b(?:spend|spending|usage|session|weekly|daily|monthly|5-hour|credit) limit\b|\bhit your (?:\S+ )?limit\b|\blimit reached\b/i.test(error);
+}
+
 /** When a ticket blocked by this error restarts on its own (the reset plus RESUME_GRACE_MS), or null. */
 export function usageLimitResumeAt(error: string | null | undefined, now = Date.now()): number | null {
   const reset = usageLimitResetAt(error, now);

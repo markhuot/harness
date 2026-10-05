@@ -15,7 +15,8 @@ for (const [k, v] of Object.entries(ENV)) process.env[k] = v;
 setDefaultTimeout(30_000);
 
 async function setup() {
-  const h = makeOrchestrator();
+  let now = Date.now();
+  const h = makeOrchestrator({ now: () => now });
   h.driver.commitsWork = true;
   const repo = join(h.home, "repo");
   mkdirSync(repo);
@@ -48,7 +49,7 @@ async function setup() {
   };
   const activity = (t: Ticket) => h.store.activity.listBySession(t.sessionId);
   const runsOf = (t: Ticket, kind: string) => h.driver.calls.filter((c) => c.kind === kind && h.store.runs.get(c.runId)?.sessionId === t.sessionId);
-  return { ...h, repo, git, project, get, failWhen, inReview, activity, runsOf };
+  return { ...h, repo, git, project, get, failWhen, inReview, activity, runsOf, setNow: (ms: number) => (now = ms) };
 }
 
 describe("a missing worktree", () => {
@@ -137,13 +138,13 @@ describe("a failed completion", () => {
   test("stays in review with the agent review approved; approving again lands it", async () => {
     const h = await setup();
     const t = await h.inReview();
-    h.failWhen((req) => req.kind === "complete", "You've hit your spend limit");
+    h.failWhen((req) => req.kind === "complete", "driver crashed");
     h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
     await h.orch.idle();
     expect(h.get(t)).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending", completionAction: "merge", blockedReason: null });
     const all = h.activity(t);
     const entries = all.slice(all.findIndex((e) => e.kind === "approved"));
-    expect(entries.some((e) => e.kind === "failed" && e.body === "Completion failed: You've hit your spend limit")).toBe(true);
+    expect(entries.some((e) => e.kind === "failed" && e.body === "Completion failed: driver crashed")).toBe(true);
     expect(entries.some((e) => e.meta.to === "blocked" || e.meta.to === "in_progress")).toBe(false);
     expect(h.runsOf(t, "work")).toHaveLength(1);
     h.driver.script = null;
@@ -168,6 +169,44 @@ describe("a failed completion", () => {
     expect(entries.some((e) => e.meta.to === "blocked")).toBe(false);
     // The conductor heard about it: its update run named the failure.
     expect(h.runsOf(parent, "conductor").some((c) => c.prompt.includes("Completion failed (driver crashed)") && c.prompt.includes("call complete_ticket again"))).toBe(true);
+  });
+});
+
+describe("a completion stopped by a usage limit", () => {
+  test("blocks with both reviews back to pending, restarts after the reset, and goes through review and completion again", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    const now = Date.now();
+    h.setNow(now);
+    const reset = Math.floor(now / 1000) * 1000 + 3600_000;
+    const limit = `Claude AI usage limit reached|${reset / 1000}`;
+    h.failWhen((req) => req.kind === "complete", limit);
+    h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
+    await h.orch.idle();
+    expect(h.get(t)).toMatchObject({ status: "blocked", agentReview: "pending", humanReview: "pending", blockedReason: limit, resumeAt: reset + 5 * 60_000 });
+    expect(h.activity(t).some((e) => e.kind === "failed" && /^Completion failed: .+ Restarts on its own at \d{1,2}:\d{2} [AP]M\.$/.test(e.body))).toBe(true);
+
+    h.driver.script = null;
+    h.setNow(reset + 5 * 60_000 + 1);
+    await h.orch.resumeDue();
+    await h.orch.idle();
+    expect(h.activity(t).map((e) => e.body)).toContain("Restarted after the usage limit reset");
+    expect(h.get(t)).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+    expect(h.runsOf(t, "work")).toHaveLength(2);
+    h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
+    await h.orch.idle();
+    expect(h.get(t).status).toBe("done");
+    expect(h.runsOf(t, "complete")).toHaveLength(2);
+  });
+
+  test("a spend limit that names no reset time blocks without a restart", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    h.failWhen((req) => req.kind === "complete", "You've hit your spend limit");
+    h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
+    await h.orch.idle();
+    expect(h.get(t)).toMatchObject({ status: "blocked", humanReview: "pending", blockedReason: "You've hit your spend limit", resumeAt: null });
+    expect(h.activity(t).at(-1)!.body).toBe("Completion failed: You've hit your spend limit");
   });
 });
 
