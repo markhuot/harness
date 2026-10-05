@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.1743](https://github.com/markhuot/harness/releases/tag/app-20261005.1743) - 2026-10-05
+
 ### Added
 
 - Each browser tab has its own size controls, on the Mac and on iPhone and iPad, behind the new
@@ -31,7 +33,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   under the agent. On a phone, a page larger than the screen is scaled down to fit.
 - The browser bar has more room for the address: Annotate is an icon, the new-tab + button sits at
   the end of the tab strip (which scrolls when there are many tabs), and the Live indicator is gone.
-
 - The Browser tab's strip of tabs now shows even when only one browser tab is open, so you can drag
   that tab off into a pane or window of its own.
 - Agents keep a ticket's spec readable top to bottom as what's being built now. When you change
