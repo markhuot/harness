@@ -102,6 +102,12 @@ contain a colon). `scopeOf`, the board selectors (`boardColumns`, `doneColumn`, 
 changes what a group's board counts, a `project.upserted` that changes a project's group drops
 the paging of both groups, and the board pages them afresh.
 
+The iPhone and iPad app ports all of it to Swift (`Paging.groupScope`, `ProjectGroups` in
+HarnessKit, checked against the `projectGroups` and `statePaging` fixtures). Its Projects sheet and
+iPad sidebar list the groups under All projects. The board filter pref (`boardProject`) stores a
+group's board as its scope, so values saved before groups still read as project ids. Project
+settings has a Group picker on the same `groupRows`, where Return sets the typed name.
+
 ## Remote IDs
 
 A ticket can be linked to a remote item, such as a Jira issue or a pull request. The link is
