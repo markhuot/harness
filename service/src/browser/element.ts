@@ -5,6 +5,27 @@
 
 import { MAX_ANNOTATION_PATH, MAX_ANNOTATION_TEXT, type BrowserElement } from "@harness/shared";
 
+// The page's DOM, as far as findElement touches it. Not every tsconfig that reaches this file loads
+// the DOM lib (it changes Bun's stream types), so these module-scoped names stand in for it.
+interface PageNode {
+  id: string;
+  localName: string;
+  parentElement: PageNode | null;
+  firstElementChild: PageNode | null;
+  nextElementSibling: PageNode | null;
+  textContent: string | null;
+  innerText?: string;
+}
+declare const document: {
+  elementFromPoint(x: number, y: number): PageNode | null;
+  querySelectorAll(selector: string): { length: number };
+  body: PageNode | null;
+  documentElement: PageNode;
+};
+declare const location: { href: string };
+declare const window: { scrollX: number; scrollY: number };
+declare const CSS: { escape(value: string): string };
+
 /** What the page reports: where it is, and what's under the point (null when nothing is). */
 export interface PageElementReport {
   href: string;
@@ -25,10 +46,10 @@ export function findElement(x: number, y: number, maxPath: number, maxText: numb
   const report = (element: BrowserElement | null): PageElementReport => ({ href: location.href, scroll: { x: window.scrollX, y: window.scrollY }, element });
   const target = document.elementFromPoint(x, y);
   if (!target) return report(null);
-  const uniqueId = (el: Element) => !!el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1;
+  const uniqueId = (el: PageNode) => !!el.id && document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1;
   const steps: string[] = [];
   let anchor = "";
-  for (let el: Element | null = target; el; el = el.parentElement) {
+  for (let el: PageNode | null = target; el; el = el.parentElement) {
     if (uniqueId(el)) {
       anchor = `#${CSS.escape(el.id)}`;
       break;
@@ -40,17 +61,21 @@ export function findElement(x: number, y: number, maxPath: number, maxText: numb
     }
     let n = 1;
     let same = false;
-    for (let s: Element | null = el.parentElement?.firstElementChild ?? null; s; s = s.nextElementSibling) {
-      if (s === el) continue;
+    let before = true;
+    for (let s: PageNode | null = el.parentElement?.firstElementChild ?? null; s; s = s.nextElementSibling) {
+      if (s === el) {
+        before = false;
+        continue;
+      }
       if (s.localName !== tag) continue;
       same = true;
-      if (s.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) n++;
+      if (before) n++;
     }
     steps.unshift(same ? `${CSS.escape(tag)}:nth-of-type(${n})` : CSS.escape(tag));
   }
   const parts = anchor ? [anchor, ...steps] : steps;
   while (parts.length > 1 && parts.join(" > ").length > maxPath) parts.shift();
-  const raw = typeof (target as HTMLElement).innerText === "string" ? (target as HTMLElement).innerText : (target.textContent ?? "");
+  const raw = typeof target.innerText === "string" ? target.innerText : (target.textContent ?? "");
   const text = raw.replace(/\s+/g, " ").trim().slice(0, maxText).trim();
   return report({ path: parts.join(" > ").slice(0, maxPath), text });
 }
