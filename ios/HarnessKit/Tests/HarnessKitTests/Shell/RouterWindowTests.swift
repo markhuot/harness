@@ -35,6 +35,28 @@ struct RouterWindowTests {
         #expect(opened().count == 1)
     }
 
+    @Test func aLaunchedNewSessionClosesItsSheetAndOpensTheTicketsWindow() {
+        let (r, opened) = windowed()
+        let sheet = SheetRoute.newSession(projectId: nil, key: nil)
+        r.present(sheet)
+        r.replace(sheet, with: .ticket(key: "A-1", tab: .transcript))
+        #expect(r.sheet == nil)
+        #expect(r.path(.board).isEmpty)
+        #expect(opened() == [.ticket(key: "A-1", tab: .transcript)])
+
+        // A sheet a link already swapped in stays up.
+        r.present(.watcher(id: nil))
+        r.replace(sheet, with: .ticket(key: "A-2", tab: nil))
+        #expect(r.sheet == .watcher(id: nil))
+        #expect(opened().last == .ticket(key: "A-2", tab: nil))
+
+        // Pushing instead (iPhone): the sheet closes and the ticket lands on the stack.
+        let p = Router()
+        p.present(sheet)
+        p.replace(sheet, with: .ticket(key: "A-3", tab: nil))
+        #expect(p.sheet == nil && p.path(.board) == [.ticket(key: "A-3", tab: nil)])
+    }
+
     @Test func withoutWindowModeOrAnOpenerTicketsPushAsBefore() {
         let r = Router()
         r.onOpenTicket = { _ in Issue.record("opened a window") }

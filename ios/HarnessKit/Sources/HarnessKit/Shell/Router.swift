@@ -119,6 +119,14 @@ public final class Router {
 
     public func present(_ cover: CoverRoute) { open(.cover(cover)) }
 
+    /// A sheet that became a ticket (New session, launched): closes `sheet` unless a link already
+    /// replaced it, then opens the ticket. The close matters on iPad, where the ticket opens in a
+    /// window of its own and `open(.push)` leaves this window's sheet up.
+    public func replace(_ sheet: SheetRoute, with route: Route) {
+        if self.sheet == sheet { self.sheet = nil }
+        open(.push(route))
+    }
+
     public func dismissModals() {
         cover = nil
         sheet = nil
