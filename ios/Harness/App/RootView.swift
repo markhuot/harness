@@ -115,6 +115,8 @@ private struct SceneChrome: ViewModifier {
                 BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
             }
             .environment(router)
+            // The menu commands (⌘N, ⌘1, …) act on the key window through its router.
+            .focusedSceneValue(\.windowRouter, router)
     }
 
     /// At regular width the Projects sheet is the split view's sidebar column (MainTabs shows it
@@ -138,6 +140,7 @@ private struct SceneChrome: ViewModifier {
 /// bar holds that button, the search field (with the filter inside it) and New session. At regular width (iPad) it's DesktopShell, where a ticket opens
 /// in a window of its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
+    @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.supportsMultipleWindows) private var multipleWindows
@@ -150,8 +153,22 @@ struct MainTabs: View {
                 SectionStack()
             }
         }
+        .focusedSceneValue(\.toggleSidebar, sidebarToggle)
         .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
             router.setOpensTicketsInWindows(windows)
+        }
+    }
+
+    /// ⌃⌘S: the split view's sidebar column at regular width (the `sidebarHidden` pref), the
+    /// Projects sheet at compact width.
+    private var sidebarToggle: SidebarToggle {
+        if sizeClass == .regular {
+            let shown = app.prefs.sidebarHidden != true
+            return SidebarToggle(shown: shown) { app.setPref(\.sidebarHidden, shown) }
+        }
+        let shown = router.sheet == .projects
+        return SidebarToggle(shown: shown) {
+            if shown { router.sheet = nil } else { router.present(.projects) }
         }
     }
 }

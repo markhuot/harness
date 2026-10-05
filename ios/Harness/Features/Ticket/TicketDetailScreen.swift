@@ -206,10 +206,30 @@ private struct TicketDetailBody: View {
             }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerTop = $0 }
         }
+        // ⇧⌘] and ⇧⌘[ step through the tabs, round the ends, as on the desktop.
+        .background { tabShortcuts(shown) }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
         .annotator($annotating) { hero.show() }
+    }
+
+    /// Next Tab and Previous Tab: buttons for their shortcuts only, not drawn.
+    @ViewBuilder private func tabShortcuts(_ shown: TicketTab) -> some View {
+        let tabs = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: store.state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
+        if tabs.count > 1 {
+            let step = { (delta: Int) in
+                guard let t = Tabs.nextTab(tabs, current: shown, delta: delta) else { return }
+                hero.show()
+                onTab(t)
+            }
+            Group {
+                Button("Next Tab") { step(1) }.keyboardShortcut("]", modifiers: [.command, .shift])
+                Button("Previous Tab") { step(-1) }.keyboardShortcut("[", modifiers: [.command, .shift])
+            }
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the

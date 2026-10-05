@@ -61,6 +61,7 @@ struct TicketDetailComposer: View {
                                                             glass: true),
                                   focusRequest: focusRequest)
                 sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
+                    .submitShortcut(focused)
             }
         }
         .padding(.top, 6)

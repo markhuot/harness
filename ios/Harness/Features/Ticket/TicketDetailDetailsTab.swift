@@ -47,6 +47,7 @@ struct TicketDetailDetailsTab: View {
                             .font(.scaled(size: 13)).foregroundStyle(c.text3).frame(maxWidth: .infinity, alignment: .leading)
                         HButton("Revert", variant: .ghost, small: true, fullWidth: false) { self.draft?.revert(ticket) }
                         HButton("Save", variant: .primary, small: true, loading: saving, fullWidth: false) { saveSpec() }
+                            .submitShortcut(editingSpec)
                     }
                 }
             }

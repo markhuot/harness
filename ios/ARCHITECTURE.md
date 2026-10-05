@@ -398,8 +398,18 @@ detail, so the gear's `router.push(.project(id:))` lands there. The column's vis
 `sidebarHidden` pref (remembered across launches); the system toggle hides and shows it. The
 detail gets `\.desktopShell`: `SidebarToolbarItem` draws nothing, and BoardScreen puts its
 search in the navigation bar (`.searchable(placement: .toolbar)`) and Filter and New session
-(⌘N) in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
-width. `harness://projects` at regular width shows the sidebar instead of a sheet (RootView
+in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
+width.
+
+**Keyboard shortcuts** (App/KeyCommands.swift) follow the desktop's ⌘ chords (keys.ts) at either
+width. The window-wide ones are `HarnessCommands`, the App's `.commands` (the iPadOS menu bar and
+the hold-⌘ overlay): New Session ⌘N, Settings ⌘,, Show/Hide Sidebar ⌃⌘S, Go → All Projects ⌘1 and
+Inbox ⌘2. They act on the key window through `focusedSceneValue(\.windowRouter)` (SceneChrome) and
+`\.toggleSidebar` (MainTabs). A screen's own chords sit on its buttons: ⇧⌘]/⇧⌘[ (hidden buttons
+on the ticket screen, `Tabs.nextTab`), ⌘↩ on send and save buttons through `.submitShortcut(active)`,
+active only while that button's field has focus so two on screen (the composer and the Details
+tab's spec in the pager) never both answer, ⇧⌘↩ Plan first, ⌘S on a prompt, and `.cancelAction`
+(Esc) on sheets' Cancel. `harness://projects` at regular width shows the sidebar instead of a sheet (RootView
 never presents it there). A section that doesn't set its own background gets `bg` from the
 detail column, since the split view paints the system background.
 
@@ -823,7 +833,7 @@ native-pattern difference, not a missing feature.
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
 | Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
-| Board (phone: no header); bottom bar: Projects, search field (project name as placeholder) with Filter (Show child tickets) inside, + New session (iPad: search in the navigation bar, Filter and New session top trailing, ⌘F / ⌘N) | screens/Board, ui/header | BoardScreen | done (differs) |
+| Board (phone: no header); bottom bar: Projects, search field (project name as placeholder) with Filter (Show child tickets) inside, + New session (iPad: search in the navigation bar, Filter and New session top trailing; ⌘F, and ⌘N from the menu commands) | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |

@@ -94,6 +94,7 @@ struct TicketDetailApprovalCard: View {
                     HButton("Back", variant: .ghost, fullWidth: false) { denying = false }.disabled(busy != nil)
                     Spacer()
                     HButton("Deny", icon: "x", variant: .dangerSolid, loading: busy == .deny, fullWidth: false, haptic: nil) { answer(.deny, tool: tool) }
+                        .submitShortcut(messageFocused)
                 }
             } else {
                 VStack(spacing: 8) {

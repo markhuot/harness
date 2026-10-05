@@ -29,6 +29,8 @@ struct HarnessApp: App {
                 .environment(actions)
         }
         .handlesExternalEvents(matching: ["\(DeepLink.scheme)://"])
+        // The desktop's menu-bar shortcuts (KeyCommands.swift), for every window.
+        .commands { HarnessCommands(app: app) }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active: app.sceneBecameActive()

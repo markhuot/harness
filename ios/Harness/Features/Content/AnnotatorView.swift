@@ -191,6 +191,7 @@ struct AnnotatorView: View {
                 .font(.scaled(size: 16))
                 .foregroundStyle(c.accentText)
                 .disabled(adding)
+                .keyboardShortcut(.cancelAction)
             VStack(spacing: 1) {
                 Text("Annotate").font(.scaled(size: 15, weight: .semibold)).foregroundStyle(c.text)
                 Text(request.file.name)
@@ -211,6 +212,8 @@ struct AnnotatorView: View {
             .buttonStyle(.plain)
             .foregroundStyle(history.isEmpty || adding ? c.text3 : c.text2)
             .disabled(history.isEmpty || adding)
+            // ⌘Z, unless a note is being typed: then it's the field's own undo.
+            .keyboardShortcut(focused == nil ? KeyboardShortcut("z") : nil)
             .accessibilityLabel("Undo")
             Button { add() } label: {
                 Group {
@@ -226,6 +229,7 @@ struct AnnotatorView: View {
             .buttonBorderShape(.capsule)
             .tint(c.accent)
             .disabled(marks.isEmpty || adding)
+            .submitShortcut()
             .accessibilityLabel("Add")
             .accessibilityHint(marks.isEmpty ? "Add a note first" : "Adds the image with its notes to your message")
         }
