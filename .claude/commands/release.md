@@ -1,5 +1,5 @@
 ---
-description: Cut a full release (GitHub, Vercel install page, TestFlight), then install the new Mac app in /Applications
+description: Cut a full release (GitHub, Vercel install page, TestFlight), then install the new Mac app in /Applications and reopen it
 ---
 
 Cut a full release of the Harness Mac and iPhone/iPad apps, following the **Releases** section of
@@ -27,8 +27,34 @@ tag or `main`.
    temp dir, `trash /Applications/Harness.app`, then `ditto` the new `Harness.app` into
    `/Applications`. Check it with `spctl -a -vv /Applications/Harness.app`, then `rm -rf` the temp
    dir (and the download dir, if you fetched the zip): each one holds a 540 MB copy of the app, and
-   leftover ones have filled the disk before. Only copy the app:
-   don't restart the service, quit or relaunch the app, or run `bun run install-app`. The app
-   notices the new version and restarts the service itself.
+   leftover ones have filled the disk before. Don't run `bun run install-app` (it packages from
+   the checkout instead).
 7. Report the tag, the GitHub release URL, https://harness-install.vercel.app, and the TestFlight
-   status (submitted for review, or left unsubmitted behind an earlier build).
+   status (submitted for review, or left unsubmitted behind an earlier build). In a Harness
+   ticket, also bring the spec up to date and submit now, before step 8.
+8. Then quit and reopen the app so the person using it sees the new version. A running Harness
+   keeps the old build in memory until it quits, even though `/Applications` now holds the new
+   one. Never skip this step. Quitting can stop the service, and with it this session, when the
+   service runs inside the app rather than at login, so make this the last thing you do and run
+   it detached, with a delay that leaves time for your final message:
+
+   ```sh
+   perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' /bin/sh -c 'sleep 20
+     app=/Applications/Harness.app
+     osascript -e "tell application id \"com.markhuot.harness.app\" to quit"
+     for i in $(seq 1 120); do pgrep -qf "$app/Contents/MacOS/Harness$" || break; sleep 1; done
+     for i in $(seq 1 10); do open "$app"; sleep 3; pgrep -qf "$app/Contents/MacOS/Harness$" && break; done' \
+     </dev/null >/dev/null 2>&1 &
+   ```
+
+   The script must reopen the app on its own, with nobody touching it. `setsid` gives it a session
+   of its own, so it outlives the shell and the session that started it (a plain `nohup … &`
+   can be stopped along with them before it reaches `open`). Both waits match the Mac app's
+   executable path, not the process name, because the iPhone app in the simulator is also a
+   `Harness` process. The `open` retries until the Mac app is running again. If you're still
+   running when it should be back (the service runs at login), check with that same `pgrep`, and
+   run `open /Applications/Harness.app` yourself if it isn't.
+
+   If agents are mid-run and the service lives inside the app, Harness asks before quitting. That
+   choice belongs to the person at the Mac, and the reopen just brings the app forward if they
+   cancel. Don't restart the service yourself: the reopened app starts or reconnects to it.
