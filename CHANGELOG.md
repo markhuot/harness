@@ -20,6 +20,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   review prompt has a new `{{specEmpty}}` variable and no longer has `{{spec}}`; a customized
   prompt that uses `{{spec}}` is flagged for you to update.
 
+### Fixed
+
+- On iPhone and iPad, scrolling a ticket's tabs no longer stutters while the ticket's title and
+  buttons slide away or come back. Long specs suffered most.
+
 ## [app-20261005.0236](https://github.com/markhuot/harness/releases/tag/app-20261005.0236) - 2026-10-05
 
 ### Changed

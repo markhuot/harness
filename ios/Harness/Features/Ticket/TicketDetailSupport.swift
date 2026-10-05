@@ -8,10 +8,20 @@ import SwiftUI
 /// The ticket hero's collapse: HeroCollapse's rules fed by the tab body's
 /// scroll gestures. `show()` brings it back (another tab, news on the ticket); `measured` takes the
 /// hero's height while it's shown, which is how much room hiding it gives the tab body.
+///
+/// A toggle changes the layout once, without animation (`hidden`), and animates only `progress`,
+/// which HeroSlide turns into a render-time offset of the tab strip and pager. Animating the hero's
+/// frame instead re-lays out the pager and the tab body's scroll view on every frame, which drops
+/// frames on a long spec.
 @MainActor
 @Observable
 final class TicketDetailHeroCollapse {
+    /// The hero takes no room: changes at once.
     private(set) var hidden = false
+    /// 1 hidden, 0 shown, animated between them: how far the slide has gone.
+    private(set) var progress: Double = 0
+    /// How far the tab strip slides: the hero's height when it last toggled.
+    private(set) var distance: Double = 0
     @ObservationIgnored private var state = HeroCollapse.shown
     @ObservationIgnored private var heroHeight: Double = 0
 
@@ -19,13 +29,41 @@ final class TicketDetailHeroCollapse {
         let next = HeroCollapse.step(state, e, heroHeight: heroHeight)
         state = next
         guard next.hidden != hidden else { return }
-        withAnimation(.easeInOut(duration: 0.22)) { hidden = next.hidden }
+        var instant = Transaction(animation: nil)
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            hidden = next.hidden
+            distance = heroHeight
+        }
+        withAnimation(.easeInOut(duration: 0.22)) { progress = next.hidden ? 1 : 0 }
     }
 
     func show() { send(.show) }
 
     func measured(_ height: Double) {
         if !state.hidden { heroHeight = height }
+    }
+}
+
+/// On the tab strip and pager under the hero: keeps them where they were drawn when the hero's
+/// room appears or goes at once, then slides them the rest of the way as `progress` animates. Only
+/// `progress` is interpolated, and only into a visual effect, so no frame of the slide lays
+/// anything out.
+struct HeroSlide: ViewModifier, Animatable {
+    var progress: Double
+    let hidden: Bool
+    let distance: Double
+
+    nonisolated var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        // Hidden: the layout moved up `distance`, so start that far down. Shown: it moved down, so
+        // start that far up.
+        let y = distance * ((hidden ? 1 : 0) - progress)
+        content.visualEffect { c, _ in c.offset(y: y) }
     }
 }
 
@@ -112,45 +150,53 @@ private func scrollPhase(_ p: ScrollPhase) -> StickScrollPhase {
     }
 }
 
+/// What a scroll tracker remembers between callbacks. A plain class, not @State values: these
+/// change on every scrolled frame and nothing draws from them, so writing them mustn't update the view.
+private final class ScrollTrack<Value> {
+    var metrics = ScrollMetrics(offset: 0, contentHeight: 0, viewportHeight: 0)
+    var value: Value
+
+    init(_ value: Value) { self.value = value }
+}
+
 private struct TicketDetailHeroScroll: ViewModifier {
     @Environment(\.ticketDetailHero) private var hero
-    @State private var metrics = ScrollMetrics(offset: 0, contentHeight: 0, viewportHeight: 0)
+    @State private var track = ScrollTrack(())
 
     func body(content: Content) -> some View {
         content
             .onScrollGeometryChange(for: ScrollMetrics.self, of: scrollMetrics) { _, m in
-                metrics = m
+                track.metrics = m
                 hero?.send(.scroll(m))
             }
             .onScrollPhaseChange { old, new in
-                for e in HeroCollapse.events(from: scrollPhase(old), to: scrollPhase(new), metrics: metrics) { hero?.send(e) }
+                for e in HeroCollapse.events(from: scrollPhase(old), to: scrollPhase(new), metrics: track.metrics) { hero?.send(e) }
             }
     }
 }
 
 private struct TicketDetailStickToBottom: ViewModifier {
-    @State private var stick = StickToBottom.stuck
+    @State private var track = ScrollTrack(StickToBottom.stuck)
     @State private var position = ScrollPosition(edge: .bottom)
-    @State private var metrics = ScrollMetrics(offset: 0, contentHeight: 0, viewportHeight: 0)
 
     func body(content: Content) -> some View {
         content
             .scrollPosition($position)
             .defaultScrollAnchor(.bottom, for: .initialOffset)
             .onScrollGeometryChange(for: ScrollMetrics.self, of: scrollMetrics) { old, m in
-                metrics = m
+                track.metrics = m
                 apply(.scroll(m))
                 // Content grew or shrank, or the viewport changed (the hero, the keyboard).
                 if old.contentHeight != m.contentHeight || old.viewportHeight != m.viewportHeight { apply(.resize) }
             }
             .onScrollPhaseChange { old, new in
-                for e in StickToBottom.events(from: scrollPhase(old), to: scrollPhase(new), metrics: metrics) { apply(e) }
+                for e in StickToBottom.events(from: scrollPhase(old), to: scrollPhase(new), metrics: track.metrics) { apply(e) }
             }
     }
 
     private func apply(_ e: StickEvent) {
-        let step = StickToBottom.stickStep(stick, e)
-        stick = step.stick
+        let step = StickToBottom.stickStep(track.value, e)
+        track.value = step.stick
         if step.follow { position.scrollTo(edge: .bottom) }
     }
 }
