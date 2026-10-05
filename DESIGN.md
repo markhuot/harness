@@ -1836,14 +1836,17 @@ so a ticket keeps working after one is moved or deleted.
     (thumbnails, the lightbox or viewer), with an "N notes" line that opens to the list: the
     composer, the New session, the Spec tab's attachment list and the Transcript.
   - **The element under a browser mark.** Each time a browser mark's anchor is placed or moved, the
-    annotator asks `POST /browser/:sessionId/element { tabId, x, y, url, scroll }` (the anchor in
-    the page's CSS pixels, and the screenshot's URL and scroll). The service runs `findElement`
+    annotator asks `POST /browser/:sessionId/element { tabId, x, y, url, scroll, viewport }` (the
+    anchor in the page's CSS pixels, and the screenshot's URL, scroll and viewport). The service runs `findElement`
     (`service/src/browser/element.ts`) in the page with `elementFromPoint`, never scrolling or
     waking it. It answers the element's CSS selector and its visible text (`BrowserElement`): `#id`
     when an id is unique in the page, else `tag:nth-of-type(n)` steps from the nearest unique id or
     `body`, up to 1000 characters, and innerText with whitespace collapsed, up to 200. It answers
-    null when the tab has navigated or scrolled since the screenshot, so a mark never names the
-    wrong element. The mark keeps them as `path` and `text` (valid only with `page`), shown under
+    null when the tab has navigated, scrolled or been resized since the screenshot (a viewer's pane
+    resizes the tab, which reflows the page), so a mark never names the wrong element. Annotate
+    in the browser pane first applies any resize still waiting on its debounce and waits (up to
+    2 s) for a frame at the pane's size, so the screenshot shows the page at the size the lookups
+    will find it. The mark keeps them as `path` and `text` (valid only with `page`), shown under
     its note as `#save · "Save"`. Moving an anchor forgets its element until the next answer
     (`moveMark`, `setMarkElement`).
   - **To the agent.** The service validates each annotation when it resolves the attachments (an
