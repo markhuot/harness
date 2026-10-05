@@ -86,7 +86,7 @@ private struct NewSessionEditorView: View {
             }
             // Start the editor once the store has what it needs: the reopened draft, or a project.
             .onChange(of: BeginInputs(state: state, reopen: reopen, projectId: projectId, prefs: app.prefs), initial: true) { begin() }
-            // The store's copy of the saved draft: another device's edit, launch or discard.
+            // The store's copy of the saved draft: launched or discarded elsewhere.
             .onChange(of: SavedInputs(state: state, savedId: editor?.savedId), initial: true) { storeChanged() }
             .onChange(of: attention(view), initial: true) { _, needs in
                 // Options start collapsed, and open by themselves when the branch pick needs a look.
@@ -266,7 +266,7 @@ private struct NewSessionEditorView: View {
     private func storeChanged() {
         guard let editor else { return }
         switch editor.storeChanged(store.state) {
-        case .none, .adopted: break
+        case .none: break
         case .discarded:
             toasts.show("This draft was discarded on another device.", kind: .info)
             dismiss()

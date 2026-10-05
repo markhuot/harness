@@ -3,9 +3,10 @@ import Foundation
 // New session's draft saving (DESIGN.md "Drafts"): the
 // editor's state is a Ticket; nothing reaches the service while it's still empty, the first
 // worthwhile edit POSTs the draft, and later edits go out as debounced PATCHes of only what
-// changed. One request at a time, in order. A change from another device (an upsert for the saved
-// key) replaces the editor's state only while it has no unsent edits: the last write wins. Moving
-// the draft to another project re-keys it; the editor adopts the key the service answers with.
+// changed. One request at a time, in order. The editor's state is the user's: the service's copy
+// (an upsert for the saved key, ours echoed back or another device's) never replaces it, so a late
+// or stale echo can't rewrite the prompt under the caret. Moving the draft to another project
+// re-keys it; the editor adopts the key the service answers with.
 
 /// The requests a draft editor makes. Main-actor bound like `DraftSync` itself;
 /// `HarnessDraftAPI` adapts a `HarnessClient`.
@@ -77,7 +78,7 @@ public final class DraftSync {
     /// - Parameters:
     ///   - local: The editor's starting state: a blank draft, or the saved draft being reopened
     ///   - saved: The draft as the service has it, when reopening one
-    ///   - onChange: The editor's state changed other than by `edit`: a key adopted, another device's change
+    ///   - onChange: The editor's state changed other than by `edit`: a key adopted
     ///   - onSaved: The service answered a save with this ticket
     public init(
         api: any DraftAPI,
@@ -134,18 +135,6 @@ public final class DraftSync {
             self.timer = nil
             self.enqueueFlush()
         }
-    }
-
-    /// The store's copy of the saved draft changed (an upsert). Taken as the editor's state only
-    /// while nothing is unsent and it isn't older than what we have. Returns whether it was taken.
-    @discardableResult
-    public func incoming(_ t: Ticket) -> Bool {
-        guard !closed, let saved, clean else { return false }
-        if t == saved || t.updatedAt < saved.updatedAt { return false }
-        self.saved = t
-        local = t
-        onChange(t)
-        return true
     }
 
     /// Send whatever hasn't gone out yet; returns once the service has it (or it failed).

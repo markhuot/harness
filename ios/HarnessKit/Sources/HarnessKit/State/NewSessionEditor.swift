@@ -2,9 +2,8 @@ import Foundation
 import Observation
 
 // New session's editor state, without the drawing: when the
-// editor can start (a project, or the reopened draft), the draft's DraftSync, what another
-// device's change to the saved draft means for the sheet (adopt it, it was discarded, it was
-// launched), the project switch, the submit gate and the Cancel decision. The SwiftUI screen
+// editor can start (a project, or the reopened draft), the draft's DraftSync, what a change to the
+// saved draft elsewhere means for the sheet (it was discarded, it was launched), the project switch, the submit gate and the Cancel decision. The SwiftUI screen
 // (Features/NewSession) feeds it the store's state and acts on what it returns.
 
 @MainActor
@@ -22,10 +21,9 @@ public final class NewSessionEditor {
 
     /// What a change in the store's copy of the saved draft means for the sheet.
     public enum StoreOutcome: Equatable, Sendable {
-        /// Nothing for the sheet to do (no saved draft yet, unsent edits, our own save).
+        /// Nothing for the sheet to do: the draft is still a draft. Its copy in the store (our own
+        /// save coming back, another device's edit) never replaces what the user is typing.
         case none
-        /// Another device's edit became the editor's state.
-        case adopted
         /// The draft is gone from the store: discarded on another device. Toast and dismiss.
         case discarded
         /// The draft was launched elsewhere. Dismiss and push it.
@@ -142,7 +140,7 @@ public final class NewSessionEditor {
         return t
     }
 
-    /// The store changed: react to its copy of the saved draft (another device's edit, launch or discard).
+    /// The store changed: react to its copy of the saved draft being launched or discarded elsewhere.
     public func storeChanged(_ s: BoardState) -> StoreOutcome {
         guard let sync, let savedId, !submitting, !sync.isClosed else { return .none }
         guard let t = s.tickets[savedId] else {
@@ -157,7 +155,7 @@ public final class NewSessionEditor {
             sync.dispose()
             return .launched(key: t.key)
         }
-        return sync.incoming(t) ? .adopted : .none
+        return .none
     }
 
     /// An edit from the form: applied to the editor's state and saved.

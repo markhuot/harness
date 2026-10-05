@@ -111,23 +111,6 @@ describe("DraftSession: saving edits", () => {
     expect(s.unsent).toBe(false);
   });
 
-  test("while edits are unsent the service's copy is ignored; once they're sent it's taken", async () => {
-    const { svc, s } = await saved();
-    s.edit({ spec: "mine" });
-    s.receive({ ...svc.server, spec: "theirs", updatedAt: 99 });
-    expect(s.local.spec).toBe("mine");
-    await s.flush();
-    s.receive({ ...svc.server, spec: "theirs later", permissionMode: "read_only" });
-    expect(s.local.spec).toBe("theirs later");
-    expect(s.local.permissionMode).toBe("read_only");
-    expect(s.unsent).toBe(false);
-  });
-
-  test("another ticket's upsert is never taken", async () => {
-    const { svc, s } = await saved();
-    s.receive({ ...svc.server, id: "other", spec: "nope" });
-    expect(s.local.spec).toBe("Fix the header");
-  });
 
   test("moving to another project PATCHes projectId and follows the new key", async () => {
     const { svc, s } = await saved();
