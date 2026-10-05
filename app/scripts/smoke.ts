@@ -115,6 +115,18 @@ try {
     check("a waiting ticket's Start reads Starts automatically, turned off", startBtn.disabled && startBtn.text === "Starts automatically" && startBtn.title === "Starts on its own once HARNESS-2 is done", JSON.stringify(startBtn));
     check("…with no Start work button beside it", !(await js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.trim() === "Start work")`)));
     await screenshot("/tmp/harness-242-mac-waiting.png");
+
+    // Start on a planned ticket whose dependency isn't done queues it: it stays in Planning with the
+    // clock, and its Start turns into Starts automatically (NYTIMES-2 made to wait on NYTIMES-1).
+    await api("PATCH", "/tickets/NYTIMES-2", { dependsOn: ["NYTIMES-1"] });
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-2"`);
+    await until("Start work on NYTIMES-2", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.trim() === "Start work")`));
+    await js(`[...document.querySelectorAll(".actions button")].find(b => b.textContent.trim() === "Start work").click()`);
+    const queued = await until("NYTIMES-2 queued", () => js<boolean>(`!!document.querySelector("[data-testid=start-waiting]") && !!document.querySelector('.card[data-key="NYTIMES-2"] [data-testid=card-autostart]')`));
+    const after = await api<{ ticket: { status: string; autoStart: boolean } }>("GET", "/tickets/NYTIMES-2");
+    check("Start with an open dependency queues the ticket: Planning, a clock, Starts automatically", queued && after.ticket.status === "planning" && after.ticket.autoStart, JSON.stringify(after.ticket.status));
+    await screenshot("/tmp/harness-242-mac-queued.png");
+    await api("PATCH", "/tickets/NYTIMES-2", { dependsOn: [] });
     await js(`location.hash = "#/board/all"`);
   }
 

@@ -25,6 +25,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   its ticket in a new window. Dragging a card doesn't move it to another column; Move to … in its
   menu still does that.
 
+### Changed
+
+- Start work on a planned ticket whose dependencies aren't done yet now queues it. The ticket stays
+  in Planning with the clock on its card and starts on its own once they finish, instead of
+  starting right away.
+
 ### Fixed
 
 - A completion that fails partway (a spend limit, a crash) leaves the ticket in Review with its

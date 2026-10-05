@@ -1257,7 +1257,7 @@ export class Orchestrator {
     if ((start || ticket.autoStart) && depsDone) {
       await this.begin(ticket, prompt);
     } else if (start || ticket.autoStart) {
-      this.appendStatus(ticket.sessionId, null, `Waiting on ${ticket.dependsOn.filter((k) => !this.isDone(k)).join(", ")}`);
+      this.appendStatus(ticket.sessionId, null, this.waitingOnLine(ticket));
     } else {
       this.enqueueRun(ticket.sessionId, "plan", prompt);
     }
@@ -1511,6 +1511,15 @@ export class Orchestrator {
     this.notDraft(ticket, "started");
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
     if (ticket.status === "done" || ticket.status === "review") throw conflict(`${ticket.key} is in ${ticket.status}; it cannot be started`);
+    // A planning ticket with open dependencies is queued, not started: it stays in planning with
+    // autoStart on, and the scheduler starts it once they're done (as `start` does on create).
+    if (ticket.status === "planning" && !this.depsDone(ticket)) {
+      if (ticket.autoStart) return ticket; // already waiting
+      const queued = this.store.tickets.update(ticket.id, { autoStart: true })!;
+      this.touchTicket(queued.id);
+      this.appendStatus(queued.sessionId, null, this.waitingOnLine(queued));
+      return this.store.tickets.get(ticket.id)!;
+    }
     await this.begin(ticket, this.prompts().workStartPrompt(ticket));
     return this.store.tickets.get(ticket.id)!;
   }
@@ -3568,6 +3577,11 @@ ${numberLines(r.body)}`;
 
   private depsDone(t: Ticket): boolean {
     return t.dependsOn.every((k) => this.isDone(k));
+  }
+
+  /** "Waiting on A, B": the status line of a ticket queued behind its open dependencies. */
+  private waitingOnLine(t: Ticket): string {
+    return `Waiting on ${t.dependsOn.filter((k) => !this.isDone(k)).join(", ")}`;
   }
 
   /**

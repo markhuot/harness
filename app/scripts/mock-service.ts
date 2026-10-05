@@ -1707,11 +1707,23 @@ async function route(req: Request, url: URL): Promise<Response> {
       }
       if (t.draft) throw new HttpError(409, `${t.key} is a draft; submit it first`);
       switch (c) {
-        case "start":
+        case "start": {
+          // Mirrors the service: a planning ticket with open dependencies is queued (autoStart)
+          // and stays in planning; a deleted dependency doesn't hold it.
+          const open = t.dependsOn.filter((k) => byKey(k) && byKey(k)!.status !== "done");
+          if (t.status === "planning" && open.length) {
+            if (!t.autoStart) {
+              t.autoStart = true;
+              upsertTicket(t);
+              appendEntry(t.sessionId, null, "system", { type: "status", text: `Waiting on ${open.join(", ")}` });
+            }
+            return ok(t);
+          }
           setStatus(t, "in_progress");
           markBaseline(t);
           workRun(t, "The plan is approved. Begin work.");
           return ok(t);
+        }
         case "messages": {
           const text = String(body.text ?? "").trim();
           if (!text) throw new HttpError(400, "text is required");

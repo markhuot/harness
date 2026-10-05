@@ -1176,6 +1176,52 @@ describe("scheduling", () => {
     expect(h.orch.ticketDetail(manual.key).ticket.status).toBe("planning");
     expect(h.orch.ticketDetail(eager.key).ticket.status).toBe("review");
   });
+
+  test("Start on a planned ticket with an open dependency queues it: planning, autoStart, started once the dependency is done", async () => {
+    const h = setup();
+    const statusLines = (t: Ticket) => h.store.transcript.tail(t.sessionId, 50, ["status"]).map((e) => ("text" in e.content ? e.content.text : ""));
+    const a = await h.orch.createTicket({ projectId: h.project.id, spec: "A", start: false });
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "B", start: false });
+    await h.orch.idle();
+    expect(runKinds(h, b)).toEqual(["plan:succeeded"]);
+    await h.orch.updateTicket(b.key, { dependsOn: [a.key] }); // the dependency added after planning
+
+    const queued = await h.orch.startTicket(b.key);
+    expect([queued.status, queued.autoStart]).toEqual(["planning", true]);
+    expect(statusLines(b).at(-1)).toBe(`Waiting on ${a.key}`);
+    // Start again while it waits: nothing changes, no second status line.
+    const lines = statusLines(b).length;
+    expect((await h.orch.startTicket(b.key)).status).toBe("planning");
+    expect(statusLines(b).length).toBe(lines);
+    await h.orch.idle();
+    expect(runKinds(h, b)).toEqual(["plan:succeeded"]); // no work run yet
+
+    await h.orch.updateTicket(a.key, { status: "done" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(b.key).ticket.status).toBe("review");
+    expect(runKinds(h, b).slice(0, 2)).toEqual(["plan:succeeded", "work:succeeded"]);
+  });
+
+  test("Start ignores dependencies that are done or deleted, and doesn't hold a blocked ticket", async () => {
+    const h = setup();
+    const done = await h.orch.createTicket({ projectId: h.project.id, spec: "done", start: false });
+    await h.orch.updateTicket(done.key, { status: "done" });
+    const gone = await h.orch.createTicket({ projectId: h.project.id, spec: "gone", start: false });
+    const open = await h.orch.createTicket({ projectId: h.project.id, spec: "open", start: false });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "t", start: false, dependsOn: [done.key, gone.key] });
+    await h.orch.idle();
+    await h.orch.deleteTicket(gone.key);
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+
+    const blocked = await h.orch.createTicket({ projectId: h.project.id, spec: "x /block why?" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(blocked.key).ticket.status).toBe("blocked");
+    await h.orch.updateTicket(blocked.key, { dependsOn: [open.key] });
+    await h.orch.startTicket(blocked.key);
+    expect(h.orch.ticketDetail(blocked.key).ticket.status).toBe("in_progress");
+  });
 });
 
 describe("concurrency", () => {
