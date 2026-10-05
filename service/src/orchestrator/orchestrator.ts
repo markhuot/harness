@@ -156,6 +156,7 @@ import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "..
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
+import { clockTime, usageLimitResumeAt } from "./usage-limit";
 
 export interface ConductorChange {
   key: string;
@@ -211,6 +212,8 @@ export interface OrchestratorOptions {
   classifierTimeoutMs?: number;
   /** How often start() re-checks for runs no live job owns (default 60s; 0 disables) */
   reconcileIntervalMs?: number;
+  /** The clock for usage-limit restarts (default Date.now) */
+  now?: () => number;
 }
 
 interface ActiveRun {
@@ -454,6 +457,9 @@ export class Orchestrator {
   private stopping = false;
   private reconcileIntervalMs: number;
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+  /** Fires at the earliest blocked ticket's resumeAt (armResume) */
+  private resumeTimer: ReturnType<typeof setTimeout> | null = null;
+  private now: () => number;
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -502,6 +508,7 @@ export class Orchestrator {
       },
     });
     this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
+    this.now = opts.now ?? Date.now;
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
         await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver, watcherId: w.id });
@@ -533,6 +540,8 @@ export class Orchestrator {
       this.log(`upload sweep failed: ${errMsg(err)}`);
     }
     this.syncWatchers();
+    // Restarts that came due while the service was down run now; the rest at their time.
+    this.kickResume();
     if (this.reconcileIntervalMs > 0) {
       this.reconcileTimer = setInterval(() => {
         try {
@@ -605,6 +614,8 @@ export class Orchestrator {
     this.stopping = true;
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.reconcileTimer = null;
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    this.resumeTimer = null;
     this.queue.pause();
     await this.watcherRunner?.stopAll().catch(() => {});
     const actives = [...this.active.values()];
@@ -3754,7 +3765,10 @@ ${numberLines(r.body)}`;
     const pending = this.movesRecorded.get(ticket.id);
     this.movesRecorded.delete(ticket.id);
     const recorded = pending?.to === to && this.store.activity.listBySession(ticket.sessionId).at(-1)?.id === pending.entryId;
-    const t = this.store.tickets.update(ticket.id, { ...patch, status: to })!;
+    // A scheduled restart is for the block that set it: any move (or a new block) drops it.
+    const resume = patch.resumeAt === undefined && ticket.resumeAt ? { resumeAt: null } : {};
+    const t = this.store.tickets.update(ticket.id, { ...patch, ...resume, status: to })!;
+    if (patch.resumeAt !== undefined || "resumeAt" in resume) this.armResume();
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
     if (from !== to) {
@@ -3951,6 +3965,49 @@ ${numberLines(r.body)}`;
       if (!fresh || fresh.draft || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
       await this.begin(fresh, this.prompts().workStartPrompt(fresh));
     }
+  }
+
+  /** Run restarts that are due now and arm the timer for the next one. */
+  private kickResume() {
+    this.track(this.resumeDue());
+  }
+
+  /** Point the timer at the earliest scheduled restart (none: no timer). */
+  private armResume() {
+    if (this.resumeTimer) clearTimeout(this.resumeTimer);
+    this.resumeTimer = null;
+    if (this.stopping) return;
+    let next = Infinity;
+    for (const t of this.store.tickets.list({ drafts: false })) {
+      if (t.status === "blocked" && t.resumeAt) next = Math.min(next, t.resumeAt);
+    }
+    if (next === Infinity) return;
+    // setTimeout holds at most ~24.8 days; a later restart re-arms when this one fires.
+    const delay = Math.min(Math.max(next - this.now(), 0), 2 ** 31 - 1);
+    this.resumeTimer = setTimeout(() => this.kickResume(), delay);
+    this.resumeTimer.unref?.();
+  }
+
+  /**
+   * Restart blocked tickets whose resumeAt has come (DESIGN.md "Usage limits"), as if a human had
+   * moved them to in progress. One waiting on a tool approval, or with a run going, keeps waiting
+   * for the human instead.
+   */
+  async resumeDue() {
+    if (this.stopping) return;
+    const now = this.now();
+    for (const t of this.store.tickets.list({ drafts: false })) {
+      if (t.status !== "blocked" || !t.resumeAt || t.resumeAt > now) continue;
+      const fresh = this.store.tickets.get(t.id);
+      if (!fresh || fresh.status !== "blocked" || !fresh.resumeAt || fresh.resumeAt > now) continue;
+      if (fresh.pendingApproval || fresh.busy || this.starting.has(fresh.id)) {
+        this.store.tickets.update(fresh.id, { resumeAt: null });
+        this.touchTicket(fresh.id);
+        continue;
+      }
+      await this.begin(fresh, this.prompts().workStartPrompt(fresh), {}, "Restarted after the usage limit reset");
+    }
+    this.armResume();
   }
 
   private notifyConductor(conductorId: string, change: ConductorChange) {
@@ -4349,8 +4406,12 @@ ${numberLines(r.body)}`;
       // A chat that unblocked the ticket was doing its work: it fails like a work run. Any other
       // failed chat leaves the ticket where it is.
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete" || (run.kind === "chat" && ticket.status === "in_progress")) {
-        this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`, this.moveMeta(ticket, "blocked"));
-        this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
+        // A usage limit that says when it resets: the ticket restarts on its own a little after.
+        const resumeAt = run.kind === "complete" ? null : usageLimitResumeAt(error, this.now());
+        const restart = resumeAt === null ? "" : ` Restarts on its own at ${clockTime(resumeAt)}.`;
+        this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}${restart}`, this.moveMeta(ticket, "blocked"));
+        this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed", resumeAt }, "Blocked: run failed", error ?? undefined);
+        if (resumeAt !== null) this.appendStatus(ticket.sessionId, run.id, `Usage limit: restarts on its own at ${clockTime(resumeAt)}`);
       } else if (run.kind === "chat") {
         this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
       } else if (run.kind === "review" && ticket.status === "review") {

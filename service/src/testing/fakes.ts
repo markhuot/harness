@@ -482,6 +482,7 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     classifierTimeoutMs: opts.classifierTimeoutMs,
     // Tests drive reconcileRuns() directly unless they ask for the timer.
     reconcileIntervalMs: opts.reconcileIntervalMs ?? 0,
+    now: opts.now,
   });
   store.settings.set({ defaultDriver: driver.id });
   onTempCleanup(async () => {

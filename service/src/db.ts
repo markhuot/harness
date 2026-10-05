@@ -663,6 +663,11 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE projects ADD COLUMN group_name TEXT;
   `,
+  // 32: tickets.resume_at: when a ticket blocked by a usage limit restarts on its own (ms), five
+  //     minutes after the limit resets. NULL for every other ticket.
+  `
+  ALTER TABLE tickets ADD COLUMN resume_at INTEGER;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

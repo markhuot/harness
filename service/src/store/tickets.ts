@@ -44,6 +44,7 @@ interface TicketRow {
   has_changes?: number | null;
   draft?: number;
   prompt_attachments?: string;
+  resume_at?: number | null;
   completed_at: number | null;
   busy: number;
   child_count: number;
@@ -147,6 +148,7 @@ export type TicketPatch = Partial<{
   kind: TicketKind;
   useWorktree: boolean | null;
   promptAttachments: Attachment[];
+  resumeAt: number | null;
 }>;
 
 const COLUMNS: Record<string, string> = {
@@ -177,6 +179,7 @@ const COLUMNS: Record<string, string> = {
   kind: "kind",
   useWorktree: "use_worktree",
   promptAttachments: "prompt_attachments",
+  resumeAt: "resume_at",
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools", "promptAttachments"]);
@@ -250,6 +253,7 @@ export class TicketRepo {
       hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),
+      resumeAt: r.resume_at ?? null,
       position: r.position,
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
