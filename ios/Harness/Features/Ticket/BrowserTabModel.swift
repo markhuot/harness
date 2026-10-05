@@ -182,6 +182,23 @@ final class BrowserTabModel {
         scheduleResize(ms: 250)
     }
 
+    /// The tab at the stage's size before a screenshot: a resize still waiting on its debounce goes
+    /// now, then this waits (up to 2 s) for a frame at that size. A screenshot taken before the
+    /// resize lands would show the page at its old size, and every element lookup on it would come
+    /// back empty once the tab is resized under it.
+    func settleSize() async {
+        resizeTask?.cancel()
+        resizeTask = nil
+        if let r = gate.take(width: stage.width, height: stage.height) { send(r) }
+        let want = (stage.width.rounded(), stage.height.rounded())
+        guard want.0 > 0, want.1 > 0 else { return }
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline {
+            if let f = frame, f.width.rounded() == want.0, f.height.rounded() == want.1 { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     private func scheduleResize(ms: Int) {
         resizeTask?.cancel()
         resizeTask = Task { [weak self] in

@@ -25,6 +25,7 @@ struct AnnotationElementLookup {
     let tabId: Int
     let url: String
     let scroll: BrowserScroll
+    let viewport: AnnotationViewport
     /// Device pixels per CSS pixel: the screenshot's pixels over the page's.
     let scale: Double
 
@@ -35,12 +36,13 @@ struct AnnotationElementLookup {
         tabId = shot.tabId
         url = shot.url
         self.scroll = scroll
+        viewport = shot.viewport
         scale = shot.scale
     }
 
     /// The query for a mark's anchor (a fraction of the `width`×`height` screenshot), in the page's CSS pixels.
     func query(_ anchor: Annotations.Point, width: Double, height: Double) -> BrowserElementQuery {
-        BrowserElementQuery(tabId: tabId, x: anchor.x * width / scale, y: anchor.y * height / scale, url: url, scroll: scroll)
+        BrowserElementQuery(tabId: tabId, x: anchor.x * width / scale, y: anchor.y * height / scale, url: url, scroll: scroll, viewport: viewport)
     }
 }
 

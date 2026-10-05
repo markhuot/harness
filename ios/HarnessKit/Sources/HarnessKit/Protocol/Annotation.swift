@@ -145,9 +145,9 @@ public struct BrowserScroll: Codable, Sendable, Equatable, Hashable {
 }
 
 /// POST /browser/:sessionId/element: what's under a point of a captured screenshot, so an
-/// annotation's mark can name it (AnnotationMark.path and .text). `url` and `scroll` are the
-/// screenshot's: when the tab has since navigated or scrolled, the answer is null rather than
-/// whatever is there now.
+/// annotation's mark can name it (AnnotationMark.path and .text). `url`, `scroll` and `viewport`
+/// are the screenshot's: when the tab has since navigated, scrolled or been resized (a viewer's
+/// pane changed size), the answer is null rather than whatever is there now.
 public struct BrowserElementQuery: Codable, Sendable, Equatable {
     public var tabId: Int
     /// The point in the page's CSS pixels (the screenshot's pixels divided by its scale).
@@ -155,13 +155,16 @@ public struct BrowserElementQuery: Codable, Sendable, Equatable {
     public var y: Double
     public var url: String
     public var scroll: BrowserScroll
+    /// The screenshot's viewport in CSS pixels (BrowserScreenshot.viewport).
+    public var viewport: AnnotationViewport
 
-    public init(tabId: Int, x: Double, y: Double, url: String, scroll: BrowserScroll) {
+    public init(tabId: Int, x: Double, y: Double, url: String, scroll: BrowserScroll, viewport: AnnotationViewport) {
         self.tabId = tabId
         self.x = x
         self.y = y
         self.url = url
         self.scroll = scroll
+        self.viewport = viewport
     }
 }
 

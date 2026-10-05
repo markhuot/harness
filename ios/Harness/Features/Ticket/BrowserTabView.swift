@@ -199,6 +199,7 @@ struct BrowserTabView: View {
         let tab = model.selection.shown
         Task {
             defer { capturing = false }
+            await model.settleSize()
             guard let shot = await actions.run(nil, { try await client.browserScreenshot(id, tabId: tab) }) else { return }
             guard let data = shot.png, let image = UIImage(data: data) else {
                 haptic(.error)

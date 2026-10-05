@@ -406,14 +406,14 @@ struct HarnessClientAttachmentTests {
         #expect(try bodyJSON(t.last) == json(#"{"path":"/Users/me/shot.png","name":"Shot"}"#))
     }
 
-    /// POST /browser/:sessionId/element with the screenshot's url and scroll; null (the page moved on) is nil.
+    /// POST /browser/:sessionId/element with the screenshot's url, scroll and viewport; null (the page moved on) is nil.
     @Test func browserElementAtPostsTheQueryAndReadsNull() async throws {
-        let q = BrowserElementQuery(tabId: 2, x: 120.5, y: 40, url: "http://localhost:3000/", scroll: BrowserScroll(x: 0, y: 300))
+        let q = BrowserElementQuery(tabId: 2, x: 120.5, y: 40, url: "http://localhost:3000/", scroll: BrowserScroll(x: 0, y: 300), viewport: AnnotationViewport(width: 402, height: 512))
         let t = FakeTransport(status: 200, body: ##"{"data":{"path":"#save","text":"Save"}}"##)
         #expect(try await client(t).browserElementAt("ses_1", q) == BrowserElement(path: "#save", text: "Save"))
         #expect(t.last?.method == "POST")
         #expect(path(t) == "/browser/ses_1/element")
-        #expect(try bodyJSON(t.last) == json(#"{"tabId":2,"x":120.5,"y":40,"url":"http://localhost:3000/","scroll":{"x":0,"y":300}}"#))
+        #expect(try bodyJSON(t.last) == json(#"{"tabId":2,"x":120.5,"y":40,"url":"http://localhost:3000/","scroll":{"x":0,"y":300},"viewport":{"width":402,"height":512}}"#))
         #expect(try await client(FakeTransport(status: 200, body: #"{"data":null}"#)).browserElementAt("ses_1", q) == nil)
     }
 
