@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and iPad, a ticket's Browser tab no longer shows the ticket's title above it, so the
+  page gets that room, the way the title hides while you scroll the Transcript. A request waiting
+  for your approval still shows there.
+- On iPhone and iPad, the browser's tabs are now at the top of the Browser tab, above the address
+  bar.
+
 ## [app-20261005.1743](https://github.com/markhuot/harness/releases/tag/app-20261005.1743) - 2026-10-05
 
 ### Added

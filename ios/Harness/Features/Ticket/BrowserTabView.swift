@@ -2,7 +2,8 @@ import HarnessKit
 import SwiftUI
 
 /// Live view of the session's headless Chrome, one browser tab at a time (a strip of tab chips that
-/// scrolls sideways, with + pinned at its right end to open another). Screencast frames
+/// scrolls sideways, with + pinned at its right end to open another, above the address bar).
+/// Screencast frames
 /// (base64 JPEG) are letterboxed into the stage and swapped only once decoded, so a new frame never
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
 /// field carries the keyboard.
@@ -71,9 +72,9 @@ struct BrowserTabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            tabStrip
             toolbar
             if sizeRowOpen, let size = model.state?.size { sizeRow(size) }
-            tabStrip
             if let title = shownTitle { status(title) }
             stage
         }

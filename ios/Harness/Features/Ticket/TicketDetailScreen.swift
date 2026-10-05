@@ -159,14 +159,14 @@ private struct TicketDetailBody: View {
         let attachTarget: (any PromptAttachmentTarget)? = TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
-        let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
+        let compact = shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
         let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 })
         ZStack(alignment: .top) {
             // The tab strip and pager are laid out over the hero, as if it were gone, and sit below it
             // while it shows (HeroSlide, PagerSlide); hiding slides them up over it. No layout changes, so a
             // toggle mid-scroll re-lays out no tab body. The hero's state is read only in the
             // modifiers, so a toggle doesn't re-render this body either.
-            TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket, compactTab: compact, collapsed: shown == .browser, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
                 .modifier(TicketHeroSlot(hero: hero))
             // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
