@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPad, New session closes once the ticket is created. It used to stay open behind the new
+  ticket's window.
+
 ## [app-20261005.1909](https://github.com/markhuot/harness/releases/tag/app-20261005.1909) - 2026-10-05
 
 ### Added

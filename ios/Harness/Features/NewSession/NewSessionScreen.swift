@@ -255,7 +255,7 @@ private struct NewSessionEditorView: View {
         }
         guard let editor else { return }
         if case let .redirect(key) = editor.begin(projectId: projectId, candidates: store.state.composerCandidates(app.prefs.boardProject, last: app.prefs.lastProject)) {
-            router.open(.push(.ticket(key: key, tab: nil)))
+            showTicket(key, tab: nil)
         }
     }
 
@@ -267,7 +267,7 @@ private struct NewSessionEditorView: View {
             toasts.show("This draft was discarded on another device.", kind: .info)
             dismiss()
         case let .launched(key):
-            router.open(.push(.ticket(key: key, tab: nil)))
+            showTicket(key, tab: nil)
         }
     }
 
@@ -278,7 +278,7 @@ private struct NewSessionEditorView: View {
             haptic(.success)
             store.dispatch(.tickets([t]))
             app.setPref(\.lastProject, t.projectId)
-            router.open(.push(.ticket(key: t.key, tab: start ? .transcript : .spec)))
+            showTicket(t.key, tab: start ? .transcript : .spec)
         }
     }
 
@@ -323,6 +323,11 @@ private struct NewSessionEditorView: View {
             store.dispatch(.event(.projectUpserted(project: p)))
             if let editor, editor.sync != nil { editor.changeProject(p.id) } else { begin() }
         }
+    }
+
+    /// Close this sheet and show the ticket it became (on iPad, in the ticket's own window).
+    private func showTicket(_ key: String, tab: TicketTab?) {
+        router.replace(.newSession(projectId: projectId, key: reopen), with: .ticket(key: key, tab: tab))
     }
 
     /// Close this sheet, unless a link has already replaced it with another.
