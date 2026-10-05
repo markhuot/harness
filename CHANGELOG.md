@@ -28,7 +28,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   the message box can be annotated too, and you can reopen an annotation to change it until you
   send. The image itself is never changed: your arrows and numbers are drawn over it wherever it
   shows, with its notes underneath, and the agent gets the image along with the numbered notes and
-  where each one points.
+  where each one points. On a browser page, each marker also names the element it points at (shown
+  under its note, like `#save · "Save"`), so the agent can find it in the page and the code.
 
 ## [app-20261004.0031](https://github.com/markhuot/harness/releases/tag/app-20261004.0031) - 2026-10-04
 

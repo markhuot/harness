@@ -1365,10 +1365,13 @@ POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /
 GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
 GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
 GET    /tickets/:key/spec/revisions/:rev?diff=<other>   → SpecRevision, or SpecDiff with diff
-GET    /attachments/:id          (the file; bearer or ?token=; Range → 206; 404 unknown id)
-GET    /tickets/:key/prompt-attachments/:index   (the attached file; bearer or ?token=; HEAD too; 404 when gone)
-GET    /transcript/:entryId/attachments/:index   (a file sent with that message, the same way)
-POST   /uploads?name=        (raw bytes → PromptAttachment under uploads/; see "Prompt attachments")
+GET    /attachments/:id          (any attachment's file; bearer or ?token=; HEAD too; Range → 206; 404 unknown id or gone)
+POST   /attachments {path, name?}   (register a file already on the service's machine → Attachment; see "One attachment model")
+POST   /uploads?name=        (raw bytes → Attachment under uploads/; see "One attachment model")
+GET    /tickets/:key/prompt-attachments/:index   (legacy, for older iPhone apps: a prompt attachment by index)
+GET    /transcript/:entryId/attachments/:index   (legacy, for older iPhone apps: a message's file by index)
+GET    /browser/:sessionId/screenshot?tab=       → BrowserScreenshot (a PNG of the tab's viewport; see "Annotations")
+POST   /browser/:sessionId/element {tabId, x, y, url, scroll}   → BrowserElement | null (see "Annotations")
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
@@ -1639,16 +1642,19 @@ that.
   or WebP header, when it has them.
 - **Storage.** Each file is copied to `$HARNESS_HOME/attachments/<id>.<ext>` when the spec is
   written, because worktrees are deleted after the merge. The original path is never referenced
-  again. Metadata lives in `ticket_attachments` (`ticket_id` ON DELETE CASCADE, `kind`,
-  `mime_type`, `name`, `size`, `width`, `height`, `created_at`), keyed by ticket rather than by
-  revision, so an attachment lives until its ticket is deleted, whichever revisions still show
-  it. Migration 26 moved the old summary attachments into it (files unchanged) and linked them
-  from the migrated note as `![name](attachment:<id>)`.
-- **Wire.** `Attachment { id, kind, mimeType, name, size, width?, height? }`.
-  `HarnessClient.attachmentUrl(id)` builds `…/attachments/<id>?token=<token>` for `<img>`,
-  `<video>` and AVPlayer, which is how clients resolve `attachment:<id>` srcs.
+  again. Each is a row of the `attachments` registry with `source` "spec" and its `ticket_id`
+  (ON DELETE CASCADE), keyed by ticket rather than by revision, so an attachment lives until its
+  ticket is deleted, whichever revisions still show it (see "One attachment model"). Migration 26
+  moved the old summary attachments into what was then `ticket_attachments` (files unchanged) and
+  linked them from the migrated note as `![name](attachment:<id>)`; migration 30 folded that table
+  into `attachments`.
+- **Wire.** Spec media are ordinary `Attachment`s (source "spec"), listed in
+  `TicketDetail.attachments`. `HarnessClient.attachmentUrl(id)` builds
+  `…/attachments/<id>?token=<token>` for `<img>`, `<video>` and AVPlayer, which is how clients
+  resolve `attachment:<id>` srcs, and the apps take the record from the detail by id.
 - **Serving.** `GET /attachments/:id` streams the file with its `Content-Type`,
-  `Content-Length`, `Cache-Control: private, max-age=31536000, immutable` and
+  `Content-Length`, `Cache-Control: private, max-age=31536000, immutable` (spec media only; every
+  other source gets `no-cache`, since its file can change or vanish) and
   `Accept-Ranges: bytes`. A single `Range: bytes=a-b` / `a-` / `-n` gets a 206 with
   `Content-Range` (416 past the end), so players can seek. Unknown ids, and ids whose file is
   missing, get a 404.
@@ -1685,19 +1691,49 @@ completed, moved or deleted between fetches never duplicate or skip a row.
   when missing. Without FTS5, search falls back to LIKE over `ticket_search` with the same
   ranking.
 
+**One attachment model.** Every file a ticket refers to is an `Attachment { id, path, name,
+source, kind, mimeType, size?, width?, height?, annotation? }`: a spec's media (source "spec"),
+a file referenced in place on the service's machine ("file"), or bytes the service stored with
+`POST /uploads` ("upload"). `kind` is "image", "video" or "file" (PNG, JPEG, GIF and WebP by their
+bytes; a video by its extension and bytes; anything else, HEIC included, a file).
+
+- **Registry.** The `attachments` table (migration 30, which folded in `ticket_attachments` and
+  backfilled ids for every list already stored) has a row per file: `id`, `ticket_id` (set only
+  for spec media), `path`, `name`, `source`, `kind`, `mime_type`, `size`, `width`, `height`. The
+  same file is the same row (matched by path and source). `service/src/store/attachments.ts` is the
+  repo, and `service/src/attachment-lists.ts` turns inputs into records.
+- **Lists.** A New session's files (`tickets.prompt_attachments`), a queued run's
+  (`runs.attachments`) and a sent message's (its transcript entry) are lists of whole
+  `Attachment` records. Each list entry keeps its own name and annotation, so the same spec image
+  can carry different notes in two messages.
+- **Inputs.** `AttachmentInput { id?, path?, name?, annotation? }` (a full `Attachment` is a valid
+  input; the service reads only those four). `id` reuses any registered attachment: a spec image,
+  an upload, a registered file or a file from an earlier message (400 for an unknown id or a new
+  one whose file is gone). `path` registers a file (absolute and existing; 400 otherwise), which
+  is how agents and the CLI attach. An entry the list already had is kept even when its file has
+  gone missing (`resolveAttachments`, `registerFile`).
+- **Registering on the Mac.** `POST /attachments { path, name? }` registers a dropped or picked
+  file when the service is on this Mac (`registerAttachment`); otherwise the app uploads it. Every
+  waiting attachment in the apps is a registered record with an id.
+- **Serving.** `GET /attachments/:id` serves every attachment (see "Spec revisions and
+  attachments" for its headers). The per-index routes for prompt and message files stay for
+  iPhone apps from before this model.
+- **Deleting and sweeping.** Deleting a ticket deletes its spec media rows and files, even when
+  another ticket's message sent one on by id (it shows as missing there), and its uploads unless
+  another ticket still references the same id or path. "file" attachments are never deleted. At
+  startup the sweep also forgets unowned rows whose file is gone, and unowned rows nothing refers
+  to after a day.
+
 **Prompt attachments.** A New session can carry files for the agent: `Ticket.promptAttachments`,
-a list of `PromptAttachment { path, name, source }` stored as JSON in `tickets.prompt_attachments`
-(migration 28). Files are referenced in place on the service's machine and never copied, so a
-ticket keeps working after one is moved or deleted.
+a list of `Attachment`s stored as JSON in `tickets.prompt_attachments` (migration 28). Files are
+referenced where they are on the service's machine (or in its uploads folder) and never copied,
+so a ticket keeps working after one is moved or deleted.
 
 - **Setting them.** `CreateTicketBody.promptAttachments` and, on drafts only (409 otherwise),
-  `UpdateTicketBody.promptAttachments` take `PromptAttachmentInput { path, name? }` and replace the
-  whole list (`normalizePromptAttachments` in `service/src/prompt-attachments.ts`). A new path must
-  be absolute and an existing regular file (400 otherwise). A path the ticket already had stays as
-  it is even when its file is gone, so a reopened draft still saves. Duplicates collapse, the limit
-  is `MAX_PROMPT_ATTACHMENTS` (20), the name defaults to the file name, and the service decides
-  `source`: `upload` for a file in its own folder right under `$HARNESS_HOME/uploads/`, else
-  `file`. The shared draft helpers carry the list like any other field: an attachment alone makes a
+  `UpdateTicketBody.promptAttachments` take `AttachmentInput`s and replace the whole list
+  (`resolveAttachments`, see "One attachment model"). A file the ticket already had stays as it is
+  even when it's gone, so a reopened draft still saves. Duplicates collapse, the limit is
+  `MAX_PROMPT_ATTACHMENTS` (20), and the name defaults to the file's. The shared draft helpers carry the list like any other field: an attachment alone makes a
   draft non-empty (`draftIsEmpty`), and `draftCreateBody` / `draftPatch` send it. The pure list
   helpers live in `shared/src/state/promptAttachments.ts`, ported to HarnessKit and checked against
   fixtures.
@@ -1705,16 +1741,14 @@ ticket keeps working after one is moved or deleted.
   `POST /uploads?name=<file name>` with the raw bytes as the body (up to 100 MB; empty is a 400,
   bigger a 413). The service writes `$HARNESS_HOME/uploads/<uuid>/<name>`, with the name cut down
   to one safe path component (`safeUploadName`, adding the MIME type's extension when there's
-  none), and answers the `PromptAttachment`. `HarnessClient.uploadPromptAttachment` wraps it.
+  none), registers it and answers the `Attachment`. `HarnessClient.uploadAttachment` wraps it.
   Deleting a ticket deletes its upload folders, except one another ticket still lists (a conductor
   can pass a pasted screenshot's path on to a child with `create_ticket`), and never a `file`
   attachment. When the service
   starts, `sweepUploads` removes upload folders over a day old that no ticket refers to, such as a
   paste taken back out of a draft.
-- **Serving and missing files.** `GET`/`HEAD /tickets/:key/prompt-attachments/:index` streams the
-  file (bearer or `?token=`, like `/attachments/:id`, with `Cache-Control: no-cache` since the file
-  can change or vanish). An index out of range, or a file that is gone, gets a 404.
-  `HarnessClient.promptAttachmentUrl` builds the URL. The apps draw image previews from it and
+- **Serving and missing files.** `GET`/`HEAD /attachments/:id` streams the file, and a file that
+  is gone gets a 404. The apps draw image previews from `attachmentUrl(id)` and
   probe other files with HEAD, and a 404 shows the attachment as missing, with its name and the
   path it was at. Nothing else about the ticket depends on the files.
 - **To the agent.** A plan, work, conductor or chat run of a ticket with attachments, while its
@@ -1734,7 +1768,7 @@ ticket keeps working after one is moved or deleted.
 - **Mac app.** The draft editor lists the attachments under the prompt (the same list as the Spec
   tab, below, with × on each row and a spinner row per upload), a paperclip that opens a multi-select file input, drag and drop of files from anywhere, and
   image paste. A file with a path (`window.harness.pathForFile`, Electron's
-  `webUtils.getPathForFile`) is attached by path. Pathless image data (a screenshot on the
+  `webUtils.getPathForFile`) is registered in place (`POST /attachments`). Pathless image data (a screenshot on the
   clipboard, an image dragged out of a browser) is uploaded. A plain text paste stays text. When
   the service isn't on this Mac (`isLocalService(client.baseUrl)` is false: anything but
   `localhost`, `::1` or `127.x`), every file is uploaded under its own name instead, since its path
@@ -1754,12 +1788,11 @@ ticket keeps working after one is moved or deleted.
   lightbox (Mac) or full-screen viewer (iOS); another file is revealed in Finder (Mac) or opens in
   Quick Look (iOS). The Transcript uses it read-only too, under a message sent with attachments.
 - **Message attachments.** A message to a ticket can carry files the same way:
-  `MessageBody.attachments` (`PromptAttachmentInput[]`, validated by `normalizePromptAttachments`
-  against an empty list, so every path must exist). The text may then be empty. While a tool
+  `MessageBody.attachments` (`AttachmentInput[]`, resolved against an empty list, so every file
+  must exist). The text may then be empty. While a tool
   approval waits they're refused with a 409, since that message answers the approval as a deny.
   The human message's transcript entry carries them (`{ type: "text", text, attachments }`), and
-  `GET`/`HEAD /transcript/:entryId/attachments/:index` serves each file the way the ticket's are
-  (`HarnessClient.messageAttachmentUrl`, 404 once it's gone). A queued run keeps them in
+  each is served by id like any other attachment. A queued run keeps them in
   `runs.attachments` (migration 29, `Run.attachments`), so they survive a restart, and its
   `<attachments>` block and inline images come from them (with the ticket's own on its first run).
   A message steered into a running agent gets the block in its text and its images in
@@ -1777,38 +1810,51 @@ ticket keeps working after one is moved or deleted.
 - **Annotations.** A human can draw numbered notes on an image to go with a message: any image
   in the spec, any prompt attachment on the Spec tab, any image sent with an earlier message in the
   Transcript, a screenshot of a session browser tab (`GET /browser/:sessionId/screenshot`, a PNG of
-  the tab's viewport with its CSS viewport size and device scale, `BrowserScreenshot`, from
+  the tab's viewport with its CSS viewport size, device scale and scroll, `BrowserScreenshot`, from
   `BrowserService.capture`; 404 when the tab doesn't exist, and a suspended tab reloads first), an
   image waiting in the ticket's composer, or an image attached to a New session. Annotations never
   speak to the agent on their own: they augment a message. And they never change the image: an
-  annotation is metadata on the attachment, `PromptAttachment.annotation`
-  (`AttachmentAnnotation`: the image's pixel size, the marks numbered 1…n in those pixels, and for
-  a browser screenshot the page's URL, title, tab, CSS viewport and scale). There's one attachment
-  record for a New session (`promptAttachments`), a message (`MessageBody.attachments`), a queued
-  run (`runs.attachments`) and a transcript entry, so the annotation travels with the file through
-  all of them with no fields of its own. Pressing on the image sets an anchor and dragging pulls
-  out an arrow whose head points at it; the number sits at the arrow's tail, or on the anchor for a
-  plain click. The rules for drawing and editing marks (the click/drag threshold, hit-testing, the
-  arrow's geometry, the style that scales with the image) and for annotating an attachment in a
-  list (`annotatePromptAttachment`: the same file is annotated in place, another is added) live in
-  `shared/src/state/annotations.ts` and `promptAttachments.ts`, mirrored in HarnessKit and checked
-  against computed fixtures. The notes are listed beside the image (Mac, iPad) or below it
-  (iPhone), never on it. **Add to message** puts the attachment, with its annotation, into the
-  message being written: on a ticket, the composer's waiting attachments; in a New session, the
-  draft's. A spec image is referenced, not copied: its input path is `attachment:<id>`, which the
-  service resolves to that spec image's stored file (only the ticket's own; 400 otherwise). A
-  browser screenshot is uploaded as is. Since the image is untouched, an annotation can be reopened
-  and edited at any time before the message goes, and the apps draw the marks over the image
-  wherever an annotated attachment shows (thumbnails, the lightbox or viewer), with an "N notes"
-  line that opens to the list: the composer, the New session, the Spec tab's attachment list and
-  the Transcript. The service validates each annotation in `normalizePromptAttachments` (an image
-  by its first bytes, marks in order and inside the image, message length, a well-formed page;
-  400 otherwise; a kept attachment whose file went missing isn't re-checked) and, not the apps,
-  writes the agent's text: the `<attachments>` block lists each annotated image's notes under its
-  path, with each mark's position in pixels and as a share of the image, plus CSS pixels for a
-  browser page since the agent drives the page in those. The image goes to the agent inline,
-  unchanged. `get_ticket` lists each prompt attachment's notes. `app/scripts/annotate-check.ts`
-  drives the Mac flow against the real service.
+  annotation is metadata on the attachment, `Attachment.annotation` (`AttachmentAnnotation`: the
+  image's pixel size, the marks numbered 1…n in those pixels, and for a browser screenshot the
+  page's URL, title, tab, CSS viewport and scale). It rides in the list entry, so it travels with
+  the file through the New session, the message, the queued run and the transcript entry with no
+  fields of its own.
+  - **Drawing.** Pressing on the image sets an anchor and dragging pulls out an arrow whose head
+    points at it; the number sits at the arrow's tail, or on the anchor for a plain click. The
+    rules for drawing and editing marks (the click/drag threshold, hit-testing, the arrow's
+    geometry, the style that scales with the image) and for annotating an attachment in a list
+    (`annotateAttachment`: the same file is annotated in place, another is added) live in
+    `shared/src/state/annotations.ts` and `promptAttachments.ts`, mirrored in HarnessKit and checked
+    against computed fixtures. The notes are listed beside the image (Mac, iPad) or below it
+    (iPhone), never on it.
+  - **Into the message.** **Add to message** puts the attachment, with its annotation, into the
+    message being written: on a ticket, the composer's waiting attachments; in a New session, the
+    draft's. A spec image goes as itself (its id from `TicketDetail.attachments`), not a copy. A
+    browser screenshot is uploaded as is. Since the image is untouched, an annotation can be
+    reopened and edited at any time before the message goes.
+  - **Showing them.** The apps draw the marks over the image wherever an annotated attachment shows
+    (thumbnails, the lightbox or viewer), with an "N notes" line that opens to the list: the
+    composer, the New session, the Spec tab's attachment list and the Transcript.
+  - **The element under a browser mark.** Each time a browser mark's anchor is placed or moved, the
+    annotator asks `POST /browser/:sessionId/element { tabId, x, y, url, scroll }` (the anchor in
+    the page's CSS pixels, and the screenshot's URL and scroll). The service runs `findElement`
+    (`service/src/browser/element.ts`) in the page with `elementFromPoint`, never scrolling or
+    waking it. It answers the element's CSS selector and its visible text (`BrowserElement`): `#id`
+    when an id is unique in the page, else `tag:nth-of-type(n)` steps from the nearest unique id or
+    `body`, up to 1000 characters, and innerText with whitespace collapsed, up to 200. It answers
+    null when the tab has navigated or scrolled since the screenshot, so a mark never names the
+    wrong element. The mark keeps them as `path` and `text` (valid only with `page`), shown under
+    its note as `#save · "Save"`. Moving an anchor forgets its element until the next answer
+    (`moveMark`, `setMarkElement`).
+  - **To the agent.** The service validates each annotation when it resolves the attachments (an
+    image by its first bytes, marks in order and inside the image, message, path and text lengths,
+    a well-formed page; 400 otherwise; a kept attachment whose file went missing isn't re-checked)
+    and, not the apps, writes the agent's text: the `<attachments>` block lists each annotated
+    image's notes under its path, with each mark's position in pixels and as a share of the image,
+    plus CSS pixels and the element for a browser page, since the agent drives the page and edits
+    the source with those. The image goes to the agent inline, unchanged. `get_ticket` lists each
+    prompt attachment's notes. `app/scripts/annotate-check.ts` drives the Mac flow against the real
+    service.
 
 **File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
 mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path
