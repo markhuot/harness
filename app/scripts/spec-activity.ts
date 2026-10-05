@@ -306,6 +306,32 @@ try {
   await until("rev 31 body", () => js<boolean>(`document.querySelector('.spec-doc')?.textContent.includes('Revision 31')`), 5000);
   await shot("7-timeline-many");
   await mouse("mouseReleased", { x: strip.x + strip.w * 0.505, y: strip.y });
+
+  // --- A wide pane: Spec and Activity read as a centered column, capped wider than the
+  // transcript's 860px, while the scrollbar stays at the pane's edge.
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 2000, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await go(`#/board/${project.id}/ticket/${key}`);
+  await until("spec tab", () => exists(".spec-doc"), 10000);
+  await js(`document.querySelector(".pane-ticket [data-testid=pane-zoom]").click()`);
+  await until("pane zoomed", () => exists(".pane-ticket.zoomed"), 5000);
+  // The column's box: the scroller's content box, against the scroller itself.
+  const column = (sel: string) =>
+    js<{ pane: number; width: number; left: number; right: number }>(`(() => {
+      const el = document.querySelector(${JSON.stringify(sel)}), r = el.getBoundingClientRect(), s = getComputedStyle(el);
+      const left = parseFloat(s.paddingLeft), right = parseFloat(s.paddingRight);
+      return { pane: r.width, width: el.clientWidth - left - right, left, right: right + r.width - el.clientWidth };
+    })()`);
+  const spec = await column(".spec-body");
+  check("a wide pane's spec is capped between the transcript's width and 1000px", spec.pane > 1400 && spec.width > 860 && spec.width <= 1000, JSON.stringify(spec));
+  check("the capped spec is centered", Math.abs(spec.left - spec.right) <= 16, JSON.stringify(spec));
+  await shot("8-spec-wide");
+  await js(`document.querySelector('.tabs [data-tab=activity]').click()`);
+  await until("activity tab", () => exists(".activity-list"), 5000);
+  const feed = await column(".activity");
+  check("a wide pane's activity is capped like the spec", feed.pane > 1400 && Math.abs(feed.width - spec.width) <= 16, JSON.stringify(feed));
+  check("the capped activity is centered", Math.abs(feed.left - feed.right) <= 16, JSON.stringify(feed));
+  await shot("9-activity-wide");
+  await cdp("Emulation.clearDeviceMetricsOverride");
 } catch (e) {
   console.error(e);
   c.fail();

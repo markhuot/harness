@@ -21,6 +21,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   it. The count appears where you're scrubbing instead: in the timeline's tooltip on the Mac and in a
   bubble above your finger on iPhone and iPad. On iPhone and iPad, Show changes sits in the bar's
   one row.
+- On the Mac, the Spec and Activity tabs keep to a centered column in a wide pane, like the
+  Transcript but a little wider, so lines stay a comfortable length when the ticket is maximized.
 
 ### Fixed
 
