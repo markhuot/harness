@@ -27,8 +27,14 @@ final class TicketDetailHeroCollapse {
     private(set) var progress: Double = 0
     /// How far the tab strip slides: the hero's height when it last toggled.
     private(set) var distance: Double = 0
+    /// The slide is under way. A global frame read inside the sliding views is off by the slide's
+    /// offset until it ends, so geometry the screen lays out from waits for `settled`.
+    @ObservationIgnored private(set) var sliding = false
+    /// Called when a slide ends (not one cut short by the next toggle).
+    @ObservationIgnored var settled: () -> Void = {}
     @ObservationIgnored private var state = HeroCollapse.shown
     @ObservationIgnored private var heroHeight: Double = 0
+    @ObservationIgnored private var slides = 0
 
     func send(_ e: CollapseEvent) {
         let next = HeroCollapse.step(state, e, heroHeight: heroHeight)
@@ -42,7 +48,16 @@ final class TicketDetailHeroCollapse {
             hidden = next.hidden
             distance = heroHeight
         }
-        withAnimation(.easeInOut(duration: 0.22)) { progress = next.hidden ? 1 : 0 }
+        slides += 1
+        let slide = slides
+        sliding = true
+        withAnimation(.easeInOut(duration: 0.22), completionCriteria: .removed) {
+            progress = next.hidden ? 1 : 0
+        } completion: { [weak self] in
+            guard let self, slide == slides else { return }
+            sliding = false
+            settled()
+        }
     }
 
     func show() { send(.show) }
@@ -124,14 +139,24 @@ final class TicketDetailRelay {
     private var onTab: (TicketTab) -> Void = { _ in }
     private var annotate: (AnnotationRequest) -> Void = { _ in }
     private var focusComposer: () -> Void = {}
+    private var setPageBottom: (CGFloat) -> Void = { _ in }
     private var cachedSink: (holder: ObjectIdentifier, sink: AnnotationSink)?
+    /// The page's latest bottom edge on screen, read while the hero slides too; the screen takes it
+    /// once the slide ends.
+    var pageBottom: CGFloat?
 
     func update(hero: TicketDetailHeroCollapse, onTab: @escaping (TicketTab) -> Void,
-                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void) {
+                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void,
+                setPageBottom: @escaping (CGFloat) -> Void) {
         self.hero = hero
         self.onTab = onTab
         self.annotate = annotate
         self.focusComposer = focusComposer
+        self.setPageBottom = setPageBottom
+        hero.settled = { [weak self] in
+            guard let self, let pageBottom else { return }
+            self.setPageBottom(pageBottom)
+        }
     }
 
     private(set) lazy var tabOpener = TicketDetailTabOpener { [weak self] t in

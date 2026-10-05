@@ -160,7 +160,8 @@ private struct TicketDetailBody: View {
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
-        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 })
+        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 },
+                             setPageBottom: { if pageBottom != $0 { pageBottom = $0 } })
         VStack(spacing: 0) {
             // Hidden, the hero keeps drawing in its zero-height slot, under the tab strip and pager,
             // which slide up over it (HeroSlide) and cover it once they get there.
@@ -233,7 +234,14 @@ private struct TicketDetailBody: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { if page == strip { pageBottom = $0 } }
+                    // While the hero slides, this frame moves with the slide's offset on every frame;
+                    // following it would re-lay out the page each frame. The reading waits for the
+                    // slide to end (`hero.settled`).
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
+                        guard page == strip else { return }
+                        relay.pageBottom = y
+                        if !hero.sliding { pageBottom = y }
+                    }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .background { PagerYieldsToBackSwipe() }
                     .tag(page)
