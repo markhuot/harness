@@ -23,6 +23,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   one row.
 - On the Mac, a ticket's message box is a single row: **+**, the text field and Send. Send shows
   its ⌘↩ shortcut inside the button, like **Start session** in New session.
+- On the Mac, the Spec and Activity tabs keep to a centered column in a wide pane, like the
+  Transcript but a little wider, so lines stay a comfortable length when the ticket is maximized.
 
 ### Fixed
 
