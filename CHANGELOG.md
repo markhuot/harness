@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.2050](https://github.com/markhuot/harness/releases/tag/app-20261005.2050) - 2026-10-05
+
 ### Added
 
 - On iPad and iPhone with a keyboard attached, the Mac's shortcuts work too: ⌘N for a new
