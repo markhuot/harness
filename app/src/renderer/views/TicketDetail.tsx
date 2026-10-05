@@ -878,8 +878,8 @@ function composerFor(ticketKey: string): ComposerAnnotate {
  * (on its top edge) drags it off into a pane of its own; torn off, it fills that pane (`fill`).
  * Annotate (anywhere in the ticket) adds the image here with its notes (metadata on the attachment;
  * the image isn't changed) and focuses the input for the human to say why; annotating a waiting
- * image again edits its notes in place. Send, at the input's right with its shortcut dimmed over
- * it, sends the files with their notes.
+ * image again edits its notes in place. Send, at the input's right with its shortcut in it (like
+ * New session's Start session), sends the files with their notes.
  */
 export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket: Ticket; onSent: () => void; grip?: ReactNode; fill?: boolean }) {
   const { client } = useStore();
@@ -923,7 +923,7 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
     what: "a message",
   });
   // One row: (+), the input and Send. The only note it needs goes on Send's tooltip.
-  const sendTitle = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : `Send (${MOD}↩)`;
+  const sendTitle = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : "Send";
   const canSend = composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
 
   useEffect(() => {
@@ -1025,14 +1025,12 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
             }
           }}
         />
-        <div className="composer-send">
-          <span className="composer-send-key" aria-hidden>
+        <button className="btn btn-primary composer-send" data-testid="composer-send" disabled={!canSend} onClick={send} title={sendTitle} aria-label="Send">
+          {sending ? <span className="spinner" /> : <Icon name="arrowUp" strokeWidth={2.25} />}
+          <span className="kbd" aria-hidden>
             {MOD}↩
           </span>
-          <button className="btn btn-primary btn-sm btn-icon" data-testid="composer-send" disabled={!canSend} onClick={send} title={sendTitle} aria-label="Send">
-            {sending ? <span className="spinner" /> : <Icon name="arrowUp" strokeWidth={2.25} />}
-          </button>
-        </div>
+        </button>
       </div>
       {attach.dropping && (
         <div className="draft-drop-hint" data-testid="composer-drop-hint" aria-hidden>

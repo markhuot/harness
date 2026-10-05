@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { TranscriptEntry } from "../protocol";
 import { inlineTokens, parseBlocks, plainText } from "./markdown";
-import { composerHint, describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, toPagePoint, toolPreview } from "./index";
+import { describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, toPagePoint, toolPreview } from "./index";
 
 test("fenced code keeps list- and heading-looking lines verbatim", () => {
   const blocks = parseBlocks("Intro\n```ts\n- not a list\n# not a heading\n```\n- real item");
@@ -274,17 +274,3 @@ test("browser: URL normalization and letterboxed touch → page coordinates", ()
 });
 
 // HARNESS-68: a message to a working in-progress or planning ticket goes into the running agent.
-test("composerHint: steering for a busy in-progress or planning ticket, queued for the rest", () => {
-  expect(composerHint({ busy: true, status: "in_progress" })).toBe("Sent to the running agent");
-  expect(composerHint({ busy: true, status: "planning" })).toBe("Sent to the running agent");
-  expect(composerHint({ busy: true, status: "review" })).toBe("Queued behind the current run");
-  expect(composerHint({ busy: true, status: "blocked" })).toBe("Queued behind the current run");
-  expect(composerHint({ busy: false, status: "planning" })).toBe("The planning agent will revise");
-  expect(composerHint({ busy: false, status: "in_progress" })).toBe("");
-});
-
-test("composerHint: idle, it says the ticket stays put and who moves it", () => {
-  expect(composerHint({ busy: false, status: "blocked" })).toBe("The agent picks the work back up once this answers it");
-  expect(composerHint({ busy: false, status: "review" })).toBe("Stays in review unless the agent changes the work");
-  expect(composerHint({ busy: false, status: "done" })).toBe("Stays done: the agent only answers. Re-open to change it");
-});

@@ -87,25 +87,6 @@ public enum Format {
         .done: "Ask about the finished work…",
     ]
 
-    /// Hint under the ticket message composer. While the agent is working on an in-progress or
-    /// planning ticket, a message goes into its run (steering); otherwise it waits for the run that's
-    /// going. Idle, it says what the message does to the ticket: a message never moves it, the agent
-    /// does (or the human, with Request changes or Re-open).
-    public static func composerHint(busy: Bool, status: TicketStatus) -> String {
-        if busy { return status == .inProgress || status == .planning ? "Sent to the running agent" : "Queued behind the current run" }
-        switch status {
-        case .planning: return "The planning agent will revise"
-        case .blocked: return "The agent picks the work back up once this answers it"
-        case .review: return "Stays in review unless the agent changes the work"
-        case .done: return "Stays done: the agent only answers. Re-open to change it"
-        default: return ""
-        }
-    }
-
-    public static func composerHint(_ t: Ticket) -> String {
-        composerHint(busy: t.busy, status: t.status)
-    }
-
     /// New-session prompt placeholder. Start vs plan is picked when it's submitted, so only the kind matters.
     public static func newSessionPlaceholder(_ kind: TicketKind) -> String {
         kind == .conductor

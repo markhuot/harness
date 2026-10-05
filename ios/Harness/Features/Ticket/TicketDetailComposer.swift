@@ -2,9 +2,9 @@ import HarnessKit
 import SwiftUI
 
 /// The message composer under every tab: @file mentions and /commands,
-/// a placeholder for the ticket's state (red while it's blocked on the human) and the hint about
-/// what a message does. The hint shows only while writing: once the field is focused, and after a blur only while it holds a message. A message
-/// goes to the agent and shows in the Transcript, never in Activity, so a send that goes through
+/// a placeholder for the ticket's state (red while it's blocked on the human), and a send button
+/// that stands out while writing: once the field is focused, and after a blur only while it holds a
+/// message. A message goes to the agent and shows in the Transcript, never in Activity, so a send that goes through
 /// opens the Transcript from any tab (Tabs.tabAfterSend). The attach (+) button, field and send
 /// button are Liquid Glass floating over the tab, with no bar of their own. Files picked from (+)
 /// (or dropped on the ticket) upload first and wait in a short list over the field, each removable,
@@ -32,7 +32,6 @@ struct TicketDetailComposer: View {
     @State private var focused = false
 
     var body: some View {
-        let hint = Format.composerHint(ticket)
         let empty = TicketDetailLogic.trim(text).isEmpty
         let writing = focused || !empty || !outgoing.isEmpty
         let attention = ticket.status == .blocked
@@ -42,14 +41,6 @@ struct TicketDetailComposer: View {
         VStack(spacing: 4) {
             if !outgoing.isEmpty || !uploader.pending.isEmpty {
                 attachmentTray(accepts: accepts)
-            }
-            if writing && !hint.isEmpty {
-                Text(hint)
-                    .font(.scaled(size: 12))
-                    .foregroundStyle(c.text3)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 6)
             }
             HStack(alignment: .bottom, spacing: 8) {
                 if accepts {

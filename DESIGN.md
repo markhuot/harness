@@ -491,8 +491,8 @@ messages work, and the queue is only the fallback (HARNESS-68).
   line "Couldn't reach the running agent; queued for the next run".
 - Review and complete runs never take messages: a message to a ticket in review gets a chat run
   queued behind the review, and the ticket stays in review.
-- On iPhone and iPad, the composer hint says "Sent to the running agent" while an in-progress or
-  planning ticket is busy. The Mac composer has no hint row: (+), the input and Send share one row.
+- The composer shows no hint about where a message goes. On the Mac, (+), the input and Send
+  (with ⌘↩ in it) share one row.
 
 claude-code (verified against claude 2.1.284): each message is written to the open stdin as a
 stream-json `user` line with its `uuid`. With `--replay-user-messages` the CLI echoes a line

@@ -6,7 +6,6 @@ import {
   CLASSIFIER_LABELS,
   COLUMN_EMPTY_TEXT,
   COMPOSER_PLACEHOLDER,
-  composerHint,
   decisionSource,
   describeApprovalInput,
   dispatchedKey,
@@ -122,15 +121,6 @@ export const tildifyCases = cases(tildify, {
 // ---------------------------------------------------------------------------
 
 const STATUSES: TicketStatus[] = ["planning", "in_progress", "blocked", "review", "done"];
-
-export const composerHintCases = cases(
-  ({ busy, status }: { busy: boolean; status: TicketStatus }) => composerHint({ busy, status }),
-  [
-    ...STATUSES.flatMap((status) => [false, true].map((busy) => [`${status} busy=${busy}`, { busy, status }] as const)),
-    ["unknown status idle", { busy: false, status: "archived" as TicketStatus }],
-    ["unknown status busy", { busy: true, status: "archived" as TicketStatus }],
-  ],
-);
 
 export const newSessionPlaceholderCases = cases(newSessionPlaceholder, {
   task: "task",

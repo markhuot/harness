@@ -12,11 +12,6 @@ struct TimeInput: Decodable, Sendable {
     let now: Double
 }
 
-struct ComposerHintInput: Decodable, Sendable {
-    let busy: Bool
-    let status: TicketStatus
-}
-
 struct ToolInput: Decodable, Sendable {
     let toolName: String
     let input: JSONValue?
@@ -146,11 +141,6 @@ struct FormatTests {
     @Test(arguments: Fixture.cases("stateFormat", "tildifyCases", input: String.self, output: String.self))
     func tildify(_ c: Fixture.Case<String, String>) {
         #expect(Format.tildify(c.input) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("stateFormat", "composerHintCases", input: ComposerHintInput.self, output: String.self))
-    func composerHint(_ c: Fixture.Case<ComposerHintInput, String>) {
-        #expect(Format.composerHint(busy: c.input.busy, status: c.input.status) == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateFormat", "newSessionPlaceholderCases", input: TicketKind.self, output: String.self))
