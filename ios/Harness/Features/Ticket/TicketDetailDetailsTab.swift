@@ -39,6 +39,7 @@ struct TicketDetailDetailsTab: View {
                     .lineLimit(5...10)
                     .lineSpacing(3)
                     .focused($editingSpec)
+                    .onSubmitShortcut { if draft?.dirty == true { saveSpec() } }
                     .disabled(!editable)
                     .accessibilityLabel("Spec")
                 if let draft, draft.dirty {
@@ -47,7 +48,6 @@ struct TicketDetailDetailsTab: View {
                             .font(.scaled(size: 13)).foregroundStyle(c.text3).frame(maxWidth: .infinity, alignment: .leading)
                         HButton("Revert", variant: .ghost, small: true, fullWidth: false) { self.draft?.revert(ticket) }
                         HButton("Save", variant: .primary, small: true, loading: saving, fullWidth: false) { saveSpec() }
-                            .submitShortcut(editingSpec)
                     }
                 }
             }

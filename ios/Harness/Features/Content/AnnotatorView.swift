@@ -211,10 +211,7 @@ struct AnnotatorView: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(history.isEmpty || adding ? c.text3 : c.text2)
-            .disabled(history.isEmpty || adding)
-            // ⌘Z, unless a note is being typed: then it's the field's own undo.
-            .keyboardShortcut(focused == nil ? KeyboardShortcut("z") : nil)
-            .accessibilityLabel("Undo")
+            .disabled(history.isEmpty || adding)            .accessibilityLabel("Undo")
             Button { add() } label: {
                 Group {
                     if adding {

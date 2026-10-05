@@ -43,6 +43,8 @@ struct MentionTextEditor: View {
     var autofocus = false
     /// Focus the field each time this changes (the composer once an annotated image joins it)
     var focusRequest = 0
+    /// ⌘↩ while the field has focus (the composer's Send)
+    var onSubmit: (() -> Void)?
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
@@ -89,6 +91,7 @@ struct MentionTextEditor: View {
                 caret = caret.onSelection(start: PickerLogic.utf16Offset(range.lowerBound, in: text), end: PickerLogic.utf16Offset(range.upperBound, in: text))
             }
             .focused($focused)
+            .onSubmitShortcut(onSubmit)
             .onChange(of: focused) { _, now in onFocusChange?(now) }
             .accessibilityLabel(fieldLabel ?? placeholder)
             .task(id: focusRequest) {

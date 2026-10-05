@@ -2,26 +2,27 @@ import HarnessKit
 import SwiftUI
 
 // The desktop's keyboard shortcuts (app/src/renderer/state/keys.ts) for a hardware keyboard on
-// iPad and iPhone. The window-wide ⌘ chords are menu commands (HarnessCommands): iPadOS lists them
-// in its menu bar and in the overlay holding ⌘ shows, and they act on the key window through its
-// Router (`focusedSceneValue(\.windowRouter)`). A screen's own chords sit on its buttons: ⌘↩ sends
-// or saves what its field holds (`.submitShortcut`), ⇧⌘] and ⇧⌘[ step through a ticket's tabs.
+// iPad and iPhone, checked on the simulator with AXe key presses. How iOS treats a SwiftUI
+// `.keyboardShortcut` decides the shape:
+// - It keeps the first registration of a chord. A shortcut that appears later (one switched on
+//   when a field takes focus) or a second screen's copy of it (a ticket pushed over another) never
+//   fires, and the button keeps the action it was first given. So the window-wide chords are
+//   hidden buttons at the window's root from its first frame (WindowShortcuts, from SceneChrome),
+//   their actions read state through references when pressed (the Router, AppModel,
+//   ShortcutTargets), and Next/Previous Tab reach the ticket screen on top through
+//   ShortcutTargets rather than buttons of their own.
+// - ⌘↩ on a field that shares its screen (the composer, a spec, an approval's note) is
+//   `.onSubmitShortcut`, a key press on the focused field. A sheet's or cover's primary button
+//   carries it instead (`.submitShortcut`), as do the Esc Cancel buttons (`.cancelAction`).
+// - Not SwiftUI `Commands`: on iPhone their menu commands never fire, iOS answers ⌘, itself (it
+//   opens the app's page in the Settings app) before the menu sees it, and placing one in the
+//   system's Settings or sidebar group crashed the app at launch. Buttons in the window come
+//   before the system's menu in the responder chain, so they win on both.
+// - While a sheet is up the window's chords don't fire, as the desktop's don't over a modal; the
+//   Projects sheet answers ⌃⌘S itself to close.
 // The desktop's other chords have nothing to act on here: no command palette (⌘K, ⌘P), panes
-// (⌥⌘ arrows, ⌘W, ⇧⌘↩, ⇧⌘O, ⌘=) or terminals (⌘T), and iPadOS lists the shortcuts itself (⌘/).
-
-extension FocusedValues {
-    /// The key window's Router: a main window's or a ticket window's.
-    @Entry var windowRouter: Router?
-    /// Shows or hides the key main window's Projects sidebar (MainTabs).
-    @Entry var toggleSidebar: SidebarToggle?
-}
-
-/// Toggle Sidebar for one main window: the split view's column at regular width, the Projects
-/// sheet at compact width.
-struct SidebarToggle {
-    let shown: Bool
-    let toggle: @MainActor () -> Void
-}
+// (⌥⌘ arrows, ⌘W, ⇧⌘↩, ⇧⌘O, ⌘=) or terminals (⌘T), and iPadOS lists the shortcuts itself when
+// ⌘ is held (⌘/).
 
 extension KeyboardShortcut {
     /// ⌘↩: send or save what the focused field holds, as on the desktop.
@@ -29,57 +30,91 @@ extension KeyboardShortcut {
 }
 
 extension View {
-    /// ⌘↩ presses this button while `active`: a field's send or save button, active while that field
-    /// has focus, so two fields on screen at once (the composer and the Details tab's spec, say)
-    /// never both answer it.
-    func submitShortcut(_ active: Bool = true) -> some View {
-        keyboardShortcut(active ? KeyboardShortcut.submit : nil)
+    /// ⌘↩ presses this button: the primary action of a sheet or cover, whose fields are all there is.
+    func submitShortcut() -> some View {
+        keyboardShortcut(KeyboardShortcut.submit)
+    }
+
+    /// ⌘↩ runs `action` while this field has focus (nil: the key goes on as usual). For a field that
+    /// shares the screen with others (the composer, the Details tab's spec, the approval's note),
+    /// so only the one being typed in answers. A button's shortcut can't do that: one that switches
+    /// on as its field takes focus never fires.
+    func onSubmitShortcut(_ action: (() -> Void)?) -> some View {
+        onKeyPress(.return, phases: .down) { press in
+            guard let action, press.modifiers == .command else { return .ignored }
+            action()
+            return .handled
+        }
+    }
+
+    /// Buttons that are only there for their keyboard shortcuts: not drawn, not read by VoiceOver.
+    func hiddenShortcuts(@ViewBuilder _ buttons: () -> some View) -> some View {
+        background {
+            buttons()
+                .opacity(0)
+                .accessibilityHidden(true)
+        }
     }
 }
 
-/// The app's menu commands, the desktop's menu-bar chords: New Session (⌘N), Settings (⌘,), Toggle
-/// Sidebar (⌃⌘S), and Go → All Projects (⌘1) and Inbox (⌘2). Each acts on the key window; in a
-/// ticket window the sections open in a main window (Router.onSectionLink).
-/// (`SwiftUI.Commands`: HarnessKit's `Commands` is the slash-command catalog.)
+/// What a window's root shortcuts act on that lives further down: the ticket screen showing, for
+/// Next Tab and Previous Tab. Screens register as they appear and leave as they go, so the last one
+/// is the one on top (a ticket pushed over another, then popped, hands the keys back).
 @MainActor
-struct HarnessCommands: SwiftUI.Commands {
-    let app: AppModel
+final class ShortcutTargets {
+    private var tabSteppers: [(owner: ObjectIdentifier, step: (Int) -> Void)] = []
 
-    @FocusedValue(\.windowRouter) private var router
-    @FocusedValue(\.toggleSidebar) private var sidebar
+    func addTabStepper(_ owner: AnyObject, _ step: @escaping (Int) -> Void) {
+        removeTabStepper(owner)
+        tabSteppers.append((ObjectIdentifier(owner), step))
+    }
 
-    var body: some SwiftUI.Commands {
-        CommandGroup(replacing: .newItem) {
-            Button("New Session…") { newSession() }
-                .keyboardShortcut("n")
-                .disabled(router == nil || app.store == nil)
-        }
-        CommandGroup(replacing: .appSettings) {
-            Button("Settings…") { router?.open(.tab(.settings)) }
-                .keyboardShortcut(",")
-                .disabled(router == nil || app.active == nil)
-        }
-        CommandGroup(before: .sidebar) {
-            Button(sidebar?.shown == false ? "Show Sidebar" : "Hide Sidebar") { sidebar?.toggle() }
-                .keyboardShortcut("s", modifiers: [.control, .command])
-                .disabled(sidebar == nil)
-        }
-        CommandMenu("Go") {
-            Button("All Projects") { router?.select(.allProjects, app: app) }
+    func removeTabStepper(_ owner: AnyObject) {
+        tabSteppers.removeAll { $0.owner == ObjectIdentifier(owner) }
+    }
+
+    func stepTab(_ delta: Int) { tabSteppers.last?.step(delta) }
+}
+
+extension EnvironmentValues {
+    /// The window's ShortcutTargets (SceneChrome).
+    @Entry var shortcutTargets: ShortcutTargets?
+}
+
+/// The window-wide chords, for a main or a ticket window: New Session (⌘N), All Projects (⌘1),
+/// Inbox (⌘2), Settings (⌘,), and Next Tab (⇧⌘]) and Previous Tab (⇧⌘[) on the ticket showing.
+/// In a ticket window the sections open in a main window (Router.onSectionLink), and New session
+/// comes up over the ticket. They're all here, at the root and from the first frame, because iOS
+/// keeps the first registration of a chord: one added later, or a second screen's, never fires.
+struct WindowShortcuts: View {
+    let router: Router
+    let targets: ShortcutTargets
+
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Button("Next Tab") { targets.stepTab(1) }
+            .keyboardShortcut("]", modifiers: [.command, .shift])
+        Button("Previous Tab") { targets.stepTab(-1) }
+            .keyboardShortcut("[", modifiers: [.command, .shift])
+        if app.active != nil {
+            Button("New Session") {
+                guard let store = app.store else { return }
+                router.present(.newSession(projectId: Self.boardProject(store.state, app.prefs), key: nil))
+            }
+            .keyboardShortcut("n")
+            Button("All Projects") { router.select(.allProjects, app: app) }
                 .keyboardShortcut("1")
-                .disabled(router == nil || app.active == nil)
-            Button("Inbox") { router?.open(.tab(.inbox)) }
+            Button("Inbox") { router.open(.tab(.inbox)) }
                 .keyboardShortcut("2")
-                .disabled(router == nil || app.active == nil)
+            Button("Settings") { router.open(.tab(.settings)) }
+                .keyboardShortcut(",")
         }
     }
 
-    /// New session for the board's project, as the board's own button opens it (none on All
-    /// projects or a group's board).
-    private func newSession() {
-        guard let router, let store = app.store else { return }
-        let filter = store.state.boardFilter(app.prefs.boardProject)
-        let project = filter.flatMap { Paging.scopeGroup($0) == nil ? $0 : nil }
-        router.present(.newSession(projectId: project, key: nil))
+    /// The board's project, as the board's own New session button passes it: nil on All projects
+    /// or a group's board.
+    static func boardProject(_ state: BoardState, _ prefs: Prefs) -> String? {
+        state.boardFilter(prefs.boardProject).flatMap { Paging.scopeGroup($0) == nil ? $0 : nil }
     }
 }

@@ -86,6 +86,7 @@ struct TicketDetailApprovalCard: View {
                     .foregroundStyle(c.text)
                     .lineLimit(3...8)
                     .focused($messageFocused)
+                    .onSubmitShortcut { if busy == nil { answer(.deny, tool: tool) } }
                     .padding(10)
                     .background(c.bgElev, in: .rect(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c.border))
@@ -94,7 +95,6 @@ struct TicketDetailApprovalCard: View {
                     HButton("Back", variant: .ghost, fullWidth: false) { denying = false }.disabled(busy != nil)
                     Spacer()
                     HButton("Deny", icon: "x", variant: .dangerSolid, loading: busy == .deny, fullWidth: false, haptic: nil) { answer(.deny, tool: tool) }
-                        .submitShortcut(messageFocused)
                 }
             } else {
                 VStack(spacing: 8) {

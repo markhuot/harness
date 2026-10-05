@@ -16,8 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   sidebar, from any window. On a ticket, ⇧⌘] and ⇧⌘[ move between its tabs. ⌘↩ sends a message,
   saves an edited spec, denies an approval with your note, sends Request changes or Re-open notes,
   approves with instructions and adds annotations. In New session, ⌘↩ starts the session and ⇧⌘↩
-  plans it first. ⌘S saves a prompt, ⌘Z undoes a mark in the annotator, and Esc cancels these
-  screens. On iPad they're listed in the menu bar and when you hold ⌘.
+  plans it first. ⌘S saves a prompt, and Esc cancels these screens.
 
 ### Fixed
 
