@@ -367,6 +367,9 @@ private struct BoardBottomBar<Filter: View, NewSession: View>: View {
 
     @Environment(\.palette) private var c
 
+    /// The search capsule's height, the bar's row
+    private let fieldHeight: CGFloat = 50
+
     var body: some View {
         let searching = focused.wrappedValue
         GlassEffectContainer(spacing: 10) {
@@ -393,9 +396,9 @@ private struct BoardBottomBar<Filter: View, NewSession: View>: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
         .padding(.top, 6)
-        .padding(.bottom, 4)
+        // Concentric with the phone's corners, like Calendar's bar; over the keyboard while searching.
+        .concentricBottomPadding(barHeight: fieldHeight, raised: searching, horizontal: 16, bottom: 4)
         .animation(.snappy, value: searching)
     }
 
@@ -427,7 +430,7 @@ private struct BoardBottomBar<Filter: View, NewSession: View>: View {
         }
         .padding(.leading, 16)
         .padding(.trailing, 10)
-        .frame(maxWidth: .infinity, minHeight: 50)
+        .frame(maxWidth: .infinity, minHeight: fieldHeight)
         .glassEffect(.regular.interactive(), in: .capsule)
         // Tapping anywhere on the capsule (not just the text) starts typing.
         .contentShape(.capsule)
