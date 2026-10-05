@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { client, distribute, ensureGroup, token, waitForBuild, type Fetch } from "./testflight";
+import { client, distribute, ensureGroup, isUploaded, token, waitForBuild, type Fetch } from "./testflight";
 
 async function p256Pem() {
   const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
@@ -122,4 +122,13 @@ test("distribute leaves the build in the group when another build of the version
   expect(r.review).toContain("distribute 202609301424");
   expect(r.publicLink).toBe("https://testflight.apple.com/join/abc");
   expect(calls.some((x) => x.key === "POST /betaGroups/G1/relationships/builds")).toBe(true);
+});
+
+test("isUploaded tells a listed build from a missing one, and throws when App Store Connect fails", async () => {
+  const app = { "GET /apps?filter[bundleId]=com.markhuot.harness&limit=1": (): [number, unknown] => [200, { data: [{ id: "A1", type: "apps", attributes: {} }] }] };
+  const builds = "GET /builds?filter[app]=A1&filter[version]=202610051743&limit=1";
+  expect(await isUploaded(fakeAsc({ ...app, [builds]: () => [200, { data: [{ id: "B1", type: "builds", attributes: {} }] }] }).c, "202610051743")).toBe(true);
+  expect(await isUploaded(fakeAsc({ ...app, [builds]: () => [200, { data: [] }] }).c, "202610051743")).toBe(false);
+  // An error must not read as "not uploaded", or a rerun uploads a used build number and fails.
+  expect(isUploaded(fakeAsc({ ...app, [builds]: () => [500, { errors: [{ code: "UNEXPECTED_ERROR" }] }] }).c, "202610051743")).rejects.toThrow("500");
 });

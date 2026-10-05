@@ -5,7 +5,7 @@
 //
 //   bun release/testflight.ts setup                 fill in the app's Test Information (once per app)
 //   bun release/testflight.ts distribute <build>    distribute an uploaded build, print JSON { publicLink, … }
-//   bun release/testflight.ts uploaded <build>      exit 0 when App Store Connect already has the build
+//   bun release/testflight.ts uploaded <build>      exit 0 when App Store Connect already has the build, 3 when not
 //   bun release/testflight.ts link                  print the public link (empty until the group exists)
 //
 // Env: ASC_KEY_ID and ASC_ISSUER_ID (a team API key with the App Manager role or higher; export
@@ -128,6 +128,13 @@ export async function waitForBuild(
   }
 }
 
+/** Whether App Store Connect lists this build number yet. Errors throw, so they're never read as "not uploaded". */
+export async function isUploaded(c: Client, buildNumber: string): Promise<boolean> {
+  const app = await findApp(c);
+  const { data } = await c.get(`/builds?filter[app]=${app.id}&filter[version]=${buildNumber}&limit=1`);
+  return Boolean(data?.[0]);
+}
+
 /** Add the build to the group and submit it for Beta App Review; resubmitting an already submitted build is fine. */
 export async function distribute(c: Client, buildNumber: string, whatsNew: string, opts?: Parameters<typeof waitForBuild>[3]) {
   const app = await findApp(c);
@@ -215,10 +222,9 @@ if (import.meta.main) {
     console.log(JSON.stringify(r));
     if (r.missing.length) console.error(`still missing for Beta App Review: ${r.missing.join(", ")} (set them and rerun setup)`);
   } else if (cmd === "uploaded" && arg) {
-    // Exit 0 when App Store Connect already has this build number, so a rerun doesn't upload it twice.
-    const app = await findApp(c);
-    const { data } = await c.get(`/builds?filter[app]=${app.id}&filter[version]=${arg}&limit=1`);
-    process.exit(data?.[0] ? 0 : 1);
+    // Exit 0 when App Store Connect already has this build number, so a rerun doesn't upload it twice,
+    // and 3 when it doesn't. Anything else (an unreachable API) exits 1, which the publish treats as a failure.
+    process.exit((await isUploaded(c, arg)) ? 0 : 3);
   } else if (cmd === "link") {
     const app = await findApp(c);
     const { data } = await c.get(`/betaGroups?filter[app]=${app.id}&filter[name]=${GROUP_NAME}&limit=10`);

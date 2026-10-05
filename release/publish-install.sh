@@ -132,12 +132,21 @@ if [[ $SKIP_IOS -eq 0 ]]; then
 
   if [[ $TESTFLIGHT -eq 1 ]]; then
     # A rerun of a publish that failed later on finds the build already uploaded; build numbers can't be reused.
-    if bun testflight.ts uploaded "$BUILD_NUMBER"; then
-      echo "==> TestFlight already has build $BUILD_NUMBER; not uploading again"
-    else
-      echo "==> Uploading build $BUILD_NUMBER to App Store Connect (TestFlight)"
-      "${NATIVE_BUILD[@]}" export --method testflight --archive-path "$ARCHIVE" >/dev/null || exit 1
-    fi
+    # `uploaded` exits 0 (has it) or 3 (doesn't); anything else is an error, never "not uploaded".
+    UPLOADED=0; bun testflight.ts uploaded "$BUILD_NUMBER" || UPLOADED=$?
+    case $UPLOADED in
+      0) echo "==> TestFlight already has build $BUILD_NUMBER; not uploading again" ;;
+      3)
+        echo "==> Uploading build $BUILD_NUMBER to App Store Connect (TestFlight)"
+        if ! "${NATIVE_BUILD[@]}" export --method testflight --archive-path "$ARCHIVE" >/dev/null; then
+          # App Store Connect can take minutes to list a fresh upload, so a quick rerun can miss it
+          # above; the upload's own refusal of a used build number means it's there.
+          grep -q "previously uploaded version: ‘$BUILD_NUMBER’" "$ROOT/ios/build/export-testflight.log" 2>/dev/null || exit 1
+          echo "==> App Store Connect already has build $BUILD_NUMBER (not listed yet); not uploading again"
+        fi
+        ;;
+      *) echo "error: can't ask App Store Connect whether build $BUILD_NUMBER is uploaded (see above)" >&2; exit 1 ;;
+    esac
     echo "==> Distributing to the TestFlight public group (waits for App Store Connect to process the build)"
     TF_JSON=$(TESTFLIGHT_WHATS_NEW="$(bun release.ts notes "$TAG")" bun testflight.ts distribute "$BUILD_NUMBER")
     TESTFLIGHT_URL=$(bun -e 'console.log(JSON.parse(process.argv[1]).publicLink ?? "")' "$TF_JSON")
