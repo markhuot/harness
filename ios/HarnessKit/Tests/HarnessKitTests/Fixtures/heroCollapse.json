@@ -346,7 +346,7 @@
         "events": [
           {
             "type": "beginDrag",
-            "offset": 1300,
+            "offset": 300,
             "contentHeight": 2000,
             "viewportHeight": 600
           },
@@ -356,15 +356,15 @@
           },
           {
             "type": "scroll",
-            "offset": 1400,
+            "offset": 400,
             "contentHeight": 2000,
             "viewportHeight": 600
           },
           {
             "type": "scroll",
-            "offset": 1200,
+            "offset": 300,
             "contentHeight": 2000,
-            "viewportHeight": 800
+            "viewportHeight": 600
           }
         ]
       },
@@ -372,27 +372,27 @@
         {
           "hidden": false,
           "live": true,
-          "anchor": 1300
+          "anchor": 300
         },
         {
           "hidden": false,
           "live": true,
-          "anchor": 1300
+          "anchor": 300
         },
         {
           "hidden": true,
           "live": false,
-          "anchor": 1400
+          "anchor": 400
         },
         {
           "hidden": true,
           "live": false,
-          "anchor": 1400
+          "anchor": 400
         }
       ]
     },
     {
-      "name": "the bounce back past the bottom isn't scrolling back",
+      "name": "a hide that would land at the end doesn't",
       "input": {
         "from": {
           "hidden": false,
@@ -416,29 +416,37 @@
           {
             "type": "endDrag",
             "velocity": 0
-          },
-          {
-            "type": "beginDrag",
-            "offset": 1400,
-            "contentHeight": 2000,
-            "viewportHeight": 600
-          },
-          {
-            "type": "scroll",
-            "offset": 1500,
-            "contentHeight": 2000,
-            "viewportHeight": 600
-          },
-          {
-            "type": "endDrag",
-            "velocity": 0
-          },
-          {
-            "type": "beginDrag",
-            "offset": 1500,
-            "contentHeight": 2000,
-            "viewportHeight": 600
-          },
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 1300
+        },
+        {
+          "hidden": false,
+          "live": true,
+          "anchor": 1300
+        },
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 1300
+        }
+      ]
+    },
+    {
+      "name": "the end brings it back, even with no finger down",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
           {
             "type": "scroll",
             "offset": 1400,
@@ -450,43 +458,86 @@
       "output": [
         {
           "hidden": false,
+          "live": false,
+          "anchor": 1400
+        }
+      ]
+    },
+    {
+      "name": "a bounce past the end is the end",
+      "input": {
+        "from": {
+          "hidden": true,
           "live": true,
           "anchor": 1300
         },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "scroll",
+            "offset": 1500,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 1400
+        }
+      ]
+    },
+    {
+      "name": "within a point of the end brings it back",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "scroll",
+            "offset": 1399,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
+        {
+          "hidden": false,
+          "live": false,
+          "anchor": 1399
+        }
+      ]
+    },
+    {
+      "name": "just short of the end stays hidden",
+      "input": {
+        "from": {
+          "hidden": true,
+          "live": false,
+          "anchor": 400
+        },
+        "heroHeight": 200,
+        "events": [
+          {
+            "type": "scroll",
+            "offset": 1398.5,
+            "contentHeight": 2000,
+            "viewportHeight": 600
+          }
+        ]
+      },
+      "output": [
         {
           "hidden": true,
           "live": false,
-          "anchor": 1400
-        },
-        {
-          "hidden": true,
-          "live": false,
-          "anchor": 1400
-        },
-        {
-          "hidden": true,
-          "live": true,
-          "anchor": 1400
-        },
-        {
-          "hidden": true,
-          "live": true,
-          "anchor": 1400
-        },
-        {
-          "hidden": true,
-          "live": false,
-          "anchor": 1400
-        },
-        {
-          "hidden": true,
-          "live": true,
-          "anchor": 1400
-        },
-        {
-          "hidden": true,
-          "live": true,
-          "anchor": 1400
+          "anchor": 400
         }
       ]
     },

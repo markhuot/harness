@@ -160,13 +160,12 @@ private struct TicketDetailBody: View {
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
-        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 },
-                             setPageBottom: { if pageBottom != $0 { pageBottom = $0 } })
-        VStack(spacing: 0) {
-            // Hidden, the hero keeps drawing in its zero-height slot, under the tab strip and pager,
-            // which slide up over it (HeroSlide) and cover it once they get there.
-            // The hero's state is read only in TicketHeroSlot and HeroSlide, so a toggle mid-scroll
-            // doesn't re-render this body (and with it every tab body).
+        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 })
+        ZStack(alignment: .top) {
+            // The tab strip and pager are laid out over the hero, as if it were gone, and sit below it
+            // while it shows (HeroSlide); hiding slides them up over it. No layout changes, so a
+            // toggle mid-scroll re-lays out no tab body. The hero's state is read only in the
+            // modifiers, so a toggle doesn't re-render this body either.
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
                 .modifier(TicketHeroSlot(hero: hero))
@@ -234,17 +233,17 @@ private struct TicketDetailBody: View {
             ForEach(pages, id: \.self) { page in
                 let t = page == strip ? shown : page
                 pageBody(t, strip: page, tornOff: tornOff)
-                    .safeAreaPadding(.bottom, max(0, pageBottom - composerTop))
+                    .modifier(HeroRoom(hero: hero, overlap: max(0, pageBottom - composerTop)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
-                    // While the hero slides, this frame moves with the slide's offset on every frame;
-                    // following it would re-lay out the page each frame. The reading waits for the
-                    // slide to end (`hero.settled`).
+                    // The frame includes HeroSlide's offset, so it's taken back to the layout's
+                    // (the hero's resting offset off), and readings mid-slide, which move on every
+                    // frame, are skipped.
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
-                        guard page == strip else { return }
-                        relay.pageBottom = y
-                        if !hero.sliding { pageBottom = y }
+                        guard page == strip, !hero.sliding else { return }
+                        let laidOut = y - hero.restingOffset
+                        if pageBottom != laidOut { pageBottom = laidOut }
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .background { PagerYieldsToBackSwipe() }
@@ -406,7 +405,8 @@ private struct TicketPinnedHeader: ViewModifier {
 /// pager, which won't run alongside the back swipe, begins for every swipe but a rightward one on the
 /// first page: it shuts the back swipe out, so the pager pages; on the first page it stays out of the
 /// way and the back swipe goes. A page's background, inside the paging scroll view; the gate only sees
-/// touches on the pager, so the back swipe elsewhere is untouched.
+/// touches on the pager, so the back swipe elsewhere is untouched. It also turns off the pager's
+/// automatic safe-area insets (see `hook`).
 private struct PagerYieldsToBackSwipe: UIViewRepresentable {
     func makeUIView(context: Context) -> Probe {
         let v = Probe()
@@ -425,8 +425,17 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
         }
 
         private func hook() {
-            guard let pager = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? UIScrollView }).first(where: \.isPagingEnabled),
-                  !(pager.gestureRecognizers ?? []).contains(where: { $0 is PagingGate }),
+            guard let pager = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? UIScrollView }).first(where: \.isPagingEnabled)
+            else { return }
+            // While the hero shows, the pager sits lower than its layout (HeroSlide) and runs past
+            // the screen's bottom safe area; UIKit would inset it for that, which lets the whole
+            // page scroll up and down by the inset once a tab body reaches its end.
+            if pager.contentInsetAdjustmentBehavior != .never {
+                pager.contentInsetAdjustmentBehavior = .never
+                pager.alwaysBounceVertical = false
+                pager.contentOffset.y = 0
+            }
+            guard !(pager.gestureRecognizers ?? []).contains(where: { $0 is PagingGate }),
                   let back = sequence(first: next, next: { $0?.next }).lazy.compactMap({ $0 as? UIViewController }).first?
                       .navigationController?.interactiveContentPopGestureRecognizer
             else { return }

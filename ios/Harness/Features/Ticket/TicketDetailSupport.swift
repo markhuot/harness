@@ -8,46 +8,41 @@ import SwiftUI
 
 /// The ticket hero's collapse: HeroCollapse's rules fed by the tab body's
 /// scroll gestures. `show()` brings it back (another tab, news on the ticket); `measured` takes the
-/// hero's height while it's shown, which is how much room hiding it gives the tab body.
+/// hero's height while it's shown.
 ///
-/// A toggle changes the layout once, without animation (`hidden`), and animates only `progress`,
-/// which HeroSlide turns into a render-time offset of the tab strip and pager. Animating the hero's
-/// frame instead re-lays out the pager and the tab body's scroll view on every frame, which drops
-/// frames on a long spec.
+/// Hiding or showing the hero changes no layout. The tab strip and pager are always laid out as if
+/// the hero were gone, under it, and sit `distance` lower while it shows (HeroSlide, a render-time
+/// offset); a toggle animates only that offset, and the tab bodies keep the hero's room at their
+/// end (`distance` as a bottom inset). Changing the layout instead re-laid out the tab body twice
+/// per toggle, as the slide started and as it ended, which on a long transcript dropped frames.
 ///
-/// Only TicketHeroSlot and HeroSlide read its state, never the ticket screen's body: a toggle runs in
-/// the middle of a scroll, and re-rendering the screen from there redrew every tab body (the whole
-/// spec's markdown, the transcript's rows) on the frame the slide starts.
+/// Only TicketHeroSlot, HeroSlide and HeroRoom read its state, never the ticket screen's body: a
+/// toggle runs in the middle of a scroll, and re-rendering the screen from there redrew every tab
+/// body on the frame the slide starts.
 @MainActor
 @Observable
 final class TicketDetailHeroCollapse {
-    /// The hero takes no room: changes at once.
     private(set) var hidden = false
     /// 1 hidden, 0 shown, animated between them: how far the slide has gone.
     private(set) var progress: Double = 0
-    /// How far the tab strip slides: the hero's height when it last toggled.
+    /// The hero's height (while it last showed): how far below it the tab strip sits while it shows,
+    /// and the room the tab bodies keep at their end.
     private(set) var distance: Double = 0
-    /// The slide is under way. A global frame read inside the sliding views is off by the slide's
-    /// offset until it ends, so geometry the screen lays out from waits for `settled`.
+    /// The slide is under way. A global frame read inside the sliding views moves with the slide's
+    /// offset until it ends, so geometry the screen lays out from ignores readings until then.
     @ObservationIgnored private(set) var sliding = false
-    /// Called when a slide ends (not one cut short by the next toggle).
-    @ObservationIgnored var settled: () -> Void = {}
     @ObservationIgnored private var state = HeroCollapse.shown
-    @ObservationIgnored private var heroHeight: Double = 0
     @ObservationIgnored private var slides = 0
 
     func send(_ e: CollapseEvent) {
-        let next = HeroCollapse.step(state, e, heroHeight: heroHeight)
+        let next = HeroCollapse.step(state, e, heroHeight: distance)
         state = next
         guard next.hidden != hidden else { return }
         // Instruments' Points of Interest: each toggle, to line up with the hitches around it.
         Self.signposter.emitEvent("Hero toggle", "\(next.hidden ? "hide" : "show")")
         var instant = Transaction(animation: nil)
         instant.disablesAnimations = true
-        withTransaction(instant) {
-            hidden = next.hidden
-            distance = heroHeight
-        }
+        withTransaction(instant) { hidden = next.hidden }
         slides += 1
         let slide = slides
         sliding = true
@@ -56,47 +51,49 @@ final class TicketDetailHeroCollapse {
         } completion: { [weak self] in
             guard let self, slide == slides else { return }
             sliding = false
-            settled()
         }
     }
 
     func show() { send(.show) }
 
     func measured(_ height: Double) {
-        if !state.hidden { heroHeight = height }
+        guard !state.hidden, height != distance else { return }
+        var instant = Transaction(animation: nil)
+        instant.disablesAnimations = true
+        withTransaction(instant) { distance = height }
     }
+
+    /// Where the tab strip and pager sit below their layout once a slide is over.
+    var restingOffset: Double { hidden ? 0 : distance }
 
     private static let signposter = OSSignposter(subsystem: "com.markhuot.harness", category: .pointsOfInterest)
 }
 
-/// On the hero: its slot, zero high while it's hidden. The hero keeps drawing there, under the tab
-/// strip and pager, which slide over it (HeroSlide).
+/// On the hero: hidden, it keeps drawing under the tab strip and pager, which cover it (HeroSlide),
+/// but takes no taps and is out of VoiceOver.
 struct TicketHeroSlot: ViewModifier {
     let hero: TicketDetailHeroCollapse
 
     func body(content: Content) -> some View {
         content
-            .frame(height: hero.hidden ? 0 : nil, alignment: .top)
             .allowsHitTesting(!hero.hidden)
             .accessibilityHidden(hero.hidden)
     }
 }
 
-/// On the tab strip and pager under the hero: keeps them where they were drawn when the hero's
-/// room appears or goes at once, then slides them the rest of the way as `progress` animates. Only
-/// `progress` is interpolated, and only into a visual effect, so no frame of the slide lays
-/// anything out.
+/// On the tab strip and pager: `distance` lower while the hero shows, sliding up over it as it
+/// hides. Only `progress` is interpolated, and only into a visual effect, so no frame of the slide
+/// lays anything out.
 struct HeroSlide: ViewModifier {
     let hero: TicketDetailHeroCollapse
 
     func body(content: Content) -> some View {
-        content.modifier(HeroSlideOffset(progress: hero.progress, hidden: hero.hidden, distance: hero.distance))
+        content.modifier(HeroSlideOffset(progress: hero.progress, distance: hero.distance))
     }
 }
 
 private struct HeroSlideOffset: ViewModifier, Animatable {
     var progress: Double
-    let hidden: Bool
     let distance: Double
 
     nonisolated var animatableData: Double {
@@ -105,10 +102,20 @@ private struct HeroSlideOffset: ViewModifier, Animatable {
     }
 
     func body(content: Content) -> some View {
-        // Hidden: the layout moved up `distance`, so start that far down. Shown: it moved down, so
-        // start that far up.
-        let y = distance * ((hidden ? 1 : 0) - progress)
+        let y = distance * (1 - progress)
         content.visualEffect { c, _ in c.offset(y: y) }
+    }
+}
+
+/// On a tab page: its bottom inset, the composer's overlap plus the hero's room. While the hero
+/// shows, the page sits `distance` lower, so its last `distance` is below the screen; keeping that
+/// room at the end at all times means a toggle changes no inset (and lays nothing out).
+struct HeroRoom: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+    let overlap: CGFloat
+
+    func body(content: Content) -> some View {
+        content.safeAreaPadding(.bottom, overlap + hero.distance)
     }
 }
 
@@ -139,24 +146,14 @@ final class TicketDetailRelay {
     private var onTab: (TicketTab) -> Void = { _ in }
     private var annotate: (AnnotationRequest) -> Void = { _ in }
     private var focusComposer: () -> Void = {}
-    private var setPageBottom: (CGFloat) -> Void = { _ in }
     private var cachedSink: (holder: ObjectIdentifier, sink: AnnotationSink)?
-    /// The page's latest bottom edge on screen, read while the hero slides too; the screen takes it
-    /// once the slide ends.
-    var pageBottom: CGFloat?
 
     func update(hero: TicketDetailHeroCollapse, onTab: @escaping (TicketTab) -> Void,
-                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void,
-                setPageBottom: @escaping (CGFloat) -> Void) {
+                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void) {
         self.hero = hero
         self.onTab = onTab
         self.annotate = annotate
         self.focusComposer = focusComposer
-        self.setPageBottom = setPageBottom
-        hero.settled = { [weak self] in
-            guard let self, let pageBottom else { return }
-            self.setPageBottom(pageBottom)
-        }
     }
 
     private(set) lazy var tabOpener = TicketDetailTabOpener { [weak self] t in
