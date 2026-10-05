@@ -768,8 +768,9 @@ Harness tools (always exposed, via MCP for claude-code):
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
-| `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab? }` → names the tab; `tab` with `new_tab` is refused. See "Browser tabs" |
-| `browser_tabs` | ″ | `{}` → one line per open tab: number, title, URL |
+| `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab?, device?, width?, height? }` → names the tab and its size; `tab` with `new_tab` is refused; the size is set before the page loads. See "Browser tabs" |
+| `browser_tabs` | ″ | `{ tab? }` → one line per tab: number, title, URL, mode and size, and its failed-request and console-error counts; with `tab`, that tab in full (state, size, scroll, requests failed-first, console). A suspended tab isn't reopened |
+| `browser_resize` | ″ | `{ device?, width?, height?, tab? }` (at least one): `device` resets to its preset size and reloads; `width`/`height` keep the mode. Any tab of the session ("your own tabs" is prompt guidance only); ends a viewer's Responsive |
 | `browser_close_tab` | ″ | `{ tab }` |
 | `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars?, tab? }` |
 | `browser_click` | ″ | `{ selector, tab? }` |
@@ -1481,8 +1482,50 @@ target in its own headless window (so every tab paints and can screencast). Numb
   frame; frames carry `tabId` so a client drops in-flight frames from the tab it left.
 - **Viewer input.** `browser.input { tabId?, viewerId? }` without a tab goes to that viewer's
   watched tab. `newTab { url? }` opens a tab and moves that viewer to it; `closeTab` closes the input's tab, and
-  closing the last one while anyone watches leaves a blank tab in its place. `resize` sets the
-  session's viewport for every tab, including ones opened later, so a switch needs no resize.
+  closing the last one while anyone watches leaves a blank tab in its place. The size inputs are
+  below.
+- **Sizes.** Each tab has its own `BrowserSize { device, width, height, responsive }`
+  (`BrowserState.size`, `BrowserTab.size`), so an agent can keep one tab on desktop and another on
+  a phone. New tabs start as desktop and Responsive at `BROWSER_DESKTOP` (1280×800), so a page
+  fills the pane of whoever has it open, as the browser always did; a popup opens in its opener's
+  mode and size. `device` is the input mode: `"desktop"` is Chrome's own mouse and user agent;
+  `"mobile"` sets `setDeviceMetricsOverride { mobile: true }` (so `<meta name="viewport">` applies,
+  and a page without one lays out 980 wide and is shown shrunk, as on a phone), touch emulation
+  (`pointer: coarse`, touch events) and `BROWSER_MOBILE_UA` (iOS Safari). On a mobile tab, mouse
+  presses (a viewer's left button, an agent's `click`) are sent as `Input.dispatchTouchEvent`
+  touches, which the page turns into the click a phone makes; hover moves are dropped and the
+  wheel still scrolls. (Chrome's `setEmitTouchEventsForMouse` is not used: the mouse presses it
+  converts never answer `Input.dispatchMouseEvent`.) The width and height are free in either mode,
+  clamped to 100–4096, and `deviceScaleFactor` stays 1. The inputs:
+  - `device { device }` (the Desktop | Mobile buttons): that mode at its preset size
+    (`BROWSER_DESKTOP`, `BROWSER_MOBILE` 393×852), Responsive off, and the page reloads so the
+    server sees the user agent too, even when the mode didn't change (the button is a reset).
+  - `size { width, height }` (the width × height inputs): keeps the mode, Responsive off, no reload.
+  - `responsive { on, width?, height? }` (the switch): on, the tab takes the sender's stage size
+    and follows it; that subscriber becomes the owner, and the last to switch it on wins. Off keeps
+    the size.
+  - `resize { width, height }` is a viewer's stage size. It counts only from the owner while
+    Responsive is on and is dropped otherwise, so opening a pane never resizes a tab (older apps
+    keep sending it and just see the tab's size).
+  The owner gets `BrowserState.sizeOwner: true` (every other viewer `false`). A Responsive tab
+  without an owner (a new tab, or its owner unsubscribed, switched tabs or its socket closed) is
+  handed to the newest viewer watching it (`refresh`), which then sends its stage size; with nobody
+  watching, it keeps its size and stays Responsive for the next viewer. An agent that needs a size
+  that holds still sets one, which turns Responsive off. Agents set sizes with `browser_open { device?, width?, height? }` (applied before the page
+  loads, so no reload) and `browser_resize`; either one ends a viewer's Responsive, like a button.
+  Nothing records who opened a tab: "resize your own tabs" is guidance in the run prompt. Both
+  apps keep the controls for the tab on screen in a size row under the URL bar, shown or hidden by
+  a Size toggle beside Annotate (remembered); the bar itself has only back, forward, reload, the
+  URL and those icon buttons, and + sits at the pinned right end of the scrolling tab strip. Both draw the frame letterboxed, and a pinch (a trackpad pinch, `wheel` with `ctrlKey`,
+  on the Mac) zooms the drawn frame 1–4× and pans it (`shared/src/state/browserZoom.ts`, ported to
+  HarnessKit's `BrowserZoom`), so a desktop page shrunk onto a phone stays usable; the page never
+  sees the pinch, and input maps through the zoomed frame.
+- **Page info.** Each live tab keeps, since its main frame last navigated, its last 100 network
+  requests (`Network.enable`: method, URL, type, status, failure, duration) and its last 50
+  console errors and warnings and uncaught exceptions (`Runtime.consoleAPICalled`,
+  `Runtime.exceptionThrown`). `tabs()` adds each tab's failed-request (failed, not canceled, or
+  status ≥ 400) and console counts; `tabInfo(sessionId, tab)` returns them in full with the scroll
+  position, for `browser_tabs { tab }`. A suspended tab reports its stored URL, title and size.
 - **Suspended tabs.** A tab outlives its Chrome page, since Chrome runs with background throttling
   off and every leftover page keeps its timers and rendering going. A suspended tab keeps its
   number, URL and title with no page (`BrowserTab.suspended`, and `BrowserState.suspended` for a
@@ -1503,7 +1546,9 @@ target in its own headless window (so every tab paints and can screencast). Numb
     and a page that closes itself (`window.close()`) removes its tab.
   A refresh reopens any suspended tab someone watches, so a viewer is never left on a page-less tab.
 - **Storage.** Each session's tabs are kept in the `browser_tabs` table (one row per session: the
-  next tab number and every tab's id, URL and title as JSON, deleted with the session). Writes
+  next tab number and every tab's id, URL, title and size (`{ device, width, height, responsive }`,
+  never the owner, which is a live viewer; a missing or broken one loads as a new tab's) as JSON,
+  deleted with the session). Writes
   follow every state change (navigation, in-page navigation, title changes), coalesced 200 ms, and
   `shutdown` flushes them. After a restart a session's entry is loaded on first use with every tab
   suspended; listing tabs doesn't start Chrome.
@@ -1908,11 +1953,11 @@ so a ticket keeps working after one is moved or deleted.
     waking it. It answers the element's CSS selector and its visible text (`BrowserElement`): `#id`
     when an id is unique in the page, else `tag:nth-of-type(n)` steps from the nearest unique id or
     `body`, up to 1000 characters, and innerText with whitespace collapsed, up to 200. It answers
-    null when the tab has navigated, scrolled or been resized since the screenshot (a viewer's pane
-    resizes the tab, which reflows the page), so a mark never names the wrong element. Annotate
-    in the browser pane first applies any resize still waiting on its debounce and waits (up to
-    2 s) for a frame at the pane's size, so the screenshot shows the page at the size the lookups
-    will find it. The mark keeps them as `path` and `text` (valid only with `page`), shown under
+    null when the tab has navigated, scrolled or been resized since the screenshot (a size change,
+    or the pane of a Responsive viewer, reflows the page), so a mark never names the wrong element.
+    When this viewer drives the size (Responsive), Annotate in the browser pane first applies any
+    resize still waiting on its debounce and waits (up to 2 s) for a frame at the pane's size, so
+    the screenshot shows the page at the size the lookups will find it. The mark keeps them as `path` and `text` (valid only with `page`), shown under
     its note as `#save · "Save"`. Moving an anchor forgets its element until the next answer
     (`moveMark`, `setMarkElement`).
   - **To the agent.** The service validates each annotation when it resolves the attachments (an
@@ -2778,8 +2823,12 @@ the conventions, and ios/README.md the build and test commands.
 - **Browser tab.** Screencast frames are letterboxed into the stage and swapped only once decoded.
   A tap sends move + down + up, a pan sends wheel events in page pixels, and hold-then-drag sends
   a mouse drag (HarnessKit `BrowserInput`). A hidden text field carries the keyboard (diffed into
-  text inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
-  only on real changes. A + button opens a tab (`newTab`); a strip of chips (shown even for a lone
+  text inserts and Backspaces). A size row under the URL bar, shown by the Size toggle, has the
+  Desktop | Mobile control, the Responsive switch and width × height fields (see "Browser tabs");
+  the stage size is sent as `resize` only while this viewer owns Responsive (`sizeOwner`, also when
+  the service hands it a tab), after the first `browser.state` and only on real changes. Pinching zooms the drawn frame 1–4× around the pinch and two fingers
+  pan it (`BrowserZoom`, the port of `shared/src/state/browserZoom.ts`); the page never sees the
+  pinch, and one-finger touches map through the zoomed frame. A + button at the end of the tab strip opens a tab (`newTab`); a strip of chips (shown even for a lone
   tab, so it can be torn off) switches (resubscribing with its `tabId`) and closes them. Each Browser view subscribes with
   a viewer id of its own (one UUID per `BrowserTabModel`) and keeps only the frames and states
   for it (`isBrowserEvent`, the port of `isBrowserEventFor`), so a torn-off browser tab and the

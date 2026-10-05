@@ -327,7 +327,13 @@ try {
   await go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
   const ready = await until("the page's first frame", () => js<boolean>(`!!document.querySelector('[data-testid="browser-annotate"]') && !document.querySelector('[data-testid="browser-annotate"]').disabled`), 20000).catch(() => false);
   check("the browser pane offers Annotate once the page is drawn", ready);
-  // Pressed as soon as it's offered: before the pane's debounced resize has reached the tab.
+  // A new tab is Responsive and follows this pane. Annotate is pressed right after opening the size
+  // row, which shortens the stage, before the new size has reached the tab, so the screenshot has
+  // to wait for it.
+  await js(`document.querySelector('[data-testid="browser-size-toggle"]').click()`);
+  await until("the size row", () => exists('[data-testid="browser-responsive"]'), 5000);
+  const follows = await until("the tab follows this pane", () => js<boolean>(`document.querySelector('[data-testid="browser-responsive"]').classList.contains("owned")`), 5000).catch(() => false);
+  check("the tab follows this pane", follows, await js<string>(`(() => { const b = document.querySelector('[data-testid="browser-responsive"]'); return b.className + " | " + b.title + " | " + [...document.querySelectorAll(".browser-size-input")].map(i => i.value).join("x"); })()`));
   const stageSize = await js<{ width: number; height: number }>(`(() => { const s = document.querySelector('.browser-stage'); return { width: Math.round(s.clientWidth), height: Math.round(s.clientHeight) }; })()`);
   await js(`document.querySelector('[data-testid="browser-annotate"]').click()`);
   check("Annotate opens the annotator on a frozen screenshot of the page", await annotatorOpen());
@@ -361,7 +367,7 @@ try {
   const shotAnn = c2?.attachments?.[1]?.annotation;
   check("each of its marks tells the agent the element it points at (path and text)", shotAnn?.marks.every((m) => m.path === "#save" && m.text === "Save") === true, JSON.stringify(shotAnn?.marks.map((m) => [m.path, m.text])));
   check("marks on other images never name an element", c2?.attachments?.[0]?.annotation?.marks.every((m) => m.path === undefined && m.text === undefined) === true);
-  check("the screenshot is of the page at the pane's size, not the tab's size before the pane resized it", !!page && page.viewport.width === stageSize.width && page.viewport.height === stageSize.height, JSON.stringify({ page: page?.viewport, stage: stageSize }));
+  check("with Responsive on, the screenshot is of the page at the pane's size, not the tab's size before it followed the pane", !!page && page.viewport.width === stageSize.width && page.viewport.height === stageSize.height, JSON.stringify({ page: page?.viewport, stage: stageSize }));
   check("the screenshot's size is the page's in device pixels, named after its host", !!shotAnn && !!page && Math.abs(shotAnn.width - page.viewport.width * page.scale) <= 2 && c2!.attachments![1]!.name === "127.0.0.1.png", JSON.stringify({ w: shotAnn?.width, name: c2?.attachments?.[1]?.name }));
 
   // ================================================================ 5. New session

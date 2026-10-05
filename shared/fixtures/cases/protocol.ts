@@ -9,7 +9,7 @@
 // (unknown event kinds, enum values, content types) that the app must decode without failing.
 
 import type * as P from "../../src/protocol";
-import { ACTIVITY_KINDS, CLASSIFIER_BACKENDS, COMPLETION_ACTIONS, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, TICKET_STATUSES } from "../../src/protocol";
+import { ACTIVITY_KINDS, BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, CLASSIFIER_BACKENDS, COMPLETION_ACTIONS, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, TICKET_STATUSES } from "../../src/protocol";
 import type * as M from "../../src/mentions";
 import type * as C from "../../src/commands";
 
@@ -714,7 +714,26 @@ export const BrowserState: P.BrowserState[] = [
       { id: 2, url: "http://localhost:3000/settings", title: "Settings", loading: false, suspended: true },
     ],
   },
+  // Per-tab sizes: this viewer drives tab 1 (Responsive, touch), tab 5 is a tablet-sized touch tab.
+  {
+    sessionId: "ses_31",
+    tabId: 1,
+    url: "http://localhost:3000/login",
+    title: "Log in",
+    loading: false,
+    size: { device: "mobile", width: 734, height: 612, responsive: true },
+    sizeOwner: true,
+    tabs: [
+      { id: 1, url: "http://localhost:3000/login", title: "Log in", loading: false, size: { device: "mobile", width: 734, height: 612, responsive: true } },
+      { id: 5, url: "http://localhost:3000/", title: "Home", loading: false, size: { device: "mobile", width: 1280, height: 800, responsive: false } },
+      { id: 6, url: "about:blank", title: "", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: false } },
+    ],
+  },
+  { sessionId: "ses_31", tabId: 6, url: "about:blank", title: "", loading: false, size: { device: "desktop", width: 1280, height: 800, responsive: false }, sizeOwner: false },
 ];
+
+/** The size presets and limits both apps read (BrowserSize). */
+export const BrowserSizeConstants = { BROWSER_DESKTOP, BROWSER_MOBILE, BROWSER_MIN_SIDE, BROWSER_MAX_SIDE };
 
 export const BranchInfo: P.BranchInfo[] = [
   { name: "main", lastCommitAt: T0, checkedOutAt: "/Users/mark/Sites/nytimes" },
@@ -854,6 +873,11 @@ export const BrowserInput: P.BrowserInput[] = [
   { type: "forward" },
   { type: "reload" },
   { type: "resize", width: 1024, height: 768 },
+  { type: "device", device: "mobile" },
+  { type: "device", device: "desktop" },
+  { type: "size", width: 1280, height: 800 },
+  { type: "responsive", on: true, width: 734, height: 612 },
+  { type: "responsive", on: false },
   { type: "newTab", url: "http://localhost:3000/docs" },
   { type: "newTab" },
   { type: "closeTab" },
@@ -1046,6 +1070,7 @@ export const enums: Record<string, readonly string[]> = {
   MouseAction: all<Extract<P.BrowserInput, { type: "mouse" }>["action"]>({ move: true, down: true, up: true, wheel: true }),
   MouseButton: all<NonNullable<Extract<P.BrowserInput, { type: "mouse" }>["button"]>>({ left: true, right: true, middle: true }),
   KeyAction: all<Extract<P.BrowserInput, { type: "key" }>["action"]>({ down: true, up: true }),
+  BrowserDevice: all<P.BrowserDevice>({ desktop: true, mobile: true }),
 };
 
 /** The discriminators of each union, in protocol.ts order (checked against the Swift enums). */
@@ -1074,7 +1099,7 @@ export const discriminators: Record<string, string[]> = {
   ToolResultContent: all<P.ToolResultContent["type"]>({ text: true, image: true }),
   ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, ping: true }),
   ServerMessage: all<P.ServerMessage["type"]>({ welcome: true, event: true, pong: true, error: true }),
-  BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, newTab: true, closeTab: true }),
+  BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, device: true, size: true, responsive: true, newTab: true, closeTab: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),
 };

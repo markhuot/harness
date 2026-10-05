@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
 import { toolsForRun } from "./index";
 
-const BROWSER = ["browser_open", "browser_tabs", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
+const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot"];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
 const NATIVE_READ = ["read_file", "list_files", "bash"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];

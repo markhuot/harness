@@ -464,6 +464,29 @@
       "height": 768
     },
     {
+      "type": "device",
+      "device": "mobile"
+    },
+    {
+      "type": "device",
+      "device": "desktop"
+    },
+    {
+      "type": "size",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "type": "responsive",
+      "on": true,
+      "width": 734,
+      "height": 612
+    },
+    {
+      "type": "responsive",
+      "on": false
+    },
+    {
       "type": "newTab",
       "url": "http://localhost:3000/docs"
     },
@@ -510,6 +533,18 @@
       }
     }
   ],
+  "BrowserSizeConstants": {
+    "BROWSER_DESKTOP": {
+      "width": 1280,
+      "height": 800
+    },
+    "BROWSER_MOBILE": {
+      "width": 393,
+      "height": 852
+    },
+    "BROWSER_MIN_SIDE": 100,
+    "BROWSER_MAX_SIDE": 4096
+  },
   "BrowserState": [
     {
       "sessionId": "ses_31",
@@ -573,6 +608,73 @@
           "suspended": true
         }
       ]
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 1,
+      "url": "http://localhost:3000/login",
+      "title": "Log in",
+      "loading": false,
+      "size": {
+        "device": "mobile",
+        "width": 734,
+        "height": 612,
+        "responsive": true
+      },
+      "sizeOwner": true,
+      "tabs": [
+        {
+          "id": 1,
+          "url": "http://localhost:3000/login",
+          "title": "Log in",
+          "loading": false,
+          "size": {
+            "device": "mobile",
+            "width": 734,
+            "height": 612,
+            "responsive": true
+          }
+        },
+        {
+          "id": 5,
+          "url": "http://localhost:3000/",
+          "title": "Home",
+          "loading": false,
+          "size": {
+            "device": "mobile",
+            "width": 1280,
+            "height": 800,
+            "responsive": false
+          }
+        },
+        {
+          "id": 6,
+          "url": "about:blank",
+          "title": "",
+          "loading": false,
+          "suspended": true,
+          "size": {
+            "device": "desktop",
+            "width": 1280,
+            "height": 800,
+            "responsive": false
+          }
+        }
+      ]
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 6,
+      "url": "about:blank",
+      "title": "",
+      "loading": false,
+      "size": {
+        "device": "desktop",
+        "width": 1280,
+        "height": 800,
+        "responsive": false
+      },
+      "sizeOwner": false
     }
   ],
   "ClientMessage": [
@@ -4276,6 +4378,9 @@
       "forward",
       "reload",
       "resize",
+      "device",
+      "size",
+      "responsive",
       "newTab",
       "closeTab"
     ],
@@ -4508,6 +4613,10 @@
     "KeyAction": [
       "down",
       "up"
+    ],
+    "BrowserDevice": [
+      "desktop",
+      "mobile"
     ]
   },
   "forwardCompat": [

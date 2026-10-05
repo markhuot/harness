@@ -17,6 +17,7 @@ export * from "./markdown";
 export * from "./specDiff";
 export * from "./icons";
 export * from "./stickToBottom";
+export * from "./browserZoom";
 export * from "./watchers";
 export * from "./attachments";
 export * from "./promptAttachments";

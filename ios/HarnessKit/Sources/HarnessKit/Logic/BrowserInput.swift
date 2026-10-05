@@ -294,21 +294,60 @@ public enum BrowserTyping {
 /// browser.state for the session confirms the subscription, then only sizes that differ from the
 /// last one sent. Call reset() for a new session or after a reconnect.
 ///
+/// A tab with a size (BrowserState.size) follows a stage only while it's responsive, and only the
+/// stage of the viewer the service names its owner (`sizeOwner`: the one that switched it on, or
+/// the newest one watching it, handed on when the owner leaves): feed every state to `follow`,
+/// which says when to send the stage, and `take` sends nothing while another viewer (or nobody)
+/// drives the tab. A state without a size (a service from before per-tab sizes) leaves every
+/// viewer driving it, as before.
+///
 /// (Debounce `take` by 250 ms after layout and 100 ms after confirm; that belongs in the view,
 /// e.g. `.task(id: size) { try await Task.sleep(for: .milliseconds(250)); … }`.)
 public struct ResizeGate: Sendable, Equatable {
     private var subscribed = false
     private var lastSent: (Int, Int)?
+    /// The tab the last state was for.
+    private var tab: Int?
+    /// This viewer's stage size drives the tab.
+    public private(set) var drives = true
 
     public init() {}
 
     public static func == (a: Self, b: Self) -> Bool {
-        a.subscribed == b.subscribed && a.lastSent?.0 == b.lastSent?.0 && a.lastSent?.1 == b.lastSent?.1
+        a.subscribed == b.subscribed && a.drives == b.drives && a.tab == b.tab && a.lastSent?.0 == b.lastSent?.0 && a.lastSent?.1 == b.lastSent?.1
     }
 
     public mutating func reset() {
         subscribed = false
         lastSent = nil
+        tab = nil
+        drives = true
+    }
+
+    /// A browser.state for the tab shown: whether this viewer drives its size now. Losing it, or
+    /// moving to another sized tab, forgets the last size sent, so driving again sends the stage
+    /// even when it's the same size it was (the tab has followed someone else's stage meanwhile, or
+    /// has a size of its own). True when this viewer just started driving a sized tab (it switched
+    /// Responsive on, the service handed it over, or it moved to a tab it owns): schedule a resize.
+    @discardableResult
+    public mutating func follow(_ state: BrowserState) -> Bool {
+        let drove = drives
+        let moved = state.tabId != tab
+        tab = state.tabId
+        drives = state.size == nil || state.ownsSize
+        if !drives || (moved && state.size != nil) { lastSent = nil }
+        return drives && state.size != nil && (!drove || moved)
+    }
+
+    /// The Responsive switch turned on from this viewer: the input carrying its stage size, which
+    /// counts as sent (the state that follows makes this viewer the owner, and its stage is
+    /// already the tab's size). Sizes that can't be an Int are left off.
+    public mutating func responsiveOn(width: Double, height: Double) -> BrowserInput {
+        guard let w = Int(exactly: JSCompat.round(width)), let h = Int(exactly: JSCompat.round(height)), w > 0, h > 0 else {
+            return .responsive(on: true, width: nil, height: nil)
+        }
+        lastSent = (w, h)
+        return .responsive(on: true, width: w, height: h)
     }
 
     /// A browser.state arrived; true the first time (schedule a resize now).
@@ -321,7 +360,7 @@ public struct ResizeGate: Sendable, Equatable {
     /// The resize to send for this stage size, or nil. NaN and infinite sizes can't be an Int, so
     /// they're nil.
     public mutating func take(width: Double, height: Double) -> BrowserInput? {
-        guard subscribed else { return nil }
+        guard subscribed, drives else { return nil }
         guard let w = Int(exactly: JSCompat.round(width)), let h = Int(exactly: JSCompat.round(height)) else { return nil }
         if w <= 0 || h <= 0 { return nil }
         if let l = lastSent, l == (w, h) { return nil }

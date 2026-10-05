@@ -872,7 +872,13 @@ try {
   const parsed = JSON.parse(down.slice(down.indexOf("{")));
   check("browser mouse input forwarded", parsed.button === "left" && parsed.clickCount === 1, down.trim());
   check("browser key input forwarded", inputs.some((l) => l.includes('"key":"a"')));
-  check("browser resize sent", inputs.some((l) => l.includes('"type":"resize"')));
+  // The bar keeps the URL, Size and Annotate; the size controls sit in a row Size opens (it stays
+  // open for the divider check further down). A new tab is Responsive and follows the pane watching
+  // it, which sends its stage size. browser-size-check.ts covers the size controls in depth.
+  check("the size row starts closed, and there's no Live indicator", !(await exists("[data-testid=browser-size-row]")) && !(await exists(".browser-live")));
+  await js(`document.querySelector("[data-testid=browser-size-toggle]").click()`);
+  const responsiveOn = await until("responsive on", () => js<boolean>(`!!document.querySelector("[data-testid=browser-responsive]")?.classList.contains("owned")`)).catch(() => false);
+  check("a new tab follows this pane (Responsive, owned) and gets its stage size", responsiveOn && inputs.some((l) => l.includes('"type":"resize"')));
 
   // 6a. Browser tabs: the mock opens two (Local dev server, Docs). + opens a third (current), a chip
   // switches back, × closes the others, and the lone tab left keeps its chip (so it can be torn off).
@@ -1417,6 +1423,12 @@ try {
     await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
     await until("browser stage", () => exists(".browser-canvas"));
     await Bun.sleep(600);
+    // Only a pane that owns Responsive drives the size (the socket may have reconnected since step 6).
+    const owned = `!!document.querySelector("[data-testid=browser-responsive]")?.classList.contains("owned")`;
+    if (!(await exists("[data-testid=browser-size-row]"))) await js(`document.querySelector("[data-testid=browser-size-toggle]").click()`);
+    await until("size row", () => exists("[data-testid=browser-responsive]")).catch(() => false);
+    if (!(await js<boolean>(owned))) await js(`document.querySelector("[data-testid=browser-responsive]").click()`);
+    await until("responsive owned", () => js<boolean>(owned)).catch(() => false);
     await drag(divider, -120);
     const stageW = await until("stage resized", async () => {
       const w = await js<number>(`Math.round(document.querySelector(".browser-stage").clientWidth)`);

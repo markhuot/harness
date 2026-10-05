@@ -1,12 +1,18 @@
 import HarnessKit
 import SwiftUI
 
-/// Live view of the session's headless Chrome, one browser tab at a time (a strip of tab chips
-/// shows once there are two or more; + opens another). Screencast frames
+/// Live view of the session's headless Chrome, one browser tab at a time (a strip of tab chips that
+/// scrolls sideways, with + pinned at its right end to open another). Screencast frames
 /// (base64 JPEG) are letterboxed into the stage and swapped only once decoded, so a new frame never
 /// flashes blank; touches become page mouse/wheel input (HarnessKit BrowserInput); a hidden text
-/// field carries the keyboard. The page viewport follows the stage size, sent once the
-/// subscription is confirmed and only on change.
+/// field carries the keyboard.
+///
+/// Under the address bar, behind the toolbar's Size button (open or closed is remembered; the
+/// button shows when the service has per-tab sizes), the tab's size: Desktop | Mobile
+/// (each resets to its preset size and reloads), Responsive (the tab follows this stage, sent once
+/// the subscription is confirmed and only on change; lit dimmer when another window drives it) and
+/// W × H. Pinching the stage zooms the drawn frame 1–4× (two fingers pan it, a two-finger double
+/// tap resets it) without the page seeing it; one finger still drives the page through the zoom.
 ///
 /// Each view is its own viewer on the socket (BrowserTabModel.viewer), so a pinned window (iPad)
 /// showing one browser tab (`pinnedTab`: no chip strip, no New tab) streams alongside this one. A
@@ -31,6 +37,15 @@ struct BrowserTabView: View {
     @State private var urlSelection: TextSelection?
     @FocusState private var editingUrl: Bool
     @State private var typing = false
+    @State private var widthDraft = ""
+    @State private var heightDraft = ""
+    @FocusState private var sizeField: SizeField?
+    /// Done applied the drafts, so losing focus doesn't put the old size back.
+    @State private var sizeApplied = false
+    /// The size row is open (remembered across launches; starts closed).
+    @AppStorage("browserSizeRowOpen") private var sizeRowOpen = false
+
+    private enum SizeField: Hashable { case width, height }
 
     init(ticket: Ticket, pinnedTab: Int? = nil) {
         self.ticket = ticket
@@ -57,8 +72,9 @@ struct BrowserTabView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if sizeRowOpen, let size = model.state?.size { sizeRow(size) }
             tabStrip
-            status
+            if let title = shownTitle { status(title) }
             stage
         }
         .background(BrowserKeyField(focused: $typing, onText: model.typed, onKey: model.press)
@@ -77,6 +93,26 @@ struct BrowserTabView: View {
                 urlSelection = TextSelection(range: urlDraft.startIndex..<urlDraft.endIndex)
             } else {
                 urlDraft = model.state?.url ?? urlDraft
+            }
+        }
+        // The fields follow the tab's size, but never over an edit in progress.
+        .onChange(of: model.state?.size, initial: true) { _, size in
+            if sizeField == nil, let size { showSize(size) }
+        }
+        .onChange(of: sizeField) { _, field in
+            guard field == nil else { return }
+            if sizeApplied {
+                sizeApplied = false
+            } else if let size = model.state?.size {
+                showSize(size)
+            }
+        }
+        .toolbar {
+            if sizeField != nil {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { applySize() }.fontWeight(.semibold)
+                }
             }
         }
     }
@@ -111,17 +147,14 @@ struct BrowserTabView: View {
             BrowserBarButton(icon: "", systemImage: typing ? "keyboard.chevron.compact.down" : "keyboard", label: typing ? "Hide keyboard" : "Type into the page", active: typing, disabled: model.frame == nil) {
                 typing.toggle()
             }
+            if model.state?.size != nil {
+                BrowserBarButton(icon: "", systemImage: "aspectratio", label: sizeRowOpen ? "Hide size" : "Size", active: sizeRowOpen) {
+                    sizeRowOpen.toggle()
+                }
+            }
             BrowserBarButton(icon: "", systemImage: "pencil.and.scribble", label: "Annotate", busy: capturing,
                              disabled: model.frame == nil || capturing || openAnnotator == nil || sink == nil) {
                 annotate()
-            }
-            if pinnedTab == nil {
-                BrowserBarButton(icon: "plus", label: "New tab", disabled: !BrowserTabSelection.supportsTabs(model.state)) {
-                    model.newTab()
-                    // Like Safari: a new tab starts in the address bar.
-                    urlDraft = ""
-                    editingUrl = true
-                }
             }
         }
         .padding(6)
@@ -129,45 +162,127 @@ struct BrowserTabView: View {
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
     }
 
+    // MARK: Size
+
+    private func sizeRow(_ size: BrowserSize) -> some View {
+        let owner = model.state?.ownsSize == true
+        let following = size.responsive && !owner
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                BrowserDeviceControl(device: size.device) { model.setDevice($0) }
+                BrowserResponsiveButton(lit: owner, following: following) { model.toggleResponsive() }
+                Spacer(minLength: 0)
+                HStack(spacing: 4) {
+                    sizeTextField("W", text: $widthDraft, field: .width, label: "Width")
+                    Text("×").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
+                    sizeTextField("H", text: $heightDraft, field: .height, label: "Height")
+                }
+            }
+            if following {
+                Text("Following another window")
+                    .font(.scaled(size: 11.5))
+                    .foregroundStyle(c.text3)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(c.bgElev)
+        .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
+    }
+
+    private func sizeTextField(_ prompt: String, text: Binding<String>, field: SizeField, label: String) -> some View {
+        TextField("", text: text, prompt: Text(prompt).foregroundStyle(c.text3))
+            .font(.scaled(size: 12.5, design: .monospaced))
+            .foregroundStyle(c.text)
+            .multilineTextAlignment(.center)
+            .keyboardType(.numberPad)
+            .submitLabel(.done)
+            .focused($sizeField, equals: field)
+            .onSubmit { applySize() }
+            .frame(width: 50)
+            .padding(.vertical, 5)
+            .background(c.bgSunken, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(sizeField == field ? c.accent : c.border, lineWidth: sizeField == field ? 1 : 0.5))
+            .accessibilityLabel(label)
+    }
+
+    private func showSize(_ size: BrowserSize) {
+        widthDraft = String(size.width)
+        heightDraft = String(size.height)
+    }
+
+    /// Done (or Return on a hardware keyboard): the tab at the typed size, held to 100–4096,
+    /// keeping its mode. Something that isn't a number puts the tab's size back.
+    private func applySize() {
+        guard let size = model.state?.size else { return }
+        if let w = BrowserSize.clampSide(widthDraft), let h = BrowserSize.clampSide(heightDraft) {
+            widthDraft = String(w)
+            heightDraft = String(h)
+            if w != size.width || h != size.height || size.responsive { model.setSize(width: w, height: h) }
+        } else {
+            showSize(size)
+        }
+        sizeApplied = sizeField != nil
+        sizeField = nil
+    }
+
     // MARK: Tabs
 
-    /// The open tabs, even a lone one (so it can be torn off); the shown one is highlighted and kept in view.
+    /// The open tabs, even a lone one (so it can be torn off), scrolling sideways when they don't
+    /// fit, with + (New tab) pinned at the right end; the shown one is highlighted and kept in view.
+    /// Not in a pinned window, nor with a service that has no tabs.
     @ViewBuilder private var tabStrip: some View {
-        let tabs = pinnedTab == nil ? BrowserTabSelection.strip(model.state) : []
-        let tornOff = WindowDirectory.shared.tornOff(ticket.key)
-        if !tabs.isEmpty {
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(tabs) { tab in
-                            let away = tornOff.browserTabs.contains(tab.id)
-                            BrowserTabChip(
-                                tab: tab, current: tab.id == model.selection.shown, away: away,
-                                select: { model.selectTab(tab.id) }, close: { model.closeTab(tab.id) })
-                                .tearOff(.pinned(ticket.key, .browser, browserTab: tab.id), tornOff: away) { model.selectTab(tab.id) }
-                                .id(tab.id)
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+        if pinnedTab == nil, BrowserTabSelection.supportsTabs(model.state) {
+            HStack(spacing: 0) {
+                tabChips
+                BrowserBarButton(icon: "plus", label: "New tab") {
+                    model.newTab()
+                    // Like Safari: a new tab starts in the address bar.
+                    urlDraft = ""
+                    editingUrl = true
                 }
-                .onChange(of: model.selection.shown, initial: true) { _, id in
-                    guard let id else { return }
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
-                }
+                .padding(.trailing, 4)
             }
             .background(c.bgElev)
             .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 0.5) }
         }
     }
 
-    private var status: some View {
-        HStack(spacing: 6) {
-            Circle().fill(model.live ? c.green : c.text3).frame(width: 7, height: 7)
-            Text(model.live ? "Live" : "Idle").font(.scaled(size: 12)).foregroundStyle(c.text3)
-            if let title = model.state?.title, !title.isEmpty, title != model.state?.url {
-                Text("· \(title)").font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
+    private var tabChips: some View {
+        let tabs = BrowserTabSelection.strip(model.state)
+        let tornOff = WindowDirectory.shared.tornOff(ticket.key)
+        return ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(tabs) { tab in
+                        let away = tornOff.browserTabs.contains(tab.id)
+                        BrowserTabChip(
+                            tab: tab, current: tab.id == model.selection.shown, away: away,
+                            select: { model.selectTab(tab.id) }, close: { model.closeTab(tab.id) })
+                            .tearOff(.pinned(ticket.key, .browser, browserTab: tab.id), tornOff: away) { model.selectTab(tab.id) }
+                            .id(tab.id)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
+            .onChange(of: model.selection.shown, initial: true) { _, id in
+                guard let id else { return }
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The page's title, when it says more than the address bar does.
+    private var shownTitle: String? {
+        guard let title = model.state?.title, !title.isEmpty, title != model.state?.url else { return nil }
+        return title
+    }
+
+    private func status(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title).font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
@@ -195,9 +310,16 @@ struct BrowserTabView: View {
                     began: { model.touchBegan($0, at: $1) },
                     moved: { model.touchMoved($0, at: $1) },
                     ended: { model.touchEnded($0, at: $1) },
-                    cancelled: { model.touchCancelled() })
+                    cancelled: { model.touchCancelled() },
+                    pinch: .init(
+                        began: { model.pinchBegan($0, $1, at: $2) },
+                        moved: { model.pinchMoved($0, $1) },
+                        ended: { model.pinchEnded(at: $0) },
+                        cancelled: { model.pinchCancelled() }))
                     .accessibilityElement()
-                    .accessibilityLabel("Browser page. Tap to click, drag to scroll, hold then drag to select.")
+                    .accessibilityLabel("Browser page. Tap to click, drag to scroll, hold then drag to select, pinch to zoom.")
+                    .accessibilityValue(model.zoomed == nil ? "" : "Zoomed")
+                    .accessibilityAction(named: "Reset zoom") { model.resetZoom() }
                 if let window = tornOffShown {
                     TornOffPlaceholder(value: window, name: model.state?.tabs?.first { $0.id == window.browserTab }.map(BrowserTabSelection.label) ?? "This tab")
                 } else if pinnedGone {
@@ -259,6 +381,76 @@ struct BrowserTabView: View {
         let id = sessionId
         let tab = model.selection.shown
         if let next = await actions.run(nil, { try await client.browserNavigate(id, url: url, tabId: tab) }) { model.apply(next) }
+    }
+}
+
+/// Desktop | Mobile as one segmented control. Tapping either half sends it, the selected one
+/// included (it resets the tab to that mode's size and reloads), which a Picker wouldn't.
+struct BrowserDeviceControl: View {
+    let device: BrowserDevice
+    let select: (BrowserDevice) -> Void
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        HStack(spacing: 2) {
+            segment(.desktop, "Desktop")
+            segment(.mobile, "Mobile")
+        }
+        .padding(2)
+        .background(c.bgSunken, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c.border, lineWidth: 0.5))
+    }
+
+    private func segment(_ value: BrowserDevice, _ label: String) -> some View {
+        let on = device == value
+        return Button {
+            haptic(.tap)
+            select(value)
+        } label: {
+            Text(label)
+                .font(.scaled(size: 12.5, weight: on ? .semibold : .regular))
+                .foregroundStyle(on ? c.accentText : c.text2)
+                .padding(.horizontal, 10)
+                .frame(height: 26)
+                .background(on ? c.accentSoft : .clear, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(on ? [.isSelected] : [])
+        .accessibilityHint(on ? "Resets to the \(label.lowercased()) size and reloads" : "")
+    }
+}
+
+/// The Responsive switch: lit while the tab follows this stage, lit dimmer while it follows
+/// another window's (tapping then takes it over).
+struct BrowserResponsiveButton: View {
+    let lit: Bool
+    let following: Bool
+    let toggle: () -> Void
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        Button {
+            haptic(.tap)
+            toggle()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right").font(.scaled(size: 11, weight: .semibold))
+                Text("Responsive").font(.scaled(size: 12.5, weight: lit ? .semibold : .regular))
+            }
+            .foregroundStyle(lit || following ? c.accentText : c.text2)
+            .opacity(following ? 0.6 : 1)
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .background(lit || following ? c.accentSoft.opacity(following ? 0.5 : 1) : c.bgSunken, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(lit || following ? .clear : c.border, lineWidth: 0.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Responsive")
+        .accessibilityAddTraits(lit ? [.isSelected] : [])
+        .accessibilityValue(lit ? "On" : following ? "Following another window" : "Off")
     }
 }
 

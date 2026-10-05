@@ -9,7 +9,28 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Each browser tab has its own size controls, on the Mac and on iPhone and iPad, behind the new
+  Size button next to Annotate (the row stays open or closed the way you left it). Desktop and
+  Mobile pick how the page is used: Desktop is a mouse at 1280×800, and Mobile is a touch screen
+  that identifies itself as an iPhone at 393×852. Pressing either one, even the one already
+  selected, resets the tab to that size and reloads the page. The width and height fields show the
+  tab's size, and you can type a new one, such as Mobile at 1024×1366 for a tablet. Responsive,
+  which new tabs start with, makes the tab follow the size of your pane or window; if you turn it
+  on from another device, the tab follows that device instead.
+- Pinch to zoom in the browser: two fingers on iPhone and iPad, or a trackpad pinch on the Mac,
+  zoom into the page you're looking at without the page seeing the pinch, so a desktop-sized page
+  stays readable on a phone.
+- Agents can open a page in Mobile or at any size, resize a tab, and check a tab's failed network
+  requests and console errors.
+
 ### Changed
+
+- When an agent sets a size for a tab, opening the browser on another device no longer resizes it
+  under the agent. On a phone, a page larger than the screen is scaled down to fit.
+- The browser bar has more room for the address: Annotate is an icon, the new-tab + button sits at
+  the end of the tab strip (which scrolls when there are many tabs), and the Live indicator is gone.
 
 - The Browser tab's strip of tabs now shows even when only one browser tab is open, so you can drag
   that tab off into a pane or window of its own.

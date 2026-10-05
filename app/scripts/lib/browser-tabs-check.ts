@@ -27,10 +27,11 @@ export async function checkBrowserTabs(opts: { api: Api; app: App; check: Check;
 
   const chips = () => js<string[]>(`[...document.querySelectorAll(".browser-tab-select")].map(e => e.textContent.trim())`);
   const chipsAre = (want: string) => until(`tab chips ${want}`, async () => (await chips()).join("|") === want, 30000).catch(() => false);
-  // The colour near the canvas's bottom-right corner says which tab is drawn.
+  // The colour right of the canvas's middle says which tab is drawn (the tab keeps its own 1280 × 800,
+  // letterboxed into the pane, so a corner may be outside the frame).
   const tint = () =>
     js<string>(`(() => { const c = document.querySelector(".browser-canvas"); if (!c || !c.width) return "";
-      const d = c.getContext("2d").getImageData(Math.floor(c.width * 0.8), Math.floor(c.height * 0.8), 1, 1).data;
+      const d = c.getContext("2d").getImageData(Math.floor(c.width * 0.7), Math.floor(c.height * 0.5), 1, 1).data;
       return d[0] > 150 && d[1] < 100 ? "red" : d[1] > 150 && d[0] < 100 ? "green" : d[2] > 150 && d[0] < 100 ? "blue" : ""; })()`);
   const drawn = (colour: string) => until(`a ${colour} frame`, async () => (await tint()) === colour, 15000).catch(() => false);
 

@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /// The Browser tab's state and timing glue: the subscription and which browser tab it's on, the
-/// latest decoded frame, live/idle, the resize gate and its debounce, wheel coalescing, and the hidden
+/// latest decoded frame, the resize gate and its debounce, wheel coalescing, and the hidden
 /// field's typing buffer. The input rules themselves are HarnessKit's (TouchGesture,
 /// WheelCoalescer, BrowserTyping, ResizeGate, BrowserTabSelection); this class feeds them touches,
 /// events and clock readings.
@@ -22,9 +22,11 @@ final class BrowserTabModel {
     private(set) var frame: Frame?
     /// The browser tab shown (followed across reconnects and kept while the session stays the same).
     private(set) var selection = BrowserTabSelection()
-    private(set) var live = false
     /// The stage's size (points), from the view's geometry.
     private(set) var stage: CGSize = .zero
+    /// The frame's drawn rect while pinch-zoomed (BrowserZoom), nil at 1×. Reset by a tab switch,
+    /// a frame of another size, or a stage of another size.
+    private(set) var zoomed: Format.Rect?
 
     /// A pinned window's browser tab: the view starts on it and never switches.
     let pinnedTab: Int?
@@ -34,12 +36,12 @@ final class BrowserTabModel {
     @ObservationIgnored private var send: (BrowserInput) -> Void = { _ in }
     @ObservationIgnored private weak var store: BoardStore?
     @ObservationIgnored private var sessionId: String?
-    @ObservationIgnored private var lastFrameAt: Double = 0
     @ObservationIgnored private var gate = ResizeGate()
     @ObservationIgnored private var resizeTask: Task<Void, Never>?
     @ObservationIgnored private var wheel = WheelCoalescer()
     @ObservationIgnored private var wheelTask: Task<Void, Never>?
     @ObservationIgnored private var typing = BrowserTyping.HiddenInput()
+    @ObservationIgnored private var pinch = BrowserPinch()
     // Frames arrive faster than they decode on a slow phone: decode one at a time, and only the
     // newest that arrived meanwhile.
     @ObservationIgnored private var decoding = false
@@ -54,11 +56,14 @@ final class BrowserTabModel {
         selection = BrowserTabSelection(shown: pinnedTab)
     }
 
-    /// What's drawn: the frame letterboxed into the stage (zero before the first frame).
-    var drawn: Format.Rect {
+    /// The frame letterboxed into the stage (zero before the first frame).
+    var fit: Format.Rect {
         guard let frame else { return Format.Rect(x: 0, y: 0, w: 0, h: 0) }
         return Format.fitRect(boxW: stage.width, boxH: stage.height, w: frame.width, h: frame.height)
     }
+
+    /// What's drawn, and what touches map through: the fit rect, pinch-zoomed.
+    var drawn: Format.Rect { zoomed ?? fit }
 
     /// Nothing to show at all: no frame and no state (the session has no browser).
     var empty: Bool { frame == nil && state == nil }
@@ -86,8 +91,6 @@ final class BrowserTabModel {
             case let .browserFrame(_, tabId, data, width, height, _):
                 // Frames still in flight from the tab just left.
                 guard self.selection.accepts(frameTabId: tabId) else { return }
-                self.lastFrameAt = Self.now()
-                if !self.live { self.live = true }
                 self.receiveFrame(data: data, width: width, height: height)
             case let .browserState(_, s, _):
                 self.receive(s)
@@ -96,11 +99,9 @@ final class BrowserTabModel {
             }
         }
         if let client, let s = try? await client.browserState(sessionId, tabId: tab), !Task.isCancelled, state == nil { receive(s) }
-        // Live = a frame within the last 2 s, checked twice a second.
+        // Held until the task is cancelled (a cancelled sleep returns at once).
         while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(500))
-            let isLive = Self.now() - lastFrameAt < 2000
-            if isLive != live { live = isLive }
+            try? await Task.sleep(for: .seconds(3600))
         }
         off()
         store.unsubscribeBrowser(sessionId, viewer: viewer)
@@ -120,6 +121,9 @@ final class BrowserTabModel {
     private func receive(_ s: BrowserState) {
         if selection.receive(s) { dropFrame() }
         state = s
+        // This view took over the tab's size (Responsive switched on here, the service handed it
+        // over, or a new tab): the stage goes once the subscription is confirmed.
+        if gate.follow(s) { scheduleResize(ms: 100) }
     }
 
     /// Forget the current frame (another tab is coming); frames decoding meanwhile are discarded.
@@ -127,6 +131,8 @@ final class BrowserTabModel {
         generation += 1
         frame = nil
         pendingFrame = nil
+        zoomed = nil
+        pinch.cancel()
     }
 
     // MARK: Tabs
@@ -141,6 +147,9 @@ final class BrowserTabModel {
             s.url = t.url
             s.title = t.title
             s.loading = t.loading
+            s.size = t.size ?? s.size
+            // Responsive never follows a viewer to another tab (the service ends it on a switch).
+            s.sizeOwner = false
             state = s
         }
         store?.subscribeBrowser(sessionId, tabId: id, viewer: viewer)
@@ -177,7 +186,9 @@ final class BrowserTabModel {
             }.value
             decoding = false
             if gen == generation, let image {
-                frame = Frame(image: image, width: Double(next.width), height: Double(next.height))
+                let width = Double(next.width), height = Double(next.height)
+                if let old = frame, old.width != width || old.height != height { zoomed = nil }
+                frame = Frame(image: image, width: width, height: height)
             }
             decodeNext()
         }
@@ -185,12 +196,13 @@ final class BrowserTabModel {
 
     // MARK: Resize
 
-    /// The stage was laid out (first layout, rotation, keyboard): resize the page viewport once
-    /// the subscription is confirmed, debounced.
+    /// The stage was laid out (first layout, rotation, keyboard): while this view drives the
+    /// tab's size, resize the page viewport once the subscription is confirmed, debounced.
     func setStage(_ size: CGSize) {
         guard size != stage else { return }
         stage = size
-        scheduleResize(ms: 250)
+        zoomed = nil
+        if gate.drives { scheduleResize(ms: 250) }
     }
 
     /// The tab at the stage's size before a screenshot: a resize still waiting on its debounce goes
@@ -198,6 +210,8 @@ final class BrowserTabModel {
     /// resize lands would show the page at its old size, and every element lookup on it would come
     /// back empty once the tab is resized under it.
     func settleSize() async {
+        // Another view drives the tab (or nobody: a fixed size); the frame is already its size.
+        guard gate.drives else { return }
         resizeTask?.cancel()
         resizeTask = nil
         if let r = gate.take(width: stage.width, height: stage.height) { send(r) }
@@ -217,6 +231,59 @@ final class BrowserTabModel {
             guard let self, !Task.isCancelled else { return }
             if let r = self.gate.take(width: self.stage.width, height: self.stage.height) { self.send(r) }
         }
+    }
+
+    // MARK: Size
+
+    /// Desktop | Mobile: that mode at its preset size, Responsive off, the page reloaded (even
+    /// when the mode didn't change).
+    func setDevice(_ device: BrowserDevice) {
+        send(.device(device))
+    }
+
+    /// The W × H fields: the tab at that size (clamped by the caller), its mode kept, Responsive off.
+    func setSize(width: Int, height: Int) {
+        send(.size(width: width, height: height))
+    }
+
+    /// The Responsive switch: off when this view drives it; otherwise on, following this stage
+    /// (taking it over from another window when it was on there).
+    func toggleResponsive() {
+        if state?.ownsSize == true {
+            send(.responsive(on: false, width: nil, height: nil))
+        } else {
+            send(gate.responsiveOn(width: stage.width, height: stage.height))
+        }
+    }
+
+    // MARK: Zoom
+
+    /// A second finger landed (the surface has cancelled the one-finger page gesture, so no
+    /// click): the pinch starts.
+    func pinchBegan(_ a: CGPoint, _ b: CGPoint, at: Double) {
+        pinch.begin(.init(x: a.x, y: a.y), .init(x: b.x, y: b.y), at: at)
+    }
+
+    /// The two fingers moved: zoom (1–4×) around the pinch and pan by its move. Nothing reaches the page.
+    func pinchMoved(_ a: CGPoint, _ b: CGPoint) {
+        guard let step = pinch.move(.init(x: a.x, y: a.y), .init(x: b.x, y: b.y)) else { return }
+        let fit = fit
+        let next = BrowserZoom.apply(step, box: .init(w: stage.width, h: stage.height), fit: fit, drawn: drawn)
+        zoomed = next == fit ? nil : next
+    }
+
+    /// A finger lifted: a second quick two-finger tap resets the zoom.
+    func pinchEnded(at: Double) {
+        if pinch.end(at: at) { resetZoom() }
+    }
+
+    func pinchCancelled() {
+        pinch.cancel()
+    }
+
+    func resetZoom() {
+        guard zoomed != nil else { return }
+        withAnimation(.easeOut(duration: 0.2)) { zoomed = nil }
     }
 
     // MARK: Touch → page input

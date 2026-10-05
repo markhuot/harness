@@ -9,7 +9,7 @@
 // also survives a restart), and watching or using it reloads the URL. Only closing a tab, or
 // deleting its session, removes it.
 
-import type { BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
+import type { BrowserDevice, BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
   sessionId: string;
@@ -25,6 +25,62 @@ export interface StoredBrowserTab {
   id: number;
   url: string;
   title: string;
+  /** Its input mode and viewport, and whether it follows a viewer's pane (absent: it does). Absent: a new tab's, desktop Responsive. */
+  size?: { device: BrowserDevice; width: number; height: number; responsive?: boolean };
+}
+
+/**
+ * A size set by a button, the width × height inputs or an agent (browser_open, browser_resize). A
+ * new `device` starts from its preset size; `width`/`height` override it, or alone keep the mode.
+ */
+export interface BrowserSizeChange {
+  device?: BrowserDevice;
+  width?: number;
+  height?: number;
+}
+
+/** One network request of a tab's page, for browser_tabs. */
+export interface BrowserRequest {
+  method: string;
+  url: string;
+  /** CDP's resource type: Document, Script, Fetch, XHR, Image… */
+  type: string;
+  /** The response status; absent until (or unless) a response arrives. */
+  status?: number;
+  /** Why it failed ("net::ERR_CONNECTION_REFUSED", "canceled", "blocked (…)"); absent when it didn't. */
+  failure?: string;
+  /** From sent to finished or failed; absent while it's still loading. */
+  durationMs?: number;
+}
+
+/** A console error or warning, or an uncaught exception, of a tab's page. */
+export interface BrowserConsoleEntry {
+  level: "error" | "warning";
+  text: string;
+  /** "url:line" where it came from, when Chrome says. */
+  source?: string;
+}
+
+/** A tab in the session's list, with how many of its requests failed and how many console errors and warnings it has. */
+export interface BrowserTabSummary extends BrowserTab {
+  failedRequests?: number;
+  consoleErrors?: number;
+}
+
+/** One tab in full (browser_tabs with a tab): its page's recent requests and console messages since it last navigated. */
+export interface BrowserTabInfo {
+  id: number;
+  url: string;
+  title: string;
+  loading: boolean;
+  suspended?: boolean;
+  size: BrowserSize;
+  /** With size.responsive: a viewer has the tab open and it follows that viewer's pane. */
+  following?: boolean;
+  /** The page's scroll position in CSS px; absent for a suspended tab or a page that didn't answer. */
+  scroll?: { x: number; y: number };
+  requests: BrowserRequest[];
+  console: BrowserConsoleEntry[];
 }
 
 export interface StoredBrowserTabs {
@@ -46,12 +102,19 @@ export interface TabOption {
 }
 
 export interface BrowserService {
-  /** Navigate a tab (`newTab`: a new one) and wait for load. */
-  open(sessionId: string, url: string, opts?: TabOption & { newTab?: boolean }): Promise<BrowserState>;
+  /** Navigate a tab (`newTab`: a new one) and wait for load; `size` is applied before it loads. */
+  open(sessionId: string, url: string, opts?: TabOption & { newTab?: boolean; size?: BrowserSizeChange }): Promise<BrowserState>;
   /** A tab's state, or null if the session has no tab yet (or no such tab). */
   state(sessionId: string, opts?: TabOption): Promise<BrowserState | null>;
-  /** The session's open tabs, by id. */
-  tabs(sessionId: string): Promise<BrowserTab[]>;
+  /** The session's tabs, by id, with each one's size and (live ones) its failed-request and console counts. */
+  tabs(sessionId: string): Promise<BrowserTabSummary[]>;
+  /** One tab in full. A suspended tab isn't reopened for it. Throws when the session has no such tab. */
+  tabInfo(sessionId: string, tab: number): Promise<BrowserTabInfo>;
+  /**
+   * Change a tab's input mode and size (browser_resize): switches Responsive off; a `device` reloads
+   * the page, as the Desktop | Mobile buttons do. Any tab of the session, whoever opened it.
+   */
+  resize(sessionId: string, change: BrowserSizeChange, opts?: TabOption): Promise<BrowserState>;
   /**
    * Page content. With a selector, returns content of all matches (joined by blank lines).
    * format "text" = innerText, "html" = outerHTML. Throws if nothing matches the selector.

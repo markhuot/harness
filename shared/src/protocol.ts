@@ -1052,7 +1052,40 @@ export interface BrowserState {
   /** The tab's page is closed to save memory (unused for a while, or the ticket is done); it reloads its URL when opened. Absent: false. */
   suspended?: boolean;
   tabs?: BrowserTab[];
+  /** The tab's input mode and viewport (BrowserSize). Services from before per-tab sizes omit it. */
+  size?: BrowserSize;
+  /**
+   * True only in the state sent to the viewer whose pane the tab follows (`size.responsive`): that
+   * viewer sends its stage size as `resize` input; everyone else's `resize` is dropped.
+   */
+  sizeOwner?: boolean;
 }
+
+/**
+ * How a tab's page is shown (DESIGN.md "Browser"), per tab. `device` is the input mode: "desktop"
+ * is a fine pointer and Chrome's own user agent; "mobile" is touch emulation, `pointer: coarse` and
+ * an iPhone user agent (BROWSER_MOBILE_UA). `width`/`height` are the viewport in CSS pixels, free in
+ * either mode. `responsive`: the tab follows the stage of the viewer that switched it on.
+ */
+export interface BrowserSize {
+  device: BrowserDevice;
+  width: number;
+  height: number;
+  responsive: boolean;
+}
+
+export type BrowserDevice = "desktop" | "mobile";
+
+/** The size the Desktop button (and every new tab) resets to. */
+export const BROWSER_DESKTOP = { width: 1280, height: 800 } as const;
+/** The size the Mobile button resets to: an iPhone (16/17 Pro) in CSS points. */
+export const BROWSER_MOBILE = { width: 393, height: 852 } as const;
+/** The smallest and largest viewport side the service accepts; anything else is clamped. */
+export const BROWSER_MIN_SIDE = 100;
+export const BROWSER_MAX_SIDE = 4096;
+/** The user agent a tab in "mobile" sends and reports (iOS Safari). */
+export const BROWSER_MOBILE_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 
 /** One tab of a session's browser. Ids count up from 1 per session and are never reused. */
 export interface BrowserTab {
@@ -1062,6 +1095,8 @@ export interface BrowserTab {
   loading: boolean;
   /** Its page is closed to save memory; watching it or an agent using it reloads its URL. Absent: false. */
   suspended?: boolean;
+  /** Its input mode and viewport. Services from before per-tab sizes omit it. */
+  size?: BrowserSize;
 }
 
 /**
@@ -1194,8 +1229,24 @@ export type BrowserInput =
   | { type: "back" }
   | { type: "forward" }
   | { type: "reload" }
-  /** The size of every tab in the session */
+  /**
+   * The viewer's stage size. Applied only while the tab is `responsive` and this viewer switched it
+   * on (BrowserState.sizeOwner); dropped otherwise, so a pane never resizes a tab by being opened.
+   */
   | { type: "resize"; width: number; height: number }
+  /**
+   * The Desktop | Mobile buttons: set the input mode, reset to its preset size (BROWSER_DESKTOP,
+   * BROWSER_MOBILE), switch `responsive` off and reload the page, even when the mode didn't change.
+   */
+  | { type: "device"; device: BrowserDevice }
+  /** The width × height inputs: resize the tab, keeping its mode; switches `responsive` off. */
+  | { type: "size"; width: number; height: number }
+  /**
+   * The Responsive switch. On: the tab follows this viewer's stage (`width`/`height`, its current
+   * size), and this viewer becomes the one whose `resize` counts (last to switch it on wins). Off:
+   * the tab keeps its current size.
+   */
+  | { type: "responsive"; on: boolean; width?: number; height?: number }
   /** Open a tab (at `url`, else about:blank) and switch this socket to it */
   | { type: "newTab"; url?: string }
   /** Close the input's tab; closing the last one leaves a blank tab in its place */
