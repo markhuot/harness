@@ -29,7 +29,7 @@ struct ActiveTicketsView: View {
             WidgetMessage(icon: "checkmark.circle", title: "Nothing active", detail: "No agent is working on a ticket right now.")
                 .overlay(alignment: .bottom) { WidgetFooter(load: entry.load, shown: 0) }
         } else if entry.compact {
-            CompactList(load: entry.load, rows: compactRows)
+            CompactList(load: entry.load, rows: compactRows, pill: family != .systemSmall)
         } else {
             switch family {
             case .systemSmall: SmallCard(ticket: tickets[0], load: entry.load)
@@ -42,8 +42,7 @@ struct ActiveTicketsView: View {
     /// Lines the compact list has room for under its header.
     private var compactRows: Int {
         switch family {
-        case .systemSmall: 4
-        case .systemMedium: 4
+        case .systemSmall, .systemMedium: 4
         default: 10
         }
     }
@@ -238,7 +237,8 @@ struct WidgetFooter: View {
             if case .saved = load.source {
                 Image(systemName: "wifi.slash").font(.system(size: 9, weight: .semibold))
                 if load.snapshot.generatedAt > 0 {
-                    Text(Date(timeIntervalSince1970: load.snapshot.generatedAt / 1000), style: .relative) + Text(" ago")
+                    // "5 min. ago": as of the entry, which is as fresh as the widget's data anyway.
+                    Text(Date(timeIntervalSince1970: load.snapshot.generatedAt / 1000), format: .relative(presentation: .named, unitsStyle: .abbreviated))
                 } else {
                     Text("Offline")
                 }
@@ -387,17 +387,19 @@ struct WidgetHeader: View {
 
 // MARK: Compact
 
-/// Compact, in any size: one ticket per line (status, project pill, key, title).
+/// Compact, in any size: one ticket per line (status, project pill, key, title). The small widget
+/// leaves the pill out, which would leave its titles a few letters long.
 struct CompactList: View {
     let load: WidgetLoad
     let rows: Int
+    let pill: Bool
 
     var body: some View {
         let tickets = Array(load.snapshot.tickets.prefix(rows))
         VStack(alignment: .leading, spacing: 0) {
             WidgetHeader(count: load.snapshot.activeCount).padding(.bottom, 4)
             ForEach(tickets) { t in
-                Link(destination: WidgetFeed.ticketURL(t.key) ?? WidgetFeed.boardURL) { CompactRow(ticket: t) }
+                Link(destination: WidgetFeed.ticketURL(t.key) ?? WidgetFeed.boardURL) { CompactRow(ticket: t, pill: pill) }
                     .frame(maxHeight: 26)
             }
             Spacer(minLength: 0)
@@ -408,17 +410,10 @@ struct CompactList: View {
 
 struct CompactRow: View {
     let ticket: WidgetTicket
+    let pill: Bool
     @Environment(\.widgetTheme) private var theme
 
     var body: some View {
-        // Narrow widgets drop the pill before the title gets too short to read.
-        ViewThatFits(in: .horizontal) {
-            row(pill: true)
-            row(pill: false)
-        }
-    }
-
-    private func row(pill: Bool) -> some View {
         HStack(spacing: 5) {
             StatusIcon(ticket: ticket, size: 12)
             if pill { ProjectPill(ticket: ticket) }
@@ -427,7 +422,7 @@ struct CompactRow: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(theme.color(\.text))
                 .lineLimit(1)
-                .frame(minWidth: 44, maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

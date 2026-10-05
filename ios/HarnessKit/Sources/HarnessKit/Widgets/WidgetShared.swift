@@ -46,7 +46,16 @@ public struct WidgetShared: Sendable {
         #else
         let id = iosAppGroup
         #endif
-        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id).map(WidgetShared.init(directory:))
+        if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: id) { return WidgetShared(directory: url) }
+        #if targetEnvironment(simulator)
+        // An ad-hoc simulator build has no provisioning profile, so Xcode drops the App Group
+        // entitlement and there's no container. The app and its widget still share the simulator's
+        // own directory, which is enough to try the widgets there.
+        if let dir = ProcessInfo.processInfo.environment["SIMULATOR_SHARED_RESOURCES_DIRECTORY"] {
+            return WidgetShared(directory: URL(filePath: dir).appending(path: "Library/Caches/\(id)"))
+        }
+        #endif
+        return nil
     }
 
     public func readHost() -> WidgetHost? { read(Self.hostFile) }
