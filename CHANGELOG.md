@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The Spec tab's revision slider is gone. In its place, a timeline runs along the bottom edge of the
+  history bar, with one segment for each revision. The revision on show is highlighted and the
+  approved plan is marked in green. Press and drag along it to sweep through the revisions while the
+  spec updates, or tap a segment to jump to it. On the Mac, hovering a segment names the revision, and
+  the arrow keys, Home and End move through them. On iPhone and iPad, Show changes now sits in the
+  bar's top row, so the bar takes one row.
+
 ## [app-20261005.0103](https://github.com/markhuot/harness/releases/tag/app-20261005.0103) - 2026-10-05
 
 ### Added

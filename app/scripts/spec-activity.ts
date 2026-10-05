@@ -1,6 +1,7 @@
 // The Spec and Activity tabs against the REAL service (dummy driver, throwaway HARNESS_HOME):
 // a ticket whose spec has several revisions, a nested list and an inline image, and whose
-// Activity has a review round and a blocked question. Checks the history bar, Show changes (the
+// Activity has a review round and a blocked question. Checks the history bar and its revision
+// timeline (drag, hover, keys, and a ticket with dozens of revisions), Show changes (the
 // rendered spec with edits marked in place), the blocked card, that Activity records every column
 // move in one line per entry, that a message sent from Spec or Activity switches to the Transcript
 // and stays out of Activity, and the Details editor's conflict prompt, with a screenshot of each.
@@ -56,7 +57,7 @@ try {
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "hello", key: "HELLO" });
   app = await launchApp({ baseUrl: base, token, theme });
-  const { js, exists, type, cmdEnter, clickText, go } = app;
+  const { js, exists, type, cmdEnter, clickText, go, cdp, key: press } = app;
   await until("sidebar shows the project", () => js<boolean>(`document.querySelector(".sidebar")?.textContent.includes("hello")`), 10000);
 
   // The "screenshot" the agent attaches: the app's own board, saved in the project dir.
@@ -149,6 +150,55 @@ try {
   await js(`[...document.querySelectorAll('.spec-history button')].find((e) => e.textContent === 'Latest')?.click()`);
   check("Latest follows again", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
 
+  // --- The revision timeline along the bar's bottom edge: one segment per revision.
+  const tl = '[data-testid="spec-timeline"]';
+  check("no stock range slider", !(await exists('.spec-tab input[type="range"]')));
+  check("one timeline segment per revision", (await js<number>(`document.querySelectorAll('${tl} .spec-timeline-seg').length`)) === 7);
+  const tones = () => js<string>(`[...document.querySelectorAll('${tl} .spec-timeline-seg')].map((e) => e.dataset.tone).join(" ")`);
+  check("the newest is on show, the approved plan is marked", (await tones()) === "before before baseline before before before shown", await tones());
+  /** The middle of revision `rev`'s segment, in the window. */
+  const segAt = (rev: number) =>
+    js<{ x: number; y: number }>(`(() => { const r = document.querySelector('${tl}').getBoundingClientRect(); const n = document.querySelectorAll('${tl} .spec-timeline-seg').length;
+      return { x: r.left + ((${rev} - 0.5) / n) * r.width, y: r.top + 1 }; })()`);
+  const mouse = (type: string, p: { x: number; y: number }, buttons = 0) =>
+    cdp("Input.dispatchMouseEvent", { type, x: p.x, y: p.y, button: type === "mouseMoved" && !buttons ? "none" : "left", buttons, clickCount: 1 });
+  await mouse("mouseMoved", await segAt(2));
+  check("hovering names the revision under the pointer", await until("tip", () => js<boolean>(`document.querySelector('.spec-timeline-tip')?.textContent.startsWith('Rev 2 · ')`), 3000));
+  check("hovering doesn't move the bar", await meta("Rev 7 of 7"));
+  await shot("2a-timeline-hover");
+  // Press on rev 6 and sweep back to rev 2: the bar and the spec follow the pointer live.
+  await mouse("mouseMoved", await segAt(6));
+  await mouse("mousePressed", await segAt(6), 1);
+  check("pressing jumps to the revision under the pointer", await until("rev 6", () => meta("Rev 6 of 7"), 3000));
+  await mouse("mouseMoved", await segAt(4), 1);
+  check("dragging scrubs live", await until("rev 4", () => meta("Rev 4 of 7"), 3000));
+  await mouse("mouseMoved", await segAt(3), 1);
+  await until("rev 3", () => meta("Rev 3 of 7"), 3000);
+  await until("rev 3 body", () => exists(".spec-doc h2"), 5000);
+  await shot("2b-timeline-drag");
+  await mouse("mouseMoved", await segAt(2), 1);
+  await mouse("mouseReleased", await segAt(2));
+  check("releasing keeps the revision", await until("rev 2", () => meta("Rev 2 of 7"), 3000));
+  check("the strip marks rev 2 on show", (await tones()) === "before shown baseline after after after after", await tones());
+  // Dragging past the end lands on the newest, which follows live again.
+  await mouse("mousePressed", await segAt(2), 1);
+  const end = await segAt(7);
+  const past = { x: (await js<number>("innerWidth")) - 2, y: end.y + 60 };
+  await mouse("mouseMoved", past, 1);
+  await mouse("mouseReleased", past);
+  check("dragging off the end follows the newest", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
+  check("…and the Latest button goes away", !(await js<boolean>(`[...document.querySelectorAll('.spec-history button')].some((e) => e.textContent === 'Latest')`)));
+  await mouse("mouseMoved", { x: end.x, y: end.y + 300 });
+  // The keyboard: ← → step, Home and End jump to the ends.
+  await js(`document.querySelector('${tl}').focus()`);
+  await press("Home", "Home", 36);
+  check("Home shows the first revision", await until("rev 1", () => meta("Rev 1 of 7"), 3000));
+  await press("ArrowRight", "ArrowRight", 39);
+  check("→ steps forward", await until("rev 2", () => meta("Rev 2 of 7"), 3000));
+  check("the slider reports the revision", (await js<string>(`document.querySelector('${tl}').getAttribute('aria-valuenow')`)) === "2");
+  await press("End", "End", 35);
+  check("End follows the newest", await until("rev 7", () => meta("Rev 7 of 7"), 3000));
+
   // --- Activity tab with the blocked card.
   await go(`#/board/${project.id}/ticket/${key}/activity`);
   await until("activity list", () => exists(".activity-list"), 5000);
@@ -217,6 +267,26 @@ try {
   await until("overwrite saved", async () => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket.spec.includes("My local edit."), 5000);
   const last = (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
   check("Overwrite wrote a new revision on top of the other one", last.specRevision === before.specRevision! + 2 && !last.spec.includes("(agreed)"));
+
+  // --- A ticket with dozens of revisions: the segments close up into a continuous strip, and a
+  // drag still lands on one revision.
+  const busy = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Rev 1", title: "Many revisions", driver: "dummy", start: false });
+  await until("plan drafted", async () => (await api<TicketDetail>("GET", `/tickets/${busy.key}`)).ticket.specRevision === 2, 15000);
+  await idle(busy.key);
+  for (let rev = 2; rev < 60; rev++) {
+    await api<Ticket>("PATCH", `/tickets/${busy.key}`, { spec: `## Goal\nRevision ${rev + 1}`, baseRevision: rev, specNote: `Pass ${rev + 1}` });
+  }
+  await go(`#/board/${project.id}/ticket/${busy.key}`);
+  await until("many: rev 60", () => meta("Rev 60 of 60"), 10000);
+  check("sixty segments", (await js<number>(`document.querySelectorAll('${tl} .spec-timeline-seg').length`)) === 60);
+  const strip = await js<{ x: number; y: number; w: number }>(`(() => { const r = document.querySelector('${tl}').getBoundingClientRect(); return { x: r.left, y: r.top + 1, w: r.width }; })()`);
+  await mouse("mouseMoved", { x: strip.x + strip.w * 0.25, y: strip.y });
+  await mouse("mousePressed", { x: strip.x + strip.w * 0.25, y: strip.y }, 1);
+  await mouse("mouseMoved", { x: strip.x + strip.w * 0.505, y: strip.y }, 1);
+  check("a drag across sixty lands on the middle one", await until("rev 31", () => meta("Rev 31 of 60"), 3000));
+  await until("rev 31 body", () => js<boolean>(`document.querySelector('.spec-doc')?.textContent.includes('Revision 31')`), 5000);
+  await shot("7-timeline-many");
+  await mouse("mouseReleased", { x: strip.x + strip.w * 0.505, y: strip.y });
 } catch (e) {
   console.error(e);
   c.fail();

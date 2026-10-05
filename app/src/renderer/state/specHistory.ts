@@ -24,3 +24,25 @@ export function scrubTo(rev: number, latest: number): SpecHistory {
 export function stepRevision(h: SpecHistory, latest: number, delta: number): SpecHistory {
   return scrubTo(shownRevision(h, latest) + delta, latest);
 }
+
+/**
+ * The revision under a pointer `x` px into the revision timeline, a `width` px strip split into
+ * `latest` equal segments: off either end clamps to the first or newest.
+ */
+export function revisionAt(x: number, width: number, latest: number): number {
+  if (latest <= 1 || !(width > 0)) return Math.max(1, latest);
+  return Math.max(1, Math.min(latest, Math.floor((x / width) * latest) + 1));
+}
+
+/**
+ * How the timeline draws one revision's segment. Segments are neutral: the ones up to the
+ * revision on show read as passed, the rest as still ahead. Only the revision on show and the
+ * approved plan are marked, and the one on show wins when it's also the approved plan.
+ */
+export type SegmentTone = "shown" | "baseline" | "before" | "after";
+
+export function segmentTone(rev: number, shown: number, baseline: number | null | undefined): SegmentTone {
+  if (rev === shown) return "shown";
+  if (rev === baseline) return "baseline";
+  return rev < shown ? "before" : "after";
+}

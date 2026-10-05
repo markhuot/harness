@@ -610,12 +610,79 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   flex: none;
   white-space: nowrap;
 }
-.spec-scrub {
-  display: block;
-  width: calc(100% - 24px);
-  margin: 6px 12px 0;
-  accent-color: var(--accent);
+/* The revision timeline is the history bar's bottom edge: one segment per revision, hanging from
+   the bar. Its hit area reaches a few px either side of the 3px line, and the segments grow while
+   it's hovered or dragged (overflowing down over the body's padding, so nothing shifts). The gap
+   between segments shrinks to nothing once there are too many to space out. */
+.spec-history.has-timeline {
+  border-bottom: none;
+}
+.spec-timeline {
+  --seg: 3px;
+  position: relative;
+  z-index: 2;
   flex: none;
+  height: 3px;
+  container-type: inline-size;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+.spec-timeline::before {
+  content: "";
+  position: absolute;
+  inset: -5px 0 -7px;
+}
+.spec-timeline:hover,
+.spec-timeline.is-dragging {
+  --seg: 7px;
+}
+.spec-timeline:focus-visible .spec-timeline-track {
+  outline: 2px solid var(--focus, var(--accent));
+  outline-offset: 2px;
+}
+.spec-timeline-track {
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(0px, calc(100cqw / var(--n, 1) - 4px), 2px);
+  height: 3px;
+}
+.spec-timeline-seg {
+  flex: 1;
+  min-width: 0;
+  height: var(--seg);
+  background: var(--border);
+  border-radius: 0 0 2px 2px;
+  transition: height 0.12s ease, background-color 0.12s ease;
+}
+.spec-timeline-seg[data-tone="before"] {
+  background: color-mix(in srgb, var(--text-3) 55%, var(--border));
+}
+.spec-timeline-seg[data-tone="baseline"] {
+  background: var(--green);
+}
+.spec-timeline-seg[data-tone="shown"] {
+  background: var(--accent);
+  height: calc(var(--seg) + 4px);
+}
+.spec-timeline-seg[data-hover]:not([data-tone="shown"]) {
+  background: var(--text-3);
+}
+.spec-timeline-tip {
+  position: absolute;
+  top: 16px;
+  max-width: min(480px, 90%);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.12);
+  color: var(--text-2);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 .spec-body {
   overflow-y: auto;
