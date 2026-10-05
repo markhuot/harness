@@ -1,19 +1,41 @@
 // BrowserService implementation: one Chrome, numbered tabs (page targets) per harness session.
 
-import type { BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserState, BrowserTab } from "@harness/shared";
+import {
+  BROWSER_DESKTOP,
+  BROWSER_MAX_SIDE,
+  BROWSER_MIN_SIDE,
+  BROWSER_MOBILE,
+  BROWSER_MOBILE_UA,
+  type BrowserDevice,
+  type BrowserElement,
+  type BrowserElementQuery,
+  type BrowserInput,
+  type BrowserScreenshot,
+  type BrowserSize,
+  type BrowserState,
+} from "@harness/shared";
 import { imageSize } from "../attachments.ts";
 import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
 import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
-import type { BrowserFrame, BrowserService, BrowserTabStore, StoredBrowserTab, TabOption } from "./types.ts";
+import type {
+  BrowserConsoleEntry,
+  BrowserFrame,
+  BrowserRequest,
+  BrowserService,
+  BrowserSizeChange,
+  BrowserTabInfo,
+  BrowserTabStore,
+  BrowserTabSummary,
+  StoredBrowserTab,
+  TabOption,
+} from "./types.ts";
 
 export interface BrowserManagerOptions {
   profileDir: string;
   chromePath?: string;
   headless?: boolean;
-  /** Default viewport for new tabs (CSS px). */
-  viewport?: { width: number; height: number };
   /** How long open() waits for the load event before returning anyway. */
   navigationTimeoutMs?: number;
   /** How long click/type wait for a navigation they triggered to finish. */
@@ -39,6 +61,9 @@ const IDLE_SWEEP_MS = 30_000;
 const STOP_GRACE_MS = 5_000;
 /** Coalesces a session's tab writes (a page can change its title many times a second). */
 const SAVE_DELAY_MS = 200;
+/** How many network requests and console messages a tab keeps for browser_tabs (since its last navigation). */
+const MAX_REQUESTS = 100;
+const MAX_CONSOLE = 50;
 
 interface Subscriber {
   onFrame: (f: BrowserFrame) => void;
@@ -67,8 +92,6 @@ interface Entry {
   savedKey?: string;
   /** Tab 1 (or the next default tab) while it is being created, so concurrent calls share it. */
   creating?: Promise<Tab>;
-  /** Every tab's viewport: viewers resize the whole session, and new tabs start at it. */
-  viewport: { width: number; height: number };
 }
 
 interface Tab {
@@ -80,7 +103,17 @@ interface Tab {
   url: string;
   title: string;
   loading: boolean;
+  /** The input mode and viewport it should have (what states report and the store keeps). */
+  size: BrowserSize;
+  /** With size.responsive: the subscriber whose stage it follows (the last to switch it on). */
+  sizeOwner?: string;
+  /** What Chrome was last told (applySize), so an unchanged size restarts nothing. */
   viewport: { width: number; height: number };
+  device: BrowserDevice;
+  /** Requests since the main frame last navigated, by CDP requestId, oldest first (at most MAX_REQUESTS). */
+  requests: Map<string, BrowserRequest & { started: number }>;
+  /** Console errors and warnings and uncaught exceptions since the main frame last navigated. */
+  console: BrowserConsoleEntry[];
   screencasting: boolean;
   /** Bumped on every screencast (re)start so stale timers can tell they're stale. */
   screencastEpoch: number;
@@ -103,6 +136,8 @@ interface Tab {
 interface Browser {
   chrome: ChromeProcess;
   cdp: CdpClient;
+  /** Chrome's own user agent, which a tab leaving "mobile" goes back to. */
+  userAgent: string;
 }
 
 const TITLE_BINDING = "__harnessTitleChanged";
@@ -175,27 +210,59 @@ function watchersOf(tab: Tab): Subscriber[] {
   return [...tab.entry.subscribers.values()].filter((sub) => watchedTab(tab.entry, sub) === tab);
 }
 
-function tabList(entry: Entry): BrowserTab[] {
+function tabList(entry: Entry): BrowserTabSummary[] {
   return tabIds(entry).map((id) => {
     const t = liveTab(entry, id);
-    if (t) return { id, url: t.url, title: t.title, loading: t.loading };
+    if (t) {
+      const failedRequests = [...t.requests.values()].filter(failed).length;
+      return { id, url: t.url, title: t.title, loading: t.loading, size: { ...t.size }, failedRequests, consoleErrors: t.console.length };
+    }
     const s = entry.suspended.get(id)!;
-    return { id, url: s.url, title: s.title, loading: false, suspended: true };
+    return { id, url: s.url, title: s.title, loading: false, suspended: true, size: storedSize(s.size) };
   });
 }
 
+/** The protocol's tab list: without the agent-only counts browser_tabs shows. */
+function protocolTabs(entry: Entry) {
+  return tabList(entry).map(({ failedRequests: _f, consoleErrors: _c, ...t }) => t);
+}
+
 function stateOf(tab: Tab): BrowserState {
-  return { sessionId: tab.entry.sessionId, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading, tabs: tabList(tab.entry) };
+  return { sessionId: tab.entry.sessionId, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading, size: { ...tab.size }, tabs: protocolTabs(tab.entry) };
 }
 
 function suspendedStateOf(entry: Entry, id: number): BrowserState {
   const s = entry.suspended.get(id)!;
-  return { sessionId: entry.sessionId, tabId: id, url: s.url, title: s.title, loading: false, suspended: true, tabs: tabList(entry) };
+  return { sessionId: entry.sessionId, tabId: id, url: s.url, title: s.title, loading: false, suspended: true, size: storedSize(s.size), tabs: protocolTabs(entry) };
 }
 
-/** A tab as stored. */
+/** A tab as stored. Responsive belongs to a live viewer, so it isn't kept. */
 function record(tab: Tab): StoredBrowserTab {
-  return { id: tab.id, url: tab.url, title: tab.title };
+  const { device, width, height } = tab.size;
+  return { id: tab.id, url: tab.url, title: tab.title, size: { device, width, height } };
+}
+
+const clampSide = (n: number) => Math.max(BROWSER_MIN_SIDE, Math.min(BROWSER_MAX_SIDE, Math.round(n)));
+/** A requested viewport side, clamped; undefined when it isn't a usable number. */
+const side = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? clampSide(n) : undefined);
+const presetOf = (device: BrowserDevice) => (device === "mobile" ? BROWSER_MOBILE : BROWSER_DESKTOP);
+
+/** A stored tab's size; Desktop at its preset when it has none or it's unusable (a row from before sizes). */
+function storedSize(size: StoredBrowserTab["size"]): BrowserSize {
+  const ok = (n: unknown) => typeof n === "number" && Number.isFinite(n);
+  if (!size || (size.device !== "desktop" && size.device !== "mobile") || !ok(size.width) || !ok(size.height)) {
+    return { device: "desktop", ...BROWSER_DESKTOP, responsive: false };
+  }
+  return { device: size.device, width: clampSide(size.width), height: clampSide(size.height), responsive: false };
+}
+
+/** A request that failed outright or got an error status. */
+const failed = (r: BrowserRequest) => r.failure !== undefined || (r.status !== undefined && r.status >= 400);
+
+/** A console argument as text: its value, or Chrome's description of an object. */
+function consoleArg(arg: CdpResult): string {
+  if (arg?.value !== undefined) return typeof arg.value === "string" ? arg.value : JSON.stringify(arg.value);
+  return String(arg?.unserializableValue ?? arg?.description ?? arg?.type ?? "");
 }
 
 function noTabMessage(entry: Entry | undefined, id: number): string {
@@ -216,7 +283,6 @@ export class BrowserManager implements BrowserService {
   /** Pages being created or reopened: Chrome isn't stopped under them. */
   private opening = 0;
   private stopTimer?: ReturnType<typeof setTimeout>;
-  private readonly viewport: { width: number; height: number };
   private readonly navigationTimeoutMs: number;
   private readonly settleTimeoutMs: number;
   private readonly now: () => number;
@@ -227,7 +293,6 @@ export class BrowserManager implements BrowserService {
   private shuttingDown = false;
 
   constructor(private readonly opts: BrowserManagerOptions) {
-    this.viewport = opts.viewport ?? { width: 1280, height: 800 };
     this.navigationTimeoutMs = opts.navigationTimeoutMs ?? 30_000;
     this.settleTimeoutMs = opts.settleTimeoutMs ?? 10_000;
     this.now = opts.now ?? Date.now;
@@ -247,8 +312,10 @@ export class BrowserManager implements BrowserService {
   // BrowserService
   // -------------------------------------------------------------------------
 
-  async open(sessionId: string, url: string, opts: TabOption & { newTab?: boolean } = {}): Promise<BrowserState> {
+  async open(sessionId: string, url: string, opts: TabOption & { newTab?: boolean; size?: BrowserSizeChange } = {}): Promise<BrowserState> {
     const tab = opts.newTab ? await this.newTab(this.entry(sessionId)) : await this.agentTab(sessionId, opts.tab, false);
+    // Before the navigation, so the page loads at that size with that user agent (no reload).
+    if (opts.size) await this.setSize(tab, opts.size);
     await this.navigateAndWait(tab, normalizeUrl(url), this.navigationTimeoutMs);
     return this.currentState(tab);
   }
@@ -262,11 +329,42 @@ export class BrowserManager implements BrowserService {
     return entry.suspended.has(id) ? suspendedStateOf(entry, id) : null;
   }
 
-  async tabs(sessionId: string): Promise<BrowserTab[]> {
+  async tabs(sessionId: string): Promise<BrowserTabSummary[]> {
     const entry = this.peek(sessionId);
     if (!entry) return [];
     await Promise.all(openTabs(entry).map((t) => this.refreshTarget(t)));
     return tabList(entry);
+  }
+
+  async tabInfo(sessionId: string, id: number): Promise<BrowserTabInfo> {
+    const entry = this.peek(sessionId);
+    if (!entry || !hasTab(entry, id)) throw new Error(noTabMessage(entry, id));
+    const tab = liveTab(entry, id);
+    // A suspended tab's page is closed: it reports what was stored and isn't reopened for this.
+    if (!tab) {
+      const s = entry.suspended.get(id)!;
+      return { id, url: s.url, title: s.title, loading: false, suspended: true, size: storedSize(s.size), requests: [], console: [] };
+    }
+    await this.refreshTarget(tab);
+    const scroll = (await this.evalValue(tab, "[window.scrollX, window.scrollY]").catch(() => undefined)) as [number, number] | undefined;
+    return {
+      id,
+      url: tab.url,
+      title: tab.title,
+      loading: tab.loading,
+      size: { ...tab.size },
+      ...(scroll ? { scroll: { x: Math.round(scroll[0]), y: Math.round(scroll[1]) } } : {}),
+      requests: [...tab.requests.values()].map(({ started: _s, ...r }) => r),
+      console: [...tab.console],
+    };
+  }
+
+  async resize(sessionId: string, change: BrowserSizeChange, opts: TabOption = {}): Promise<BrowserState> {
+    const tab = await this.agentTab(sessionId, opts.tab);
+    await this.setSize(tab, change);
+    // A new input mode reloads, like the Desktop | Mobile buttons, so the server sees the user agent too.
+    if (change.device) await this.reloadAndWait(tab);
+    return this.currentState(tab);
   }
 
   async content(sessionId: string, opts: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number } = {}): Promise<string> {
@@ -309,6 +407,12 @@ export class BrowserManager implements BrowserService {
       if (!box.found) throw new Error(`No element matches selector: ${selector}`);
       if (box.hittable && box.x !== undefined && box.y !== undefined) {
         const { x, y } = box;
+        if (tab.device === "mobile") {
+          // A tap: the page gets touch events, then the click a phone makes of them.
+          await this.touch(tab, "touchStart", x, y);
+          await this.touch(tab, "touchEnd", x, y);
+          return;
+        }
         await tab.session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
         await tab.session.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
         await tab.session.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
@@ -440,16 +544,11 @@ export class BrowserManager implements BrowserService {
       }
       return;
     }
-    if (input.type === "resize") {
-      const width = Math.max(100, Math.min(4096, Math.round(input.width)));
-      const height = Math.max(100, Math.min(4096, Math.round(input.height)));
-      entry.viewport = { width, height };
-      if (defaultId(entry) === undefined) await this.tab(sessionId);
-      await Promise.all(openTabs(entry).map((t) => this.resizeTab(t)));
-      return;
-    }
     // Without a tab, input goes to the tab the subscriber watches (reopened if it was suspended).
     const id = opts.tab ?? (sub ? watchedId(entry, sub) : undefined);
+    if (input.type === "resize" || input.type === "device" || input.type === "size" || input.type === "responsive") {
+      return this.sizeInput(entry, input, id, sub ? opts.subscriberId : undefined);
+    }
     if (input.type === "closeTab") {
       const target = id ?? defaultId(entry);
       if (target === undefined) throw new Error("This session has no open tabs.");
@@ -465,6 +564,21 @@ export class BrowserManager implements BrowserService {
         const y = input.y;
         if (input.action === "wheel") {
           await s.send("Input.dispatchMouseEvent", { type: "mouseWheel", x, y, deltaX: input.deltaX ?? 0, deltaY: input.deltaY ?? 0 });
+          return;
+        }
+        // A touch device: the left button is a finger (a press, drag or tap); hover and the other buttons don't exist.
+        if (tab.device === "mobile") {
+          if ((input.button ?? "left") !== "left" && input.action !== "move") return;
+          const held = (tab.buttons & 1) !== 0;
+          if (input.action === "down") {
+            tab.buttons |= 1;
+            await this.touch(tab, "touchStart", x, y);
+          } else if (input.action === "move" && held) {
+            await this.touch(tab, "touchMove", x, y);
+          } else if (input.action === "up" && held) {
+            tab.buttons &= ~1;
+            await this.touch(tab, "touchEnd", x, y);
+          }
           return;
         }
         if (input.action === "move") {
@@ -561,6 +675,72 @@ export class BrowserManager implements BrowserService {
     if (left) left.lastUsed = this.now();
     entry.subscribers.delete(subscriberId);
     await this.refresh(entry);
+  }
+
+  /**
+   * A viewer's size controls (DESIGN.md "Browser"). `resize` is its stage size, which counts only
+   * from the viewer a Responsive tab follows; the rest are the Desktop | Mobile buttons, the
+   * width × height inputs and the Responsive switch.
+   */
+  private async sizeInput(
+    entry: Entry,
+    input: Extract<BrowserInput, { type: "resize" | "device" | "size" | "responsive" }>,
+    id: number | undefined,
+    subscriberId: string | undefined,
+  ): Promise<void> {
+    if (input.type === "resize") {
+      // Opening a pane never resizes a tab: only the viewer it follows does.
+      const tab = liveTab(entry, id ?? defaultId(entry));
+      if (!tab || !tab.size.responsive || subscriberId === undefined || tab.sizeOwner !== subscriberId) return;
+      const width = side(input.width);
+      const height = side(input.height);
+      if (width === undefined || height === undefined) return;
+      tab.size = { ...tab.size, width, height };
+      await this.applySize(tab);
+      this.emitStates(entry);
+      return;
+    }
+    const tab = await this.tab(entry.sessionId, id);
+    tab.lastUsed = this.now();
+    switch (input.type) {
+      case "device":
+        await this.setSize(tab, { device: input.device });
+        // Even when the mode didn't change: the button is a reset.
+        await tab.session.send("Page.reload", {});
+        return;
+      case "size":
+        return this.setSize(tab, { width: input.width, height: input.height });
+      case "responsive": {
+        if (!input.on) {
+          tab.size = { ...tab.size, responsive: false };
+          tab.sizeOwner = undefined;
+          this.emitStates(entry);
+          return;
+        }
+        if (subscriberId === undefined) throw new Error("Only a viewer can switch Responsive on (it follows that viewer's pane).");
+        const width = side(input.width);
+        const height = side(input.height);
+        tab.size = { ...tab.size, responsive: true, ...(width !== undefined && height !== undefined ? { width, height } : {}) };
+        // Last to switch it on wins: the earlier viewer's resizes stop counting.
+        tab.sizeOwner = subscriberId;
+        await this.applySize(tab);
+        this.emitStates(entry);
+        return;
+      }
+    }
+  }
+
+  /**
+   * Set a tab's input mode and size, as a button, the inputs or an agent do: a new `device` starts
+   * from its preset size, and anything set this way switches Responsive off (last set wins).
+   */
+  private async setSize(tab: Tab, change: BrowserSizeChange): Promise<void> {
+    const device = change.device ?? tab.size.device;
+    const base = change.device ? presetOf(change.device) : tab.size;
+    tab.size = { device, width: side(change.width) ?? base.width, height: side(change.height) ?? base.height, responsive: false };
+    tab.sizeOwner = undefined;
+    await this.applySize(tab);
+    this.emitStates(tab.entry);
   }
 
   /** Diagnostics: a tab's screencast status (default: the lowest open tab), or null without one. */
@@ -703,8 +883,8 @@ export class BrowserManager implements BrowserService {
       chromePath,
       profileDir: this.opts.profileDir,
       headless,
-      width: this.viewport.width,
-      height: this.viewport.height,
+      width: BROWSER_DESKTOP.width,
+      height: BROWSER_DESKTOP.height,
     });
     let cdp: CdpClient;
     try {
@@ -713,7 +893,11 @@ export class BrowserManager implements BrowserService {
       await chrome.close();
       throw e;
     }
-    const browser: Browser = { chrome, cdp };
+    let userAgent = "";
+    try {
+      userAgent = (await cdp.send("Browser.getVersion")).userAgent ?? "";
+    } catch {}
+    const browser: Browser = { chrome, cdp, userAgent };
 
     cdp.onClose(() => {
       // Chrome died, was stopped, or the socket dropped: every tab is suspended (it reloads when
@@ -740,7 +924,8 @@ export class BrowserManager implements BrowserService {
       if (!opener) return;
       const entry = opener.entry;
       this.opening++;
-      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser)
+      // It opens in the opener's mode and size, so a mobile page's link stays mobile.
+      void this.attachTab(entry, entry.nextTabId++, info.targetId, browser, undefined, { ...opener.size, responsive: false })
         .catch(() => {})
         .finally(() => this.opening--);
     });
@@ -788,7 +973,6 @@ export class BrowserManager implements BrowserService {
       reviving: new Map(),
       nextTabId: Math.max(stored?.nextTabId ?? 1, ...(stored?.tabs ?? []).map((t) => t.id + 1)),
       retired: false,
-      viewport: { ...this.viewport },
     };
     e.savedKey = this.saveKey(e);
     this.entries.set(sessionId, e);
@@ -900,7 +1084,7 @@ export class BrowserManager implements BrowserService {
    * Attach to a page target (one we created, or a popup a tab opened) and make it tab `id`.
    * `initial`: a suspended tab being reopened, whose URL and title stand until its page reports its own.
    */
-  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab): Promise<Tab> {
+  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab, size?: BrowserSize): Promise<Tab> {
     const { cdp } = browser;
     let sessionId: string;
     try {
@@ -921,7 +1105,12 @@ export class BrowserManager implements BrowserService {
       url: initial?.url ?? "about:blank",
       title: initial?.title ?? "",
       loading: false,
-      viewport: { ...entry.viewport },
+      size: size ?? storedSize(initial?.size),
+      // A fresh page: no size applied yet, Chrome's own input and user agent.
+      viewport: { width: 0, height: 0 },
+      device: "desktop",
+      requests: new Map(),
+      console: [],
       screencasting: false,
       screencastEpoch: 0,
       castSize: null,
@@ -946,7 +1135,9 @@ export class BrowserManager implements BrowserService {
         session.send("Runtime.enable"),
         session.send("Runtime.addBinding", { name: TITLE_BINDING }),
         session.send("Page.addScriptToEvaluateOnNewDocument", { source: TITLE_WATCH_SCRIPT }),
-        this.applyViewport(tab),
+        // What browser_tabs reports for the tab: its requests (console messages come with Runtime).
+        session.send("Network.enable"),
+        this.applySize(tab),
       ]);
       const { frameTree } = await session.send("Page.getFrameTree");
       tab.frameId = frameTree.frame.id;
@@ -957,7 +1148,7 @@ export class BrowserManager implements BrowserService {
       throw e;
     }
     // Resized while this tab was starting: catch up.
-    if (tab.viewport.width !== entry.viewport.width || tab.viewport.height !== entry.viewport.height) await this.resizeTab(tab);
+    await this.applySize(tab);
     // Closed (or the session deleted) while its page was being reopened: the tab is gone.
     if (initial && entry.suspended.get(id) !== initial) {
       this.dropTabs([tab], "forget");
@@ -977,6 +1168,7 @@ export class BrowserManager implements BrowserService {
       s.on("Page.frameNavigated", (p) => {
         if (p.frame.parentId) return;
         tab.frameId = p.frame.id;
+        tab.console = [];
         tab.url = p.frame.url + (p.frame.urlFragment ?? "");
         this.emitState(tab);
       }),
@@ -1026,6 +1218,43 @@ export class BrowserManager implements BrowserService {
         if (p.name !== TITLE_BINDING || typeof p.payload !== "string") return;
         tab.title = p.payload;
         this.emitState(tab);
+      }),
+      s.on("Network.requestWillBeSent", (p) => {
+        // A new main-frame document starts the page's list over.
+        if (p.type === "Document" && p.frameId === tab.frameId && p.requestId === p.loaderId && !p.redirectResponse) tab.requests.clear();
+        const known = tab.requests.get(p.requestId);
+        if (known) {
+          // A redirect: the same request, now at its new URL.
+          known.url = p.request.url;
+          return;
+        }
+        tab.requests.set(p.requestId, { method: p.request.method, url: p.request.url, type: p.type ?? "Other", started: p.timestamp });
+        if (tab.requests.size > MAX_REQUESTS) tab.requests.delete(tab.requests.keys().next().value!);
+      }),
+      s.on("Network.responseReceived", (p) => {
+        const r = tab.requests.get(p.requestId);
+        if (r && typeof p.response?.status === "number") r.status = p.response.status;
+      }),
+      s.on("Network.loadingFinished", (p) => {
+        const r = tab.requests.get(p.requestId);
+        if (r) r.durationMs = Math.max(0, Math.round((p.timestamp - r.started) * 1000));
+      }),
+      s.on("Network.loadingFailed", (p) => {
+        const r = tab.requests.get(p.requestId);
+        if (!r) return;
+        r.failure = p.canceled ? "canceled" : p.blockedReason ? `blocked (${p.blockedReason})` : p.errorText || "failed";
+        r.durationMs = Math.max(0, Math.round((p.timestamp - r.started) * 1000));
+      }),
+      s.on("Runtime.consoleAPICalled", (p) => {
+        if (p.type !== "error" && p.type !== "warning" && p.type !== "assert") return;
+        const frame = p.stackTrace?.callFrames?.[0];
+        const text = (p.args ?? []).map(consoleArg).join(" ") || (p.type === "assert" ? "Assertion failed" : "");
+        this.noteConsole(tab, { level: p.type === "warning" ? "warning" : "error", text, ...(frame?.url ? { source: `${frame.url}:${frame.lineNumber + 1}` } : {}) });
+      }),
+      s.on("Runtime.exceptionThrown", (p) => {
+        const d = p.exceptionDetails;
+        const text = String(d?.exception?.description ?? d?.text ?? "Uncaught exception");
+        this.noteConsole(tab, { level: "error", text, ...(d?.url ? { source: `${d.url}:${(d.lineNumber ?? 0) + 1}` } : {}) });
       }),
       s.on("Inspector.targetCrashed", () => {
         this.dropTabs([tab], "suspend");
@@ -1084,6 +1313,15 @@ export class BrowserManager implements BrowserService {
    * someone watches it, and send every subscriber its state (the tab list changed for all of them).
    */
   private async refresh(entry: Entry): Promise<void> {
+    // Responsive ends when the viewer it follows leaves the tab (unsubscribed, switched, socket gone):
+    // the tab keeps its size, and everyone sees the switch go off rather than stay on for no one.
+    for (const tab of openTabs(entry)) {
+      if (tab.sizeOwner === undefined) continue;
+      const owner = entry.subscribers.get(tab.sizeOwner);
+      if (owner && watchedId(entry, owner) === tab.id) continue;
+      tab.sizeOwner = undefined;
+      tab.size = { ...tab.size, responsive: false };
+    }
     for (const sub of entry.subscribers.values()) {
       const id = watchedId(entry, sub);
       if (id !== undefined && entry.suspended.has(id) && !this.shuttingDown) void this.revive(entry, id, "go").catch(() => {});
@@ -1133,12 +1371,17 @@ export class BrowserManager implements BrowserService {
     }
   }
 
-  /** Apply the session's viewport to a tab; an unchanged size restarts nothing (viewers resize on every layout pass). */
-  private async resizeTab(tab: Tab): Promise<void> {
-    const { width, height } = tab.entry.viewport;
-    if (tab.viewport.width === width && tab.viewport.height === height) return;
+  /**
+   * Tell Chrome the tab's size and input mode (tab.size). What hasn't changed since the last call is
+   * skipped, so an unchanged size restarts nothing (a Responsive viewer resizes on every layout pass).
+   */
+  private async applySize(tab: Tab): Promise<void> {
+    const { device, width, height } = tab.size;
+    const switched = tab.device !== device;
+    if (!switched && tab.viewport.width === width && tab.viewport.height === height) return;
     tab.viewport = { width, height };
-    await this.applyViewport(tab);
+    tab.device = device;
+    await Promise.all([this.applyViewport(tab), switched ? this.applyDevice(tab) : undefined]);
     await this.syncScreencast(tab);
   }
 
@@ -1147,8 +1390,29 @@ export class BrowserManager implements BrowserService {
       width: tab.viewport.width,
       height: tab.viewport.height,
       deviceScaleFactor: 1,
-      mobile: false,
+      // A phone's viewport: the page's <meta name="viewport"> applies.
+      mobile: tab.device === "mobile",
     });
+  }
+
+  /**
+   * "mobile": a touch device (touch events, `pointer: coarse`) with an iPhone user agent; clicks and
+   * presses are sent as touches (touch()), not through setEmitTouchEventsForMouse, whose converted
+   * mouse presses never answer Input.dispatchMouseEvent. "desktop": Chrome's own pointer and user agent. The user agent reaches
+   * the server on the next load, which is why the Desktop | Mobile buttons reload.
+   */
+  private applyDevice(tab: Tab): Promise<unknown> {
+    const mobile = tab.device === "mobile";
+    const s = tab.session;
+    return Promise.all([
+      s.send("Emulation.setTouchEmulationEnabled", mobile ? { enabled: true, maxTouchPoints: 5 } : { enabled: false }),
+      s.send("Emulation.setUserAgentOverride", mobile ? { userAgent: BROWSER_MOBILE_UA, platform: "iPhone" } : { userAgent: this.browser?.userAgent ?? "" }),
+    ]);
+  }
+
+  private noteConsole(tab: Tab, entry: BrowserConsoleEntry): void {
+    tab.console.push(entry);
+    if (tab.console.length > MAX_CONSOLE) tab.console.splice(0, tab.console.length - MAX_CONSOLE);
   }
 
   /**
@@ -1249,11 +1513,11 @@ export class BrowserManager implements BrowserService {
    */
   private emitStates(entry: Entry): void {
     this.scheduleSave(entry);
-    for (const sub of entry.subscribers.values()) {
+    for (const [subId, sub] of entry.subscribers) {
       const id = watchedId(entry, sub);
       if (id === undefined) continue;
       const tab = liveTab(entry, id);
-      const state = tab ? stateOf(tab) : suspendedStateOf(entry, id);
+      const state = { ...(tab ? stateOf(tab) : suspendedStateOf(entry, id)), sizeOwner: tab?.sizeOwner === subId };
       const key = JSON.stringify(state);
       if (key !== sub.lastStateKey) {
         sub.lastStateKey = key;
@@ -1304,6 +1568,12 @@ export class BrowserManager implements BrowserService {
     }
   }
 
+  /** Reload a tab's page and wait (up to the navigation timeout) for it to load. */
+  private async reloadAndWait(tab: Tab): Promise<void> {
+    await tab.session.send("Page.reload", {});
+    await this.untilLoaded(tab);
+  }
+
   /** Wait (up to the navigation timeout) for a tab's page to stop loading. */
   private async untilLoaded(tab: Tab): Promise<void> {
     const deadline = Date.now() + this.navigationTimeoutMs;
@@ -1340,6 +1610,11 @@ export class BrowserManager implements BrowserService {
     } finally {
       for (const off of offs) off();
     }
+  }
+
+  /** One finger on a touch ("mobile") tab: down, moving, or lifted. */
+  private touch(tab: Tab, type: "touchStart" | "touchMove" | "touchEnd", x: number, y: number): Promise<unknown> {
+    return tab.session.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 0 }] });
   }
 
   private async pressKey(tab: Tab, key: string, code: string, text?: string): Promise<void> {

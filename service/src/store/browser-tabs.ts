@@ -14,9 +14,9 @@ export class BrowserTabRepo implements BrowserTabStore {
     const tabs = fromJson<unknown>(row.tabs, []);
     return {
       nextTabId: row.next_tab_id,
-      tabs: (Array.isArray(tabs) ? tabs : []).filter(
-        (t): t is StoredBrowserTab => !!t && Number.isInteger(t.id) && t.id > 0 && typeof t.url === "string" && typeof t.title === "string",
-      ),
+      tabs: (Array.isArray(tabs) ? tabs : [])
+        .filter((t): t is StoredBrowserTab => !!t && Number.isInteger(t.id) && t.id > 0 && typeof t.url === "string" && typeof t.title === "string")
+        .map(({ id, url, title, size }) => (storedSize(size) ? { id, url, title, size: storedSize(size)! } : { id, url, title })),
     };
   }
 
@@ -27,10 +27,18 @@ export class BrowserTabRepo implements BrowserTabStore {
         `INSERT INTO browser_tabs (session_id, next_tab_id, tabs, updated_at) VALUES ($id, $next, $tabs, $t)
          ON CONFLICT(session_id) DO UPDATE SET next_tab_id = excluded.next_tab_id, tabs = excluded.tabs, updated_at = excluded.updated_at`,
       )
-      .run({ id: sessionId, next: state.nextTabId, tabs: JSON.stringify(state.tabs.map(({ id, url, title }) => ({ id, url, title }))), t: now() });
+      .run({ id: sessionId, next: state.nextTabId, tabs: JSON.stringify(state.tabs.map(({ id, url, title, size }) => (size ? { id, url, title, size } : { id, url, title }))), t: now() });
   }
 
   delete(sessionId: string) {
     this.db.query("DELETE FROM browser_tabs WHERE session_id = $id").run({ id: sessionId });
   }
+}
+
+/** A stored tab's size when it's usable; an older row (or anything else) has none, which loads as Desktop. */
+function storedSize(size: unknown): StoredBrowserTab["size"] | undefined {
+  if (!size || typeof size !== "object") return undefined;
+  const { device, width, height } = size as Record<string, unknown>;
+  const ok = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n > 0;
+  return (device === "desktop" || device === "mobile") && ok(width) && ok(height) ? { device, width: width as number, height: height as number } : undefined;
 }
