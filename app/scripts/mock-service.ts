@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
+import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserSize } from "@harness/shared";
 import type {
   ActivityAuthor,
   ActivityEntry,
@@ -2033,14 +2034,18 @@ async function route(req: Request, url: URL): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 // Like the service: a session's browser has tabs (ids count up from 1, never reused); each socket
-// watches one tab per session, and resize applies to every tab. A suspended tab (its page closed
-// to save memory) reopens when a socket watches it.
+// watches one tab per session. Each tab has its own size (Desktop | Mobile, width × height), and a
+// `resize` counts only from the socket that switched the tab's Responsive on. A suspended tab (its
+// page closed to save memory) reopens when a socket watches it.
 interface TabSim {
   id: number;
   url: string;
   title: string;
   loading: boolean;
   suspended?: boolean;
+  size: BrowserSize;
+  /** The socket whose stage the tab follows while `size.responsive`. */
+  owner?: ServerWebSocket<WsData>;
   mouseX: number;
   mouseY: number;
   clicks: { x: number; y: number }[];
@@ -2050,8 +2055,6 @@ interface TabSim {
   index: number;
 }
 interface BrowserSim {
-  width: number;
-  height: number;
   tabs: Map<number, TabSim>;
   nextTab: number;
 }
@@ -2060,7 +2063,7 @@ const browsers = new Map<string, BrowserSim>();
 const titleOf = (url: string) => (url === "about:blank" ? "" : url.replace(/^https?:\/\//, ""));
 
 function addTab(b: BrowserSim, url: string, title = titleOf(url)): TabSim {
-  const t: TabSim = { id: b.nextTab++, url, title, loading: false, mouseX: -1, mouseY: -1, clicks: [], scroll: 0, typed: "", history: [url], index: 0 };
+  const t: TabSim = { id: b.nextTab++, url, title, loading: false, size: { device: "desktop", ...BROWSER_DESKTOP, responsive: false }, mouseX: -1, mouseY: -1, clicks: [], scroll: 0, typed: "", history: [url], index: 0 };
   b.tabs.set(t.id, t);
   return t;
 }
@@ -2068,7 +2071,7 @@ function addTab(b: BrowserSim, url: string, title = titleOf(url)): TabSim {
 function sim(sessionId: string): BrowserSim {
   let b = browsers.get(sessionId);
   if (!b) {
-    b = { width: 1280, height: 800, tabs: new Map(), nextTab: 1 };
+    b = { tabs: new Map(), nextTab: 1 };
     browsers.set(sessionId, b);
     addTab(b, "http://localhost:3000/", "Local dev server");
     addTab(b, "http://localhost:3000/docs", "Docs").suspended = true;
@@ -2082,11 +2085,15 @@ function tabOf(sessionId: string, tabId?: number): TabSim {
   return (tabId !== undefined ? b.tabs.get(tabId) : undefined) ?? b.tabs.values().next().value!;
 }
 
-function stateFor(sessionId: string, tabId?: number): BrowserState {
+/** A tab's state as `ws` sees it: sizeOwner only for the socket the tab follows. */
+function stateFor(sessionId: string, tabId?: number, ws?: ServerWebSocket<WsData>): BrowserState {
   const t = tabOf(sessionId, tabId);
-  const tabs = [...sim(sessionId).tabs.values()].map(({ id, url, title, loading, suspended }) => ({ id, url, title, loading, ...(suspended && { suspended }) }));
-  return { sessionId, tabId: t.id, url: t.url, title: t.title, loading: t.loading, ...(t.suspended && { suspended: true }), tabs };
+  const tabs = [...sim(sessionId).tabs.values()].map(({ id, url, title, loading, suspended, size }) => ({ id, url, title, loading, ...(suspended && { suspended }), size }));
+  const sizeOwner = t.size.responsive && !!ws && t.owner === ws;
+  return { sessionId, tabId: t.id, url: t.url, title: t.title, loading: t.loading, ...(t.suspended && { suspended: true }), tabs, size: { ...t.size }, ...(sizeOwner && { sizeOwner }) };
 }
+
+const side = (n: number) => Math.max(BROWSER_MIN_SIDE, Math.min(BROWSER_MAX_SIDE, Math.round(n)));
 
 function sendEvent(ws: ServerWebSocket<WsData>, event: HarnessEvent) {
   sendMsg(ws, { type: "event", event });
@@ -2096,7 +2103,7 @@ function sendEvent(ws: ServerWebSocket<WsData>, event: HarnessEvent) {
 function emitState(sessionId: string) {
   for (const ws of sockets) {
     const tabId = ws.data.subs.get(sessionId);
-    if (tabId !== undefined) sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, tabId) });
+    if (tabId !== undefined) sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, tabId, ws) });
   }
 }
 
@@ -2108,7 +2115,7 @@ function watch(ws: ServerWebSocket<WsData>, sessionId: string, tabId?: number) {
     t.suspended = false; // watching reopens it
     emitState(sessionId);
   }
-  sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, t.id) });
+  sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, t.id, ws) });
   sendEvent(ws, { kind: "browser.frame", sessionId, tabId: t.id, ...renderFrame(sessionId, t.id, frameTick) });
 }
 
@@ -2149,8 +2156,36 @@ function handleInput(ws: ServerWebSocket<WsData>, sessionId: string, tabId: numb
       t.typed += input.text;
       break;
     case "resize":
-      b.width = Math.max(100, Math.min(2560, Math.round(input.width)));
-      b.height = Math.max(100, Math.min(1600, Math.round(input.height)));
+      // Only the Responsive owner's stage counts; anyone else's pane leaves the tab alone.
+      if (!t.size.responsive || t.owner !== ws) break;
+      t.size = { ...t.size, width: side(input.width), height: side(input.height) };
+      emitState(sessionId);
+      break;
+    case "device":
+      // Resets to the mode's preset, switches Responsive off and reloads, even for the same mode.
+      t.size = { device: input.device, ...(input.device === "mobile" ? BROWSER_MOBILE : BROWSER_DESKTOP), responsive: false };
+      t.owner = undefined;
+      t.loading = true;
+      emitState(sessionId);
+      setTimeout(() => {
+        t.loading = false;
+        emitState(sessionId);
+      }, 400);
+      break;
+    case "size":
+      t.size = { ...t.size, width: side(input.width), height: side(input.height), responsive: false };
+      t.owner = undefined;
+      emitState(sessionId);
+      break;
+    case "responsive":
+      if (input.on) {
+        t.owner = ws;
+        t.size = { ...t.size, responsive: true, ...(input.width && input.height && { width: side(input.width), height: side(input.height) }) };
+      } else {
+        t.owner = undefined;
+        t.size = { ...t.size, responsive: false };
+      }
+      emitState(sessionId);
       break;
     case "navigate":
       navigate(sessionId, t.id, input.url);
@@ -2285,8 +2320,8 @@ function mockVideo(name: string): Attachment[] {
 }
 
 function renderFrame(sessionId: string, tabId: number, tick: number): { data: string; width: number; height: number } {
-  const { width: w, height: h } = sim(sessionId);
   const s = tabOf(sessionId, tabId);
+  const { width: w, height: h } = s.size;
   const px = new Uint8Array(w * h * 3);
   const rect = (x0: number, y0: number, rw: number, rh: number, r: number, g: number, b: number) => {
     const xa = Math.max(0, Math.floor(x0));

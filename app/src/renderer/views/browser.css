@@ -3,6 +3,13 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  container: browser / inline-size;
+}
+/* A narrow pane keeps the URL and size controls; the Live label goes first. */
+@container browser (max-width: 600px) {
+  .browser-live {
+    display: none;
+  }
 }
 
 /* The session's tabs, shown once it has more than one. Chips shrink to share the width (like a
@@ -191,7 +198,8 @@
   box-shadow: 0 0 0 3px var(--focus);
 }
 .browser-size-input {
-  width: 4ch;
+  width: 5ch;
+  padding: 0;
   border: 0;
   background: transparent;
   outline: none;
