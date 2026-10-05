@@ -1369,6 +1369,48 @@ withChrome("BrowserManager extensions (real Chrome)", () => {
     }
   }, 90_000);
 
+  // Talks to the Chrome Web Store, so it runs only when asked: HARNESS_NETWORK_TESTS=1.
+  (process.env.HARNESS_NETWORK_TESTS ? test : test.skip)(
+    "a Web Store extension installs through Chrome, turns off and on, opens its popup on a page, and is uninstalled when Chrome restarts",
+    async () => {
+      await settlePolicy();
+      const REACT = "fmkadmapgofadopljbjfkapdkoienihi";
+      const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 20_000, tabStore: memoryTabStore(), extensionsDir: tempDir("harness-ext-") });
+      try {
+        // No tab has a page, so Chrome restarts at once to install it.
+        const added = await service.addExtension({ webstore: `https://chromewebstore.google.com/detail/react-developer-tools/${REACT}` });
+        expect(added).toMatchObject({ id: REACT, name: "React Developer Tools", source: "webstore", status: "loaded", hasAction: true });
+        expect(existsSync(join(profileDir, "External Extensions", `${REACT}.json`))).toBe(true);
+        await expect(service.addExtension({ webstore: REACT })).rejects.toThrow(/already installed/);
+
+        expect((await service.setExtensionEnabled(REACT, false)).status).toBe("off");
+        expect((await service.setExtensionEnabled(REACT, true)).status).toBe("loaded");
+
+        await service.open("ws", "https://react.dev/");
+        await Bun.sleep(2000); // its content script reports React to its service worker
+        const { tab } = await service.runExtensionAction("ws", REACT);
+        expect(tab).toBe(2);
+        const popup = (await service.tabs("ws")).find((t) => t.id === 2)!;
+        expect(popup.url).toStartWith(`chrome-extension://${REACT}/popups/`);
+        expect(popup.size!.width).toBeLessThan(1280); // the popup's own size, not an emulated viewport
+
+        // A blocked extension (an organization's allowlist) is refused before anything is installed.
+        if (existsSync("/Library/Managed Preferences/com.google.Chrome.plist")) {
+          await expect(service.addExtension({ webstore: "eimadpbcbfnmbkopoojfekhnkhdbieeh" })).rejects.toThrow(/policy/);
+        }
+
+        await service.removeExtension(REACT);
+        expect((await service.extensions()).extensions.map((e) => e.id)).not.toContain(REACT);
+        expect(existsSync(join(profileDir, "External Extensions", `${REACT}.json`))).toBe(false);
+        await service.restartBrowser();
+        await until(() => !existsSync(join(profileDir, "Default", "Extensions", REACT)), "Chrome uninstalling it", 15_000);
+      } finally {
+        await service.shutdown();
+      }
+    },
+    120_000,
+  );
+
   test("bad input is refused before Chrome starts", async () => {
     const service = new BrowserManager({ profileDir, chromePath: chromePath!, tabStore: memoryTabStore(), extensionsDir: tempDir("harness-ext-") });
     try {

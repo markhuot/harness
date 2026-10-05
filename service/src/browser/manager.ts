@@ -117,6 +117,11 @@ interface Tab {
   url: string;
   title: string;
   loading: boolean;
+  /**
+   * An extension's toolbar popup (runExtensionAction). Chrome sizes a popup to its content and
+   * won't emulate a viewport or device for it, so its size is measured, not set.
+   */
+  popup?: boolean;
   /** The input mode and viewport it should have (what states report and the store keeps). */
   size: BrowserSize;
   /**
@@ -993,7 +998,7 @@ export class BrowserManager implements BrowserService {
         const popup = (await pages()).find((t) => t.type === "page" && !before.has(t.targetId) && t.url.startsWith(origin));
         if (popup) {
           const entry = tab.entry;
-          const opened = await this.attachTab(entry, entry.nextTabId++, popup.targetId, browser, undefined, { ...tab.size });
+          const opened = await this.attachTab(entry, entry.nextTabId++, popup.targetId, browser, undefined, { ...tab.size }, true);
           this.scheduleSave(entry);
           return { tab: opened.id };
         }
@@ -1300,7 +1305,7 @@ export class BrowserManager implements BrowserService {
    * Attach to a page target (one we created, or a popup a tab opened) and make it tab `id`.
    * `initial`: a suspended tab being reopened, whose URL and title stand until its page reports its own.
    */
-  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab, size?: BrowserSize): Promise<Tab> {
+  private async attachTab(entry: Entry, id: number, targetId: string, browser: Browser, initial?: StoredBrowserTab, size?: BrowserSize, popup = false): Promise<Tab> {
     const { cdp } = browser;
     let sessionId: string;
     try {
@@ -1338,8 +1343,11 @@ export class BrowserManager implements BrowserService {
       gone,
       markGone,
       offs: [],
+      popup,
     };
     this.attachListeners(tab);
+    // A popup grows to fit its content after it loads.
+    if (popup) tab.offs.push(session.on("Page.frameResized", () => void this.applySize(tab).catch(() => {})));
     try {
       await Promise.all([
         session.send("Page.enable"),
@@ -1606,12 +1614,26 @@ export class BrowserManager implements BrowserService {
    * skipped, so an unchanged size restarts nothing (a Responsive viewer resizes on every layout pass).
    */
   private async applySize(tab: Tab): Promise<void> {
+    if (tab.popup) return this.measurePopup(tab);
     const { device, width, height } = tab.size;
     const switched = tab.device !== device;
     if (!switched && tab.viewport.width === width && tab.viewport.height === height) return;
     tab.viewport = { width, height };
     tab.device = device;
     await Promise.all([this.applyViewport(tab), switched ? this.applyDevice(tab) : undefined]);
+    await this.syncScreencast(tab);
+  }
+
+  /** A popup's size is whatever Chrome gave it: report that (any size asked for doesn't apply). */
+  private async measurePopup(tab: Tab): Promise<void> {
+    const r = await tab.session.send("Runtime.evaluate", { expression: "[innerWidth, innerHeight]", returnByValue: true }).catch(() => null);
+    const [width, height] = (r?.result?.value as [number, number] | undefined) ?? [0, 0];
+    if (!(width > 0 && height > 0)) return;
+    const changed = width !== tab.viewport.width || height !== tab.viewport.height;
+    tab.viewport = { width, height };
+    tab.size = { device: "desktop", width, height, responsive: false };
+    if (!changed) return;
+    this.emitStates(tab.entry);
     await this.syncScreencast(tab);
   }
 

@@ -53,16 +53,19 @@ interface ChromeExtension {
   /** "admin" (an organization's policy), "normal", "sideload" (External Extensions), "development" (unpacked)… */
   installType: string;
   optionsUrl?: string;
+  /** false: Chrome won't turn it on, as for one the organization's policy doesn't allow. */
+  mayEnable?: boolean;
 }
+
+const blockedState = (name: string): LoadState => ({ status: "blocked", error: `Your organization's Chrome policy doesn't allow ${name}.` });
 
 /** What went wrong (or right) the last time Chrome installed or loaded an extension. */
 type LoadState = { status: "loaded" | "blocked" | "error"; error?: string };
 
-/** The page chrome://extensions, whose chrome.management installs, turns on and off, and uninstalls. */
+/** The page chrome://extensions, whose chrome.management lists extensions and turns them on and off. */
 interface ExtensionsPage {
   getAll(): Promise<ChromeExtension[]>;
   setEnabled(id: string, enabled: boolean): Promise<void>;
-  uninstall(id: string): Promise<void>;
 }
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -83,6 +86,8 @@ export class ExtensionHost {
   private states = new Map<string, LoadState>();
   /** chrome.management's view the last time it was read: Web Store installs and the organization's. */
   private chrome = new Map<string, ChromeExtension>();
+  /** Web Store extensions removed while Chrome ran: off, and gone once Chrome restarts. Hidden until then. */
+  private uninstalling = new Set<string>();
   /** This launch's Web Store sync (waiting for installs, turning them on or off). */
   private syncing: Promise<void> = Promise.resolve();
   /** Serializes changes, so two of them don't load, check and write the registry over each other. */
@@ -163,15 +168,25 @@ export class ExtensionHost {
         else if (cdp) await cdp.send("Extensions.uninstall", { id }).catch(() => {});
         if (!enabled) this.states.delete(id);
       } else if (cdp) {
-        await this.withExtensionsPage(cdp, async (page) => {
-          if ((await page.getAll()).some((e) => e.id === id)) {
-            try {
-              await page.setEnabled(id, enabled);
-            } catch (e) {
-              throw new HarnessError(422, `Chrome couldn't turn ${entry.name} ${enabled ? "on" : "off"}: ${errorText(e)}`);
-            }
+        const installed = await this.withExtensionsPage(cdp, async (page) => (await page.getAll()).find((e) => e.id === id));
+        if (enabled && installed && !installed.enabled && installed.mayEnable === false) throw new HarnessError(403, blockedState(entry.name).error!);
+        if (installed) {
+          try {
+            await this.switchExtension(cdp, id, enabled);
+          } catch (e) {
+            throw new HarnessError(422, `Chrome couldn't turn ${entry.name} ${enabled ? "on" : "off"}: ${errorText(e)}`);
           }
-          this.remember(await page.getAll());
+        }
+        this.states.delete(id);
+        // Chrome reports the change a moment after it answers.
+        await this.withExtensionsPage(cdp, async (page) => {
+          const deadline = this.now() + 2000;
+          let all = await page.getAll();
+          while (installed && all.find((e) => e.id === id)?.enabled !== enabled && this.now() < deadline) {
+            await Bun.sleep(100);
+            all = await page.getAll();
+          }
+          this.remember(all);
         });
       }
       const next = { ...entry, enabled };
@@ -180,21 +195,21 @@ export class ExtensionHost {
     });
   }
 
-  /** Uninstall an extension Settings added. An unpacked folder stays where it is. */
+  /**
+   * Uninstall an extension Settings added. An unpacked folder leaves Chrome at once (the folder
+   * itself stays). A Web Store extension is turned off at once and uninstalled by Chrome when it
+   * next starts and finds its External Extensions file gone: chrome.management.uninstall needs a
+   * person to confirm a dialog, which this Chrome never shows.
+   */
   async remove(id: string): Promise<void> {
     const entry = this.mine(id);
     await this.serial(async () => {
       const cdp = this.opts.live();
       if (entry.source === "unpacked") await cdp?.send("Extensions.uninstall", { id }).catch(() => {});
       else {
-        // Without its file, Chrome also uninstalls it when it next starts, if it isn't running now.
         removeExternalExtension(this.opts.profileDir, id);
-        if (cdp) {
-          await this.withExtensionsPage(cdp, async (page) => {
-            await page.uninstall(id).catch(() => {});
-            this.remember(await page.getAll());
-          }).catch(() => {});
-        }
+        this.uninstalling.add(id);
+        if (cdp && this.chrome.get(id)?.enabled !== false) await this.switchExtension(cdp, id, false).catch(() => {});
       }
       this.chrome.delete(id);
       this.registry.remove(id);
@@ -223,16 +238,29 @@ export class ExtensionHost {
       const entry: StoredExtension = { id, name, version: "", source: "webstore", enabled: true, addedAt: this.now() };
       this.registry.put(entry);
       this.states.delete(id);
+      this.uninstalling.delete(id);
       if (problem === "installed") {
-        // The profile has it already (from before, or another route): make sure it's on.
-        await this.withExtensionsPage(cdp, async (page) => {
-          await page.setEnabled(id, true).catch(() => {});
-          this.remember(await page.getAll());
-        });
+        // The profile has it already (from before, or removed but not yet uninstalled): turn it on.
+        const installed = await this.withExtensionsPage(cdp, async (page) => (await page.getAll()).find((e) => e.id === id));
+        if (installed && !installed.enabled && installed.mayEnable === false) this.states.set(id, blockedState(name));
+        else if (installed && !installed.enabled) await this.switchExtension(cdp, id, true).catch((e) => this.states.set(id, { status: "error", error: errorText(e) }));
+        await this.withExtensionsPage(cdp, async (page) => this.remember(await page.getAll()));
       } else if (!this.opts.hasPages()) {
         // Chrome installs it when it starts, and no page would reload: restart now and wait for it.
         await this.opts.restart();
         await this.synced();
+      }
+      // The store's answer can come before Chrome has the organization's policy (a new profile's
+      // first minutes): Chrome then installs the extension but won't turn it on. Undo the install;
+      // Chrome removes it when it next starts without its file.
+      const state = this.states.get(id);
+      if (state?.status === "blocked") {
+        removeExternalExtension(this.opts.profileDir, id);
+        this.uninstalling.add(id);
+        this.registry.remove(id);
+        this.states.delete(id);
+        this.chrome.delete(id);
+        throw new HarnessError(403, state.error!);
       }
       return this.describe(this.registry.get(id) ?? entry);
     });
@@ -296,8 +324,8 @@ export class ExtensionHost {
 
   /** Wait (installWaitMs) for Chrome to install the registry's Web Store extensions, then turn each on or off to match. */
   private async syncWebStore(cdp: CdpClient): Promise<void> {
-    await this.withExtensionsPage(cdp, async (page) => {
-      const wanted = () => this.registry.list().filter((e) => e.source === "webstore");
+    const wanted = () => this.registry.list().filter((e) => e.source === "webstore");
+    const all = await this.withExtensionsPage(cdp, async (page) => {
       const deadline = this.now() + (this.opts.installWaitMs ?? 30_000);
       let all = await page.getAll();
       this.remember(all);
@@ -305,24 +333,31 @@ export class ExtensionHost {
         await Bun.sleep(500);
         all = await page.getAll();
       }
-      for (const entry of wanted()) {
-        const installed = all.find((c) => c.id === entry.id);
-        if (!installed) {
-          if (entry.enabled) {
-            this.states.set(entry.id, {
-              status: "error",
-              error: "Chrome didn't install it from the Chrome Web Store. The store may be unreachable, or your organization's Chrome policy may no longer allow it.",
-            });
-          }
-          continue;
-        }
-        this.states.delete(entry.id);
-        if (installed.enabled !== entry.enabled) {
-          await page.setEnabled(entry.id, entry.enabled).catch((e) => this.states.set(entry.id, { status: "error", error: errorText(e) }));
-        }
-      }
-      this.remember(await page.getAll());
+      return all;
     });
+    for (const entry of wanted()) {
+      const installed = all.find((c) => c.id === entry.id);
+      if (!installed) {
+        if (entry.enabled) {
+          this.states.set(entry.id, {
+            status: "error",
+            error: "Chrome didn't install it from the Chrome Web Store. The store may be unreachable, or your organization's Chrome policy may no longer allow it.",
+          });
+        }
+        continue;
+      }
+      this.states.delete(entry.id);
+      if (entry.enabled && !installed.enabled && installed.mayEnable === false) this.states.set(entry.id, blockedState(entry.name));
+      else if (installed.enabled !== entry.enabled) {
+        await this.switchExtension(cdp, entry.id, entry.enabled).catch((e) => this.states.set(entry.id, { status: "error", error: errorText(e) }));
+      }
+    }
+    await this.withExtensionsPage(cdp, async (page) => this.remember(await page.getAll()));
+  }
+
+  /** chrome.management.setEnabled, as a person flipping the extension's switch in chrome://extensions. */
+  private switchExtension(cdp: CdpClient, id: string, enabled: boolean): Promise<void> {
+    return this.withExtensionsPage(cdp, (page) => page.setEnabled(id, enabled));
   }
 
   /** Open `url` in a page of its own (not a session's tab), run `fn` with an evaluator for it, and close it. */
@@ -344,16 +379,19 @@ export class ExtensionHost {
   /** chrome://extensions, once its chrome.management is there. */
   private withExtensionsPage<T>(cdp: CdpClient, fn: (page: ExtensionsPage) => Promise<T>): Promise<T> {
     return this.withPage(cdp, "chrome://extensions", async (evaluate) => {
-      await this.until(() => evaluate(`typeof chrome?.management?.getAll === "function"`), 10_000, "chrome://extensions didn't load");
-      const call = (expression: string) =>
-        evaluate(`new Promise((resolve, reject) => ${expression}(() => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(true)))`);
+      await this.until(() => evaluate(`document.readyState === "complete" && typeof chrome?.management?.getAll === "function"`), 10_000, "chrome://extensions didn't load");
+      // `fn` takes the API's callback. Chrome never answers some calls (turning on an extension its
+      // policy keeps off), so each gets 10 seconds.
+      const call = (fn: string) =>
+        evaluate(
+          `new Promise((resolve, reject) => { setTimeout(() => reject(new Error("Chrome didn't answer")), 10000); (${fn})(() => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve(true)); })`,
+        );
       return fn({
         getAll: () =>
           evaluate(
-            `new Promise((resolve) => chrome.management.getAll((list) => resolve(list.filter((e) => e.type === "extension").map((e) => ({ id: e.id, name: e.name, version: e.version, description: e.description, enabled: e.enabled, installType: e.installType, optionsUrl: e.optionsUrl || undefined })))))`,
+            `new Promise((resolve) => chrome.management.getAll((list) => resolve(list.filter((e) => e.type === "extension").map((e) => ({ id: e.id, name: e.name, version: e.version, description: e.description, enabled: e.enabled, installType: e.installType, optionsUrl: e.optionsUrl || undefined, mayEnable: e.mayEnable })))))`,
           ),
         setEnabled: async (id, enabled) => void (await call(`(cb) => chrome.management.setEnabled(${JSON.stringify(id)}, ${enabled}, cb)`)),
-        uninstall: async (id) => void (await call(`(cb) => chrome.management.uninstall(${JSON.stringify(id)}, { showConfirmDialog: false }, cb)`)),
       });
     });
   }
@@ -392,6 +430,7 @@ export class ExtensionHost {
 
   private remember(all: ChromeExtension[]): void {
     this.chrome = new Map(all.map((e) => [e.id, e]));
+    for (const id of this.uninstalling) if (!this.chrome.has(id)) this.uninstalling.delete(id);
   }
 
   private mine(id: string): StoredExtension {
@@ -421,7 +460,7 @@ export class ExtensionHost {
     const mine = new Set(entries.map((e) => e.id));
     const extensions = entries.map((e) => this.describe(e));
     for (const c of this.chrome.values()) {
-      if (mine.has(c.id) || c.installType === "development") continue;
+      if (mine.has(c.id) || this.uninstalling.has(c.id) || c.installType === "development") continue;
       const dir = installedExtensionDir(this.opts.profileDir, c.id);
       let hasAction = false;
       try {
