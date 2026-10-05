@@ -1,4 +1,5 @@
 import HarnessKit
+import os
 import SwiftUI
 
 // Pieces the ticket screen shares with its tab bodies:
@@ -13,6 +14,10 @@ import SwiftUI
 /// which HeroSlide turns into a render-time offset of the tab strip and pager. Animating the hero's
 /// frame instead re-lays out the pager and the tab body's scroll view on every frame, which drops
 /// frames on a long spec.
+///
+/// Only TicketHeroSlot and HeroSlide read its state, never the ticket screen's body: a toggle runs in
+/// the middle of a scroll, and re-rendering the screen from there redrew every tab body (the whole
+/// spec's markdown, the transcript's rows) on the frame the slide starts.
 @MainActor
 @Observable
 final class TicketDetailHeroCollapse {
@@ -29,6 +34,8 @@ final class TicketDetailHeroCollapse {
         let next = HeroCollapse.step(state, e, heroHeight: heroHeight)
         state = next
         guard next.hidden != hidden else { return }
+        // Instruments' Points of Interest: each toggle, to line up with the hitches around it.
+        Self.signposter.emitEvent("Hero toggle", "\(next.hidden ? "hide" : "show")")
         var instant = Transaction(animation: nil)
         instant.disablesAnimations = true
         withTransaction(instant) {
@@ -43,13 +50,36 @@ final class TicketDetailHeroCollapse {
     func measured(_ height: Double) {
         if !state.hidden { heroHeight = height }
     }
+
+    private static let signposter = OSSignposter(subsystem: "com.markhuot.harness", category: .pointsOfInterest)
+}
+
+/// On the hero: its slot, zero high while it's hidden. The hero keeps drawing there, under the tab
+/// strip and pager, which slide over it (HeroSlide).
+struct TicketHeroSlot: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+
+    func body(content: Content) -> some View {
+        content
+            .frame(height: hero.hidden ? 0 : nil, alignment: .top)
+            .allowsHitTesting(!hero.hidden)
+            .accessibilityHidden(hero.hidden)
+    }
 }
 
 /// On the tab strip and pager under the hero: keeps them where they were drawn when the hero's
 /// room appears or goes at once, then slides them the rest of the way as `progress` animates. Only
 /// `progress` is interpolated, and only into a visual effect, so no frame of the slide lays
 /// anything out.
-struct HeroSlide: ViewModifier, Animatable {
+struct HeroSlide: ViewModifier {
+    let hero: TicketDetailHeroCollapse
+
+    func body(content: Content) -> some View {
+        content.modifier(HeroSlideOffset(progress: hero.progress, hidden: hero.hidden, distance: hero.distance))
+    }
+}
+
+private struct HeroSlideOffset: ViewModifier, Animatable {
     var progress: Double
     let hidden: Bool
     let distance: Double
@@ -82,6 +112,54 @@ struct TicketDetailTabOpener: Sendable {
     let open: @MainActor @Sendable (TicketTab) -> Void
 
     @MainActor func callAsFunction(_ tab: TicketTab) { open(tab) }
+}
+
+/// The ticket screen's callbacks for its tab bodies (the tab opener, the annotation sink, the
+/// annotator opener), made once and kept for the screen's life. Closures never compare equal, so
+/// fresh ones on each render would redraw every view that reads them: a transcript row, the spec's
+/// markdown. These call through to whatever the screen set last (`update`), so they stay current.
+@MainActor
+final class TicketDetailRelay {
+    private var hero: TicketDetailHeroCollapse?
+    private var onTab: (TicketTab) -> Void = { _ in }
+    private var annotate: (AnnotationRequest) -> Void = { _ in }
+    private var focusComposer: () -> Void = {}
+    private var cachedSink: (holder: ObjectIdentifier, sink: AnnotationSink)?
+
+    func update(hero: TicketDetailHeroCollapse, onTab: @escaping (TicketTab) -> Void,
+                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void) {
+        self.hero = hero
+        self.onTab = onTab
+        self.annotate = annotate
+        self.focusComposer = focusComposer
+    }
+
+    private(set) lazy var tabOpener = TicketDetailTabOpener { [weak self] t in
+        self?.hero?.show()
+        self?.onTab(t)
+    }
+
+    private(set) lazy var annotatorOpener = AnnotatorOpener { [weak self] in self?.annotate($0) }
+
+    /// Annotated images join the next message, their notes on the attachment itself (a file already
+    /// waiting there is edited in place), never sent on their own; the field takes focus so the
+    /// human can say why.
+    func sink(outgoing: MessageAttachments, uploader: PromptAttachmentUploader, toasts: ToastCenter) -> AnnotationSink {
+        if let cachedSink, cachedSink.holder == ObjectIdentifier(outgoing) { return cachedSink.sink }
+        let sink = AnnotationSink(current: { a in
+            outgoing.list.first { $0.id == a.id }?.annotation
+        }, add: { [weak self] added in
+            guard outgoing.annotate(added.attachment, annotation: added.annotation) else {
+                haptic(.warning)
+                toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
+                return
+            }
+            if let data = added.uploaded { Task { await uploader.keepUploaded(data, for: added.attachment) } }
+            self?.focusComposer()
+        })
+        cachedSink = (ObjectIdentifier(outgoing), sink)
+        return sink
+    }
 }
 
 extension EnvironmentValues {

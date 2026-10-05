@@ -145,6 +145,7 @@ private struct TicketDetailBody: View {
     @State private var annotating: AnnotationRequest?
     /// The spec's media (the detail's attachments), refetched when a new revision may show more.
     @State private var specAttachments: [Attachment]?
+    @State private var relay = TicketDetailRelay()
 
     /// What has to change for the spec's media to load again.
     private struct SpecAttachmentsTrigger: Hashable {
@@ -159,31 +160,29 @@ private struct TicketDetailBody: View {
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
+        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 })
         VStack(spacing: 0) {
             // Hidden, the hero keeps drawing in its zero-height slot, under the tab strip and pager,
             // which slide up over it (HeroSlide) and cover it once they get there.
+            // The hero's state is read only in TicketHeroSlot and HeroSlide, so a toggle mid-scroll
+            // doesn't re-render this body (and with it every tab body).
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
-                .frame(height: hero.hidden ? 0 : nil, alignment: .top)
-                .allowsHitTesting(!hero.hidden)
-                .accessibilityHidden(hero.hidden)
+                .modifier(TicketHeroSlot(hero: hero))
             VStack(spacing: 0) {
                 TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs, tornOff: tornOff) { t in
                     hero.show()
                     onTab(t)
                 }
                 pager(shown, tornOff: tornOff)
-                    .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
-                        hero.show()
-                        onTab(t)
-                    })
-                    .environment(\.annotationSink, sink)
-                    .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
+                    .environment(\.ticketDetailOpenTab, relay.tabOpener)
+                    .environment(\.annotationSink, relay.sink(outgoing: outgoing, uploader: uploader, toasts: toasts))
+                    .environment(\.openAnnotator, relay.annotatorOpener)
                     .environment(\.specAttachments, specAttachments)
             }
             // Not into the safe area: running up under the bar, it would slide down over the hero.
             .background(c.bg, ignoresSafeAreaEdges: [])
-            .modifier(HeroSlide(progress: hero.progress, hidden: hero.hidden, distance: hero.distance))
+            .modifier(HeroSlide(hero: hero))
             .zIndex(1)
         }
         .task(id: SpecAttachmentsTrigger(key: ticket.key, revision: ticket.specRevision, epoch: store.epoch)) {
@@ -209,27 +208,6 @@ private struct TicketDetailBody: View {
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
         .annotator($annotating) { hero.show() }
-    }
-
-    /// Annotated images join the next message, their notes on the attachment itself (a file already
-    /// waiting there is edited in place), never sent on their own; the field takes focus so the
-    /// human can say why.
-    private var sink: AnnotationSink {
-        let outgoing = outgoing
-        let uploader = uploader
-        let toasts = toasts
-        let focus = { focusComposer += 1 }
-        return AnnotationSink(current: { a in
-            outgoing.list.first { $0.id == a.id }?.annotation
-        }, add: { added in
-            guard outgoing.annotate(added.attachment, annotation: added.annotation) else {
-                haptic(.warning)
-                toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
-                return
-            }
-            if let data = added.uploaded { Task { await uploader.keepUploaded(data, for: added.attachment) } }
-            focus()
-        })
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the

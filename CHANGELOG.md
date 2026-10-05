@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, a ticket's title and buttons slide away and come back with less stutter
+  while you scroll its Spec, Transcript or other tabs. The tab you're scrolling no longer redraws
+  each time they move.
+
 ## [app-20261005.1016](https://github.com/markhuot/harness/releases/tag/app-20261005.1016) - 2026-10-05
 
 ### Changed
