@@ -1,4 +1,4 @@
-// Settings: appearance, drivers (each with its own settings) and the default model, general run settings, prompts, watchers, and the project list
+// Settings: appearance, drivers (each with its own settings) and the default model, general run settings, the browser's extensions, prompts, watchers, and the project list
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -19,6 +19,7 @@ import { NetworkSection } from "./settings/NetworkSettings";
 import { AppearanceSection } from "./settings/AppearanceSettings";
 import { PromptsSection } from "./settings/PromptSettings";
 import { ServiceSection } from "./settings/ServiceSettings";
+import { ExtensionsSection } from "./settings/ExtensionSettings";
 
 /** The settings page's sections, in order ([id, label]); the ⌘K palette lists them too. */
 export const SETTINGS_SECTIONS = [
@@ -28,6 +29,7 @@ export const SETTINGS_SECTIONS = [
   ["service", "Service"],
   ["permissions", "Permissions"],
   ["network", "Network"],
+  ["extensions", "Extensions"],
   ["prompts", "Prompts"],
   ["watchers", "Watchers"],
   ["projects", "Projects"],
@@ -76,6 +78,7 @@ export function SettingsView() {
           <ServiceSection />
           {state.settings && <PermissionsSection settings={state.settings} />}
           {state.settings && <NetworkSection settings={state.settings} />}
+          <ExtensionsSection />
           <PromptsSection />
           <WatchersSection />
           <ProjectsSection />

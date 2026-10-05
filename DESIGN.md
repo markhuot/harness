@@ -1587,6 +1587,38 @@ target in its own headless window (so every tab paints and can screencast). Numb
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 
+### Browser extensions
+
+Every session's tabs share the service Chrome's extensions (HARNESS-285; `browser/extensions.ts`,
+`browser/extension-host.ts`). Settings → Extensions adds them; `~/.harness/chrome-extensions/extensions.json`
+lists what was added and whether each is on.
+
+- **Web Store extensions are Chrome's own installs.** The store page's
+  `chrome.webstorePrivate.getExtensionStatus` says first whether the organization's policy allows
+  one (`can_request`, `blocked_by_policy` … become a 403). Then the service writes
+  `<profile>/External Extensions/<id>.json`, Chrome installs the store build on its next start and
+  keeps it updated, and `chrome://extensions`' `chrome.management.setEnabled` turns it on or off.
+  Chrome reads that folder only at startup, so an install restarts Chrome at once when no tab has a
+  page, and otherwise waits as `pending` for `POST /browser/restart` (or Chrome's idle stop).
+  Removing deletes the file and turns it off; Chrome uninstalls it on its next start, since
+  `chrome.management.uninstall` needs a confirmation dialog headless Chrome never shows. One Chrome
+  installs but won't enable (`mayEnable: false`) is reported as blocked.
+- **Not repacked CRX files.** Loading a store CRX unpacked (with its key, so the ID matches) works
+  only until a `*` blocklist policy arrives (about 5 s into a new profile's first launch); after
+  that Chrome refuses every unpacked load. Building on that window would sidestep the administrator.
+- **Unpacked folders** load over CDP (`Extensions.loadUnpacked`, enabled by
+  `--enable-unsafe-extension-debugging`) and again after every launch, since Chrome forgets them.
+  Chrome's "disabled by the administrator" refusal is reported as blocked by policy.
+- **Toolbar actions.** `POST /browser/:sessionId/extension-action` runs `Extensions.triggerAction`
+  on the page's tab target (CDP doesn't link pages to tabs; the service auto-attaches to tab targets
+  until one's page is the tab's). The popup joins the session as its next tab. Chrome won't emulate
+  a viewport for a popup, so such a tab reports the size Chrome gave it and re-measures on
+  `Page.frameResized`.
+- **Restarting** suspends every tab before closing Chrome (its `targetDestroyed` events would
+  otherwise close them for good); a watched tab reopens at once in the new Chrome.
+- Tests: `HARNESS_NETWORK_TESTS=1 bun test src/browser/manager.test.ts -t extensions` runs the Web
+  Store flow; `app/scripts/extensions-real.ts` drives it through the Mac app.
+
 ### Browser waits and scripts
 
 Agents wait for a page instead of sleeping, and run multi-step flows as scripts (HARNESS-278).

@@ -1236,6 +1236,32 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
     expect(store.rows.get("sd")?.tabs).toEqual([{ id: 1, url: `${base}/?sd`, title: "Home Page", size: { device: "desktop", width: 1280, height: 800, responsive: true } }]);
   }, 60_000);
 
+  test("restartBrowser keeps every tab: each reloads its URL in the new Chrome, a watched one at once", async () => {
+    const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
+    try {
+      await service.open("rb", `${base}/?rb-1`);
+      await service.open("rb", `${base}/page2?rb-2`, { newTab: true });
+      await service.subscribe("rb", "viewer", () => {}, () => {}, { tab: 1 });
+      const pid = service.chromePid!;
+      await service.restartBrowser();
+      expect(service.chromePid).toBeDefined();
+      expect(service.chromePid).not.toBe(pid);
+      expect(isAlive(pid)).toBe(false);
+      // The watched tab came back with its page; the other waits, suspended, until it's used.
+      await until(async () => {
+        const first = (await service.tabs("rb"))[0];
+        return !!first && !first.suspended && first.url === `${base}/?rb-1`;
+      }, "the watched tab reopening at its URL", 10_000);
+      expect((await service.tabs("rb")).map((t) => [t.id, t.url, !!t.suspended])).toEqual([
+        [1, `${base}/?rb-1`, false],
+        [2, `${base}/page2?rb-2`, true],
+      ]);
+      expect(await service.content("rb", { selector: "h1", tab: 2 })).toBe("Second page");
+    } finally {
+      await service.shutdown();
+    }
+  }, 60_000);
+
   test("Chrome stops once no tab has a page, and the next call relaunches it", async () => {
     const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
     try {

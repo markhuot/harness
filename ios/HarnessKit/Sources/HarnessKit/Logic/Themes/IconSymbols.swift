@@ -61,6 +61,7 @@ extension Icons {
         "pointer": "cursorarrow",
         "phone": "iphone",
         "ruler": "ruler",
+        "puzzle": "puzzlepiece.extension",
     ]
 
     public static let fallbackSymbol = "questionmark.square.dashed"

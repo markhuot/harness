@@ -1021,8 +1021,20 @@ export class BrowserManager implements BrowserService {
       const old = this.browser;
       if (old) {
         this.browser = undefined;
-        await old.chrome.close({ cdp: old.cdp });
-        old.cdp.close();
+        // A launch (a watched tab reopening) waits for this Chrome to be gone: one profile, one Chrome.
+        this.stopping = (async () => {
+          await old.chrome.close({ cdp: old.cdp });
+          old.cdp.close();
+        })().finally(() => {
+          this.stopping = undefined;
+        });
+        // Suspend every tab first, so each keeps its URL and reloads it in the new Chrome (as Chrome
+        // closes it reports each page destroyed, which would otherwise close the tabs for good).
+        for (const entry of this.entries.values()) {
+          this.dropTabs(openTabs(entry), "suspend");
+          this.scheduleSave(entry);
+        }
+        await this.stopping;
       }
       await this.ensureBrowser();
       await this.extensionHost?.synced();
