@@ -984,11 +984,10 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
     browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock, tabStore: store });
   });
 
-  // Closing Chrome gracefully can take longer than the default 5 s hook timeout on a busy Mac.
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  }, 20_000);
+  });
 
   const pages = () => chromePages(browser);
 
