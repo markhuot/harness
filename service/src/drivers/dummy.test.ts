@@ -261,6 +261,16 @@ describe("dummy driver", () => {
     expect(again.ops.calls[0]!.args[0]).toBe("approve");
   });
 
+  test("review reads the revision the prompt names and finds directives in the spec", async () => {
+    const { req, ops } = makeReq("review", "Review TEST-1.\n\n## Spec (revision 3)\nRead it first with `read_spec` { revision: 3 }: the work was submitted against it.");
+    ops.readSpec = async (_ctx, revision) => (revision === 3 ? "Revision 3 of 4.\n   1\tMake it blue [dummy:reject]" : "Revision 4 (current).\n   1\tMake it blue");
+    const { events } = await collect(driver, req);
+    expect(calls(events).map((c) => [c.name, c.input])).toEqual([
+      ["read_spec", { revision: 3 }],
+      ["review_decision", { decision: "request_changes", notes: "The dummy reviewer was asked to reject this round." }],
+    ]);
+  });
+
   test("complete posts 'Completed.'", async () => {
     const { req, ops } = makeReq("complete", "Finalize");
     const { events } = await collect(driver, req);

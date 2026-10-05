@@ -273,9 +273,12 @@ write driver state back to the session. All other ticket runs resume the session
 
 ### Agent review
 
-`run.review` gives the reviewer what it needs inline (`Orchestrator.reviewContext`):
+`run.review` gives the reviewer what it needs (`Orchestrator.reviewContext`):
 
-- the spec at its current revision;
+- the spec's current revision number, which the reviewer reads with `read_spec { revision }`. The
+  text isn't inlined: revisions never change once written, so the number pins exactly what was
+  submitted even if someone edits the spec mid-review, and a long spec doesn't land in the context
+  twice (the prompt, then `get_ticket`);
 - the unified diff from the approved baseline (`specBaselineRevision`) to the current spec, or a
   note that there is none (the ticket started without planning);
 - from round 2 on, the earlier rounds: each decision, its notes and the commit it reviewed. The

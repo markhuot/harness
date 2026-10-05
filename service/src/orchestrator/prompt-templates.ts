@@ -516,12 +516,13 @@ Tabs last between runs, but their pages don't. A tab nobody has used for a few m
   "run.review": {
     group: "run",
     label: "Agent review",
-    description: "Starts an agent review run once the work is submitted: the spec, its changes since the approved baseline, earlier rounds and recent Activity.",
+    description:
+      "Starts an agent review run once the work is submitted: the spec revision to read, its changes since the approved baseline, earlier rounds and recent Activity.",
     variables: {
       ticket: TICKET,
       key: "The ticket's local key, what get_ticket takes",
-      spec: "The ticket's current spec",
-      specRevision: "The spec's current revision number",
+      specEmpty: "True when the spec is empty, so the title is the whole spec",
+      specRevision: "The spec's current revision number, the one the reviewer reads with read_spec",
       baselineRevision: "The revision the human approved by pressing Start, or empty when there is none",
       baselineDiff: "A unified diff (in a diff code fence) from the approved baseline to the current spec, or empty when they're the same",
       round: "The review round: 1 for the first agent review of this ticket",
@@ -533,7 +534,7 @@ Tabs last between runs, but their pages don't. A tab nobody has used for a few m
     template: `Review {{ticket}}{{#if rereview}}: round {{round}}, a re-review{{/if}}.
 
 ## Spec (revision {{specRevision}})
-{{spec}}
+{{#if specEmpty}}The spec is empty; the title is the whole spec.{{else}}Read it first with \`read_spec\` { revision: {{specRevision}} }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.{{/if}}
 
 ## Spec changes since the human approved it
 {{#if baselineDiff}}Revision {{baselineRevision}} is what the human approved by pressing Start:
