@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.1909](https://github.com/markhuot/harness/releases/tag/app-20261005.1909) - 2026-10-05
+
 ### Added
 
 - A ticket that stops because you hit a usage limit no longer waits for you to restart it. It
