@@ -6,8 +6,8 @@ import Observation
 // fan-out for the Browser tab, and the phone-specific policy: iOS suspends the socket in the
 // background, so returning to the foreground rebuilds it and refetches; a 401 (token rotated on
 // the Mac) is surfaced for re-pairing.
-// Paging: the snapshot is every non-done ticket plus the first Done page for the board's project
-// filter; BoardLoader pages Done and runs the board search, DetailFetcher fills in the tickets the
+// Paging: the snapshot is every non-done ticket plus the first Done page for the board's filter
+// (a project, a project group, or All projects); BoardLoader pages Done and runs the board search, DetailFetcher fills in the tickets the
 // UI references that aren't loaded (older done dependencies, conductors' done children).
 //
 // UI-framework-free: the app shell owns one per connection and injects it into SwiftUI.
@@ -93,7 +93,7 @@ public final class BoardStore {
     @ObservationIgnored private var closed = false
 
     /// - Parameters:
-    ///   - boardProject: the board's project filter at launch (prefs.boardProject)
+    ///   - boardProject: the board's filter at launch (prefs.boardProject: a project id or a group's scope)
     ///   - makeSocket: opens the live event stream (rebuilt on foregrounding)
     public init(
         client: any BoardClient,
@@ -367,7 +367,8 @@ public final class BoardStore {
         // A service from before paging answers 404 here (and ignores ?status=, sending every ticket).
         async let donePage: TicketPage? = {
             do {
-                return try await client.ticketPage(status: .done, projectId: Paging.scopeProject(scope), q: nil, limit: Paging.donePageSize, cursor: nil)
+                let filter = Paging.scopeQuery(scope)
+                return try await client.ticketPage(status: .done, projectId: filter.projectId, group: filter.group, q: nil, limit: Paging.donePageSize, cursor: nil)
             } catch let e as HarnessAPIError where e.status == 404 {
                 return nil
             }
@@ -405,10 +406,11 @@ public final class BoardStore {
 
     // MARK: Board
 
-    /// The board's project filter changed: snapshots page Done for it; fetches its first page.
-    public func setBoardScope(_ projectId: String?) {
-        scope = Paging.scopeOf(projectId)
-        loader.ensureFirstPage(projectId)
+    /// The board's filter (a project id, a group's scope, nil for All projects) changed: snapshots
+    /// page Done for it; fetches its first page.
+    public func setBoardScope(_ board: String?) {
+        scope = Paging.scopeOf(board)
+        loader.ensureFirstPage(board)
     }
 
     /// A ticket's detail merged into the store (shared with the background fetches for that key).

@@ -13,17 +13,45 @@ struct SidebarRowTests {
         return (m, storage)
     }
 
-    @Test func highlightFollowsTheSectionAndTheBoardsFilter() {
-        let exists: (String) -> Bool = { $0 == "p1" }
-        #expect(SidebarRow.current(tab: .inbox, boardProject: "p1", projectExists: exists) == .inbox)
-        #expect(SidebarRow.current(tab: .settings, boardProject: "p1", projectExists: exists) == .settings)
-        #expect(SidebarRow.current(tab: .board, boardProject: "p1", projectExists: exists) == .project("p1"))
-        #expect(SidebarRow.current(tab: .board, boardProject: nil, projectExists: exists) == .allProjects)
+    static func state(_ projects: Project...) -> BoardState {
+        var s = BoardState.initial
+        for p in projects { s.projects[p.id] = p }
+        return s
     }
 
-    /// A deleted project's filter shows All projects on the board, so that row is the one lit.
-    @Test func aGoneProjectHighlightsAllProjects() {
-        #expect(SidebarRow.current(tab: .board, boardProject: "deleted", projectExists: { _ in false }) == .allProjects)
+    static func project(_ id: String, group: String? = nil) -> Project {
+        Project(id: id, key: id.uppercased(), name: id, path: "/\(id)", nextSeq: 1, useWorktrees: false, group: group, createdAt: 1, updatedAt: 1)
+    }
+
+    @Test func highlightFollowsTheSectionAndTheBoardsFilter() {
+        let s = Self.state(Self.project("p1", group: "Work"))
+        #expect(SidebarRow.current(tab: .inbox, board: s.boardFilter("p1")) == .inbox)
+        #expect(SidebarRow.current(tab: .settings, board: s.boardFilter("p1")) == .settings)
+        #expect(SidebarRow.current(tab: .board, board: s.boardFilter("p1")) == .project("p1"))
+        #expect(SidebarRow.current(tab: .board, board: s.boardFilter(nil)) == .allProjects)
+        #expect(SidebarRow.current(tab: .board, board: s.boardFilter("group:Work")) == .group("Work"))
+    }
+
+    /// A deleted project's filter, or a group no project carries any more, shows All projects on
+    /// the board, so that row is the one lit.
+    @Test func aGoneProjectOrGroupHighlightsAllProjects() {
+        let s = Self.state(Self.project("p1", group: "Work"))
+        #expect(SidebarRow.current(tab: .board, board: s.boardFilter("deleted")) == .allProjects)
+        #expect(SidebarRow.current(tab: .board, board: s.boardFilter("group:Home")) == .allProjects)
+        // Group names match exactly here: the service keeps one spelling per group.
+        #expect(s.boardFilter("group:work") == nil)
+        #expect(s.boardFilter("") == nil)
+    }
+
+    @Test func aGroupRowSavesTheGroupsBoardAndItSurvivesARelaunch() throws {
+        let (app, storage) = Self.app()
+        let r = Router()
+        r.select(.group("Side projects"), app: app)
+        #expect(r.selectedTab == .board && app.prefs.boardProject == "group:Side projects")
+        #expect(Prefs.normalize(data: try #require(storage.snapshot[StorageKeys.prefs]).data(using: .utf8)).boardProject == "group:Side projects")
+        // A project row replaces it.
+        r.select(.project("p1"), app: app)
+        #expect(app.prefs.boardProject == "p1")
     }
 
     @Test func aProjectRowFiltersTheBoardAndPopsItToItsRoot() throws {
@@ -51,6 +79,6 @@ struct SidebarRowTests {
         #expect(r.selectedTab == .settings && app.prefs.boardProject == "p1")
         r.select(.inbox, app: app)
         #expect(r.selectedTab == .inbox && app.prefs.boardProject == "p1")
-        #expect(SidebarRow.current(tab: r.selectedTab, boardProject: app.prefs.boardProject, projectExists: { _ in true }) == .inbox)
+        #expect(SidebarRow.current(tab: r.selectedTab, board: app.prefs.boardProject) == .inbox)
     }
 }

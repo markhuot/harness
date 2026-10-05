@@ -1,0 +1,413 @@
+{
+  "canonicalCases": [
+    {
+      "name": "a different case joins the group",
+      "input": {
+        "name": "work",
+        "existing": [
+          "Personal",
+          "Work"
+        ]
+      },
+      "output": "Work"
+    },
+    {
+      "name": "accents still differ",
+      "input": {
+        "name": "Cafe",
+        "existing": [
+          "Café"
+        ]
+      },
+      "output": "Cafe"
+    },
+    {
+      "name": "no match keeps the name",
+      "input": {
+        "name": "Side",
+        "existing": [
+          "Work"
+        ]
+      },
+      "output": "Side"
+    },
+    {
+      "name": "first match wins",
+      "input": {
+        "name": "WORK",
+        "existing": [
+          "Work",
+          "work"
+        ]
+      },
+      "output": "Work"
+    }
+  ],
+  "listCases": [
+    {
+      "name": "once each, alphabetically without case",
+      "input": [
+        {
+          "group": "work"
+        },
+        {
+          "group": null
+        },
+        {
+          "group": "Personal"
+        },
+        {},
+        {
+          "group": "work"
+        },
+        {
+          "group": "Archive"
+        }
+      ],
+      "output": [
+        "Archive",
+        "Personal",
+        "work"
+      ]
+    },
+    {
+      "name": "accents sort with their base letter",
+      "input": [
+        {
+          "group": "Zeta"
+        },
+        {
+          "group": "Éclair"
+        },
+        {
+          "group": "Apple"
+        }
+      ],
+      "output": [
+        "Apple",
+        "Éclair",
+        "Zeta"
+      ]
+    },
+    {
+      "name": "spellings that differ only by case both list, upper case first",
+      "input": [
+        {
+          "group": "work"
+        },
+        {
+          "group": "Work"
+        }
+      ],
+      "output": [
+        "Work",
+        "work"
+      ]
+    },
+    {
+      "name": "none",
+      "input": [],
+      "output": []
+    }
+  ],
+  "normalizeCases": [
+    {
+      "name": "trimmed, inner whitespace collapsed",
+      "input": "  Day \t  job ",
+      "output": {
+        "name": "Day job"
+      }
+    },
+    {
+      "name": "only spaces is no group",
+      "input": "   ",
+      "output": {
+        "name": null
+      }
+    },
+    {
+      "name": "empty is no group",
+      "input": "",
+      "output": {
+        "name": null
+      }
+    },
+    {
+      "name": "null",
+      "input": null,
+      "output": {
+        "name": null
+      }
+    },
+    {
+      "name": "at the limit",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "output": {
+        "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    },
+    {
+      "name": "over the limit",
+      "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "output": {
+        "refused": true
+      }
+    },
+    {
+      "name": "spaces around don't count toward the limit",
+      "input": "  yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy  ",
+      "output": {
+        "name": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+      }
+    },
+    {
+      "name": "astral characters count as two code units",
+      "input": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "output": {
+        "refused": true
+      }
+    },
+    {
+      "name": "NBSP and ideographic space are whitespace",
+      "input": " Side　projects ",
+      "output": {
+        "name": "Side projects"
+      }
+    }
+  ],
+  "rowCases": [
+    {
+      "name": "nothing typed",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": ""
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "none",
+            "value": null,
+            "label": "No group"
+          },
+          {
+            "kind": "group",
+            "value": "Personal",
+            "label": "Personal"
+          },
+          {
+            "kind": "group",
+            "value": "Side projects",
+            "label": "Side projects"
+          },
+          {
+            "kind": "group",
+            "value": "Work",
+            "label": "Work"
+          }
+        ],
+        "ids": [
+          "",
+          "Personal",
+          "Side projects",
+          "Work"
+        ]
+      }
+    },
+    {
+      "name": "a prefix completes first, then the new name",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": "wor"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Work",
+            "label": "Work"
+          },
+          {
+            "kind": "new",
+            "value": "wor",
+            "label": "New group \"wor\""
+          }
+        ],
+        "ids": [
+          "Work",
+          "wor"
+        ]
+      }
+    },
+    {
+      "name": "words in any order",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": "proj side"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Side projects",
+            "label": "Side projects"
+          },
+          {
+            "kind": "new",
+            "value": "proj side",
+            "label": "New group \"proj side\""
+          }
+        ],
+        "ids": [
+          "Side projects",
+          "proj side"
+        ]
+      }
+    },
+    {
+      "name": "an existing name in any case isn't new",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": "  WORK "
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Work",
+            "label": "Work"
+          }
+        ],
+        "ids": [
+          "Work"
+        ]
+      }
+    },
+    {
+      "name": "a brand-new name, spaces tidied",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": "  Open   source "
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "new",
+            "value": "Open source",
+            "label": "New group \"Open source\""
+          }
+        ],
+        "ids": [
+          "Open source"
+        ]
+      }
+    },
+    {
+      "name": "No group stays reachable",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": "no"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "none",
+            "value": null,
+            "label": "No group"
+          },
+          {
+            "kind": "new",
+            "value": "no",
+            "label": "New group \"no\""
+          }
+        ],
+        "ids": [
+          "",
+          "no"
+        ]
+      }
+    },
+    {
+      "name": "too long",
+      "input": {
+        "groups": [
+          "Personal",
+          "Side projects",
+          "Work"
+        ],
+        "query": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "invalid",
+            "value": null,
+            "label": "Group names are at most 60 characters"
+          }
+        ],
+        "ids": []
+      }
+    },
+    {
+      "name": "no groups yet",
+      "input": {
+        "groups": [],
+        "query": ""
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "none",
+            "value": null,
+            "label": "No group"
+          }
+        ],
+        "ids": [
+          ""
+        ]
+      }
+    },
+    {
+      "name": "no groups, a name",
+      "input": {
+        "groups": [],
+        "query": "Home"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "new",
+            "value": "Home",
+            "label": "New group \"Home\""
+          }
+        ],
+        "ids": [
+          "Home"
+        ]
+      }
+    }
+  ]
+}

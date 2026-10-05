@@ -93,7 +93,8 @@ public final class NewSessionEditor {
     }
 
     /// Start the editor once the store has what it needs: the reopened draft, or a project
-    /// (composerProject of the route's project, then `candidates`: the board's, the last used).
+    /// (composerProject of the route's project, then `candidates`: BoardState.composerCandidates of
+    /// the board and the last used project).
     @discardableResult
     public func begin(projectId: String?, candidates: [String?]) -> Begin {
         if sync != nil { return .started }

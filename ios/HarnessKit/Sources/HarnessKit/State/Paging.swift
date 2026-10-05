@@ -6,12 +6,18 @@ import Foundation
 // - The snapshot loads every non-done ticket, plus the first page of done for the current board
 //   scope. Other done tickets arrive by paging, search, ticket details (children, deps) and live
 //   events, so `tickets` holds an arbitrary subset of done.
-// - Paging is per scope (a project id, or `allScope` for "All projects"). The Done column shows a
-//   contiguous prefix of the server's ordering (completedAt desc): done tickets at or after the
-//   scope's `frontier` (the oldest completedAt paged in so far). Older done tickets that happen to
-//   be loaded (a dependency, a search hit) stay out of the column until paging reaches them, so
-//   "Load more" never reshuffles what's already on screen.
+// - Paging is per scope (a project id, `groupScope(name)` for a project group's board, or
+//   `allScope` for "All projects"). The Done column shows a contiguous prefix of the server's
+//   ordering (completedAt desc): done tickets at or after the scope's `frontier` (the oldest
+//   completedAt paged in so far). Older done tickets that happen to be loaded (a dependency, a
+//   search hit) stay out of the column until paging reaches them, so "Load more" never reshuffles
+//   what's already on screen.
 // - `total` is the server's count, kept current by live ticket.upserted / ticket.deleted events.
+//   A project joining or leaving a group changes which tickets that group's board counts, so the
+//   reducer drops the paging of both groups and the board pages them afresh.
+//
+// Selectors that take a board (`_ board: String?`) take a project id, a scope (`allScope`,
+// `groupScope(name)`) or nil for All projects.
 //
 // How a client drives this: see BoardLoader (Done paging + debounced search) and BoardStore
 // (snapshot on connect).
@@ -24,13 +30,29 @@ public enum Paging {
 
     /// Paging scope key for "All projects".
     public static let allScope = "*"
-    public static func scopeOf(_ projectId: String?) -> String {
-        guard let projectId, !projectId.isEmpty else { return allScope }
-        return projectId
+    static let groupPrefix = "group:"
+    /// The scope of a project group's board (ProjectGroups.swift). Project ids never contain a colon.
+    public static func groupScope(_ group: String) -> String { groupPrefix + group }
+    /// The group a scope is the board of, or nil for All projects and project scopes.
+    public static func scopeGroup(_ scope: String) -> String? {
+        scope.hasPrefix(groupPrefix) ? String(scope.dropFirst(groupPrefix.count)) : nil
     }
-    /// The projectId to send for a scope (nil = all projects).
-    public static func scopeProject(_ scope: String) -> String? { scope == allScope ? nil : scope }
-    static func inScope(_ t: Ticket, _ scope: String) -> Bool { scope == allScope || t.projectId == scope }
+    /// A board's scope: the identity on scopes, nil or "" → All projects.
+    public static func scopeOf(_ board: String?) -> String {
+        guard let board, !board.isEmpty else { return allScope }
+        return board
+    }
+    /// The ticket page and search filter for a scope: one project, one group's projects, or none.
+    public static func scopeQuery(_ scope: String) -> (projectId: String?, group: String?) {
+        if let group = scopeGroup(scope) { return (nil, group) }
+        return (scope == allScope ? nil : scope, nil)
+    }
+    /// Whether a ticket shows on a scope's board: every ticket on All projects, its group's, or its project's.
+    static func inScope(_ projects: [String: Project], _ t: Ticket, _ scope: String) -> Bool {
+        if scope == allScope { return true }
+        if let group = scopeGroup(scope) { return projects[t.projectId]?.group == group }
+        return t.projectId == scope
+    }
 
     /// Every status the snapshot lists in full (all but done).
     public static let liveStatuses: [TicketStatus] = [.planning, .inProgress, .blocked, .review]
@@ -146,7 +168,7 @@ public enum Paging {
     public static func adjustDoneTotals(_ state: BoardState, prev: Ticket?, next: Ticket?) -> [String: DonePaging] {
         guard !state.donePaging.isEmpty, let subject = next ?? prev else { return state.donePaging }
         var out = state.donePaging
-        for (scope, p) in state.donePaging where inScope(subject, scope) {
+        for (scope, p) in state.donePaging where inScope(state.projects, subject, scope) {
             var delta = 0
             let isDone = next?.status == .done
             if let prev {
@@ -172,11 +194,11 @@ public enum Paging {
     /// The Done column for a scope: loaded done tickets in the paged-in prefix, newest completed
     /// first. Without paging state (an older service, or before the first page) every loaded done
     /// ticket in scope shows.
-    public static func doneColumn(_ state: BoardState, _ projectId: String?) -> [Ticket] {
-        let scope = scopeOf(projectId)
+    public static func doneColumn(_ state: BoardState, _ board: String?) -> [Ticket] {
+        let scope = scopeOf(board)
         let frontier = state.donePaging[scope]?.frontier
         return state.tickets.values
-            .filter { t in t.status == .done && inScope(t, scope) && (frontier.map { completedAtOf(t) >= $0 } ?? true) }
+            .filter { t in t.status == .done && inScope(state.projects, t, scope) && (frontier.map { completedAtOf(t) >= $0 } ?? true) }
             .sorted(by: newestCompletedFirst)
     }
 
@@ -194,19 +216,19 @@ public enum Paging {
     }
 
     /// Done count for the column header: the server's total when paging, else what's loaded.
-    public static func doneCount(_ state: BoardState, _ projectId: String?, loaded: Int) -> Int {
-        state.donePaging[scopeOf(projectId)]?.total ?? loaded
+    public static func doneCount(_ state: BoardState, _ board: String?, loaded: Int) -> Int {
+        state.donePaging[scopeOf(board)]?.total ?? loaded
     }
 
     /// Whether the Done column has more to load (and isn't already loading it).
-    public static func canLoadMoreDone(_ state: BoardState, _ projectId: String?) -> Bool {
-        guard let p = state.donePaging[scopeOf(projectId)] else { return false }
+    public static func canLoadMoreDone(_ state: BoardState, _ board: String?) -> Bool {
+        guard let p = state.donePaging[scopeOf(board)] else { return false }
         return p.nextCursor != nil && !p.loading
     }
 
     /// True when the scope needs its first done page (never requested, or reset by a snapshot).
-    public static func needsFirstDonePage(_ state: BoardState, _ projectId: String?) -> Bool {
-        state.ready && state.donePaging[scopeOf(projectId)] == nil
+    public static func needsFirstDonePage(_ state: BoardState, _ board: String?) -> Bool {
+        state.ready && state.donePaging[scopeOf(board)] == nil
     }
 
     /// Instant local match while the server search is in flight: key (current or old), remote ID or title.
@@ -236,12 +258,12 @@ public enum Paging {
     /// column of its current status, so live moves still apply); until then, the loaded tickets
     /// that match locally. Search shows every match, child tickets included: the user is looking
     /// for something specific, and hiding a match would read as "not found".
-    public static func searchColumns(_ state: BoardState, _ projectId: String?) -> (columns: Columns, pending: Bool) {
+    public static func searchColumns(_ state: BoardState, _ board: String?) -> (columns: Columns, pending: Bool) {
         var cols = Columns()
         guard let s = state.search else { return (cols, false) }
         guard let ids = s.ids else {
-            let scope = scopeOf(projectId)
-            for t in state.tickets.values where inScope(t, scope) && matchesQuery(t, s.q, aliases: state.keyAliases) {
+            let scope = scopeOf(board)
+            for t in state.tickets.values where inScope(state.projects, t, scope) && matchesQuery(t, s.q, aliases: state.keyAliases) {
                 cols[t.status].append(t)
             }
             sortColumns(&cols, tieById: true)

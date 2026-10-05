@@ -10,6 +10,7 @@ struct BoardLoaderTests {
     struct PageCall: Sendable {
         let cursor: String?
         let projectId: String?
+        var group: String?
         let limit: Int?
         let d = Deferred<TicketPage>()
     }
@@ -18,6 +19,7 @@ struct BoardLoaderTests {
         let q: String
         let cursor: String?
         let projectId: String?
+        var group: String?
         let d = Deferred<TicketPage>()
     }
 
@@ -25,14 +27,14 @@ struct BoardLoaderTests {
         let pages = CallLog<PageCall>()
         let searches = CallLog<SearchCall>()
 
-        func ticketPage(status: TicketStatus, projectId: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
-            let call = PageCall(cursor: cursor, projectId: projectId, limit: limit)
+        func ticketPage(status: TicketStatus, projectId: String?, group: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
+            let call = PageCall(cursor: cursor, projectId: projectId, group: group, limit: limit)
             pages.append(call)
             return try await call.d.value()
         }
 
-        func searchTickets(q: String, projectId: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
-            let call = SearchCall(q: q, cursor: cursor, projectId: projectId)
+        func searchTickets(q: String, projectId: String?, group: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
+            let call = SearchCall(q: q, cursor: cursor, projectId: projectId, group: group)
             searches.append(call)
             return try await call.d.value()
         }
@@ -185,9 +187,9 @@ struct BoardLoaderTests {
     @Test func searchIsDebouncedToOneRequestForTheLastTextOfABurst() async {
         let h = Harness()
         h.snapshot([], Self.page([], nil, 0))
-        h.loader.setQuery("g", projectId: nil)
-        h.loader.setQuery("gr", projectId: nil)
-        h.loader.setQuery("gre ", projectId: nil)
+        h.loader.setQuery("g", board: nil)
+        h.loader.setQuery("gr", board: nil)
+        h.loader.setQuery("gre ", board: nil)
         #expect(h.clock.count == 1)
         #expect(h.clock.delays == [200])
         await settle()
@@ -200,7 +202,7 @@ struct BoardLoaderTests {
         h.clock.advance(by: 1)
         await eventually { h.client.searches.count == 1 }
         #expect(h.client.searches.all.map(\.q) == ["gre"])
-        h.loader.setQuery("gre", projectId: nil) // trailing space trimmed away: same query, no new request
+        h.loader.setQuery("gre", board: nil) // trailing space trimmed away: same query, no new request
         h.clock.fireAll()
         await settle()
         #expect(h.client.searches.count == 1)
@@ -209,13 +211,13 @@ struct BoardLoaderTests {
     @Test func aSlowResponseForAnEarlierQueryNeverOverwritesANewerOne() async {
         let h = Harness()
         h.snapshot([], Self.page([], nil, 0))
-        h.loader.setQuery("ab", projectId: nil)
+        h.loader.setQuery("ab", board: nil)
         h.clock.fireAll()
         await eventually { h.client.searches.count == 1 }
-        h.loader.setQuery("abc", projectId: nil)
+        h.loader.setQuery("abc", board: nil)
         h.clock.fireAll()
         await eventually { h.client.searches.count == 2 }
-        h.loader.setQuery("ab", projectId: nil) // backspace: same text as the first, slow request
+        h.loader.setQuery("ab", board: nil) // backspace: same text as the first, slow request
         h.clock.fireAll()
         await eventually { h.client.searches.count == 3 }
         #expect(h.client.searches.all.map(\.q) == ["ab", "abc", "ab"])
@@ -231,11 +233,11 @@ struct BoardLoaderTests {
     @Test func clearingTheSearchCancelsThePendingDebounceAndDropsTheResponseInFlight() async {
         let h = Harness()
         h.snapshot([], Self.page([], nil, 0))
-        h.loader.setQuery("first", projectId: nil)
+        h.loader.setQuery("first", board: nil)
         h.clock.fireAll()
         await eventually { h.client.searches.count == 1 }
-        h.loader.setQuery("second", projectId: nil)
-        h.loader.setQuery("", projectId: nil)
+        h.loader.setQuery("second", board: nil)
+        h.loader.setQuery("", board: nil)
         #expect(h.state.search == nil)
         #expect(h.clock.count == 0)
         h.clock.fireAll()
@@ -250,7 +252,7 @@ struct BoardLoaderTests {
     @Test func searchLoadMorePagesWithTheCursorOnce() async {
         let h = Harness()
         h.snapshot([], Self.page([], nil, 0))
-        h.loader.setQuery("x", projectId: "p1")
+        h.loader.setQuery("x", board: "p1")
         h.clock.fireAll()
         await eventually { h.client.searches.count == 1 }
         #expect(h.client.searches[0].projectId == "p1")
@@ -270,10 +272,31 @@ struct BoardLoaderTests {
         #expect(!h.loader.canLoadMoreSearch())
     }
 
+    @Test func aGroupBoardPagesAndSearchesByGroup() async {
+        let h = Harness()
+        let work = Paging.groupScope("Work")
+        h.snapshot([], Self.page([], nil, 0))
+        h.dispatch(.event(.projectUpserted(project: Project(id: "p1", key: "P1", name: "p1", path: "/p1", nextSeq: 1, useWorktrees: false, group: "Work", createdAt: 1, updatedAt: 1))))
+        h.loader.ensureFirstPage(work)
+        await eventually { h.client.pages.count == 1 }
+        #expect(h.client.pages[0].group == "Work" && h.client.pages[0].projectId == nil)
+        h.client.pages[0].d.resolve(Self.page([Self.tk("d1"), Self.tk("x", projectId: "p2")], "c1", 9))
+        await eventually { h.state.donePaging[work]?.nextCursor == "c1" }
+        // A page from the service only holds the group's tickets; locally the scope still filters.
+        #expect(Paging.doneColumn(h.state, work).map(\.id) == ["d1"])
+        h.loader.loadMoreDone(work)
+        await eventually { h.client.pages.count == 2 }
+        #expect(h.client.pages[1].group == "Work" && h.client.pages[1].cursor == "c1")
+        h.loader.setQuery("x", board: work)
+        h.clock.fireAll()
+        await eventually { h.client.searches.count == 1 }
+        #expect(h.client.searches[0].group == "Work" && h.client.searches[0].projectId == nil)
+    }
+
     @Test func aFailedSearchWaitsForRetryWhichReRunsTheFirstPage() async {
         let h = Harness()
         h.snapshot([], Self.page([], nil, 0))
-        h.loader.setQuery("x", projectId: nil)
+        h.loader.setQuery("x", board: nil)
         h.clock.fireAll()
         await eventually { h.client.searches.count == 1 }
         h.client.searches[0].d.reject(TestError("offline"))
@@ -291,7 +314,7 @@ struct BoardLoaderTests {
     @Test func aRefetchReRunsTheActiveSearchAndIgnoresTheAnswerBeforeIt() async {
         let h = Harness()
         h.snapshot([], Self.page([], nil, 0))
-        h.loader.setQuery("zap", projectId: nil)
+        h.loader.setQuery("zap", board: nil)
         h.clock.fireAll()
         await eventually { h.client.searches.count == 1 }
         h.snapshot([], Self.page([], nil, 0))
@@ -308,7 +331,7 @@ struct BoardLoaderTests {
         let h = Harness()
         h.snapshot([], Self.page([Self.tk("a")], "c1", 3))
         let more = h.loader.loadMoreDone(nil)
-        h.loader.setQuery("q", projectId: nil)
+        h.loader.setQuery("q", board: nil)
         h.loader.dispose()
         #expect(h.clock.count == 0)
         await eventually { h.client.pages.count == 1 }

@@ -63,6 +63,10 @@ struct HarnessClientURLTests {
         #expect(path(t) == "/tickets/page?status=done&projectId=prj_1&limit=25&cursor=c%3A1")
         _ = try await client(t).searchTickets(q: "seek stall")
         #expect(path(t) == "/tickets/search?q=seek+stall")
+        _ = try await client(t).ticketPage(status: .done, group: "Side projects", limit: 50)
+        #expect(path(t) == "/tickets/page?status=done&group=Side+projects&limit=50")
+        _ = try await client(t).searchTickets(q: "x", group: "Work")
+        #expect(path(t) == "/tickets/search?q=x&group=Work")
     }
 
     @Test func transcriptAfterAndEncodedSubagent() async throws {

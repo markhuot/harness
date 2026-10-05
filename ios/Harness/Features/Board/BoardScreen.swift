@@ -6,7 +6,7 @@ import SwiftUI
 /// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
 /// it scrolls into older pages (footer spinner) and its count is the server's total. On the phone
 /// there's no navigation bar: our own bottom bar (BoardBottomBar) reads Projects, the search field
-/// (always on screen, its placeholder the project's name or "All projects", with the filter, "Show
+/// (always on screen, its placeholder the project's or group's name or "All projects", with the filter, "Show
 /// child tickets", off by default, at its trailing end) and New session; in the iPad's DesktopShell they're in the top bar instead (search in the
 /// navigation bar, ⌘F; Filter and New session, ⌘N, trailing) and there's no bottom bar. Typing
 /// searches on the server; results page the same way, across every column.
@@ -66,24 +66,25 @@ struct BoardScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(desktop ? .automatic : .hidden, for: .navigationBar)
         .modifier(BoardSearch(desktop: desktop, query: $query, focused: $searchFocused,
-                              prompt: ctx.project.map { "Search \($0.name)" } ?? "Search tickets") {
+                              prompt: ctx.scopeName.map { "Search \($0)" } ?? "Search tickets") {
             BoardBottomBar(query: $query, focused: $searchFocused, placeholder: scopeName(ctx),
                            filter: filterMenu, newSession: newSessionButton(ctx))
         })
         .toolbar { toolbar(ctx) }
-        // Paging follows the project filter; a refetch drops the paging, so ask again when it's gone.
-        .onChange(of: ctx.projectId, initial: true) { _, id in store.setBoardScope(id) }
-        .onChange(of: FirstPageKey(projectId: ctx.projectId, ready: store.state.ready, paging: ctx.paging), initial: true) {
-            store.loader.ensureFirstPage(ctx.projectId)
+        // Paging follows the board's filter (a project or a group); a refetch drops the paging (so
+        // does a project changing group), so ask again when it's gone.
+        .onChange(of: ctx.filter, initial: true) { _, filter in store.setBoardScope(filter) }
+        .onChange(of: FirstPageKey(filter: ctx.filter, ready: store.state.ready, paging: ctx.paging), initial: true) {
+            store.loader.ensureFirstPage(ctx.filter)
         }
         // Every keystroke: local matches at once, the server's after a pause (BoardLoader).
-        .onChange(of: SearchKey(query: query, projectId: ctx.projectId), initial: true) { _, k in
-            store.loader.setQuery(k.query, projectId: k.projectId)
+        .onChange(of: SearchKey(query: query, filter: ctx.filter), initial: true) { _, k in
+            store.loader.setQuery(k.query, board: k.filter)
         }
         // Hidden children can leave the loaded Done run nearly empty: while Done is on screen, top it up.
         .onChange(of: AutofillKey(layout: layout, page: page, visible: visible, searching: ctx.searching, count: ctx.shown.done.count, paging: ctx.paging), initial: true) { _, k in
-            if BoardScreenRules.shouldAutofillDone(k.layout, page: k.page, visible: k.visible, searching: k.searching, visibleCount: k.count, canLoad: store.loader.canLoadMoreDone(ctx.projectId)) {
-                store.loader.loadMoreDone(ctx.projectId)
+            if BoardScreenRules.shouldAutofillDone(k.layout, page: k.page, visible: k.visible, searching: k.searching, visibleCount: k.count, canLoad: store.loader.canLoadMoreDone(ctx.filter)) {
+                store.loader.loadMoreDone(ctx.filter)
             }
         }
         // The first visit lands on the most useful column: what needs you, else what's moving.
@@ -209,7 +210,7 @@ struct BoardScreen: View {
         }
     }
 
-    private func scopeName(_ ctx: BoardContext) -> String { ctx.project?.name ?? "All projects" }
+    private func scopeName(_ ctx: BoardContext) -> String { ctx.scopeName ?? "All projects" }
 
     private var filterMenu: some View {
         Menu {
@@ -223,14 +224,14 @@ struct BoardScreen: View {
     }
 
     private func newSession(_ ctx: BoardContext) -> some View {
-        Button("New session", systemImage: Self.newSessionSymbol) { router.present(.newSession(projectId: ctx.projectId, key: nil)) }
+        Button("New session", systemImage: Self.newSessionSymbol) { router.present(.newSession(projectId: ctx.project?.id, key: nil)) }
             .primaryToolbarItem(c)
     }
 
     /// New session as a glass circle for the phone's bar: prominent accent glass when the glyph
     /// reads in white on it, else plain glass with an accent glyph (as primaryToolbarItem decides).
     @ViewBuilder private func newSessionButton(_ ctx: BoardContext) -> some View {
-        let button = Button { router.present(.newSession(projectId: ctx.projectId, key: nil)) } label: {
+        let button = Button { router.present(.newSession(projectId: ctx.project?.id, key: nil)) } label: {
             Image(systemName: Self.newSessionSymbol)
                 .font(.system(size: 19, weight: .medium))
                 .frame(width: 34, height: 34)
@@ -267,14 +268,14 @@ struct BoardScreen: View {
     // MARK: onChange keys
 
     private struct FirstPageKey: Equatable {
-        let projectId: String?
+        let filter: String?
         let ready: Bool
         let paging: DonePaging?
     }
 
     private struct SearchKey: Equatable {
         let query: String
-        let projectId: String?
+        let filter: String?
     }
 
     private struct AutofillKey: Equatable {
@@ -290,9 +291,13 @@ struct BoardScreen: View {
 /// What every part of the board reads, computed once per render.
 struct BoardContext {
     let state: BoardState
-    /// The project filter, when that project still exists.
-    let projectId: String?
+    /// The board's filter (BoardState.boardFilter): a project id, a group's scope, or nil for All
+    /// projects; a project or group that's gone reads as nil.
+    let filter: String?
+    /// The filter's project (nil on All projects and a group's board).
     let project: Project?
+    /// The filter's group, on a group's board.
+    let group: String?
     /// The search in the toolbar's field (nil while it's empty).
     let search: SearchState?
     let board: Columns
@@ -308,8 +313,9 @@ struct BoardContext {
 
     init(_ state: BoardState, _ prefs: Prefs) {
         self.state = state
-        let id = prefs.boardProject.flatMap { state.projects[$0] != nil ? $0 : nil }
-        projectId = id
+        let id = state.boardFilter(prefs.boardProject)
+        filter = id
+        group = id.flatMap(Paging.scopeGroup)
         project = id.flatMap { state.projects[$0] }
         search = state.search
         board = state.boardColumns(id)
@@ -326,8 +332,11 @@ struct BoardContext {
         paging = state.donePaging[Paging.scopeOf(id)]
     }
 
+    /// The project's or group's name (nil on All projects).
+    var scopeName: String? { project?.name ?? group }
+
     func count(_ s: TicketStatus) -> Int {
-        BoardColumns.columnCount(state, projectId, shown: shown, status: s, searching: searching)
+        BoardColumns.columnCount(state, filter, shown: shown, status: s, searching: searching)
     }
 }
 

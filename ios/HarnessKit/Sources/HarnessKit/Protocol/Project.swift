@@ -50,6 +50,9 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// Color of the project's key badge: a preset id from PROJECT_COLORS ("blue") or a custom
     /// "#rrggbb". null → the theme's accent.
     @Nullable public var color: String?
+    /// The project's group ("Work", "Personal"; see ProjectGroups.swift): each group has a board of
+    /// its own projects. nil → in no group. Absent from older payloads.
+    public var group: String?
     public var createdAt: Timestamp
     public var updatedAt: Timestamp
 
@@ -59,7 +62,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil, completionActions: [CompletionAction]? = nil,
-        pullRequestHost: Patch<String> = .absent, color: String? = nil, createdAt: Timestamp, updatedAt: Timestamp
+        pullRequestHost: Patch<String> = .absent, color: String? = nil, group: String? = nil, createdAt: Timestamp, updatedAt: Timestamp
     ) {
         self.id = id
         self.key = key
@@ -79,6 +82,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.completionActions = completionActions
         self.pullRequestHost = pullRequestHost
         self.color = color
+        self.group = group
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

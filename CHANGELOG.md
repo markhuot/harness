@@ -11,11 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- On the Mac, projects can share a group, such as Work or Personal. Pick a group in a project's
-  settings: the Group field completes to a group you already have, or press Return to start a new
-  one with the name you typed. Each group gets its own board with only its projects' tickets,
-  listed under All projects in the sidebar in alphabetical order, and the command palette's
-  Board: entries include the groups.
+- Projects can share a group, such as Work or Personal, on the Mac, iPhone and iPad. Pick a group
+  in a project's settings: the Group field offers the groups you already have, or press Return to
+  start a new one with the name you typed. Each group gets its own board with only its projects'
+  tickets, listed under All projects in the sidebar (the Projects sheet on iPhone) in alphabetical
+  order with its open count, and the Mac's command palette Board: entries include the groups.
 
 ### Fixed
 

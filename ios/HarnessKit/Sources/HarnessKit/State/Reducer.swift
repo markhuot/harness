@@ -162,7 +162,12 @@ extension BoardState {
     public mutating func apply(_ event: HarnessEvent) {
         switch event {
         case let .projectUpserted(project):
+            let before = projects[project.id]?.group
             projects[project.id] = project
+            // Joining or leaving a group changes what that group's board counts: page it afresh.
+            if before != project.group {
+                for g in [before, project.group].compactMap({ $0 }) { donePaging[Paging.groupScope(g)] = nil }
+            }
         case let .projectDeleted(id):
             projects[id] = nil
             tickets = tickets.filter { $0.value.projectId != id }

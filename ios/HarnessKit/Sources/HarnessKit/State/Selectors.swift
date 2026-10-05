@@ -4,20 +4,23 @@ import Foundation
 // insertion order, Swift sorts (see BoardState.swift).
 
 extension BoardState {
-    /// The project's tickets (every project when nil), by id.
-    public func ticketsForProject(_ projectId: String?) -> [Ticket] {
-        tickets.values.filter { projectId == nil || $0.projectId == projectId }.sorted { JSString.less($0.id, $1.id) }
+    /// The loaded tickets on a board (a project id, a scope from Paging.swift, or nil for All
+    /// projects), by id.
+    public func ticketsForProject(_ board: String?) -> [Ticket] {
+        let scope = Paging.scopeOf(board)
+        return tickets.values.filter { Paging.inScope(projects, $0, scope) }.sorted { JSString.less($0.id, $1.id) }
     }
 
     /// The board: live columns by position then age, Done newest-completed first and only the
     /// paged-in prefix (Paging.doneColumn).
-    public func boardColumns(_ projectId: String?) -> Columns {
+    public func boardColumns(_ board: String?) -> Columns {
+        let scope = Paging.scopeOf(board)
         var cols = Columns()
-        for t in tickets.values where (projectId == nil || t.projectId == projectId) && t.status != .done {
+        for t in tickets.values where t.status != .done && Paging.inScope(projects, t, scope) {
             cols[t.status].append(t)
         }
         for status in Paging.liveStatuses { cols[status].sort(by: Paging.boardOrder) }
-        cols.done = Paging.doneColumn(self, projectId)
+        cols.done = Paging.doneColumn(self, board)
         return cols
     }
 
@@ -117,12 +120,33 @@ extension BoardState {
         (deltas[sessionId] ?? [:]).map { LiveDelta(runId: $0.key, text: $0.value) }.sorted { JSString.less($0.runId, $1.runId) }
     }
 
+    /// The board a stored filter (prefs.boardProject) shows: the project while it exists, a
+    /// group's scope while some project carries the group, else nil (All projects).
+    public func boardFilter(_ stored: String?) -> String? {
+        guard let stored, !stored.isEmpty else { return nil }
+        if let group = Paging.scopeGroup(stored) { return ProjectGroups.exists(group, in: projects.values) ? stored : nil }
+        return projects[stored] != nil ? stored : nil
+    }
+
+    /// The groups the projects carry, alphabetically (ProjectGroups.list), as the sidebar lists them.
+    public func projectGroups() -> [String] { ProjectGroups.list(projects.values) }
+
     /// Projects by name.
     public func sortedProjects() -> [Project] {
         projects.values.sorted { a, b in
             let c = BoardState.localeCompare(a.name, b.name)
             return c != .orderedSame ? c == .orderedAscending : JSString.less(a.id, b.id)
         }
+    }
+
+    /// The projects a New session on `board` (a project id, a scope, or nil) should prefer, best
+    /// first, for composerProject: the board's project; on a group's board the last used project if
+    /// it's in the group, else the group's first by name; then the last used anywhere.
+    public func composerCandidates(_ board: String?, last: String?) -> [String?] {
+        guard let group = board.flatMap(Paging.scopeGroup) else { return [board == Paging.allScope ? nil : board, last] }
+        let members = sortedProjects().filter { $0.group == group }
+        let lastInGroup = members.first { $0.id == last }?.id
+        return [lastInGroup, members.first?.id, last]
     }
 
     /// Which project the composer should target: the current choice if it still exists, else the
