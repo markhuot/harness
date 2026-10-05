@@ -80,6 +80,34 @@ current key first, then an alias, so a real ticket holding a key always wins. Ru
   again and drops their aliases.
 - Deleting a ticket (or its project) deletes its aliases.
 
+## Project groups
+
+A project group is a name several projects share, such as "Work" or "Personal"
+(`Project.group`, column `projects.group_name`, migration 31; null means no group). A project is
+in at most one group, and a group exists for as long as some project carries it: there's no group
+table, and `projectGroups(projects)` (`shared/src/projectGroups.ts`) lists them alphabetically
+without case. `POST`/`PATCH /projects` take `group`: trimmed, inner whitespace collapsed, at most
+60 characters (`normalizeProjectGroup`; longer or not a string is a 400), `null` or `""` clears
+it. A name that matches another project's group without case takes that group's spelling
+(`canonicalGroup`), so "work" joins "Work" instead of starting a second group. The project being
+changed doesn't count, so the only project in a group can re-spell it. The project tools take
+`group` too.
+
+Each group has a board, like All projects but with only its projects' tickets. Its scope is
+`groupScope(name)` = `"group:<name>"` beside project ids and `ALL_SCOPE` (project ids never
+contain a colon). `scopeOf`, the board selectors (`boardColumns`, `doneColumn`, `searchColumns`,
+…) and Done paging all take it, and `inScope` matches a ticket by its project's group.
+`/tickets/page` and `/tickets/search` take `group=` to narrow to the projects in a group
+(`scopeQuery(scope)` gives a client the filter to send). Because joining or leaving a group
+changes what a group's board counts, a `project.upserted` that changes a project's group drops
+the paging of both groups, and the board pages them afresh.
+
+The iPhone and iPad app ports all of it to Swift (`Paging.groupScope`, `ProjectGroups` in
+HarnessKit, checked against the `projectGroups` and `statePaging` fixtures). Its Projects sheet and
+iPad sidebar list the groups under All projects. The board filter pref (`boardProject`) stores a
+group's board as its scope, so values saved before groups still read as project ids. Project
+settings has a Group picker on the same `groupRows`, where Return sets the typed name.
+
 ## Remote IDs
 
 A ticket can be linked to a remote item, such as a Jira issue or a pull request. The link is
@@ -735,7 +763,7 @@ Harness tools (always exposed, via MCP for claude-code):
 | `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, color?, base_branch? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, color?, group?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
 | `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
@@ -887,7 +915,7 @@ client state, not service state.
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
-| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
+| Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, group, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
 | Settings | Anthropic API key, long-lived Claude token, GitHub Copilot token | none | secrets don't pass through a model; `get_settings` shows only `anthropicApiKeySet` and `claudeOauthTokenSet` |
@@ -1387,8 +1415,8 @@ GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (s
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
-GET    /tickets/page?status=done&projectId=&q=&limit=50&cursor=     → TicketPage
-GET    /tickets/search?q=&projectId=&limit=100&cursor=              → TicketPage
+GET    /tickets/page?status=done&projectId=&group=&q=&limit=50&cursor= → TicketPage
+GET    /tickets/search?q=&projectId=&group=&limit=100&cursor=       → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
 POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review
@@ -1711,6 +1739,8 @@ completed, moved or deleted between fetches never duplicate or skip a row.
 
 - `/tickets/page` takes exactly one `status`. done sorts by `completedAt` desc; other statuses by
   `position`, then `createdAt`. `q` narrows the page to search hits (an empty `q` is a 400).
+  `projectId` narrows a page or a search to one project and `group` to the projects in a group
+  ("Project groups").
 - `Ticket.completedAt` is when the ticket last entered done, and null outside done. SQLite
   triggers maintain it (migration 6 backfilled existing done tickets from `updatedAt`), so every
   write path gets it right.
@@ -2324,15 +2354,16 @@ collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) sho
 Settings, project settings, or on the board route the pane workspace.
 
 - **Pane workspace.** A tmux-style split tree (`state/panes.ts`) per board scope: each project's
-  board has its own, and All projects has one too. `harness.panes` stores
-  `{ scopes: { [scope]: PaneState } }`, keyed like Done paging (`scopeOf`: the project id, or
-  `ALL_SCOPE` = `"*"`), and a board with no entry shows a bare board. The operations work on one
+  board has its own, each project group's board has one, and All projects has one too.
+  `harness.panes` stores `{ scopes: { [scope]: PaneState } }`, keyed like Done paging (`scopeOf`:
+  the project id, `groupScope(name)`, or `ALL_SCOPE` = `"*"`), and a board with no entry shows a
+  bare board. The operations work on one
   scope's `PaneState`. The store takes the scope (`usePanes(scope)`, `updatePanes(scope, fn)`),
   and `updateAllPanes` covers the edits that reach every board: a deleted ticket (`ticket.deleted`
   runs `pruneTickets`) and a renamed key (`renameTicketKey`). Removing a project, from the sidebar
   or through `project.deleted`, drops its scope and closes its tickets on All projects
-  (`forgetProject`). A snapshot drops the scopes of projects that no longer exist, apart from the
-  one on screen. The single tree stored before scopes existed migrates into All projects. It was
+  (`forgetProject`). A snapshot drops the scopes of projects and groups that no longer exist,
+  apart from the one on screen. The single tree stored before scopes existed migrates into All projects. It was
   shared by every board, and All projects is the board that can show all of its tickets; project
   boards start bare. Parsing drops a scope entry it can't read. Pane ids are unique across all
   scopes, because content is keyed by leaf id: loading seeds the id sequence past every stored `p<N>` (`seedPaneIds`), a later scope
@@ -2566,7 +2597,8 @@ Settings, project settings, or on the board route the pane workspace.
     any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
     (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.
     Elements get `:focus-visible` rings from `--focus`. A click never shows any of them.
-- **Routing.** `#/board/<project>` is the board's filter. `#/board/<project>/ticket/<KEY>[/<tab>]`
+- **Routing.** `#/board/<project>` is the board's filter, `#/board/group/<name>` a project
+  group's board and `#/board/all` All projects. `#/board/<project>/ticket/<KEY>[/<tab>]`
   still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
   opens the ticket the way a card click does. The route the app launches with opens its ticket
   in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
@@ -2576,6 +2608,15 @@ Settings, project settings, or on the board route the pane workspace.
   scope: `#/board/<project>/ticket/<KEY>` opens the ticket in that project's panes, and the mirror
   reads the route's scope. Leaving for Inbox or Settings, or for another project, and coming back
   restores that board's panes.
+- **Project groups.** The sidebar lists the groups (`projectGroups`) under All projects,
+  alphabetically, each with the count pill of its projects' tickets (`sidebarCounts` `byGroup`);
+  the project list below stays flat. The command palette offers `Board: <group>` beside the
+  project boards. Project settings' Group field (`components/GroupSelect.tsx`, rows from
+  `groupRows` in `shared/src/state/groups.ts`) lists the groups and, for a typed name no group has
+  in any case, a `New group "<name>"` row, so Enter completes to an existing group or starts the
+  typed one. On a group's board a New session defaults to the last used project when it's in the
+  group, else the group's first project by name (`composerCandidates`), and a terminal opens at
+  home. `app/scripts/groups-check.ts` drives all of it in the built app.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a

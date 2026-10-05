@@ -658,6 +658,11 @@ export const MIGRATIONS: string[] = [
   SELECT id, ticket_id, '', name, 'spec', kind, mime_type, size, width, height, created_at FROM ticket_attachments ORDER BY created_at, rowid;
   DROP TABLE ticket_attachments;
   `,
+  // 31: projects.group_name: the project's group ("Work", "Personal"), whose board shows only its
+  //     projects. NULL (every existing project) is in no group.
+  `
+  ALTER TABLE projects ADD COLUMN group_name TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

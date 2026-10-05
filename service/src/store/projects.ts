@@ -18,6 +18,7 @@ interface ProjectRow {
   skip_human_review: number;
   permission_mode?: string | null;
   color?: string | null;
+  group_name?: string | null;
   base_branch?: string | null;
   completion_action?: string | null;
   default_models: string;
@@ -63,6 +64,7 @@ const toProject = (r: ProjectRow): Project => {
     requireHumanReview: !bool(r.skip_human_review),
     permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
     color: r.color ?? null,
+    group: r.group_name ?? null,
     baseBranch: r.base_branch ?? null,
     completionAction: isCompletionAction(r.completion_action) ? r.completion_action : "merge",
     completionActions: offeredCompletionActions({ isGit, pullRequestHost }),
@@ -99,6 +101,7 @@ export interface NewProject {
   skipAgentReview?: boolean;
   skipHumanReview?: boolean;
   color?: string | null;
+  group?: string | null;
   baseBranch?: string | null;
   completionAction?: CompletionAction;
   defaultModels?: Record<string, string>;
@@ -143,8 +146,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, base_branch, completion_action, default_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $baseBranch, $completionAction, $defaultModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_name, base_branch, completion_action, default_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $group, $baseBranch, $completionAction, $defaultModels, $t, $t)`,
         )
         .run({
           id,
@@ -156,6 +159,7 @@ export class ProjectRepo {
           skipAgentReview: int(input.skipAgentReview ?? false),
           skipHumanReview: int(input.skipHumanReview ?? false),
           color: input.color ?? null,
+          group: input.group ?? null,
           baseBranch: input.baseBranch ?? null,
           completionAction: input.completionAction ?? "merge",
           defaultModels: toJson(input.defaultModels ?? {}),
@@ -172,7 +176,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels,
+           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_name = $group, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -184,6 +188,7 @@ export class ProjectRepo {
         skipAgentReview: int(patch.skipAgentReview ?? !!existing.skipAgentReview),
         skipHumanReview: int(patch.skipHumanReview ?? !!existing.skipHumanReview),
         color: patch.color !== undefined ? patch.color : existing.color,
+        group: patch.group !== undefined ? patch.group : (existing.group ?? null),
         baseBranch: patch.baseBranch !== undefined ? patch.baseBranch : (existing.baseBranch ?? null),
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
         defaultModels: toJson(patch.defaultModels ?? existing.defaultModels),

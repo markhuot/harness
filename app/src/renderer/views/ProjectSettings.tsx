@@ -1,15 +1,16 @@
 // Project settings (#/project/<id>/settings): everything that belongs to one project — name,
-// identifier (ticket key prefix), color, folder, default driver + model, worktrees, the review
+// identifier (ticket key prefix), color, group, folder, default driver + model, worktrees, the review
 // defaults for new tickets, delete.
 
 import { useEffect, useMemo, useState } from "react";
 import type { CompletionAction, Project } from "@harness/shared";
-import { offeredCompletionActions, projectCompletionDefault, resolveBaseBranch } from "@harness/shared";
+import { offeredCompletionActions, projectCompletionDefault, projectGroups, resolveBaseBranch } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { inheritedBaseLabel, previewProjectKey, tildify } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/bits";
 import { BranchSelect } from "../components/BranchSelect";
+import { GroupSelect } from "../components/GroupSelect";
 import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
 import { DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
@@ -59,6 +60,7 @@ function ProjectSettings({ project }: { project: Project }) {
   // A custom color being dragged in the color panel, shown on the header badge before it's saved.
   const [previewColor, setPreviewColor] = useState<string | undefined>();
   const openBoard = () => navigate({ view: "board", projectId: project.id, ticketKey: null, tab: "spec" });
+  const groups = useMemo(() => projectGroups(Object.values(state.projects)), [state.projects]);
 
   const changePath = async () => {
     const path = await window.harness?.pickDirectory({ title: `Move ${project.name}`, buttonLabel: "Use this folder", defaultPath: project.path });
@@ -98,6 +100,9 @@ function ProjectSettings({ project }: { project: Project }) {
               <KeyRow project={project} />
               <Row title="Color" sub="Tints the project's key badge in the sidebar, on cards and on tickets.">
                 <ProjectColorPicker value={project.color} onChange={(color) => void save({ color })} onPreview={setPreviewColor} />
+              </Row>
+              <Row title="Group" sub="Projects in the same group share a board, listed under All projects in the sidebar. Type a name to start a new group.">
+                <GroupSelect value={project.group ?? null} groups={groups} onChange={(group) => void save({ group }, group ? `Added to ${group}` : "Removed from its group")} />
               </Row>
               <div className="settings-row">
                 <div className="settings-row-main">

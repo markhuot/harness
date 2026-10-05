@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, type Ref } from "react";
-import type { Project } from "@harness/shared";
+import { projectGroups, type Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects, triageSessions } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -25,6 +25,7 @@ export function Sidebar({
   const { state, route, navigate, client } = useStore();
   const act = useAction();
   const projects = sortedProjects(state);
+  const groups = useMemo(() => projectGroups(Object.values(state.projects)), [state.projects]);
 
   // One roving list: New session, the nav items, each project and Settings are j/k stops; the
   // chevron, Add project and the project gears stay on Tab after the list's stop.
@@ -40,7 +41,7 @@ export function Sidebar({
   useRovingList(local, { owner: "sidebar" });
   useCommands("sidebar", { "sidebar.exit": () => runCommand("pane.right") });
 
-  const counts = useMemo(() => sidebarCounts(Object.values(state.tickets)), [state.tickets]);
+  const counts = useMemo(() => sidebarCounts(Object.values(state.tickets), (id) => state.projects[id]?.group), [state.tickets, state.projects]);
   const triaging = triageSessions(state).filter((s) => s.triageStatus === "triaging" || s.busy).length;
 
   const addProject = async () => {
@@ -142,10 +143,22 @@ export function Sidebar({
             <NavItem
               icon="layers"
               label="All projects"
-              active={onBoard && route.projectId === null}
+              active={onBoard && route.projectId === null && !route.group}
               onClick={() => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" })}
               counts={counts.total}
             />
+            {/* Project groups (set in each project's settings), each a board of its projects. */}
+            {groups.map((g) => (
+              <NavItem
+                key={g}
+                icon="folder"
+                label={g}
+                testId="nav-group"
+                active={onBoard && route.group === g}
+                onClick={() => navigate({ view: "board", projectId: null, group: g, ticketKey: null, tab: "spec" })}
+                counts={counts.byGroup[g]}
+              />
+            ))}
           </nav>
 
           <div className="nav-section">
@@ -206,9 +219,17 @@ function NavItem(props: {
   onClick: () => void;
   counts?: StatusCounts;
   badge?: React.ReactNode;
+  testId?: string;
 }) {
   return (
-    <button className={`nav-item ${props.active ? "active" : ""}`} data-roving-item aria-current={props.active ? "page" : undefined} onClick={props.onClick} title={props.title}>
+    <button
+      className={`nav-item ${props.active ? "active" : ""}`}
+      data-roving-item
+      data-testid={props.testId}
+      aria-current={props.active ? "page" : undefined}
+      onClick={props.onClick}
+      title={props.title}
+    >
       {props.icon && <Icon name={props.icon} />}
       {props.prefix}
       <span className="grow truncate">{props.label}</span>

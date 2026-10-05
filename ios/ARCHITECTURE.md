@@ -348,9 +348,10 @@ feature needs something new here, add to it without changing what's there.
   a NavigationStack with a Cancel (✕) toolbar button by `SheetHost` (Projects excepted), so a sheet
   slot sets only its title and its own toolbar items. Pushed screens go on the selected section's stack.
   `RouteScreen`/`SheetHost`/`CoverHost` (App/Destinations.swift) are the only Route → view mapping.
-  The sidebar's rows are `SidebarRow` (HarnessKit/Shell): `SidebarRow.current(tab:boardProject:projectExists:)`
-  is the highlighted row and `router.select(row, app:)` goes there (a board row saves the project
-  filter first), tested in SidebarRowTests. A ticket screen leaves the stack through
+  The sidebar's rows are `SidebarRow` (HarnessKit/Shell): `SidebarRow.current(tab:board:)` (the
+  board from `BoardState.boardFilter(prefs.boardProject)`) is the highlighted row and
+  `router.select(row, app:)` goes there (a board row saves its filter first: a project id, or a
+  group's `Paging.groupScope(name)`), tested in SidebarRowTests. A ticket screen leaves the stack through
   `router.removeTicket(where:)` and swaps itself with `router.replaceTicket(_:with:)`, never by
   editing `path(router.selectedTab)`, so the same code works as a ticket window's root.
 - **iPad layout:** see § iPad layout and § Windows.
@@ -827,7 +828,7 @@ native-pattern difference, not a missing feature.
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |
 | Search: the board's always-visible field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen | done |
-| Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
+| Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, project group rows (HARNESS-269: `folder` icon and open count, alphabetical, under All projects), rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
 | Header menu: Copy key, Open external, Cancel run, Open PR, Mark done, Delete | screens/TicketDetail | TicketDetailScreen | done |
 | Hero: crumb, title (compact on Browser/plugin/sub-agent), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |
@@ -858,6 +859,7 @@ native-pattern difference, not a missing feature.
 | Driver screen: status, Log in, review model, Anthropic API key | screens/DriverSettings, app/driver/[id] | Features/Settings/DriverSettingsScreen | done |
 | Settings: prompts summary, watchers (menu, enable), projects | screens/Settings | SettingsListSections | done |
 | Project settings: identifier rename preview, color, folder, agents, completion, Remove | screens/ProjectSettings | ProjectSettingsScreen | done |
+| Project groups (HARNESS-269, after the RN app): group boards (`group:<name>` scope, Done paging and search by `group=`, regroup paging reset), the Group picker in project settings, New session defaulting into the group | — (desktop: shared/src/projectGroups.ts, state/groups.ts, state/paging.ts) | Logic/ProjectGroups, State/Paging, Shell/SidebarRow, Features/Pickers/GroupPicker, ProjectSettingsScreen, BoardScreen | done (fixtures: projectGroups, statePaging groupScenarios) |
 | Prompts list and editor (Customize, Reset, Compare, variables) | screens/Prompts, app/prompt/[id] | Features/Prompts/* | done |
 | Watcher form | screens/WatcherForm, lib/watcherDraft | Features/Watchers/WatcherFormScreen | done |
 | Deep links (every `harness://` route above) | app/+native-intent, expo-router routes | Shell/DeepLink, Router, App/Destinations | done |

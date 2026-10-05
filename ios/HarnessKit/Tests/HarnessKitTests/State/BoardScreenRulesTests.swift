@@ -133,4 +133,15 @@ struct BoardScreenRulesTests {
         let counts = BoardScreenRules.openCounts([Self.t("a"), Self.t("b", .done), Self.t("c", .blocked, project: "p2"), Self.t("d", .review)])
         #expect(counts == ["p1": 2, "p2": 1])
     }
+
+    /// A group's count sums its projects'; ungrouped projects count toward no group, and a group
+    /// with nothing open still has an entry of 0.
+    @Test func groupCountsSumTheirProjects() {
+        func p(_ id: String, _ group: String?) -> Project {
+            Project(id: id, key: id.uppercased(), name: id, path: "/\(id)", nextSeq: 1, useWorktrees: false, group: group, createdAt: 1, updatedAt: 1)
+        }
+        let counts = ["p1": 2, "p2": 1, "p3": 4]
+        let groups = BoardScreenRules.groupOpenCounts(counts, projects: [p("p1", "Work"), p("p2", "Work"), p("p3", nil), p("p4", "Home")])
+        #expect(groups == ["Work": 3, "Home": 0])
+    }
 }

@@ -41,14 +41,14 @@ struct BoardStoreTests {
             return s.withLock { $0.live }
         }
 
-        func ticketPage(status: TicketStatus, projectId: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
-            calls.append("page \(status.rawValue) \(projectId ?? "*") \(limit.map(String.init) ?? "-") \(cursor ?? "-")")
+        func ticketPage(status: TicketStatus, projectId: String?, group: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
+            calls.append("page \(status.rawValue) \(group.map { "group=\($0)" } ?? projectId ?? "*") \(limit.map(String.init) ?? "-") \(cursor ?? "-")")
             let (page, error) = s.withLock { ($0.donePage, $0.pageError) }
             if let error { throw error }
             return page ?? TicketPage(tickets: [], nextCursor: nil, total: 0)
         }
 
-        func searchTickets(q: String, projectId: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
+        func searchTickets(q: String, projectId: String?, group: String?, limit: Int?, cursor: String?) async throws -> TicketPage {
             calls.append("search \(q)")
             return TicketPage(tickets: [], nextCursor: nil, total: 0)
         }
@@ -392,6 +392,15 @@ struct BoardStoreTests {
         await h.store.refresh()
         #expect(h.client.count("page done p2") == 2)
         #expect(Array(h.store.state.donePaging.keys) == ["p2"])
+    }
+
+    @Test func aGroupBoardPagesDoneByGroupNotByProject() async {
+        let h = Harness(boardProject: Paging.groupScope("Work"))
+        await h.store.refresh()
+        #expect(h.client.calls.all.contains("page done group=Work 50 -"))
+        #expect(h.store.state.donePaging["group:Work"] != nil)
+        h.store.setBoardScope(Paging.groupScope("Side projects"))
+        await eventually { h.client.calls.all.contains("page done group=Side projects 50 -") }
     }
 
     @Test func unresolvedKeysAndWatchedKeysAreFetched() async {

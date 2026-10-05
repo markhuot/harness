@@ -20,7 +20,7 @@ import {
   NEWS_KINDS,
   plainText,
   progressOf,
-  scopeOf,
+  scopeGroup,
   searchColumns,
   searchStatusText,
   ticketByKey,
@@ -46,7 +46,7 @@ type CardSelection = "focused" | "open" | null;
 
 /** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
 export function BoardPane() {
-  const { state, client, navigate, boardProjectId, loadMoreDone, setSearch, loadMoreSearch } = useStore();
+  const { state, client, navigate, boardProjectId, boardScope, loadMoreDone, setSearch, loadMoreSearch } = useStore();
   const act = useAction();
   // A draft's delete is Discard; it asks only when there's a prompt to lose.
   const discardDraft = useCallback(
@@ -59,7 +59,7 @@ export function BoardPane() {
   const [filter, setFilter] = useState("");
   const [hideChildren, toggleHideChildren] = useHideChildren();
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
-  useEffect(() => setSearch(filter), [filter, boardProjectId, setSearch]);
+  useEffect(() => setSearch(filter), [filter, boardScope, setSearch]);
   useEffect(() => () => setSearch(""), [setSearch]);
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
@@ -72,16 +72,16 @@ export function BoardPane() {
   const openKeys = useMemo(() => new Set(leaves(panes.root).flatMap((l) => (l.content.kind === "ticket" ? [l.content.ticketKey] : []))), [panes.root]);
   const selection = (key: string): CardSelection => (key === focusedKey ? "focused" : openKeys.has(key) ? "open" : null);
 
-  const projectId = boardProjectId;
-  const project = projectId ? state.projects[projectId] : null;
+  const project = boardProjectId ? state.projects[boardProjectId] : null;
+  const group = scopeGroup(boardScope);
   // While searching, the board shows the server's matches (every match, children included: the
   // user is looking for something specific, and hiding a hit would read as "not found").
-  const search = state.search && state.search.q === filter.trim() && state.search.scope === scopeOf(projectId) ? state.search : null;
+  const search = state.search && state.search.q === filter.trim() && state.search.scope === boardScope ? state.search : null;
   const searching = !!filter.trim();
-  const columns = searching ? searchColumns(state, projectId).columns : boardColumns(state, projectId);
+  const columns = searching ? searchColumns(state, boardScope).columns : boardColumns(state, boardScope);
   const visible = (t: Ticket) => searching || !hideOnBoard(t, hideChildren);
-  const doneTotal = searching ? columns.done.length : doneCount(state, projectId, columns.done.length);
-  const paging = searching ? undefined : state.donePaging[scopeOf(projectId)];
+  const doneTotal = searching ? columns.done.length : doneCount(state, boardScope, columns.done.length);
+  const paging = searching ? undefined : state.donePaging[boardScope];
   const shown = TICKET_STATUSES.map((status) => columns[status].filter(visible));
 
   // The keyboard cursor (state/boardNav.ts): a card key, and the spot it was last seen at so a card
@@ -164,6 +164,11 @@ export function BoardPane() {
             <>
               <ProjectKey project={project} size="lg" />
               {project.name}
+            </>
+          ) : group !== null ? (
+            <>
+              <Icon name="folder" />
+              {group}
             </>
           ) : (
             <>
@@ -262,7 +267,7 @@ export function BoardPane() {
                     state={state}
                     selected={selection(t.key)}
                     isCursor={t.key === cursor}
-                    showProject={!projectId}
+                    showProject={!project}
                     related={!!hoverConductor && t.parentId === hoverConductor}
                     onHoverConductor={setHoverConductor}
                     onOpen={openCard}

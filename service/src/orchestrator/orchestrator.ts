@@ -55,6 +55,7 @@ import type {
 } from "@harness/shared";
 import type { BaseBranchSource, BranchInfo, CompletionAction, PromptEntry } from "@harness/shared";
 import {
+  canonicalGroup,
   checkProjectKey,
   COMPLETION_ACTIONS,
   completionOptions,
@@ -62,12 +63,15 @@ import {
   isConductor,
   isTicketKey,
   normalizeProjectColor,
+  normalizeProjectGroup,
   managingConductor,
   offeredCompletionActions,
   outputTitle,
   parentLandingBranch,
   PERMISSION_MODES,
   PROJECT_COLORS,
+  PROJECT_GROUP_MAX,
+  projectGroups,
   resolveBaseBranch,
   resolveCompletionAction,
   resolvePermissionMode,
@@ -382,6 +386,13 @@ function validCompletionAction(name: string, value: unknown): CompletionAction |
   if (value === undefined || value === null) return undefined;
   if (!isCompletionAction(value)) throw badRequest(`${name} must be one of ${COMPLETION_ACTIONS.join(", ")}`);
   return value;
+}
+
+/** Validate a project group name from a request body (null / "" → none). */
+function validProjectGroup(value: unknown): string | null {
+  const group = normalizeProjectGroup(value);
+  if (group === undefined) throw badRequest(`group must be a name of at most ${PROJECT_GROUP_MAX} characters, or null`);
+  return group;
 }
 
 /** Validate a project color from a request body: a preset id or "#rrggbb" (null / "" → none). */
@@ -751,12 +762,24 @@ export class Orchestrator {
       useWorktrees: body.useWorktrees,
       ...projectReviewDefaults(body),
       color: body.color !== undefined ? validProjectColor(body.color) : null,
+      group: body.group !== undefined ? this.projectGroup(body.group) : null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
       completionAction: this.validProjectCompletion(path, body.completionAction),
       defaultModels:
         body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
     };
     return { input, mode: validPermissionMode(body.permissionMode) };
+  }
+
+  /**
+   * A project's group from a request body, spelled like an existing group that matches it without
+   * case ("work" joins "Work"; `except`, the project being changed, doesn't count).
+   */
+  private projectGroup(value: unknown, except?: string): string | null {
+    const group = validProjectGroup(value);
+    if (group === null) return null;
+    const others = this.store.projects.list().filter((p) => p.id !== except);
+    return canonicalGroup(group, projectGroups(others));
   }
 
   /** A project's default completion action, which the project at `path` must offer. */
@@ -850,6 +873,7 @@ export class Orchestrator {
       defaultModels: modelPatch,
       permissionMode: _mode,
       color: rawColor,
+      group: rawGroup,
       baseBranch: rawBase,
       completionAction: rawAction,
       skipAgentReview: _skipAgent,
@@ -858,11 +882,12 @@ export class Orchestrator {
       ...rest
     } = body;
     const color = rawColor !== undefined ? validProjectColor(rawColor) : undefined;
+    const group = rawGroup !== undefined ? this.projectGroup(rawGroup, existing.id) : undefined;
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
     const defaultModels =
       modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
-    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, baseBranch, completionAction }, path, defaultModels };
+    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, group, baseBranch, completionAction }, path, defaultModels };
   }
 
   async deleteProject(id: string) {
@@ -882,13 +907,13 @@ export class Orchestrator {
   }
 
   /** One page of a column (GET /tickets/page). See TicketRepo.page. */
-  ticketPage(opts: { status: TicketStatus; projectId?: string; q?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
+  ticketPage(opts: { status: TicketStatus; projectId?: string; group?: string; q?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
     if (opts.q !== undefined && !opts.q.trim()) throw badRequest("q must not be empty");
     return this.withCursor(() => this.store.tickets.page({ ...opts, limit: clampLimit(opts.limit, DEFAULT_PAGE_LIMIT) }));
   }
 
   /** Ticket search across every status (GET /tickets/search). See TicketRepo.search. */
-  searchTickets(opts: { q: string; projectId?: string; limit?: number | string | null; cursor?: string | null; drafts?: boolean }): TicketPage {
+  searchTickets(opts: { q: string; projectId?: string; group?: string; limit?: number | string | null; cursor?: string | null; drafts?: boolean }): TicketPage {
     if (!opts.q?.trim()) throw badRequest("q is required");
     return this.withCursor(() => this.store.tickets.search({ ...opts, limit: clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT) }));
   }
@@ -3114,6 +3139,7 @@ ${numberLines(r.body)}`;
       skipHumanReview: !!p.skipHumanReview,
       permissionMode: p.permissionMode,
       color: p.color,
+      group: p.group ?? null,
       baseBranch: p.baseBranch ?? null,
       completionAction: p.completionAction ?? "merge",
       completionActions: p.completionActions ?? offeredCompletionActions(p),

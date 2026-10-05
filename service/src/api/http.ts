@@ -221,6 +221,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.ticketPage({
       status,
       projectId: sp.get("projectId") || undefined,
+      group: sp.get("group") || undefined,
       q: sp.has("q") ? sp.get("q")! : undefined,
       limit: sp.get("limit"),
       cursor: sp.get("cursor") || null,
@@ -228,7 +229,13 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   });
   add("GET", "/tickets/search", ({ url }) => {
     const sp = url.searchParams;
-    return o.searchTickets({ q: sp.get("q") ?? "", projectId: sp.get("projectId") || undefined, limit: sp.get("limit"), cursor: sp.get("cursor") || null });
+    return o.searchTickets({
+      q: sp.get("q") ?? "",
+      projectId: sp.get("projectId") || undefined,
+      group: sp.get("group") || undefined,
+      limit: sp.get("limit"),
+      cursor: sp.get("cursor") || null,
+    });
   });
   add("GET", "/tickets/:key", ({ params }) => o.ticketDetail(params.key!));
   add("PATCH", "/tickets/:key", async ({ params, body }) => o.updateTicket(params.key!, await body()));

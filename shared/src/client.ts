@@ -173,12 +173,13 @@ export class HarnessClient {
   }
   /**
    * One page of a single column. done pages newest-completed first; other statuses by position.
-   * `q` narrows to tickets matching the search. Pass the previous page's nextCursor as `cursor`.
+   * `q` narrows to tickets matching the search, `projectId` to one project and `group` to the
+   * projects in that group. Pass the previous page's nextCursor as `cursor`.
    */
-  ticketPage(opts: { status: TicketStatus; projectId?: string; q?: string; limit?: number; cursor?: string | null }) {
+  ticketPage(opts: { status: TicketStatus; projectId?: string; group?: string; q?: string; limit?: number; cursor?: string | null }) {
     return this.request<TicketPage>(
       "GET",
-      `/tickets/page${query({ status: opts.status, projectId: opts.projectId, q: opts.q, limit: opts.limit, cursor: opts.cursor })}`,
+      `/tickets/page${query({ status: opts.status, projectId: opts.projectId, group: opts.group, q: opts.q, limit: opts.limit, cursor: opts.cursor })}`,
     );
   }
   /**
@@ -186,8 +187,11 @@ export class HarnessClient {
    * latest Activity note. Key matches rank first, then title, then the rest; newest first within a rank.
    * An empty/whitespace `q` is a 400.
    */
-  searchTickets(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null }) {
-    return this.request<TicketPage>("GET", `/tickets/search${query({ q: opts.q, projectId: opts.projectId, limit: opts.limit, cursor: opts.cursor })}`);
+  searchTickets(opts: { q: string; projectId?: string; group?: string; limit?: number; cursor?: string | null }) {
+    return this.request<TicketPage>(
+      "GET",
+      `/tickets/search${query({ q: opts.q, projectId: opts.projectId, group: opts.group, limit: opts.limit, cursor: opts.cursor })}`,
+    );
   }
   createTicket(body: CreateTicketBody) {
     return this.request<Ticket>("POST", "/tickets", body);

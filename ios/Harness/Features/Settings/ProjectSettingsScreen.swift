@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// A project's settings: name, identifier (renamed with the live
-/// preview), color, folder (a text field: there's no folder picker on the phone), default driver /
+/// preview), color, group (its board in the Projects sidebar), folder (a text field: there's no folder picker on the phone), default driver /
 /// model / permission mode, worktrees, base branch and "When approved" (git projects), human
 /// review, auto-complete, and removing it. Every change goes out as an updateProject PATCH.
 struct ProjectSettingsScreen: View {
@@ -71,6 +71,9 @@ private struct ProjectSettingsForm: View {
                     ProjectColorPicker(value: project.color) { save(UpdateProjectBody(color: Patch($0))) }
                 }
                 .settingsRowBackground(c)
+                SettingsRow(label: "Group", hint: "Projects in a group share a board in the Projects list.") {
+                    GroupPicker(value: project.group, groups: state.projectGroups()) { save(UpdateProjectBody(group: Patch($0))) }
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Folder").font(.scaled(size: 15)).foregroundStyle(c.text)

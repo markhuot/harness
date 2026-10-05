@@ -587,7 +587,8 @@ describe("positionForDrop", () => {
   });
 });
 
-import { composerProject } from "./reducer";
+import { composerCandidates, composerProject } from "./reducer";
+import { ALL_SCOPE, groupScope } from "./paging";
 
 describe("composerProject", () => {
   const withProjects = (...ps: Project[]) => ({ ...initialState, projects: Object.fromEntries(ps.map((p) => [p.id, p])) });
@@ -605,5 +606,24 @@ describe("composerProject", () => {
     const s = withProjects(project("p1", "A"), project("p2", "B"));
     expect(composerProject(s, "gone", ["p2", "p1"])).toBe("p2");
     expect(composerProject(s, "gone", ["missing", "p1"])).toBe("p1");
+  });
+});
+
+describe("composerCandidates", () => {
+  const p = (id: string, name: string, group: string | null) => ({ ...project(id, name), name, group });
+  const s = { ...initialState, projects: { a: p("a", "Zed", "Work"), b: p("b", "Alpha", "Work"), c: p("c", "Mid", null) } };
+
+  test("a project board prefers its project, then the last used; All projects just the last used", () => {
+    expect(composerCandidates(s, "c", "a")).toEqual(["c", "a"]);
+    expect(composerCandidates(s, ALL_SCOPE, "a")).toEqual([null, "a"]);
+    expect(composerCandidates(s, null, "a")).toEqual([null, "a"]);
+  });
+
+  test("a group's board prefers the last used project when it's in the group, else the group's first by name", () => {
+    expect(composerProject(s, "", composerCandidates(s, groupScope("Work"), "a"))).toBe("a");
+    expect(composerProject(s, "", composerCandidates(s, groupScope("Work"), "c"))).toBe("b");
+    expect(composerProject(s, "", composerCandidates(s, groupScope("Work"), null))).toBe("b");
+    // A group nobody carries falls back to the last used.
+    expect(composerProject(s, "", composerCandidates(s, groupScope("Gone"), "c"))).toBe("c");
   });
 });

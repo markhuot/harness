@@ -181,6 +181,18 @@ const COLUMNS: Record<string, string> = {
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools", "promptAttachments"]);
 
+/** Narrow a page or search to one project, or to the projects in a group (a group's board). */
+function projectFilter(opts: { projectId?: string; group?: string }, where: string[], params: SqlParams) {
+  if (opts.projectId) {
+    where.push("t.project_id = $projectId");
+    params.projectId = opts.projectId;
+  }
+  if (opts.group) {
+    where.push("t.project_id IN (SELECT id FROM projects WHERE group_name = $group)");
+    params.group = opts.group;
+  }
+}
+
 export class TicketRepo {
   constructor(private db: Database) {}
 
@@ -331,14 +343,11 @@ export class TicketRepo {
    * statuses: position, then creation. `q` narrows to search hits (same matching as search).
    * Throws CursorError for a cursor that isn't from this ordering.
    */
-  page(opts: { status: TicketStatus; projectId?: string; q?: string; limit?: number; cursor?: string | null }): TicketPage {
+  page(opts: { status: TicketStatus; projectId?: string; group?: string; q?: string; limit?: number; cursor?: string | null }): TicketPage {
     const limit = clampLimit(opts.limit, DEFAULT_PAGE_LIMIT);
     const params: SqlParams = { status: opts.status };
     const where = ["t.status = $status"];
-    if (opts.projectId) {
-      where.push("t.project_id = $projectId");
-      params.projectId = opts.projectId;
-    }
+    projectFilter(opts, where, params);
     let cte = "";
     if (opts.q !== undefined) {
       cte = this.hitsCte(opts.q, params);
@@ -378,16 +387,13 @@ export class TicketRepo {
    * Search every status (see hitsCte for matching and ranks): rank first, newest first within a
    * rank, keyset-paged. The caller rejects an empty `q`. Throws CursorError for a bad cursor.
    */
-  search(opts: { q: string; projectId?: string; limit?: number; cursor?: string | null; drafts?: boolean }): TicketPage {
+  search(opts: { q: string; projectId?: string; group?: string; limit?: number; cursor?: string | null; drafts?: boolean }): TicketPage {
     const limit = clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT);
     const params: SqlParams = {};
     const cte = this.hitsCte(opts.q, params);
     const where = ["1"];
     if (opts.drafts === false) where.push("t.draft = 0");
-    if (opts.projectId) {
-      where.push("t.project_id = $projectId");
-      params.projectId = opts.projectId;
-    }
+    projectFilter(opts, where, params);
     const from = "FROM tickets t JOIN hits h ON h.id = t.id";
     const total = (this.db.query(`${cte} SELECT COUNT(*) AS n ${from} WHERE ${where.join(" AND ")}`).get(params) as { n: number }).n;
     const pageParams: SqlParams = { ...params, limit: limit + 1 };

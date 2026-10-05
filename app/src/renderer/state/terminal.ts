@@ -5,12 +5,15 @@
 // terminal.test.ts.
 
 import type { Project } from "@harness/shared";
-import { ALL_SCOPE, scopeOf, type ResolvedTheme } from "@harness/shared/state";
+import { ALL_SCOPE, type ResolvedTheme } from "@harness/shared/state";
 import { over, toHex, type ThemeTokens } from "@harness/shared/themes";
 import type { TerminalExit, TerminalSession } from "../../main/types";
-import type { Route } from "./route";
+import { paneScopeOf, type Route } from "./route";
 
-/** The folder a terminal in `scope` starts in: the project's folder, or home (`~`) on All projects or for a project that isn't loaded. */
+/**
+ * The folder a terminal in `scope` starts in: the project's folder, or home (`~`) on All projects,
+ * a group's board, or for a project that isn't loaded.
+ */
 export function terminalCwd(scope: string, projects: Readonly<Record<string, Pick<Project, "path">>>): string {
   if (scope === ALL_SCOPE) return "~";
   return projects[scope]?.path || "~";
@@ -21,7 +24,7 @@ export function terminalCwd(scope: string, projects: Readonly<Record<string, Pic
  * settings page; otherwise (Inbox, Settings) the board last shown, else All projects.
  */
 export function terminalScope(route: Route, lastBoardScope: string | null): string {
-  if (route.view === "board") return scopeOf(route.projectId);
+  if (route.view === "board") return paneScopeOf(route)!;
   if (route.view === "project") return route.projectId;
   return lastBoardScope ?? ALL_SCOPE;
 }

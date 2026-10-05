@@ -17,6 +17,13 @@ test("counts in progress, blocked and review per project and in total; planning 
   expect(total).toEqual({ in_progress: 2, blocked: 1, review: 1 });
 });
 
+test("a group counts its projects' tickets; projects in no group count only for themselves", () => {
+  const groupOf = (id: string) => ({ a: "Work", b: "Work", c: "Personal" })[id] ?? null;
+  const { byGroup, byProject } = sidebarCounts([t("a", "in_progress"), t("b", "in_progress"), t("b", "review"), t("c", "planning"), t("d", "blocked")], groupOf);
+  expect(byGroup).toEqual({ Work: { in_progress: 2, blocked: 0, review: 1 } });
+  expect(byProject.d).toEqual({ in_progress: 0, blocked: 1, review: 0 });
+});
+
 test("zero columns drop out of the pill and the order stays in progress, blocked, review", () => {
   expect(countSegments({ in_progress: 2, blocked: 1, review: 4 })).toEqual([
     { status: "in_progress", n: 2 },

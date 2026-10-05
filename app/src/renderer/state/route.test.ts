@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { subagentTabRoute } from "@harness/shared/state";
-import { formatRoute, mirrorRoute, parsePluginTab, parseRoute, pluginTabRoute, type Route } from "./route";
+import { ALL_SCOPE, groupScope } from "@harness/shared/state";
+import { boardRoute, formatRoute, mirrorRoute, paneScopeOf, parsePluginTab, parseRoute, pluginTabRoute, type Route } from "./route";
 
 test("parses board routes with and without a project", () => {
   expect(parseRoute("")).toEqual({ view: "board", projectId: null, ticketKey: null, tab: "spec" });
@@ -86,4 +87,23 @@ test("the board hash mirrors the focused ticket pane and keeps the project filte
   // Other views aren't touched.
   const inbox: Route = { view: "inbox", sessionId: "s1" };
   expect(mirrorRoute(inbox, { ticketKey: "B-2", tab: "details" })).toBe(inbox);
+});
+
+test("a group's board round-trips as /board/group/<name> (any characters), with its tickets, and has its own pane scope", () => {
+  const r: Route = { view: "board", projectId: null, group: "Side / fun", ticketKey: "FOO-1", tab: "activity" };
+  expect(formatRoute(r)).toBe("#/board/group/Side%20%2F%20fun/ticket/FOO-1/activity");
+  expect(parseRoute(formatRoute(r))).toEqual(r);
+  expect(parseRoute("#/board/group/Work")).toEqual({ view: "board", projectId: null, group: "Work", ticketKey: null, tab: "spec" });
+  expect(paneScopeOf(r)).toBe(groupScope("Side / fun"));
+  expect(paneScopeOf({ view: "board", projectId: "p1", ticketKey: null, tab: "spec" })).toBe("p1");
+  // "group" without a name isn't a group (nor a project called "group").
+  expect(parseRoute("#/board/group")).toMatchObject({ projectId: "group" });
+});
+
+test("a group's board keeps its group as the hash follows the focused pane, and boardRoute goes back to it", () => {
+  const board: Route = { view: "board", projectId: null, group: "Work", ticketKey: null, tab: "spec" };
+  expect(mirrorRoute(board, { ticketKey: "A-1", tab: "spec" })).toEqual({ ...board, ticketKey: "A-1" });
+  expect(boardRoute(groupScope("Work"))).toEqual(board);
+  expect(boardRoute(ALL_SCOPE)).toEqual({ view: "board", projectId: null, ticketKey: null, tab: "spec" });
+  expect(boardRoute("p1", "A-1", "activity")).toEqual({ view: "board", projectId: "p1", ticketKey: "A-1", tab: "activity" });
 });

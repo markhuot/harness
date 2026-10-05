@@ -322,6 +322,11 @@ const projectProps = {
     type: "string",
     description: `Key badge color: ${PROJECT_COLORS.map((c) => c.id).join(", ")}, or a custom "#rrggbb". Empty for the theme's accent.`,
   },
+  group: {
+    type: "string",
+    description:
+      "Project group, e.g. \"Work\" or \"Personal\": each group has a board of its own projects in the apps. A name matching an existing group (any case) joins it. Empty for no group.",
+  },
   base_branch: {
     type: "string",
     description: "Branch this project's tickets land on when they complete, and new ticket branches start from, e.g. \"develop\". Empty for the settings default.",
@@ -338,6 +343,7 @@ type ProjectToolInput = {
   permission_mode?: string;
   default_models?: Record<string, string | null>;
   color?: string;
+  group?: string;
   base_branch?: string;
 };
 
@@ -354,6 +360,7 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.permission_mode !== undefined) body.permissionMode = i.permission_mode === "inherit" ? null : i.permission_mode;
   if (i.default_models !== undefined) body.defaultModels = i.default_models;
   if (i.color !== undefined) body.color = i.color || null;
+  if (i.group !== undefined) body.group = i.group || null;
   if (i.base_branch !== undefined) body.baseBranch = i.base_branch.trim() || null;
   return body;
 }

@@ -117,7 +117,7 @@ struct BoardColumnView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
-                    BoardTicketCard(ticket: t, showProject: ctx.projectId == nil, onMove: onMove, onDiscard: onDiscard)
+                    BoardTicketCard(ticket: t, showProject: ctx.project == nil, onMove: onMove, onDiscard: onDiscard)
                         .onAppear { if i >= cards.count - Self.endThreshold { onEnd() } }
                 }
                 if cards.isEmpty { empty }
@@ -132,7 +132,7 @@ struct BoardColumnView: View {
         if ctx.searching {
             store.loader.loadMoreSearch()
         } else if status == .done {
-            store.loader.loadMoreDone(ctx.projectId)
+            store.loader.loadMoreDone(ctx.filter)
         }
     }
 
@@ -144,7 +144,7 @@ struct BoardColumnView: View {
                            systemImage: BoardScreen.newSessionSymbol)
             } else if ctx.searching && ctx.pending {
                 emptyText("Searching…")
-            } else if !ctx.searching && status == .done && !store.loader.legacy && (p == nil || p!.loading || store.loader.canLoadMoreDone(ctx.projectId)) && p?.error == nil {
+            } else if !ctx.searching && status == .done && !store.loader.legacy && (p == nil || p!.loading || store.loader.canLoadMoreDone(ctx.filter)) && p?.error == nil {
                 Spinner()
             } else {
                 emptyText(ctx.searching ? "No matches" : Format.columnEmptyText[status] ?? "")
@@ -169,7 +169,7 @@ struct BoardColumnView: View {
             }
         } else if status == .done, let p = ctx.paging {
             if p.error != nil {
-                Button { store.loader.retryDone(ctx.projectId) } label: {
+                Button { store.loader.retryDone(ctx.filter) } label: {
                     Text("Couldn't load older tickets. \(Text("Retry").fontWeight(.semibold).foregroundStyle(c.accentText))")
                         .font(.scaled(size: 13))
                         .foregroundStyle(c.text3)

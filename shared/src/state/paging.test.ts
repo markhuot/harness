@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { Session, Ticket, TicketDetail, TicketPage } from "../index";
+import type { Project, Session, Ticket, TicketDetail, TicketPage } from "../index";
 import {
   ALL_SCOPE,
   canLoadMoreDone,
   canLoadMoreSearch,
   doneCount,
+  groupScope,
   matchesQuery,
   needsFirstDonePage,
+  scopeGroup,
+  scopeProject,
+  scopeQuery,
   searchColumns,
   searchStatusText,
 } from "./paging";
@@ -361,5 +365,65 @@ describe("stale Load more after a refresh of the same scope", () => {
     const fresh = run(s, { type: "donePage", scope: "p1", page: page([done("y", 70)], null, 7), append: true, cursor: "c1b" });
     expect(fresh.tickets.y).toBeDefined();
     expect(fresh.donePaging.p1?.nextCursor).toBeNull();
+  });
+});
+
+describe("a project group's board", () => {
+  const proj = (id: string, group: string | null) => ({ id, key: id.toUpperCase(), name: id, group }) as unknown as Project;
+  const withProjects = (projects: Project[], tickets: Ticket[], donePage?: Snapshot["donePage"]): State =>
+    run(initialState, { type: "snapshot", snapshot: { projects, tickets, sessions: [], watchers: [], settings: null, drivers: [], donePage } });
+  const work = groupScope("Work");
+  const a = tk("a", { projectId: "p1" });
+  const b = tk("b", { projectId: "p2", status: "review" });
+  const c = tk("c", { projectId: "p3" });
+  const d1 = done("x1", 2000, { projectId: "p1" });
+  const d3 = done("x3", 2001, { projectId: "p3" });
+  const booted = () =>
+    withProjects([proj("p1", "Work"), proj("p2", "Work"), proj("p3", null)], [a, b, c], { scope: work, page: page([d1], null, 1) });
+
+  test("a group scope round-trips, and asks the service for the group rather than a project", () => {
+    expect(scopeGroup(work)).toBe("Work");
+    expect(scopeGroup(ALL_SCOPE)).toBeNull();
+    expect(scopeGroup("p1")).toBeNull();
+    expect(scopeQuery(work)).toEqual({ group: "Work" });
+    expect(scopeQuery("p1")).toEqual({ projectId: "p1" });
+    expect(scopeQuery(ALL_SCOPE)).toEqual({});
+    expect(scopeProject(work)).toBeUndefined();
+  });
+
+  test("the board shows the tickets of every project in the group, and no others", () => {
+    const s = booted();
+    const cols = boardColumns(s, work);
+    expect(keys(cols.planning)).toEqual(["A"]);
+    expect(keys(cols.review)).toEqual(["B"]);
+    expect(keys(cols.done)).toEqual(["X1"]);
+    // A group nobody carries has an empty board, not every ticket.
+    expect(Object.values(boardColumns(s, groupScope("Nope"))).flat()).toEqual([]);
+  });
+
+  test("live completions count on the group's board only when the project is in it", () => {
+    let s = booted();
+    s = run(s, upsert(done("x2", 3000, { projectId: "p2" })));
+    expect(doneCount(s, work, 0)).toBe(2);
+    s = run(s, upsert(d3));
+    expect(doneCount(s, work, 0)).toBe(2);
+  });
+
+  test("local search matches only within the group", () => {
+    const s = run(booted(), { type: "search.set", q: "a", scope: work }, { type: "search.set", q: "c", scope: work });
+    expect(Object.values(searchColumns(s, work).columns).flat()).toEqual([]);
+    const hit = run(booted(), { type: "search.set", q: "b", scope: work });
+    expect(keys(searchColumns(hit, work).columns.review)).toEqual(["B"]);
+  });
+
+  test("a project joining or leaving a group drops both groups' paging so they page afresh; other edits keep it", () => {
+    const s = booted();
+    const renamed = run(s, { type: "event", event: { kind: "project.upserted", project: { ...proj("p1", "Work"), name: "new name" } } });
+    expect(renamed.donePaging[work]).toBeDefined();
+    const moved = run(s, { type: "event", event: { kind: "project.upserted", project: proj("p3", "Work") } });
+    expect(moved.donePaging[work]).toBeUndefined();
+    expect(needsFirstDonePage(moved, work)).toBe(true);
+    // Its tickets are on the board right away.
+    expect(keys(boardColumns(moved, work).planning).sort()).toEqual(["A", "C"]);
   });
 });

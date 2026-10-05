@@ -412,6 +412,25 @@ describe("http api", () => {
     await expect(client.createProject({ path: dir, key: "OTHER", color: "nope" })).rejects.toMatchObject({ status: 400 });
   });
 
+  test("project group over HTTP: trimmed, joins an existing group whatever its case, junk is refused, empty clears", async () => {
+    const { client, dir } = await boot();
+    const work = await client.createProject({ path: dir, key: "WORK", group: "  Day   job " });
+    expect(work.group).toBe("Day job");
+    const other = await client.createProject({ path: dir, key: "OTHER" });
+    expect(other.group).toBeNull();
+    // Typing the group in another case joins it rather than starting a second one.
+    expect((await client.updateProject(other.id, { group: "day JOB" })).group).toBe("Day job");
+    expect((await client.updateProject(other.id, { name: "renamed" })).group).toBe("Day job");
+    // The only project in a group can re-spell it (it doesn't match against itself).
+    expect((await client.updateProject(work.id, { group: "Personal" })).group).toBe("Personal");
+    expect((await client.updateProject(work.id, { group: "PERSONAL" })).group).toBe("PERSONAL");
+    await expect(client.updateProject(work.id, { group: "x".repeat(61) })).rejects.toMatchObject({ status: 400 });
+    await expect(client.updateProject(work.id, { group: 7 as unknown as string })).rejects.toMatchObject({ status: 400 });
+    expect((await client.listProjects()).find((x) => x.id === work.id)!.group).toBe("PERSONAL");
+    expect((await client.updateProject(work.id, { group: "  " })).group).toBeNull();
+    expect((await client.updateProject(other.id, { group: null })).group).toBeNull();
+  });
+
   test("MCP endpoint serves the run's tools only while the run is active", async () => {
     const { client, dir, h, fake } = await boot();
     const p = await client.createProject({ path: dir });
@@ -805,6 +824,27 @@ describe("ticket paging + search over http", () => {
     await expect(client.request("GET", "/tickets/search")).rejects.toMatchObject({ status: 400 });
     // /tickets/:key still works alongside the new routes.
     expect((await client.getTicket(planning.key)).ticket.id).toBe(planning.id);
+  });
+
+  test("a group's board: /tickets/page and /tickets/search narrow to the projects in the group", async () => {
+    const { client, dir, p, done1, done2, done3 } = await seedBoard();
+    const other = await client.createProject({ path: dir, key: "OUT" });
+    const outside = await client.createTicket({ projectId: other.id, spec: "login elsewhere", title: "login elsewhere", start: false });
+    await client.updateTicket(outside.key, { status: "done" });
+    // No project carries the group yet: nothing matches (not every ticket).
+    expect((await client.ticketPage({ status: "done", group: "Work" })).total).toBe(0);
+    await client.updateProject(p.id, { group: "Work" });
+    const first = await client.ticketPage({ status: "done", group: "Work", limit: 2 });
+    expect(first.tickets.map((t) => t.key)).toEqual([done3.key, done2.key]);
+    expect(first.total).toBe(3);
+    const second = await client.ticketPage({ status: "done", group: "Work", limit: 2, cursor: first.nextCursor });
+    expect(second.tickets.map((t) => t.key)).toEqual([done1.key]);
+    expect((await client.searchTickets({ q: "login", group: "Work" })).tickets.map((t) => t.key)).not.toContain(outside.key);
+    expect((await client.searchTickets({ q: "login" })).tickets.map((t) => t.key)).toContain(outside.key);
+    // A second project joins: its tickets are on the group's board too.
+    await client.updateProject(other.id, { group: "work" });
+    expect((await client.ticketPage({ status: "done", group: "Work" })).total).toBe(4);
+    expect((await client.searchTickets({ q: "login", group: "Work" })).tickets.map((t) => t.key)).toContain(outside.key);
   });
 
   test("file autocomplete: /projects/:id/files and /tickets/:key/files", async () => {

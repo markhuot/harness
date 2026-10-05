@@ -12,7 +12,7 @@
 
 import "./palette.css";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { displayKey, keyLabel, secondaryKey, type FileMatch, type Ticket } from "@harness/shared";
+import { displayKey, keyLabel, projectGroups, secondaryKey, type FileMatch, type Ticket } from "@harness/shared";
 import { sortedProjects, ticketByKey } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { commandKeys } from "../state/keys";
@@ -231,6 +231,10 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
       const nav = (id: string, label: string, run: () => void, keywords?: string[]) => out.push({ id: `nav:${id}`, kind: "nav", label, group: "Go to", keywords, run });
       // Commands for the same places come first; these fill in what they don't cover.
       if (!have.has("board")) nav("board", "Board: All Projects", () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" }));
+      // Project groups next, as in the sidebar; "group" finds them all.
+      for (const g of projectGroups(Object.values(state.projects))) {
+        nav(`group:${g}`, `Board: ${g}`, () => navigate({ view: "board", projectId: null, group: g, ticketKey: null, tab: "spec" }), ["group"]);
+      }
       for (const p of sortedProjects(state)) nav(`project:${p.id}`, `Board: ${p.name}`, () => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "spec" }), [p.key]);
       if (!have.has("inbox")) nav("inbox", "Inbox", () => navigate({ view: "inbox", sessionId: null }));
       if (!have.has("settings")) nav("settings", "Settings", () => navigate({ view: "settings", section: null }));

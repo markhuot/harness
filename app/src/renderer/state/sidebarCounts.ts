@@ -7,17 +7,26 @@ export type StatusCounts = Record<CountedStatus, number>;
 
 const empty = (): StatusCounts => ({ in_progress: 0, blocked: 0, review: 0 });
 
-/** In progress, blocked and review counts per project, plus `total` across every project. */
-export function sidebarCounts(tickets: Iterable<Pick<Ticket, "projectId" | "status">>): { byProject: Record<string, StatusCounts>; total: StatusCounts } {
+/**
+ * In progress, blocked and review counts per project, per project group (`groupOf` names a
+ * project's group, null for none), plus `total` across every project.
+ */
+export function sidebarCounts(
+  tickets: Iterable<Pick<Ticket, "projectId" | "status">>,
+  groupOf: (projectId: string) => string | null | undefined = () => null,
+): { byProject: Record<string, StatusCounts>; byGroup: Record<string, StatusCounts>; total: StatusCounts } {
   const byProject: Record<string, StatusCounts> = {};
+  const byGroup: Record<string, StatusCounts> = {};
   const total = empty();
   for (const t of tickets) {
     if (!(COUNTED as readonly string[]).includes(t.status)) continue;
     const s = t.status as CountedStatus;
     (byProject[t.projectId] ??= empty())[s]++;
+    const group = groupOf(t.projectId);
+    if (group) (byGroup[group] ??= empty())[s]++;
     total[s]++;
   }
-  return { byProject, total };
+  return { byProject, byGroup, total };
 }
 
 /** The pill's segments: zero counts drop out, so an idle board shows nothing. */

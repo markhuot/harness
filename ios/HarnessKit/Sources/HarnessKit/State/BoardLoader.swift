@@ -71,50 +71,52 @@ public final class BoardLoader {
         if !query.q.isEmpty { runSearch(searchGen, cursor: nil) }
     }
 
-    /// The board shows `projectId`: fetch its first Done page unless it has one.
+    /// The board shows `board` (a project id or a scope, nil for All projects): fetch its first
+    /// Done page unless it has one.
     @discardableResult
-    public func ensureFirstPage(_ projectId: String?) -> Task<Void, Never>? {
-        if legacy || !Paging.needsFirstDonePage(getState(), projectId) { return nil }
-        return fetchDone(projectId, cursor: nil)
+    public func ensureFirstPage(_ board: String?) -> Task<Void, Never>? {
+        if legacy || !Paging.needsFirstDonePage(getState(), board) { return nil }
+        return fetchDone(board, cursor: nil)
     }
 
     /// Is there a next Done page this gate would ask for right now? (drives the footer spinner / autofill)
-    public func canLoadMoreDone(_ projectId: String?) -> Bool {
+    public func canLoadMoreDone(_ board: String?) -> Bool {
         let state = getState()
-        guard !legacy, let p = state.donePaging[Paging.scopeOf(projectId)] else { return false }
+        guard !legacy, let p = state.donePaging[Paging.scopeOf(board)] else { return false }
         // After a failure the column waits for Retry: a failing service would otherwise be hit by every scroll event.
-        return p.error == nil && Paging.canLoadMoreDone(state, projectId) && !asked.contains(key(projectId, p.nextCursor))
+        return p.error == nil && Paging.canLoadMoreDone(state, board) && !asked.contains(key(board, p.nextCursor))
     }
 
     /// The Done list scrolled near its end (or is too short to scroll).
     @discardableResult
-    public func loadMoreDone(_ projectId: String?) -> Task<Void, Never>? {
-        guard canLoadMoreDone(projectId) else { return nil }
-        return fetchDone(projectId, cursor: getState().donePaging[Paging.scopeOf(projectId)]?.nextCursor)
+    public func loadMoreDone(_ board: String?) -> Task<Void, Never>? {
+        guard canLoadMoreDone(board) else { return nil }
+        return fetchDone(board, cursor: getState().donePaging[Paging.scopeOf(board)]?.nextCursor)
     }
 
     /// Footer "Retry" after a failed page.
     @discardableResult
-    public func retryDone(_ projectId: String?) -> Task<Void, Never>? {
-        guard let p = getState().donePaging[Paging.scopeOf(projectId)], p.error != nil, !legacy else { return nil }
-        return fetchDone(projectId, cursor: p.nextCursor)
+    public func retryDone(_ board: String?) -> Task<Void, Never>? {
+        guard let p = getState().donePaging[Paging.scopeOf(board)], p.error != nil, !legacy else { return nil }
+        return fetchDone(board, cursor: p.nextCursor)
     }
 
-    private func key(_ projectId: String?, _ cursor: String?) -> String {
-        "\(gen)|\(Paging.scopeOf(projectId))|\(cursor ?? "")"
+    private func key(_ board: String?, _ cursor: String?) -> String {
+        "\(gen)|\(Paging.scopeOf(board))|\(cursor ?? "")"
     }
 
-    private func fetchDone(_ projectId: String?, cursor: String?) -> Task<Void, Never>? {
-        let key = key(projectId, cursor)
+    private func fetchDone(_ board: String?, cursor: String?) -> Task<Void, Never>? {
+        let key = key(board, cursor)
         if asked.contains(key) { return nil }
         asked.insert(key)
         let gen = gen
-        let scope = Paging.scopeOf(projectId)
+        let scope = Paging.scopeOf(board)
         dispatch(.donePageRequest(scope: scope))
         let client = client
         return Task { @MainActor in
             do {
-                let page = try await client.ticketPage(status: .done, projectId: Paging.scopeProject(scope), q: nil, limit: Paging.donePageSize, cursor: cursor)
+                let filter = Paging.scopeQuery(scope)
+                let page = try await client.ticketPage(status: .done, projectId: filter.projectId, group: filter.group, q: nil, limit: Paging.donePageSize, cursor: cursor)
                 guard gen == self.gen else { return }
                 self.dispatch(.donePage(scope: scope, page: page, append: cursor != nil, cursor: Patch(cursor)))
             } catch {
@@ -129,9 +131,9 @@ public final class BoardLoader {
 
     /// Every keystroke in the search bar (and project switches while searching). The reducer shows
     /// local matches at once; the server is asked after a pause, and only the newest ask may land.
-    public func setQuery(_ raw: String, projectId: String?) {
+    public func setQuery(_ raw: String, board: String?) {
         let q = JSCompat.trim(raw)
-        let scope = Paging.scopeOf(projectId)
+        let scope = Paging.scopeOf(board)
         if q == query.q && scope == query.scope { return }
         query = (q, scope)
         searchGen += 1
@@ -179,7 +181,8 @@ public final class BoardLoader {
         let client = client
         return Task { @MainActor in
             do {
-                let page = try await client.searchTickets(q: q, projectId: Paging.scopeProject(scope), limit: Paging.searchPageSize, cursor: cursor)
+                let filter = Paging.scopeQuery(scope)
+                let page = try await client.searchTickets(q: q, projectId: filter.projectId, group: filter.group, limit: Paging.searchPageSize, cursor: cursor)
                 guard gen == self.searchGen else { return }
                 self.dispatch(.searchResults(q: q, scope: scope, page: page, append: cursor != nil))
             } catch {
