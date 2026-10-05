@@ -2779,8 +2779,8 @@ the conventions, and ios/README.md the build and test commands.
   A tap sends move + down + up, a pan sends wheel events in page pixels, and hold-then-drag sends
   a mouse drag (HarnessKit `BrowserInput`). A hidden text field carries the keyboard (diffed into
   text inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
-  only on real changes. A + button opens a tab (`newTab`); with more than one tab a strip of chips
-  switches (resubscribing with its `tabId`) and closes them. Each Browser view subscribes with
+  only on real changes. A + button opens a tab (`newTab`); a strip of chips (shown even for a lone
+  tab, so it can be torn off) switches (resubscribing with its `tabId`) and closes them. Each Browser view subscribes with
   a viewer id of its own (one UUID per `BrowserTabModel`) and keeps only the frames and states
   for it (`isBrowserEvent`, the port of `isBrowserEventFor`), so a torn-off browser tab and the
   ticket's Browser tab stream at once. See "Browser tabs".

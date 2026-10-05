@@ -520,7 +520,7 @@ export function BrowserView({
 
   return (
     <div className="browser">
-      {!pinned && tabs && tabs.length > 1 && (
+      {!pinned && tabs && tabs.length > 0 && (
         <div className="browser-tabs" role="tablist" aria-label="Browser tabs" ref={tabsRef}>
           {tabs.map((tab, i) => {
             const label = tabLabel(tab);

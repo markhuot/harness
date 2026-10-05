@@ -874,18 +874,22 @@ try {
   check("browser key input forwarded", inputs.some((l) => l.includes('"key":"a"')));
   check("browser resize sent", inputs.some((l) => l.includes('"type":"resize"')));
 
-  // 6a. Browser tabs: + opens a tab (the strip appears with it current), a chip switches back,
-  // × closes one (the strip goes away with a single tab left).
+  // 6a. Browser tabs: the mock opens two (Local dev server, Docs). + opens a third (current), a chip
+  // switches back, × closes the others, and the lone tab left keeps its chip (so it can be torn off).
   {
     type Chip = { id: number; on: boolean; label: string };
     const chips = () => js<Chip[]>(`[...document.querySelectorAll(".browser-tab-select")].map((b) => ({ id: Number(b.dataset.tabId), on: b.getAttribute("aria-selected") === "true", label: b.textContent }))`);
-    check("one tab shows no tab strip", !(await exists(".browser-tabs")) && (await exists("[data-testid=browser-new-tab]")));
-    await js(`document.querySelector("[data-testid=browser-new-tab]").click()`);
-    const opened = await until("tab strip", async () => {
+    const initial = await until("tab strip", async () => {
       const c = await chips();
-      return c.length === 2 && c[1]!.on && c;
+      return c.length === 2 && c[0]!.on && c;
     }).catch(() => null);
-    check("New tab opens a second tab and switches to it", !!opened && opened[1]!.label === "New tab", JSON.stringify(opened));
+    check("the strip shows the session's two tabs", !!initial && (await exists("[data-testid=browser-new-tab]")), JSON.stringify(initial));
+    await js(`document.querySelector("[data-testid=browser-new-tab]").click()`);
+    const opened = await until("new tab chip", async () => {
+      const c = await chips();
+      return c.length === 3 && c[2]!.on && c;
+    }).catch(() => null);
+    check("New tab opens a third tab and switches to it", !!opened && opened[2]!.label === "New tab", JSON.stringify(opened));
     check("New tab sent newTab", inputs.some((l) => l.includes('"type":"newTab"')));
     const repainted = await until("new tab frame", () => js<boolean>(canvasPainted), 8000).catch(() => false);
     check("the new tab's frames are drawn", repainted);
@@ -897,9 +901,15 @@ try {
       return c[0]?.on && url.startsWith("http://localhost:3000") && c;
     }).catch(() => null);
     check("clicking a chip switches to its tab (and its URL)", !!back, JSON.stringify(back));
+    await js(`document.querySelectorAll(".browser-tab-close")[2].click()`);
+    await until("two chips left", async () => (await chips()).length === 2).catch(() => false);
     await js(`document.querySelectorAll(".browser-tab-close")[1].click()`);
-    const closed = await until("strip gone", async () => !(await exists(".browser-tabs"))).catch(() => false);
-    check("closing a tab down to one hides the strip", closed);
+    const lone = await until("one chip left", async () => {
+      const c = await chips();
+      return c.length === 1 && c[0]!.on && c;
+    }).catch(() => null);
+    check("closing tabs down to one keeps the strip with the last chip", !!lone && lone[0]!.label === "Local dev server", JSON.stringify(lone));
+    await screenshot("/tmp/harness-271-mac-lone-browser-tab.png");
     check("closeTab sent with the tab's id", inputs.some((l) => l.includes('"type":"closeTab"')));
     // New tab focused the URL field; let go of it so later keyboard checks reach the app.
     await js(`document.activeElement?.blur()`);

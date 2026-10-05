@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The Browser tab's strip of tabs now shows even when only one browser tab is open, so you can drag
+  that tab off into a pane or window of its own.
+
 ## [app-20261005.1342](https://github.com/markhuot/harness/releases/tag/app-20261005.1342) - 2026-10-05
 
 ### Added

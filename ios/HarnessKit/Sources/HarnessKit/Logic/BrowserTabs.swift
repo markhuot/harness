@@ -38,10 +38,10 @@ public struct BrowserTabSelection: Sendable, Equatable {
         return tabId == shown
     }
 
-    /// The tab chips to draw: every open tab, but only once there's more than one.
+    /// The tab chips to draw: every open tab, even a lone one, so it can still be torn off into a
+    /// window of its own.
     public static func strip(_ state: BrowserState?) -> [BrowserTab] {
-        guard let tabs = state?.tabs, tabs.count > 1 else { return [] }
-        return tabs
+        state?.tabs ?? []
     }
 
     /// Whether the service knows about tabs (a New Tab button would be ignored otherwise).

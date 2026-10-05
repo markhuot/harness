@@ -339,7 +339,7 @@ feature needs something new here, add to it without changing what's there.
   browser.state's `tabId` and resubscribes to that tab after a reconnect. BrowserTabModel keeps the
   shown tab in HarnessKit's `BrowserTabSelection` across resubscribes of the same session: it drops
   the frame when the tab changes, ignores frames from other tabs (in flight after a switch), and
-  supplies the strip (two or more tabs) and chip labels. Services from before tabs send no ids:
+  supplies the strip (every tab, even a lone one, so it can be torn off) and chip labels. Services from before tabs send no ids:
   nothing is filtered, the strip never shows and New tab is disabled.
 - **Navigation.** `Router` (HarnessKit/Shell, one per window: § Windows) holds `selectedTab` (the section: Board, Inbox or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
