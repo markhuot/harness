@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and iPad, the browser tab's button for typing into the page now shows a keyboard
+  instead of a pencil, so it no longer looks like Annotate. While the keyboard is up, it shows the
+  hide-keyboard symbol.
+
 ### Fixed
 
 - When you message a done ticket and ask for more work (another check, a fix), the agent now
