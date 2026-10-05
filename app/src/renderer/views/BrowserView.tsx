@@ -7,15 +7,17 @@
 // input, and closing one leaves the others watching. In a ticket, a chip drags off into a pane
 // pinned to that browser tab (`pinnedTab`: no strip); a chip torn off shows a placeholder here.
 //
-// Each tab has its own size (BrowserSize): the bar's Desktop | Mobile, Responsive and width × height
-// set it, and the pane sends its stage size only while it owns Responsive. A trackpad pinch zooms
-// the drawn frame (browserZoom), never the page.
+// Each tab has its own size (BrowserSize): Desktop | Mobile, Responsive and width × height set it,
+// in a row under the bar that the bar's Size button opens (remembered for every pane, layout.ts).
+// The pane sends its stage size only while it owns Responsive. A trackpad pinch zooms the drawn
+// frame (browserZoom), never the page.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { isBrowserEventFor, type BrowserInput, type BrowserState, type BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, panRect, toPagePoint, zoomRect, zoomScale, type Rect } from "@harness/shared/state";
-import { drivesSize, responsiveInput, responsiveLook, sideInput, wheelAction } from "../state/browserSize";
+import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "../state/browserSize";
+import { toggleBrowserSizeRow, useLayout } from "../state/layout";
 import { Icon } from "../components/Icon";
 import { useAnnotate } from "../components/Annotator";
 import { browserShotName } from "../state/annotator";
@@ -76,7 +78,7 @@ export function BrowserView({
   const viewerId = paneId ?? ownId;
   const [state, setState] = useState<BrowserState | null>(null);
   const [hasFrame, setHasFrame] = useState(false);
-  const [live, setLive] = useState(false);
+  const sizeRow = useLayout().browserSizeRow;
   const [urlDraft, setUrlDraft] = useState("");
   const editingUrl = useRef(false);
   const [sizeDraft, setSizeDraft] = useState({ w: "", h: "" });
@@ -95,7 +97,6 @@ export function BrowserView({
   const [zoomPct, setZoomPct] = useState(100);
   const decoding = useRef(false);
   const pending = useRef<{ data: string; width: number; height: number } | null>(null);
-  const lastFrameAt = useRef(0);
   /** Bumped whenever the canvas is cleared, so a frame still decoding from before is dropped. */
   const frameGen = useRef(0);
   /** The tab this view shows (see ViewTab); frames from any other tab are ignored. */
@@ -264,8 +265,6 @@ export function BrowserView({
       if (e.kind === "browser.frame") {
         if (!frameIsForView(e.tabId, viewTab.current)) return;
         debugStats.frames++;
-        lastFrameAt.current = Date.now();
-        setLive(true);
         pending.current = { data: e.data, width: e.width, height: e.height };
         void decode();
       } else {
@@ -296,7 +295,7 @@ export function BrowserView({
         // Only while it still describes the tab on screen (the socket may have moved meanwhile).
         if (cancelled || !s) return;
         const tab = viewTab.current;
-        if (s.tabId === undefined || tab === undefined || tab === s.tabId) applyState(s);
+        if (s.tabId === undefined || tab === undefined || tab === s.tabId) applyState(keepOwner(s, stateRef.current));
       })
       .catch(() => {});
     return () => {
@@ -312,12 +311,6 @@ export function BrowserView({
   useEffect(() => {
     if (!editingSize.current) setSizeDraft(size ? { w: String(size.width), h: String(size.height) } : { w: "", h: "" });
   }, [size?.width, size?.height]);
-
-  // "Live" indicator decays when frames stop.
-  useEffect(() => {
-    const t = setInterval(() => setLive(Date.now() - lastFrameAt.current < 2000), 500);
-    return () => clearInterval(t);
-  }, []);
 
   // ------------------------------------------------------------------ resize
 
@@ -379,6 +372,17 @@ export function BrowserView({
     });
     return off;
   }, [sessionId, viewerId, onEvent, scheduleResize, epoch]);
+
+  // Handed a Responsive tab (a new tab, the owner left, switched on here): send this stage's size
+  // even though it didn't change, since the tab still has the size its last owner gave it.
+  const lastState = useRef<BrowserState | null>(null);
+  useEffect(() => {
+    if (takesOverSize(lastState.current, state)) {
+      lastSize.current = "";
+      scheduleResize(100);
+    }
+    lastState.current = state;
+  }, [state, scheduleResize]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -529,17 +533,14 @@ export function BrowserView({
     (document.activeElement as HTMLElement | null)?.blur();
     const tab = viewTab.current;
     const next = await act(() => client.browserNavigate(sessionId, url, typeof tab === "number" ? tab : undefined));
-    if (next && (next.tabId === undefined || viewTab.current === undefined || next.tabId === viewTab.current)) applyState(next);
+    if (next && (next.tabId === undefined || viewTab.current === undefined || next.tabId === viewTab.current)) applyState(keepOwner(next, stateRef.current));
   };
 
   const look = responsiveLook(state);
   const toggleResponsive = () => {
     const stage = stageRef.current;
     if (!stage) return;
-    const input = responsiveInput(look, { width: stage.clientWidth, height: stage.clientHeight });
-    // The switch carries this stage's size, so the debounced resize that follows has nothing new to say.
-    if (input.type === "responsive" && input.on) lastSize.current = sizeKey(input.width ?? 0, input.height ?? 0);
-    send(input);
+    send(responsiveInput(look, { width: stage.clientWidth, height: stage.clientHeight }));
   };
 
   /** Send the width × height drafts (when they changed) and leave editing. */
@@ -664,38 +665,44 @@ export function BrowserView({
   return (
     <div className="browser">
       {!pinned && tabs && tabs.length > 0 && (
-        <div className="browser-tabs" role="tablist" aria-label="Browser tabs" ref={tabsRef}>
-          {tabs.map((tab, i) => {
-            const label = tabLabel(tab);
-            const on = tab.id === state?.tabId;
-            const torn = tear?.torn.get(`browser:${tab.id}`);
-            return (
-              <div key={tab.id} className={`browser-tab ${on ? "on" : ""} ${tab.suspended && !on ? "suspended" : ""} ${torn ? "torn" : ""}`} role="presentation">
-                <button
-                  className="browser-tab-select"
-                  role="tab"
-                  aria-selected={on}
-                  tabIndex={on ? 0 : -1}
-                  data-tab-id={tab.id}
-                  title={tabTooltip(tab) + (tear ? "\nDrag off to open it in a pane of its own" : "")}
-                  onClick={() => switchTab(tab)}
-                  onAuxClick={(e) => e.button === 1 && closeTab(tab)}
-                  onKeyDown={(e) => onTabKey(e, i)}
-                  {...(tear && {
-                    ...dragProps(chipDrag(tab), { chip: tear.ticketKey, title: label, tab: "Browser" }, tear.boardScope),
-                    onContextMenu: (e) => void tabContextMenu(e, tear.scope, tear.boardScope, tear.paneId, chipDrag(tab), torn),
-                  })}
-                >
-                  {tab.loading ? <span className="spinner browser-tab-spinner" /> : <Icon name="globe" size={11} className="browser-tab-icon" />}
-                  <span className="truncate">{label}</span>
-                  {torn && <TornMark torn={torn} />}
-                </button>
-                <button className="browser-tab-close" title="Close tab" aria-label={`Close ${label}`} onClick={() => closeTab(tab)}>
-                  <Icon name="x" size={11} strokeWidth={2} />
-                </button>
-              </div>
-            );
-          })}
+        <div className="browser-tab-strip">
+          <div className="browser-tabs" role="tablist" aria-label="Browser tabs" ref={tabsRef}>
+            {tabs.map((tab, i) => {
+              const label = tabLabel(tab);
+              const on = tab.id === state?.tabId;
+              const torn = tear?.torn.get(`browser:${tab.id}`);
+              return (
+                <div key={tab.id} className={`browser-tab ${on ? "on" : ""} ${tab.suspended && !on ? "suspended" : ""} ${torn ? "torn" : ""}`} role="presentation">
+                  <button
+                    className="browser-tab-select"
+                    role="tab"
+                    aria-selected={on}
+                    tabIndex={on ? 0 : -1}
+                    data-tab-id={tab.id}
+                    title={tabTooltip(tab) + (tear ? "\nDrag off to open it in a pane of its own" : "")}
+                    onClick={() => switchTab(tab)}
+                    onAuxClick={(e) => e.button === 1 && closeTab(tab)}
+                    onKeyDown={(e) => onTabKey(e, i)}
+                    {...(tear && {
+                      ...dragProps(chipDrag(tab), { chip: tear.ticketKey, title: label, tab: "Browser" }, tear.boardScope),
+                      onContextMenu: (e) => void tabContextMenu(e, tear.scope, tear.boardScope, tear.paneId, chipDrag(tab), torn),
+                    })}
+                  >
+                    {tab.loading ? <span className="spinner browser-tab-spinner" /> : <Icon name="globe" size={11} className="browser-tab-icon" />}
+                    <span className="truncate">{label}</span>
+                    {torn && <TornMark torn={torn} />}
+                  </button>
+                  <button className="browser-tab-close" title="Close tab" aria-label={`Close ${label}`} onClick={() => closeTab(tab)}>
+                    <Icon name="x" size={11} strokeWidth={2} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {/* Outside the scroller, so it stays at the strip's end however many tabs there are. */}
+          <button className="btn btn-ghost btn-icon btn-sm browser-new-tab" title="New tab" aria-label="New tab" data-testid="browser-new-tab" onClick={newTab}>
+            <Icon name="plus" />
+          </button>
         </div>
       )}
       <div className="browser-bar">
@@ -736,6 +743,32 @@ export function BrowserView({
           {state?.title && <span className="browser-title truncate">{state.title}</span>}
         </div>
         {size && (
+          <button
+            className={`btn btn-ghost btn-icon btn-sm browser-size-toggle ${sizeRow ? "on" : ""}`}
+            aria-pressed={sizeRow}
+            aria-label="Size"
+            title={sizeRow ? "Hide the page size controls" : "Page size: Desktop or Mobile, Responsive, width × height"}
+            data-testid="browser-size-toggle"
+            onClick={toggleBrowserSizeRow}
+          >
+            <Icon name="ruler" />
+          </button>
+        )}
+        {annotator && (
+          <button
+            className="btn btn-ghost btn-icon btn-sm"
+            data-testid="browser-annotate"
+            aria-label="Annotate"
+            title="Freeze this page and number spots on it for your message"
+            disabled={!hasFrame || shooting || viewTab.current === "pending"}
+            onClick={() => void annotatePage()}
+          >
+            {shooting ? <span className="spinner" /> : <Icon name="edit" />}
+          </button>
+        )}
+      </div>
+      {size && sizeRow && (
+        <div className="browser-size-row" data-testid="browser-size-row">
           <div className="browser-size-controls">
             <div className="segmented browser-device" role="group" aria-label="Device">
               {(["desktop", "mobile"] as const).map((device) => (
@@ -773,33 +806,13 @@ export function BrowserView({
               {sizeField("h")}
             </div>
           </div>
-        )}
-        {zoomPct > 100 && (
-          <button className="btn btn-ghost btn-sm browser-zoom mono" title="Zoomed in: ⌥-double-click the page, or click here, for 100%" onClick={resetZoom}>
-            {zoomPct}%
-          </button>
-        )}
-        {tabs && !pinned && (
-          <button className="btn btn-ghost btn-icon btn-sm" title="New tab" aria-label="New tab" data-testid="browser-new-tab" onClick={newTab}>
-            <Icon name="plus" />
-          </button>
-        )}
-        {annotator && (
-          <button
-            className="btn btn-ghost btn-sm"
-            data-testid="browser-annotate"
-            title="Freeze this page and number spots on it for your message"
-            disabled={!hasFrame || shooting || viewTab.current === "pending"}
-            onClick={() => void annotatePage()}
-          >
-            {shooting ? <span className="spinner" /> : <Icon name="edit" />} Annotate
-          </button>
-        )}
-        <span className={`browser-live ${live ? "on" : ""}`} title={live ? "Receiving frames" : "Idle"}>
-          <span className="browser-live-dot" />
-          {live ? "Live" : "Idle"}
-        </span>
-      </div>
+          {zoomPct > 100 && (
+            <button className="btn btn-ghost btn-sm browser-zoom mono" title="Zoomed in: ⌥-double-click the page, or click here, for 100%" onClick={resetZoom}>
+              {zoomPct}%
+            </button>
+          )}
+        </div>
+      )}
       <div className="browser-stage" ref={stageRef}>
         <canvas ref={canvasRef} className="browser-canvas" tabIndex={0} onKeyDown={onKey("down")} onKeyUp={onKey("up")} />
         {empty && (

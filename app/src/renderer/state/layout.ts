@@ -1,5 +1,5 @@
-// Window layout preferences: the left sidebar (collapsed, width). Ticket panes and their sizes
-// live in panes.ts.
+// Window layout preferences: the left sidebar (collapsed, width), and whether the Browser pane's
+// size row is open. Ticket panes and their sizes live in panes.ts.
 // The pure helpers (bounds, clamping, parsing, keyboard steps) are tested in layout.test.ts; the
 // store at the bottom persists to localStorage and keeps every subscriber (and the View menu's
 // "Show Sidebar" checkmark) in sync.
@@ -15,9 +15,11 @@ export interface Layout {
   sidebarCollapsed: boolean;
   /** null = the default width */
   sidebarWidth: number | null;
+  /** The Browser pane's second row (Desktop | Mobile, Responsive, width × height), in every pane. */
+  browserSizeRow: boolean;
 }
 
-export const DEFAULT_LAYOUT: Layout = { sidebarCollapsed: false, sidebarWidth: null };
+export const DEFAULT_LAYOUT: Layout = { sidebarCollapsed: false, sidebarWidth: null, browserSizeRow: false };
 
 export interface Bounds {
   min: number;
@@ -77,6 +79,7 @@ export function parseLayout(raw: string | null | undefined): Layout {
   return {
     sidebarCollapsed: o.sidebarCollapsed === true,
     sidebarWidth: widthOrNull(o.sidebarWidth, sidebarBounds()),
+    browserSizeRow: o.browserSizeRow === true,
   };
 }
 
@@ -116,6 +119,7 @@ export function updateLayout(patch: Partial<Layout>) {
 }
 
 export const toggleSidebar = () => updateLayout({ sidebarCollapsed: !get().sidebarCollapsed });
+export const toggleBrowserSizeRow = () => updateLayout({ browserSizeRow: !get().browserSizeRow });
 
 let started = false;
 function subscribe(fn: () => void) {

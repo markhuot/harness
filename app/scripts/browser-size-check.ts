@@ -60,16 +60,37 @@ try {
     await a.key("Enter", "Enter", 13);
   };
 
+  const stageSize = () => js<{ w: number; h: number }>(`(() => { const s = document.querySelector(".browser-stage"); return { w: Math.round(s.clientWidth), h: Math.round(s.clientHeight) }; })()`);
+
   await until("app connected", () => a.exists(".conn.on"), 15000);
   await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
-  await until("size controls", () => a.exists("[data-testid=browser-responsive]"), 10000);
+  await until("size button", () => a.exists("[data-testid=browser-size-toggle]"), 10000);
   await until("frame drawn", () => js<boolean>(`window.__harnessBrowser.drawn > 0`), 10000);
   await Bun.sleep(1200);
 
-  // 1. A new tab is Desktop at 1280 × 800, Responsive off, and opening the pane doesn't resize it.
+  // 0. The bar: the size row starts closed behind Size, Annotate is an icon, and there's no Live.
+  check("the size row starts closed", !(await a.exists("[data-testid=browser-size-row]")) && (await js<string>(`document.querySelector("[data-testid=browser-size-toggle]").getAttribute("aria-pressed")`)) === "false");
+  check("Annotate is icon-only, labelled", (await js<string>(`(() => { const b = document.querySelector("[data-testid=browser-annotate]"); return b.textContent.trim() + "|" + b.getAttribute("aria-label"); })()`)) === "|Annotate");
+  check("no Live/Idle indicator", !(await a.exists(".browser-live")));
+  await click("[data-testid=browser-size-toggle]");
+  await until("size row open", () => a.exists("[data-testid=browser-responsive]"));
+  check("Size is pressed while the row is open", (await js<string>(`document.querySelector("[data-testid=browser-size-toggle]").getAttribute("aria-pressed")`)) === "true");
+  await js(`location.reload()`);
+  await until("reloaded", () => a.exists("[data-testid=browser-size-toggle]"), 15000);
+  check("the open row survives a renderer reload", await until("row after reload", () => a.exists("[data-testid=browser-responsive]"), 5000).catch(() => false));
+  await until("frame drawn after reload", () => js<boolean>(`window.__harnessBrowser.drawn > 0`), 10000);
+  await Bun.sleep(1200);
+
+  // 1. A new tab is Desktop and Responsive, following the pane that watches it: this one, which
+  //    sends its stage size without being resized. (The page from before the reload owned it until
+  //    its socket closed, then handed it on.)
+  await until("owned after the reload", async () => (await fields()).responsive === "owned", 8000).catch(() => {});
+  await Bun.sleep(600);
   let f = await fields();
-  check("a new tab shows Desktop at 1280 × 800, Responsive off", f.device === "Desktop" && f.w === "1280" && f.h === "800" && f.responsive === "off", JSON.stringify(f));
-  check("a pane that doesn't own Responsive sends no resize", since(0, "resize").length === 0, JSON.stringify(since(0, "resize")));
+  let st = await stageSize();
+  check("a new tab is Desktop, Responsive and owned by the pane watching it", f.device === "Desktop" && f.responsive === "owned", JSON.stringify(f));
+  const handed = since(0, "resize").at(-1);
+  check("the pane it's handed to sends its stage size", handed?.width === st.w && handed?.height === st.h && f.w === String(st.w), `${JSON.stringify(handed)} stage ${JSON.stringify(st)} fields ${JSON.stringify(f)}`);
   await shot("1-desktop");
 
   // 2. Mobile resets to 393 × 852; clicking it again resends (it reloads even in the same mode).
@@ -141,6 +162,20 @@ try {
   await until("taken over", async () => (await fields()).responsive === "owned");
   check("clicking the dimmed switch takes ownership (on, with this stage)", since(n, "responsive")[0]?.on === true, JSON.stringify(since(n, "responsive")));
   await js(`document.querySelector(".browser-stage").style.marginRight = "0px"`);
+  await Bun.sleep(900);
+
+  // 6b. The other window takes it back, then leaves: the tab comes back to this pane, which sends
+  //     its stage size though its stage didn't change (the tab is still at the other window's).
+  other.send(JSON.stringify({ type: "browser.input", sessionId, viewerId: "other", tabId, input: { type: "responsive", on: true, width: 700, height: 500 } }));
+  await until("following again", async () => (await fields()).w === "700");
+  n = inputs.length;
+  other.close();
+  other = null;
+  await until("handed back", async () => (await fields()).responsive === "owned");
+  st = await stageSize();
+  const back = await until("resize after the handoff", async () => since(n, "resize")[0]).catch(() => undefined);
+  check("a pane handed Responsive when the owner leaves sends its unchanged stage size", back?.width === st.w && back?.height === st.h, `${JSON.stringify(back)} stage ${JSON.stringify(st)}`);
+  check("and the tab follows it", await until("tab at the stage size", async () => (await fields()).w === String(st.w)).catch(() => false));
 
   // 7. Pinch-zoom: a ctrl wheel zooms the frame around the cursor and never reaches the page.
   await click("[data-testid=browser-device-desktop]");
@@ -197,6 +232,40 @@ try {
   await until("zoomed again", async () => (await fields()).zoom !== null);
   await click("[data-testid=browser-device-mobile]");
   await until("zoom dropped on a new size", async () => (await fields()).zoom === null).then(() => check("a new device size resets the zoom", true)).catch(() => check("a new device size resets the zoom", false));
+
+  // 11. A narrow pane (420 px): with the row closed the bar is back, forward, reload, the URL, Size
+  //     and Annotate, and the URL field keeps most of the width.
+  await js(`document.querySelector(".browser").style.width = "420px"`);
+  await click("[data-testid=browser-size-toggle]");
+  await until("row closed", async () => !(await a.exists("[data-testid=browser-size-row]")));
+  await Bun.sleep(600);
+  const urlW = await js<number>(`document.querySelector(".browser-url").getBoundingClientRect().width`);
+  check("in a 420 px pane the URL field is readable (over 200 px wide)", urlW > 200, `${Math.round(urlW)} px`);
+  await shot("11-narrow-row-closed");
+  await click("[data-testid=browser-size-toggle]");
+  await until("row open", () => a.exists("[data-testid=browser-size-row]"));
+  const rowFits = await js<boolean>(`(() => { const r = document.querySelector("[data-testid=browser-size-row]"); return r.scrollWidth <= r.clientWidth; })()`);
+  check("the size row fits a 420 px pane", rowFits);
+  await Bun.sleep(600);
+  await shot("12-narrow-row-open");
+
+  // 12. Enough tabs to overflow the strip: the chips scroll, + stays at the strip's end.
+  for (let i = 0; i < 5; i++) {
+    const before = await js<number>(`document.querySelectorAll(".browser-tab-select").length`);
+    await click("[data-testid=browser-new-tab]");
+    await until("another tab", async () => (await js<number>(`document.querySelectorAll(".browser-tab-select").length`)) > before);
+  }
+  await Bun.sleep(800);
+  const strip = await js<{ overflow: boolean; plusIn: boolean; plusOutsideScroller: boolean }>(`(() => {
+    const tabs = document.querySelector(".browser-tabs");
+    const strip = document.querySelector(".browser-tab-strip").getBoundingClientRect();
+    const plus = document.querySelector("[data-testid=browser-new-tab]");
+    const p = plus.getBoundingClientRect();
+    tabs.scrollLeft = 0;
+    return { overflow: tabs.scrollWidth > tabs.clientWidth, plusIn: p.left >= strip.left && p.right <= strip.right + 0.5 && p.width > 0, plusOutsideScroller: !tabs.contains(plus) };
+  })()`);
+  check("with the strip overflowing, + stays visible at its end, outside the scrolling chips", strip.overflow && strip.plusIn && strip.plusOutsideScroller, JSON.stringify(strip));
+  await shot("13-strip-overflow");
 } catch (e) {
   c.fail();
   console.error("✗", (e as Error).stack ?? (e as Error).message);

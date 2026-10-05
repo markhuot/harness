@@ -175,6 +175,12 @@ try {
   check("the Beta pane streams Beta (green) at the same time", await drawn(betaPane, "green"), await tint(betaPane));
   check("…and Alpha still streams beside it", (await tint(alphaPane)) === "red");
   check("pinned panes have no chip strip", !(await a.exists(`[data-pane-id="${alphaPane}"] .browser-tabs`)) && !(await a.exists(`[data-pane-id="${betaPane}"] .browser-tabs`)));
+  check(
+    "pinned panes have no + (the ticket's Browser keeps it at the strip's end)",
+    !(await a.exists(`[data-pane-id="${alphaPane}"] [data-testid=browser-new-tab]`)) &&
+      !(await a.exists(`[data-pane-id="${betaPane}"] [data-testid=browser-new-tab]`)) &&
+      (await a.exists(`[data-pane-id="${ticketPaneId}"] .browser-tab-strip > [data-testid=browser-new-tab]`)),
+  );
   check("the header names the page", (await js<string>(`document.querySelector('[data-pane-id="${betaPane}"] .torn-browser-title')?.textContent ?? ""`)) === "Beta");
   check("the ticket's Browser covers a torn-off chip's canvas with the way back", await until("chip placeholder", () => a.exists(`[data-pane-id="${ticketPaneId}"] .browser-torn [data-testid=torn-return]`), 8000).catch(() => false));
   // Input goes to each viewer's own tab: a reload in Beta's pane leaves Alpha streaming.

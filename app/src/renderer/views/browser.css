@@ -3,30 +3,33 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  container: browser / inline-size;
-}
-/* A narrow pane keeps the URL and size controls; the Live label goes first. */
-@container browser (max-width: 600px) {
-  .browser-live {
-    display: none;
-  }
 }
 
-/* The session's tabs, shown once it has more than one. Chips shrink to share the width (like a
-   desktop browser) down to a floor, then the strip scrolls sideways. */
-.browser-tabs {
+/* The session's tabs, then + at the end. Chips shrink to share the width (like a desktop browser)
+   down to a floor, then the chips scroll sideways while + stays put. */
+.browser-tab-strip {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 6px 12px 0;
   background: var(--bg);
   flex: none;
+}
+.browser-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
 }
 .browser-tabs::-webkit-scrollbar {
   display: none;
+}
+.browser-new-tab {
+  flex: none;
 }
 .browser-tab {
   flex: 0 1 200px;
@@ -161,7 +164,24 @@
   display: none;
 }
 
-/* Desktop | Mobile, Responsive and width × height for the shown tab. */
+/* Size (the row under the bar) and Annotate. */
+.browser-size-toggle.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Desktop | Mobile, Responsive and width × height for the shown tab, under the bar. */
+.browser-size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
 .browser-size-controls {
   display: flex;
   align-items: center;
@@ -216,33 +236,6 @@
 .browser-zoom {
   flex: none;
   font-size: 11px;
-}
-
-.browser-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-3);
-  padding: 0 4px;
-  flex: none;
-}
-.browser-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-3);
-  opacity: 0.6;
-}
-.browser-live.on {
-  color: var(--green);
-}
-.browser-live.on .browser-live-dot {
-  background: var(--green);
-  opacity: 1;
-  box-shadow: 0 0 0 3px var(--green-soft);
-  animation: pulse 1.6s ease-in-out infinite;
 }
 
 .browser-stage {

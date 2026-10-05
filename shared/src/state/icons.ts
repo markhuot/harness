@@ -60,6 +60,7 @@ export const ICON_PATHS = {
   chevron: "M6 9l6 6 6-6",
   pointer: "M4 4l7.07 17 2.51-7.39L21 11.07z",
   phone: "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM12 18h.01",
+  ruler: "M2 8h20v8H2zM6 8v3M10 8v4M14 8v3M18 8v4",
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;

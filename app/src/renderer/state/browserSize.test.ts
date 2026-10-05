@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { BrowserSize } from "@harness/shared";
-import { drivesSize, responsiveInput, responsiveLook, sideInput, wheelAction } from "./browserSize";
+import type { BrowserSize, BrowserState } from "@harness/shared";
+import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, takesOverSize, wheelAction } from "./browserSize";
 
 const size = (responsive: boolean): BrowserSize => ({ device: "desktop", width: 1280, height: 800, responsive });
 
@@ -18,6 +18,55 @@ describe("drivesSize", () => {
   test("an older service (no size) is driven by every pane; no state yet drives nothing", () => {
     expect(drivesSize({})).toBe(true);
     expect(drivesSize(null)).toBe(false);
+  });
+});
+
+describe("takesOverSize", () => {
+  const owned = (tabId: number) => ({ tabId, size: size(true), sizeOwner: true });
+  const following = (tabId: number) => ({ tabId, size: size(true), sizeOwner: false });
+
+  test("a pane handed the tab later (the owner left) sends its size", () => {
+    expect(takesOverSize(following(1), owned(1))).toBe(true);
+  });
+
+  test("the first state already owned (a new tab follows its viewer) counts", () => {
+    expect(takesOverSize(null, owned(1))).toBe(true);
+  });
+
+  test("switching Responsive on here counts", () => {
+    expect(takesOverSize({ tabId: 1, size: size(false), sizeOwner: true }, owned(1))).toBe(true);
+  });
+
+  test("owning another tab after moving to it counts, though both states say owner", () => {
+    expect(takesOverSize(owned(1), owned(2))).toBe(true);
+  });
+
+  test("a later state of a tab it already drives doesn't resend", () => {
+    expect(takesOverSize(owned(1), owned(1))).toBe(false);
+  });
+
+  test("following, fixed-size or an older service's tab is never taken over", () => {
+    expect(takesOverSize(null, following(1))).toBe(false);
+    expect(takesOverSize(following(1), { tabId: 1, size: size(false), sizeOwner: true })).toBe(false);
+    expect(takesOverSize(null, { tabId: 1 })).toBe(false);
+  });
+});
+
+describe("keepOwner", () => {
+  const reply = (tabId: number): BrowserState => ({ sessionId: "s", tabId, url: "https://a.test/", title: "", loading: false, size: size(true) });
+
+  test("an HTTP reply for the tab this pane owns keeps the ownership", () => {
+    expect(keepOwner(reply(1), { tabId: 1, sizeOwner: true }).sizeOwner).toBe(true);
+  });
+
+  test("a reply for another tab doesn't inherit it", () => {
+    expect(keepOwner(reply(2), { tabId: 1, sizeOwner: true }).sizeOwner).toBeUndefined();
+  });
+
+  test("with no socket state yet the reply stands as it is", () => {
+    const r = reply(1);
+    expect(keepOwner(r, null)).toBe(r);
+    expect(keepOwner(r, { tabId: 1 })).toBe(r);
   });
 });
 

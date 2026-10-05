@@ -46,17 +46,20 @@ describe("keyWidth", () => {
 
 describe("parseLayout", () => {
   test("round-trips", () => {
-    const l = { sidebarCollapsed: true, sidebarWidth: 300 };
+    const l = { sidebarCollapsed: true, sidebarWidth: 300, browserSizeRow: true };
     expect(parseLayout(serializeLayout(l))).toEqual(l);
   });
   test("a stored detailWidth from before ticket panes is ignored", () => {
-    expect(parseLayout(JSON.stringify({ sidebarCollapsed: true, sidebarWidth: 300, detailWidth: 720 }))).toEqual({ sidebarCollapsed: true, sidebarWidth: 300 });
+    expect(parseLayout(JSON.stringify({ sidebarCollapsed: true, sidebarWidth: 300, detailWidth: 720 }))).toEqual({ sidebarCollapsed: true, sidebarWidth: 300, browserSizeRow: false });
   });
   test("missing or corrupt storage falls back to the defaults", () => {
     for (const raw of [null, undefined, "", "{", "null", "[]", "42", '"x"']) expect(parseLayout(raw)).toEqual(DEFAULT_LAYOUT);
   });
+  test("a layout stored before the browser's size row has it closed", () => {
+    expect(parseLayout(JSON.stringify({ sidebarCollapsed: true, sidebarWidth: 300 })).browserSizeRow).toBe(false);
+  });
   test("junk values are dropped field by field", () => {
-    expect(parseLayout(JSON.stringify({ sidebarCollapsed: "yes", sidebarWidth: "300" }))).toEqual(DEFAULT_LAYOUT);
+    expect(parseLayout(JSON.stringify({ sidebarCollapsed: "yes", sidebarWidth: "300", browserSizeRow: "yes" }))).toEqual(DEFAULT_LAYOUT);
     expect(parseLayout('{"sidebarWidth": 1e400}').sidebarWidth).toBeNull(); // Infinity
   });
   test("stored widths are clamped to the current bounds", () => {

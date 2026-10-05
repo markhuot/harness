@@ -2035,8 +2035,9 @@ async function route(req: Request, url: URL): Promise<Response> {
 
 // Like the service: a session's browser has tabs (ids count up from 1, never reused); each socket
 // watches one tab per session. Each tab has its own size (Desktop | Mobile, width × height), and a
-// `resize` counts only from the socket that switched the tab's Responsive on. A suspended tab (its
-// page closed to save memory) reopens when a socket watches it.
+// `resize` counts only from the socket the tab's Responsive follows: the last to switch it on,
+// else the newest socket watching it (a new tab is Responsive, and handOn passes it along when its
+// socket leaves). A suspended tab (its page closed to save memory) reopens when a socket watches it.
 interface TabSim {
   id: number;
   url: string;
@@ -2063,7 +2064,7 @@ const browsers = new Map<string, BrowserSim>();
 const titleOf = (url: string) => (url === "about:blank" ? "" : url.replace(/^https?:\/\//, ""));
 
 function addTab(b: BrowserSim, url: string, title = titleOf(url)): TabSim {
-  const t: TabSim = { id: b.nextTab++, url, title, loading: false, size: { device: "desktop", ...BROWSER_DESKTOP, responsive: false }, mouseX: -1, mouseY: -1, clicks: [], scroll: 0, typed: "", history: [url], index: 0 };
+  const t: TabSim = { id: b.nextTab++, url, title, loading: false, size: { device: "desktop", ...BROWSER_DESKTOP, responsive: true }, mouseX: -1, mouseY: -1, clicks: [], scroll: 0, typed: "", history: [url], index: 0 };
   b.tabs.set(t.id, t);
   return t;
 }
@@ -2099,8 +2100,21 @@ function sendEvent(ws: ServerWebSocket<WsData>, event: HarnessEvent) {
   sendMsg(ws, { type: "event", event });
 }
 
+/** A Responsive tab whose socket left (or that never had one) follows the newest socket watching it. */
+function handOn(sessionId: string) {
+  for (const t of sim(sessionId).tabs.values()) {
+    if (!t.size.responsive) {
+      t.owner = undefined;
+      continue;
+    }
+    if (t.owner && sockets.has(t.owner) && t.owner.data.subs.get(sessionId) === t.id) continue;
+    t.owner = [...sockets].filter((ws) => ws.data.subs.get(sessionId) === t.id).at(-1);
+  }
+}
+
 /** Every watcher of the session gets its own tab's state (the tab list changes for all of them). */
 function emitState(sessionId: string) {
+  handOn(sessionId);
   for (const ws of sockets) {
     const tabId = ws.data.subs.get(sessionId);
     if (tabId !== undefined) sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, tabId, ws) });
@@ -2111,11 +2125,9 @@ function emitState(sessionId: string) {
 function watch(ws: ServerWebSocket<WsData>, sessionId: string, tabId?: number) {
   const t = tabOf(sessionId, tabId);
   ws.data.subs.set(sessionId, t.id);
-  if (t.suspended) {
-    t.suspended = false; // watching reopens it
-    emitState(sessionId);
-  }
-  sendEvent(ws, { kind: "browser.state", sessionId, state: stateFor(sessionId, t.id, ws) });
+  t.suspended = false; // watching reopens it
+  // Everyone: the watched tab may have a new Responsive owner (this socket, or another one's left).
+  emitState(sessionId);
   sendEvent(ws, { kind: "browser.frame", sessionId, tabId: t.id, ...renderFrame(sessionId, t.id, frameTick) });
 }
 
@@ -2506,6 +2518,7 @@ const server = Bun.serve<WsData>({
           break;
         case "browser.unsubscribe":
           ws.data.subs.delete(msg.sessionId);
+          emitState(msg.sessionId);
           break;
         case "browser.input":
           handleInput(ws, msg.sessionId, msg.tabId, msg.input);
@@ -2514,6 +2527,7 @@ const server = Bun.serve<WsData>({
     },
     close(ws) {
       sockets.delete(ws);
+      for (const sessionId of ws.data.subs.keys()) emitState(sessionId);
     },
   },
 });
