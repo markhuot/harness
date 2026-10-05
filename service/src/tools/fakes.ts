@@ -194,9 +194,12 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
       current ?? { sessionId, tabId: opts?.tab ?? 1, url: "about:blank", title: "", loading: false },
     closeTab: async () => {},
     content: async () => "Example page text",
-    click: async () => {},
+    click: async () => ({}),
     type: async () => {},
     evaluate: async () => "42",
+    waitFor: async () => ({ met: true, elapsedMs: 120, url: current?.url ?? "about:blank", summary: `met after 0.1s; now at ${current?.url ?? "about:blank"}` }),
+    // Synchronous, like the real one: it returns the unsubscribe.
+    watch: () => () => {},
     screenshot: async () => "iVBORw0KGgo=",
     capture: async (sessionId: string, opts?: { tab?: number }) => ({
       data: "iVBORw0KGgo=",
@@ -220,10 +223,16 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
   const browser = {} as BrowserService & { calls: RecordedCall[] };
   for (const name of Object.keys(defaults) as (keyof BrowserService)[]) {
     const impl = overrides[name] ?? defaults[name];
-    (browser as any)[name] = async (...args: unknown[]) => {
-      calls.push({ method: name, args });
-      return impl(...args);
-    };
+    (browser as any)[name] =
+      name === "watch"
+        ? (...args: unknown[]) => {
+            calls.push({ method: name, args });
+            return impl(...args);
+          }
+        : async (...args: unknown[]) => {
+            calls.push({ method: name, args });
+            return impl(...args);
+          };
   }
   browser.calls = calls;
   return browser;

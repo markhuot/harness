@@ -9,6 +9,7 @@
 // also survives a restart), and watching or using it reloads the URL. Only closing a tab, or
 // deleting its session, removes it.
 
+import type { WaitCondition, WaitResult } from "./wait";
 import type { BrowserDevice, BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
@@ -96,6 +97,27 @@ export interface BrowserTabStore {
   delete(sessionId: string): void;
 }
 
+/**
+ * Something a tab's page did, as it happens (BrowserService.watch): what a browser_run script's log
+ * streams besides its own output, and what a wait's timeout reports.
+ */
+export type BrowserPageEvent =
+  | { tabId: number; kind: "console"; level: "log" | "info" | "debug" | "warning" | "error"; text: string; source?: string }
+  | { tabId: number; kind: "exception"; text: string; source?: string }
+  | { tabId: number; kind: "navigated"; url: string }
+  /** A request that failed outright (not one the page canceled) or got a status of 400 or more. */
+  | { tabId: number; kind: "request-failed"; method: string; url: string; status?: number; failure?: string }
+  /** The tab was closed for good (not suspended). */
+  | { tabId: number; kind: "closed" };
+
+/** What browser_click found at its target, so a click that likely did nothing says so. */
+export interface ClickReport {
+  /** The element was disabled or aria-disabled. */
+  disabled?: boolean;
+  /** The element was inside [aria-busy=true]. */
+  busy?: boolean;
+}
+
 /** Which tab a call acts on. An explicit tab that isn't open throws. */
 export interface TabOption {
   tab?: number;
@@ -120,10 +142,22 @@ export interface BrowserService {
    * format "text" = innerText, "html" = outerHTML. Throws if nothing matches the selector.
    */
   content(sessionId: string, opts?: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number }): Promise<string>;
-  click(sessionId: string, selector: string, opts?: TabOption): Promise<void>;
+  /** Click the first match. Reports a target that was disabled or busy (it is clicked anyway). */
+  click(sessionId: string, selector: string, opts?: TabOption): Promise<ClickReport>;
   type(sessionId: string, selector: string, text: string, opts?: TabOption & { submit?: boolean }): Promise<void>;
-  /** Evaluate a JS expression in the page; returns JSON-serialized result. */
+  /**
+   * Evaluate a JS expression in the page; returns its JSON-serialized result. Elements come back as
+   * a short description ("p#x"), Maps as objects, cycles as "[Circular]". Throws, naming the new
+   * URL, when the page navigates while the expression runs.
+   */
   evaluate(sessionId: string, expression: string, opts?: TabOption): Promise<string>;
+  /**
+   * Wait until `condition` holds in the tab (BrowserManager polls it; a navigation in the middle is
+   * fine) or its timeout passes. Never throws for a timeout: the result says what the page was doing.
+   */
+  waitFor(sessionId: string, condition: WaitCondition, opts?: TabOption): Promise<WaitResult>;
+  /** Follow every tab of the session as its pages log, navigate, fail requests and close. Returns the unsubscribe. */
+  watch(sessionId: string, listener: (event: BrowserPageEvent) => void): () => void;
   /** PNG screenshot as base64 */
   screenshot(sessionId: string, opts?: TabOption): Promise<string>;
   /**

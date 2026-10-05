@@ -67,10 +67,19 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     async content() {
       return "page text";
     },
-    async click() {},
+    async click() {
+      return {};
+    },
     async type() {},
     async evaluate() {
       return "null";
+    },
+    async waitFor(sessionId) {
+      const url = states.get(sessionId)?.url ?? "about:blank";
+      return { met: true, elapsedMs: 0, url, summary: `met after 0.0s; now at ${url}` };
+    },
+    watch() {
+      return () => {};
     },
     async screenshot() {
       return "";

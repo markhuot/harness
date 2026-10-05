@@ -19,9 +19,12 @@ import { findElementExpression, sameView, type PageElementReport } from "./eleme
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
 import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
+import { IDLE_IGNORE_AFTER_MS, IDLE_QUIET_MS, describeCondition, seconds, timeoutMs, urlMatcher, type WaitCondition, type WaitResult } from "./wait.ts";
 import type {
   BrowserConsoleEntry,
   BrowserFrame,
+  BrowserPageEvent,
+  ClickReport,
   BrowserRequest,
   BrowserService,
   BrowserSizeChange,
@@ -92,6 +95,8 @@ interface Entry {
   savedKey?: string;
   /** Tab 1 (or the next default tab) while it is being created, so concurrent calls share it. */
   creating?: Promise<Tab>;
+  /** Who follows the session's page events (watch): browser_run jobs, waits that may time out. */
+  listeners: Set<(event: BrowserPageEvent) => void>;
 }
 
 interface Tab {
@@ -114,8 +119,11 @@ interface Tab {
   /** What Chrome was last told (applySize), so an unchanged size restarts nothing. */
   viewport: { width: number; height: number };
   device: BrowserDevice;
-  /** Requests since the main frame last navigated, by CDP requestId, oldest first (at most MAX_REQUESTS). */
-  requests: Map<string, BrowserRequest & { started: number }>;
+  /**
+   * Requests since the main frame last navigated, by CDP requestId, oldest first (at most
+   * MAX_REQUESTS). `started` is Chrome's clock (seconds); `at` is ours (ms), for idle waits.
+   */
+  requests: Map<string, BrowserRequest & { started: number; at: number }>;
   /** Console errors and warnings and uncaught exceptions since the main frame last navigated. */
   console: BrowserConsoleEntry[];
   screencasting: boolean;
@@ -270,6 +278,16 @@ function consoleArg(arg: CdpResult): string {
   return String(arg?.unserializableValue ?? arg?.description ?? arg?.type ?? "");
 }
 
+/** A console call's level as the log shows it (console.assert and console.trace count as errors). */
+function consoleLevel(type: string): "log" | "info" | "debug" | "warning" | "error" {
+  if (type === "warning" || type === "info" || type === "debug") return type;
+  if (type === "error" || type === "assert" || type === "trace") return "error";
+  return "log";
+}
+
+/** A CDP error that means the page's document went away under a call (a navigation or a reload). */
+const NAVIGATED = /Inspected target navigated or closed|Execution context was destroyed|Cannot find context with specified id|Cannot find default execution context/i;
+
 function noTabMessage(entry: Entry | undefined, id: number): string {
   const open = entry ? tabIds(entry) : [];
   return `No browser tab ${id}. ${open.length ? `Open tabs: ${open.join(", ")}.` : "This session has no open tabs."}`;
@@ -394,8 +412,9 @@ export class BrowserManager implements BrowserService {
     return truncate(result.parts.join("\n\n"), opts.maxChars);
   }
 
-  async click(sessionId: string, selector: string, opts: TabOption = {}): Promise<void> {
+  async click(sessionId: string, selector: string, opts: TabOption = {}): Promise<ClickReport> {
     const tab = await this.agentTab(sessionId, opts.tab);
+    const report: ClickReport = {};
     await this.settle(tab, async () => {
       const box = (await this.evalValue(
         tab,
@@ -403,14 +422,18 @@ export class BrowserManager implements BrowserService {
           const el = document.querySelector(${JSON.stringify(selector)});
           if (!el) return { found: false };
           el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+          const disabled = el.matches(":disabled") || el.closest('[aria-disabled="true"]') !== null;
+          const busy = el.closest('[aria-busy="true"]') !== null;
           const r = el.getBoundingClientRect();
-          if (r.width === 0 || r.height === 0) return { found: true, hittable: false };
+          if (r.width === 0 || r.height === 0) return { found: true, hittable: false, disabled, busy };
           const x = r.left + r.width / 2, y = r.top + r.height / 2;
           const hit = document.elementFromPoint(x, y);
-          return { found: true, x, y, hittable: !!hit && (hit === el || el.contains(hit)) };
+          return { found: true, x, y, hittable: !!hit && (hit === el || el.contains(hit)), disabled, busy };
         })()`,
-      )) as { found: boolean; hittable?: boolean; x?: number; y?: number };
+      )) as { found: boolean; hittable?: boolean; x?: number; y?: number; disabled?: boolean; busy?: boolean };
       if (!box.found) throw new Error(`No element matches selector: ${selector}`);
+      if (box.disabled) report.disabled = true;
+      if (box.busy) report.busy = true;
       if (box.hittable && box.x !== undefined && box.y !== undefined) {
         const { x, y } = box;
         if (tab.device === "mobile") {
@@ -427,6 +450,7 @@ export class BrowserManager implements BrowserService {
         await this.evalValue(tab, `document.querySelector(${JSON.stringify(selector)}).click()`);
       }
     });
+    return report;
   }
 
   async type(sessionId: string, selector: string, text: string, opts: TabOption & { submit?: boolean } = {}): Promise<void> {
@@ -466,14 +490,42 @@ export class BrowserManager implements BrowserService {
 
   async evaluate(sessionId: string, expression: string, opts: TabOption = {}): Promise<string> {
     const tab = await this.agentTab(sessionId, opts.tab);
-    const res = await tab.session.send("Runtime.evaluate", {
-      expression,
-      awaitPromise: true,
-      returnByValue: false,
-      userGesture: true,
-    });
+    let res: CdpResult;
+    try {
+      // "deep" serializes the value in the same call that produced it, so a page that navigates
+      // right after the expression settles can't leave us holding a dead object id.
+      res = await tab.session.send("Runtime.evaluate", {
+        expression,
+        awaitPromise: true,
+        userGesture: true,
+        serializationOptions: { serialization: "deep", maxDepth: 32 },
+      });
+    } catch (e) {
+      if (e instanceof CdpError && NAVIGATED.test(e.message)) {
+        await this.untilLoaded(tab);
+        throw new Error(
+          `The page navigated to ${tab.url} while the expression ran, so its result was lost. browser_run runs steps that span a reload (click, wait, read) from outside the page.`,
+        );
+      }
+      throw e;
+    }
     if (res.exceptionDetails) throw new Error(`Evaluation failed: ${exceptionMessage(res.exceptionDetails)}`);
+    if (res.result?.deepSerializedValue) {
+      if (res.result.objectId) tab.session.send("Runtime.releaseObject", { objectId: res.result.objectId }).catch(() => {});
+      return serializeDeep(res.result);
+    }
     return this.serializeRemote(tab, res.result);
+  }
+
+  async waitFor(sessionId: string, condition: WaitCondition, opts: TabOption = {}): Promise<WaitResult> {
+    const tab = await this.agentTab(sessionId, opts.tab);
+    return this.waitOn(tab, condition);
+  }
+
+  watch(sessionId: string, listener: (event: BrowserPageEvent) => void): () => void {
+    const entry = this.entry(sessionId);
+    entry.listeners.add(listener);
+    return () => void entry.listeners.delete(listener);
   }
 
   async screenshot(sessionId: string, opts: TabOption = {}): Promise<string> {
@@ -983,6 +1035,7 @@ export class BrowserManager implements BrowserService {
       reviving: new Map(),
       nextTabId: Math.max(stored?.nextTabId ?? 1, ...(stored?.tabs ?? []).map((t) => t.id + 1)),
       retired: false,
+      listeners: new Set(),
     };
     e.savedKey = this.saveKey(e);
     this.entries.set(sessionId, e);
@@ -1181,6 +1234,7 @@ export class BrowserManager implements BrowserService {
         tab.console = [];
         tab.url = p.frame.url + (p.frame.urlFragment ?? "");
         this.emitState(tab);
+        this.emitPage(tab, { kind: "navigated", url: tab.url });
       }),
       s.on("Page.navigatedWithinDocument", (p) => {
         if (!isMain(p.frameId)) return;
@@ -1238,12 +1292,15 @@ export class BrowserManager implements BrowserService {
           known.url = p.request.url;
           return;
         }
-        tab.requests.set(p.requestId, { method: p.request.method, url: p.request.url, type: p.type ?? "Other", started: p.timestamp });
+        tab.requests.set(p.requestId, { method: p.request.method, url: p.request.url, type: p.type ?? "Other", started: p.timestamp, at: this.now() });
         if (tab.requests.size > MAX_REQUESTS) tab.requests.delete(tab.requests.keys().next().value!);
       }),
       s.on("Network.responseReceived", (p) => {
         const r = tab.requests.get(p.requestId);
-        if (r && typeof p.response?.status === "number") r.status = p.response.status;
+        if (r && typeof p.response?.status === "number") {
+          r.status = p.response.status as number;
+          if (p.response.status >= 400) this.emitPage(tab, { kind: "request-failed", method: r.method, url: r.url, status: r.status });
+        }
       }),
       s.on("Network.loadingFinished", (p) => {
         const r = tab.requests.get(p.requestId);
@@ -1254,17 +1311,23 @@ export class BrowserManager implements BrowserService {
         if (!r) return;
         r.failure = p.canceled ? "canceled" : p.blockedReason ? `blocked (${p.blockedReason})` : p.errorText || "failed";
         r.durationMs = Math.max(0, Math.round((p.timestamp - r.started) * 1000));
+        if (!p.canceled) this.emitPage(tab, { kind: "request-failed", method: r.method, url: r.url, failure: r.failure });
       }),
       s.on("Runtime.consoleAPICalled", (p) => {
-        if (p.type !== "error" && p.type !== "warning" && p.type !== "assert") return;
         const frame = p.stackTrace?.callFrames?.[0];
+        const source = frame?.url ? { source: `${frame.url}:${frame.lineNumber + 1}` } : {};
         const text = (p.args ?? []).map(consoleArg).join(" ") || (p.type === "assert" ? "Assertion failed" : "");
-        this.noteConsole(tab, { level: p.type === "warning" ? "warning" : "error", text, ...(frame?.url ? { source: `${frame.url}:${frame.lineNumber + 1}` } : {}) });
+        const level = consoleLevel(p.type);
+        if (tab.entry.listeners.size) this.emitPage(tab, { kind: "console", level, text, ...source });
+        if (level !== "error" && level !== "warning") return;
+        this.noteConsole(tab, { level, text, ...source });
       }),
       s.on("Runtime.exceptionThrown", (p) => {
         const d = p.exceptionDetails;
         const text = String(d?.exception?.description ?? d?.text ?? "Uncaught exception");
-        this.noteConsole(tab, { level: "error", text, ...(d?.url ? { source: `${d.url}:${(d.lineNumber ?? 0) + 1}` } : {}) });
+        const source = d?.url ? { source: `${d.url}:${(d.lineNumber ?? 0) + 1}` } : {};
+        this.noteConsole(tab, { level: "error", text, ...source });
+        this.emitPage(tab, { kind: "exception", text, ...source });
       }),
       s.on("Inspector.targetCrashed", () => {
         this.dropTabs([tab], "suspend");
@@ -1287,6 +1350,7 @@ export class BrowserManager implements BrowserService {
       for (const off of tab.offs) off();
       tab.offs = [];
       tab.markGone();
+      if (mode === "forget") this.emitPage(tab, { kind: "closed" });
       if (tab.entry.tabs.get(tab.id) === tab) {
         tab.entry.tabs.delete(tab.id);
         if (mode === "suspend") tab.entry.suspended.set(tab.id, record(tab));
@@ -1421,6 +1485,11 @@ export class BrowserManager implements BrowserService {
       s.send("Emulation.setTouchEmulationEnabled", mobile ? { enabled: true, maxTouchPoints: 5 } : { enabled: false }),
       s.send("Emulation.setUserAgentOverride", mobile ? { userAgent: BROWSER_MOBILE_UA, platform: "iPhone" } : { userAgent: this.browser?.userAgent ?? "" }),
     ]);
+  }
+
+  /** Tell the session's watchers (watch) what a tab's page did. A listener that throws is skipped. */
+  private emitPage(tab: Tab, event: PageEventBody): void {
+    for (const listener of tab.entry.listeners) safeCall(() => listener({ tabId: tab.id, ...event } as BrowserPageEvent));
   }
 
   private noteConsole(tab: Tab, entry: BrowserConsoleEntry): void {
@@ -1581,6 +1650,78 @@ export class BrowserManager implements BrowserService {
     }
   }
 
+  /**
+   * Poll `c` until it holds or its timeout passes (WaitCondition, browser/wait.ts). Each tick reads
+   * the page afresh, so a navigation in the middle only costs a tick. Never throws for a timeout
+   * or a closed tab: the result says what happened.
+   */
+  private async waitOn(tab: Tab, c: WaitCondition): Promise<WaitResult> {
+    const start = Date.now();
+    const deadline = start + timeoutMs(c);
+    const matchUrl = c.url !== undefined ? urlMatcher(c.url) : null;
+    const dom = c.selector !== undefined || c.text !== undefined;
+    const expression = dom ? waitCheckExpression(c) : "";
+    // What the page complained about while we waited, for a timeout to report.
+    const complaints: string[] = [];
+    const off = this.watch(tab.entry.sessionId, (e) => {
+      if (e.tabId !== tab.id || complaints.length >= 5) return;
+      if (e.kind === "exception" || (e.kind === "console" && e.level === "error")) complaints.push(e.text.split("\n")[0]!);
+    });
+    let quietSince: number | null = null;
+    let check: WaitCheck | null = null;
+    let checkError = "";
+    const finish = (met: boolean, summary: string): WaitResult => ({ met, elapsedMs: Date.now() - start, url: tab.url, summary });
+    try {
+      for (;;) {
+        if (tab.closed) return finish(false, `Tab ${tab.id} closed while waiting for ${describeCondition(c)}.`);
+        tab.lastUsed = this.now();
+        let met = true;
+        if (matchUrl && !matchUrl(tab.url)) met = false;
+        if (c.idle) {
+          const now = Date.now();
+          if (tab.loading || inFlight(tab, now).length > 0) quietSince = null;
+          else quietSince ??= now;
+          if (quietSince === null || now - quietSince < IDLE_QUIET_MS) met = false;
+        }
+        if (dom) {
+          try {
+            const res = await tab.session.send("Runtime.evaluate", { expression, returnByValue: true }, 5_000);
+            check = (res.result?.value as WaitCheck | undefined) ?? null;
+            checkError = res.exceptionDetails ? exceptionMessage(res.exceptionDetails) : "";
+          } catch (e) {
+            // The document went away under the check (a navigation): look again next tick.
+            check = null;
+            checkError = (e as Error).message;
+          }
+          if (check?.error) return finish(false, `Can't wait for ${JSON.stringify(c.selector)}: it isn't a valid CSS selector (${check.error}).`);
+          if (!check?.met) met = false;
+        }
+        const elapsed = Date.now() - start;
+        if (met) return finish(true, `${describeCondition(c)} after ${seconds(elapsed)}; now at ${tab.url}`);
+        if (Date.now() >= deadline) {
+          const busy = check?.busy ?? ((await this.evalValue(tab, `document.querySelectorAll('[aria-busy="true"]').length`).catch(() => 0)) as number);
+          const pending = inFlight(tab, Date.now());
+          const lines = [
+            `Timed out after ${seconds(elapsed)} waiting for ${describeCondition(c)}.`,
+            `Now at ${tab.url}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
+          ];
+          if (dom && check) {
+            lines.push(`Last check: ${check.count} element${check.count === 1 ? "" : "s"} matched (${check.visible} visible, ${check.enabled} enabled).`);
+          } else if (dom) lines.push(`The last check couldn't read the page${checkError ? `: ${checkError}` : ""}.`);
+          if (c.url !== undefined && matchUrl && !matchUrl(tab.url)) lines.push(`The URL doesn't match ${c.url}.`);
+          if (pending.length) {
+            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${r.url} (${seconds(Date.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
+          }
+          if (complaints.length) lines.push(`Console errors while waiting: ${complaints.join(" | ")}`);
+          return finish(false, lines.join("\n"));
+        }
+        await Bun.sleep(100);
+      }
+    } finally {
+      off();
+    }
+  }
+
   /** Reload a tab's page and wait (up to the navigation timeout) for it to load. */
   private async reloadAndWait(tab: Tab): Promise<void> {
     await tab.session.send("Page.reload", {});
@@ -1679,6 +1820,112 @@ export class BrowserManager implements BrowserService {
       tab.session.send("Runtime.releaseObject", { objectId: obj.objectId }).catch(() => {});
     }
   }
+}
+
+/** A page event before it's stamped with its tab. */
+type PageEventBody = BrowserPageEvent extends infer E ? (E extends BrowserPageEvent ? Omit<E, "tabId"> : never) : never;
+
+/** What one tick of a wait read from the page (waitCheckExpression). */
+interface WaitCheck {
+  met: boolean;
+  count: number;
+  visible: number;
+  enabled: number;
+  /** How many elements are marked aria-busy="true". */
+  busy: number;
+  /** The selector didn't parse. */
+  error?: string;
+}
+
+/** The in-page half of a wait's selector/text check: does the condition hold, and what's there. */
+function waitCheckExpression(c: WaitCondition): string {
+  return `(() => {
+    const sel = ${JSON.stringify(c.selector ?? null)};
+    const text = ${JSON.stringify(c.text ?? null)};
+    const state = ${JSON.stringify(c.state ?? "visible")};
+    let els;
+    try {
+      els = sel === null ? [document.body || document.documentElement] : Array.from(document.querySelectorAll(sel));
+    } catch (e) {
+      return { error: String((e && e.message) || e) };
+    }
+    if (text !== null) els = els.filter((el) => ((typeof el.innerText === "string" ? el.innerText : el.textContent) || "").includes(text));
+    const visible = (el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return false;
+      return typeof el.checkVisibility === "function" ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : true;
+    };
+    const enabled = (el) => !el.matches(":disabled") && !el.closest('[aria-disabled="true"]') && !el.closest('[aria-busy="true"]');
+    const vis = els.filter(visible);
+    const en = vis.filter(enabled);
+    const met = state === "gone" ? els.length === 0 : state === "hidden" ? vis.length === 0 : state === "enabled" ? en.length > 0 : vis.length > 0;
+    return { met, count: els.length, visible: vis.length, enabled: en.length, busy: document.querySelectorAll('[aria-busy="true"]').length };
+  })()`;
+}
+
+/** Requests that keep a page from being idle: still loading, and not open so long they're a long poll or a stream. */
+function inFlight(tab: Tab, now: number): (BrowserRequest & { at: number })[] {
+  return [...tab.requests.values()].filter(
+    (r) => r.durationMs === undefined && r.failure === undefined && r.type !== "WebSocket" && r.type !== "EventSource" && now - r.at < IDLE_IGNORE_AFTER_MS,
+  );
+}
+
+/**
+ * A Runtime.evaluate result with a deep-serialized value, as the JSON browser_eval returns. Top-level
+ * elements, functions and errors read as Chrome describes them ("p#x", "Error: boom …"); special
+ * numbers stay bare (NaN), as before.
+ */
+function serializeDeep(result: CdpResult): string {
+  if (result.type === "undefined") return "undefined";
+  if (result.unserializableValue !== undefined) return String(result.unserializableValue);
+  if (result.subtype === "node" || result.subtype === "error" || result.type === "function") return JSON.stringify(result.description ?? result.type);
+  return JSON.stringify(deepToJson(result.deepSerializedValue)) ?? "undefined";
+}
+
+/** One WebDriver BiDi-style deep-serialized value as plain JSON. */
+function deepToJson(v: CdpResult): unknown {
+  if (!v || typeof v !== "object") return null;
+  const missing = () => (v.weakLocalObjectReference !== undefined ? "[Circular]" : `[${v.type}]`);
+  switch (v.type) {
+    case "undefined":
+    case "null":
+      return null;
+    case "string":
+    case "boolean":
+    case "number": // "NaN", "-0", "Infinity" arrive as strings
+      return v.value;
+    case "bigint":
+      return `${v.value}n`;
+    case "array":
+    case "set":
+      return Array.isArray(v.value) ? v.value.map(deepToJson) : missing();
+    case "object":
+    case "map":
+      return Array.isArray(v.value)
+        ? Object.fromEntries(v.value.map(([k, val]: [unknown, CdpResult]) => [typeof k === "string" ? k : String(deepToJson(k as CdpResult)), deepToJson(val)]))
+        : missing();
+    case "date":
+      return v.value;
+    case "regexp":
+      return `/${v.value?.pattern ?? ""}/${v.value?.flags ?? ""}`;
+    case "node":
+      return nodeLabel(v.value);
+    case "window":
+      return "Window";
+    default:
+      return `[${v.type}]`;
+  }
+}
+
+/** An element the way devtools labels one: tag#id.class (text nodes and documents by kind). */
+function nodeLabel(n: CdpResult): string {
+  if (!n) return "Node";
+  if (n.nodeType === 3) return "#text";
+  if (n.nodeType === 9) return "#document";
+  if (n.nodeType !== 1) return "Node";
+  const attrs = (n.attributes ?? {}) as Record<string, string>;
+  const classes = (attrs.class ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 3);
+  return `${n.localName ?? "element"}${attrs.id ? `#${attrs.id}` : ""}${classes.map((c) => `.${c}`).join("")}`;
 }
 
 function safeCall(fn: () => void): void {
