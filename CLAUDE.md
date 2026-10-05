@@ -31,9 +31,11 @@ one simulator and one runtime.
   dies. Hold it for one install-to-screenshot pass, not for a whole ticket. sim-check takes the
   lock itself.
 - Before a heavy build (xcodebuild, sim-check, `release:publish`), run `bun run sim disk`. It exits
-  1 when less than 5 GiB is free. Then block and ask rather than build.
-- sim-check shuts down the `sim-check *` simulators it drove when it ends (normally, by error, or
-  on Ctrl-C/SIGTERM), unless `--keep`. A run killed outright (SIGKILL, a tool timeout) can't, and
+  1 when less than 5 GiB is free. Then block and ask rather than build. It also names any iOS
+  runtime other than 27.0 that's installed. Pass those on to the human; don't delete them yourself.
+- sim-check shuts down and deletes the `sim-check *` simulators it drove when it ends (normally, by
+  error, or on Ctrl-C/SIGTERM), unless `--keep`. Each one grows to 3–8 GB, and the next run that
+  needs one creates it again. A run killed outright (SIGKILL, a tool timeout) can't, and
   leaves booted simulators and an orphaned daemon behind. The next sim-check or `with-lock` cleans
   those up first. If the Mac is slow or a run was killed, run `bun run sim reap` yourself. It only
   touches what no live run owns: `sim-check *` simulators nobody holds the lock on, daemons whose

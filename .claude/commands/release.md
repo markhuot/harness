@@ -25,7 +25,9 @@ tag or `main`.
    built, `release/build/release/Harness-mac.zip` (if it's missing, fetch the published one with
    `gh release download app-… --pattern Harness-mac.zip --dir <tmp>`), `ditto -x -k` it into a
    temp dir, `trash /Applications/Harness.app`, then `ditto` the new `Harness.app` into
-   `/Applications`. Check it with `spctl -a -vv /Applications/Harness.app`. Only copy the app:
+   `/Applications`. Check it with `spctl -a -vv /Applications/Harness.app`, then `rm -rf` the temp
+   dir (and the download dir, if you fetched the zip): each one holds a 540 MB copy of the app, and
+   leftover ones have filled the disk before. Only copy the app:
    don't restart the service, quit or relaunch the app, or run `bun run install-app`. The app
    notices the new version and restarts the service itself.
 7. Report the tag, the GitHub release URL, https://harness-install.vercel.app, and the TestFlight

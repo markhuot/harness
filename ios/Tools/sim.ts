@@ -9,7 +9,8 @@
 //   bun ios/Tools/sim.ts reap                                 clean up after dead sim-check runs: shut down unheld
 //                                                                 "sim-check *" devices, stop orphaned daemons, remove temp dirs
 //   bun ios/Tools/sim.ts status                               the device and who holds its lock
-//   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5)
+//   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5), and
+//                                                                 names installed iOS runtimes other than 27.0
 //
 // The device is "harness-shared" (an iPhone 18 Pro) unless --device names another. Locks are files
 // under ~/.harness/tmp/sim-locks (HARNESS_SIM_LOCK_DIR overrides it). Each records the holder's PID
@@ -55,6 +56,14 @@ export function deviceTypeFor(runtime: Runtime, kind: DeviceKind): DeviceType {
       : types.find((t) => t.name === "iPhone 18 Pro") ?? types.find((t) => t.name.startsWith("iPhone"));
   if (!found) throw new Error(`iOS ${runtime.version} has no ${kind === "ipad" ? "iPad" : "iPhone"} device type`);
   return found;
+}
+
+/** A simulator runtime's disk image, as `simctl runtime list -j` reports it. */
+export interface RuntimeImage { identifier: string; version: string; platformIdentifier?: string; sizeBytes?: number }
+
+/** Installed iOS runtimes other than 27.0. Nothing runs on them, and each holds about 8 GB of disk. */
+export function extraRuntimes(images: RuntimeImage[], version = IOS_RUNTIME): RuntimeImage[] {
+  return images.filter((r) => r.platformIdentifier === "com.apple.platform.iphonesimulator" && r.version !== version && !r.version.startsWith(`${version}.`));
 }
 
 // ---------------------------------------------------------------- locks
@@ -271,7 +280,7 @@ async function findDevice(name: string, run: Simctl = simctl): Promise<Device | 
 }
 
 // ---------------------------------------------------------------- reaping
-// A sim-check run that ends normally shuts down the extra simulators it booted, stops its daemon and
+// A sim-check run that ends normally shuts down (and deletes) the extra simulators it booted, stops its daemon and
 // removes its temp dirs. One killed outright (SIGKILL, a crash, a tool timeout) leaves all three
 // behind: booted iOS devices and orphaned daemons that keep loading the Mac. `reap` finds what such
 // runs left and cleans it up; sim-check and with-lock run it before they start.
@@ -493,6 +502,10 @@ if (import.meta.main) {
     } else if (cmd === "disk") {
       const min = Number(opt("min") ?? MIN_FREE_GIB);
       console.log(`${freeGiB().toFixed(1)} GiB free`);
+      const images = await simctl("runtime", "list", "-j").then((out) => Object.values(JSON.parse(out) as Record<string, RuntimeImage>)).catch(() => []);
+      for (const r of extraRuntimes(images)) {
+        console.error(`the iOS ${r.version} runtime (${((r.sizeBytes ?? 0) / 1e9).toFixed(1)} GB) is installed but nothing runs on it: ask the human to remove it with \`xcrun simctl runtime delete ${r.identifier}\``);
+      }
       checkDisk(min);
     } else {
       throw new Error("usage: sim.ts ensure | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB]  (each takes --device=name; ensure and with-lock take --ipad)");
