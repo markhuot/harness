@@ -1386,7 +1386,8 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
     await until("the edit saved", async () => ((await saved())?.text === "Finished on the Mac, really now" ? true : null), 8000);
     await tapWhere(udid, "Send");
     await until("the draft cleared", async () => ((await saved()) === null ? true : null), 8000);
-    await until("the field emptied", async () => ((await field()) === "" ? true : null), 4000).catch(async (e) => {
+    // An empty field reads its placeholder as its value.
+    await until("the field emptied", async () => (/finished/i.test(await field()) ? null : true), 4000).catch(async (e) => {
       throw new Error(`${(e as Error).message}; the field shows ${JSON.stringify(await field())}`);
     });
     const texts = (await api<TranscriptEntry[]>("GET", `/sessions/${p.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
