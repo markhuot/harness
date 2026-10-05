@@ -21,6 +21,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   it. The count appears where you're scrubbing instead: in the timeline's tooltip on the Mac and in a
   bubble above your finger on iPhone and iPad. On iPhone and iPad, Show changes sits in the bar's
   one row.
+- On the Mac, a ticket's message box is a single row: **+**, the text field and Send. Send shows
+  its ⌘↩ shortcut inside the button, like **Start session** in New session.
 
 ### Fixed
 
@@ -28,6 +30,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   a predicted word could show up after the cursor while you typed, because a saved copy of the
   draft came back from the Mac and replaced what was in the box. New session now keeps exactly
   what you type, on the Mac and on iPhone and iPad.
+
+### Removed
+
+- The **Move to in progress** and **Re-open and move to in progress** switches over a ticket's
+  message box, on the Mac and on iPhone and iPad. A message to a ticket in review goes to its
+  agent, which moves the ticket back to in progress when it changes the work and leaves it in
+  review when it only answers. To move a ticket yourself, use **Request changes** (review) or
+  **Re-open** (done).
+- The hints by a ticket's message box, such as "Sent to the running agent" and "Stays in review
+  unless the agent submits it again", on the Mac and on iPhone and iPad.
 
 ## [app-20261005.0103](https://github.com/markhuot/harness/releases/tag/app-20261005.0103) - 2026-10-05
 

@@ -151,13 +151,11 @@ struct HarnessClientRequestTests {
         #expect(try bodyJSON(r) == json(#"{"projectId":"prj_1","spec":"Do it","start":false}"#))
     }
 
-    /// `move` only when true, and never `log`: messages don't go into Activity any more.
-    @Test func sendMessageSendsMoveOnlyWhenTrueAndNeverLog() async throws {
+    /// Only the text: no `log` (messages don't go into Activity) and no `move` (a message never moves the ticket).
+    @Test func sendMessageSendsOnlyTheText() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
         _ = try await client(t).sendMessage("NY-1", text: "hi")
         #expect(try bodyJSON(t.last) == json(#"{"text":"hi"}"#))
-        _ = try await client(t).sendMessage("NY-1", text: "hi", move: true)
-        #expect(try bodyJSON(t.last) == json(#"{"text":"hi","move":true}"#))
         #expect(path(t) == "/tickets/NY-1/messages")
     }
 
@@ -178,9 +176,9 @@ struct HarnessClientRequestTests {
             marks: [AnnotationMark(n: 1, x: 10, y: 20, tailX: 100, tailY: 120, message: "this"), AnnotationMark(n: 2, x: 5, y: 6, message: "that")]
         )
         let spec = Attachment(id: "att_1", path: "/h/att_1.png", name: "shot.png", source: .spec, kind: .image, mimeType: "image/png", annotation: note)
-        _ = try await client(t).sendMessage("NY-1", text: "Fix these", move: true, attachments: PromptAttachments.inputs([spec]) + [AttachmentInput(id: "a2")])
+        _ = try await client(t).sendMessage("NY-1", text: "Fix these", attachments: PromptAttachments.inputs([spec]) + [AttachmentInput(id: "a2")])
         #expect(try bodyJSON(t.last) == json(#"""
-        {"text":"Fix these","move":true,"attachments":[{"id":"att_1","path":"/h/att_1.png","name":"shot.png","source":"spec","kind":"image","mimeType":"image/png",
+        {"text":"Fix these","attachments":[{"id":"att_1","path":"/h/att_1.png","name":"shot.png","source":"spec","kind":"image","mimeType":"image/png",
          "annotation":{"width":800,"height":600,
          "marks":[{"n":1,"x":10,"y":20,"tailX":100,"tailY":120,"message":"this"},{"n":2,"x":5,"y":6,"message":"that"}]}},{"id":"a2"}]}
         """#))

@@ -225,7 +225,7 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(review).toContain("call `submit_for_review` { note, spec_is_up_to_date: true } again, which starts both reviews over");
     expect(review).not.toContain("`unblock` { note? } before");
     const done = sys("chat", ticket({ status: "done" }));
-    expect(done).toContain('"Re-open and move to in progress" switch');
+    expect(done).toContain("re-open the ticket with its Re-open button");
     expect(done).toContain("change files only when they ask for it outright");
     expect(done).not.toContain("starts both reviews over");
   });

@@ -72,7 +72,6 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
-import { composerHint } from "@harness/shared/state";
 import { Database } from "bun:sqlite";
 import { acquire, checkDisk, ensureDevice, markKept, reap, SHARED_DEVICE, writeRunOwner } from "./sim";
 
@@ -890,7 +889,6 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
 const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
 const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
 /** The line over the composer ("Stays in review unless…"), which isn't one of the list's rows. */
-const COMPOSER_HINTS = new Set((["planning", "in_progress", "blocked", "review", "done"] as const).flatMap((status) => [false, true].map((busy) => composerHint({ status, busy }))));
 /** The last Activity row after a `sayStick(…, { activity: true })`: the dummy reviewer's approval. */
 const STICK_REVIEWED = "The dummy reviewer approves.";
 /**
@@ -937,17 +935,16 @@ async function seedStick() {
 async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>) {
   const key = p.ticket.key;
   const H = (await tree(udid))[0]!.frame.height;
-  // The list's viewport: below the tab strip, above the composer and the switch over it ("Move to
-  // in progress", moveSwitchLabel in shared/state/format).
+  // The list's viewport: below the tab strip, above the composer.
   async function listView() {
     const all = await nodes(udid);
     const tab = all.find((n) => n.AXLabel === "Transcript" || n.AXLabel?.startsWith("Activity"));
-    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Attach" || n.AXLabel === "Move to in progress" || n.AXLabel === "Re-open and move to in progress");
+    const composer = all.filter((n) => n.AXLabel?.startsWith("Message the agent") || n.AXLabel === "Send" || n.AXLabel === "Attach");
     const top = tab ? tab.frame.y + tab.frame.height : 100;
     const bottom = composer.length ? Math.min(...composer.map((n) => n.frame.y)) : H - 60;
     // Every row rendered below the tab strip, on screen or not (FlatList keeps rows around the
     // viewport). Starting below it leaves out the app window and the header.
-    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && !COMPOSER_HINTS.has(n.AXLabel) && n.frame.y >= top);
+    const rows = all.filter((n) => n.AXLabel && !composer.includes(n) && n.frame.y >= top);
     return { rows, top, bottom };
   }
   /** At the bottom: the lowest rendered row is the list's last row and ends just above the composer. */
@@ -1099,15 +1096,6 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     moved(udid);
     return "Spec → Activity → Spec → back to the board";
   });
-
-  // The blur half (the keyboard going down) is in --keyboard, which has the software keyboard.
-  await check("the composer's switch waits for the field to be focused", async () => {
-    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
-    if ((await labels(udid)).includes("Move to in progress")) throw new Error("shown before the field was focused");
-    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-    await until("the switch after focusing", async () => (await labels(udid)).includes("Move to in progress") || null, 3000);
-    return "hidden, then shown on focus";
-  });
 }
 
 /**
@@ -1163,41 +1151,6 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     return Math.min(q.frame.y, ...bar.map((n) => n.frame.y)) - 8;
   };
   const bottomOf = (n: AXNode) => n.frame.y + n.frame.height;
-
-  // The composer's "Move to in progress" switch and hint show only while writing: once the field
-  // is focused, and after a blur only while it holds a message. Dragging the list down dismisses
-  // the keyboard, which blurs the field.
-  const switchShown = async () => (await labels(udid)).includes("Move to in progress");
-  const dismiss = async (top: number) => {
-    // Start in the list just above the composer (the native hero and tab strip reach y≈325).
-    await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(top - 150)), "--end-x", "200", "--end-y", String(Math.round(top + 60)), "--duration", "0.3", "--udid", udid);
-    await until("keyboard down", async () => !(await keyboardTop()) || null, 5000);
-  };
-  await check("the composer's switch shows while writing", async () => {
-    await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
-    if (await switchShown()) throw new Error("shown before the field was focused");
-    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-    const top = await until("keyboard up", keyboardTop, 8000);
-    if (!(await switchShown())) throw new Error("no switch once focused");
-    // Turned on, the hint goes away; the switch must stay at the left rather than center in the row.
-    const switchX = async () => (await nodes(udid)).find((n) => n.AXLabel === "Move to in progress")?.frame.x;
-    const offX = await switchX();
-    await tapWhere(udid, (l) => l === "Move to in progress");
-    await Bun.sleep(400);
-    const onX = await switchX();
-    await tapWhere(udid, (l) => l === "Move to in progress");
-    if (offX == null || onX == null) throw new Error("lost the switch while toggling it");
-    if (Math.abs(onX - offX) > 4) throw new Error(`the switch moved from x=${offX} to x=${onX} when turned on`);
-    await dismiss(top);
-    await until("no switch after an empty blur", async () => !(await switchShown()) || null, 3000);
-    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-    await until("keyboard up", keyboardTop, 8000);
-    await typeOnKeys("draft");
-    await dismiss(top);
-    await Bun.sleep(400);
-    if (!(await switchShown())) throw new Error("hid after a blur with a message typed");
-    return "hidden until focused, gone after an empty blur, kept with a draft";
-  });
 
   await check("ticket composer sits on top of the keyboard", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));

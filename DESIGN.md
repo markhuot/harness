@@ -219,12 +219,13 @@ carries the mode (`app`, `login`, `external`).
 Columns: **planning → in_progress → blocked → review → done**.
 Humans own planning and blocked, agents own in_progress, review is shared.
 
-**Messages.** A human message never moves the ticket unless asked to (`POST /messages {text,
-move?}`, `Orchestrator.sendMessage`). It goes to the agent and the transcript, never to Activity
+**Messages.** A human message never moves the ticket (`POST /messages {text}`,
+`Orchestrator.sendMessage`). It goes to the agent and the transcript, never to Activity
 (an older app's `log` field is ignored), and the apps switch to the Transcript once it's sent
-(`tabAfterSend`). Code moves a ticket only before a run starts: `move: true`
-sends a review ticket back to in progress and re-opens a done one (the composer's switch, off by
-default and after every send); planning starts with Start. Otherwise the ticket's own agent gets
+(`tabAfterSend`). The human moves a ticket with buttons instead: Start (planning), Request changes
+(review) and Re-open (done). Older apps had a composer switch that sent `move: true`, which still
+sends a review ticket back to in progress or re-opens a done one before the run starts; today's
+apps never send it. The ticket's own agent gets
 the message where the ticket is, with its work tools, and moves the ticket itself: `unblock` once
 the message resolves its block, `resume_work` before it changes work that's in review (its call:
 an answer or an investigation leaves the ticket in review), then `submit_for_review` or `block`. A planning ticket's message
@@ -247,7 +248,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | Agent calls `unblock(note?)` | blocked → `in_progress`, `blockedReason` cleared, status "Unblocked by the agent", an `unblocked` entry (`meta.note`); the run carries on. Refused unless blocked, and while a tool approval is pending |
 | Agent calls `resume_work(note?)` | review → `in_progress`, both reviews pending, a queued or running agent review cancelled, status "Moved back to in progress by the agent"; the run carries on and ends like a work run. Refused unless in review, and while a tool approval is pending |
 | Human message in review or done | status and reviews unchanged; a **chat** run that's going takes it in, otherwise enqueue one. The message and the chat's answer are in the transcript only |
-| Human message with `move: true` in review | status `in_progress`, both reviews reset to pending, enqueue work run with the message |
+| Human message with `move: true` in review (older apps only) | status `in_progress`, both reviews reset to pending, enqueue work run with the message |
 | Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is neither auto-submits nor blocks (its last text is its answer, in the transcript). A failed chat adds a `failed` entry and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
 | Agent calls `submit_for_review(note, spec_is_up_to_date: true)` (in_progress, blocked or review; refused in planning and done, and without `spec_is_up_to_date: true`) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the ticket has `skipHumanReview`, see "Skipping the human review"), a `submitted` entry with the note (`meta.specRevision`); after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
 | Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; the `submitted` note = the first line of the last assistant text (system author, `activityLine`). A trailing question blocks with it instead (a `blocked` entry) |
@@ -263,7 +264,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | Conductor → done with children in review it approved but didn't complete | each child's `humanReview` back to `pending` ("<conductor> is done: approve to land this ticket"): the human has the child back (`managingConductor` is null) and approving lands it |
 | `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; a `reopened` entry with the notes; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket or a move back to in_progress re-opens it the same way (with the message / the spec). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; a `reopened` entry with the notes; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket (older apps only), a triage update to it, or a move back to in_progress re-opens it the same way (with the message / the spec). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged (a cancelled complete run reopens the human review, above) |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
@@ -491,10 +492,10 @@ messages work, and the queue is only the fallback (HARNESS-68).
 - Whenever a message has to wait although a run is going (a driver that can't steer, a
   different run kind, a run that already stopped taking input), the transcript gets the status
   line "Couldn't reach the running agent; queued for the next run".
-- Review and complete runs never take messages: a message to a ticket in review moves it back
-  to in progress with a work run queued behind the review, as before.
-- The composer hint says "Sent to the running agent" while an in-progress or planning ticket is
-  busy.
+- Review and complete runs never take messages: a message to a ticket in review gets a chat run
+  queued behind the review, and the ticket stays in review.
+- The composer shows no hint about where a message goes. On the Mac, (+), the input and Send
+  (with ⌘↩ in it) share one row.
 
 claude-code (verified against claude 2.1.284): each message is written to the open stdin as a
 stream-json `user` line with its `uuid`. With `--replay-user-messages` the CLI echoes a line
@@ -667,7 +668,8 @@ output that qualifies) or `decline_work`. `dispatch_ticket`'s `key` is the item'
   `Dispatched to MH-124 (MH-62) in MH`.
 - `ticket_key` (the current key or an alias; drafts don't count) posts the `spec` text to that
   ticket as a message (`Sent update to existing MH-123`). A done ticket is re-opened with it
-  instead, as a human message with `move: true` would (`Re-opened MH-123 with the update`): triage
+  instead, as Re-open would, with the update as its prompt and a `reopened` entry by `system`
+  (`Re-opened MH-123 with the update`): triage
   only dispatches work, and a done ticket's chat run can't do any, since the complete run may
   have removed its worktree and nothing would review or land the result. Re-opening recreates the
   worktree. Adding `key` links a ticket that has no remote ID yet (`Linked MH-123 to MH-62 and

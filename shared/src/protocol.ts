@@ -1442,12 +1442,6 @@ export interface MessageBody {
    * message then answers it as a deny).
    */
   attachments?: AttachmentInput[];
-  /**
-   * true: move the ticket before its agent gets the message: a review ticket back to in
-   * progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
-   * (planning → the plan run; blocked, review, done → a chat run with the work tools).
-   */
-  move?: boolean;
 }
 
 /** The `data` of PATCH /tickets/:key's 409 when baseRevision isn't the current spec revision. */

@@ -168,7 +168,7 @@ describe("http api", () => {
     expect(replied.status).toBe("blocked");
     await h.orchestrator.idle();
     expect((await client.getTicket(t.key)).ticket.status).toBe("review");
-    // move sends a review ticket back to in progress first; the old chat flag is ignored.
+    // Older apps' move still sends a review ticket back to in progress first; the old chat flag is ignored.
     const moved = await client.request<any>("POST", `/tickets/${t.key}/messages`, { text: "darker", move: true });
     expect(moved.status).toBe("in_progress");
     await h.orchestrator.idle();

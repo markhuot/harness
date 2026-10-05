@@ -87,40 +87,6 @@ public enum Format {
         .done: "Ask about the finished work…",
     ]
 
-    /// The composer's switch, where a message can move the ticket before its agent gets it (off by
-    /// default, and back off after each send): a review ticket back to in progress, a done one
-    /// re-opened. Elsewhere there's none: the agent moves a planning, in-progress or blocked ticket
-    /// itself, and a message to a ticket waiting on a tool approval answers the approval.
-    public static func moveSwitchLabel(status: TicketStatus, hasPendingApproval: Bool) -> String? {
-        if hasPendingApproval { return nil }
-        if status == .review { return "Move to in progress" }
-        if status == .done { return "Re-open and move to in progress" }
-        return nil
-    }
-
-    public static func moveSwitchLabel(_ t: Ticket) -> String? {
-        moveSwitchLabel(status: t.status, hasPendingApproval: t.pendingApproval != nil)
-    }
-
-    /// Hint under the ticket message composer. While the agent is working on an in-progress or
-    /// planning ticket, a message goes into its run (steering); otherwise it waits for the run that's
-    /// going. Idle, it says what the message does to the ticket (`move`: the switch is on).
-    public static func composerHint(busy: Bool, status: TicketStatus, move: Bool = false) -> String {
-        if busy { return status == .inProgress || status == .planning ? "Sent to the running agent" : "Queued behind the current run" }
-        if move { return "" }
-        switch status {
-        case .planning: return "The planning agent will revise"
-        case .blocked: return "The agent picks the work back up once this answers it"
-        case .review: return "Stays in review unless the agent submits it again"
-        case .done: return "Stays done: the agent only answers"
-        default: return ""
-        }
-    }
-
-    public static func composerHint(_ t: Ticket, move: Bool = false) -> String {
-        composerHint(busy: t.busy, status: t.status, move: move)
-    }
-
     /// New-session prompt placeholder. Start vs plan is picked when it's submitted, so only the kind matters.
     public static func newSessionPlaceholder(_ kind: TicketKind) -> String {
         kind == .conductor

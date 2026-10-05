@@ -349,7 +349,8 @@ html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.acti
   max-height: none;
   height: auto;
 }
-.composer-fill .composer-attach {
+.composer-fill .composer-attach,
+.composer-fill .composer-send {
   align-self: flex-end;
 }
 /* Where the composer was, while it's torn off. */

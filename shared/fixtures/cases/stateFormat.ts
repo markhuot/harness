@@ -6,7 +6,6 @@ import {
   CLASSIFIER_LABELS,
   COLUMN_EMPTY_TEXT,
   COMPOSER_PLACEHOLDER,
-  composerHint,
   decisionSource,
   describeApprovalInput,
   dispatchedKey,
@@ -15,7 +14,6 @@ import {
   fitRect,
   formatMaybeJson,
   groupTranscript,
-  moveSwitchLabel,
   newSessionPlaceholder,
   normalizeUrl,
   permissionModeLabel,
@@ -123,30 +121,6 @@ export const tildifyCases = cases(tildify, {
 // ---------------------------------------------------------------------------
 
 const STATUSES: TicketStatus[] = ["planning", "in_progress", "blocked", "review", "done"];
-const approvalStub = { id: "a", runId: "r", toolName: "Bash", input: {}, requestedAt: 1 };
-
-export const moveSwitchLabelCases = cases(
-  ({ status, pendingApproval }: { status: TicketStatus; pendingApproval: typeof approvalStub | null }) => moveSwitchLabel({ status, pendingApproval }),
-  {
-    ...Object.fromEntries(STATUSES.map((status) => [status, { status, pendingApproval: null }])),
-    "review with a pending approval": { status: "review", pendingApproval: approvalStub },
-    "done with a pending approval": { status: "done", pendingApproval: approvalStub },
-    "unknown status": { status: "archived" as TicketStatus, pendingApproval: null },
-  },
-);
-
-export const composerHintCases = cases(
-  ({ busy, status, move }: { busy: boolean; status: TicketStatus; move?: boolean }) => composerHint({ busy, status }, move),
-  [
-    ...STATUSES.flatMap((status) =>
-      [false, true].flatMap((busy) =>
-        [undefined, false, true].map((move) => [`${status} busy=${busy} move=${move ?? "default"}`, move === undefined ? { busy, status } : { busy, status, move }] as const),
-      ),
-    ),
-    ["unknown status idle", { busy: false, status: "archived" as TicketStatus }],
-    ["unknown status busy", { busy: true, status: "archived" as TicketStatus }],
-  ],
-);
 
 export const newSessionPlaceholderCases = cases(newSessionPlaceholder, {
   task: "task",

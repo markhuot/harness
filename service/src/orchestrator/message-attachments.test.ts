@@ -113,7 +113,7 @@ describe("a message's attachments", () => {
     expect(h.store.tickets.get(t.id)!.pendingApproval).not.toBeNull();
   });
 
-  test("re-opening a done ticket with a message sends them with its work run", async () => {
+  test("an older app's move re-opening a done ticket with a message sends them with its work run", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Ship it" });
     await h.orch.idle();

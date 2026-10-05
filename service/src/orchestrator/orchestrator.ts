@@ -1569,16 +1569,16 @@ export class Orchestrator {
   }
 
   /**
-   * A human message to the ticket's agent (DESIGN.md "Messages"). Code moves the ticket only
-   * before a run starts, and only on request: `move` sends a review ticket back to in progress,
-   * or re-opens a done one. Otherwise the ticket stays where it is:
+   * A human message to the ticket's agent (DESIGN.md "Messages"). The ticket stays where it is:
    *  - planning: the plan run takes it (plan mode; it revises the plan),
    *  - in progress: the running work takes it, or a new work run,
    *  - blocked, review, done: a chat run with the ticket's work tools, whose agent moves the
    *    ticket itself (unblock once the block is resolved, resume_work before changing reviewed work, submit_for_review, block).
    * A message to a ticket waiting on a tool approval answers it as a deny.
    * The message goes to the agent and the transcript, never to Activity (older apps' `log` flag is
-   * ignored).
+   * ignored). Older apps may also send `move`, from the composer switch they had: it still sends a
+   * review ticket back to in progress, or re-opens a done one, before the run starts. Today's apps
+   * move a ticket with Request changes and Re-open instead.
    */
   async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown } = {}): Promise<Ticket> {
     if (text !== undefined && typeof text !== "string") throw badRequest("text must be a string");
@@ -2455,7 +2455,7 @@ ${numberLines(r.body)}`;
    */
   private lifecycleFrom(t: Ticket, tool: "block" | "submit_for_review") {
     if (t.status === "planning") throw new Error(`${t.key} is still in planning: the work starts when the human presses Start, so ${tool} doesn't apply yet.`);
-    if (t.status === "done") throw new Error(`${t.key} is done: the human re-opens it (the composer's "Re-open and move to in progress" switch) to change it again.`);
+    if (t.status === "done") throw new Error(`${t.key} is done: the human re-opens it (its Re-open button) to change it again.`);
   }
 
   async submitForReview(ctx: ToolContext, note: string, specIsUpToDate: unknown, skips: ReviewSkips = {}): Promise<void> {
@@ -3044,7 +3044,12 @@ ${numberLines(r.body)}`;
       // Triage only dispatches work, and a done ticket's chat can't do any: its worktree may be
       // gone and nothing reviews or lands the result. The update re-opens it instead.
       const reopened = existing.status === "done";
-      await this.sendMessage(existing.key, body, { move: reopened });
+      if (reopened) {
+        this.notCompleting(existing, "re-opened");
+        this.resetRejections(existing);
+        this.addActivity(existing, "reopened", "system", `Re-opened by an update from ${meta.source}`, this.moveMeta(existing, "in_progress"));
+        await this.reopen(existing, body, `Re-opened by an update from ${meta.source}`);
+      } else await this.sendMessage(existing.key, body);
       const sent = reopened ? "re-opened it with the update" : "sent update";
       this.finishTriage(
         session.id,

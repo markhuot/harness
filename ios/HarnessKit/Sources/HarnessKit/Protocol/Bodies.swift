@@ -276,10 +276,6 @@ public struct HumanReviewBody: Codable, Sendable, Equatable {
 public struct MessageBody: Codable, Sendable, Equatable {
     /// May be empty when the message carries attachments.
     public var text: String
-    /// true: move the ticket before its agent gets the message: a review ticket back to in
-    /// progress, a done one re-opened. Default: the ticket stays where it is and its agent moves it
-    /// (planning → the plan run; blocked, review, done → a chat run with the work tools).
-    public var move: Bool?
     /// Files sent with the message (at most maxPromptAttachments), like a New session's
     /// promptAttachments: by `id` (a spec image, an upload, a registered file, a file from an
     /// earlier message) or by `path`.
@@ -287,9 +283,8 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// message then answers it as a deny).
     public var attachments: [AttachmentInput]?
 
-    public init(text: String, move: Bool? = nil, attachments: [AttachmentInput]? = nil) {
+    public init(text: String, attachments: [AttachmentInput]? = nil) {
         self.text = text
-        self.move = move
         self.attachments = attachments
     }
 }

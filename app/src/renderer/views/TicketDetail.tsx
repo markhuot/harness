@@ -11,10 +11,8 @@ import {
   CHANGES_TAB,
   childrenOf,
   COMPOSER_PLACEHOLDER,
-  composerHint,
   effectiveTabWithChanges,
   hasCustomDriver,
-  moveSwitchLabel,
   nextTab,
   normalizeChangesTab,
   otherPluginTabs,
@@ -38,7 +36,7 @@ import { Icon, isIconName } from "../components/Icon";
 import { FileLinkScope, SpecAttachmentsScope } from "../components/Markdown";
 import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 import { ModelBadge } from "../components/ModelSelect";
-import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, Switch, TicketKey } from "../components/bits";
+import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
 import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
@@ -880,7 +878,8 @@ function composerFor(ticketKey: string): ComposerAnnotate {
  * (on its top edge) drags it off into a pane of its own; torn off, it fills that pane (`fill`).
  * Annotate (anywhere in the ticket) adds the image here with its notes (metadata on the attachment;
  * the image isn't changed) and focuses the input for the human to say why; annotating a waiting
- * image again edits its notes in place. Send sends the files with their notes.
+ * image again edits its notes in place. Send, at the input's right with its shortcut in it (like
+ * New session's Start session), sends the files with their notes.
  */
 export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket: Ticket; onSent: () => void; grip?: ReactNode; fill?: boolean }) {
   const { client } = useStore();
@@ -894,10 +893,6 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback((q: string) => client.ticketFiles(ticket.key, q), [client, ticket.key]);
   const searchCommands = useCallback((q: string) => client.ticketCommands(ticket.key, q), [client, ticket.key]);
-  // Off by default and after every send: the ticket stays where it is unless asked to move first.
-  const [moveFirst, setMoveFirst] = useState(false);
-  const switchLabel = moveSwitchLabel(ticket);
-  const move = !!switchLabel && moveFirst;
   // A message while a tool approval waits answers it (as a deny), and the service won't take files with it.
   const approvalPending = !!ticket.pendingApproval;
   const setList = (next: Attachment[]) => {
@@ -927,7 +922,8 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
     enabled: !approvalPending,
     what: "a message",
   });
-  const hint = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : composerHint(ticket, move);
+  // One row: (+), the input and Send. The only note it needs goes on Send's tooltip.
+  const sendTitle = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : "Send";
   const canSend = composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
 
   useEffect(() => {
@@ -950,13 +946,12 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
     const files = attachments;
     setSending(true);
     // Each file carries its notes (Attachment.annotation).
-    const ok = await act(() => client.sendMessage(ticket.key, body, { move, ...(files.length ? { attachments: attachmentInputs(files) } : {}) }));
+    const ok = await act(() => client.sendMessage(ticket.key, body, files.length ? { attachments: attachmentInputs(files) } : {}));
     setSending(false);
     if (ok) {
       setText("");
       // Only what went: anything attached while it was sending stays for the next message.
       setList(listRef.current.filter((a) => !files.includes(a)));
-      setMoveFirst(false);
       onSent();
     }
   };
@@ -1030,18 +1025,11 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
             }
           }}
         />
-      </div>
-      <div className="composer-bar">
-        {switchLabel && <Switch checked={move} onChange={setMoveFirst} label={switchLabel} />}
-        {hint && (
-          <span className="muted" data-testid="composer-hint">
-            {hint}
-          </span>
-        )}
-        <div className="grow" />
-        <span className="kbd">{MOD}↩</span>
-        <button className="btn btn-primary btn-sm btn-icon" data-testid="composer-send" disabled={!canSend} onClick={send} title="Send">
+        <button className="btn btn-primary composer-send" data-testid="composer-send" disabled={!canSend} onClick={send} title={sendTitle} aria-label="Send">
           {sending ? <span className="spinner" /> : <Icon name="arrowUp" strokeWidth={2.25} />}
+          <span className="kbd" aria-hidden>
+            {MOD}↩
+          </span>
         </button>
       </div>
       {attach.dropping && (
