@@ -507,6 +507,76 @@ describe("triage tools → HarnessOps", () => {
   });
 });
 
+describe("wait_for and browser_wait", () => {
+  test("a bad wait_for is refused before the tool touches the page", async () => {
+    for (const [name, input] of [
+      ["browser_click", { selector: "#go", wait_for: { timeout: 5 } }],
+      ["browser_type", { selector: "input", text: "x", wait_for: { selector: "#a", bogus: 1 } }],
+      ["browser_open", { url: "http://a.test", wait_for: { idle: true, timeout: 500 } }],
+      ["browser_screenshot", { wait_for: { url: "/[/" } }],
+      ["browser_content", { wait_for: { state: "gone" } }],
+      ["browser_eval", { expression: "1", wait_for: { selector: "" } }],
+      ["browser_resize", { width: 500, wait_for: { idle: "yes" } }],
+    ] as const) {
+      const browser = fakeBrowser();
+      const r = await tool(name).execute(input, fakeContext({ browser }));
+      expect(r.isError).toBe(true);
+      expect(text(r)).toStartWith("wait_for: ");
+      expect(browser.calls).toEqual([]);
+    }
+  });
+
+  test("actions wait after acting and reads wait before reading, on the same tab", async () => {
+    const browser = fakeBrowser();
+    const ctx = fakeContext({ browser });
+    const cond = { selector: ".done" };
+    await tool("browser_click").execute({ selector: "#go", tab: 2, wait_for: cond }, ctx);
+    await tool("browser_screenshot").execute({ tab: 2, wait_for: cond }, ctx);
+    expect(browser.calls.filter((c) => c.method !== "state").map((c) => [c.method, c.args.at(-1)])).toEqual([
+      ["click", { tab: 2 }],
+      ["waitFor", { tab: 2 }],
+      ["waitFor", { tab: 2 }],
+      ["screenshot", { tab: 2 }],
+    ]);
+    expect(browser.calls.find((c) => c.method === "waitFor")!.args[1]).toEqual(cond);
+  });
+
+  test("a timed-out wait makes the result an error but keeps what the tool did or read", async () => {
+    const timedOut = { met: false, elapsedMs: 15_000, url: "http://a.test/", summary: "Timed out after 15.0s waiting for \".done\" visible." };
+    const browser = fakeBrowser({ waitFor: async () => timedOut });
+    const ctx = fakeContext({ browser });
+    const clicked = await tool("browser_click").execute({ selector: "#go", wait_for: { selector: ".done" } }, ctx);
+    expect(clicked.isError).toBe(true);
+    expect(text(clicked)).toContain("Clicked #go. Now at http://a.test/");
+    expect(text(clicked)).toContain("Timed out after 15.0s");
+    const shot = await tool("browser_screenshot").execute({ wait_for: { selector: ".done" } }, ctx);
+    expect(shot.isError).toBe(true);
+    expect(shot.content.some((c) => c.type === "image")).toBe(true);
+  });
+
+  test("browser_wait needs something to wait for, and reports a timeout as an error", async () => {
+    expect(text(await tool("browser_wait").execute({ timeout: 3 }, fakeContext()))).toContain("Say what to wait for");
+    const browser = fakeBrowser({ waitFor: async () => ({ met: false, elapsedMs: 2000, url: "u", summary: "Timed out after 2.0s waiting for network idle." }) });
+    const r = await tool("browser_wait").execute({ idle: true, timeout: 2 }, fakeContext({ browser }));
+    expect(r.isError).toBe(true);
+    expect(browser.calls.find((c) => c.method === "waitFor")!.args[1]).toEqual({ idle: true, timeout: 2 });
+  });
+
+  test("a click on a disabled or busy target says the page may have ignored it", async () => {
+    const browser = fakeBrowser({ click: async () => ({ disabled: true, busy: true }) });
+    const r = await tool("browser_click").execute({ selector: "#go" }, fakeContext({ browser }));
+    expect(text(r)).toContain("It was disabled and inside an element marked aria-busy");
+  });
+
+  test("browser_run_status and browser_run_stop refuse a job that doesn't exist", async () => {
+    for (const name of ["browser_run_status", "browser_run_stop"]) {
+      const r = await tool(name).execute({ job: 999_999 }, fakeContext());
+      expect(r.isError).toBe(true);
+      expect(text(r)).toContain("No browser_run job 999999 in this session");
+    }
+  });
+});
+
 describe("browser tools → BrowserService", () => {
   test("every browser tool acts on the run's session id", async () => {
     const browser = fakeBrowser();

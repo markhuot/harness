@@ -489,7 +489,8 @@ function report(job: Job): ToolResult {
   return job.status === "failed" ? { content, isError: true } : { content };
 }
 
-const SCRIPT_API =
+/** The script's functions, for browser_run's description and the Browser prompt section. */
+export const SCRIPT_API =
   "click(selector, { wait_for }), type(selector, text, { submit, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, wait_for }) (runs in the page and returns the value), content(selector?, { format, max_chars, wait_for }), screenshot(path?, { wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms)";
 
 const WAIT_PARAM = {
