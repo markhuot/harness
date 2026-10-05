@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The Settings section (from the bottom of the sidebar): connection (saved Macs, token rotation), network,
 /// appearance and themes, drivers (each opens DriverSettingsScreen) with the default model,
-/// general, permissions, triage, prompts, watchers and projects. Pull to refresh reloads the board snapshot. A settings deep link's theme
+/// general, permissions, triage, the browser's extensions (opens ExtensionSettingsScreen), prompts, watchers and projects. Pull to refresh reloads the board snapshot. A settings deep link's theme
 /// picks (`harness://settings?lightTheme=…`) are applied by the shell before this screen shows.
 ///
 /// A modifier on a Form `Section` lands on every row of it, so the sections don't present or load
@@ -28,6 +28,7 @@ struct SettingsScreen: View {
                 SettingsPermissionsSection(settings: settings)
                 SettingsTriageSection(settings: settings)
             }
+            SettingsExtensionsSection()
             SettingsPromptsSection()
             SettingsWatchersSection()
             SettingsProjectsSection()

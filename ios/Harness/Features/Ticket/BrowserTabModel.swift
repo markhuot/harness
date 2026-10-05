@@ -155,9 +155,9 @@ final class BrowserTabModel {
         store?.subscribeBrowser(sessionId, tabId: id, viewer: viewer)
     }
 
-    /// Open a blank tab; the service moves this viewer to it (learnt from the next browser.state).
-    func newTab() {
-        send(.newTab(url: nil))
+    /// Open a blank tab (or one at `url`); the service moves this viewer to it (learnt from the next browser.state).
+    func newTab(url: String? = nil) {
+        send(.newTab(url: url))
     }
 
     /// Close tab `id`. When it's the one shown the service moves this viewer to the lowest open tab.

@@ -20,6 +20,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A ticket's browser has a puzzle-piece button that lists your extensions. Choose one to run its
   toolbar button on the page you're looking at. Its popup opens in a new tab, since the browser
   has no toolbar of its own. Extensions with an options page can open it from the same menu.
+- On iPhone and iPad, Settings has the same Extensions screen, and a ticket's browser has the same
+  puzzle-piece button. To add an extension you're building, type the path of its folder on your
+  Mac.
 
 ### Fixed
 
