@@ -626,7 +626,7 @@ describe("http api", () => {
       });
       expect(pre.status).toBe(204);
       expect(pre.headers.get("access-control-allow-origin")).toBe(origin);
-      expect(pre.headers.get("access-control-allow-methods")).toBe("GET,POST,PATCH,DELETE,OPTIONS");
+      expect(pre.headers.get("access-control-allow-methods")).toBe("GET,POST,PUT,PATCH,DELETE,OPTIONS");
       expect(pre.headers.get("access-control-allow-headers")).toBe("authorization, content-type");
     }
     const evil = await fetch(`${h.url}/projects`, { method: "OPTIONS", headers: { origin: "https://evil.example" } });
