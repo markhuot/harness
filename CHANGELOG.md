@@ -9,11 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and iPad, a ticket's title and buttons come back when you scroll to the very end of a
+  tab, the way Safari's toolbars do at the end of a page.
+
 ### Fixed
 
-- On iPhone and iPad, a ticket's title and buttons slide away and come back with less stutter
-  while you scroll its Spec, Transcript or other tabs. The tab you're scrolling no longer redraws
-  each time they move.
+- On iPhone and iPad, a ticket's title and buttons slide away and come back smoothly while you
+  scroll its Spec, Transcript or other tabs. Long transcripts no longer stutter as they move.
 
 ## [app-20261005.1016](https://github.com/markhuot/harness/releases/tag/app-20261005.1016) - 2026-10-05
 
