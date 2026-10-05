@@ -20,6 +20,8 @@ import {
   progressLabel,
   progressOf,
   progressSegments,
+  restartsAt,
+  restartTitle,
   SEGMENT_ORDER,
   waitingOn,
   workingTitle,
@@ -230,6 +232,15 @@ export const autoStartCases = cases(
     "no dependencies": { tickets: {}, ticket: tk({ key: "S-10", autoStart: true }) },
   },
 );
+
+export const restartsAtCases = cases(restartsAt, {
+  "blocked with a restart": tk({ key: "R-1", status: "blocked", resumeAt: 1_791_230_700_000 }),
+  "blocked on a question": tk({ key: "R-2", status: "blocked", resumeAt: null }),
+  "an older payload without the field": tk({ key: "R-3", status: "blocked" }),
+  "no longer blocked": tk({ key: "R-4", status: "in_progress", resumeAt: 1_791_230_700_000 }),
+} satisfies Record<string, Ticket>);
+
+export const restartTitleCases = cases(restartTitle, { time: "2:35 PM" } satisfies Record<string, string>);
 
 export const autoStartTitleCases = cases(autoStartTitle, {
   none: [],

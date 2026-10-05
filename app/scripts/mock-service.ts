@@ -528,6 +528,7 @@ interface SeedTicket {
   skipAgentReview?: boolean;
   skipHumanReview?: boolean;
   blockedReason?: string;
+  resumeAt?: number;
   pendingApproval?: Ticket["pendingApproval"];
   allowedTools?: string[];
   permissionMode?: Ticket["permissionMode"];
@@ -572,6 +573,7 @@ function seedTicket(s: SeedTicket): Ticket {
     workdir: worktree ? `/Users/markhuot/.harness/worktrees/${key}` : s.project.path,
     branch: worktree ? `harness/${key.toLowerCase()}` : null,
     blockedReason: s.blockedReason ?? null,
+    resumeAt: s.resumeAt ?? null,
     permissionMode: s.permissionMode ?? null,
     busy: s.busy ?? false,
     pendingApproval: s.pendingApproval ?? null,
@@ -714,6 +716,18 @@ function seed() {
     ageMin: 25,
     activity: [["agent", "Scaffolded `tests/smoke.spec.ts`. Needs Playwright installed to run it."]],
   }); // HARNESS-9
+  seedTicket({
+    project: hx,
+    key: "HARNESS-21",
+    title: "Walk a purchase on the demo branch",
+    spec: "Merge the latest branches into the demo branch, then walk a purchase step by step.",
+    status: "blocked",
+    driver: "claude-code",
+    blockedReason: "You've hit your limit · resets 2:30pm (America/New_York)",
+    resumeAt: now() + 25 * 60_000,
+    ageMin: 40,
+    activity: [["agent", "Merged the latest branch; clearing the cart for the walkthrough."]],
+  }); // HARNESS-21: stopped on a usage limit, restarts on its own
   seedTicket({
     project: hx,
     key: "HARNESS-20",

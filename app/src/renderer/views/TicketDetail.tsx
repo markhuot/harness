@@ -7,6 +7,8 @@ import {
   attachmentInputs,
   autoStartTitle,
   autoStartWaitingOn,
+  restartsAt,
+  restartTitle,
   CHANGES_LABEL,
   CHANGES_TAB,
   childrenOf,
@@ -526,6 +528,8 @@ function DetailHeader({
     onClose,
   );
   const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
+  // Stopped on a usage limit: the service restarts it on its own after the limit resets.
+  const restart = restartsAt(ticket);
 
   return (
     <div className="detail-head">
@@ -628,6 +632,11 @@ function DetailHeader({
           {waitingToStart.length > 0 && (
             <button className="btn btn-primary" data-testid="start-waiting" disabled title={autoStartTitle(waitingToStart)}>
               <Icon name="clock" /> Starts automatically
+            </button>
+          )}
+          {restart !== null && (
+            <button className="btn btn-primary" data-testid="restart-waiting" disabled title={restartTitle(new Date(restart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}>
+              <Icon name="clock" /> Restarts at {new Date(restart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
             </button>
           )}
           {/* A conductor's child keeps its (turned off) Approve once approved: the conductor lands it. */}

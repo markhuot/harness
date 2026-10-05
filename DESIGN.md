@@ -280,7 +280,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | Chat run | the ticket's own agent (it resumes the session's conversation) with its work tools (a conductor ticket's: the conductor tools), permission mode, grants and prompt sections (Branches, Changing other tickets, Tool approvals), under the "Message run instructions" (`system.chat`). A gated call opens an approval card without moving the ticket (the apps show the card in any column), and answering it resumes a chat. The run ends like a work run once the agent moved the ticket (a submit gets its review; a ticket it unblocked auto-submits, or blocks on a trailing question); one that left the ticket where it is neither auto-submits nor blocks (its last text is its answer, in the transcript). A failed chat adds a `failed` entry and moves nothing, unless it had unblocked the ticket (then it blocks, like a failed work run). 409 while the ticket is completing |
 | Agent calls `submit_for_review(note, spec_is_up_to_date: true)` (in_progress, blocked or review; refused in planning and done, and without `spec_is_up_to_date: true`) | status `review`, `blockedReason` cleared, `agentReview=pending` (`skipped` when the ticket has `skipAgentReview`), `humanReview=pending` (or `approved` when the ticket has `skipHumanReview`, see "Skipping the human review"), a `submitted` entry with the note (`meta.specRevision`); after the run ends enqueue **review** run, unless the agent review was skipped (see "Skipping the agent review") |
 | Work run (or a chat that unblocked the ticket) ends and ticket still in_progress | auto-submit for review; the `submitted` note = the first line of the last assistant text (system author, `activityLine`). A trailing question blocks with it instead (a `blocked` entry) |
-| Work run fails | a `failed` entry; status `blocked`, `blockedReason` = error. A ticket already `done` stays done (only the `failed` entry): a run queued before it completed can only fail on the removed worktree |
+| Work run fails | a `failed` entry; status `blocked`, `blockedReason` = error. A usage limit that names its reset time also sets `resumeAt`, and the ticket restarts on its own (see "Usage limits"). A ticket already `done` stays done (only the `failed` entry): a run queued before it completed can only fail on the removed worktree |
 | Review run fails | a `failed` entry ("Agent review failed: <error>. Re-run agent review to try again."); the ticket stays in review with the agent review `pending`, so the board says why nothing is running |
 | A run starts on a ticket whose worktree is gone (`workdir` missing: the complete run removed it, or an agent or a human did) | every run but a plan run starts in the project checkout instead of failing, with a status line "Worktree missing: running from <path>". The harness repairs nothing: the prompt ends with a harness note (`missingWorktreeNote`) naming the missing path, whether the branch still exists and whether its tip (or, with the branch gone, the last commit an agent review round recorded) is already in the base branch, and on a review that commit. Work, chat and review runs are told to recreate the worktree at the same path (`git worktree add <path> <branch>`, or `-b <branch> <path> <commit or base>`) before changing or testing anything and to leave the checkout alone; a reviewer may review landed work straight from git instead. A complete run is told it doesn't need the worktree back. A chat about a done ticket gets no note (its worktree was removed on purpose). claude-code resumes a conversation only from the directory it started in, so such a run may start a fresh one |
 | Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, with a one-line system `permission` entry whose `meta.detail` (and a transcript status line) lists the denied calls. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
@@ -298,6 +298,30 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 
 Review runs start from a **fresh** driver conversation (independent reviewer) and never
 write driver state back to the session. All other ticket runs resume the session's state.
+
+### Usage limits
+
+A run can stop on a usage limit ("You've hit your limit · resets 2:30pm (America/New_York)", or
+the older "Claude AI usage limit reached|<epoch seconds>"). The ticket blocks like any failed run,
+and when the error says when the limit resets (`usageLimitResetAt` in
+`service/src/orchestrator/usage-limit.ts`), it also gets `Ticket.resumeAt` (column
+`tickets.resume_at`, migration 32): five minutes after the reset, or five minutes from now when the
+reset has already passed. A time without a date is its next occurrence in the named zone (the
+Mac's zone when none is named). Errors that name no reset time block without a restart.
+
+- **Restart.** When `resumeAt` comes, the scheduler (`Orchestrator.resumeDue`, on a timer
+  `armResume` points at the earliest `resumeAt`, and once at start-up for restarts that came due
+  while the service was down) moves the ticket to in progress with `run.work_start`, as a human
+  moving it there does, and a `moved` entry "Restarted after the usage limit reset". If the limit
+  hits again, the ticket blocks again with a new `resumeAt`.
+- **Cancelling.** Any move of the ticket (to planning, in progress, done, or a new block) clears
+  `resumeAt`. A ticket waiting on a tool approval, or with a run going, when its time comes keeps
+  waiting for the human and loses its restart.
+- **Where it shows.** The `failed` entry ends "Restarts on its own at 2:35 PM.", and the transcript
+  gets a status line. On the board the card shows a clock, like a planning ticket waiting on its
+  dependencies (`restartsAt`, `restartTitle` in `shared/src/state/conductor.ts`), and the ticket's
+  detail shows a disabled "Restarts at 2:35 PM" button. A complete run that fails on a limit gets
+  no restart: completions have their own retry (approve again).
 
 ### Agent review
 

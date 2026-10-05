@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- A ticket that stops because you hit a usage limit no longer waits for you to restart it. It
+  moves to Blocked as before, and when the limit says when it resets, the ticket starts again on
+  its own five minutes after that. Its card shows a clock, like a planning ticket waiting on its
+  dependencies, and the ticket shows a "Restarts at 2:35 PM" button, on the Mac and on iPhone and
+  iPad. Moving the ticket anywhere else cancels the restart.
+
 ## [app-20261005.1743](https://github.com/markhuot/harness/releases/tag/app-20261005.1743) - 2026-10-05
 
 ### Added

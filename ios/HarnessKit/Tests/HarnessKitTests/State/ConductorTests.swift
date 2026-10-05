@@ -146,6 +146,16 @@ struct ConductorTests {
         #expect(Conductor.autoStartTitle(c.input) == c.output)
     }
 
+    @Test(arguments: Fixture.cases("stateConductor", "restartsAtCases", input: Ticket.self, output: Timestamp?.self))
+    func restartsAt(_ c: Fixture.Case<Ticket, Timestamp?>) {
+        #expect(Conductor.restartsAt(c.input) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("stateConductor", "restartTitleCases", input: String.self, output: String.self))
+    func restartTitle(_ c: Fixture.Case<String, String>) {
+        #expect(Conductor.restartTitle(c.input) == c.output)
+    }
+
     @Test(arguments: Fixture.cases("stateConductor", "dependencyDepthsCases", input: [Ticket].self, output: [String: Int].self))
     func dependencyDepths(_ c: Fixture.Case<[Ticket], [String: Int]>) {
         #expect(Conductor.dependencyDepths(c.input) == c.output)

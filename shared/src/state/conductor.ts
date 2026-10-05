@@ -148,6 +148,20 @@ export function autoStartTitle(keys: string[]): string {
 }
 
 /**
+ * When a blocked ticket restarts on its own (ms): a run stopped on a usage limit, and the service
+ * restarts it five minutes after the limit resets (`Ticket.resumeAt`). null when it won't: not
+ * blocked, or blocked on anything else.
+ */
+export function restartsAt(t: Ticket): number | null {
+  return t.status === "blocked" && !t.draft && t.resumeAt ? t.resumeAt : null;
+}
+
+/** The restarting card's clock: "Restarts on its own at 2:35 PM" (`time` already formatted). */
+export function restartTitle(time: string): string {
+  return `Restarts on its own at ${time}, after the usage limit resets`;
+}
+
+/**
  * Depth in the sibling dependency graph: 0 = depends on no sibling, n = 1 + deepest sibling dep.
  * Deps outside the set are ignored; cycles are cut (a ticket revisited mid-walk counts as 0).
  */
