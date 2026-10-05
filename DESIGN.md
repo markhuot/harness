@@ -2823,12 +2823,12 @@ the conventions, and ios/README.md the build and test commands.
 - **Browser tab.** Screencast frames are letterboxed into the stage and swapped only once decoded.
   A tap sends move + down + up, a pan sends wheel events in page pixels, and hold-then-drag sends
   a mouse drag (HarnessKit `BrowserInput`). A hidden text field carries the keyboard (diffed into
-  text inserts and Backspaces). A size row under the URL bar has the Desktop | Mobile control,
-  the Responsive switch and width × height fields (see "Browser tabs"); the stage size is sent as
-  `resize` only while this viewer owns Responsive (`sizeOwner`), after the first `browser.state`
-  and only on real changes. Pinching zooms the drawn frame 1–4× around the pinch and two fingers
+  text inserts and Backspaces). A size row under the URL bar, shown by the Size toggle, has the
+  Desktop | Mobile control, the Responsive switch and width × height fields (see "Browser tabs");
+  the stage size is sent as `resize` only while this viewer owns Responsive (`sizeOwner`, also when
+  the service hands it a tab), after the first `browser.state` and only on real changes. Pinching zooms the drawn frame 1–4× around the pinch and two fingers
   pan it (`BrowserZoom`, the port of `shared/src/state/browserZoom.ts`); the page never sees the
-  pinch, and one-finger touches map through the zoomed frame. A + button opens a tab (`newTab`); a strip of chips (shown even for a lone
+  pinch, and one-finger touches map through the zoomed frame. A + button at the end of the tab strip opens a tab (`newTab`); a strip of chips (shown even for a lone
   tab, so it can be torn off) switches (resubscribing with its `tabId`) and closes them. Each Browser view subscribes with
   a viewer id of its own (one UUID per `BrowserTabModel`) and keeps only the frames and states
   for it (`isBrowserEvent`, the port of `isBrowserEventFor`), so a torn-off browser tab and the
