@@ -612,12 +612,14 @@ describe("run prompts", () => {
     expect(workStartPrompt(ticket({ spec: "  " }))).toContain("the title is the whole spec");
   });
 
-  test("a first reviewPrompt inlines the spec, its baseline state and the Activity, and points at get_ticket for the rest", () => {
+  test("a first reviewPrompt names the spec revision to read, its baseline state and the Activity, and points at get_ticket for the rest", () => {
     const text = reviewPrompt(ticket({ specRevision: 3 }), {
       ...firstReview,
       activity: [{ id: "a1", sessionId: "s1", ticketId: "t1", kind: "submitted", author: "agent", body: "Added the toggle", meta: {}, createdAt: 0 } satisfies ActivityEntry],
     });
-    expect(text).toContain("## Spec (revision 3)\nAdd a dark theme toggle to the header.");
+    // The spec isn't inlined: read_spec pins the submitted revision, so the reviewer reads it once.
+    expect(text).toContain("## Spec (revision 3)\nRead it first with `read_spec` { revision: 3 }");
+    expect(text).not.toContain("Add a dark theme toggle to the header.");
     expect(text).toContain("There is no approved baseline");
     expect(text).toContain("## Activity so far\n* submitted, agent: Added the toggle");
     expect(text).not.toContain("## Earlier review rounds");
@@ -628,6 +630,12 @@ describe("run prompts", () => {
     // A ticket linked to a remote ID is fetched by its local key: get_ticket doesn't take remote IDs.
     const linked = ticket({ key: "NYT-124", externalRef: { source: "jira", key: "NYT-62", url: null, raw: null } });
     expect(reviewPrompt(linked, firstReview)).toContain('`get_ticket` { key: "NYT-124" }');
+  });
+
+  test("reviewPrompt says an empty spec leaves only the title instead of sending the reviewer to read_spec", () => {
+    const empty = reviewPrompt(ticket({ spec: " \n" }), firstReview);
+    expect(empty).toContain("The spec is empty; the title is the whole spec.");
+    expect(empty).not.toContain("read_spec");
   });
 
   test("reviewPrompt shows the diff from the approved baseline, or says the spec is unchanged", () => {

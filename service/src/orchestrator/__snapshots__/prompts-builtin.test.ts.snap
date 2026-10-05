@@ -9728,9 +9728,7 @@ exports[`built-in run prompts reviewPrompt · round 1, no baseline 1`] = `
 "Review NYT-3 "Add dark mode".
 
 ## Spec (revision 3)
-Add a dark theme toggle to the header.
-
-* keep \`prefers-color-scheme\`
+Read it first with \`read_spec\` { revision: 3 }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.
 
 ## Spec changes since the human approved it
 There is no approved baseline (the ticket started without planning), so judge the spec as written.
@@ -9745,9 +9743,7 @@ exports[`built-in run prompts reviewPrompt · round 1, spec untouched since the 
 "Review NYT-3 "Add dark mode".
 
 ## Spec (revision 3)
-Add a dark theme toggle to the header.
-
-* keep \`prefers-color-scheme\`
+Read it first with \`read_spec\` { revision: 3 }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.
 
 ## Spec changes since the human approved it
 None: the spec is still revision 3, as the human approved it.
@@ -9763,9 +9759,7 @@ exports[`built-in run prompts reviewPrompt · round 2, with a baseline diff and 
 "Review NYT-3 "Add dark mode": round 2, a re-review.
 
 ## Spec (revision 3)
-Add a dark theme toggle to the header.
-
-* keep \`prefers-color-scheme\`
+Read it first with \`read_spec\` { revision: 3 }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.
 
 ## Spec changes since the human approved it
 Revision 2 is what the human approved by pressing Start:

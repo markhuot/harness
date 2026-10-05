@@ -456,8 +456,13 @@ export class DummyDriver implements Driver {
 
       case "review": {
         // [dummy:reject] rejects every round; [dummy:reject-once] only the first (a re-review's
-        // prompt lists the earlier rounds).
-        const reject = prompt.includes("[dummy:reject]") || (prompt.includes("[dummy:reject-once]") && !prompt.includes("## Earlier review rounds"));
+        // prompt lists the earlier rounds). The prompt names the spec revision rather than
+        // inlining it, so the dummy reads it the way a real reviewer does.
+        const specRev = /`read_spec` \{ revision: (\d+) \}/.exec(prompt)?.[1];
+        const spec: { result?: ToolResult } = {};
+        if (specRev && hasTool("read_spec")) yield* call("read_spec", { revision: Number(specRev) }, spec);
+        const text = `${prompt}\n${spec.result ? resultText(spec.result) : ""}`;
+        const reject = text.includes("[dummy:reject]") || (text.includes("[dummy:reject-once]") && !prompt.includes("## Earlier review rounds"));
         yield* say(reject ? "Reviewing the work: changes are needed." : "Reviewing the work: it looks good.");
         yield* call(
           "review_decision",

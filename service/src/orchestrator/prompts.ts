@@ -416,9 +416,11 @@ export function workStartPrompt(ticket: Ticket, overrides?: PromptOverrides | nu
 }
 
 /**
- * The review run's message: the spec, its changes since the approved baseline, the earlier review
- * rounds and the Activity since the last one. A re-review (round 2 on) is told to look at what
- * changed since the commit the last round reviewed.
+ * The review run's message: the spec revision to read, its changes since the approved baseline,
+ * the earlier review rounds and the Activity since the last one. The spec itself isn't inlined:
+ * revisions never change once written, so the revision number pins exactly what was submitted and
+ * the reviewer reads it once with read_spec (instead of here and again in get_ticket). A re-review
+ * (round 2 on) is told to look at what changed since the commit the last round reviewed.
  */
 export function reviewPrompt(ticket: Ticket, ctx: ReviewContext, overrides?: PromptOverrides | null): string {
   const last = ctx.earlier.at(-1);
@@ -428,7 +430,7 @@ export function reviewPrompt(ticket: Ticket, ctx: ReviewContext, overrides?: Pro
     {
       ticket: ticketLabel(ticket),
       key: ticket.key,
-      spec: specOf(ticket),
+      specEmpty: !ticket.spec.trim(),
       specRevision: String(ticket.specRevision ?? 1),
       baselineRevision: ctx.baselineRevision ? String(ctx.baselineRevision) : "",
       baselineDiff: ctx.baselineDiff ? `${diffFence}diff\n${ctx.baselineDiff}\n${diffFence}` : "",
