@@ -53,7 +53,7 @@ import type {
   WatcherBody,
   WatcherLive,
 } from "@harness/shared";
-import type { BaseBranchSource, BranchInfo, CompletionAction, PromptEntry } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PromptEntry } from "@harness/shared";
 import {
   canonicalGroup,
   checkProjectKey,
@@ -83,7 +83,7 @@ import {
   watcherModel,
 } from "@harness/shared";
 import { SpecConflictError, type Store } from "../store";
-import { grantKey, type TicketPatch } from "../store/tickets";
+import { canonicalJson, grantKey, type TicketPatch } from "../store/tickets";
 import { cachedPullRequestTarget, insideGitCheckout } from "../store/projects";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
@@ -1214,7 +1214,12 @@ export class Orchestrator {
       if (a.id) ids.add(a.id);
       paths.add(a.path);
     };
-    for (const t of this.store.tickets.list({})) if (t.id !== except?.id) for (const a of t.promptAttachments ?? []) add(a);
+    for (const t of this.store.tickets.list({})) {
+      if (t.id === except?.id) continue;
+      for (const a of t.promptAttachments ?? []) add(a);
+      // Files waiting in a message draft.
+      for (const a of t.messageDraft?.attachments ?? []) add(a);
+    }
     // Files sent with messages, which a conductor can pass on the same way.
     for (const m of this.store.transcript.messageAttachments()) if (m.sessionId !== except?.sessionId) add(m.attachment);
     for (const m of this.store.runs.messageAttachments()) if (m.sessionId !== except?.sessionId) add(m.attachment);
@@ -1569,7 +1574,7 @@ export class Orchestrator {
     const still = this.referencedAttachments(ticket);
     const stillUsed = new Set(uploadDirs(this.paths.uploadsDir, [...still.paths].map((path) => ({ path, source: "upload" as const }))));
     const sent = [...this.store.transcript.messageAttachments(ticket.sessionId), ...this.store.runs.messageAttachments().filter((m) => m.sessionId === ticket.sessionId)].map((m) => m.attachment);
-    const own = [...(ticket.promptAttachments ?? []), ...sent].filter((a) => a.source === "upload" && !still.ids.has(a.id));
+    const own = [...(ticket.promptAttachments ?? []), ...(ticket.messageDraft?.attachments ?? []), ...sent].filter((a) => a.source === "upload" && !still.ids.has(a.id));
     const uploads = uploadDirs(this.paths.uploadsDir, own).filter((d) => !stillUsed.has(d));
     const goneIds = own.filter((a) => uploads.some((d) => a.path.startsWith(d + "/"))).map((a) => a.id);
     this.store.transaction(() => {
@@ -1616,7 +1621,45 @@ export class Orchestrator {
    * review ticket back to in progress, or re-opens a done one, before the run starts. Today's apps
    * move a ticket with Request changes and Re-open instead.
    */
-  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; fromApp?: boolean } = {}): Promise<Ticket> {
+    const sent = await this.deliverMessage(key, text, opts);
+    // The human's message went: the draft they wrote it in is used up, on every device. An
+    // agent's message_ticket leaves the human's draft alone.
+    if (!opts.fromApp || !sent.messageDraft) return sent;
+    const t = this.store.tickets.setMessageDraft(sent.id, null)!;
+    this.bus.emit({ kind: "ticket.upserted", ticket: t });
+    return t;
+  }
+
+  /**
+   * Save the message the human is writing to the ticket (DESIGN.md "Message drafts"): the whole
+   * draft, last write wins. Empty text and no attachments clear it. A save that changes nothing
+   * emits nothing.
+   */
+  saveMessageDraft(key: string, body: MessageDraftBody): Ticket {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    if (body.text !== undefined && typeof body.text !== "string") throw badRequest("text must be a string");
+    if (body.origin !== undefined && body.origin !== null && (typeof body.origin !== "string" || body.origin.length > 200)) {
+      throw badRequest("origin must be a string of at most 200 characters");
+    }
+    const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "given a message draft (it has no agent yet)");
+    const previous = ticket.messageDraft ?? null;
+    const text = body.text ?? "";
+    const attachments = body.attachments === undefined || body.attachments === null ? [] : this.resolveAttachments(body.attachments, previous?.attachments ?? []);
+    const origin = body.origin || null;
+    const next: MessageDraft | null = text || attachments.length ? { text, attachments, origin, updatedAt: this.now() } : null;
+    const same =
+      next === null
+        ? previous === null
+        : previous !== null && previous.text === next.text && previous.origin === next.origin && canonicalJson(previous.attachments) === canonicalJson(next.attachments);
+    if (same) return ticket;
+    const t = this.store.tickets.setMessageDraft(ticket.id, next)!;
+    this.bus.emit({ kind: "ticket.upserted", ticket: t });
+    return t;
+  }
+
+  private async deliverMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown }): Promise<Ticket> {
     if (text !== undefined && typeof text !== "string") throw badRequest("text must be a string");
     text = text ?? "";
     const ticket = this.requireTicket(key);
