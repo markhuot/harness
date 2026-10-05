@@ -165,9 +165,10 @@ try {
   const alphaPane = await until("Alpha's pane", () => tornPane("browser:1"), 8000);
   await drag(chip("Beta"), { pane: alphaPane, fx: 0.5, fy: 0.9 });
   const betaPane = await until("Beta's pane", () => tornPane("browser:2"), 8000);
+  // Sampled at the canvas's centre: each tab keeps its own 1280 × 800, letterboxed into its pane.
   const tint = (paneId: string) =>
     js<string>(`(() => { const c = document.querySelector('[data-pane-id="${paneId}"] .browser-canvas'); if (!c || !c.width) return "";
-      const d = c.getContext("2d").getImageData(Math.floor(c.width * 0.8), Math.floor(c.height * 0.8), 1, 1).data;
+      const d = c.getContext("2d").getImageData(Math.floor(c.width * 0.5), Math.floor(c.height * 0.5), 1, 1).data;
       return d[0] > 150 && d[1] < 100 ? "red" : d[1] > 150 && d[0] < 100 ? "green" : ""; })()`);
   const drawn = (paneId: string, colour: string) => until(`a ${colour} frame in ${paneId}`, async () => (await tint(paneId)) === colour, 20000).catch(() => false);
   check("the Alpha pane streams Alpha (red)", await drawn(alphaPane, "red"), await tint(alphaPane));
