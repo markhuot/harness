@@ -6,11 +6,16 @@
 // a browser tab torn off beside it (or two torn-off tabs) stream side by side, each taking its own
 // input, and closing one leaves the others watching. In a ticket, a chip drags off into a pane
 // pinned to that browser tab (`pinnedTab`: no strip); a chip torn off shows a placeholder here.
+//
+// Each tab has its own size (BrowserSize): the bar's Desktop | Mobile, Responsive and width × height
+// set it, and the pane sends its stage size only while it owns Responsive. A trackpad pinch zooms
+// the drawn frame (browserZoom), never the page.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { isBrowserEventFor, type BrowserInput, type BrowserState, type BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
+import { fitRect, normalizeUrl, panRect, toPagePoint, zoomRect, zoomScale, type Rect } from "@harness/shared/state";
+import { drivesSize, responsiveInput, responsiveLook, sideInput, wheelAction } from "../state/browserSize";
 import { Icon } from "../components/Icon";
 import { useAnnotate } from "../components/Annotator";
 import { browserShotName } from "../state/annotator";
@@ -74,11 +79,20 @@ export function BrowserView({
   const [live, setLive] = useState(false);
   const [urlDraft, setUrlDraft] = useState("");
   const editingUrl = useRef(false);
+  const [sizeDraft, setSizeDraft] = useState({ w: "", h: "" });
+  const editingSize = useRef(false);
+  /** The latest state, for callbacks that outlive a render (resize, settleSize). */
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frame = useRef<{ bitmap: ImageBitmap | null; width: number; height: number }>({ bitmap: null, width: 0, height: 0 });
   const drawn = useRef<Rect>({ x: 0, y: 0, w: 0, h: 0 });
+  /** The pinch-zoomed frame (null at 1×) and the fitted rect it was zoomed from; a new fit drops it. */
+  const zoom = useRef<{ fit: Rect; rect: Rect } | null>(null);
+  /** The zoom as a percentage, re-rendered for the bar's badge (zoom itself lives in the ref). */
+  const [zoomPct, setZoomPct] = useState(100);
   const decoding = useRef(false);
   const pending = useRef<{ data: string; width: number; height: number } | null>(null);
   const lastFrameAt = useRef(0);
@@ -123,16 +137,52 @@ export function BrowserView({
     ctx.clearRect(0, 0, cw, ch);
     const { bitmap, width, height } = frame.current;
     if (!bitmap) return;
-    // Frames are page CSS pixels; fit that page into the stage, full bleed (the page is resized to the stage).
-    const r = fitRect(cw, ch, width || bitmap.width, height || bitmap.height);
+    // Frames are page CSS pixels; fit that page into the stage (shrunk to fit, or centered), then
+    // through the pinch-zoom, which only holds while the fit it was made from does.
+    const fit = fitRect(cw, ch, width || bitmap.width, height || bitmap.height);
+    const z = zoom.current;
+    if (z && !sameRect(z.fit, fit)) {
+      zoom.current = null;
+      setZoomPct(100);
+    }
+    const r = zoom.current?.rect ?? fit;
     drawn.current = r;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bitmap, r.x, r.y, r.w, r.h);
   }, []);
 
+  /** The frame as fitted into the stage, unzoomed. */
+  const fitted = useCallback((): Rect | null => {
+    const stage = stageRef.current;
+    const { bitmap, width, height } = frame.current;
+    if (!stage || !bitmap) return null;
+    const r = fitRect(stage.clientWidth, stage.clientHeight, width || bitmap.width, height || bitmap.height);
+    return r.w && r.h ? r : null;
+  }, []);
+
+  /** Show the frame at `rect` (from zoomRect/panRect); a rect back at the fit is 1×. */
+  const setZoom = useCallback(
+    (fit: Rect, rect: Rect) => {
+      const scale = zoomScale(fit, rect);
+      zoom.current = scale > 1 ? { fit, rect } : null;
+      setZoomPct(Math.round((zoom.current ? scale : 1) * 100));
+      draw();
+    },
+    [draw],
+  );
+
+  const resetZoom = useCallback(() => {
+    if (!zoom.current) return;
+    zoom.current = null;
+    setZoomPct(100);
+    draw();
+  }, [draw]);
+
   /** Blank the canvas (a new session, or another tab) until that tab's first frame arrives. */
   const clearFrame = useCallback(() => {
+    zoom.current = null;
+    setZoomPct(100);
     frameGen.current++;
     pending.current = null;
     frame.current.bitmap?.close();
@@ -162,6 +212,11 @@ export function BrowserView({
             continue;
           }
           frame.current.bitmap?.close();
+          // A new page size (Desktop/Mobile, width × height, a responsive resize) starts at 1×.
+          if (next.width !== frame.current.width || next.height !== frame.current.height) {
+            zoom.current = null;
+            setZoomPct(100);
+          }
           frame.current = { bitmap, width: next.width, height: next.height };
           draw();
           debugStats.drawn++;
@@ -253,6 +308,11 @@ export function BrowserView({
     if (!editingUrl.current) setUrlDraft(state?.url ?? "");
   }, [state?.url]);
 
+  const size = state?.size;
+  useEffect(() => {
+    if (!editingSize.current) setSizeDraft(size ? { w: String(size.width), h: String(size.height) } : { w: "", h: "" });
+  }, [size?.width, size?.height]);
+
   // "Live" indicator decays when frames stop.
   useEffect(() => {
     const t = setInterval(() => setLive(Date.now() - lastFrameAt.current < 2000), 500);
@@ -264,12 +324,14 @@ export function BrowserView({
   // The service restarts the screencast on every resize, and overlapping restarts (or one that
   // races the subscribe) leave the tab without frames. So: send nothing until the subscription
   // is confirmed (first browser.state for this session), then only real size changes, debounced.
+  // And only from the pane that owns Responsive (drivesSize): the service drops anyone else's, so a
+  // pane never resizes a tab by being opened.
   const subscribed = useRef(false);
   const lastSize = useRef("");
   const resizeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendResize = useCallback(() => {
     const stage = stageRef.current;
-    if (!stage || !subscribed.current) return;
+    if (!stage || !subscribed.current || !drivesSize(stateRef.current)) return;
     const width = Math.round(stage.clientWidth);
     const height = Math.round(stage.clientHeight);
     const key = sizeKey(width, height);
@@ -289,11 +351,12 @@ export function BrowserView({
    * The tab at the pane's size before a screenshot: a resize still waiting on its debounce goes
    * now, then this waits (up to 2 s) for a frame at that size. A screenshot taken before the
    * resize lands would show the page at its old size, and every element lookup on it would come
-   * back empty once the tab is resized under it.
+   * back empty once the tab is resized under it. A tab this pane doesn't drive keeps its size, so
+   * there's nothing to wait for.
    */
   const settleSize = useCallback(async () => {
     const stage = stageRef.current;
-    if (!stage || !subscribed.current) return;
+    if (!stage || !subscribed.current || !drivesSize(stateRef.current)) return;
     if (resizeTimer.current) {
       clearTimeout(resizeTimer.current);
       resizeTimer.current = null;
@@ -366,7 +429,19 @@ export function BrowserView({
       if (wait <= 0) flushMove();
       else if (!moveTimer) moveTimer = setTimeout(flushMove, wait);
     };
+    // ⌥-double-click while zoomed goes back to 1× instead of reaching the page (its up too).
+    let swallowUp = false;
     const onButton = (action: "down" | "up") => (e: MouseEvent) => {
+      if (action === "down" && e.altKey && e.detail === 2 && zoom.current) {
+        e.preventDefault();
+        swallowUp = true;
+        resetZoom();
+        return;
+      }
+      if (action === "up" && swallowUp) {
+        swallowUp = false;
+        return;
+      }
       const p = toPage(e.clientX, e.clientY);
       if (action === "down") canvas.focus();
       if (!p) return;
@@ -377,11 +452,31 @@ export function BrowserView({
     const onDown = onButton("down");
     const onUp = onButton("up");
     const onWheel = (e: WheelEvent) => {
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.clientHeight : 1;
+      const deltaX = e.deltaX * unit;
+      const deltaY = e.deltaY * unit;
+      const what = wheelAction({ ctrlKey: e.ctrlKey, deltaX, deltaY }, zoom.current !== null);
+      if (what.kind !== "page") {
+        // A pinch (or a scroll while zoomed) is the pane's own: it never reaches the page, and
+        // never zooms the app window either.
+        e.preventDefault();
+        const fit = fitted();
+        if (!fit) return;
+        const stage = { w: canvas.clientWidth, h: canvas.clientHeight };
+        const current = zoom.current?.rect ?? fit;
+        const box = canvas.getBoundingClientRect();
+        setZoom(
+          fit,
+          what.kind === "zoom"
+            ? zoomRect(stage, fit, current, what.factor, { x: e.clientX - box.left, y: e.clientY - box.top })
+            : panRect(stage, fit, current, what.dx, what.dy),
+        );
+        return;
+      }
       const p = toPage(e.clientX, e.clientY);
       if (!p) return;
       e.preventDefault();
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? canvas.clientHeight : 1;
-      send({ type: "mouse", action: "wheel", ...p, deltaX: e.deltaX * unit, deltaY: e.deltaY * unit });
+      send({ type: "mouse", action: "wheel", ...p, deltaX, deltaY });
     };
     const onContext = (e: MouseEvent) => e.preventDefault();
     const onPaste = (e: ClipboardEvent) => {
@@ -408,7 +503,7 @@ export function BrowserView({
       canvas.removeEventListener("contextmenu", onContext);
       document.removeEventListener("paste", onPaste);
     };
-  }, [send, toPage]);
+  }, [send, toPage, fitted, setZoom, resetZoom]);
 
   const onKey = (action: "down" | "up") => (e: ReactKeyboardEvent<HTMLCanvasElement>) => {
     const k = e.key.toLowerCase();
@@ -436,6 +531,53 @@ export function BrowserView({
     const next = await act(() => client.browserNavigate(sessionId, url, typeof tab === "number" ? tab : undefined));
     if (next && (next.tabId === undefined || viewTab.current === undefined || next.tabId === viewTab.current)) applyState(next);
   };
+
+  const look = responsiveLook(state);
+  const toggleResponsive = () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const input = responsiveInput(look, { width: stage.clientWidth, height: stage.clientHeight });
+    // The switch carries this stage's size, so the debounced resize that follows has nothing new to say.
+    if (input.type === "responsive" && input.on) lastSize.current = sizeKey(input.width ?? 0, input.height ?? 0);
+    send(input);
+  };
+
+  /** Send the width × height drafts (when they changed) and leave editing. */
+  const commitSize = () => {
+    editingSize.current = false;
+    if (!size) return;
+    const width = sideInput(sizeDraft.w, size.width);
+    const height = sideInput(sizeDraft.h, size.height);
+    setSizeDraft({ w: String(width), h: String(height) });
+    if (width !== size.width || height !== size.height) send({ type: "size", width, height });
+  };
+  const revertSize = () => {
+    editingSize.current = false;
+    if (size) setSizeDraft({ w: String(size.width), h: String(size.height) });
+    (document.activeElement as HTMLElement | null)?.blur();
+  };
+  const sizeField = (axis: "w" | "h") => (
+    <input
+      className="browser-size-input mono"
+      inputMode="numeric"
+      aria-label={axis === "w" ? "Width" : "Height"}
+      title={axis === "w" ? "Page width in CSS pixels" : "Page height in CSS pixels"}
+      value={sizeDraft[axis]}
+      spellCheck={false}
+      onFocus={(e) => {
+        editingSize.current = true;
+        e.currentTarget.select();
+      }}
+      onChange={(e) => setSizeDraft((d) => ({ ...d, [axis]: e.target.value }))}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commitSize();
+          e.currentTarget.blur();
+        }
+        if (e.key === "Escape") revertSize();
+      }}
+    />
+  );
 
   // ------------------------------------------------------------------ tabs
 
@@ -592,6 +734,50 @@ export function BrowserView({
           />
           {state?.title && <span className="browser-title truncate">{state.title}</span>}
         </div>
+        {size && (
+          <div className="browser-size-controls">
+            <div className="segmented browser-device" role="group" aria-label="Device">
+              {(["desktop", "mobile"] as const).map((device) => (
+                <button
+                  key={device}
+                  className={size.device === device ? "on" : ""}
+                  aria-pressed={size.device === device}
+                  aria-label={device === "desktop" ? "Desktop" : "Mobile"}
+                  title={device === "desktop" ? "Desktop: a mouse pointer at 1280 × 800" : "Mobile: touch and an iPhone's user agent at 393 × 852"}
+                  data-testid={`browser-device-${device}`}
+                  onClick={() => send({ type: "device", device })}
+                >
+                  <Icon name={device === "desktop" ? "pointer" : "phone"} size={13} />
+                </button>
+              ))}
+            </div>
+            <button
+              className={`btn btn-ghost btn-icon btn-sm browser-responsive ${look}`}
+              aria-pressed={look !== "off"}
+              aria-label="Responsive"
+              title={look === "owned" ? "Responsive: the page follows this pane's size" : look === "following" ? "Following another window" : "Responsive: make the page follow this pane's size"}
+              data-testid="browser-responsive"
+              onClick={toggleResponsive}
+            >
+              <Icon name="expand" />
+            </button>
+            <div
+              className="browser-size"
+              onBlur={(e) => {
+                if (editingSize.current && !e.currentTarget.contains(e.relatedTarget as Node | null)) commitSize();
+              }}
+            >
+              {sizeField("w")}
+              <span className="browser-size-x">×</span>
+              {sizeField("h")}
+            </div>
+          </div>
+        )}
+        {zoomPct > 100 && (
+          <button className="btn btn-ghost btn-sm browser-zoom mono" title="Zoomed in: ⌥-double-click the page, or click here, for 100%" onClick={resetZoom}>
+            {zoomPct}%
+          </button>
+        )}
         {tabs && !pinned && (
           <button className="btn btn-ghost btn-icon btn-sm" title="New tab" aria-label="New tab" data-testid="browser-new-tab" onClick={newTab}>
             <Icon name="plus" />
@@ -636,6 +822,10 @@ export function BrowserView({
       </div>
     </div>
   );
+}
+
+function sameRect(a: Rect, b: Rect): boolean {
+  return a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
 }
 
 /** A tab size as the pane compares them: whole CSS pixels. */
