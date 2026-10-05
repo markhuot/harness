@@ -131,7 +131,7 @@ struct BrowserTabView: View {
 
     // MARK: Tabs
 
-    /// The open tabs, once there are two or more; the shown one is highlighted and kept in view.
+    /// The open tabs, even a lone one (so it can be torn off); the shown one is highlighted and kept in view.
     @ViewBuilder private var tabStrip: some View {
         let tabs = pinnedTab == nil ? BrowserTabSelection.strip(model.state) : []
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)

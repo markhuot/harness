@@ -50,10 +50,10 @@ struct BrowserTabSelectionTests {
         #expect(s.accepts(frameTabId: 1))
     }
 
-    @Test func theStripShowsFromTwoTabs() {
+    @Test func theStripShowsEveryTabEvenALoneOne() {
         #expect(BrowserTabSelection.strip(nil).isEmpty)
         #expect(BrowserTabSelection.strip(state(1)).isEmpty)
-        #expect(BrowserTabSelection.strip(state(1, tabs: [tab(1)])).isEmpty)
+        #expect(BrowserTabSelection.strip(state(1, tabs: [tab(1)])).map(\.id) == [1])
         #expect(BrowserTabSelection.strip(state(1, tabs: [tab(1), tab(2)])).map(\.id) == [1, 2])
         #expect(!BrowserTabSelection.supportsTabs(nil))
         #expect(!BrowserTabSelection.supportsTabs(state(nil)))
