@@ -45,7 +45,7 @@ import type {
   Watcher,
 } from "@harness/shared";
 import type { PromptEntry, PromptId } from "@harness/shared";
-import { buildPairUrl, checkProjectKey, isCompletionAction, isLegacyMirror, isTicketKey, LISTEN_MODES, normalizeProjectColor, offeredCompletionActions, outputTitle, PROMPT_IDS, resolveCompletionAction, reviewPassed } from "@harness/shared";
+import { buildPairUrl, canonicalGroup, checkProjectKey, isCompletionAction, isLegacyMirror, isTicketKey, LISTEN_MODES, normalizeProjectColor, normalizeProjectGroup, offeredCompletionActions, outputTitle, projectGroups, PROMPT_IDS, resolveCompletionAction, reviewPassed } from "@harness/shared";
 import type { CompletionAction } from "@harness/shared";
 // The real catalog, so the Prompts screen shows the text runs get.
 import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
@@ -455,6 +455,13 @@ function checkCompletionAction(t: Ticket, requested: unknown): CompletionAction 
   return r.action;
 }
 
+/** A project group from a request, spelled like an existing group that matches it without case (as the service does). */
+function mockGroup(value: unknown, except?: string): string | null {
+  const group = normalizeProjectGroup(value);
+  if (group === undefined) throw new HttpError(400, `Invalid group ${JSON.stringify(value)}`);
+  return group === null ? null : canonicalGroup(group, projectGroups([...projects.values()].filter((p) => p.id !== except)));
+}
+
 function seedProject(key: string, name: string, path: string, skipHumanReview = false, color: string | null = null, isGit = true, pullRequestHost: string | null = null): Project {
   const p: Project = {
     id: newId("proj"),
@@ -470,6 +477,7 @@ function seedProject(key: string, name: string, path: string, skipHumanReview = 
     skipHumanReview,
     permissionMode: null,
     color,
+    group: null,
     completionAction: "merge",
     pullRequestHost: isGit ? pullRequestHost : null,
     createdAt: now() - 86400_000 * 7,
@@ -1522,6 +1530,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         skipHumanReview: body.skipHumanReview ?? false,
         permissionMode: body.permissionMode ?? null,
         color: normalizeProjectColor(body.color ?? null) ?? null,
+        group: mockGroup(body.group),
         completionAction: "merge",
         pullRequestHost: null,
         createdAt: now(),
@@ -1558,6 +1567,7 @@ async function route(req: Request, url: URL): Promise<Response> {
         if (color === undefined) throw new HttpError(400, `Invalid color ${JSON.stringify(body.color)}`);
         body.color = color;
       }
+      if (body.group !== undefined) body.group = mockGroup(body.group, p.id);
       Object.assign(p, body, { id: p.id, key: p.key, updatedAt: now() });
       withCompletionActions(p);
       broadcast({ kind: "project.upserted", project: p });
@@ -1573,8 +1583,9 @@ async function route(req: Request, url: URL): Promise<Response> {
   // Tickets
   if (a === "tickets") {
     const pid = url.searchParams.get("projectId");
+    const group = url.searchParams.get("group");
     const statuses = url.searchParams.get("status")?.split(",").filter(Boolean) ?? [];
-    const inProject = (t: Ticket) => !pid || t.projectId === pid;
+    const inProject = (t: Ticket) => (!pid || t.projectId === pid) && (!group || projects.get(t.projectId)?.group === group);
     if (!b && method === "GET") {
       return ok([...tickets.values()].filter((t) => inProject(t) && (!statuses.length || statuses.includes(t.status))));
     }

@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac, projects can share a group, such as Work or Personal. Pick a group in a project's
+  settings: the Group field completes to a group you already have, or press Return to start a new
+  one with the name you typed. Each group gets its own board with only its projects' tickets,
+  listed under All projects in the sidebar in alphabetical order, and the command palette's
+  Board: entries include the groups.
+
 ### Fixed
 
 - When you message a done ticket and ask for more work (another check, a fix), the agent now
