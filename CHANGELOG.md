@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- A ticket whose completion stops on a usage or spend limit now moves to Blocked with the limit
+  as its reason, instead of sitting in Review. When the limit says when it resets, the ticket
+  restarts on its own a few minutes after, goes back through review, and is completed again once
+  approved.
+
 ## [app-20261005.2050](https://github.com/markhuot/harness/releases/tag/app-20261005.2050) - 2026-10-05
 
 ### Added
