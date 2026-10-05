@@ -61,6 +61,92 @@ public enum BrowserZoom {
     public static func panRect(box: Box, fit: Rect, drawn: Rect, dx: Double, dy: Double) -> Rect {
         clampZoomRect(box: box, fit: fit, rect: Rect(x: drawn.x + dx, y: drawn.y + dy, w: drawn.w, h: drawn.h))
     }
+
+    /// One pinch step: zoom around the old center, then pan by the center's move, so the page point
+    /// that was under the fingers stays under them.
+    public static func apply(_ step: BrowserPinch.Step, box: Box, fit: Rect, drawn: Rect) -> Rect {
+        panRect(box: box, fit: fit, drawn: zoomRect(box: box, fit: fit, drawn: drawn, factor: step.factor, anchor: step.anchor), dx: step.dx, dy: step.dy)
+    }
+}
+
+/// Two fingers on the stage → zoom steps for BrowserZoom (iOS only; the Mac pinches with its
+/// trackpad's magnification). Each `move` is one step: the scale change since the last one, the
+/// old pinch center to zoom around, and how far the center moved (a two-finger drag pans). Two
+/// quick two-finger taps in a row reset the zoom. Driven by explicit points (stage coordinates) and
+/// timestamps (ms), like TouchGesture.
+public struct BrowserPinch: Sendable {
+    public struct Step: Sendable, Equatable {
+        public var factor: Double
+        public var anchor: Format.Point
+        public var dx: Double
+        public var dy: Double
+        public init(factor: Double, anchor: Format.Point, dx: Double, dy: Double) {
+            self.factor = factor
+            self.anchor = anchor
+            self.dx = dx
+            self.dy = dy
+        }
+    }
+
+    /// Two fingers down and up within this, moving less than `slop` between them, is a tap.
+    public var tapMs: Double = 250
+    public var slop: Double = 10
+    /// A second two-finger tap starting this soon after the first ended resets the zoom.
+    public var doubleTapMs: Double = 350
+
+    private var a: Format.Point?
+    private var b: Format.Point?
+    private var startAt: Double = 0
+    private var travel: Double = 0
+    private var lastTapAt: Double?
+
+    public init() {}
+
+    public var active: Bool { a != nil }
+
+    public mutating func begin(_ a: Format.Point, _ b: Format.Point, at: Double) {
+        self.a = a
+        self.b = b
+        startAt = at
+        travel = 0
+    }
+
+    public mutating func move(_ a2: Format.Point, _ b2: Format.Point) -> Step? {
+        guard let a, let b else { return nil }
+        let d0 = hypot(b.x - a.x, b.y - a.y)
+        let d1 = hypot(b2.x - a2.x, b2.y - a2.y)
+        let c0 = Format.Point(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+        let c1 = Format.Point(x: (a2.x + b2.x) / 2, y: (a2.y + b2.y) / 2)
+        travel += hypot(a2.x - a.x, a2.y - a.y) + hypot(b2.x - b.x, b2.y - b.y)
+        self.a = a2
+        self.b = b2
+        return Step(factor: d0 > 0 ? d1 / d0 : 1, anchor: c0, dx: c1.x - c0.x, dy: c1.y - c0.y)
+    }
+
+    /// The pinch ended (a finger lifted): true when it was the second of two quick two-finger
+    /// taps, so the zoom resets.
+    public mutating func end(at: Double) -> Bool {
+        guard active else { return false }
+        a = nil
+        b = nil
+        guard at - startAt <= tapMs, travel < slop else {
+            lastTapAt = nil
+            return false
+        }
+        if let last = lastTapAt, startAt - last <= doubleTapMs {
+            lastTapAt = nil
+            return true
+        }
+        lastTapAt = at
+        return false
+    }
+
+    /// The system took the touches: no tap, nothing pending.
+    public mutating func cancel() {
+        a = nil
+        b = nil
+        lastTapAt = nil
+    }
 }
 
 /// JS truthiness of a number: NaN and ±0 are falsy.
