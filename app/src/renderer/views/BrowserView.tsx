@@ -595,7 +595,8 @@ export function BrowserView({
     // tab's); its browser.state and last frame follow.
     editingUrl.current = false;
     setUrlDraft(tab.url);
-    setState((s) => s && { ...s, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading });
+    // Its own size too; Responsive never follows a viewer to another tab (the service ends it on a switch).
+    setState((s) => s && { ...s, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading, size: tab.size ?? s.size, sizeOwner: false });
     socket.subscribeBrowser(sessionId, tab.id, viewerId);
   };
 

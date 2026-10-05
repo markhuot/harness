@@ -155,6 +155,8 @@ final class BrowserTabModel {
             s.title = t.title
             s.loading = t.loading
             s.size = t.size ?? s.size
+            // Responsive never follows a viewer to another tab (the service ends it on a switch).
+            s.sizeOwner = false
             state = s
         }
         store?.subscribeBrowser(sessionId, tabId: id, viewer: viewer)
