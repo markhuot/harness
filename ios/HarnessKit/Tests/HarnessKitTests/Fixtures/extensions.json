@@ -1,0 +1,387 @@
+{
+  "extensionNoteCases": [
+    {
+      "name": "loaded from the store shows its description",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": true,
+        "status": "loaded",
+        "hasAction": true,
+        "description": "Adds React debugging tools."
+      },
+      "output": {
+        "text": "Adds React debugging tools.",
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "loaded unpacked shows nothing (its path shows)",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "unpacked",
+        "enabled": true,
+        "status": "loaded",
+        "hasAction": true,
+        "path": "/x",
+        "description": "Ignored"
+      },
+      "output": {
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "waiting store install",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": true,
+        "status": "pending",
+        "hasAction": true
+      },
+      "output": {
+        "badge": "Waiting",
+        "text": "Installs the next time the browser starts.",
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "waiting unpacked load",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "unpacked",
+        "enabled": true,
+        "status": "pending",
+        "hasAction": true
+      },
+      "output": {
+        "badge": "Waiting",
+        "text": "Loads the next time the browser starts.",
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "off",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": false,
+        "status": "off",
+        "hasAction": true
+      },
+      "output": {
+        "badge": "Off",
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "blocked with Chrome's reason",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": true,
+        "status": "blocked",
+        "hasAction": true,
+        "error": "Your organization's Chrome policy doesn't allow Dark Reader."
+      },
+      "output": {
+        "badge": "Blocked",
+        "text": "Your organization's Chrome policy doesn't allow Dark Reader.",
+        "tone": "error"
+      }
+    },
+    {
+      "name": "blocked without a reason",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": true,
+        "status": "blocked",
+        "hasAction": true
+      },
+      "output": {
+        "badge": "Blocked",
+        "text": "Your organization's Chrome policy doesn't allow it.",
+        "tone": "error"
+      }
+    },
+    {
+      "name": "error with a reason",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": true,
+        "status": "error",
+        "hasAction": true,
+        "error": "bad manifest"
+      },
+      "output": {
+        "badge": "Error",
+        "text": "bad manifest",
+        "tone": "error"
+      }
+    },
+    {
+      "name": "error without a reason",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "webstore",
+        "enabled": true,
+        "status": "error",
+        "hasAction": true
+      },
+      "output": {
+        "badge": "Error",
+        "text": "Chrome couldn't install or load it.",
+        "tone": "error"
+      }
+    },
+    {
+      "name": "installed by policy",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "chrome",
+        "enabled": true,
+        "status": "loaded",
+        "hasAction": true,
+        "byPolicy": true,
+        "description": "Password Alert helps protect against phishing attacks."
+      },
+      "output": {
+        "badge": "Installed by your organization",
+        "text": "Password Alert helps protect against phishing attacks.",
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "installed elsewhere and off",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "chrome",
+        "enabled": false,
+        "status": "off",
+        "hasAction": true
+      },
+      "output": {
+        "badge": "Off",
+        "tone": "normal"
+      }
+    },
+    {
+      "name": "installed elsewhere and on",
+      "input": {
+        "id": "fmkadmapgofadopljbjfkapdkoienihi",
+        "name": "React Developer Tools",
+        "version": "8.0.0",
+        "source": "chrome",
+        "enabled": true,
+        "status": "loaded",
+        "hasAction": true
+      },
+      "output": {
+        "tone": "normal"
+      }
+    }
+  ],
+  "extensionsWaitingCases": [
+    {
+      "name": "running: pending ones count",
+      "input": {
+        "running": true,
+        "extensions": [
+          {
+            "id": "fmkadmapgofadopljbjfkapdkoienihi",
+            "name": "React Developer Tools",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "pending",
+            "hasAction": true
+          },
+          {
+            "id": "fmkadmapgofadopljbjfkapdkoienihi",
+            "name": "React Developer Tools",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "pending",
+            "hasAction": true
+          },
+          {
+            "id": "fmkadmapgofadopljbjfkapdkoienihi",
+            "name": "React Developer Tools",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "loaded",
+            "hasAction": true
+          }
+        ]
+      },
+      "output": 2
+    },
+    {
+      "name": "not running: its next start picks them up",
+      "input": {
+        "running": false,
+        "extensions": [
+          {
+            "id": "fmkadmapgofadopljbjfkapdkoienihi",
+            "name": "React Developer Tools",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "pending",
+            "hasAction": true
+          }
+        ]
+      },
+      "output": 0
+    },
+    {
+      "name": "nothing waits",
+      "input": {
+        "running": true,
+        "extensions": [
+          {
+            "id": "fmkadmapgofadopljbjfkapdkoienihi",
+            "name": "React Developer Tools",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "off",
+            "hasAction": true
+          }
+        ]
+      },
+      "output": 0
+    }
+  ],
+  "runnableExtensionsCases": [
+    {
+      "name": "loaded with a button or options page, by name",
+      "input": {
+        "running": true,
+        "extensions": [
+          {
+            "id": "b",
+            "name": "Zeta",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "loaded",
+            "hasAction": true
+          },
+          {
+            "id": "c",
+            "name": "alpha",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "loaded",
+            "hasAction": false,
+            "optionsUrl": "chrome-extension://c/o.html"
+          },
+          {
+            "id": "d",
+            "name": "Quiet",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "loaded",
+            "hasAction": false
+          },
+          {
+            "id": "e",
+            "name": "Off one",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "off",
+            "hasAction": true
+          },
+          {
+            "id": "f",
+            "name": "Waiting",
+            "version": "8.0.0",
+            "source": "webstore",
+            "enabled": true,
+            "status": "pending",
+            "hasAction": true
+          },
+          {
+            "id": "g",
+            "name": "Org",
+            "version": "8.0.0",
+            "source": "chrome",
+            "enabled": true,
+            "status": "loaded",
+            "hasAction": true,
+            "byPolicy": true
+          }
+        ]
+      },
+      "output": [
+        {
+          "id": "c",
+          "name": "alpha",
+          "version": "8.0.0",
+          "source": "webstore",
+          "enabled": true,
+          "status": "loaded",
+          "hasAction": false,
+          "optionsUrl": "chrome-extension://c/o.html"
+        },
+        {
+          "id": "g",
+          "name": "Org",
+          "version": "8.0.0",
+          "source": "chrome",
+          "enabled": true,
+          "status": "loaded",
+          "hasAction": true,
+          "byPolicy": true
+        },
+        {
+          "id": "b",
+          "name": "Zeta",
+          "version": "8.0.0",
+          "source": "webstore",
+          "enabled": true,
+          "status": "loaded",
+          "hasAction": true
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": {
+        "running": false,
+        "extensions": []
+      },
+      "output": []
+    }
+  ]
+}

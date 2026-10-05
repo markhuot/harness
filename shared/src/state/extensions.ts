@@ -1,6 +1,7 @@
-// What Settings → Extensions and the browser's extensions menu say about each extension.
+// What Settings → Extensions and the browser's extensions menu say about each extension, on the
+// Mac and on iPhone and iPad (HarnessKit's Extensions.swift ports it; fixtures/cases/extensions.ts).
 
-import type { BrowserExtension, BrowserExtensionList } from "@harness/shared";
+import type { BrowserExtension, BrowserExtensionList } from "../protocol";
 
 export interface ExtensionNote {
   /** A short label beside the name, when its status needs one. */

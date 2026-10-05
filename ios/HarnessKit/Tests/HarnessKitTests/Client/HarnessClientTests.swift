@@ -270,6 +270,44 @@ struct HarnessClientRequestTests {
         #expect(path(none) == "/browser/ses_1")
     }
 
+    @Test func browserExtensionCalls() async throws {
+        let list = FakeTransport(status: 200, body: try envelope(protocolSample("BrowserExtensionList")))
+        let got = try await client(list).listBrowserExtensions()
+        #expect(path(list) == "/browser-extensions" && list.last?.method == "GET")
+        #expect(got.running && got.extensions.first?.status == .loaded && got.extensions.last?.byPolicy == true)
+
+        let ext = try envelope(protocolSample("BrowserExtension"))
+        let add = FakeTransport(status: 200, body: ext)
+        _ = try await client(add).addBrowserExtension(.webstore("fmkadmapgofadopljbjfkapdkoienihi"))
+        #expect(path(add) == "/browser-extensions" && add.last?.method == "POST")
+        #expect(try bodyJSON(add.last) == json(#"{"webstore":"fmkadmapgofadopljbjfkapdkoienihi"}"#))
+        let addPath = FakeTransport(status: 200, body: ext)
+        _ = try await client(addPath).addBrowserExtension(.path("~/ext"))
+        #expect(try bodyJSON(addPath.last) == json(#"{"path":"~/ext"}"#))
+
+        let toggle = FakeTransport(status: 200, body: ext)
+        _ = try await client(toggle).setBrowserExtensionEnabled("abc", enabled: false)
+        #expect(path(toggle) == "/browser-extensions/abc" && toggle.last?.method == "PATCH")
+        #expect(try bodyJSON(toggle.last) == json(#"{"enabled":false}"#))
+
+        let remove = FakeTransport(status: 200, body: #"{"data":{"ok":true}}"#)
+        _ = try await client(remove).removeBrowserExtension("abc")
+        #expect(path(remove) == "/browser-extensions/abc" && remove.last?.method == "DELETE")
+
+        let restart = FakeTransport(status: 200, body: #"{"data":{"ok":true}}"#)
+        _ = try await client(restart).restartBrowser()
+        #expect(path(restart) == "/browser/restart" && restart.last?.method == "POST")
+
+        let action = FakeTransport(status: 200, body: #"{"data":{"tab":null}}"#)
+        let res = try await client(action).browserExtensionAction("ses_1", id: "abc")
+        #expect(res.tab == nil)
+        #expect(path(action) == "/browser/ses_1/extension-action")
+        #expect(try bodyJSON(action.last) == json(#"{"id":"abc"}"#))
+        let actionTab = FakeTransport(status: 200, body: #"{"data":{"tab":4}}"#)
+        #expect(try await client(actionTab).browserExtensionAction("ses_1", id: "abc", tabId: 2).tab == 4)
+        #expect(try bodyJSON(actionTab.last) == json(#"{"id":"abc","tabId":2}"#))
+    }
+
     @Test func browserCallsCarryTheTabOnlyWhenGiven() async throws {
         let get = FakeTransport(status: 200, body: try envelope(protocolSample("BrowserState")))
         _ = try await client(get).browserState("ses_1", tabId: 3)

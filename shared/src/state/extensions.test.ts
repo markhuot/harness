@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BrowserExtension } from "@harness/shared";
+import type { BrowserExtension } from "../protocol";
 import { extensionNote, extensionsWaiting, runnableExtensions } from "./extensions";
 
 const ext = (over: Partial<BrowserExtension>): BrowserExtension => ({

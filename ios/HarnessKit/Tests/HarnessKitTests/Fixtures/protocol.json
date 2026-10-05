@@ -126,6 +126,14 @@
     },
     {}
   ],
+  "AddBrowserExtensionBody": [
+    {
+      "webstore": "https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi"
+    },
+    {
+      "path": "~/code/my-extension"
+    }
+  ],
   "AnnotationMark": [
     {
       "n": 1,
@@ -395,6 +403,95 @@
         "width": 390,
         "height": 844
       }
+    }
+  ],
+  "BrowserExtension": [
+    {
+      "id": "fmkadmapgofadopljbjfkapdkoienihi",
+      "name": "React Developer Tools",
+      "version": "8.0.0",
+      "description": "Adds React debugging tools to the Chrome Developer Tools.",
+      "source": "webstore",
+      "enabled": true,
+      "status": "loaded",
+      "hasAction": true,
+      "addedAt": 1759190400000
+    },
+    {
+      "id": "abcdefghijklmnopabcdefghijklmnop",
+      "name": "My extension",
+      "version": "0.1.0",
+      "source": "unpacked",
+      "path": "/Users/mark/code/my-extension",
+      "enabled": true,
+      "status": "blocked",
+      "error": "Your organization's Chrome policy doesn't allow unpacked extensions in this browser.",
+      "hasAction": false,
+      "optionsUrl": "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",
+      "addedAt": 1759190400000
+    },
+    {
+      "id": "noondiphcddnnabmjcihcjfbhfklnnep",
+      "name": "Password Alert",
+      "version": "1.38.4",
+      "source": "chrome",
+      "byPolicy": true,
+      "enabled": true,
+      "status": "loaded",
+      "hasAction": false
+    }
+  ],
+  "BrowserExtensionActionResult": [
+    {
+      "tab": 4
+    },
+    {
+      "tab": null
+    }
+  ],
+  "BrowserExtensionList": [
+    {
+      "extensions": [
+        {
+          "id": "fmkadmapgofadopljbjfkapdkoienihi",
+          "name": "React Developer Tools",
+          "version": "8.0.0",
+          "description": "Adds React debugging tools to the Chrome Developer Tools.",
+          "source": "webstore",
+          "enabled": true,
+          "status": "loaded",
+          "hasAction": true,
+          "addedAt": 1759190400000
+        },
+        {
+          "id": "abcdefghijklmnopabcdefghijklmnop",
+          "name": "My extension",
+          "version": "0.1.0",
+          "source": "unpacked",
+          "path": "/Users/mark/code/my-extension",
+          "enabled": true,
+          "status": "blocked",
+          "error": "Your organization's Chrome policy doesn't allow unpacked extensions in this browser.",
+          "hasAction": false,
+          "optionsUrl": "chrome-extension://abcdefghijklmnopabcdefghijklmnop/options.html",
+          "addedAt": 1759190400000
+        },
+        {
+          "id": "noondiphcddnnabmjcihcjfbhfklnnep",
+          "name": "Password Alert",
+          "version": "1.38.4",
+          "source": "chrome",
+          "byPolicy": true,
+          "enabled": true,
+          "status": "loaded",
+          "hasAction": false
+        }
+      ],
+      "running": true
+    },
+    {
+      "extensions": [],
+      "running": false
     }
   ],
   "BrowserInput": [
@@ -4617,6 +4714,18 @@
     "BrowserDevice": [
       "desktop",
       "mobile"
+    ],
+    "BrowserExtensionSource": [
+      "webstore",
+      "unpacked",
+      "chrome"
+    ],
+    "BrowserExtensionStatus": [
+      "loaded",
+      "pending",
+      "off",
+      "blocked",
+      "error"
     ]
   },
   "forwardCompat": [
@@ -4709,6 +4818,22 @@
               "y": 2
             }
           ]
+        }
+      ]
+    },
+    {
+      "type": "BrowserExtension",
+      "samples": [
+        {
+          "id": "fmkadmapgofadopljbjfkapdkoienihi",
+          "name": "React Developer Tools",
+          "version": "8.0.0",
+          "description": "Adds React debugging tools to the Chrome Developer Tools.",
+          "source": "enterprise",
+          "enabled": true,
+          "status": "updating",
+          "hasAction": true,
+          "addedAt": 1759190400000
         }
       ]
     },

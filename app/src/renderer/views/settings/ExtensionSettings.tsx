@@ -9,7 +9,7 @@ import { useStore } from "../../state/store";
 import { Icon } from "../../components/Icon";
 import { Switch } from "../../components/bits";
 import { Section } from "../Settings";
-import { extensionNote, extensionsWaiting } from "../../state/extensions";
+import { extensionNote, extensionsWaiting } from "@harness/shared/state";
 import "./extensions.css";
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));

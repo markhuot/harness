@@ -20,7 +20,7 @@ import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, take
 import { toggleBrowserSizeRow, useLayout } from "../state/layout";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
-import { runnableExtensions } from "../state/extensions";
+import { runnableExtensions } from "@harness/shared/state";
 import { useAnnotate } from "../components/Annotator";
 import { browserShotName } from "../state/annotator";
 import { isAppChord } from "../state/keys";

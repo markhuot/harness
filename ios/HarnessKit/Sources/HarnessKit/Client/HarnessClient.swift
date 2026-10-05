@@ -448,6 +448,35 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/browser/\(sessionId)/navigate", body: NavigateBody(url: url, tabId: tabId))
     }
 
+    /// Run extension `id`'s toolbar button on tab `tabId` (nil: the lowest open tab); its popup opens as the session's next tab.
+    public func browserExtensionAction(_ sessionId: String, id: String, tabId: Int? = nil) async throws -> BrowserExtensionActionResult {
+        try await request("POST", "/browser/\(sessionId)/extension-action", body: BrowserExtensionActionBody(id: id, tabId: tabId))
+    }
+
+    // MARK: Browser extensions (shared by every session's tabs)
+
+    public func listBrowserExtensions() async throws -> BrowserExtensionList {
+        try await request("GET", "/browser-extensions")
+    }
+
+    /// Restart the service's Chrome, so pending extensions install: every tab's page reloads.
+    public func restartBrowser() async throws -> OkResponse {
+        try await request("POST", "/browser/restart")
+    }
+
+    /// Install from the Chrome Web Store (a link or an ID) or an unpacked folder on the service's machine.
+    public func addBrowserExtension(_ body: AddBrowserExtensionBody) async throws -> BrowserExtension {
+        try await request("POST", "/browser-extensions", body: body)
+    }
+
+    public func setBrowserExtensionEnabled(_ id: String, enabled: Bool) async throws -> BrowserExtension {
+        try await request("PATCH", "/browser-extensions/\(id)", body: BrowserExtensionEnabledBody(enabled: enabled))
+    }
+
+    public func removeBrowserExtension(_ id: String) async throws -> OkResponse {
+        try await request("DELETE", "/browser-extensions/\(id)")
+    }
+
     // MARK: Plugins
 
     public func listPlugins() async throws -> [PluginInfo] {
