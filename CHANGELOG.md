@@ -15,6 +15,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   the bottom as at the sides, so their rounded ends follow the phone's corners the way Calendar's
   bar does. While you type, they still rest just above the keyboard.
 
+### Fixed
+
+- On iPhone and iPad, scrolling a ticket's tabs no longer stutters while the ticket's title and
+  buttons slide away or come back. Long specs suffered most.
+
 ## [app-20261005.0236](https://github.com/markhuot/harness/releases/tag/app-20261005.0236) - 2026-10-05
 
 ### Changed

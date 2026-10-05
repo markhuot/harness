@@ -160,23 +160,31 @@ private struct TicketDetailBody: View {
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         let compact = shown == .browser || shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
         VStack(spacing: 0) {
+            // Hidden, the hero keeps drawing in its zero-height slot, under the tab strip and pager,
+            // which slide up over it (HeroSlide) and cover it once they get there.
             TicketDetailHero(ticket: ticket, compactTab: compact, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
                 .frame(height: hero.hidden ? 0 : nil, alignment: .top)
-                .clipped()
+                .allowsHitTesting(!hero.hidden)
                 .accessibilityHidden(hero.hidden)
-            TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs, tornOff: tornOff) { t in
-                hero.show()
-                onTab(t)
-            }
-            pager(shown, tornOff: tornOff)
-                .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
+            VStack(spacing: 0) {
+                TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs, tornOff: tornOff) { t in
                     hero.show()
                     onTab(t)
-                })
-                .environment(\.annotationSink, sink)
-                .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
-                .environment(\.specAttachments, specAttachments)
+                }
+                pager(shown, tornOff: tornOff)
+                    .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
+                        hero.show()
+                        onTab(t)
+                    })
+                    .environment(\.annotationSink, sink)
+                    .environment(\.openAnnotator, AnnotatorOpener { annotating = $0 })
+                    .environment(\.specAttachments, specAttachments)
+            }
+            // Not into the safe area: running up under the bar, it would slide down over the hero.
+            .background(c.bg, ignoresSafeAreaEdges: [])
+            .modifier(HeroSlide(progress: hero.progress, hidden: hero.hidden, distance: hero.distance))
+            .zIndex(1)
         }
         .task(id: SpecAttachmentsTrigger(key: ticket.key, revision: ticket.specRevision, epoch: store.epoch)) {
             guard let api = store.api, let detail = try? await api.getTicket(ticket.key), !Task.isCancelled else { return }
