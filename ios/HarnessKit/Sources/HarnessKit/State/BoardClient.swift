@@ -5,8 +5,8 @@ import Foundation
 
 /// What BoardLoader asks for: Done pages and server-side search.
 public protocol LoaderClient: Sendable {
-    func ticketPage(status: TicketStatus, projectId: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage
-    func searchTickets(q: String, projectId: String?, limit: Int?, cursor: String?) async throws -> TicketPage
+    func ticketPage(status: TicketStatus, projectId: String?, group: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage
+    func searchTickets(q: String, projectId: String?, group: String?, limit: Int?, cursor: String?) async throws -> TicketPage
 }
 
 /// What DetailFetcher asks for: one ticket's detail by key.

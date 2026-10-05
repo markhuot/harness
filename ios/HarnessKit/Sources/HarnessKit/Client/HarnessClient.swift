@@ -156,9 +156,10 @@ public final class HarnessClient: Sendable {
 
     /// One page of a single column. done pages newest-completed first; other statuses by position.
     /// `q` narrows to tickets matching the search. Pass the previous page's nextCursor as `cursor`.
-    public func ticketPage(status: TicketStatus, projectId: String? = nil, q: String? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> TicketPage {
+    public func ticketPage(status: TicketStatus, projectId: String? = nil, group: String? = nil, q: String? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> TicketPage {
         let query = Query.build([
-            ("status", .str(status.rawValue)), ("projectId", .str(projectId)), ("q", .str(q)), ("limit", .int(limit)), ("cursor", .str(cursor)),
+            ("status", .str(status.rawValue)), ("projectId", .str(projectId)), ("group", .str(group)), ("q", .str(q)), ("limit", .int(limit)),
+            ("cursor", .str(cursor)),
         ])
         return try await request("GET", "/tickets/page\(query)")
     }
@@ -166,8 +167,8 @@ public final class HarnessClient: Sendable {
     /// Search every status: key (current or pre-rename, exact/prefix), title, spec and the
     /// latest Activity note. Key matches rank first, then title, then the rest; newest first within a rank.
     /// An empty/whitespace `q` is a 400.
-    public func searchTickets(q: String, projectId: String? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> TicketPage {
-        let query = Query.build([("q", .str(q)), ("projectId", .str(projectId)), ("limit", .int(limit)), ("cursor", .str(cursor))])
+    public func searchTickets(q: String, projectId: String? = nil, group: String? = nil, limit: Int? = nil, cursor: String? = nil) async throws -> TicketPage {
+        let query = Query.build([("q", .str(q)), ("projectId", .str(projectId)), ("group", .str(group)), ("limit", .int(limit)), ("cursor", .str(cursor))])
         return try await request("GET", "/tickets/search\(query)")
     }
 

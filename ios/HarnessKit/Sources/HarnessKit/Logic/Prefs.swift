@@ -19,7 +19,9 @@ public struct Prefs: Codable, Sendable, Equatable {
     /// Board: hide child tickets (the blocked / awaiting-approval ones always show). First run: hidden, like the desktop.
     public var hideChildren: Bool
     @Nullable public var lastProject: String?
-    /// Board project filter (nil = All projects)
+    /// Board project filter (nil = All projects): a project id, or a project group's board as
+    /// `Paging.groupScope(name)` ("group:Work"). Project ids never contain a colon, so values from
+    /// before groups read as they always did. Resolve with `BoardState.boardFilter`.
     @Nullable public var boardProject: String?
     @Nullable public var activeServer: String?
     /// iPad (regular width): the desktop sidebar is hidden (nil or false: shown). Newer than the

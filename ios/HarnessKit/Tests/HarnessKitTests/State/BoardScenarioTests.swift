@@ -42,7 +42,7 @@ enum BoardProbe {
 
     /// Every probe this runner knows; checked against PROBE_NAMES in board.ts.
     static let names = [
-        "boardColumns", "canLoadMoreDone", "canLoadMoreSearch", "childrenOf", "composerProject", "conductorsNeedingChildren",
+        "boardColumns", "canLoadMoreDone", "canLoadMoreSearch", "childrenOf", "composerCandidates", "composerProject", "conductorsNeedingChildren",
         "defaultDriverOf", "dependencyStates", "dependentsOf", "doneColumn", "doneCount", "hasCustomDriver", "latestActivity",
         "liveDelta", "matchesQuery", "needsFirstDonePage", "searchColumns", "searchStatusText", "sortedProjects", "specBody", "specRevisions",
         "subagentById", "subagentPath", "subagentTranscript", "subagentsOf", "taskOutputOf", "ticketByKey", "ticketLinkable",
@@ -100,6 +100,7 @@ enum BoardProbe {
         case "ticketsForProject": return ids(s.ticketsForProject(try arg(0, String?.self)))
         case "sortedProjects": return strings(s.sortedProjects().map(\.id))
         case "composerProject": return .string(s.composerProject(try arg(0), candidates: try arg(1)))
+        case "composerCandidates": return .array(s.composerCandidates(try arg(0, String?.self), last: try arg(1, String?.self)).map(opt))
         case "matchesQuery": return .bool(Paging.matchesQuery(s.tickets[try arg(0, String.self)]!, try arg(1), aliases: s.keyAliases))
         case "subagentsOf": return s.subagentsOf(try arg(0)).map { strings($0.map(\.id)) } ?? .null
         case "subagentById": return opt(s.subagentById(try arg(0), try arg(1))?.status.rawValue)
@@ -220,6 +221,7 @@ struct ReducerScenarioTests {
         let raw = try Fixture.value("stateReducer", "scenarios", as: [JSONValue].self)
             + Fixture.value("statePaging", "doneScenarios", as: [JSONValue].self)
             + Fixture.value("statePaging", "searchScenarios", as: [JSONValue].self)
+            + Fixture.value("statePaging", "groupScenarios", as: [JSONValue].self)
         var count = 0
         for scenario in raw {
             guard case let .array(steps)? = scenario["steps"] else { continue }
@@ -245,6 +247,9 @@ struct PagingScenarioTests {
 
     @Test(arguments: BoardScenario.load("statePaging", "searchScenarios"))
     func search(_ s: BoardScenario) throws { try BoardProbe.check(s) }
+
+    @Test(arguments: BoardScenario.load("statePaging", "groupScenarios"))
+    func groups(_ s: BoardScenario) throws { try BoardProbe.check(s) }
 
     @Test(arguments: BoardScenario.load("statePaging", "unloadedScenarios"))
     func unloaded(_ s: BoardScenario) throws { try BoardProbe.check(s) }

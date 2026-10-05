@@ -5,16 +5,27 @@ import Foundation
 public enum SidebarRow: Hashable, Sendable {
     case inbox
     case allProjects
+    /// A project group's board, by the group's name
+    case group(String)
     case project(String)
     case settings
 
-    /// The highlighted row: the section, and on the board its project filter. A filter whose
-    /// project is gone reads as All projects, as the board itself does (BoardContext).
-    public static func current(tab: AppTab, boardProject: String?, projectExists: (String) -> Bool) -> SidebarRow {
+    /// The highlighted row: the section, and on the board its filter as the board resolves it
+    /// (`BoardState.boardFilter`: a filter whose project or group is gone reads as All projects).
+    public static func current(tab: AppTab, board: String?) -> SidebarRow {
         switch tab {
         case .inbox: .inbox
         case .settings: .settings
-        case .board: boardProject.flatMap { projectExists($0) ? .project($0) : nil } ?? .allProjects
+        case .board: board.map { b in Paging.scopeGroup(b).map(SidebarRow.group) ?? .project(b) } ?? .allProjects
+        }
+    }
+
+    /// The board filter the row saves (prefs.boardProject): a project id, a group's scope, or nil.
+    public var board: String? {
+        switch self {
+        case let .group(name): Paging.groupScope(name)
+        case let .project(id): id
+        case .inbox, .allProjects, .settings: nil
         }
     }
 
@@ -22,20 +33,16 @@ public enum SidebarRow: Hashable, Sendable {
         switch self {
         case .inbox: .inbox
         case .settings: .settings
-        case .allProjects, .project: .board
+        case .allProjects, .group, .project: .board
         }
     }
 }
 
 extension Router {
     /// Goes where a sidebar row points: its section at the root, modals dismissed, and for a board
-    /// row the project filter saved first.
+    /// row its filter saved first.
     public func select(_ row: SidebarRow, app: AppModel) {
-        switch row {
-        case .allProjects: app.setPref(\.boardProject, nil)
-        case let .project(id): app.setPref(\.boardProject, id)
-        case .inbox, .settings: break
-        }
+        if row.tab == .board { app.setPref(\.boardProject, row.board) }
         open(.tab(row.tab))
     }
 }

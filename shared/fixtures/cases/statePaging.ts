@@ -1,9 +1,9 @@
 // Done paging and board search scenarios (shared/src/state/paging.ts, every case in
 // paging.test.ts plus edge cases) for HarnessKit's Paging.swift. See ../board.ts.
-import { ALL_SCOPE, matchesQuery, searchStatusText, type SearchState } from "../../src/state";
-import type { Ticket } from "../../src/protocol";
+import { ALL_SCOPE, groupScope, matchesQuery, searchStatusText, type SearchState } from "../../src/state";
+import type { Project, Ticket } from "../../src/protocol";
 import { cases } from "../case";
-import { detail, done, ev, page, scenario, snapshot, tk, upsert, type Probe } from "../board";
+import { detail, done, ev, page, project, scenario, snapshot, tk, upsert, type Probe } from "../board";
 
 // paging.test.ts scaled down to keep the JSON small: 12 done tickets in p1 (TS: 120), completed
 // at 1000 (oldest) … 1011 (newest); pages of 5 newest-first (TS: 50).
@@ -224,6 +224,79 @@ export const unloadedScenarios = [
   scenario("an appended page with a null cursor only applies when the scope's cursor is null", [
     { actions: [snapshot([], { scope: "p1", page: page([done("a", 90)], "c1", 6) }), { type: "donePage", scope: "p1", page: page([done("x", 10)], null, 6), append: true, cursor: null }], full: true },
     { actions: [{ type: "donePage", scope: "p1", page: page([done("y", 70)], null, 6), append: true, cursor: "c1" }, { type: "donePage", scope: "p1", page: page([done("w", 60)], null, 6), append: true, cursor: null }] },
+  ]),
+];
+
+// Project groups (DESIGN.md "Project groups"): W1 and W2 are in Work, H1 in Home, N1 in none.
+// A group's board holds only its projects' tickets; Done pages by group:Work.
+const WORK = groupScope("Work");
+const HOME = groupScope("Home");
+const pw1 = project("w1", "W1", { group: "Work" });
+const pw2 = project("w2", "W2", { group: "Work", name: "aardvark" });
+const ph1 = project("h1", "H1", { group: "Home" });
+const pn1 = project("n1", "N1");
+const groupProjects = [pw1, pw2, ph1, pn1];
+/** A project with no group key at all, as the service sends one that left its group (JSON has no undefined). */
+const ungrouped = ({ group: _, ...p }: Project): Project => p;
+const gLive = [
+  tk("gw1", { projectId: "w1", title: "Widget one", status: "in_progress", createdAt: 21 }),
+  tk("gw2", { projectId: "w2", title: "Widget two", status: "review", createdAt: 22 }),
+  tk("gh1", { projectId: "h1", title: "Widget home", status: "in_progress", createdAt: 23 }),
+  tk("gn1", { projectId: "n1", title: "Widget none", status: "planning", createdAt: 24 }),
+];
+const gDone = [done("dw1", 2002, { projectId: "w1" }), done("dw2", 2001, { projectId: "w2" })];
+const groupBoot = snapshot([...gLive, done("dh1", 2003, { projectId: "h1" })], { scope: WORK, page: page(gDone, "gc", 5) }, { projects: groupProjects });
+const groupBoard: Probe[] = [["boardColumns", WORK], ["doneCount", WORK, 0], ["ticketsForProject", WORK]];
+
+export const groupScenarios = [
+  scenario("a group's board shows only its projects' tickets, with the group's Done count", [
+    {
+      actions: [groupBoot],
+      probes: [...groupBoard, ["doneColumn", WORK], ["canLoadMoreDone", WORK], ["needsFirstDonePage", WORK], ["needsFirstDonePage", HOME], ["boardColumns", HOME], ["boardColumns", ALL_SCOPE], ["boardColumns", null]],
+    },
+  ]),
+  scenario("a live completion counts on its group's board and not on another group's", [
+    {
+      actions: [groupBoot, { type: "donePage", scope: HOME, page: page([], null, 1), append: false }],
+      probes: [["doneCount", WORK, 0], ["doneCount", HOME, 0]],
+    },
+    { actions: [upsert({ ...gLive[0]!, status: "done", completedAt: 9000, updatedAt: 9000 })], probes: [["doneCount", WORK, 0], ["doneCount", HOME, 0], ["doneColumn", WORK]] },
+    { actions: [upsert({ ...gLive[3]!, status: "done", completedAt: 9001, updatedAt: 9001 })], probes: [["doneCount", WORK, 0], ["doneCount", HOME, 0]] },
+  ]),
+  scenario("local search on a group's board matches only the group's tickets", [
+    { actions: [groupBoot, { type: "search.set", q: "widget", scope: WORK }], probes: [["searchColumns", WORK], ["searchColumns", null]] },
+    { actions: [{ type: "search.results", q: "widget", scope: WORK, page: page([gLive[1]!, done("far", 50, { projectId: "w1", title: "Old" })], null, 2), append: false }], probes: [["searchColumns", WORK], ["searchStatusText"]] },
+  ]),
+  scenario("a project joining or leaving a group drops both groups' Done paging; other changes keep it", [
+    {
+      actions: [groupBoot, { type: "donePage", scope: HOME, page: page([], null, 1), append: false }, { type: "donePage", scope: "w1", page: page([], null, 1), append: false }],
+      probes: [["needsFirstDonePage", WORK], ["needsFirstDonePage", HOME]],
+    },
+    // A rename inside the group keeps it.
+    { actions: [ev({ kind: "project.upserted", project: { ...pw2, name: "renamed", updatedAt: 2 } })], probes: [["needsFirstDonePage", WORK], ["needsFirstDonePage", HOME]] },
+    // N1 joins Work: Work pages afresh, Home keeps its paging, and N1's tickets show on Work at once.
+    { actions: [ev({ kind: "project.upserted", project: { ...pn1, group: "Work", updatedAt: 2 } })], probes: [["needsFirstDonePage", WORK], ["needsFirstDonePage", HOME], ["needsFirstDonePage", "w1"], ["boardColumns", WORK]], full: true },
+    { actions: [{ type: "donePage", scope: WORK, page: page(gDone, null, 2), append: false }] },
+    // H1 moves from Home to Work: both drop.
+    { actions: [ev({ kind: "project.upserted", project: { ...ph1, group: "Work", updatedAt: 3 } })], probes: [["needsFirstDonePage", WORK], ["needsFirstDonePage", HOME], ["boardColumns", HOME]] },
+    { actions: [{ type: "donePage", scope: WORK, page: page(gDone, null, 2), append: false }] },
+    // W1 leaves every group (its payload has no group key): Work drops, and W1 is off its board.
+    { actions: [ev({ kind: "project.upserted", project: ungrouped({ ...pw1, updatedAt: 4 }) })], probes: [["needsFirstDonePage", WORK], ["boardColumns", WORK]] },
+  ]),
+  scenario("New session on a group's board prefers the last used project in it, else its first by name", [
+    {
+      actions: [groupBoot],
+      probes: [
+        ["composerCandidates", WORK, "w1"],
+        ["composerCandidates", WORK, "h1"],
+        ["composerCandidates", WORK, null],
+        ["composerCandidates", groupScope("Nobody"), "h1"],
+        ["composerCandidates", "h1", "w1"],
+        ["composerCandidates", ALL_SCOPE, "w1"],
+        ["composerCandidates", null, "w1"],
+        ["composerProject", "", ["w1", "w2", "h1"]],
+      ],
+    },
   ]),
 ];
 
