@@ -166,6 +166,13 @@ describe("ticket tools → HarnessOps", () => {
     const r = await tool("resume_work").execute({ note: "fixing the bug" }, fakeContext({ ops: fakeOps() }));
     expect(text(r)).toContain("submit_for_review");
     expect(text(r)).not.toContain("Stop here");
+    expect(text(r)).not.toContain("working directory is now");
+  });
+
+  test("resume_work that moved the ticket's workdir (a re-opened done ticket) says where to work", async () => {
+    const r = await tool("resume_work").execute({}, fakeContext({ ops: fakeOps({ resumeWork: async () => "/w/ACME-1" }) }));
+    expect(text(r)).toContain("working directory is now /w/ACME-1");
+    expect(text(r)).toContain("git -C /w/ACME-1");
   });
 
   test("review_decision rejects an unknown decision without calling ops", async () => {

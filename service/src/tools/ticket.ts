@@ -110,11 +110,14 @@ export const unblock = defineTool<{ note?: string }>({
 export const resumeWork = defineTool<{ note?: string }>({
   name: "resume_work",
   description:
-    "Move your ticket from Review back to In progress, because you're about to change the work again: editing code, fixing a bug, adding to what was submitted. Call it before you start, so the board shows the ticket being worked on; it stops a running agent review and both reviews start over. Then finish with submit_for_review (or block). It's your call: answering a question, explaining the work or a tiny fix you resubmit right away doesn't need it. Refused unless the ticket is in review, and while a tool approval is waiting on the human.",
+    "Move your ticket from Review or Done back to In progress, because you're about to work on it again: editing code, fixing a bug, adding to what was submitted, or new investigation whose results belong on the ticket. Call it before you start, so the board shows the ticket being worked on; it stops a running agent review and both reviews start over. A done ticket is re-opened, its worktree recreated if it was removed. Then finish with submit_for_review (or block). It's your call: answering a question or explaining the work doesn't need it. Refused unless the ticket is in review or done, and while a tool approval is waiting on the human.",
   inputSchema: schema({ note: { type: "string", description: "Optional: why the work is picked back up, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
-    await ctx.ops.resumeWork(ctx, note);
-    return "Ticket moved to in progress. Make the changes, then call submit_for_review (or block with a question).";
+    const moved = await ctx.ops.resumeWork(ctx, note);
+    const where = moved
+      ? ` The ticket's working directory is now ${moved}, not the directory this run started in: do the work and commit there, with absolute paths or \`git -C ${moved}\`.`
+      : "";
+    return `Ticket moved to in progress.${where} Make the changes, then call submit_for_review (or block with a question).`;
   },
 });
 

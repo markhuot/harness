@@ -234,8 +234,12 @@ export interface HarnessOps {
   block(ctx: ToolContext, question: string): Promise<void>;
   /** A human's message resolved the block: blocked → in progress, and the run carries on with the work. */
   unblock(ctx: ToolContext, note?: string): Promise<void>;
-  /** The agent is changing reviewed work again: review → in progress, and both reviews start over. */
-  resumeWork(ctx: ToolContext, note?: string): Promise<void>;
+  /**
+   * The agent is changing reviewed or landed work again: review or done → in progress, and both
+   * reviews start over. Returns the ticket's workdir when re-opening moved it away from ctx.cwd
+   * (a done ticket's worktree recreated), else "".
+   */
+  resumeWork(ctx: ToolContext, note?: string): Promise<string>;
   /**
    * Work is finished: move to review with a note on this round. `specIsUpToDate` must be true (the
    * spec was brought up to date in an earlier call), else it throws and the ticket stays put. The

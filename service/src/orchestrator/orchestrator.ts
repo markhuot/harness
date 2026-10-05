@@ -2439,23 +2439,36 @@ ${numberLines(r.body)}`;
    * A chat on a ticket in review is changing the work again: back to in progress, as when the human
    * moves it there, with both reviews pending and a running agent review stopped (it would judge
    * work that's about to change).
+   * A chat on a done ticket that's doing work re-opens it, as Re-open does: both reviews pending,
+   * and the worktree the complete run removed comes back. The running chat started in the old
+   * directory (often the project checkout), so the result names the workdir when it moved.
    */
-  async resumeWork(ctx: ToolContext, note?: string): Promise<void> {
+  async resumeWork(ctx: ToolContext, note?: string): Promise<string> {
     const t = this.ctxTicket(ctx);
     if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can move it.`);
-    if (t.status !== "review") throw new Error(`${t.key} is ${t.status}, not in review: resume_work only takes a ticket out of review.`);
-    await this.cancelReviewRuns(t.sessionId);
+    if (t.status !== "review" && t.status !== "done") throw new Error(`${t.key} is ${t.status}, not in review or done: resume_work only takes a ticket out of review or done.`);
     const why = typeof note === "string" ? note.trim() : "";
-    this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`, undefined, { by: "agent", line: why || "Changing the reviewed work" });
+    if (t.status === "review") {
+      await this.cancelReviewRuns(t.sessionId);
+      this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`, undefined, { by: "agent", line: why || "Changing the reviewed work" });
+      return "";
+    }
+    const dir = await this.workdirFor(t);
+    if (typeof dir === "string") throw new Error(`${t.key} couldn't be re-opened: ${dir}`);
+    this.autoRetries.delete(t.id);
+    this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
+    this.addActivityLine(t, "reopened", "agent", why || "Re-opened to pick the work back up", this.moveMeta(t, "in_progress"));
+    this.transition(t, "in_progress", { ...dir, agentReview: "pending", humanReview: "pending", blockedReason: null, reviewRejections: 0 }, `Re-opened by the agent${why ? `: ${why}` : ""}`);
+    return dir.workdir === ctx.cwd ? "" : dir.workdir;
   }
 
   /**
    * block and submit_for_review work from in progress, blocked and review; a planning ticket
-   * starts when the human presses Start, and a done one when they re-open it.
+   * starts when the human presses Start, and a done one when they re-open it (or a chat calls resume_work).
    */
   private lifecycleFrom(t: Ticket, tool: "block" | "submit_for_review") {
     if (t.status === "planning") throw new Error(`${t.key} is still in planning: the work starts when the human presses Start, so ${tool} doesn't apply yet.`);
-    if (t.status === "done") throw new Error(`${t.key} is done: the human re-opens it (its Re-open button) to change it again.`);
+    if (t.status === "done") throw new Error(`${t.key} is done: call resume_work first to re-open it when you're picking the work back up, then ${tool}.`);
   }
 
   async submitForReview(ctx: ToolContext, note: string, specIsUpToDate: unknown, skips: ReviewSkips = {}): Promise<void> {
