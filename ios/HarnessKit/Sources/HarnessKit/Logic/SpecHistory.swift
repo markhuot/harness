@@ -1,11 +1,11 @@
 import Foundation
 
 // The Spec tab's history bar (DESIGN.md "Spec revisions and attachments"): which revision is on
-// screen, stepping and scrubbing through the others, and the bar's copy. Bodies and metadata load
+// screen, scrubbing through the others, and the bar's copy. Bodies and metadata load
 // lazily (BoardState.specBody / specRevisions); this only decides what to show and what to fetch.
 
 /// Which revision the Spec tab shows. It follows the newest revision (`pinned` nil) until the user
-/// steps or scrubs back; stepping or scrubbing to the newest follows again, so a revision that
+/// scrubs back; scrubbing to the newest follows again, so a revision that
 /// lands while the user reads an older one doesn't move them, and one that lands while they're on
 /// the newest shows at once.
 public struct SpecScrubber: Equatable, Sendable {
@@ -33,20 +33,6 @@ public struct SpecScrubber: Equatable, Sendable {
         let r = min(max(1, rev), latest)
         pinned = r == latest ? nil : r
     }
-
-    /// One revision back (`delta` -1) or forward (+1) from the one on screen.
-    public mutating func step(_ delta: Int, latest: Int) {
-        show(shown(latest: latest) + delta, latest: latest)
-    }
-
-    /// Whether `step(delta)` would move.
-    public func canStep(_ delta: Int, latest: Int) -> Bool {
-        let target = shown(latest: latest) + delta
-        return target >= 1 && target <= max(1, latest)
-    }
-
-    /// Back to the newest revision.
-    public mutating func follow() { pinned = nil }
 }
 
 public enum SpecHistory {
@@ -56,26 +42,14 @@ public enum SpecHistory {
     /// The revision "Show changes" compares `rev` with: the one before it; nil for the first.
     public static func previous(_ rev: Int) -> Int? { rev > 1 ? rev - 1 : nil }
 
-    /// Who wrote a revision, as the bar names them.
-    public static func authorLabel(_ a: SpecRevisionAuthor) -> String {
-        switch a {
-        case .agent: "Agent"
-        case .human: "You"
-        default: "Harness"
-        }
-    }
-
-    /// The bar's first line: "Rev 7 of 7", then "Agent · 3m ago" once the revision's metadata has
-    /// loaded. The note and the baseline tag sit beside it (`SpecHistoryLine`).
+    /// The bar's copy for a revision: when it was written ("3m ago", once its metadata has loaded),
+    /// its note and the baseline tag. The count ("Rev 7 of 7") isn't on the bar: the timeline's
+    /// bubble shows it while dragging, and VoiceOver reads it (`SpecHistoryLine`).
     public static func line(rev: Int, latest: Int, info: SpecRevisionInfo?, now: Double) -> SpecHistoryLine {
-        var meta: [String] = []
-        if let info {
-            meta.append(authorLabel(info.author))
-            if info.createdAt > 0 { meta.append(Format.relativeTime(info.createdAt, now: now)) }
-        }
+        let meta = info.flatMap { $0.createdAt > 0 ? Format.relativeTime($0.createdAt, now: now) : nil } ?? ""
         let note = info.map { JSCompat.trim($0.note) } ?? ""
         return SpecHistoryLine(
-            title: "Rev \(rev) of \(max(rev, latest))", meta: meta.joined(separator: " · "), note: note,
+            title: "Rev \(rev) of \(max(rev, latest))", meta: meta, note: note,
             baseline: info?.approvedBaseline ?? false)
     }
 
@@ -136,9 +110,9 @@ public enum SpecHistory {
 
 /// The history bar's copy for one revision.
 public struct SpecHistoryLine: Equatable, Sendable {
-    /// "Rev 7 of 7"
+    /// "Rev 7 of 7": the timeline's bubble and VoiceOver, not the bar
     public var title: String
-    /// "Agent · 3m ago" ("" until the metadata loads)
+    /// "3m ago" ("" until the metadata loads, or for a revision with no time)
     public var meta: String
     /// What the revision changed (its note), "" when none
     public var note: String
