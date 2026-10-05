@@ -13,3 +13,4 @@ export * from "./fileLinks";
 export * from "./templates";
 export * from "./prompts";
 export * from "./completion";
+export * from "./projectGroups";

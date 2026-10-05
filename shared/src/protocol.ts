@@ -76,6 +76,11 @@ export interface Project {
    * "#rrggbb". null → the theme's accent.
    */
   color: string | null;
+  /**
+   * The project's group ("Work", "Personal"; see projectGroups.ts): each group has a board of its
+   * own projects. null → in no group. Optional only so older payloads type-check.
+   */
+  group?: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -1221,6 +1226,11 @@ export interface CreateProjectBody {
   requireHumanReview?: boolean;
   /** Preset id from PROJECT_COLORS or "#rrggbb"; null or "" → the theme's accent */
   color?: string | null;
+  /**
+   * The project's group (normalizeProjectGroup); null or "" → none. A name matching an existing
+   * group without case takes that group's spelling.
+   */
+  group?: string | null;
   /** null → settings.permissionMode */
   permissionMode?: PermissionMode | null;
   /** Per-driver default models; PATCH merges per driver, null clears one */

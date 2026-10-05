@@ -6,12 +6,15 @@
 // - The snapshot loads every non-done ticket, plus the first page of done for the current board
 //   scope. Other done tickets arrive by paging, search, ticket details (children, deps) and live
 //   events, so `state.tickets` holds an arbitrary subset of done.
-// - Paging is per scope (a project id, or ALL_SCOPE for "All projects"). The Done column shows a
-//   contiguous prefix of the server's ordering (completedAt desc): done tickets at or after the
-//   scope's `frontier` (the oldest completedAt paged in so far). Older done tickets that happen to
-//   be loaded (a dependency, a search hit) stay out of the column until paging reaches them, so
-//   "Load more" never reshuffles what's already on screen.
+// - Paging is per scope (a project id, groupScope(name) for a project group's board, or ALL_SCOPE
+//   for "All projects"). The Done column shows a contiguous prefix of the server's ordering
+//   (completedAt desc): done tickets at or after the scope's `frontier` (the oldest completedAt
+//   paged in so far). Older done tickets that happen to be loaded (a dependency, a search hit)
+//   stay out of the column until paging reaches them, so "Load more" never reshuffles what's
+//   already on screen.
 // - `total` is the server's count, kept current by live ticket.upserted / ticket.deleted events.
+//   A project joining or leaving a group changes which tickets that group's board counts, so the
+//   reducer drops the paging of both groups and the board pages them afresh.
 
 import type { Ticket, TicketPage, TicketStatus } from "../index";
 import type { State } from "./reducer";
@@ -23,10 +26,31 @@ export const SEARCH_DEBOUNCE_MS = 200;
 
 /** Paging scope key for "All projects". */
 export const ALL_SCOPE = "*";
-export const scopeOf = (projectId: string | null | undefined): string => projectId || ALL_SCOPE;
-/** The projectId to send for a scope (undefined = all projects). */
-export const scopeProject = (scope: string): string | undefined => (scope === ALL_SCOPE ? undefined : scope);
-const inScope = (t: Ticket, scope: string) => scope === ALL_SCOPE || t.projectId === scope;
+const GROUP_PREFIX = "group:";
+/** The scope of a project group's board (projectGroups.ts). Project ids never contain a colon. */
+export const groupScope = (group: string): string => GROUP_PREFIX + group;
+/** The group a scope is the board of, or null for All projects and project scopes. */
+export const scopeGroup = (scope: string): string | null => (scope.startsWith(GROUP_PREFIX) ? scope.slice(GROUP_PREFIX.length) : null);
+/**
+ * A board's scope. Selectors that take a board (`board: string | null`) take a project id, a
+ * scope (ALL_SCOPE, groupScope(name)) or null for All projects, so this is the identity on scopes.
+ */
+export const scopeOf = (board: string | null | undefined): string => board || ALL_SCOPE;
+/** The projectId to send for a scope (undefined = all projects, or a group: see scopeQuery). */
+export const scopeProject = (scope: string): string | undefined => (scope === ALL_SCOPE || scopeGroup(scope) !== null ? undefined : scope);
+/** The ticket page and search filter for a scope: one project, one group's projects, or none. */
+export function scopeQuery(scope: string): { projectId?: string; group?: string } {
+  const group = scopeGroup(scope);
+  if (group !== null) return { group };
+  return scope === ALL_SCOPE ? {} : { projectId: scope };
+}
+/** Whether a ticket shows on a scope's board: every ticket on All projects, its group's, or its project's. */
+export function inScope(state: Pick<State, "projects">, t: Ticket, scope: string): boolean {
+  if (scope === ALL_SCOPE) return true;
+  const group = scopeGroup(scope);
+  if (group !== null) return state.projects[t.projectId]?.group === group;
+  return t.projectId === scope;
+}
 
 /** Every status the snapshot lists in full (all but done). */
 export const LIVE_STATUSES: TicketStatus[] = ["planning", "in_progress", "blocked", "review"];
@@ -191,7 +215,7 @@ export function adjustDoneTotals(state: State, prev: Ticket | undefined, next: T
   if (!subject) return state.donePaging;
   let out: State["donePaging"] | null = null;
   for (const scope of scopes) {
-    if (!inScope(subject, scope)) continue;
+    if (!inScope(state, subject, scope)) continue;
     const p = state.donePaging[scope]!;
     let delta = 0;
     const isDone = next?.status === "done";
@@ -219,28 +243,28 @@ export function adjustDoneTotals(state: State, prev: Ticket | undefined, next: T
  * first. Without paging state (an older service, or before the first page) every loaded done
  * ticket in scope shows.
  */
-export function doneColumn(state: State, projectId: string | null): Ticket[] {
-  const scope = scopeOf(projectId);
+export function doneColumn(state: State, board: string | null): Ticket[] {
+  const scope = scopeOf(board);
   const frontier = state.donePaging[scope]?.frontier ?? null;
   return Object.values(state.tickets)
-    .filter((t) => t.status === "done" && inScope(t, scope) && (frontier === null || completedAtOf(t) >= frontier))
+    .filter((t) => t.status === "done" && inScope(state, t, scope) && (frontier === null || completedAtOf(t) >= frontier))
     .sort((a, b) => completedAtOf(b) - completedAtOf(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** Done count for the column header: the server's total when paging, else what's loaded. */
-export function doneCount(state: State, projectId: string | null, loaded: number): number {
-  return state.donePaging[scopeOf(projectId)]?.total ?? loaded;
+export function doneCount(state: State, board: string | null, loaded: number): number {
+  return state.donePaging[scopeOf(board)]?.total ?? loaded;
 }
 
 /** Whether the Done column has more to load (and isn't already loading it). */
-export function canLoadMoreDone(state: State, projectId: string | null): boolean {
-  const p = state.donePaging[scopeOf(projectId)];
+export function canLoadMoreDone(state: State, board: string | null): boolean {
+  const p = state.donePaging[scopeOf(board)];
   return !!p && p.nextCursor !== null && !p.loading;
 }
 
 /** True when the scope needs its first done page (never requested, or reset by a snapshot). */
-export function needsFirstDonePage(state: State, projectId: string | null): boolean {
-  return state.ready && !state.donePaging[scopeOf(projectId)];
+export function needsFirstDonePage(state: State, board: string | null): boolean {
+  return state.ready && !state.donePaging[scopeOf(board)];
 }
 
 /** Instant local match while the server search is in flight: key (current or old), remote ID or title. */
@@ -269,13 +293,13 @@ function sortColumns(cols: Columns): Columns {
  * match locally. Search shows every match, child tickets included: the user is looking for
  * something specific, and hiding a match would read as "not found".
  */
-export function searchColumns(state: State, projectId: string | null): { columns: Columns; pending: boolean } {
+export function searchColumns(state: State, board: string | null): { columns: Columns; pending: boolean } {
   const s = state.search;
   const cols = emptyColumns();
   if (!s) return { columns: cols, pending: false };
   if (s.ids === null) {
-    const scope = scopeOf(projectId);
-    for (const t of Object.values(state.tickets)) if (inScope(t, scope) && matchesQuery(t, s.q, state.keyAliases)) cols[t.status].push(t);
+    const scope = scopeOf(board);
+    for (const t of Object.values(state.tickets)) if (inScope(state, t, scope) && matchesQuery(t, s.q, state.keyAliases)) cols[t.status].push(t);
     return { columns: sortColumns(cols), pending: true };
   }
   for (const id of s.ids) {
@@ -301,15 +325,15 @@ export const canLoadMoreSearch = (s: SearchState | null): boolean => !!s && s.id
 // ---------------------------------------------------------------------------
 //
 // Snapshot / reconnect:
-//   listTickets(undefined, { status: LIVE_STATUSES }) + ticketPage({ status: "done", projectId:
-//   scopeProject(scope), limit: DONE_PAGE_SIZE }) → dispatch({ type: "snapshot", snapshot: {
+//   listTickets(undefined, { status: LIVE_STATUSES }) + ticketPage({ status: "done",
+//   ...scopeQuery(scope), limit: DONE_PAGE_SIZE }) → dispatch({ type: "snapshot", snapshot: {
 //   ..., tickets, donePage: { scope, page } } }). The snapshot drops every other scope's paging
 //   and re-arms an active search (ids → null) so the client re-runs it.
-// Scope change: if needsFirstDonePage(state, projectId): "donePage.request" then the page with
+// Scope change: if needsFirstDonePage(state, board): "donePage.request" then the page with
 //   append: false.
 // Load more (button or an IntersectionObserver near the column's end): if canLoadMoreDone,
 //   "donePage.request" then ticketPage({ cursor: nextCursor }) with append: true.
 // Search: on every keystroke "search.set" (instant local matches); after SEARCH_DEBOUNCE_MS
-//   "search.request" + searchTickets({ q, projectId, limit: SEARCH_PAGE_SIZE }) → "search.results"
+//   "search.request" + searchTickets({ q, ...scopeQuery(scope), limit: SEARCH_PAGE_SIZE }) → "search.results"
 //   (stale responses are ignored). More: canLoadMoreSearch → searchTickets({ cursor }) with
 //   append: true. An empty query clears it.

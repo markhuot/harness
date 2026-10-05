@@ -431,6 +431,8 @@ export interface ProjectView {
   permissionMode: PermissionMode | null;
   /** Key badge color: a preset id or "#rrggbb"; null → the theme's accent */
   color: string | null;
+  /** The project's group; null → in no group */
+  group: string | null;
   /** Base branch override; null → settings.baseBranch */
   baseBranch: string | null;
   /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */

@@ -23,7 +23,7 @@ import type {
 import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
 import { dispatchedKey } from "./format";
-import { adjustDoneTotals, doneColumn, mergeTickets, pagingFromPage, reducePaging, type DonePaging, type PagingAction, type SearchState } from "./paging";
+import { adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
   entries: TranscriptEntry[];
@@ -296,8 +296,16 @@ function pruneDeltas(deltas: State["deltas"], sessions: State["sessions"], runs:
 
 export function applyEvent(state: State, event: HarnessEvent): State {
   switch (event.kind) {
-    case "project.upserted":
-      return { ...state, projects: { ...state.projects, [event.project.id]: event.project } };
+    case "project.upserted": {
+      const projects = { ...state.projects, [event.project.id]: event.project };
+      // Joining or leaving a group changes what that group's board counts: page it afresh.
+      const before = state.projects[event.project.id]?.group ?? null;
+      const after = event.project.group ?? null;
+      if (before === after) return { ...state, projects };
+      const stale = [before, after].flatMap((g) => (g === null ? [] : [groupScope(g)]));
+      const donePaging = Object.fromEntries(Object.entries(state.donePaging).filter(([scope]) => !stale.includes(scope)));
+      return { ...state, projects, donePaging };
+    }
     case "project.deleted": {
       const tickets: Record<string, Ticket> = {};
       for (const t of Object.values(state.tickets)) if (t.projectId !== event.id) tickets[t.id] = t;
@@ -498,18 +506,20 @@ export function reducer(state: State, action: Action): State {
 // Selectors
 // ---------------------------------------------------------------------------
 
-export function ticketsForProject(state: State, projectId: string | null): Ticket[] {
-  return Object.values(state.tickets).filter((t) => projectId === null || t.projectId === projectId);
+/** The loaded tickets on a board: a project id, a scope (paging.ts: a group's, All projects) or null for all. */
+export function ticketsForProject(state: State, board: string | null): Ticket[] {
+  const scope = scopeOf(board);
+  return Object.values(state.tickets).filter((t) => inScope(state, t, scope));
 }
 
-export function boardColumns(state: State, projectId: string | null): Record<TicketStatus, Ticket[]> {
+export function boardColumns(state: State, board: string | null): Record<TicketStatus, Ticket[]> {
   const cols: Record<TicketStatus, Ticket[]> = { planning: [], in_progress: [], blocked: [], review: [], done: [] };
-  for (const t of ticketsForProject(state, projectId)) if (t.status !== "done") cols[t.status]?.push(t);
+  for (const t of ticketsForProject(state, board)) if (t.status !== "done") cols[t.status]?.push(t);
   for (const list of Object.values(cols)) {
     list.sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
   }
   // Done: newest-completed first, only the paged-in prefix (see paging.ts).
-  cols.done = doneColumn(state, projectId);
+  cols.done = doneColumn(state, board);
   return cols;
 }
 
