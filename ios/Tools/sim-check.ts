@@ -318,7 +318,10 @@ async function pickDevices(n: number): Promise<string[]> {
       await acquire(name, { onWait: (h) => console.log(`waiting for simulator "${name}"${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
       if (!given) {
         const udid = await ensureDevice(name, { kind: ipad ? "ipad" : "iphone", log: console.log });
-        if (name !== SHARED_DEVICE) toShutDown.add(udid);
+        if (name !== SHARED_DEVICE) {
+          toShutDown.add(udid);
+          toDelete.add(udid);
+        }
         return udid;
       }
       if (d!.state !== "Booted") {
@@ -336,12 +339,20 @@ async function pickDevices(n: number): Promise<string[]> {
  * booted. harness-shared stays up for the next agent, and --keep leaves everything running.
  */
 const toShutDown = new Set<string>();
+/**
+ * Its own sim-check devices, deleted once they're shut down: each grows to 3–8 GB, and the next run
+ * that needs one creates it again on iOS 27.0 in a few seconds. --udid devices are never deleted.
+ */
+const toDelete = new Set<string>();
 async function shutDownDevices() {
   if (flag("keep") || !toShutDown.size) return;
   const udids = [...toShutDown];
   toShutDown.clear();
   await Promise.all(udids.map((u) => sh(["xcrun", "simctl", "shutdown", u], { allowFail: true })));
   console.log(`shut down ${udids.join(", ")}`);
+  const gone = udids.filter((u) => toDelete.has(u));
+  await Promise.all(gone.map((u) => sh(["xcrun", "simctl", "delete", u], { allowFail: true })));
+  if (gone.length) console.log(`deleted ${gone.join(", ")}`);
 }
 
 // ------------------------------------------------------------ navigating the running app

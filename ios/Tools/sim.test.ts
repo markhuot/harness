@@ -8,6 +8,7 @@ import {
   deviceTypeFor,
   ensureDevice,
   etimeSeconds,
+  extraRuntimes,
   lockHolder,
   markKept,
   parseSimDaemons,
@@ -49,6 +50,13 @@ test("pinnedRuntime refuses when only other runtimes exist, and names them", () 
 test("pinnedRuntime ignores an unavailable 27.0 and other platforms' 27.0", () => {
   expect(() => pinnedRuntime([runtime("27.0", { isAvailable: false }), runtime("27.1")])).toThrow(/27\.0 \(unavailable\)/);
   expect(() => pinnedRuntime([runtime("27.0", { platform: "watchOS", identifier: "com.apple.CoreSimulator.SimRuntime.watchOS-27-0" })])).toThrow(/none/);
+});
+
+test("extraRuntimes names every iOS runtime but 27.0 (27.0.x counts as 27.0), and skips other platforms", () => {
+  const image = (version: string, platformIdentifier = "com.apple.platform.iphonesimulator") => ({ identifier: `id-${version}`, version, platformIdentifier });
+  const images = [image("18.6"), image("27.0"), image("27.0.1"), image("27.1"), image("27.10"), image("12.0", "com.apple.platform.watchsimulator")];
+  expect(extraRuntimes(images).map((r) => r.version)).toEqual(["18.6", "27.1", "27.10"]);
+  expect(extraRuntimes([image("27.0")])).toEqual([]);
 });
 
 test("deviceTypeFor prefers the iPhone 18 Pro and an iPad Pro 11-inch, else any of the kind", () => {
