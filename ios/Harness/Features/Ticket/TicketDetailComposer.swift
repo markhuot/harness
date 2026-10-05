@@ -59,7 +59,8 @@ struct TicketDetailComposer: View {
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
                                                             glass: true),
-                                  focusRequest: focusRequest)
+                                  focusRequest: focusRequest,
+                                  onSubmit: { send() })
                 sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
             }
         }

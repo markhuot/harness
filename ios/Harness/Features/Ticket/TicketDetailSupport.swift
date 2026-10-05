@@ -177,13 +177,25 @@ final class TicketDetailRelay {
     private var annotate: (AnnotationRequest) -> Void = { _ in }
     private var focusComposer: () -> Void = {}
     private var cachedSink: (holder: ObjectIdentifier, sink: AnnotationSink)?
+    private var tabs: [TicketTab] = []
+    private var shown: TicketTab?
 
     func update(hero: TicketDetailHeroCollapse, onTab: @escaping (TicketTab) -> Void,
-                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void) {
+                annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void,
+                tabs: [TicketTab], shown: TicketTab) {
         self.hero = hero
         self.onTab = onTab
         self.annotate = annotate
         self.focusComposer = focusComposer
+        self.tabs = tabs
+        self.shown = shown
+    }
+
+    /// Next Tab (1) and Previous Tab (-1), round the ends (Tabs.nextTab), for ⇧⌘] and ⇧⌘[ (WindowShortcuts).
+    func step(_ delta: Int) {
+        guard tabs.count > 1, let shown, let t = Tabs.nextTab(tabs, current: shown, delta: delta) else { return }
+        hero?.show()
+        onTab(t)
     }
 
     private(set) lazy var tabOpener = TicketDetailTabOpener { [weak self] t in

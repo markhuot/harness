@@ -4,7 +4,16 @@ import SwiftUI
 /// The desktop sidebar on a phone: ProjectsSidebar, presented with medium/large detents by the
 /// shell, which closes it by its grabber (no Cancel button). A row's link closes it.
 struct ProjectsSheet: View {
-    var body: some View { ProjectsSidebar() }
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ProjectsSidebar()
+            // ⌃⌘S closes it again; the shortcut that opened it is under the sheet.
+            .hiddenShortcuts {
+                Button("Toggle Sidebar") { dismiss() }
+                    .keyboardShortcut("s", modifiers: [.control, .command])
+            }
+    }
 }
 
 /// The desktop sidebar, and how the app moves between its sections: Inbox, All projects, each

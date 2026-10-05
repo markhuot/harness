@@ -398,8 +398,21 @@ detail, so the gear's `router.push(.project(id:))` lands there. The column's vis
 `sidebarHidden` pref (remembered across launches); the system toggle hides and shows it. The
 detail gets `\.desktopShell`: `SidebarToolbarItem` draws nothing, and BoardScreen puts its
 search in the navigation bar (`.searchable(placement: .toolbar)`) and Filter and New session
-(⌘N) in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
-width. `harness://projects` at regular width shows the sidebar instead of a sheet (RootView
+in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
+width.
+
+**Keyboard shortcuts** (App/KeyCommands.swift, whose header has the reasons) follow the desktop's
+⌘ chords (keys.ts) at either width. iOS keeps the first registration of a chord, so the
+window-wide ones are hidden buttons at each window's root from its first frame (`WindowShortcuts`
+in SceneChrome): New Session ⌘N, All Projects ⌘1, Inbox ⌘2, Settings ⌘,, and Next/Previous Tab
+⇧⌘]/⇧⌘[, which step the ticket screen on top (it registers with `ShortcutTargets` as it appears,
+`Tabs.nextTab`). ⌃⌘S is a hidden button in MainTabs (the Projects sheet, which closes itself on
+⌃⌘S) and DesktopShell (the `sidebarHidden` pref). ⌘↩ on a field sharing its screen (composer,
+Details spec, approval Deny note) is `.onSubmitShortcut`, a key press on the focused field; a
+sheet's primary button carries `.submitShortcut()` (New session's Start, with ⇧⌘↩ on Plan first;
+Request changes, Re-open, Approve and…, the annotator's Add). ⌘S saves a prompt, and sheets'
+Cancel buttons take Esc (`.cancelAction`). Not SwiftUI `Commands`: their menu commands don't fire
+on iPhone and iOS takes ⌘, for itself. `harness://projects` at regular width shows the sidebar instead of a sheet (RootView
 never presents it there). A section that doesn't set its own background gets `bg` from the
 detail column, since the split view paints the system background.
 
@@ -823,7 +836,7 @@ native-pattern difference, not a missing feature.
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
 | Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
-| Board (phone: no header); bottom bar: Projects, search field (project name as placeholder) with Filter (Show child tickets) inside, + New session (iPad: search in the navigation bar, Filter and New session top trailing, ⌘F / ⌘N) | screens/Board, ui/header | BoardScreen | done (differs) |
+| Board (phone: no header); bottom bar: Projects, search field (project name as placeholder) with Filter (Show child tickets) inside, + New session (iPad: search in the navigation bar, Filter and New session top trailing; ⌘F, and ⌘N with the window shortcuts) | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): moves, top/bottom, open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |

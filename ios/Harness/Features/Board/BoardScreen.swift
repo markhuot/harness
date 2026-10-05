@@ -206,7 +206,7 @@ struct BoardScreen: View {
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
         if desktop {
             ToolbarItem(placement: .primaryAction) { filterMenu }
-            ToolbarItem(placement: .primaryAction) { newSession(ctx).keyboardShortcut("n") }
+            ToolbarItem(placement: .primaryAction) { newSession(ctx) }
         }
     }
 

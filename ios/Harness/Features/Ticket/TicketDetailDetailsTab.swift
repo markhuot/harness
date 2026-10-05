@@ -39,6 +39,7 @@ struct TicketDetailDetailsTab: View {
                     .lineLimit(5...10)
                     .lineSpacing(3)
                     .focused($editingSpec)
+                    .onSubmitShortcut { if draft?.dirty == true { saveSpec() } }
                     .disabled(!editable)
                     .accessibilityLabel("Spec")
                 if let draft, draft.dirty {

@@ -53,17 +53,21 @@ private struct NewSessionEditorView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", systemImage: "xmark") { cancel() }
+                        .keyboardShortcut(.cancelAction)
                 }
                 // Plan first and Start session each get their own glass; Start is the prominent one.
+                // ⌘↩ starts and ⇧⌘↩ plans first, as on the desktop.
                 ToolbarItem(placement: .topBarTrailing) {
                     launchButton("Plan first", systemImage: "doc.text") { submit(start: false) }
                         .disabled(!canSubmit(view))
+                        .keyboardShortcut(.return, modifiers: [.command, .shift])
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .confirmationAction) {
                     launchButton("Start session", systemImage: "paperplane.fill") { submit(start: true) }
                         .primaryToolbarItem(c)
                         .disabled(!canSubmit(view))
+                        .submitShortcut()
                 }
             }
             .trackingBranches(branches, for: view)

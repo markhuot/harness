@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPad and iPhone with a keyboard attached, the Mac's shortcuts work too: ⌘N for a new
+  session, ⌘1 for All projects, ⌘2 for the Inbox, ⌘, for Settings and ⌃⌘S to show or hide the
+  sidebar, from any window. On a ticket, ⇧⌘] and ⇧⌘[ move between its tabs. ⌘↩ sends a message,
+  saves an edited spec, denies an approval with your note, sends Request changes or Re-open notes,
+  approves with instructions and adds annotations. In New session, ⌘↩ starts the session and ⇧⌘↩
+  plans it first. ⌘S saves a prompt, and Esc cancels these screens.
+
 ### Fixed
 
 - On iPad, New session closes once the ticket is created. It used to stay open behind the new

@@ -83,6 +83,7 @@ private struct SceneChrome: ViewModifier {
 
     @Environment(AppModel.self) private var app
     @Environment(\.colorScheme) private var scheme
+    @State private var targets = ShortcutTargets()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.supportsMultipleWindows) private var multipleWindows
 
@@ -115,6 +116,9 @@ private struct SceneChrome: ViewModifier {
                 BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
             }
             .environment(router)
+            // The desktop's window-wide shortcuts (⌘N, ⌘1, ⌘2, ⌘,, ⇧⌘], ⇧⌘[), for this window.
+            .environment(\.shortcutTargets, targets)
+            .hiddenShortcuts { WindowShortcuts(router: router, targets: targets) }
     }
 
     /// At regular width the Projects sheet is the split view's sidebar column (MainTabs shows it
@@ -147,7 +151,13 @@ struct MainTabs: View {
             if sizeClass == .regular {
                 DesktopShell()
             } else {
-                SectionStack()
+                // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
+                SectionStack().hiddenShortcuts {
+                    Button("Toggle Sidebar") {
+                        if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                    }
+                    .keyboardShortcut("s", modifiers: [.control, .command])
+                }
             }
         }
         .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
@@ -189,6 +199,11 @@ private struct DesktopShell: View {
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
         .navigationSplitViewStyle(.balanced)
+        // ⌃⌘S, as the desktop toggles its sidebar.
+        .hiddenShortcuts {
+            Button("Toggle Sidebar") { app.setPref(\.sidebarHidden, app.prefs.sidebarHidden != true) }
+                .keyboardShortcut("s", modifiers: [.control, .command])
+        }
         .onChange(of: router.sheet, initial: true) { _, sheet in
             guard case .projects? = sheet else { return }
             router.sheet = nil

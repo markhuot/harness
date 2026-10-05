@@ -145,13 +145,16 @@ private struct PromptDetailView: View {
             if cancellable {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel", systemImage: "xmark", action: cancel)
+                        .keyboardShortcut(.cancelAction)
                 }
             }
             if editing {
                 ToolbarItem(placement: .topBarTrailing) {
                     // Disabled, a prominent glass button still reads as enabled in dark mode, so it goes plain and dim.
                     if canSave {
+                        // ⌘S, as on the desktop.
                         Button("Save", systemImage: "checkmark") { submit() }.buttonStyle(.glassProminent).tint(c.accent)
+                            .keyboardShortcut("s")
                     } else {
                         Button("Save", systemImage: "checkmark") {}.disabled(true)
                     }

@@ -146,6 +146,7 @@ private struct TicketDetailBody: View {
     /// The spec's media (the detail's attachments), refetched when a new revision may show more.
     @State private var specAttachments: [Attachment]?
     @State private var relay = TicketDetailRelay()
+    @Environment(\.shortcutTargets) private var shortcutTargets
 
     /// What has to change for the spec's media to load again.
     private struct SpecAttachmentsTrigger: Hashable {
@@ -160,7 +161,9 @@ private struct TicketDetailBody: View {
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
         let compact = shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
-        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 })
+        let tabs = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
+        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 },
+                             tabs: tabs, shown: shown)
         ZStack(alignment: .top) {
             // The tab strip and pager are laid out over the hero, as if it were gone, and sit below it
             // while it shows (HeroSlide, PagerSlide); hiding slides them up over it. No layout changes, so a
@@ -206,6 +209,10 @@ private struct TicketDetailBody: View {
             }
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerTop = $0 }
         }
+        // ⇧⌘] and ⇧⌘[ step through the tabs, round the ends, as on the desktop.
+        // ⇧⌘] and ⇧⌘[ (the window's WindowShortcuts) step this screen's tabs while it's the one showing.
+        .onAppear { shortcutTargets?.addTabStepper(relay) { [relay] in relay.step($0) } }
+        .onDisappear { shortcutTargets?.removeTabStepper(relay) }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))

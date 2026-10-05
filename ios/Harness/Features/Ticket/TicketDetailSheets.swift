@@ -20,6 +20,7 @@ struct TicketDetailSheetFrame<Primary: View, Content: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 HButton("Cancel", variant: .ghost, fullWidth: false, haptic: nil) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
                 VStack(spacing: 1) {
                     Text(title).font(.scaled(size: 16, weight: .semibold)).foregroundStyle(c.text).lineLimit(1)
                     if let subtitle { Text(subtitle).font(.mono(12)).foregroundStyle(c.text3).lineLimit(1) }
@@ -91,6 +92,7 @@ struct TicketDetailNotesSheet: View {
         TicketDetailSheetFrame(title: reopen ? "Re-open" : "Request changes", subtitle: Keys.keyLabel(ticket)) {
             HButton("Send", variant: .primary, fullWidth: false) { submit() }
                 .disabled(TicketDetailLogic.trim(notes).isEmpty)
+                .submitShortcut()
         } content: {
             TicketDetailSheetField(text: $notes, placeholder: reopen ? "What should the agent do now?" : "What should the agent change?", minHeight: 160, autoFocus: true)
             Text(reopen
@@ -134,6 +136,7 @@ struct TicketDetailApproveCustomSheet: View {
         TicketDetailSheetFrame(title: "Approve and…", subtitle: Keys.keyLabel(ticket)) {
             HButton("Approve", variant: .primary, fullWidth: false, haptic: nil) { submit() }
                 .disabled(TicketDetailLogic.trim(instructions).isEmpty)
+                .submitShortcut()
         } content: {
             TicketDetailSheetField(text: $instructions, placeholder: "What should the agent do with the work? e.g. “deploy it to staging, then open a PR”",
                                    minHeight: 140, accessibilityLabel: "Completion instructions", autoFocus: true)
