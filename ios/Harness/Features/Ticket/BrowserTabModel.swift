@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /// The Browser tab's state and timing glue: the subscription and which browser tab it's on, the
-/// latest decoded frame, live/idle, the resize gate and its debounce, wheel coalescing, and the hidden
+/// latest decoded frame, the resize gate and its debounce, wheel coalescing, and the hidden
 /// field's typing buffer. The input rules themselves are HarnessKit's (TouchGesture,
 /// WheelCoalescer, BrowserTyping, ResizeGate, BrowserTabSelection); this class feeds them touches,
 /// events and clock readings.
@@ -22,7 +22,6 @@ final class BrowserTabModel {
     private(set) var frame: Frame?
     /// The browser tab shown (followed across reconnects and kept while the session stays the same).
     private(set) var selection = BrowserTabSelection()
-    private(set) var live = false
     /// The stage's size (points), from the view's geometry.
     private(set) var stage: CGSize = .zero
     /// The frame's drawn rect while pinch-zoomed (BrowserZoom), nil at 1×. Reset by a tab switch,
@@ -37,7 +36,6 @@ final class BrowserTabModel {
     @ObservationIgnored private var send: (BrowserInput) -> Void = { _ in }
     @ObservationIgnored private weak var store: BoardStore?
     @ObservationIgnored private var sessionId: String?
-    @ObservationIgnored private var lastFrameAt: Double = 0
     @ObservationIgnored private var gate = ResizeGate()
     @ObservationIgnored private var resizeTask: Task<Void, Never>?
     @ObservationIgnored private var wheel = WheelCoalescer()
@@ -93,8 +91,6 @@ final class BrowserTabModel {
             case let .browserFrame(_, tabId, data, width, height, _):
                 // Frames still in flight from the tab just left.
                 guard self.selection.accepts(frameTabId: tabId) else { return }
-                self.lastFrameAt = Self.now()
-                if !self.live { self.live = true }
                 self.receiveFrame(data: data, width: width, height: height)
             case let .browserState(_, s, _):
                 self.receive(s)
@@ -103,11 +99,9 @@ final class BrowserTabModel {
             }
         }
         if let client, let s = try? await client.browserState(sessionId, tabId: tab), !Task.isCancelled, state == nil { receive(s) }
-        // Live = a frame within the last 2 s, checked twice a second.
+        // Held until the task is cancelled (a cancelled sleep returns at once).
         while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(500))
-            let isLive = Self.now() - lastFrameAt < 2000
-            if isLive != live { live = isLive }
+            try? await Task.sleep(for: .seconds(3600))
         }
         off()
         store.unsubscribeBrowser(sessionId, viewer: viewer)
@@ -127,10 +121,9 @@ final class BrowserTabModel {
     private func receive(_ s: BrowserState) {
         if selection.receive(s) { dropFrame() }
         state = s
-        let drove = gate.drives
-        gate.follow(s)
-        // Responsive switched on from here: the stage goes once the subscription is confirmed.
-        if gate.drives, !drove { scheduleResize(ms: 100) }
+        // This view took over the tab's size (Responsive switched on here, the service handed it
+        // over, or a new tab): the stage goes once the subscription is confirmed.
+        if gate.follow(s) { scheduleResize(ms: 100) }
     }
 
     /// Forget the current frame (another tab is coming); frames decoding meanwhile are discarded.

@@ -295,36 +295,48 @@ public enum BrowserTyping {
 /// last one sent. Call reset() for a new session or after a reconnect.
 ///
 /// A tab with a size (BrowserState.size) follows a stage only while it's responsive, and only the
-/// stage of the viewer that switched that on (`sizeOwner`): feed every state to `follow`, and
-/// `take` sends nothing while another viewer (or nobody) drives the tab. A state without a size
-/// (a service from before per-tab sizes) leaves every viewer driving it, as before.
+/// stage of the viewer the service names its owner (`sizeOwner`: the one that switched it on, or
+/// the newest one watching it, handed on when the owner leaves): feed every state to `follow`,
+/// which says when to send the stage, and `take` sends nothing while another viewer (or nobody)
+/// drives the tab. A state without a size (a service from before per-tab sizes) leaves every
+/// viewer driving it, as before.
 ///
 /// (Debounce `take` by 250 ms after layout and 100 ms after confirm; that belongs in the view,
 /// e.g. `.task(id: size) { try await Task.sleep(for: .milliseconds(250)); … }`.)
 public struct ResizeGate: Sendable, Equatable {
     private var subscribed = false
     private var lastSent: (Int, Int)?
+    /// The tab the last state was for.
+    private var tab: Int?
     /// This viewer's stage size drives the tab.
     public private(set) var drives = true
 
     public init() {}
 
     public static func == (a: Self, b: Self) -> Bool {
-        a.subscribed == b.subscribed && a.drives == b.drives && a.lastSent?.0 == b.lastSent?.0 && a.lastSent?.1 == b.lastSent?.1
+        a.subscribed == b.subscribed && a.drives == b.drives && a.tab == b.tab && a.lastSent?.0 == b.lastSent?.0 && a.lastSent?.1 == b.lastSent?.1
     }
 
     public mutating func reset() {
         subscribed = false
         lastSent = nil
+        tab = nil
         drives = true
     }
 
-    /// A browser.state for the tab shown: whether this viewer drives its size now. Losing it
-    /// forgets the last size sent, so taking it back sends the stage again even when it's the same
-    /// size it was (the tab has followed someone else's stage meanwhile).
-    public mutating func follow(_ state: BrowserState) {
+    /// A browser.state for the tab shown: whether this viewer drives its size now. Losing it, or
+    /// moving to another sized tab, forgets the last size sent, so driving again sends the stage
+    /// even when it's the same size it was (the tab has followed someone else's stage meanwhile, or
+    /// has a size of its own). True when this viewer just started driving a sized tab (it switched
+    /// Responsive on, the service handed it over, or it moved to a tab it owns): schedule a resize.
+    @discardableResult
+    public mutating func follow(_ state: BrowserState) -> Bool {
+        let drove = drives
+        let moved = state.tabId != tab
+        tab = state.tabId
         drives = state.size == nil || state.ownsSize
-        if !drives { lastSent = nil }
+        if !drives || (moved && state.size != nil) { lastSent = nil }
+        return drives && state.size != nil && (!drove || moved)
     }
 
     /// The Responsive switch turned on from this viewer: the input carrying its stage size, which
