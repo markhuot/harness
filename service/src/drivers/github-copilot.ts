@@ -160,7 +160,9 @@ export interface CopilotPermissionPlan {
 
 /**
  * Harness permission mode → CLI flags. The harness MCP server is always allowed.
- *  - auto → --allow-all-tools (Copilot has no classifier of its own).
+ *  - auto → --allow-all (Copilot has no classifier of its own). --allow-all-tools alone still
+ *    verifies paths and URLs, so prompt mode denies any command touching a path outside the
+ *    cwd (/tmp, /Applications) with nobody to ask.
  *  - ask → writes in the workdir and read-only shell run; anything else is denied, reported as
  *    permission_denied, and becomes a pending approval. Human grants become allow rules.
  *  - read_only (and plan runs) → shell and writes denied outright.
@@ -176,7 +178,7 @@ export function planCopilotPermissions(
     return plan;
   }
   if (mode === "auto") {
-    plan.args.push("--allow-all-tools");
+    plan.args.push("--allow-all");
     return plan;
   }
   plan.args.push("--allow-tool", "write");

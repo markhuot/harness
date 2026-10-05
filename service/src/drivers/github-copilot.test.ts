@@ -110,7 +110,7 @@ describe("models", () => {
 
 describe("permissions", () => {
   test("auto allows everything, read-only and plan runs deny shell and writes", () => {
-    expect(planCopilotPermissions({ kind: "work", permissionMode: "auto" }, settings).args).toEqual(["--allow-tool", "harness", "--allow-all-tools"]);
+    expect(planCopilotPermissions({ kind: "work", permissionMode: "auto" }, settings).args).toEqual(["--allow-tool", "harness", "--allow-all"]);
     const ro = ["--allow-tool", "harness", "--deny-tool", "write", "--deny-tool", "shell"];
     expect(planCopilotPermissions({ kind: "work", permissionMode: "read_only" }, settings).args).toEqual(ro);
     expect(planCopilotPermissions({ kind: "plan", permissionMode: "auto" }, settings).args).toEqual(ro);

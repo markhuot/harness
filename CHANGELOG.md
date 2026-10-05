@@ -24,6 +24,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   puzzle-piece button. To add an extension you're building, type the path of its folder on your
   Mac.
 
+### Fixed
+
+- Tickets on the GitHub Copilot driver in auto mode can run shell commands that touch files
+  outside their checkout again (`/tmp`, `/Applications`, another worktree). Copilot used to deny
+  those with nobody to ask, so the agent blocked saying every command was refused.
+
 ## [app-20261005.2050](https://github.com/markhuot/harness/releases/tag/app-20261005.2050) - 2026-10-05
 
 ### Added

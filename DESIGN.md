@@ -1098,7 +1098,8 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   driver reports them under their own names. There's no system-prompt flag, so the run's system
   prompt goes in front of the prompt inside `<harness_instructions>`. Prompt mode reads no stdin,
   so the driver doesn't steer, and attached images aren't sent (the prompt lists their paths).
-  Permissions: auto → `--allow-all-tools`; ask → `--allow-tool write` plus the ticket's grants
+  Permissions: auto → `--allow-all` (tools, paths and URLs; `--allow-all-tools` alone still denies
+  commands that touch paths outside the cwd); ask → `--allow-tool write` plus the ticket's grants
   (`bash` → `shell`, edits → `write`, a one-time grant of a simple command → `shell(<command>)`);
   read-only and plan runs → `--deny-tool write --deny-tool shell`. The harness server is always
   allowed and `--no-ask-user` is always set. A call the rules don't allow fails with
