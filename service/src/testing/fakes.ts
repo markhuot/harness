@@ -53,6 +53,16 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
       const s = states.get(sessionId);
       return s ? [{ id: 1, url: s.url, title: s.title, loading: s.loading }] : [];
     },
+    async tabInfo(sessionId, tab) {
+      const s = states.get(sessionId);
+      if (!s || tab !== 1) throw new Error(`No browser tab ${tab}`);
+      return { id: 1, url: s.url, title: s.title, loading: s.loading, size: { device: "desktop", width: 1280, height: 800, responsive: false }, requests: [], console: [] };
+    },
+    async resize(sessionId) {
+      const s = states.get(sessionId);
+      if (!s) throw new Error("This session has no open tabs.");
+      return s;
+    },
     async closeTab() {},
     async content() {
       return "page text";

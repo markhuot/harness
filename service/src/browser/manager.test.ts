@@ -18,8 +18,9 @@ const withChrome = chromePath ? describe : describe.skip;
 // One Chrome profile for the whole file (Chrome instances here run one at a time).
 const profileDir = chromePath ? tempDir("harness-browser-test-") : "";
 
-const html = (body: string, title = "Fixture") =>
-  new Response(`<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`, {
+// The viewport tag a responsive site has, so a "mobile" tab lays the page out at its own width.
+const html = (body: string, title = "Fixture", head = `<meta name="viewport" content="width=device-width, initial-scale=1">`) =>
+  new Response(`<!doctype html><html><head>${head}<title>${title}</title></head><body>${body}</body></html>`, {
     headers: { "content-type": "text/html; charset=utf-8" },
   });
 
@@ -94,10 +95,41 @@ function fixtures(req: Request): Response {
          <div id="a">Left</div><div id="b">Right</div>`,
         "Halves",
       );
+    case "/ua":
+      // What the server saw: the user agent of each load of this page, in order.
+      uaHits.push(req.headers.get("user-agent") ?? "");
+      return html(`<p id="ua">${req.headers.get("user-agent") ?? ""}</p>`, "UA");
+    case "/legacy":
+      return html(`<p>No viewport tag</p>`, "Legacy", "");
+    case "/touch":
+      return html(
+        `<button id="tap" style="display:block;width:200px;height:60px">tap</button>
+         <script>
+           window.seen = [];
+           const b = document.getElementById('tap');
+           for (const t of ['touchstart', 'touchend', 'mousedown', 'click']) b.addEventListener(t, () => window.seen.push(t));
+         </script>`,
+        "Touch",
+      );
+    case "/noisy":
+      return html(
+        `<script>
+           console.error('boom', { code: 7 });
+           console.warn('careful');
+           console.log('not reported');
+           fetch('/missing').catch(() => {});
+           fetch('http://127.0.0.1:1/refused').catch(() => {});
+           setTimeout(() => { throw new Error('late failure'); }, 0);
+         </script>`,
+        "Noisy",
+      );
     default:
       return new Response("not found", { status: 404 });
   }
 }
+
+/** The User-Agent of every load of /ua, in order. */
+const uaHits: string[] = [];
 
 async function until<T>(fn: () => T | Promise<T>, what: string, timeoutMs = 5000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -165,7 +197,8 @@ withChrome("BrowserManager (real Chrome)", () => {
       url: `${base}/`,
       title: "Home Page",
       loading: false,
-      tabs: [{ id: 1, url: `${base}/`, title: "Home Page", loading: false }],
+      size: { device: "desktop", width: 1280, height: 800, responsive: false },
+      tabs: [{ id: 1, url: `${base}/`, title: "Home Page", loading: false, size: { device: "desktop", width: 1280, height: 800, responsive: false } }],
     });
     expect(await browser.state("s-open")).toEqual(state);
   }, 30_000);
@@ -355,17 +388,16 @@ withChrome("BrowserManager (real Chrome)", () => {
 
     test("answers null once the tab was resized since the screenshot (a viewer's pane changed), and matches again at the new size", async () => {
       await browser.open("s-halves", `${base}/halves`);
-      await browser.input("s-halves", { type: "resize", width: 1280, height: 800 });
       const shot = await browser.capture("s-halves");
       expect(shot.viewport).toEqual({ width: 1280, height: 800 });
       const query = { tabId: shot.tabId, x: 700, y: 100, url: shot.url, scroll: shot.scroll, viewport: shot.viewport };
       expect(await browser.elementAt("s-halves", query)).toEqual({ path: "#b", text: "Right" });
       // Wider: (700, 100) is now over the left half. Narrower: it's outside the page. Either way, null.
-      await browser.input("s-halves", { type: "resize", width: 1600, height: 800 });
+      await browser.resize("s-halves", { width: 1600, height: 800 });
       await until(async () => (await browser.evaluate("s-halves", "window.innerWidth")) === "1600", "the tab to be 1600 wide");
       expect(await browser.evaluate("s-halves", "document.elementFromPoint(700, 100).id")).toBe('"a"');
       expect(await browser.elementAt("s-halves", query)).toBeNull();
-      await browser.input("s-halves", { type: "resize", width: 480, height: 800 });
+      await browser.resize("s-halves", { width: 480, height: 800 });
       await until(async () => (await browser.evaluate("s-halves", "window.innerWidth")) === "480", "the tab to be 480 wide");
       expect(await browser.elementAt("s-halves", query)).toBeNull();
       // A screenshot at the new size names what's there now.
@@ -512,14 +544,22 @@ withChrome("BrowserManager (real Chrome)", () => {
       await browser.close("t-pop");
     }, 30_000);
 
-    test("resize applies to every tab, and to tabs opened later", async () => {
-      await browser.open("t-size", `${base}/`);
+    test("each tab keeps its own size; new tabs start at desktop 1280×800", async () => {
+      // Not the home page: its long unbroken line would make a phone zoom out to fit it.
+      await browser.open("t-size", `${base}/page2`);
+      await browser.open("t-size", `${base}/page2`, { newTab: true });
+      await browser.input("t-size", { type: "size", width: 800, height: 600 }, { tab: 1 });
+      await browser.input("t-size", { type: "device", device: "mobile" }, { tab: 2 });
+      await until(async () => (await browser.evaluate("t-size", "innerWidth", { tab: 2 }).catch(() => "")) === "393", "tab 2 to be mobile");
+      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight, navigator.maxTouchPoints]", { tab: 1 })).toBe("[800,600,0]");
+      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0]", { tab: 2 })).toBe("[393,852,true]");
       await browser.open("t-size", `${base}/`, { newTab: true });
-      await browser.input("t-size", { type: "resize", width: 800, height: 600 });
-      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 1 })).toBe("[800,600]");
-      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 2 })).toBe("[800,600]");
-      await browser.open("t-size", `${base}/`, { newTab: true });
-      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 3 })).toBe("[800,600]");
+      expect(await browser.evaluate("t-size", "[innerWidth, innerHeight]", { tab: 3 })).toBe("[1280,800]");
+      expect((await browser.tabs("t-size")).map((t) => [t.id, t.size?.device, t.size?.width, t.size?.height])).toEqual([
+        [1, "desktop", 800, 600],
+        [2, "mobile", 393, 852],
+        [3, "desktop", 1280, 800],
+      ]);
       await browser.close("t-size");
     }, 30_000);
   });
@@ -571,13 +611,16 @@ withChrome("BrowserManager (real Chrome)", () => {
       await browser.open("s-race", `${base}/anim`);
       const frames: BrowserFrame[] = [];
       const late: BrowserFrame[] = [];
-      // Fire everything at once, like a viewer whose layout settles while it subscribes.
+      // v1 drives the tab's size (Responsive), then everything fires at once, like a viewer whose
+      // layout settles while another subscribes.
+      await browser.subscribe("s-race", "v1", (f) => frames.push(f), () => {});
+      await browser.input("s-race", { type: "responsive", on: true, width: 800, height: 500 }, { subscriberId: "v1" });
+      const v1 = { subscriberId: "v1" };
       await Promise.all([
-        browser.subscribe("s-race", "v1", (f) => frames.push(f), () => {}),
-        browser.input("s-race", { type: "resize", width: 900, height: 700 }),
-        browser.input("s-race", { type: "resize", width: 1000, height: 650 }),
+        browser.input("s-race", { type: "resize", width: 900, height: 700 }, v1),
+        browser.input("s-race", { type: "resize", width: 1000, height: 650 }, v1),
         browser.subscribe("s-race", "v2", (f) => late.push(f), () => {}),
-        browser.input("s-race", { type: "resize", width: 1024, height: 640 }),
+        browser.input("s-race", { type: "resize", width: 1024, height: 640 }, v1),
       ]);
       const info = browser.screencastInfo("s-race")!;
       expect(info).toMatchObject({ active: true, width: 1024, height: 640 });
@@ -589,12 +632,12 @@ withChrome("BrowserManager (real Chrome)", () => {
 
       // Same size again (as viewers send on every layout pass): no restart.
       await Promise.all([
-        browser.input("s-race", { type: "resize", width: 1024, height: 640 }),
-        browser.input("s-race", { type: "resize", width: 1024, height: 640 }),
+        browser.input("s-race", { type: "resize", width: 1024, height: 640 }, v1),
+        browser.input("s-race", { type: "resize", width: 1024, height: 640 }, v1),
       ]);
       expect(browser.screencastInfo("s-race")!.starts).toBe(info.starts);
       // A real change does restart, exactly once.
-      await browser.input("s-race", { type: "resize", width: 800, height: 600 });
+      await browser.input("s-race", { type: "resize", width: 800, height: 600 }, v1);
       expect(browser.screencastInfo("s-race")).toMatchObject({ active: true, width: 800, height: 600, starts: info.starts + 1 });
       frames.length = 0;
       await until(() => frames.some((f) => f.width === 800), "frames after real resize");
@@ -701,12 +744,181 @@ withChrome("BrowserManager (real Chrome)", () => {
       await until(async () => (await browser.evaluate("s-nav", "window.marker").catch(() => "1")) === "undefined", "reload clears JS state");
     }, 30_000);
 
-    test("resize changes the viewport", async () => {
+    test("the width × height inputs change the viewport", async () => {
       await browser.open("s-resize", `${base}/`);
-      await browser.input("s-resize", { type: "resize", width: 800, height: 600 });
+      await browser.input("s-resize", { type: "size", width: 800, height: 600 });
       expect(await browser.evaluate("s-resize", "[innerWidth, innerHeight]")).toBe("[800,600]");
       const png = Buffer.from(await browser.screenshot("s-resize"), "base64");
       expect(png.readUInt32BE(16)).toBe(800);
+    }, 30_000);
+  });
+
+  describe("sizes", () => {
+    const state = (states: BrowserState[]) => states.at(-1)!;
+
+    test("Mobile is touch with an iPhone user agent, which the server sees too; Desktop puts it all back", async () => {
+      await browser.open("z-mobile", `${base}/touch`);
+      const desktopUa = JSON.parse(await browser.evaluate("z-mobile", "navigator.userAgent")) as string;
+      await browser.input("z-mobile", { type: "device", device: "mobile" });
+      await until(async () => (await browser.evaluate("z-mobile", "innerWidth").catch(() => "")) === "393", "the tab to be mobile");
+      await until(async () => !(await browser.state("z-mobile"))?.loading, "the reload");
+      expect(await browser.evaluate("z-mobile", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0, matchMedia('(pointer: coarse)').matches, 'ontouchstart' in window]")).toBe(
+        "[393,852,true,true,true]",
+      );
+      expect(JSON.parse(await browser.evaluate("z-mobile", "navigator.userAgent"))).toMatch(/iPhone.*Mobile.*Safari/);
+      // An agent's click arrives as a tap: touches, then the click a phone makes of them.
+      await browser.click("z-mobile", "#tap");
+      expect(JSON.parse(await browser.evaluate("z-mobile", "window.seen"))).toEqual(["touchstart", "touchend", "mousedown", "click"]);
+      // So does a viewer's press and release; hover isn't sent at all.
+      await browser.evaluate("z-mobile", "window.seen = []");
+      for (const action of ["move", "down", "up"] as const) await browser.input("z-mobile", { type: "mouse", action, x: 50, y: 30, button: "left" });
+      await until(async () => (await browser.evaluate("z-mobile", "window.seen.join()")) === '"touchstart,touchend,mousedown,click"', "the viewer's tap");
+      // The server gets the iPhone user agent from the reload the button does.
+      uaHits.length = 0;
+      await browser.open("z-mobile", `${base}/ua`);
+      expect(uaHits.at(-1)).toMatch(/iPhone/);
+
+      await browser.input("z-mobile", { type: "device", device: "desktop" });
+      await until(async () => (await browser.evaluate("z-mobile", "innerWidth").catch(() => "")) === "1280", "the tab to be desktop");
+      await until(async () => uaHits.length >= 2 && !(await browser.state("z-mobile"))?.loading, "the reload");
+      expect(uaHits.at(-1)).toBe(desktopUa);
+      expect(await browser.evaluate("z-mobile", "[innerHeight, navigator.maxTouchPoints, matchMedia('(pointer: coarse)').matches, navigator.userAgent === " + JSON.stringify(desktopUa) + "]")).toBe(
+        "[800,0,false,true]",
+      );
+      await browser.close("z-mobile");
+    }, 30_000);
+
+    test("pressing the selected button still resets and reloads; the inputs resize without one, keeping the mode", async () => {
+      await browser.open("z-reset", `${base}/page2`);
+      await browser.input("z-reset", { type: "device", device: "mobile" });
+      await until(async () => (await browser.evaluate("z-reset", "innerWidth").catch(() => "")) === "393", "mobile");
+      await until(async () => !(await browser.state("z-reset"))?.loading, "the reload");
+      // A tablet: touch at 1280×800, with no reload (the marker survives).
+      await browser.evaluate("z-reset", "window.marker = 1");
+      await browser.input("z-reset", { type: "size", width: 1280, height: 800 });
+      expect(await browser.evaluate("z-reset", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0, window.marker]")).toBe("[1280,800,true,1]");
+      expect((await browser.state("z-reset"))?.size).toEqual({ device: "mobile", width: 1280, height: 800, responsive: false });
+      // Mobile again: back to the phone size, and the page reloads (the marker is gone).
+      await browser.input("z-reset", { type: "device", device: "mobile" });
+      await until(async () => (await browser.evaluate("z-reset", "String(window.marker)").catch(() => "")) === '"undefined"', "the reload");
+      expect(await browser.evaluate("z-reset", "[innerWidth, innerHeight]")).toBe("[393,852]");
+      // Sizes are clamped, and junk is ignored.
+      await browser.input("z-reset", { type: "size", width: 20, height: 99_999 });
+      expect((await browser.state("z-reset"))?.size).toMatchObject({ width: 100, height: 4096 });
+      await browser.input("z-reset", { type: "size", width: Number.NaN, height: 500 });
+      expect((await browser.state("z-reset"))?.size).toMatchObject({ width: 100, height: 500 });
+      await browser.close("z-reset");
+    }, 30_000);
+
+    test("a pane resizes the tab only while Responsive follows it; the last viewer to switch it on wins", async () => {
+      await browser.open("z-resp", `${base}/page2`);
+      const a: BrowserState[] = [];
+      const b: BrowserState[] = [];
+      await browser.subscribe("z-resp", "a", () => {}, (s) => a.push(s));
+      await browser.subscribe("z-resp", "b", () => {}, (s) => b.push(s));
+      // Opening panes resizes nothing.
+      await browser.input("z-resp", { type: "resize", width: 600, height: 400 }, { subscriberId: "a" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[1280,800]");
+      // Mobile, then a switches Responsive on: it follows a's pane and stays touch.
+      await browser.input("z-resp", { type: "device", device: "mobile" }, { subscriberId: "a" });
+      await browser.input("z-resp", { type: "responsive", on: true, width: 700, height: 500 }, { subscriberId: "a" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0]")).toBe("[700,500,true]");
+      expect([state(a).sizeOwner, state(b).sizeOwner]).toEqual([true, false]);
+      expect(state(b).size).toEqual({ device: "mobile", width: 700, height: 500, responsive: true });
+      await browser.input("z-resp", { type: "resize", width: 720, height: 510 }, { subscriberId: "a" });
+      await browser.input("z-resp", { type: "resize", width: 300, height: 300 }, { subscriberId: "b" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[720,510]");
+      // b takes over: a's pane stops counting.
+      await browser.input("z-resp", { type: "responsive", on: true, width: 900, height: 600 }, { subscriberId: "b" });
+      await browser.input("z-resp", { type: "resize", width: 640, height: 480 }, { subscriberId: "a" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[900,600]");
+      expect([state(a).sizeOwner, state(b).sizeOwner]).toEqual([false, true]);
+      // The inputs switch it off.
+      await browser.input("z-resp", { type: "size", width: 1000, height: 700 }, { subscriberId: "a" });
+      expect(state(b)).toMatchObject({ size: { device: "mobile", width: 1000, height: 700, responsive: false }, sizeOwner: false });
+      await browser.input("z-resp", { type: "resize", width: 640, height: 480 }, { subscriberId: "b" });
+      expect(await browser.evaluate("z-resp", "[innerWidth, innerHeight]")).toBe("[1000,700]");
+      // The owner leaving switches it off and keeps the size.
+      await browser.input("z-resp", { type: "responsive", on: true, width: 800, height: 520 }, { subscriberId: "b" });
+      await browser.unsubscribe("z-resp", "b");
+      expect(state(a)).toMatchObject({ size: { width: 800, height: 520, responsive: false }, sizeOwner: false });
+      // So does the owner switching to another tab.
+      await browser.input("z-resp", { type: "responsive", on: true, width: 810, height: 530 }, { subscriberId: "a" });
+      await browser.open("z-resp", `${base}/page2`, { newTab: true });
+      await browser.subscribe("z-resp", "a", () => {}, (s) => a.push(s), { tab: 2 });
+      expect((await browser.state("z-resp", { tab: 1 }))?.size).toEqual({ device: "mobile", width: 810, height: 530, responsive: false });
+      // Without a viewer there's no pane to follow.
+      await expect(browser.input("z-resp", { type: "responsive", on: true }, { tab: 1 })).rejects.toThrow(/viewer/);
+      await browser.unsubscribe("z-resp", "a");
+      await browser.close("z-resp");
+    }, 30_000);
+
+    test("an agent's size: open loads straight into it, resize changes one tab and ends a viewer's Responsive", async () => {
+      uaHits.length = 0;
+      await browser.open("z-agent", `${base}/ua`, { size: { device: "mobile" } });
+      // One load, already as an iPhone at the phone size.
+      expect(uaHits).toHaveLength(1);
+      expect(uaHits[0]).toMatch(/iPhone/);
+      expect(await browser.evaluate("z-agent", "innerWidth")).toBe("393");
+      await browser.open("z-agent", `${base}/page2`, { newTab: true });
+      const states: BrowserState[] = [];
+      await browser.subscribe("z-agent", "v", () => {}, (s) => states.push(s), { tab: 2 });
+      await browser.input("z-agent", { type: "responsive", on: true, width: 700, height: 500 }, { subscriberId: "v" });
+      const st = await browser.resize("z-agent", { device: "mobile", width: 1024, height: 1366 }, { tab: 2 });
+      expect(st.size).toEqual({ device: "mobile", width: 1024, height: 1366, responsive: false });
+      expect(states.at(-1)?.sizeOwner).toBe(false);
+      expect(await browser.evaluate("z-agent", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0]", { tab: 2 })).toBe("[1024,1366,true]");
+      // Width alone keeps the mode and the height.
+      await browser.resize("z-agent", { width: 800 }, { tab: 2 });
+      expect((await browser.state("z-agent", { tab: 2 }))?.size).toEqual({ device: "mobile", width: 800, height: 1366, responsive: false });
+      expect((await browser.state("z-agent", { tab: 1 }))?.size).toEqual({ device: "mobile", width: 393, height: 852, responsive: false });
+      await browser.unsubscribe("z-agent", "v");
+      await browser.close("z-agent");
+    }, 30_000);
+
+    test("in Mobile a page without a viewport tag lays out at 980 wide and is shown shrunk, as on a phone", async () => {
+      await browser.open("z-legacy", `${base}/legacy`, { size: { device: "mobile" } });
+      expect(await browser.evaluate("z-legacy", "[innerWidth, screen.width]")).toBe("[980,393]");
+      const shot = await browser.capture("z-legacy");
+      expect([shot.width, shot.viewport.width]).toEqual([393, 980]);
+      await browser.close("z-legacy");
+    }, 30_000);
+
+    test("a page a mobile tab opens is mobile too", async () => {
+      await browser.open("z-pop", `${base}/popup`, { size: { device: "mobile" } });
+      await browser.evaluate("z-pop", "document.getElementById('open').click()");
+      await until(async () => (await browser.tabs("z-pop")).length === 2, "the popup's tab");
+      await until(async () => (await browser.evaluate("z-pop", "innerWidth", { tab: 2 }).catch(() => "")) === "393", "the popup at the phone size");
+      expect((await browser.tabs("z-pop"))[1]?.size).toEqual({ device: "mobile", width: 393, height: 852, responsive: false });
+      await browser.close("z-pop");
+    }, 30_000);
+
+    test("tabInfo has the page's requests and console since it last navigated; counts show in the list", async () => {
+      await browser.open("z-info", `${base}/noisy`);
+      const info = (await until(async () => {
+        const i = await browser.tabInfo("z-info", 1);
+        return i.console.length >= 3 && i.requests.filter((r) => r.status !== undefined || r.failure).length >= 3 ? i : null;
+      }, "the noisy page's requests and messages"))!;
+      expect(info).toMatchObject({ id: 1, url: `${base}/noisy`, title: "Noisy", loading: false, size: { device: "desktop", width: 1280, height: 800 }, scroll: { x: 0, y: 0 } });
+      const byUrl = (u: string) => info.requests.find((r) => r.url === u);
+      expect(byUrl(`${base}/noisy`)).toMatchObject({ method: "GET", type: "Document", status: 200 });
+      expect(byUrl(`${base}/missing`)).toMatchObject({ type: "Fetch", status: 404 });
+      expect(byUrl("http://127.0.0.1:1/refused")?.failure).toMatch(/ERR_/);
+      expect(info.console.map((c) => [c.level, c.text])).toEqual([
+        ["error", "boom Object"],
+        ["warning", "careful"],
+        ["error", expect.stringContaining("late failure")],
+      ]);
+      expect(info.console[0]?.source).toBe(`${base}/noisy:2`);
+      const [listed] = await browser.tabs("z-info");
+      expect([listed?.failedRequests, listed?.consoleErrors]).toEqual([2, 3]);
+      // A new page starts both over.
+      await browser.open("z-info", `${base}/page2`);
+      const after = await browser.tabInfo("z-info", 1);
+      expect(after.console).toEqual([]);
+      expect(after.requests.map((r) => r.url)).toEqual([`${base}/page2`]);
+      await expect(browser.tabInfo("z-info", 9)).rejects.toThrow(/No browser tab 9/);
+      await browser.close("z-info");
     }, 30_000);
   });
 
@@ -772,10 +984,11 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
     browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock, tabStore: store });
   });
 
+  // Closing Chrome gracefully can take longer than the default 5 s hook timeout on a busy Mac.
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 20_000);
 
   const pages = () => chromePages(browser);
 
@@ -967,25 +1180,28 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
       // Changed right before stopping: only the flush on shutdown can write it.
       await first.evaluate("rs", "document.title = 'Last words'", { tab: 1 });
       await until(async () => (await first.tabs("rs"))[0]?.title === "Last words", "the new title");
+      // A tablet-sized touch tab: its mode and size come back after the restart.
+      await first.resize("rs", { device: "mobile", width: 1024, height: 1366 }, { tab: 2 });
     } finally {
       await first.shutdown(); // flushes the store
     }
     expect(store.rows.get("rs")).toEqual({
       nextTabId: 3,
       tabs: [
-        { id: 1, url: `${base}/?rs-1`, title: "Last words" },
-        { id: 2, url: `${base}/page2`, title: "Page Two" },
+        { id: 1, url: `${base}/?rs-1`, title: "Last words", size: { device: "desktop", width: 1280, height: 800 } },
+        { id: 2, url: `${base}/page2`, title: "Page Two", size: { device: "mobile", width: 1024, height: 1366 } },
       ],
     });
 
     const second = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
     try {
       expect(await second.tabs("rs")).toEqual([
-        { id: 1, url: `${base}/?rs-1`, title: "Last words", loading: false, suspended: true },
-        { id: 2, url: `${base}/page2`, title: "Page Two", loading: false, suspended: true },
+        { id: 1, url: `${base}/?rs-1`, title: "Last words", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: false } },
+        { id: 2, url: `${base}/page2`, title: "Page Two", loading: false, suspended: true, size: { device: "mobile", width: 1024, height: 1366, responsive: false } },
       ]);
       expect(second.chromePid).toBeUndefined(); // listing them didn't start Chrome
       expect(await second.content("rs", { selector: "h1", tab: 2 })).toBe("Second page");
+      expect(await second.evaluate("rs", "[innerWidth, innerHeight, navigator.maxTouchPoints > 0, /iPhone/.test(navigator.userAgent)]", { tab: 2 })).toBe("[1024,1366,true,true]");
       expect((await second.open("rs", `${base}/?rs-3`, { newTab: true })).tabId).toBe(3);
       expect(await second.tabs("nobody")).toEqual([]);
       expect(await second.state("nobody")).toBeNull();
@@ -1004,7 +1220,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
     await Bun.sleep(500);
     expect(isAlive(pid)).toBe(false);
     expect(service.chromePid).toBeUndefined();
-    expect(store.rows.get("sd")?.tabs).toEqual([{ id: 1, url: `${base}/?sd`, title: "Home Page" }]);
+    expect(store.rows.get("sd")?.tabs).toEqual([{ id: 1, url: `${base}/?sd`, title: "Home Page", size: { device: "desktop", width: 1280, height: 800 } }]);
   }, 60_000);
 
   test("Chrome stops once no tab has a page, and the next call relaunches it", async () => {
