@@ -267,7 +267,7 @@ private struct SpecTimeline: View {
                     .onEnded { _ in dragging = false }
             )
         }
-        .frame(height: 20)
+        .frame(height: 24)
         .animation(.snappy(duration: 0.15), value: dragging)
         .accessibilityElement()
         .accessibilityLabel("Revision")
