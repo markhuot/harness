@@ -13,6 +13,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The Browser tab's strip of tabs now shows even when only one browser tab is open, so you can drag
   that tab off into a pane or window of its own.
+- Agents keep a ticket's spec readable top to bottom as what's being built now. When you change
+  your mind while planning or after, the agent rewrites the Goal and every other part your change
+  touches, instead of adding a "Later refinement" below a Goal that no longer holds. Earlier
+  versions stay in the spec's history. If you customized the agent instructions in Settings, you
+  keep your own text.
 
 ## [app-20261005.1342](https://github.com/markhuot/harness/releases/tag/app-20261005.1342) - 2026-10-05
 
