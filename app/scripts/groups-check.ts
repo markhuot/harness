@@ -76,6 +76,12 @@ try {
   check("Enter on a prefix joins the group it completes to", (await until("beta in Work", async () => (await groupOf(beta)) === "Work").catch(() => false)) === true, String(await groupOf(beta)));
   await until("picker shows the group", () => js<boolean>(`document.querySelector('[data-testid="group-select"] button')?.textContent.includes("Work")`), 5000);
   await shot("groups-settings");
+  // The best match is highlighted, not the project's current group nor whatever sorts first:
+  // a project in Network typing "wo" joins Work.
+  await api("PATCH", `/projects/${gamma.id}`, { group: "Network" });
+  const ranked = await setGroup(gamma, "wo");
+  check("a name prefix ranks above a match inside a word", ranked[0] === "Work" && ranked[1] === "Network", JSON.stringify(ranked));
+  check("Enter joins the best match, not the current group", (await until("gamma in Work", async () => (await groupOf(gamma)) === "Work").catch(() => false)) === true, String(await groupOf(gamma)));
   await setGroup(gamma, "Personal");
   await until("gamma in Personal", async () => (await groupOf(gamma)) === "Personal");
 

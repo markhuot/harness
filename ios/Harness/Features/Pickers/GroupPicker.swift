@@ -3,9 +3,9 @@ import SwiftUI
 
 /// A project's group (project settings), on ProjectGroups.rows like the Mac's GroupSelect. Same
 /// trigger as the other selects; it opens a page sheet whose field filters the groups other
-/// projects have and names a new one: No group, the matching groups, then `New group "<name>"`
-/// when no group has the typed name in any case. Return sets the typed name
-/// (ProjectGroups.submitRow); the service makes "work" join "Work".
+/// projects have and names a new one: the matching groups, best match first, then No group and
+/// `New group "<name>"` when no group has the typed name in any case. Return picks the first row,
+/// the best match (ProjectGroups.submitRow), as Enter does on the Mac.
 ///
 /// nil = no group. `groups` is every group in use, alphabetically (BoardState.projectGroups).
 struct GroupPicker: View {

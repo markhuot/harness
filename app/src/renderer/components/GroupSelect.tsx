@@ -36,7 +36,9 @@ export function GroupSelect({
 
   const rows = open ? groupRows(groups, query) : [];
   const ids = groupRowIds(rows);
-  const current = settleActive(ids, active, value ?? "");
+  // While something's typed the highlight starts on the best match (the first row), not on the
+  // project's current group, so Enter joins what was typed.
+  const current = settleActive(ids, active, query.trim() ? (ids[0] ?? "") : (value ?? ""));
 
   const show = (q = "") => {
     if (disabled) return;

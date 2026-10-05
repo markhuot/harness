@@ -74,13 +74,14 @@ struct ProjectGroupsTests {
         #expect(rows.compactMap(\.id) == c.output.ids)
     }
 
-    /// Return sets the typed name: a new group, or the group it names in any case; a partial match
-    /// or an empty field picks nothing (the rows are still there to tap).
-    @Test func returnPicksTheTypedName() {
-        let groups = ["Personal", "Work"]
+    /// Return picks the best match, as Enter does on the Mac: the group the typed text completes
+    /// to, else the typed name as a new group. An empty field or an overlong name picks nothing.
+    @Test func returnPicksTheBestMatch() {
+        let groups = ["Client Work", "Network", "Personal", "Work"]
         func submit(_ q: String) -> GroupRow? { ProjectGroups.submitRow(ProjectGroups.rows(groups, query: q), query: q) }
-        #expect(submit("wor") == .new("wor"))
+        #expect(submit("wo") == .group("Work"))
         #expect(submit("  work ") == .group("Work"))
+        #expect(submit("net") == .group("Network"))
         #expect(submit("Open  source") == .new("Open source"))
         #expect(submit("") == nil)
         #expect(submit("   ") == nil)

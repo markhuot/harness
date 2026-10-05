@@ -351,6 +351,197 @@
       }
     },
     {
+      "name": "No group after a group that matches",
+      "input": {
+        "groups": [
+          "Notes"
+        ],
+        "query": "no"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Notes",
+            "label": "Notes"
+          },
+          {
+            "kind": "none",
+            "value": null,
+            "label": "No group"
+          },
+          {
+            "kind": "new",
+            "value": "no",
+            "label": "New group \"no\""
+          }
+        ],
+        "ids": [
+          "Notes",
+          "",
+          "no"
+        ]
+      }
+    },
+    {
+      "name": "the exact name first, whatever sorts before it",
+      "input": {
+        "groups": [
+          "Client Work",
+          "Work"
+        ],
+        "query": "work"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Work",
+            "label": "Work"
+          },
+          {
+            "kind": "group",
+            "value": "Client Work",
+            "label": "Client Work"
+          }
+        ],
+        "ids": [
+          "Work",
+          "Client Work"
+        ]
+      }
+    },
+    {
+      "name": "a name prefix beats a match inside a word",
+      "input": {
+        "groups": [
+          "Network",
+          "Work"
+        ],
+        "query": "wo"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Work",
+            "label": "Work"
+          },
+          {
+            "kind": "group",
+            "value": "Network",
+            "label": "Network"
+          },
+          {
+            "kind": "new",
+            "value": "wo",
+            "label": "New group \"wo\""
+          }
+        ],
+        "ids": [
+          "Work",
+          "Network",
+          "wo"
+        ]
+      }
+    },
+    {
+      "name": "ranks: exact, name prefix, word prefix, elsewhere",
+      "input": {
+        "groups": [
+          "Artwork",
+          "Client Work",
+          "Home-work",
+          "Work stuff",
+          "Workshop"
+        ],
+        "query": "work"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Work stuff",
+            "label": "Work stuff"
+          },
+          {
+            "kind": "group",
+            "value": "Workshop",
+            "label": "Workshop"
+          },
+          {
+            "kind": "group",
+            "value": "Client Work",
+            "label": "Client Work"
+          },
+          {
+            "kind": "group",
+            "value": "Home-work",
+            "label": "Home-work"
+          },
+          {
+            "kind": "group",
+            "value": "Artwork",
+            "label": "Artwork"
+          },
+          {
+            "kind": "new",
+            "value": "work",
+            "label": "New group \"work\""
+          }
+        ],
+        "ids": [
+          "Work stuff",
+          "Workshop",
+          "Client Work",
+          "Home-work",
+          "Artwork",
+          "work"
+        ]
+      }
+    },
+    {
+      "name": "a multi-word name prefix",
+      "input": {
+        "groups": [
+          "My side projects",
+          "Projects on the side",
+          "Side projects"
+        ],
+        "query": "side proj"
+      },
+      "output": {
+        "rows": [
+          {
+            "kind": "group",
+            "value": "Side projects",
+            "label": "Side projects"
+          },
+          {
+            "kind": "group",
+            "value": "My side projects",
+            "label": "My side projects"
+          },
+          {
+            "kind": "group",
+            "value": "Projects on the side",
+            "label": "Projects on the side"
+          },
+          {
+            "kind": "new",
+            "value": "side proj",
+            "label": "New group \"side proj\""
+          }
+        ],
+        "ids": [
+          "Side projects",
+          "My side projects",
+          "Projects on the side",
+          "side proj"
+        ]
+      }
+    },
+    {
       "name": "too long",
       "input": {
         "groups": [
