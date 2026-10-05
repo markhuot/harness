@@ -13,6 +13,17 @@ export function drivesSize(state: Pick<BrowserState, "size" | "sizeOwner"> | nul
   return state.size.responsive && state.sizeOwner === true;
 }
 
+/**
+ * Whether `next` hands this pane a Responsive tab it didn't already drive: switched on here, given
+ * to it as the newest viewer (a new tab, or the owner left), or owned on another tab it moved to.
+ * The pane then sends its stage size even though the stage didn't change, or the tab keeps the size
+ * the last owner gave it.
+ */
+export function takesOverSize(prev: Pick<BrowserState, "tabId" | "size" | "sizeOwner"> | null, next: Pick<BrowserState, "tabId" | "size" | "sizeOwner"> | null): boolean {
+  if (!next?.size?.responsive || next.sizeOwner !== true) return false;
+  return !(prev?.size?.responsive && prev.sizeOwner === true && prev.tabId === next.tabId);
+}
+
 /** How the Responsive switch looks: off, lit (this pane owns it) or dimmed-lit (another pane does). */
 export type ResponsiveLook = "off" | "owned" | "following";
 

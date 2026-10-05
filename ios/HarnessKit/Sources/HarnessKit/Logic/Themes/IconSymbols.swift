@@ -60,6 +60,7 @@ extension Icons {
         "chevron": "chevron.down",
         "pointer": "cursorarrow",
         "phone": "iphone",
+        "ruler": "ruler",
     ]
 
     public static let fallbackSymbol = "questionmark.square.dashed"
