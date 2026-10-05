@@ -20,6 +20,8 @@ const zipArg = process.argv.indexOf("--zip");
 const zip = resolve(appDir, zipArg > 0 ? process.argv[zipArg + 1]! : "out/Harness-mac.zip");
 const identity = process.env.MAC_SIGN_IDENTITY ?? "F59032923631CF42FCFFD1CE71D17205FD554A92";
 const entitlements = join(appDir, "resources", "entitlements.mac.plist");
+// The desktop widget extension (package.ts) is sandboxed, with entitlements of its own.
+const widgetEntitlements = resolve(appDir, "..", "ios", "Widgets", "macOS", "HarnessMacWidgets.entitlements");
 if (!existsSync(app)) throw new Error(`${app} is missing; run \`bun run package\` first.`);
 
 async function run(cmd: string[], quiet = false) {
@@ -35,7 +37,7 @@ await signAsync({
   app,
   identity,
   platform: "darwin",
-  optionsForFile: () => ({ hardenedRuntime: true, entitlements }),
+  optionsForFile: (file) => ({ hardenedRuntime: true, entitlements: /\.appex(\/|$)/.test(file) ? widgetEntitlements : entitlements }),
 });
 await run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
 const info = await run(["codesign", "-dv", "--verbose=2", app], true);

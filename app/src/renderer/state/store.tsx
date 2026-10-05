@@ -50,6 +50,7 @@ import { terminalCwd, terminalScope } from "./terminal";
 import { fileContentFor, type FileLinkContext } from "./fileOpen";
 import type { HarnessBridge } from "../../main/types";
 import { isServiceStale, serviceCodeOf, type ServiceCode } from "./service";
+import { widgetSignature } from "./widgets";
 
 declare global {
   interface Window {
@@ -428,6 +429,13 @@ export function StoreProvider({
     void runSearch(s.q, s.scope, false);
   }, [rearmed, runSearch]);
   useEffect(() => () => void (searchTimer.current && clearTimeout(searchTimer.current)), []);
+
+  // --- Desktop widget ------------------------------------------------------------------------
+  // The main process reloads the widget when what it shows may have changed (main/widgets.ts).
+  const widgetSig = useMemo(() => widgetSignature(Object.values(state.tickets)), [state.tickets]);
+  useEffect(() => {
+    if (state.ready) window.harness?.widgetsChanged?.(widgetSig);
+  }, [widgetSig, state.ready]);
 
   // --- Tickets the UI names but the store doesn't have ---------------------------------------
   // Dependencies, dependents and triage outcomes that aren't loaded (usually older done tickets,

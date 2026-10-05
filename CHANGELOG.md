@@ -17,6 +17,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   saves an edited spec, denies an approval with your note, sends Request changes or Re-open notes,
   approves with instructions and adds annotations. In New session, ⌘↩ starts the session and ⇧⌘↩
   plans it first. ⌘S saves a prompt, and Esc cancels these screens.
+- Harness has an Active tickets widget for the iPhone and iPad home screen and the Mac desktop and
+  Notification Center. The small size shows the ticket your agents touched most recently, the
+  medium size adds its blocked question or latest Activity line, and the large size shows the
+  three most recent tickets as board cards. Turn on Compact in Edit Widget to list tickets one per
+  line instead (status, project, key and title). Tap a ticket to open it in the app. The widget
+  checks the service every 15 minutes on its own and refreshes right away while the app is open,
+  and when it can't reach your Mac it keeps showing the last tickets it saw along with how old
+  they are.
 
 ### Fixed
 

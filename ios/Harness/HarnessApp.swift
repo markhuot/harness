@@ -6,6 +6,7 @@ struct HarnessApp: App {
     @State private var app: AppModel
     @State private var toasts: ToastCenter
     @State private var actions: Actions
+    @State private var widgets: WidgetSync
     /// The app's phase across all its windows: active while any window is, background once none is.
     @Environment(\.scenePhase) private var scenePhase
 
@@ -18,6 +19,9 @@ struct HarnessApp: App {
         // Synchronous and quick: the Keychain holds a few small items. Loading before the first
         // frame keeps a cold start from flashing Connect before the saved server appears.
         app.load()
+        let widgets = WidgetSync(app: app)
+        _widgets = State(initialValue: widgets)
+        widgets.start()
     }
 
     var body: some Scene {

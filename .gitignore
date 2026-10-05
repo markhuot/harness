@@ -8,6 +8,7 @@ out
 # Native iOS app (ios/): XcodeGen output and build products are regenerated
 ios/*.xcodeproj
 ios/Harness/Info.plist
+ios/Widgets/*/Info.plist
 ios/build/
 DerivedData/
 .build/

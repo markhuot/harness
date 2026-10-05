@@ -37,7 +37,7 @@ outlives the app (see "Service supervision").
 | `service/src/cli.ts` | `harness service install|start|stop|status|ensure|uninstall`, `harness new ...`, `harness network|listen|pair|token rotate` |
 | `app/` | Electron main + React renderer |
 | `service/src/plugins/host.ts` | Plugin discovery, loading, `/plugins/<id>/api` + `/ui` serving, tab `when` evaluation |
-| `ios/` | iPhone and iPad app (SwiftUI, XcodeGen `project.yml`): the `Harness` app target (views, navigation, platform glue) and the `HarnessKit` Swift package (protocol types, client, logic and state, `swift test`); build and simulator tooling in `ios/Tools/` |
+| `ios/` | iPhone and iPad app (SwiftUI, XcodeGen `project.yml`): the `Harness` app target (views, navigation, platform glue) and the `HarnessKit` Swift package (protocol types, client, logic and state, `swift test`); build and simulator tooling in `ios/Tools/`; the home screen and desktop widgets for both apps in `ios/Widgets/` (ios/ARCHITECTURE.md § Widgets) |
 | `release/` | Release tooling: `release.ts` (prepare), `publish-install.sh` (build, GitHub release, TestFlight via `testflight.ts`), `install-page.ts` and the Vercel install site in `release/Install/` |
 | `plugins/sdk/` | Plugin API: `server.ts` (types, `definePlugin`) and `harness-plugin.ts` (iframe bridge, `connect()`) |
 | `plugins/git/` | Built-in git plugin: the routes behind the ticket **Changes** tab (which the apps draw), and a web page of it for other hosts |

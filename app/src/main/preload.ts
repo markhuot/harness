@@ -39,6 +39,7 @@ const bridge: HarnessBridge = {
     return () => ipcRenderer.removeListener("theme", listener);
   },
   setSidebarVisible: (visible) => ipcRenderer.send("harness:sidebarVisible", visible),
+  widgetsChanged: (signature) => ipcRenderer.send("harness:widgetsChanged", signature),
   terminal: {
     ensure: (id, opts) => ipcRenderer.invoke("harness:terminal:ensure", id, opts),
     write: (id, data) => ipcRenderer.invoke("harness:terminal:write", id, data),

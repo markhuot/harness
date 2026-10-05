@@ -171,6 +171,8 @@ export interface HarnessBridge {
   onThemeChange(cb: (state: ThemeState) => void): () => void;
   /** Keep View → Show Sidebar's checkmark in step with the renderer's sidebar */
   setSidebarVisible(visible: boolean): void;
+  /** The board's widget signature (renderer/state/widgets.ts) changed: reload the desktop widget */
+  widgetsChanged(signature: string): void;
   terminal: TerminalBridge;
   popout: PopoutBridge;
   platform: string;
