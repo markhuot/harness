@@ -56,12 +56,12 @@ private struct NewSessionEditorView: View {
                 }
                 // Plan first and Start session each get their own glass; Start is the prominent one.
                 ToolbarItem(placement: .topBarTrailing) {
-                    launchButton("Plan first", systemImage: "doc.text", busy: editor?.busy == .plan) { submit(start: false) }
+                    launchButton("Plan first", systemImage: "doc.text") { submit(start: false) }
                         .disabled(!canSubmit(view))
                 }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 ToolbarItem(placement: .confirmationAction) {
-                    launchButton("Start session", systemImage: "paperplane.fill", busy: editor?.busy == .start) { submit(start: true) }
+                    launchButton("Start session", systemImage: "paperplane.fill") { submit(start: true) }
                         .primaryToolbarItem(c)
                         .disabled(!canSubmit(view))
                 }
@@ -104,16 +104,12 @@ private struct NewSessionEditorView: View {
             }
     }
 
-    /// A toolbar launch button: its icon turns into a spinner while its launch is in flight.
-    private func launchButton(_ title: String, systemImage: String, busy: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label {
-                Text(title)
-            } icon: {
-                if busy { ProgressView().controlSize(.small) } else { Image(systemName: systemImage) }
-            }
-        }
-        .accessibilityLabel(title)
+    /// A toolbar launch button: always just its icon. It's disabled (through canSubmit) while a
+    /// launch is in flight; swapping the icon for a spinner made the toolbar show the title instead.
+    private func launchButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(title, systemImage: systemImage, action: action)
+            .labelStyle(.iconOnly)
+            .accessibilityLabel(title)
     }
 
     // MARK: Content
