@@ -132,3 +132,11 @@ test("isUploaded tells a listed build from a missing one, and throws when App St
   // An error must not read as "not uploaded", or a rerun uploads a used build number and fails.
   expect(isUploaded(fakeAsc({ ...app, [builds]: () => [500, { errors: [{ code: "UNEXPECTED_ERROR" }] }] }).c, "202610051743")).rejects.toThrow("500");
 });
+
+test("distribute treats INVALID_QC_STATE as already submitted only when the build has a review submission", async () => {
+  const qc = distributeRoutes(422, "ENTITY_UNPROCESSABLE.INVALID_QC_STATE");
+  const submitted = { ...qc, "GET /builds/B1/betaAppReviewSubmission": (): [number, unknown] => [200, { data: { id: "S1", type: "betaAppReviewSubmissions", attributes: { betaReviewState: "WAITING_FOR_REVIEW" } } }] };
+  expect((await distribute(fakeAsc(submitted).c, "202609301424", "", quiet)).review).toBe("already submitted (WAITING_FOR_REVIEW)");
+  const none = { ...qc, "GET /builds/B1/betaAppReviewSubmission": (): [number, unknown] => [200, { data: null }] };
+  expect(distribute(fakeAsc(none).c, "202609301424", "", quiet)).rejects.toThrow("INVALID_QC_STATE");
+});

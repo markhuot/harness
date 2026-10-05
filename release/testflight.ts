@@ -156,6 +156,13 @@ export async function distribute(c: Client, buildNumber: string, whatsNew: strin
   } catch (e) {
     // 409 means it's already in review or approved (a later build of an approved version is often waved through).
     if (e instanceof AscError && e.status === 409) review = `not resubmitted (${e.message.split("→ ")[1]})`;
+    // A build already waiting in Beta App Review refuses a second submission as INVALID_QC_STATE
+    // (a rerun of a publish that failed after submitting); its submission says so.
+    else if (e instanceof AscError && e.codes.includes("ENTITY_UNPROCESSABLE.INVALID_QC_STATE")) {
+      const { data: sub } = await c.get(`/builds/${build.id}/betaAppReviewSubmission`);
+      if (!sub) throw e;
+      review = `already submitted (${sub.attributes.betaReviewState})`;
+    }
     // Only one build per version can wait in Beta App Review. This one is in the group with its notes;
     // submit it once the earlier build clears, by rerunning `distribute` for it.
     else if (e instanceof AscError && e.codes.includes("ENTITY_UNPROCESSABLE.ANOTHER_BUILD_IN_REVIEW"))
