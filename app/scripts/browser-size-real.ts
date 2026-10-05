@@ -1,8 +1,8 @@
 // Browser size controls end-to-end against a REAL daemon and real headless Chrome (temp HARNESS_HOME,
 // random port; never ~/.harness). The test page reports its own viewport and pointer type in its
-// title, so every check reads what the page actually got: Desktop, Mobile, Mobile at 1280 × 800,
-// Responsive (and that the pane drives nothing without it), and a click on a small link while the
-// frame is pinch-zoomed.
+// title, so every check reads what the page actually got: a new tab following the pane, Desktop,
+// Mobile, Mobile at 1280 × 800, Responsive (and that the pane drives nothing without it), and a
+// click on a small link while the frame is pinch-zoomed.
 //
 //   bun run build && bun scripts/browser-size-real.ts [screenshotDir]
 import { mkdirSync, readFileSync } from "node:fs";
@@ -55,7 +55,9 @@ try {
   const calls = [{ name: "browser_open", input: { url: `http://127.0.0.1:${pages.port}/` } }];
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: `/tools ${JSON.stringify(calls)}`, driver: "dummy", start: true });
   await a.go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
-  await until("size controls", () => a.exists("[data-testid=browser-responsive]"), 30000);
+  await until("size button", () => a.exists("[data-testid=browser-size-toggle]"), 30000);
+  await js(`document.querySelector("[data-testid=browser-size-toggle]").click()`);
+  await until("size controls", () => a.exists("[data-testid=browser-responsive]"), 5000);
 
   const title = () => js<string>(`document.querySelector(".browser-title")?.textContent ?? ""`);
   const titleIs = (want: string | RegExp) =>
@@ -71,10 +73,11 @@ try {
     await a.key("Enter", "Enter", 13);
   };
 
-  // 1. A new tab is Desktop 1280 × 800, and opening the (narrower) pane doesn't resize it.
-  check("the page opens at Desktop 1280 × 800 with a fine pointer", await titleIs("1280x800 fine"), await title());
-  await Bun.sleep(1500);
-  check("the pane leaves it at 1280 × 800 without Responsive", (await title()) === "1280x800 fine", `${await title()} (stage ${JSON.stringify(await stage())})`);
+  // 1. A new tab is Desktop and Responsive, following the pane watching it: the page lays out at
+  //    this pane's size with a fine pointer.
+  await Bun.sleep(1000);
+  let s = await stage();
+  check("a new tab follows the pane (Responsive, owned) at Desktop with a fine pointer", (await titleIs(`${Math.round(s.w)}x${Math.round(s.h)} fine`)) && (await look()) === "owned", `${await title()} vs ${Math.round(s.w)}x${Math.round(s.h)}, ${await look()}`);
   await shot("1-desktop");
 
   // 2. Mobile: 393 × 852 with a coarse pointer.
@@ -93,8 +96,9 @@ try {
   // 4. Responsive: the page follows this pane, and only while it's on.
   await click("[data-testid=browser-device-desktop]");
   check("Desktop resets to 1280 × 800 fine", await titleIs("1280x800 fine"), await title());
+  check("…with Responsive off", (await look()) === "off", await look());
   await click("[data-testid=browser-responsive]");
-  let s = await stage();
+  s = await stage();
   check("Responsive lays the page out at the pane's size", (await titleIs(`${Math.round(s.w)}x${Math.round(s.h)} fine`)) && (await look()) === "owned", `${await title()} vs ${Math.round(s.w)}x${Math.round(s.h)}`);
   await js(`document.querySelector(".browser-stage").style.marginRight = "160px"`);
   s = await stage();

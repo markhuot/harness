@@ -327,9 +327,12 @@ try {
   await go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
   const ready = await until("the page's first frame", () => js<boolean>(`!!document.querySelector('[data-testid="browser-annotate"]') && !document.querySelector('[data-testid="browser-annotate"]').disabled`), 20000).catch(() => false);
   check("the browser pane offers Annotate once the page is drawn", ready);
-  // The page follows the pane once Responsive is on; Annotate is pressed right after switching it
-  // on, before the new size has reached the tab, so the screenshot has to wait for it.
-  await js(`document.querySelector('[data-testid="browser-responsive"]').click()`);
+  // A new tab is Responsive and follows this pane. Annotate is pressed right after opening the size
+  // row, which shortens the stage, before the new size has reached the tab, so the screenshot has
+  // to wait for it.
+  await js(`document.querySelector('[data-testid="browser-size-toggle"]').click()`);
+  await until("the size row", () => exists('[data-testid="browser-responsive"]'), 5000);
+  check("the tab follows this pane", await js<boolean>(`document.querySelector('[data-testid="browser-responsive"]').classList.contains("owned")`));
   const stageSize = await js<{ width: number; height: number }>(`(() => { const s = document.querySelector('.browser-stage'); return { width: Math.round(s.clientWidth), height: Math.round(s.clientHeight) }; })()`);
   await js(`document.querySelector('[data-testid="browser-annotate"]').click()`);
   check("Annotate opens the annotator on a frozen screenshot of the page", await annotatorOpen());
