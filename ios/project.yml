@@ -32,6 +32,12 @@ targets:
         product: HarnessKit
       - package: HarnessKit
         product: HarnessHighlight
+      # The home screen widgets (ios/Widgets, ARCHITECTURE.md § Widgets), embedded in PlugIns.
+      - target: HarnessWidgets
+    # The App Group the app shares with its widgets (WidgetShared): the active server and the last
+    # snapshot.
+    entitlements:
+      path: Harness/Harness.entitlements
     # The syntax highlighter's JavaScriptCore bundle (Shiki, from Tools/highlighter/highlight.ts) is
     # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
     # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
@@ -101,6 +107,62 @@ targets:
         # phase may only do for declared inputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
+  # The widgets (ARCHITECTURE.md § Widgets). One set of sources builds both extensions: this one
+  # for iPhone and iPad, embedded in the app, and HarnessMacWidgets for the Electron Mac app.
+  HarnessWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widgets/Sources
+    dependencies:
+      - package: HarnessKit
+        product: HarnessKit
+    entitlements:
+      path: Widgets/iOS/HarnessWidgets.entitlements
+    info:
+      path: Widgets/iOS/Info.plist
+      properties:
+        CFBundleDisplayName: Harness
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        # The same as the app: plain http to the Mac over the LAN or Tailscale.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: NO
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.widgets
+        SKIP_INSTALL: YES
+  # Built by app/scripts/package.ts (xcodebuild -scheme HarnessMacWidgets) and copied into
+  # Harness.app/Contents/PlugIns; sign-mac.ts signs it with its own sandbox entitlements.
+  HarnessMacWidgets:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "15.0"
+    sources:
+      - path: Widgets/Sources
+    dependencies:
+      - package: HarnessKit
+        product: HarnessKit
+    entitlements:
+      path: Widgets/macOS/HarnessMacWidgets.entitlements
+    info:
+      path: Widgets/macOS/Info.plist
+      properties:
+        CFBundleDisplayName: Harness
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: NO
+        # Inside the Electron app's bundle id (APP_BUNDLE_ID in app/scripts/package.ts).
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.app.widgets
+        ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
 schemes:
   Harness:
     build:
@@ -110,3 +172,7 @@ schemes:
       config: Debug
     archive:
       config: Release
+  HarnessMacWidgets:
+    build:
+      targets:
+        HarnessMacWidgets: all
