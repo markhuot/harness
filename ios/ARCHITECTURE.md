@@ -556,11 +556,11 @@ board's open tickets so main can run `Contents/MacOS/harness-widgets-reload`
 with those entitlements. Taps open `harness://ticket/<key>`, which the iPhone app routes with
 `DeepLink` and the Mac app maps to `#/board/all/ticket/<key>` (`routeForLink`).
 
-An ad-hoc simulator build has no provisioning profile, so Xcode drops the App Group entitlement and
-`containerURL` is nil. `WidgetShared.appGroup()` falls back to the simulator's
-`SIMULATOR_SHARED_RESOURCES_DIRECTORY` there, which the app and its widget both reach. On the
-simulator, add the widget from the home screen's Edit → Add Widget; the size picker is in a
-widget's long-press menu.
+The entitlements are `properties` in project.yml: XcodeGen overwrites an entitlements file with an
+empty dict when a target names only its path (config.test.ts checks this). The ad-hoc simulator
+build carries the App Group as simulated entitlements, so the widget works there too. Add it from
+the home screen's Edit → Add Widget; the size picker is in a widget's long-press menu. The
+Compact switch in Edit Widget doesn't take AXe taps.
 
 ## Feature slots
 
