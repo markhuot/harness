@@ -376,6 +376,10 @@
       "scroll": {
         "x": 0,
         "y": 0
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 800
       }
     },
     {
@@ -386,6 +390,10 @@
       "scroll": {
         "x": 0,
         "y": 1240.5
+      },
+      "viewport": {
+        "width": 390,
+        "height": 844
       }
     }
   ],

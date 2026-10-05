@@ -325,8 +325,8 @@ export const BrowserScreenshot: P.BrowserScreenshot[] = [
 ];
 
 export const BrowserElementQuery: P.BrowserElementQuery[] = [
-  { tabId: 3, x: 640, y: 400, url: "http://localhost:3000/login", scroll: { x: 0, y: 0 } },
-  { tabId: 1, x: 12.5, y: 300.25, url: "about:blank", scroll: { x: 0, y: 1240.5 } },
+  { tabId: 3, x: 640, y: 400, url: "http://localhost:3000/login", scroll: { x: 0, y: 0 }, viewport: { width: 1280, height: 800 } },
+  { tabId: 1, x: 12.5, y: 300.25, url: "about:blank", scroll: { x: 0, y: 1240.5 }, viewport: { width: 390, height: 844 } },
 ];
 
 export const BrowserElement: P.BrowserElement[] = [

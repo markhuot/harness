@@ -88,6 +88,12 @@ function fixtures(req: Request): Response {
          <div style="height:3000px"></div>`,
         "Elements",
       );
+    case "/halves":
+      return html(
+        `<style>body{margin:0} div{position:fixed;top:0;bottom:0;width:50%} #a{left:0;background:#fc0} #b{right:0;background:#09f}</style>
+         <div id="a">Left</div><div id="b">Right</div>`,
+        "Halves",
+      );
     default:
       return new Response("not found", { status: 404 });
   }
@@ -315,7 +321,7 @@ withChrome("BrowserManager (real Chrome)", () => {
     test("names the element under a point: a unique id, nth-of-type steps, escaping, and its text", async () => {
       const shot = await browser.capture("s-el");
       expect(shot.scroll).toEqual({ x: 0, y: 0 });
-      const at = async (selector: string) => browser.elementAt("s-el", { tabId: shot.tabId, ...(await centre(selector)), url: shot.url, scroll: shot.scroll });
+      const at = async (selector: string) => browser.elementAt("s-el", { tabId: shot.tabId, ...(await centre(selector)), url: shot.url, scroll: shot.scroll, viewport: shot.viewport });
       // The third button: two siblings share its tag; form is the only one of its kind.
       expect(await at("#login button:nth-of-type(3)")).toEqual({ path: "#login > form > button:nth-of-type(3)", text: "Sign in" });
       // "dup" is on two elements, so it isn't an anchor: the chain goes up to body.
@@ -335,16 +341,36 @@ withChrome("BrowserManager (real Chrome)", () => {
       const shot = await browser.capture("s-el");
       const point = await centre("em");
       await browser.evaluate("s-el", "window.scrollTo(0, 120)");
-      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: shot.url, scroll: shot.scroll })).toBeNull();
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: shot.url, scroll: shot.scroll, viewport: shot.viewport })).toBeNull();
       expect(await browser.evaluate("s-el", "window.scrollY")).toBe("120");
       // A screenshot taken there matches again (and reports the scroll).
       const scrolled = await browser.capture("s-el");
       expect(scrolled.scroll).toEqual({ x: 0, y: 120 });
-      expect(await browser.elementAt("s-el", { tabId: shot.tabId, x: point.x, y: point.y - 120, url: scrolled.url, scroll: scrolled.scroll })).toEqual({ path: "#a\\:b\\.c > em", text: "Escaped" });
-      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: scrolled.url, scroll: { x: 0, y: 120.6 } })).not.toBeNull();
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, x: point.x, y: point.y - 120, url: scrolled.url, scroll: scrolled.scroll, viewport: scrolled.viewport })).toEqual({ path: "#a\\:b\\.c > em", text: "Escaped" });
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: scrolled.url, scroll: { x: 0, y: 120.6 }, viewport: scrolled.viewport })).not.toBeNull();
       await browser.open("s-el", `${base}/page2`);
-      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: shot.url, scroll: { x: 0, y: 0 } })).toBeNull();
-      await expect(browser.elementAt("s-el", { tabId: 9, ...point, url: shot.url, scroll: shot.scroll })).rejects.toThrow();
+      expect(await browser.elementAt("s-el", { tabId: shot.tabId, ...point, url: shot.url, scroll: { x: 0, y: 0 }, viewport: shot.viewport })).toBeNull();
+      await expect(browser.elementAt("s-el", { tabId: 9, ...point, url: shot.url, scroll: shot.scroll, viewport: shot.viewport })).rejects.toThrow();
+    }, 30_000);
+
+    test("answers null once the tab was resized since the screenshot (a viewer's pane changed), and matches again at the new size", async () => {
+      await browser.open("s-halves", `${base}/halves`);
+      await browser.input("s-halves", { type: "resize", width: 1280, height: 800 });
+      const shot = await browser.capture("s-halves");
+      expect(shot.viewport).toEqual({ width: 1280, height: 800 });
+      const query = { tabId: shot.tabId, x: 700, y: 100, url: shot.url, scroll: shot.scroll, viewport: shot.viewport };
+      expect(await browser.elementAt("s-halves", query)).toEqual({ path: "#b", text: "Right" });
+      // Wider: (700, 100) is now over the left half. Narrower: it's outside the page. Either way, null.
+      await browser.input("s-halves", { type: "resize", width: 1600, height: 800 });
+      await until(async () => (await browser.evaluate("s-halves", "window.innerWidth")) === "1600", "the tab to be 1600 wide");
+      expect(await browser.evaluate("s-halves", "document.elementFromPoint(700, 100).id")).toBe('"a"');
+      expect(await browser.elementAt("s-halves", query)).toBeNull();
+      await browser.input("s-halves", { type: "resize", width: 480, height: 800 });
+      await until(async () => (await browser.evaluate("s-halves", "window.innerWidth")) === "480", "the tab to be 480 wide");
+      expect(await browser.elementAt("s-halves", query)).toBeNull();
+      // A screenshot at the new size names what's there now.
+      const again = await browser.capture("s-halves");
+      expect(await browser.elementAt("s-halves", { ...query, x: 300, viewport: again.viewport })).toEqual({ path: "#b", text: "Right" });
     }, 30_000);
   });
 

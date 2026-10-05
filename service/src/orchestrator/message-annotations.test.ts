@@ -256,8 +256,10 @@ describe("over HTTP", () => {
     await client.browserNavigate(t.sessionId, "http://localhost:3000/login");
     const shot = await client.browserScreenshot(t.sessionId);
     expect(shot.scroll).toEqual({ x: 0, y: 0 });
-    const query = { tabId: shot.tabId, x: 490, y: 180, url: shot.url, scroll: shot.scroll };
+    const query = { tabId: shot.tabId, x: 490, y: 180, url: shot.url, scroll: shot.scroll, viewport: shot.viewport };
     expect(await client.browserElementAt(t.sessionId, query)).toEqual(STUB_ELEMENT);
+    // Resized since the screenshot (a viewer's pane changed): null.
+    expect(await client.browserElementAt(t.sessionId, { ...query, viewport: { width: 1600, height: 800 } })).toBeNull();
 
     // Scrolled since the screenshot: null, not whatever is there now.
     browser.scrolls.set(t.sessionId, { x: 0, y: 300 });
@@ -272,6 +274,7 @@ describe("over HTTP", () => {
     expect(await status({ ...query, x: "490" })).toBe(400);
     expect(await status({ ...query, url: "" })).toBe(400);
     expect(await status({ ...query, scroll: undefined })).toBe(400);
+    expect(await status({ ...query, viewport: undefined })).toBe(400);
 
     // The element rides on the mark into the agent's prompt.
     const up = await client.uploadAttachment(new Blob([Buffer.from(shot.data, "base64")], { type: "image/png" }), "Browser.png", "image/png");

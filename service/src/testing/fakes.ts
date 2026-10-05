@@ -74,7 +74,7 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
     async elementAt(sessionId, query) {
       const s = states.get(sessionId);
       if (!s || query.tabId !== 1) throw new Error(`No browser tab ${query.tabId}`);
-      return sameView({ href: s.url, scroll: scrolls.get(sessionId) ?? { x: 0, y: 0 }, element: STUB_ELEMENT }, s.url, query);
+      return sameView({ href: s.url, scroll: scrolls.get(sessionId) ?? { x: 0, y: 0 }, viewport: { width: 1280, height: 800 }, element: STUB_ELEMENT }, s.url, query);
     },
     async input() {},
     async subscribe(sessionId, subscriberId, onFrame, onState, opts) {

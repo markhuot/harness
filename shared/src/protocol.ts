@@ -1071,9 +1071,9 @@ export interface BrowserScreenshot {
 
 /**
  * POST /browser/:sessionId/element: what's under a point of a captured screenshot, so an
- * annotation's mark can name it (AnnotationMark.path and .text). `url` and `scroll` are the
- * screenshot's: when the tab has since navigated or scrolled, the answer is null rather than
- * whatever is there now.
+ * annotation's mark can name it (AnnotationMark.path and .text). `url`, `scroll` and `viewport`
+ * are the screenshot's: when the tab has since navigated, scrolled or been resized (a viewer's
+ * pane changed size), the answer is null rather than whatever is there now.
  */
 export interface BrowserElementQuery {
   tabId: number;
@@ -1082,6 +1082,8 @@ export interface BrowserElementQuery {
   y: number;
   url: string;
   scroll: { x: number; y: number };
+  /** The screenshot's viewport in CSS pixels (BrowserScreenshot.viewport). */
+  viewport: { width: number; height: number };
 }
 
 /** The element under a point of the page (BrowserElementQuery), or null when there's none or the page moved on. */
