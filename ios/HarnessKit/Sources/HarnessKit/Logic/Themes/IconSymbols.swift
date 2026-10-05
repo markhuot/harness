@@ -58,6 +58,8 @@ extension Icons {
         "shield": "shield",
         "grip": "line.3.horizontal",
         "chevron": "chevron.down",
+        "pointer": "cursorarrow",
+        "phone": "iphone",
     ]
 
     public static let fallbackSymbol = "questionmark.square.dashed"
