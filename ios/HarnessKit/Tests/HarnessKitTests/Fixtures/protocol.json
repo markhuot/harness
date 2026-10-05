@@ -1635,6 +1635,87 @@
       ]
     }
   ],
+  "MessageDraft": [
+    {
+      "text": "Half written",
+      "attachments": [],
+      "origin": "9f3c2a1b7d4e6f80",
+      "updatedAt": 1759190400000
+    },
+    {
+      "text": "",
+      "attachments": [
+        {
+          "id": "att_1",
+          "path": "/Users/mark/Desktop/shot.png",
+          "name": "shot.png",
+          "source": "file",
+          "kind": "image",
+          "mimeType": "image/png",
+          "annotation": {
+            "width": 1280,
+            "height": 800,
+            "marks": [
+              {
+                "n": 1,
+                "x": 412,
+                "y": 188,
+                "tailX": 520,
+                "tailY": 96,
+                "message": "This button should be blue"
+              },
+              {
+                "n": 2,
+                "x": 64,
+                "y": 700,
+                "message": "Typo: \"Sumbit\""
+              }
+            ]
+          }
+        }
+      ],
+      "origin": null,
+      "updatedAt": 1759190400001
+    }
+  ],
+  "MessageDraftBody": [
+    {
+      "text": "Half written",
+      "origin": "9f3c2a1b7d4e6f80"
+    },
+    {
+      "text": "",
+      "attachments": [
+        {
+          "id": "att_1",
+          "annotation": {
+            "width": 1280,
+            "height": 800,
+            "marks": [
+              {
+                "n": 1,
+                "x": 412,
+                "y": 188,
+                "tailX": 520,
+                "tailY": 96,
+                "message": "This button should be blue"
+              },
+              {
+                "n": 2,
+                "x": 64,
+                "y": 700,
+                "message": "Typo: \"Sumbit\""
+              }
+            ]
+          }
+        }
+      ],
+      "origin": "9f3c2a1b7d4e6f80"
+    },
+    {
+      "text": ""
+    }
+  ],
   "ModelInfo": [
     {
       "id": "opus",
@@ -2970,6 +3051,7 @@
       "completionInstructions": null,
       "pullRequestUrl": null,
       "draft": true,
+      "messageDraft": null,
       "promptAttachments": [
         {
           "id": "att_31",
@@ -3094,6 +3176,49 @@
       "createdAt": 1759190400000,
       "updatedAt": 1759190400000,
       "completionAction": "cleanup"
+    },
+    {
+      "id": "tkt_7",
+      "key": "SCRATCH-7",
+      "projectId": "prj_00a1",
+      "kind": "task",
+      "title": "Fix the flaky test",
+      "spec": "",
+      "status": "blocked",
+      "sessionId": "ses_2",
+      "driver": "anthropic-api",
+      "parentId": null,
+      "dependsOn": [],
+      "autoStart": false,
+      "agentReview": "pending",
+      "humanReview": "pending",
+      "externalRef": null,
+      "workdir": null,
+      "branch": null,
+      "blockedReason": null,
+      "busy": false,
+      "pendingApproval": null,
+      "allowedTools": [],
+      "permissionMode": null,
+      "model": null,
+      "position": 0,
+      "createdAt": 1759190400000,
+      "updatedAt": 1759190400000,
+      "messageDraft": {
+        "text": "Decode them as .unknown so a newer service",
+        "attachments": [
+          {
+            "id": "att_33",
+            "path": "/Users/mark/.harness/uploads/upl_3/Pasted image.png",
+            "name": "Pasted image.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ],
+        "origin": "9f3c2a1b7d4e6f80",
+        "updatedAt": 1759193400000
+      }
     }
   ],
   "TicketDetail": [

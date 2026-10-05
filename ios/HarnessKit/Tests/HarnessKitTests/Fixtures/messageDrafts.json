@@ -1,0 +1,384 @@
+{
+  "adoptMessageDraftCases": [
+    {
+      "name": "another device's draft replaces an idle composer's",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": {
+          "text": "from the phone",
+          "attachments": [],
+          "origin": "phone",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "",
+          "attachments": []
+        }
+      },
+      "output": {
+        "text": "from the phone",
+        "attachments": []
+      }
+    },
+    {
+      "name": "its own save coming back is skipped",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": {
+          "text": "hel",
+          "attachments": [],
+          "origin": "me",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "hello",
+          "attachments": []
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "nothing replaces the field while it has focus",
+      "input": {
+        "origin": "me",
+        "focused": true,
+        "dirty": false,
+        "saved": {
+          "text": "from the phone",
+          "attachments": [],
+          "origin": "phone",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "mine",
+          "attachments": []
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "unsaved edits aren't overwritten",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": true,
+        "saved": {
+          "text": "from the phone",
+          "attachments": [],
+          "origin": "phone",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "mine",
+          "attachments": []
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "a cleared draft empties an idle composer",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": null,
+        "shown": {
+          "text": "half written",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
+            }
+          ]
+        }
+      },
+      "output": {
+        "text": "",
+        "attachments": []
+      }
+    },
+    {
+      "name": "a draft with no origin counts as another editor's",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": {
+          "text": "from the CLI",
+          "attachments": [],
+          "origin": null,
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "",
+          "attachments": []
+        }
+      },
+      "output": {
+        "text": "from the CLI",
+        "attachments": []
+      }
+    },
+    {
+      "name": "the same text and files change nothing",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": {
+          "text": "same",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
+            }
+          ],
+          "origin": "phone",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "same",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
+            }
+          ]
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "nothing saved and nothing shown",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": null,
+        "shown": {
+          "text": "",
+          "attachments": []
+        }
+      },
+      "output": null
+    },
+    {
+      "name": "a change to the files alone is adopted",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": {
+          "text": "same",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
+            }
+          ],
+          "origin": "phone",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "same",
+          "attachments": []
+        }
+      },
+      "output": {
+        "text": "same",
+        "attachments": [
+          {
+            "id": "a1",
+            "path": "/Users/me/.harness/uploads/u1/shot.png",
+            "name": "shot.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a change to a file's notes is adopted",
+      "input": {
+        "origin": "me",
+        "focused": false,
+        "dirty": false,
+        "saved": {
+          "text": "same",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png",
+              "annotation": {
+                "width": 640,
+                "height": 480,
+                "marks": [
+                  {
+                    "n": 1,
+                    "x": 10,
+                    "y": 20,
+                    "message": "here"
+                  }
+                ]
+              }
+            }
+          ],
+          "origin": "phone",
+          "updatedAt": 1759190000000
+        },
+        "shown": {
+          "text": "same",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png"
+            }
+          ]
+        }
+      },
+      "output": {
+        "text": "same",
+        "attachments": [
+          {
+            "id": "a1",
+            "path": "/Users/me/.harness/uploads/u1/shot.png",
+            "name": "shot.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "annotation": {
+              "width": 640,
+              "height": 480,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 10,
+                  "y": 20,
+                  "message": "here"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "messageDraftBodyCases": [
+    {
+      "name": "text only",
+      "input": {
+        "value": {
+          "text": "hi",
+          "attachments": []
+        },
+        "origin": "me"
+      },
+      "output": {
+        "text": "hi",
+        "attachments": [],
+        "origin": "me"
+      }
+    },
+    {
+      "name": "files with their notes",
+      "input": {
+        "value": {
+          "text": "",
+          "attachments": [
+            {
+              "id": "a1",
+              "path": "/Users/me/.harness/uploads/u1/shot.png",
+              "name": "shot.png",
+              "source": "upload",
+              "kind": "image",
+              "mimeType": "image/png",
+              "annotation": {
+                "width": 640,
+                "height": 480,
+                "marks": [
+                  {
+                    "n": 1,
+                    "x": 10,
+                    "y": 20,
+                    "message": "here"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "origin": "me"
+      },
+      "output": {
+        "text": "",
+        "attachments": [
+          {
+            "id": "a1",
+            "path": "/Users/me/.harness/uploads/u1/shot.png",
+            "name": "shot.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png",
+            "annotation": {
+              "width": 640,
+              "height": 480,
+              "marks": [
+                {
+                  "n": 1,
+                  "x": 10,
+                  "y": 20,
+                  "message": "here"
+                }
+              ]
+            }
+          }
+        ],
+        "origin": "me"
+      }
+    },
+    {
+      "name": "empty (clears it)",
+      "input": {
+        "value": {
+          "text": "",
+          "attachments": []
+        },
+        "origin": "me"
+      },
+      "output": {
+        "text": "",
+        "attachments": [],
+        "origin": "me"
+      }
+    }
+  ]
+}

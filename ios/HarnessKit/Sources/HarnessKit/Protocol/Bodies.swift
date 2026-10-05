@@ -281,6 +281,22 @@ public struct HumanReviewBody: Codable, Sendable, Equatable {
 }
 
 /// POST /tickets/:key/messages
+/// PUT /tickets/:key/message-draft: the whole draft, replacing the saved one. Empty text and no
+/// attachments clear it.
+public struct MessageDraftBody: Codable, Sendable, Equatable {
+    public var text: String
+    /// At most maxPromptAttachments, as MessageBody.attachments takes them
+    public var attachments: [AttachmentInput]?
+    /// An id for the editor saving it, unique per open editor (MessageDraft.origin)
+    public var origin: String?
+
+    public init(text: String, attachments: [AttachmentInput]? = nil, origin: String? = nil) {
+        self.text = text
+        self.attachments = attachments
+        self.origin = origin
+    }
+}
+
 public struct MessageBody: Codable, Sendable, Equatable {
     /// May be empty when the message carries attachments.
     public var text: String

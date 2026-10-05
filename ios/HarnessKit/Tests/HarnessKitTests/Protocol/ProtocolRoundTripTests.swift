@@ -88,6 +88,8 @@ struct ProtocolRoundTripTests {
         "SubmitTicketBody": rt(SubmitTicketBody.self),
         "HumanReviewBody": rt(HumanReviewBody.self),
         "MessageBody": rt(MessageBody.self),
+        "MessageDraft": rt(MessageDraft.self),
+        "MessageDraftBody": rt(MessageDraftBody.self),
         "ReopenBody": rt(ReopenBody.self),
         "ApprovalBody": rt(ApprovalBody.self),
         "CompleteBody": rt(CompleteBody.self),

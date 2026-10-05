@@ -192,6 +192,7 @@ export const Ticket: P.Ticket[] = [
     completionInstructions: null,
     pullRequestUrl: null,
     draft: true,
+    messageDraft: null,
     promptAttachments: [
       { id: "att_31", path: "/Users/mark/Desktop/login bug.png", name: "login bug.png", source: "file", kind: "image", mimeType: "image/png", size: 52_311 },
       {
@@ -213,6 +214,19 @@ export const Ticket: P.Ticket[] = [
   { ...plainTicket, id: "tkt_4", key: "SCRATCH-4", status: "in_progress", useWorktree: false, completionAction: "merge" },
   { ...plainTicket, id: "tkt_5", key: "SCRATCH-5", status: "review", completionAction: "custom" },
   { ...plainTicket, id: "tkt_6", key: "SCRATCH-6", status: "done", completionAction: "cleanup" },
+  // A reply half written on another device (Ticket.messageDraft).
+  {
+    ...plainTicket,
+    id: "tkt_7",
+    key: "SCRATCH-7",
+    status: "blocked",
+    messageDraft: {
+      text: "Decode them as .unknown so a newer service",
+      attachments: [{ id: "att_33", path: "/Users/mark/.harness/uploads/upl_3/Pasted image.png", name: "Pasted image.png", source: "upload", kind: "image", mimeType: "image/png" }],
+      origin: "9f3c2a1b7d4e6f80",
+      updatedAt: T0 + 3_000_000,
+    },
+  },
 ];
 
 export const TicketPage: P.TicketPage[] = [
@@ -993,6 +1007,17 @@ export const MessageBody: P.MessageBody[] = [
     text: "Fix the marked spots.",
     attachments: [{ id: "att_1", annotation: AttachmentAnnotation[0]! }, annotatedPage, { path: "/Users/mark/Desktop/shot.png" }],
   },
+];
+
+export const MessageDraft: P.MessageDraft[] = [
+  { text: "Half written", attachments: [], origin: "9f3c2a1b7d4e6f80", updatedAt: T0 },
+  { text: "", attachments: [{ id: "att_1", path: "/Users/mark/Desktop/shot.png", name: "shot.png", source: "file", kind: "image", mimeType: "image/png", annotation: AttachmentAnnotation[0]! }], origin: null, updatedAt: T0 + 1 },
+];
+
+export const MessageDraftBody: P.MessageDraftBody[] = [
+  { text: "Half written", origin: "9f3c2a1b7d4e6f80" },
+  { text: "", attachments: [{ id: "att_1", annotation: AttachmentAnnotation[0]! }], origin: "9f3c2a1b7d4e6f80" },
+  { text: "" },
 ];
 
 export const ReopenBody: P.ReopenBody[] = [{ notes: "The enum test is tautological" }];
