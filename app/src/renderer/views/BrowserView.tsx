@@ -221,7 +221,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     if (!stage || !subscribed.current) return;
     const width = Math.round(stage.clientWidth);
     const height = Math.round(stage.clientHeight);
-    const key = `${width}x${height}`;
+    const key = sizeKey(width, height);
     if (width <= 0 || height <= 0 || key === lastSize.current) return;
     lastSize.current = key;
     send({ type: "resize", width, height });
@@ -233,6 +233,25 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     },
     [sendResize],
   );
+
+  /**
+   * The tab at the pane's size before a screenshot: a resize still waiting on its debounce goes
+   * now, then this waits (up to 2 s) for a frame at that size. A screenshot taken before the
+   * resize lands would show the page at its old size, and every element lookup on it would come
+   * back empty once the tab is resized under it.
+   */
+  const settleSize = useCallback(async () => {
+    const stage = stageRef.current;
+    if (!stage || !subscribed.current) return;
+    if (resizeTimer.current) {
+      clearTimeout(resizeTimer.current);
+      resizeTimer.current = null;
+    }
+    sendResize();
+    const want = sizeKey(stage.clientWidth, stage.clientHeight);
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && sizeKey(frame.current.width, frame.current.height) !== want) await new Promise((r) => setTimeout(r, 50));
+  }, [sendResize]);
 
   useEffect(() => {
     // New session or reconnect: the service-side subscription starts over.
@@ -426,6 +445,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     if (!annotator || shooting) return;
     const tabId = typeof viewTab.current === "number" ? viewTab.current : state?.tabId;
     setShooting(true);
+    await settleSize();
     const shot = await act(() => client.browserScreenshot(sessionId, tabId));
     setShooting(false);
     if (!shot) return;
@@ -437,7 +457,9 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
       attachment: (png) => client.uploadAttachment(png, `${browserShotName(shot.url, shot.title)}.png`, "image/png"),
       // What each mark points at, in the page as it was captured (null once the tab has moved on).
       // An older service sends no scroll, and has no lookup either.
-      ...(shot.scroll ? { elementAt: (x: number, y: number) => client.browserElementAt(sessionId, { tabId: shot.tabId, x, y, url: shot.url, scroll: shot.scroll }) } : {}),
+      ...(shot.scroll
+        ? { elementAt: (x: number, y: number) => client.browserElementAt(sessionId, { tabId: shot.tabId, x, y, url: shot.url, scroll: shot.scroll, viewport: shot.viewport }) }
+        : {}),
     });
   };
 
@@ -548,4 +570,9 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
       </div>
     </div>
   );
+}
+
+/** A tab size as the pane compares them: whole CSS pixels. */
+function sizeKey(width: number, height: number): string {
+  return `${Math.round(width)}x${Math.round(height)}`;
 }

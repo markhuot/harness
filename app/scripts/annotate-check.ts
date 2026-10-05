@@ -327,6 +327,8 @@ try {
   await go(`#/board/${project.id}/ticket/${ticket.key}/browser`);
   const ready = await until("the page's first frame", () => js<boolean>(`!!document.querySelector('[data-testid="browser-annotate"]') && !document.querySelector('[data-testid="browser-annotate"]').disabled`), 20000).catch(() => false);
   check("the browser pane offers Annotate once the page is drawn", ready);
+  // Pressed as soon as it's offered: before the pane's debounced resize has reached the tab.
+  const stageSize = await js<{ width: number; height: number }>(`(() => { const s = document.querySelector('.browser-stage'); return { width: Math.round(s.clientWidth), height: Math.round(s.clientHeight) }; })()`);
   await js(`document.querySelector('[data-testid="browser-annotate"]').click()`);
   check("Annotate opens the annotator on a frozen screenshot of the page", await annotatorOpen());
   const elementLabels = () => js<(string | null)[]>(`[...document.querySelectorAll('[data-testid="annotator-row"]')].map(r => r.querySelector('[data-testid="annotator-element"]')?.textContent ?? null)`);
@@ -359,6 +361,7 @@ try {
   const shotAnn = c2?.attachments?.[1]?.annotation;
   check("each of its marks tells the agent the element it points at (path and text)", shotAnn?.marks.every((m) => m.path === "#save" && m.text === "Save") === true, JSON.stringify(shotAnn?.marks.map((m) => [m.path, m.text])));
   check("marks on other images never name an element", c2?.attachments?.[0]?.annotation?.marks.every((m) => m.path === undefined && m.text === undefined) === true);
+  check("the screenshot is of the page at the pane's size, not the tab's size before the pane resized it", !!page && page.viewport.width === stageSize.width && page.viewport.height === stageSize.height, JSON.stringify({ page: page?.viewport, stage: stageSize }));
   check("the screenshot's size is the page's in device pixels, named after its host", !!shotAnn && !!page && Math.abs(shotAnn.width - page.viewport.width * page.scale) <= 2 && c2!.attachments![1]!.name === "127.0.0.1.png", JSON.stringify({ w: shotAnn?.width, name: c2?.attachments?.[1]?.name }));
 
   // ================================================================ 5. New session
