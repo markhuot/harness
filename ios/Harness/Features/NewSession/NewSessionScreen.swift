@@ -254,7 +254,7 @@ private struct NewSessionEditorView: View {
             )
         }
         guard let editor else { return }
-        if case let .redirect(key) = editor.begin(projectId: projectId, candidates: [app.prefs.boardProject, app.prefs.lastProject]) {
+        if case let .redirect(key) = editor.begin(projectId: projectId, candidates: store.state.composerCandidates(app.prefs.boardProject, last: app.prefs.lastProject)) {
             router.open(.push(.ticket(key: key, tab: nil)))
         }
     }
@@ -340,7 +340,7 @@ private struct BeginInputs: Equatable {
     @MainActor
     init(state: BoardState, reopen: String?, projectId: String?, prefs: Prefs) {
         stored = reopen.flatMap { state.ticketByKey($0) }
-        project = reopen == nil ? state.composerProject(projectId ?? "", candidates: [prefs.boardProject, prefs.lastProject]) : ""
+        project = reopen == nil ? state.composerProject(projectId ?? "", candidates: state.composerCandidates(prefs.boardProject, last: prefs.lastProject)) : ""
         hasSettings = state.settings != nil
     }
 }

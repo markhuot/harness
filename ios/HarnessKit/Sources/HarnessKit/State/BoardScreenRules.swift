@@ -122,4 +122,11 @@ public enum BoardScreenRules {
         for t in tickets where t.status != .done { m[t.projectId, default: 0] += 1 }
         return m
     }
+
+    /// Open tickets per project group (from `openCounts`), for the Projects sheet's group rows.
+    public static func groupOpenCounts(_ counts: [String: Int], projects: some Sequence<Project>) -> [String: Int] {
+        var m: [String: Int] = [:]
+        for p in projects { if let g = p.group { m[g, default: 0] += counts[p.id] ?? 0 } }
+        return m
+    }
 }

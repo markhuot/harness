@@ -7,8 +7,9 @@ struct ProjectsSheet: View {
     var body: some View { ProjectsSidebar() }
 }
 
-/// The desktop sidebar, and how the app moves between its sections: Inbox, All projects and each
-/// project with its open count and a settings gear (pick one to filter the board), and Settings at
+/// The desktop sidebar, and how the app moves between its sections: Inbox, All projects, each
+/// project group's board (alphabetically, under All projects), and each project with its open
+/// count and a settings gear (pick one to filter the board), and Settings at
 /// the bottom with the connection. Add a project by its path on the Mac. The phone shows it as the
 /// Projects sheet; the iPad (regular width) keeps it in the split view's sidebar column
 /// (`column`), where a gear pushes on the detail column's stack.
@@ -30,8 +31,10 @@ struct ProjectsSidebar: View {
         let projects = state.sortedProjects()
         let counts = BoardScreenRules.openCounts(state.tickets.values)
         let totalOpen = counts.values.reduce(0, +)
+        let groups = state.projectGroups()
+        let groupCounts = BoardScreenRules.groupOpenCounts(counts, projects: projects)
         let triaging = state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
-        let row = SidebarRow.current(tab: router.selectedTab, boardProject: app.prefs.boardProject) { state.projects[$0] != nil }
+        let row = SidebarRow.current(tab: router.selectedTab, board: state.boardFilter(app.prefs.boardProject))
         let bg = column ? c.bgSidebar : c.bg
 
         ScrollView {
@@ -43,6 +46,13 @@ struct ProjectsSidebar: View {
                     Divider().overlay(c.border)
                     ProjectsNavRow(icon: "layers", label: "All projects", count: totalOpen, active: row == .allProjects) {
                         select(.allProjects)
+                    }
+                    // Each group's board, like All projects with only its projects.
+                    ForEach(groups, id: \.self) { g in
+                        Divider().overlay(c.border)
+                        ProjectsNavRow(icon: "folder", label: g, count: groupCounts[g] ?? 0, active: row == .group(g)) {
+                            select(.group(g))
+                        }
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
@@ -166,7 +176,7 @@ struct ProjectsSidebar: View {
     }
 }
 
-/// An Inbox / All projects row: icon, label, and the open count or an amber badge.
+/// An Inbox / All projects / project group row: icon, label, and the open count or an amber badge.
 private struct ProjectsNavRow: View {
     let icon: String
     let label: String
@@ -180,7 +190,7 @@ private struct ProjectsNavRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Icon(icon, size: 18).foregroundStyle(active ? c.accentText : c.text2)
-                Text(label).font(.scaled(size: 16)).foregroundStyle(c.text)
+                Text(label).font(.scaled(size: 16)).foregroundStyle(c.text).lineLimit(1)
                 Spacer()
                 if badge > 0 {
                     Text("\(badge)")
