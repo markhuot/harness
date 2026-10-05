@@ -1093,6 +1093,58 @@ export const BROWSER_MAX_SIDE = 4096;
 export const BROWSER_MOBILE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
 
+/**
+ * Where an extension of the service's browser came from: "webstore", installed from the Chrome Web
+ * Store in Settings; "unpacked", a folder on the service's machine added in Settings; "chrome", in
+ * the browser without Settings adding it (an organization's policy installs some), which Settings
+ * lists but doesn't change.
+ */
+export type BrowserExtensionSource = "webstore" | "unpacked" | "chrome";
+
+/**
+ * An extension in the service's browser (GET /browser-extensions). Every session's tabs share
+ * them. `status`:
+ * - "loaded": running.
+ * - "pending": on, waiting for Chrome to start: a Web Store extension installs then, an unpacked one loads then.
+ * - "off": turned off.
+ * - "blocked": the organization's Chrome policy doesn't allow it.
+ * - "error": Chrome couldn't install or load it (`error` says why).
+ */
+export interface BrowserExtension {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  source: BrowserExtensionSource;
+  /** An unpacked extension's folder. */
+  path?: string;
+  /** Installed by the organization's Chrome policy. */
+  byPolicy?: boolean;
+  enabled: boolean;
+  status: "loaded" | "pending" | "off" | "blocked" | "error";
+  error?: string;
+  /** It has a toolbar button (an action), which POST /browser/:sessionId/extension-action runs. */
+  hasAction: boolean;
+  /** Its options page, to open in a tab. */
+  optionsUrl?: string;
+  /** When it was added in Settings (absent for "chrome" ones). */
+  addedAt?: number;
+}
+
+/** GET /browser-extensions. `running`: Chrome is running, so a "pending" extension waits for a restart (POST /browser/restart). */
+export interface BrowserExtensionList {
+  extensions: BrowserExtension[];
+  running: boolean;
+}
+
+/** POST /browser-extensions: `webstore` is a Chrome Web Store link or a 32-letter extension ID; `path` an unpacked extension's folder on the service's machine. */
+export type AddBrowserExtensionBody = { webstore: string } | { path: string };
+
+/** POST /browser/:sessionId/extension-action: the tab its popup opened in, or null when the action had no popup. */
+export interface BrowserExtensionActionResult {
+  tab: number | null;
+}
+
 /** One tab of a session's browser. Ids count up from 1 per session and are never reused. */
 export interface BrowserTab {
   id: number;

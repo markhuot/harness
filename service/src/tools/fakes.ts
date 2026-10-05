@@ -218,6 +218,16 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
     subscribe: async () => {},
     unsubscribe: async () => {},
     suspendTabs: async () => {},
+    extensions: async () => ({ extensions: [], running: false }),
+    restartBrowser: async () => {},
+    addExtension: async () => {
+      throw new Error("No extensions in the fake browser");
+    },
+    setExtensionEnabled: async () => {
+      throw new Error("No extensions in the fake browser");
+    },
+    removeExtension: async () => {},
+    runExtensionAction: async () => ({ tab: null }),
     close: async () => {},
     shutdown: async () => {},
   };

@@ -46,6 +46,10 @@ import type {
   BrowserScreenshot,
   BrowserElement,
   BrowserElementQuery,
+  BrowserExtension,
+  BrowserExtensionList,
+  BrowserExtensionActionResult,
+  AddBrowserExtensionBody,
   PluginInfo,
   PluginTab,
   NetworkStatus,
@@ -397,6 +401,29 @@ export class HarnessClient {
   }
   browserNavigate(sessionId: string, url: string, tabId?: number) {
     return this.request<BrowserState>("POST", `/browser/${sessionId}/navigate`, tabId === undefined ? { url } : { url, tabId });
+  }
+  /** Run extension `id`'s toolbar action on a tab (`tabId` omitted: the lowest open tab); its popup opens as the session's next tab. */
+  browserExtensionAction(sessionId: string, id: string, tabId?: number) {
+    return this.request<BrowserExtensionActionResult>("POST", `/browser/${sessionId}/extension-action`, tabId === undefined ? { id } : { id, tabId });
+  }
+
+  // Browser extensions (shared by every session's tabs)
+  listBrowserExtensions() {
+    return this.request<BrowserExtensionList>("GET", "/browser-extensions");
+  }
+  /** Restart the service's Chrome, so pending extensions install: every tab's page reloads (watched ones now, the rest when next used). */
+  restartBrowser() {
+    return this.request<{ ok: true }>("POST", "/browser/restart");
+  }
+  /** Install from the Chrome Web Store (a link or an ID) or an unpacked folder on the service's machine. */
+  addBrowserExtension(body: AddBrowserExtensionBody) {
+    return this.request<BrowserExtension>("POST", "/browser-extensions", body);
+  }
+  setBrowserExtensionEnabled(id: string, enabled: boolean) {
+    return this.request<BrowserExtension>("PATCH", `/browser-extensions/${id}`, { enabled });
+  }
+  removeBrowserExtension(id: string) {
+    return this.request<{ ok: true }>("DELETE", `/browser-extensions/${id}`);
   }
 
   // Plugins

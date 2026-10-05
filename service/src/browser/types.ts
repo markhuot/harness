@@ -10,7 +10,7 @@
 // deleting its session, removes it.
 
 import type { WaitCondition, WaitResult } from "./wait";
-import type { BrowserDevice, BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
+import type { AddBrowserExtensionBody, BrowserExtension, BrowserExtensionActionResult, BrowserExtensionList, BrowserDevice, BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
   sessionId: string;
@@ -198,6 +198,22 @@ export interface BrowserService {
    * URL when watched or used). A tab someone is watching keeps its page until the viewer leaves.
    */
   suspendTabs(sessionId: string): Promise<void>;
+  /** Chrome's extensions (every session's tabs share them). Throws 404 when the browser has no extensions folder. */
+  extensions(): Promise<BrowserExtensionList>;
+  /**
+   * Install from the Chrome Web Store (checking the organization's policy first) or load an unpacked
+   * folder, starting Chrome for it. A Web Store install lands when Chrome next starts: right away
+   * when no tab has a page, otherwise it waits (pending) for restartBrowser.
+   */
+  addExtension(body: AddBrowserExtensionBody): Promise<BrowserExtension>;
+  /** Turn an extension added in Settings on or off. */
+  setExtensionEnabled(id: string, enabled: boolean): Promise<BrowserExtension>;
+  /** Uninstall an extension added in Settings (an unpacked folder itself is left alone). */
+  removeExtension(id: string): Promise<void>;
+  /** Run an extension's toolbar action on a tab; its popup opens as the session's next tab. */
+  runExtensionAction(sessionId: string, id: string, opts?: TabOption): Promise<BrowserExtensionActionResult>;
+  /** Restart Chrome so pending extensions install; every tab's page reloads (watched ones at once). */
+  restartBrowser(): Promise<void>;
   /** Close all of the session's tabs and forget them, stored ones included (the session is deleted). */
   close(sessionId: string): Promise<void>;
   /** Shut down Chrome. */
