@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, New session's Start session and Plan first buttons keep their icons when you
+  tap them. Before, the tapped button briefly turned into its text label. Now both are just
+  disabled while the session launches.
+
 ## [app-20261005.1016](https://github.com/markhuot/harness/releases/tag/app-20261005.1016) - 2026-10-05
 
 ### Changed
