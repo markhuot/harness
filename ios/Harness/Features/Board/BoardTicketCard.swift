@@ -29,7 +29,7 @@ struct BoardTicketCard: View {
             .contextMenu { menu(parent: parent) }
             .modifier(CardDrag(ticket: t))
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")))
+            .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")) + restartLabel(t))
             .accessibilityHint(t.draft == true ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to move it.")
             .accessibilityAddTraits(.isButton)
             .accessibilityActions {
@@ -37,6 +37,13 @@ struct BoardTicketCard: View {
                     Button("Move to \(statusLabel(s))") { onMove(t, s, .bottom) }
                 }
             }
+    }
+
+    /// ", restarts on its own at 2:35 PM, …" for a ticket stopped on a usage limit; "" otherwise.
+    private func restartLabel(_ t: Ticket) -> String {
+        guard let at = Conductor.restartsAt(t) else { return "" }
+        let time = Date(timeIntervalSince1970: at / 1000).formatted(date: .omitted, time: .shortened)
+        return ", " + Conductor.restartTitle(time).replacingOccurrences(of: "Restarts", with: "restarts")
     }
 
     private func open() {
@@ -85,7 +92,7 @@ struct BoardTicketCard: View {
                 }
                 if Conductor.isWorking(state.tickets, t) {
                     Spinner().controlSize(.small)
-                } else if !waiting.isEmpty {
+                } else if !waiting.isEmpty || Conductor.restartsAt(t) != nil {
                     Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
                 }
                 if t.status == .done, case .value = t.pullRequestUrl { Badge("PR", tone: .violet, icon: "external") }

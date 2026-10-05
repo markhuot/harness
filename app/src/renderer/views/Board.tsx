@@ -20,6 +20,8 @@ import {
   NEWS_KINDS,
   plainText,
   progressOf,
+  restartsAt,
+  restartTitle,
   scopeGroup,
   searchColumns,
   searchStatusText,
@@ -369,6 +371,8 @@ const TicketCard = memo(function TicketCard({
   const discard = () => onDiscard(t);
   const working = isWorking(state.tickets, t);
   const waitingToStart = autoStartWaitingOn(t, deps);
+  const restart = restartsAt(t);
+  const restartLabel = restart === null ? "" : restartTitle(new Date(restart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
 
   return (
     <article
@@ -414,6 +418,11 @@ const TicketCard = memo(function TicketCard({
         {working && <span className="spinner" title={workingTitle(t)} />}
         {!working && waitingToStart.length > 0 && (
           <span className="card-autostart" data-testid="card-autostart" title={autoStartTitle(waitingToStart)} aria-label={autoStartTitle(waitingToStart)}>
+            <Icon name="clock" size={12} />
+          </span>
+        )}
+        {!working && restart !== null && (
+          <span className="card-autostart" data-testid="card-restart" title={restartLabel} aria-label={restartLabel}>
             <Icon name="clock" size={12} />
           </span>
         )}

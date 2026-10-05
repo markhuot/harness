@@ -264,6 +264,12 @@ export interface Ticket {
   promptAttachments?: Attachment[];
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
+  /**
+   * When a blocked ticket restarts on its own (ms): a run that stopped on a usage limit naming its
+   * reset time blocks the ticket until five minutes after it (DESIGN.md "Usage limits"). Cleared
+   * when the ticket leaves blocked. Optional so older payloads type-check.
+   */
+  resumeAt?: number | null;
   /** True while any agent run for this ticket is queued or running */
   busy: boolean;
   /** A tool-permission request waiting on a human (claude-code driver). Ticket is blocked meanwhile. */

@@ -231,6 +231,19 @@ public enum Conductor {
         return "Starts on its own once \(list) \(keys.count > 1 ? "are" : "is") done"
     }
 
+    /// When a blocked ticket restarts on its own (ms): a run stopped on a usage limit, and the service
+    /// restarts it five minutes after the limit resets (`Ticket.resumeAt`). nil when it won't: not
+    /// blocked, or blocked on anything else.
+    public static func restartsAt(_ t: Ticket) -> Timestamp? {
+        guard t.status == .blocked, t.draft != true, let at = t.resumeAt.optional, at != 0 else { return nil }
+        return at
+    }
+
+    /// The restarting card's clock: "Restarts on its own at 2:35 PM, …" (`time` already formatted).
+    public static func restartTitle(_ time: String) -> String {
+        "Restarts on its own at \(time), after the usage limit resets"
+    }
+
     /// Depth in the sibling dependency graph, by upper-cased key: 0 = depends on no sibling, n = 1 +
     /// deepest sibling dep. Deps outside the set are ignored; cycles are cut (a ticket revisited
     /// mid-walk counts as 0).

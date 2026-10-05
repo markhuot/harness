@@ -166,6 +166,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "plan", route: "#/board/all/ticket/NYTIMES-2" },
   { name: "transcript", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 4200 },
   { name: "blocked", route: "#/board/all/ticket/NYTIMES-3" },
+  { name: "restarts", route: "#/board/all/ticket/HARNESS-21" },
   { name: "done", route: "#/board/all/ticket/NYTIMES-5" },
   { name: "reopen", route: "#/board/all/ticket/NYTIMES-5", setup: `[...document.querySelectorAll(".actions button")].find((b) => b.textContent?.includes("Re-open"))?.click()` },
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },

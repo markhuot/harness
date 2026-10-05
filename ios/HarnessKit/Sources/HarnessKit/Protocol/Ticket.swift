@@ -92,6 +92,10 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var promptAttachments: [Attachment]?
     /// Why the ticket is blocked (question for the human), when status = blocked
     @Nullable public var blockedReason: String?
+    /// When a blocked ticket restarts on its own (ms): a run that stopped on a usage limit naming its
+    /// reset time blocks the ticket until five minutes after it. Cleared when the ticket leaves
+    /// blocked. Optional so older payloads decode.
+    public var resumeAt: Patch<Timestamp>
     /// True while any agent run for this ticket is queued or running
     public var busy: Bool
     /// A tool-permission request waiting on a human (claude-code driver). Ticket is blocked meanwhile.
@@ -120,7 +124,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, blockedReason: String? = nil, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
         createdAt: Timestamp, updatedAt: Timestamp
@@ -157,6 +161,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.draft = draft
         self.promptAttachments = promptAttachments
         self.blockedReason = blockedReason
+        self.resumeAt = resumeAt
         self.busy = busy
         self.pendingApproval = pendingApproval
         self.allowedTools = allowedTools

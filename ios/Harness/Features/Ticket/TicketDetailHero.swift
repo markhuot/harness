@@ -130,6 +130,13 @@ struct TicketDetailHero: View {
                     accessibilityLabel: Conductor.autoStartTitle(waiting)) {}
                 .disabled(true)
         }
+        // Stopped on a usage limit: the service restarts it on its own after the limit resets.
+        if let restart = Conductor.restartsAt(ticket) {
+            let time = Date(timeIntervalSince1970: restart / 1000).formatted(date: .omitted, time: .shortened)
+            HButton("Restarts at \(time)", icon: "clock", variant: .primary, small: true, fullWidth: false,
+                    accessibilityLabel: Conductor.restartTitle(time)) {}
+                .disabled(true)
+        }
         // Approving lands the work once both reviews pass; there's no separate Complete step. A
         // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.
         if ticket.status == .review && (ticket.humanReview != .approved || managed) {
