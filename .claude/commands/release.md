@@ -20,10 +20,13 @@ tag or `main`.
    a long while: run it in the background and check on it. If it fails partway, fix the cause and
    rerun it on the same tag, as long as no GitHub release exists for it yet.
 5. Commit the regenerated `release/Install/` files as `Install page: release app-…` and push `main`.
-6. Download the published Mac app and replace the installed one:
-   `gh release download app-… --pattern Harness-mac.zip --dir <tmp>`, `ditto -x -k` it, `trash`
-   `/Applications/Harness.app`, then `ditto` the new `Harness.app` into `/Applications`. Check it
-   with `spctl -a -vv /Applications/Harness.app`. Don't restart the service or relaunch the app;
-   the service picks up the new version on its own.
+6. Every run of this command ends by copying the built Mac app into `/Applications`, the way
+   dragging it there in Finder would. Never skip this step. Take the notarized zip the publish
+   built, `release/build/release/Harness-mac.zip` (if it's missing, fetch the published one with
+   `gh release download app-… --pattern Harness-mac.zip --dir <tmp>`), `ditto -x -k` it into a
+   temp dir, `trash /Applications/Harness.app`, then `ditto` the new `Harness.app` into
+   `/Applications`. Check it with `spctl -a -vv /Applications/Harness.app`. Only copy the app:
+   don't restart the service, quit or relaunch the app, or run `bun run install-app`. The app
+   notices the new version and restarts the service itself.
 7. Report the tag, the GitHub release URL, https://harness-install.vercel.app, and the TestFlight
    status (submitted for review, or left unsubmitted behind an earlier build).
