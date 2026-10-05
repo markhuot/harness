@@ -120,6 +120,7 @@ import {
   ensureWorktree,
   headCommit,
   hasChangesToLand,
+  isAncestor,
   isGitRepo,
   isInside,
   listBranches,
@@ -1602,6 +1603,47 @@ export class Orchestrator {
     if (t?.status !== "blocked") return "";
     const reason = t.blockedReason?.trim();
     return `\n\n[Harness note: this ticket is blocked${reason ? ` on: ${reason}` : ""}. If this message resolves that, call unblock before you continue the work; if it doesn't, answer and leave the ticket blocked.]`;
+  }
+
+  /**
+   * What the agent reads when its ticket's worktree is gone and the run started in `cwd` instead
+   * (DESIGN.md "Ticket lifecycle"): where the worktree was, whether its branch is still there and
+   * already in the base branch, and on a review the last commit an earlier round checked. The
+   * harness repairs nothing; the agent recreates the worktree when it needs one. A done ticket's
+   * worktree was removed on purpose, so a chat about it gets no note.
+   */
+  private async missingWorktreeNote(t: Ticket, kind: RunKind, cwd: string, project: Project | null): Promise<string> {
+    if (!t.workdir || t.status === "done") return "";
+    const repo = project?.path ?? cwd;
+    const branch = t.branch ?? t.requestedBranch ?? branchForKey(t.key);
+    const base = (await this.refreshBaseBranch(t, project)).branch;
+    const reviewed = kind === "review" ? this.lastReviewedCommit(t) : null;
+    const exists = await branchExists(repo, branch);
+    const tip = exists ? branch : reviewed;
+    const landed = !!tip && (await isAncestor(repo, tip, base));
+    const lines = [
+      `this ticket's worktree at ${t.workdir} is missing, so this run started in ${cwd}, the project checkout.`,
+      `Branch \`${branch}\` ${exists ? "still exists" : "no longer exists"}${tip ? `, and ${exists ? "it" : `commit ${tip}`} ${landed ? "is already" : "isn't"} in the base branch \`${base}\`` : ""}.`,
+    ];
+    if (reviewed) lines.push(`The last commit an earlier review round checked is ${reviewed}.`);
+    if (kind === "complete") {
+      lines.push(`A completion doesn't need the worktree back: do what it asks from the project checkout with \`git -C ${repo}\`. If the work already landed and the branch is gone, there is nothing left to merge or remove; say so.`);
+    } else {
+      const add = exists ? `git -C ${repo} worktree add ${t.workdir} ${branch}` : `git -C ${repo} worktree add -b ${branch} ${t.workdir} ${reviewed ?? base}`;
+      lines.push(`Before you change, build or test anything, recreate the worktree at that same path (\`${add}\`) and work there. Leave the project checkout's files and branch alone.`);
+      if (kind === "review") lines.push(`If the work already landed on \`${base}\`, you may review it straight from git instead (\`git show\`, \`git diff ${reviewed ?? "<commit>"} ${base}\`).`);
+    }
+    return `\n\n[Harness note: ${lines.join(" ")}]`;
+  }
+
+  /** The commit the last agent review round recorded (`meta.commit`), if any. */
+  private lastReviewedCommit(t: Ticket): string | null {
+    return this.agentReviewRounds(t).at(-1)?.meta.commit ?? null;
+  }
+
+  /** The ticket's agent review rounds, oldest first (DESIGN.md "Agent review"). */
+  private agentReviewRounds(t: Ticket) {
+    return this.store.activity.listBySession(t.sessionId).filter((e) => (e.kind === "review_approved" || e.kind === "changes_requested") && e.meta.by === "agent");
   }
 
   /**
@@ -3650,11 +3692,32 @@ ${numberLines(r.body)}`;
    * approval goes back to pending, so the Approve button offers its choices again and approving
    * lands the work: nothing else starts a completion for a ticket that's already approved.
    */
-  private completionStopped(sessionId: string, why: string) {
+  /**
+   * A complete run stopped before it landed the work: the ticket stays in review with its agent
+   * review approved. Approving again lands it, so the human approval goes back to pending. A
+   * conductor-managed child whose completion failed or was interrupted stays ready instead, and
+   * its conductor is told to call complete_ticket again (a cancel was someone's choice, so it
+   * hands the approval back like any other).
+   */
+  private completionStopped(sessionId: string, why: "cancelled" | "interrupted" | "failed", error?: string | null) {
     const ticketId = this.store.sessions.get(sessionId)?.ticketId;
     const t = ticketId ? this.store.tickets.get(ticketId) : null;
     if (!t || t.status !== "review" || t.humanReview !== "approved") return;
-    this.transition(t, "review", { humanReview: "pending" }, `Completion ${why}: approve again to land it`);
+    const what = `Completion ${why}${error ? ` (${error})` : ""}`;
+    if (why !== "cancelled" && t.parentId && this.managedChild(t)) {
+      const conductor = this.store.tickets.get(t.parentId)!;
+      this.appendStatus(t.sessionId, null, `${what}: still approved, waiting on ${conductor.key} to complete it again`);
+      this.notifyConductor(t.parentId, {
+        key: t.key,
+        title: t.title,
+        from: "review",
+        to: "review",
+        note: `${what}. It's still approved and nothing landed it: call complete_ticket again once the cause is cleared.`,
+        specRevision: t.specRevision,
+      });
+      return;
+    }
+    this.transition(t, "review", { humanReview: "pending" }, `${what}: approve again to land it`);
   }
 
   private submit(ticket: Ticket, note: string, author: ActivityAuthor) {
@@ -3731,9 +3794,9 @@ ${numberLines(r.body)}`;
    */
   reviewContext(t: Ticket): prompts.ReviewContext {
     const activity = this.store.activity.listBySession(t.sessionId);
-    const rounds = activity.filter((e) => (e.kind === "review_approved" || e.kind === "changes_requested") && e.meta.by === "agent");
+    const rounds = this.agentReviewRounds(t);
     const last = rounds.at(-1);
-    const since = last ? activity.slice(activity.indexOf(last) + 1) : activity;
+    const since = last ? activity.slice(activity.findIndex((e) => e.id === last.id) + 1) : activity;
     const baseline = t.specBaselineRevision ? this.store.specs.get(t.id, t.specBaselineRevision) : null;
     const current = t.specRevision ?? 1;
     return {
@@ -3937,9 +4000,10 @@ ${numberLines(r.body)}`;
     this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;
-    // A chat about a done ticket falls back to the checkout once the complete run removed the
-    // worktree. The session's cwd is that same worktree, so it's skipped when it's gone too.
-    const gone = run.kind === "chat" && !!ticket?.workdir && !existsSync(ticket.workdir);
+    // A ticket whose worktree is gone (the complete run removed it, or an agent did) runs from the
+    // project checkout instead of failing; missingWorktreeNote tells the agent. The session's cwd
+    // is that same worktree, so it's skipped when it's gone too.
+    const gone = run.kind !== "plan" && !!ticket?.workdir && !existsSync(ticket.workdir);
     const workdir = run.kind === "plan" || gone ? null : ticket?.workdir;
     const sessionCwd = gone && session.cwd && !existsSync(session.cwd) ? null : session.cwd;
     const cwd = workdir ?? sessionCwd ?? project?.path ?? this.paths.home;
@@ -3968,8 +4032,10 @@ ${numberLines(r.body)}`;
         // conversation keeps them after that).
         const firstRun = !this.store.runs.listBySession(session.id).some((r) => r.id !== run.id && r.status === "succeeded" && MENTION_RUN_KINDS.has(r.kind));
         const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...(ticket && firstRun ? (ticket.promptAttachments ?? []) : []), ...(run.attachments ?? [])]) : null;
+        const missing = gone && ticket ? await this.missingWorktreeNote(ticket, run.kind, cwd, project) : "";
+        if (missing) this.appendStatus(session.id, run.id, `Worktree missing: running from ${cwd}`);
         // The transcript keeps the human's words; the agent also reads when to unblock.
-        const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + (attached?.block ?? "");
+        const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + missing + (attached?.block ?? "");
         active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
         const req: RunRequest = {
@@ -4170,6 +4236,13 @@ ${numberLines(r.body)}`;
         this.addActivityLine(ticket, "failed", "system", `Run failed after the ticket was done: ${error ?? "no error reported"}`);
         return;
       }
+      // A completion that fails in review keeps its approvals: blocking it would send it through
+      // in progress again, and the resubmit would reset both reviews.
+      if (run.kind === "complete" && ticket.status === "review") {
+        this.addActivityLine(ticket, "failed", "system", `Completion failed: ${error ?? "no error reported"}`);
+        this.completionStopped(run.sessionId, "failed", error);
+        return;
+      }
       // A chat that unblocked the ticket was doing its work: it fails like a work run. Any other
       // failed chat leaves the ticket where it is.
       if (run.kind === "work" || run.kind === "conductor" || run.kind === "complete" || (run.kind === "chat" && ticket.status === "in_progress")) {
@@ -4177,6 +4250,9 @@ ${numberLines(r.body)}`;
         this.transition(ticket, "blocked", { blockedReason: error ?? "Run failed" }, "Blocked: run failed", error ?? undefined);
       } else if (run.kind === "chat") {
         this.addActivityLine(ticket, "failed", "system", `Run failed: ${error ?? "no error reported"}`);
+      } else if (run.kind === "review" && ticket.status === "review") {
+        // Otherwise the ticket sits in review with nothing running and no word why.
+        this.addActivityLine(ticket, "failed", "system", `Agent review failed: ${error ?? "no error reported"}. Re-run agent review to try again.`);
       }
       return;
     }

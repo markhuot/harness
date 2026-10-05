@@ -398,7 +398,7 @@ describe("ticket lifecycle", () => {
     expect(runKinds(h, u)).toEqual(["plan:succeeded"]);
   });
 
-  test("complete run failure → blocked", async () => {
+  test("complete run failure stays in review with its agent review, and says why", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
@@ -408,8 +408,8 @@ describe("ticket lifecycle", () => {
     await h.orch.completeTicket(t.key);
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
-    expect(cur.status).toBe("blocked");
-    expect(cur.blockedReason).toBe("merge conflict");
+    expect(cur).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending", blockedReason: null });
+    expect(h.store.activity.listBySession(cur.sessionId).at(-1)).toMatchObject({ kind: "failed", body: "Completion failed: merge conflict" });
   });
 
   test("cancel aborts the active run and drops queued runs; status unchanged", async () => {
