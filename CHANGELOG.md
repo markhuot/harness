@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.1342](https://github.com/markhuot/harness/releases/tag/app-20261005.1342) - 2026-10-05
+
 ### Added
 
 - Projects can share a group, such as Work or Personal, on the Mac, iPhone and iPad. Pick a group
