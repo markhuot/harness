@@ -94,7 +94,7 @@ export const features: { img: string; w: number; h: number; size: "hero" | "full
     h: 900,
     size: "hero",
     title: "Every agent session is a ticket",
-    body: "Each job you hand an agent gets a card with a key like NYTIMES-4. The board shows what's in planning, what's running, what's waiting on you and what's ready for review, across every project on your Mac.",
+    body: "Each job you hand an agent gets a card with a key like NYTIMES-4. The board shows what's in planning, what's running, what's waiting on you and what's ready for review, across every project on your Mac. Put projects in groups (Work and Personal, say) to give each group a board of its own.",
   },
   {
     img: "review",
@@ -143,6 +143,38 @@ export const features: { img: string; w: number; h: number; size: "hero" | "full
     size: "small",
     title: "You approve the risky commands",
     body: "Agents edit files in their own workspace freely. A command the permission rules don't allow (installing a package, say) stops the ticket until you allow it once, allow it for the ticket, or deny it with a note.",
+  },
+  {
+    img: "split",
+    w: 1440,
+    h: 900,
+    size: "full",
+    title: "Several tickets open side by side",
+    body: "Drag a card onto an open ticket to split the window, and keep the board, a ticket you're reviewing and one that's waiting on an answer in view at once. Each pane keeps its own tab and message box.",
+  },
+  {
+    img: "transcript",
+    w: 482,
+    h: 800,
+    size: "small",
+    title: "Watch the agent work",
+    body: "The Transcript tab streams every message and tool call as it happens, along with why each command was allowed. Send a follow-up from the box underneath whenever you want to steer.",
+  },
+  {
+    img: "browser",
+    w: 482,
+    h: 800,
+    size: "small",
+    title: "A browser you can look over",
+    body: "Each ticket gets its own Chrome tabs to open your dev server, read docs or click through a flow, and you see them live. Annotate a screenshot to point at exactly what needs to change.",
+  },
+  {
+    img: "palette",
+    w: 620,
+    h: 418,
+    size: "small",
+    title: "Everything from the keyboard",
+    body: "Press ⌘K to jump to any ticket, board or project group, or run a command. Search finds tickets by key or title across every project.",
   },
 ];
 
