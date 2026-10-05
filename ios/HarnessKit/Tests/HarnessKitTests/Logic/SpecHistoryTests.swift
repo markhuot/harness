@@ -56,6 +56,49 @@ struct SpecHistoryTests {
         #expect(s.following)
     }
 
+    @Test func eachRevisionOwnsAnEqualSliceOfTheTimeline() {
+        #expect(SpecHistory.revisionAt(0, width: 100, latest: 4) == 1)
+        #expect(SpecHistory.revisionAt(24.9, width: 100, latest: 4) == 1)
+        #expect(SpecHistory.revisionAt(25, width: 100, latest: 4) == 2)
+        #expect(SpecHistory.revisionAt(74.9, width: 100, latest: 4) == 3)
+        #expect(SpecHistory.revisionAt(75, width: 100, latest: 4) == 4)
+        #expect(SpecHistory.revisionAt(49, width: 100, latest: 2) == 1)
+        #expect(SpecHistory.revisionAt(50, width: 100, latest: 2) == 2)
+    }
+
+    @Test func timelineClampsOffEitherEnd() {
+        #expect(SpecHistory.revisionAt(-30, width: 100, latest: 4) == 1)
+        #expect(SpecHistory.revisionAt(100, width: 100, latest: 4) == 4)
+        #expect(SpecHistory.revisionAt(400, width: 100, latest: 4) == 4)
+        // More revisions than points still land on one.
+        #expect(SpecHistory.revisionAt(60, width: 120, latest: 500) == 251)
+        #expect(SpecHistory.revisionAt(119.99, width: 120, latest: 500) == 500)
+        // One revision, or a strip that hasn't laid out yet.
+        #expect(SpecHistory.revisionAt(50, width: 100, latest: 1) == 1)
+        #expect(SpecHistory.revisionAt(50, width: 0, latest: 6) == 6)
+        #expect(SpecHistory.revisionAt(50, width: 100, latest: 0) == 1)
+    }
+
+    @Test func timelineMarksOnlyTheShownRevisionAndTheApprovedPlan() {
+        #expect((1...5).map { SpecHistory.segmentTone(rev: $0, shown: 3, baseline: nil) } == [.before, .before, .shown, .after, .after])
+        #expect(SpecHistory.segmentTone(rev: 2, shown: 4, baseline: 2) == .baseline)
+        #expect(SpecHistory.segmentTone(rev: 5, shown: 4, baseline: 5) == .baseline)
+        #expect(SpecHistory.segmentTone(rev: 3, shown: 3, baseline: 3) == .shown)
+    }
+
+    @Test func approvedPlanComesFromTheTicketElseTheRevisionList() {
+        func ticket(_ baseline: Patch<Int>) -> Ticket {
+            Ticket(id: "t1", key: "GREET-1", projectId: "p1", title: "Hi", spec: "", specBaselineRevision: baseline, status: .inProgress,
+                   sessionId: "s1", driver: "dummy", createdAt: 1, updatedAt: 1)
+        }
+        var s = BoardState()
+        let t = ticket(.null)
+        #expect(SpecHistory.baseline(s, ticket: t) == nil)
+        s.specRevisions["t1"] = [SpecRevisionInfo(rev: 1, author: .agent, note: "", createdAt: 1), SpecRevisionInfo(rev: 2, author: .human, note: "", approvedBaseline: true, createdAt: 2)]
+        #expect(SpecHistory.baseline(s, ticket: t) == 2)
+        #expect(SpecHistory.baseline(s, ticket: ticket(.value(4))) == 4)
+    }
+
     @Test func showChangesComparesWithThePreviousRevision() {
         #expect(SpecHistory.previous(1) == nil)
         #expect(SpecHistory.previous(7) == 6)

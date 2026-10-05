@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The Spec tab, where a ticket opens: the ticket's living spec (markdown with nested lists and
 /// inline images), what it depends on, the files attached to its prompt, and a history bar over it. The bar steps and scrubs through
-/// the spec's revisions (loaded as they're needed), tags the approved plan, and follows the newest
+/// the spec's revisions (‹ › and the timeline along its bottom edge, loaded as they're needed), tags the approved plan, and follows the newest
 /// revision as it lands unless the user has stepped back (SpecScrubber). Show changes keeps the
 /// rendered spec and marks what the shown revision changed from the one before it, in place
 /// (MarkdownView with `previous`).
@@ -115,7 +115,8 @@ struct TicketDetailSpecTab: View {
 }
 
 /// The bar over the spec: "Rev 7 of 7 · Agent · 3m ago", the approved-plan tag, the revision's
-/// note, ‹ › to step, a slider to scrub, a Latest button while pinned, and Show changes.
+/// note, ‹ › to step, a Latest button while pinned and Show changes in one row, with the revision
+/// timeline (SpecTimeline) as its bottom edge.
 private struct SpecHistoryBar: View {
     let ticket: Ticket
     @Binding var scrubber: SpecScrubber
@@ -130,12 +131,12 @@ private struct SpecHistoryBar: View {
         let info = SpecHistory.info(store.state, ticketId: ticket.id, rev: rev)
         NowReader { now in
             let line = SpecHistory.line(rev: rev, latest: latest, info: info, now: now)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 6) {
                     stepButton(-1, icon: "chevronLeft", label: "Previous revision")
                     VStack(alignment: .leading, spacing: 1) {
                         HStack(spacing: 6) {
-                            Text(line.title).font(.scaled(size: 13.5, weight: .semibold)).foregroundStyle(c.text)
+                            Text(line.title).font(.scaled(size: 13.5, weight: .semibold)).foregroundStyle(c.text).fixedSize()
                             if !line.meta.isEmpty { Text(line.meta).font(.scaled(size: 12.5)).foregroundStyle(c.text3).lineLimit(1) }
                             if line.baseline {
                                 Text(SpecHistory.baselineLabel)
@@ -144,6 +145,7 @@ private struct SpecHistoryBar: View {
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(c.greenSoft, in: .capsule)
+                                    .fixedSize()
                             }
                         }
                         if !line.note.isEmpty {
@@ -161,46 +163,48 @@ private struct SpecHistoryBar: View {
                         .font(.scaled(size: 12.5, weight: .semibold))
                         .foregroundStyle(c.accentText)
                         .buttonStyle(.plain)
+                        .fixedSize()
                     }
                     stepButton(1, icon: "chevronRight", label: "Next revision")
+                    if latest > 1 { showChangesButton(rev: rev) }
                 }
-                HStack(spacing: 10) {
-                    if latest > 1 {
-                        Slider(value: Binding(get: { Double(rev) }, set: { scrubber.show(Int($0.rounded()), latest: latest) }),
-                               in: 1...Double(latest), step: 1)
-                            .tint(c.accent)
-                            .accessibilityLabel("Revision")
-                            .accessibilityValue("\(rev) of \(latest)")
-                    } else {
-                        Spacer(minLength: 0)
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, latest > 1 ? 0 : 6)
+                if latest > 1 {
+                    SpecTimeline(latest: latest, shown: rev, baseline: SpecHistory.baseline(store.state, ticket: ticket)) {
+                        scrubber.show($0, latest: latest)
                     }
-                    let on = showChanges && rev > 1
-                    Button {
-                        haptic(.select)
-                        showChanges.toggle()
-                    } label: {
-                        HStack(spacing: 5) {
-                            Icon(on ? "check" : "branch", size: 11, weight: .semibold)
-                            Text("Show changes").font(.scaled(size: 13, weight: .medium))
-                        }
-                        .foregroundStyle(rev <= 1 ? c.text3 : on ? c.onAccent : c.text2)
-                        .padding(.horizontal, 10)
-                        .frame(height: 28)
-                        .background(on ? c.accent : c.bgActive, in: .capsule)
-                        .contentShape(.capsule)
-                    }
-                    .buttonStyle(.plain)
-                    .fixedSize()
-                    .disabled(rev <= 1)
-                    .accessibilityAddTraits(on ? .isSelected : [])
-                    .accessibilityHint(rev <= 1 ? "The first revision has nothing to compare with" : "Compares this revision with the one before it")
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
             .background(c.bgElev)
-            .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
+            .overlay(alignment: .bottom) {
+                if latest <= 1 { Rectangle().fill(c.border).frame(height: 1 / 3) }
+            }
         }
+    }
+
+    private func showChangesButton(rev: Int) -> some View {
+        let on = showChanges && rev > 1
+        return Button {
+            haptic(.select)
+            showChanges.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Icon(on ? "check" : "branch", size: 11, weight: .semibold)
+                Text("Show changes").font(.scaled(size: 13, weight: .medium))
+            }
+            .foregroundStyle(rev <= 1 ? c.text3 : on ? c.onAccent : c.text2)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(on ? c.accent : c.bgActive, in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(rev <= 1)
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityHint(rev <= 1 ? "The first revision has nothing to compare with" : "Compares this revision with the one before it")
     }
 
     private func stepButton(_ delta: Int, icon: String, label: String) -> some View {
@@ -217,6 +221,78 @@ private struct SpecHistoryBar: View {
         .buttonStyle(.plain)
         .disabled(!enabled)
         .accessibilityLabel(label)
+    }
+}
+
+/// The history bar's bottom edge: one segment per revision, rising from the bar's bottom line. The
+/// revision on show stands taller in the accent color and the approved plan is green; the rest are
+/// neutral, darker up to the one on show. Press anywhere and drag to sweep through the revisions,
+/// with a selection tick each time the finger crosses into another one. The touch area is taller
+/// than the strip draws, and the segments grow while a finger is on it. The gaps close up once
+/// there are too many revisions to space out.
+private struct SpecTimeline: View {
+    let latest: Int
+    let shown: Int
+    let baseline: Int?
+    let onScrub: (Int) -> Void
+
+    @Environment(\.palette) private var c
+    @State private var dragging = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let gap = min(2, max(0, width / Double(latest) - 4))
+            HStack(alignment: .bottom, spacing: gap) {
+                ForEach(1...latest, id: \.self) { rev in
+                    let tone = SpecHistory.segmentTone(rev: rev, shown: shown, baseline: baseline)
+                    UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5)
+                        .fill(color(tone))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: height(tone))
+                }
+            }
+            .frame(width: width, height: geo.size.height, alignment: .bottom)
+            .contentShape(.rect)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { v in
+                        dragging = true
+                        let rev = SpecHistory.revisionAt(v.location.x, width: width, latest: latest)
+                        if rev != shown {
+                            haptic(.select)
+                            onScrub(rev)
+                        }
+                    }
+                    .onEnded { _ in dragging = false }
+            )
+        }
+        .frame(height: 20)
+        .animation(.snappy(duration: 0.15), value: dragging)
+        .accessibilityElement()
+        .accessibilityLabel("Revision")
+        .accessibilityValue(shown == baseline ? "\(shown) of \(latest), \(SpecHistory.baselineLabel)" : "\(shown) of \(latest)")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onScrub(min(latest, shown + 1))
+            case .decrement: onScrub(max(1, shown - 1))
+            @unknown default: break
+            }
+        }
+    }
+
+    private func color(_ tone: SpecHistory.SegmentTone) -> Color {
+        switch tone {
+        case .shown: c.accent
+        case .baseline: c.green
+        case .before: c.text3.opacity(0.55)
+        case .after: c.borderStrong
+        }
+    }
+
+    private func height(_ tone: SpecHistory.SegmentTone) -> Double {
+        let base: Double = dragging ? 6 : 3
+        return tone == .shown ? base + 4 : base
     }
 }
 

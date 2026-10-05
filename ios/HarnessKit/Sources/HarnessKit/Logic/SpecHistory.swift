@@ -92,6 +92,39 @@ public enum SpecHistory {
         state.specRevisions[ticketId]?.first { $0.rev == rev }
     }
 
+    /// The approved plan's revision: the ticket's baseline, else the one the revision list marks.
+    public static func baseline(_ state: BoardState, ticket: Ticket) -> Int? {
+        ticket.specBaselineRevision.optional ?? state.specRevisions[ticket.id]?.first { $0.approvedBaseline }?.rev
+    }
+
+    /// The revision under a finger `x` points into the revision timeline, a `width` point strip
+    /// split into `latest` equal segments: off either end clamps to the first or newest.
+    public static func revisionAt(_ x: Double, width: Double, latest: Int) -> Int {
+        guard latest > 1, width > 0 else { return max(1, latest) }
+        return min(latest, max(1, Int((x / width * Double(latest)).rounded(.down)) + 1))
+    }
+
+    /// How the timeline draws one revision's segment (`segmentTone`).
+    public enum SegmentTone: Equatable, Sendable {
+        /// The revision on show
+        case shown
+        /// The approved plan
+        case baseline
+        /// Before the one on show
+        case before
+        /// After the one on show
+        case after
+    }
+
+    /// Segments are neutral: the ones before the revision on show read as passed, the rest as still
+    /// ahead. Only the revision on show and the approved plan are marked, and the one on show wins
+    /// when it's also the approved plan.
+    public static func segmentTone(rev: Int, shown: Int, baseline: Int?) -> SegmentTone {
+        if rev == shown { return .shown }
+        if rev == baseline { return .baseline }
+        return rev < shown ? .before : .after
+    }
+
     /// Whether the revision list needs (re)fetching for a ticket whose newest revision is `latest`:
     /// not loaded yet, or a revision the list doesn't have (a spec.revised that arrived before the
     /// list did, or a reconnect that missed events).
