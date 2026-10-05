@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261005.0236](https://github.com/markhuot/harness/releases/tag/app-20261005.0236) - 2026-10-05
+
 ### Changed
 
 - The Spec tab's revision slider is gone. In its place, a timeline runs along the bottom edge of the
