@@ -113,8 +113,10 @@ export interface PopoutOpenOptions {
   id: string;
   /** The hash route the window opens at (#/popout/<id>/<fromScope>) */
   route: string;
-  /** Where the pane was on screen; the window opens near it */
+  /** Where the pane was on screen; the window opens near it (and at its size) */
   bounds?: ScreenRect;
+  /** A screen point the window opens under (a drag released outside a window); wins over bounds' spot */
+  at?: { x: number; y: number };
 }
 
 /** Pop-out windows: one pane each, in its own window (renderer/components/PopoutWindow.tsx). */

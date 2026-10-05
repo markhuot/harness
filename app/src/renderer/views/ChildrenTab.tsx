@@ -8,7 +8,7 @@ import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, 
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
-import { useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
+import { useBoardScope, useOpenTicket, usePane, usePaneScope } from "../components/paneContext";
 import { keysArea } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
@@ -100,6 +100,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
   const quietDone = c.status === "done";
   const paneId = usePane()?.paneId ?? null;
   const scope = usePaneScope();
+  const boardScope = useBoardScope();
 
   return (
     <div
@@ -110,9 +111,9 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
       data-key={c.key}
       onClick={() => onOpen(c.key)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen(c.key))}
-      // Drag onto a half of this pane (or any other) to see the child beside its conductor.
-      {...dragProps(c.key, c.title, undefined, keyLabel(c))}
-      onContextMenu={(e) => void ticketContextMenu(e, scope, c.key, () => onOpen(c.key), paneId)}
+      // Drag onto a half of this pane (or any other) to see the child beside its conductor, or out of the window to open it in one.
+      {...dragProps({ kind: "ticket", ticketKey: c.key }, { chip: keyLabel(c), title: c.title }, boardScope)}
+      onContextMenu={(e) => void ticketContextMenu(e, scope, c.key, () => onOpen(c.key), paneId, undefined, boardScope)}
     >
       <div className="child-main">
         <div className="child-top">

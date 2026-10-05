@@ -16,25 +16,31 @@ const POPOUT_ID = /^[A-Za-z0-9-]{1,64}$/;
 const isRect = (v: unknown): v is ScreenRect =>
   !!v && typeof v === "object" && (["x", "y", "width", "height"] as const).every((k) => Number.isFinite((v as Record<string, unknown>)[k]));
 
-/** The renderer's open request, checked: a plain id, a pop-out route for that id, and bounds that are numbers. Null when unusable. */
+const isPoint = (v: unknown): v is { x: number; y: number } => !!v && typeof v === "object" && (["x", "y"] as const).every((k) => Number.isFinite((v as Record<string, unknown>)[k]));
+
+/** The renderer's open request, checked: a plain id, a pop-out route for that id, and bounds and a point that are numbers. Null when unusable. */
 export function parsePopoutOptions(raw: unknown): PopoutOpenOptions | null {
   if (!raw || typeof raw !== "object") return null;
-  const { id, route, bounds } = raw as Record<string, unknown>;
+  const { id, route, bounds, at } = raw as Record<string, unknown>;
   if (typeof id !== "string" || !POPOUT_ID.test(id)) return null;
   if (typeof route !== "string" || !route.startsWith(`#/popout/${id}/`)) return null;
-  return isRect(bounds) ? { id, route, bounds } : { id, route };
+  return { id, route, ...(isRect(bounds) ? { bounds } : {}), ...(isPoint(at) ? { at: { x: at.x, y: at.y } } : {}) };
 }
+
+/** Where the pointer sits in a window opened under it: over the left of its title bar, as if it had been picked up there. */
+export const POPOUT_GRAB = { x: 80, y: 18 } as const;
 
 /**
  * Where a pop-out window opens: its pane's spot, nudged down and right by POPOUT_OFFSET, at least
  * POPOUT_START in size, and kept inside the display's work area (shrunk to fit when it's bigger).
- * With no pane bounds it's centered in the work area.
+ * Given `at` (a drag released outside the window), it opens under that point instead, held by
+ * its title bar (POPOUT_GRAB). With neither it's centered in the work area.
  */
-export function popoutBounds(pane: ScreenRect | undefined, workArea: ScreenRect): ScreenRect {
+export function popoutBounds(pane: ScreenRect | undefined, workArea: ScreenRect, at?: { x: number; y: number }): ScreenRect {
   const width = Math.min(Math.max(Math.round(pane?.width ?? 0), POPOUT_START.width), workArea.width);
   const height = Math.min(Math.max(Math.round(pane?.height ?? 0), POPOUT_START.height), workArea.height);
-  const wantX = pane ? Math.round(pane.x) + POPOUT_OFFSET : workArea.x + (workArea.width - width) / 2;
-  const wantY = pane ? Math.round(pane.y) + POPOUT_OFFSET : workArea.y + (workArea.height - height) / 2;
+  const wantX = at ? Math.round(at.x) - POPOUT_GRAB.x : pane ? Math.round(pane.x) + POPOUT_OFFSET : workArea.x + (workArea.width - width) / 2;
+  const wantY = at ? Math.round(at.y) - POPOUT_GRAB.y : pane ? Math.round(pane.y) + POPOUT_OFFSET : workArea.y + (workArea.height - height) / 2;
   const clamp = (v: number, lo: number, hi: number) => Math.round(Math.min(Math.max(v, lo), hi));
   return {
     x: clamp(wantX, workArea.x, workArea.x + workArea.width - width),

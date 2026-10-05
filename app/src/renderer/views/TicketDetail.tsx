@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { conductorManagedReason, isConductor, keyLabel, managingConductor, resolveBaseBranch, type CompletionAction, type PromptAttachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
@@ -31,6 +31,7 @@ import {
   visibleTabsWithChanges,
   type TicketTab,
 } from "@harness/shared/state";
+import type { PluginTab as PluginTabRef } from "@harness/shared";
 import { Icon, isIconName } from "../components/Icon";
 import { FileLinkScope } from "../components/Markdown";
 import { ModelBadge } from "../components/ModelSelect";
@@ -38,7 +39,7 @@ import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, 
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
 import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
 import { Transcript } from "./Transcript";
-import { BrowserView } from "./BrowserView";
+import { BrowserView, type BrowserTear } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
 import { SpecTab } from "./SpecTab";
 import { ActivityTab } from "./ActivityTab";
@@ -51,9 +52,27 @@ import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
-import { useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
+import { useBoardScope, useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
-import { closePane, renameTicketKey, setTab as setPaneTab, toggleZoom, updateAllPanes, updatePanes } from "../state/panes";
+import { dragProps, tabContextMenu } from "../components/paneDrag";
+import { ComposerReturnBar, TornMark, TornPlaceholder } from "../components/TornOff";
+import { formatRoute } from "../state/route";
+import {
+  closePane,
+  COMPOSER_TAB,
+  popoutIdOf,
+  renameTicketKey,
+  returnTabPane,
+  setTab as setPaneTab,
+  toggleZoom,
+  tornId,
+  updateAllPanes,
+  updatePanes,
+  useTornOffTabs,
+  type TabDrag,
+  type TornOff,
+  type TornTab,
+} from "../state/panes";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
 import { liveRelatedTickets, remoteKeyMatches } from "../state/remoteIds";
@@ -86,20 +105,54 @@ function scrollerIn(root: HTMLElement | null): HTMLElement | null {
 
 const LINE = 48;
 
-/** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
-export function TicketDetail({
-  paneId,
-  ticketKey,
-  tab: paneTab,
-  zoomed,
-}: {
-  paneId: string;
-  ticketKey: string;
-  tab: TicketTab;
-  zoomed: boolean;
-}) {
+/** The j/k/Space/g/G handlers for a pane whose tab body is under `root` (".detail-body"). */
+export function scrollCommands(root: () => HTMLElement | null) {
+  const scroll = (fn: (el: HTMLElement) => void) => () => {
+    const el = scrollerIn(root());
+    if (el) fn(el);
+  };
+  return {
+    "ticket.scrollDown": scroll((el) => el.scrollBy({ top: LINE })),
+    "ticket.scrollUp": scroll((el) => el.scrollBy({ top: -LINE })),
+    "ticket.pageDown": scroll((el) => el.scrollBy({ top: el.clientHeight * 0.9 })),
+    "ticket.pageUp": scroll((el) => el.scrollBy({ top: -el.clientHeight * 0.9 })),
+    "ticket.top": scroll((el) => el.scrollTo({ top: 0 })),
+    "ticket.bottom": scroll((el) => el.scrollTo({ top: el.scrollHeight })),
+  };
+}
+
+/**
+ * `i` from anywhere in a ticket: its composer, wherever it is. There's one per ticket, in its
+ * ticket pane or torn off, so the first in this window is it; a composer torn off into a window of
+ * its own brings that window forward (its pane focuses the input there: TicketTabPane).
+ */
+export function focusTicketComposer(ticketKey: string, torn: TornOff | undefined, boardScope: string) {
+  const el = document.querySelector<HTMLElement>(`.pane[data-pane-ticket="${CSS.escape(ticketKey)}"] .composer-input`);
+  if (el) return el.focus();
+  if (torn?.window) {
+    const id = popoutIdOf(torn.scope);
+    void window.harness?.popout.open({ id, route: formatRoute({ view: "popout", id, fromScope: boardScope }) });
+  }
+}
+
+/** A tab's name in a placeholder, a drag image or a torn-off pane's header. */
+export function tornTabName(tab: TornTab, pluginTabs: PluginTabRef[] | null | undefined): string {
+  if (tab === COMPOSER_TAB) return "Message box";
+  const t = tabStripTab(tab);
+  if (t === CHANGES_TAB) return CHANGES_LABEL;
+  const plugin = parsePluginTab(t);
+  if (plugin) return pluginTabs?.find((p) => p.pluginId === plugin.pluginId && p.id === plugin.tabId)?.title ?? plugin.tabId;
+  return TAB_LABEL[t as keyof typeof TAB_LABEL] ?? t;
+}
+
+/**
+ * A ticket, loaded for a pane: by key, or by an old key the service already resolved (the pane then
+ * follows the new one); its plugin tabs; and the detail's relatedTickets (the Details tab's
+ * External row). `missing` is true once it's gone, or the tickets linked to it when the key is a
+ * remote ID. Used by the ticket pane and by its torn-off tabs, which work without it.
+ */
+export function useTicketData(ticketKey: string) {
   const { state, client, dispatch, epoch } = useStore();
-  const scope = usePaneScope();
   // Not found: gone (true), or a remote ID that linked tickets carry (their list, remote-only pane).
   const [missing, setMissing] = useState<boolean | RemoteKeyMatches>(false);
   // By key, or by an old key the service already resolved (the effect below redirects to the new one).
@@ -147,6 +200,27 @@ export function TicketDetail({
       cancelled = true;
     };
   }, [client, ticketKey, remoteId]);
+  return { ticket, missing, related, pluginTabs };
+}
+
+/** A ticket's pane in the workspace (components/PaneWorkspace.tsx); its key and tab are the pane's content. */
+export function TicketDetail({
+  paneId,
+  ticketKey,
+  tab: paneTab,
+  zoomed,
+}: {
+  paneId: string;
+  ticketKey: string;
+  tab: TicketTab;
+  zoomed: boolean;
+}) {
+  const { state } = useStore();
+  const scope = usePaneScope();
+  const boardScope = useBoardScope();
+  const { ticket, missing, related, pluginTabs } = useTicketData(ticketKey);
+  // Which of its tabs (and its composer) are torn off into panes or windows of their own.
+  const torn = useTornOffTabs(ticket?.key ?? ticketKey, boardScope);
 
   // Escape (closing the focused pane, or ending a zoom) is handled by the workspace.
   const close = () => updatePanes(scope, (s) => closePane(s, paneId));
@@ -177,21 +251,12 @@ export function TicketDetail({
     refocusTab.current = false;
     asideRef.current?.querySelector<HTMLElement>(".tabs [aria-selected=true]")?.focus();
   }, [tab]);
-  const scroll = (fn: (el: HTMLElement) => void) => () => {
-    const el = scrollerIn(asideRef.current?.querySelector(".detail-body") ?? null);
-    if (el) fn(el);
-  };
   useCommands(owner, {
     "tab.next": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, 1))),
     "tab.prev": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, -1))),
     ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab.${i + 1}`, !!tabs[i] && (() => goTab(tabs[i]!))])),
-    "ticket.compose": !!ticket && (() => asideRef.current?.querySelector<HTMLElement>(".composer-input")?.focus()),
-    "ticket.scrollDown": scroll((el) => el.scrollBy({ top: LINE })),
-    "ticket.scrollUp": scroll((el) => el.scrollBy({ top: -LINE })),
-    "ticket.pageDown": scroll((el) => el.scrollBy({ top: el.clientHeight * 0.9 })),
-    "ticket.pageUp": scroll((el) => el.scrollBy({ top: -el.clientHeight * 0.9 })),
-    "ticket.top": scroll((el) => el.scrollTo({ top: 0 })),
-    "ticket.bottom": scroll((el) => el.scrollTo({ top: el.scrollHeight })),
+    "ticket.compose": !!ticket && (() => focusTicketComposer(ticket!.key, torn.get(COMPOSER_TAB), boardScope)),
+    ...scrollCommands(() => asideRef.current?.querySelector(".detail-body") ?? null),
   });
   /** ←/→ (and Home/End) on a focused tab move along the strip, as in any tablist. */
   const tabKeys = (e: KeyboardEvent) => {
@@ -233,31 +298,38 @@ export function TicketDetail({
   // A draft is edited, not worked on: the New session editor instead of the tabs.
   if (ticket.draft) return <DraftEditor paneId={paneId} ticket={ticket} zoomed={zoomed} />;
 
-  const wantPlugin = parsePluginTab(normalizeChangesTab(paneTab));
-  const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
-  const openAgent = parseSubagentTab(tab);
-  const openedTask = openAgent ? isTask(subagentById(state, ticket.sessionId, openAgent) ?? {}) : false;
   const stripTab = tabStripTab(tab);
   const setTab = (t: TicketTab) => updatePanes(scope, (s) => setPaneTab(s, paneId, t));
-  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
   const childCount = isConductor(ticket) ? childrenOf(state, ticket.id).length : 0;
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
+  // The tab shown, when it's torn off: its body is a placeholder with the way back.
+  const tornShown = torn.get(tornId({ tab }));
+  const tornComposer = torn.get(COMPOSER_TAB);
+  const back = (id: string) => returnTabPane(boardScope, ticket.key, id);
+  const tabDrag = (t: TornTab): TabDrag => ({ kind: "tab", ticketKey: ticket.key, tab: t });
 
-  // role=tab props: one tab stop (the current tab, where pane focus lands), the rest by ←/→.
+  // role=tab props: one tab stop (the current tab, where pane focus lands), the rest by ←/→. Each
+  // drags off into a pane of its own (or out of the window), and its menu does the same.
   const tabProps = (on: boolean, t: TicketTab) => ({
     role: "tab",
     "aria-selected": on,
     tabIndex: on ? 0 : -1,
     "data-pane-autofocus": on || undefined,
-    title: tabs.indexOf(t) >= 0 && tabs.indexOf(t) < 9 ? `Press ${tabs.indexOf(t) + 1}, or ⇧⌘[ / ⇧⌘] to go through the tabs` : undefined,
+    title: tabs.indexOf(t) >= 0 && tabs.indexOf(t) < 9 ? `Press ${tabs.indexOf(t) + 1}, or ⇧⌘[ / ⇧⌘] to go through the tabs. Drag off to open it in a pane of its own.` : undefined,
+    ...dragProps(tabDrag(t), { chip: keyLabel(ticket), title: ticket.title, tab: tornTabName(t, pluginTabs) }, boardScope),
+    onContextMenu: (e: MouseEvent) => void tabContextMenu(e, scope, boardScope, paneId, tabDrag(t), torn.get(tornId({ tab: t }))),
   });
+  const mark = (t: TicketTab) => {
+    const where = torn.get(tornId({ tab: t }));
+    return where && <TornMark torn={where} />;
+  };
 
   return (
     <aside className="detail" ref={asideRef} {...keysArea("ticket", owner)}>
       <DetailHeader paneId={paneId} owner={owner} ticket={ticket} onClose={close} zoomed={zoomed} onToggleZoom={zoom} />
       <nav className="tabs" role="tablist" aria-label="Ticket tabs" onKeyDown={tabKeys}>
         {tabs.filter((t) => !parsePluginTab(t)).map((t) => (
-          <button key={t} className={`tab ${stripTab === t ? "on" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
+          <button key={t} className={`tab ${stripTab === t ? "on" : ""} ${torn.has(t) ? "torn" : ""}`} onClick={() => setTab(t)} data-tab={t} {...tabProps(stripTab === t, t)}>
             {t === CHANGES_TAB ? CHANGES_LABEL : TAB_LABEL[t as keyof typeof TAB_LABEL]}
             {t === "spec" && (ticket.specRevision ?? 1) > 1 && <span className="count" title="Revisions">{ticket.specRevision}</span>}
             {t === "activity" && (state.activity[ticket.sessionId]?.length ?? 0) > 0 && <span className="count">{state.activity[ticket.sessionId]!.length}</span>}
@@ -265,44 +337,133 @@ export function TicketDetail({
             {t === "agents" && (subagents?.length ?? 0) > 0 && <span className="count">{subagents!.length}</span>}
             {t === "agents" && agentsRunning && <span className="live-dot" title={AGENTS_LIVE_LABEL} />}
             {t === "transcript" && ticket.busy && <span className="live-dot" />}
+            {mark(t)}
           </button>
         ))}
         {otherPluginTabs(pluginTabs)?.map((p) => {
           const t = pluginTabRoute(p.pluginId, p.id);
           return (
-            <button key={t} className={`tab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)} data-plugin-tab={t} {...tabProps(tab === t, t)} title={`${p.title} (plugin: ${p.pluginId})`}>
+            <button
+              key={t}
+              className={`tab ${tab === t ? "on" : ""} ${torn.has(t) ? "torn" : ""}`}
+              onClick={() => setTab(t)}
+              data-plugin-tab={t}
+              {...tabProps(tab === t, t)}
+              title={`${p.title} (plugin: ${p.pluginId}). Drag off to open it in a pane of its own.`}
+            >
               {p.icon && isIconName(p.icon) && <Icon name={p.icon} size={12} />}
               {p.title}
+              {mark(t)}
             </button>
           );
         })}
       </nav>
       <div className="detail-body">
-        <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
-        {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
-        {tab === "activity" && <ActivityTab ticket={ticket} />}
-        {tab === "children" && <ChildrenTab ticket={ticket} />}
-        {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
-        {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
-        {openAgent &&
-          (openedTask ? (
-            <TaskView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} />
-          ) : (
-            <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />
-          ))}
-        {tab === "browser" && <BrowserView sessionId={ticket.sessionId} />}
-        {tab === CHANGES_TAB && <ChangesTab ticket={ticket} />}
-        {tab === "details" && <TicketDetails ticket={ticket} related={related} />}
-        {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}
-        {wantPlugin && !pluginTabs && (
-          <div className="empty" style={{ flex: 1 }}>
-            <div className="spinner" />
-          </div>
+        {tornShown ? (
+          <TornPlaceholder name={tornTabName(tab, pluginTabs)} torn={tornShown} onReturn={() => back(tornId({ tab }))} />
+        ) : (
+          <TicketTabBody
+            ticket={ticket}
+            tab={tab}
+            requested={paneTab}
+            pluginTabs={pluginTabs}
+            related={related}
+            setTab={setTab}
+            browser={{ tear: { ticketKey: ticket.key, scope, boardScope, paneId, torn } }}
+          />
         )}
-        </FileLinkScope>
       </div>
-      <MessageComposer ticket={ticket} key={ticket.id} onSent={() => setTab(tabAfterSend(tab, true))} />
+      {tornComposer ? (
+        <ComposerReturnBar torn={tornComposer} onReturn={() => back(COMPOSER_TAB)} />
+      ) : (
+        <MessageComposer
+          ticket={ticket}
+          key={ticket.id}
+          // The Transcript shows what was sent, unless it's torn off (it's on screen there).
+          onSent={() => !torn.has("transcript") && setTab(tabAfterSend(tab, true))}
+          grip={<ComposerGrip ticket={ticket} scope={scope} boardScope={boardScope} paneId={paneId} />}
+        />
+      )}
     </aside>
+  );
+}
+
+/** What a browser in a tab body is: pinned to one browser tab (a torn-off chip), and where its chips tear off to. */
+export interface BrowserOpts {
+  pinnedTab?: number;
+  tear?: BrowserTear;
+  onPinnedClosed?: () => void;
+  onTitle?: (title: string) => void;
+}
+
+/**
+ * One tab's body, as the ticket pane shows it and as a torn-off tab's pane does (TicketTabPane):
+ * the same components with the same handlers, so everything works the same in both. `tab` is the
+ * tab after fallbacks (effectiveTabWithChanges); `requested` the pane's own, for a plugin tab
+ * that's still loading. `setTab` moves within the body (Agents ⇄ a sub-agent).
+ */
+export function TicketTabBody({
+  ticket,
+  tab,
+  requested,
+  pluginTabs,
+  related,
+  setTab,
+  browser,
+}: {
+  ticket: Ticket;
+  tab: TicketTab;
+  requested: TicketTab;
+  pluginTabs: PluginTabRef[] | null | undefined;
+  related: RelatedTicket[] | undefined;
+  setTab: (t: TicketTab) => void;
+  browser: BrowserOpts;
+}) {
+  const { state } = useStore();
+  const wantPlugin = parsePluginTab(normalizeChangesTab(requested));
+  const activePlugin = wantPlugin ? pluginTabs?.find((t) => t.pluginId === wantPlugin.pluginId && t.id === wantPlugin.tabId) : undefined;
+  const openAgent = parseSubagentTab(tab);
+  const openedTask = openAgent ? isTask(subagentById(state, ticket.sessionId, openAgent) ?? {}) : false;
+  const openSubagent = (id: string) => setTab(subagentTabRoute(id));
+  return (
+    <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
+      {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
+      {tab === "activity" && <ActivityTab ticket={ticket} />}
+      {tab === "children" && <ChildrenTab ticket={ticket} />}
+      {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
+      {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+      {openAgent &&
+        (openedTask ? (
+          <TaskView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} />
+        ) : (
+          <SubagentView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} onOpen={openSubagent} />
+        ))}
+      {tab === "browser" && <BrowserView key={browser.pinnedTab ?? "all"} sessionId={ticket.sessionId} pinnedTab={browser.pinnedTab} tear={browser.tear} onPinnedClosed={browser.onPinnedClosed} onTitle={browser.onTitle} />}
+      {tab === CHANGES_TAB && <ChangesTab ticket={ticket} />}
+      {tab === "details" && <TicketDetails ticket={ticket} related={related} />}
+      {activePlugin && <PluginFrame key={`${ticket.key}/${tab}`} ticket={ticket} tab={activePlugin} />}
+      {wantPlugin && !pluginTabs && (
+        <div className="empty" style={{ flex: 1 }}>
+          <div className="spinner" />
+        </div>
+      )}
+    </FileLinkScope>
+  );
+}
+
+/** The composer's grip, on its top edge: drags it off into a pane (or window) of its own, like a tab. */
+export function ComposerGrip({ ticket, scope, boardScope, paneId }: { ticket: Ticket; scope: string; boardScope: string; paneId: string }) {
+  const drag: TabDrag = { kind: "tab", ticketKey: ticket.key, tab: COMPOSER_TAB };
+  return (
+    <div
+      className="composer-grip"
+      data-testid="composer-grip"
+      title="Drag to put the message box in a pane of its own (or out of the window)"
+      {...dragProps(drag, { chip: keyLabel(ticket), title: ticket.title, tab: tornTabName(COMPOSER_TAB, null) }, boardScope)}
+      onContextMenu={(e) => void tabContextMenu(e, scope, boardScope, paneId, drag, undefined)}
+    >
+      <span className="composer-grip-bar" />
+    </div>
   );
 }
 
@@ -322,78 +483,15 @@ function DetailHeader({
   zoomed: boolean;
   onToggleZoom: () => void;
 }) {
-  const { state, client } = useStore();
+  const { state } = useStore();
   const openTicket = useOpenTicket();
   const popout = usePopout();
-  const act = useAction();
-  const [changes, setChanges] = useState(false);
-  const [reopening, setReopening] = useState(false);
-  const [sheet, setSheet] = useState<LandSheetState | null>(null);
+  const { k, label, parent, project, land, conductor, managedReason, start, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals } = useTicketActions(
+    owner,
+    ticket,
+    onClose,
+  );
   const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
-  const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
-  const project = state.projects[ticket.projectId];
-  const k = ticket.key;
-  // What confirms and toasts call it: "MH-62 · MH-124" for a linked ticket (its remote ID first).
-  const label = keyLabel(ticket);
-
-  const remove = async () => {
-    if (!confirm(`Delete ${label}? Its transcript, spec history and activity are removed too.`)) return;
-    const ok = await act(() => client.deleteTicket(k), `${label} deleted`);
-    if (ok) onClose();
-  };
-  // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
-  // ⌘K palette (these are its "Actions" commands) run the same functions.
-  const start = () => act(() => client.startTicket(k));
-  // Started while its dependencies were open: it starts on its own once they're done, so there's
-  // nothing to start (Start would skip the wait and run it now).
-  const waitingToStart = autoStartWaitingOn(ticket, dependencyStates(state, ticket));
-  const canStart = ticket.status === "planning" && !waitingToStart.length;
-  // How the approved work lands: the Approve split button (state/approveMenu.ts). Approving lands
-  // it once both reviews pass; there's no separate Complete step.
-  // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
-  const base = resolveBaseBranch(ticket, project, state.settings, parent).branch;
-  const land = landMenu(ticket, project, parent, base);
-  // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
-  const conductor = managingConductor(ticket, parent);
-  const managedReason = conductor && conductorManagedReason(conductor);
-  const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
-  const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} approved, no action taken`);
-  const choose = (c: LandChoice) => {
-    if (c.kind === "none") return void approveNoAction();
-    if (c.kind === "sheet") return setSheet({ action: c.action, required: c.required });
-    void approveWith(c.action);
-  };
-  const approve = () => choose(land.primary);
-  const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
-  const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
-  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
-  const copyKey = () => void navigator.clipboard.writeText(k);
-  const external = ticket.externalRef?.url;
-  const reviewing = ticket.status === "review";
-  const canApprove = reviewing && ticket.humanReview !== "approved";
-  // The Approve split button as the palette names it.
-  const landing = !conductor && canApprove && landCommands(land);
-  const landChoice = (action: CompletionAction) => {
-    const c = landing && landing.others[action];
-    return c && { label: c.label, run: () => choose(c) };
-  };
-  useCommands(owner, {
-    "ticket.start": canStart && start,
-    "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
-    "ticket.land.merge": landChoice("merge"),
-    "ticket.land.pr": landChoice("pr"),
-    "ticket.land.cleanup": landChoice("cleanup"),
-    "ticket.land.custom": landChoice("custom"),
-    "ticket.requestChanges": canApprove && (() => setChanges(true)),
-    "ticket.approveNoAction": reviewing && !conductor && { label: land.noAction.label, run: approveNoAction },
-    "ticket.rerunReview": reviewing && !ticket.busy && { label: ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review", run: rerunReview },
-    "ticket.cancelRun": ticket.busy && cancelRun,
-    "ticket.markDone": ticket.status !== "done" && markDone,
-    "ticket.reopen": ticket.status === "done" && (() => setReopening(true)),
-    "ticket.copyKey": copyKey,
-    "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
-    "ticket.delete": () => void remove(),
-  });
 
   return (
     <div className="detail-head">
@@ -526,7 +624,91 @@ function DetailHeader({
           )}
         </div>
       </div>
+      {modals}
+    </div>
+  );
+}
 
+/**
+ * A ticket's actions (Start work, Approve and the ways to land, Request changes, Cancel run…), as
+ * the palette's "Actions" commands of the command area `owner` and as functions for buttons. The
+ * ticket pane's header and every torn-off tab's pane register them, so they work from either.
+ * `modals` (Request changes, Re-open, the land sheet) goes in the caller's render.
+ */
+export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () => void) {
+  const { state, client } = useStore();
+  const act = useAction();
+  const [changes, setChanges] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [sheet, setSheet] = useState<LandSheetState | null>(null);
+  const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
+  const project = state.projects[ticket.projectId];
+  const k = ticket.key;
+  // What confirms and toasts call it: "MH-62 · MH-124" for a linked ticket (its remote ID first).
+  const label = keyLabel(ticket);
+  const onClose = onDeleted;
+
+  const remove = async () => {
+    if (!confirm(`Delete ${label}? Its transcript, spec history and activity are removed too.`)) return;
+    const ok = await act(() => client.deleteTicket(k), `${label} deleted`);
+    if (ok) onClose();
+  };
+  // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
+  // ⌘K palette (these are its "Actions" commands) run the same functions.
+  const start = () => act(() => client.startTicket(k));
+  // Started while its dependencies were open: it starts on its own once they're done, so there's
+  // nothing to start (Start would skip the wait and run it now).
+  const waitingToStart = autoStartWaitingOn(ticket, dependencyStates(state, ticket));
+  const canStart = ticket.status === "planning" && !waitingToStart.length;
+  // How the approved work lands: the Approve split button (state/approveMenu.ts). Approving lands
+  // it once both reviews pass; there's no separate Complete step.
+  // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
+  const base = resolveBaseBranch(ticket, project, state.settings, parent).branch;
+  const land = landMenu(ticket, project, parent, base);
+  // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
+  const conductor = managingConductor(ticket, parent);
+  const managedReason = conductor && conductorManagedReason(conductor);
+  const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
+  const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} approved, no action taken`);
+  const choose = (c: LandChoice) => {
+    if (c.kind === "none") return void approveNoAction();
+    if (c.kind === "sheet") return setSheet({ action: c.action, required: c.required });
+    void approveWith(c.action);
+  };
+  const approve = () => choose(land.primary);
+  const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
+  const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
+  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
+  const copyKey = () => void navigator.clipboard.writeText(k);
+  const external = ticket.externalRef?.url;
+  const reviewing = ticket.status === "review";
+  const canApprove = reviewing && ticket.humanReview !== "approved";
+  // The Approve split button as the palette names it.
+  const landing = !conductor && canApprove && landCommands(land);
+  const landChoice = (action: CompletionAction) => {
+    const c = landing && landing.others[action];
+    return c && { label: c.label, run: () => choose(c) };
+  };
+  useCommands(owner, {
+    "ticket.start": canStart && start,
+    "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
+    "ticket.land.merge": landChoice("merge"),
+    "ticket.land.pr": landChoice("pr"),
+    "ticket.land.cleanup": landChoice("cleanup"),
+    "ticket.land.custom": landChoice("custom"),
+    "ticket.requestChanges": canApprove && (() => setChanges(true)),
+    "ticket.approveNoAction": reviewing && !conductor && { label: land.noAction.label, run: approveNoAction },
+    "ticket.rerunReview": reviewing && !ticket.busy && { label: ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review", run: rerunReview },
+    "ticket.cancelRun": ticket.busy && cancelRun,
+    "ticket.markDone": ticket.status !== "done" && markDone,
+    "ticket.reopen": ticket.status === "done" && (() => setReopening(true)),
+    "ticket.copyKey": copyKey,
+    "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
+    "ticket.delete": () => void remove(),
+  });
+
+  const modals = (
+    <>
       {changes && <RequestChangesModal ticket={ticket} onClose={() => setChanges(false)} />}
       {reopening && <RequestChangesModal reopen ticket={ticket} onClose={() => setReopening(false)} />}
       {sheet && (
@@ -538,8 +720,9 @@ function DetailHeader({
           onClose={() => setSheet(null)}
         />
       )}
-    </div>
+    </>
   );
+  return { k, label, parent, project, land, conductor, managedReason, start, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals };
 }
 
 /**
@@ -638,9 +821,10 @@ function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Tick
 /**
  * The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the
  * answer appear. (+) attaches files the way a New session does (pick, or paste an image; drops and
- * ⌘V of files work too); they show above the input until the message goes, and go with it.
+ * ⌘V of files work too); they show above the input until the message goes, and go with it. `grip`
+ * (on its top edge) drags it off into a pane of its own; torn off, it fills that pane (`fill`).
  */
-function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => void }) {
+export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket: Ticket; onSent: () => void; grip?: ReactNode; fill?: boolean }) {
   const { client } = useStore();
   const act = useAction();
   const [text, setText] = useState("");
@@ -673,9 +857,11 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // A torn-off composer's input fills its pane (CSS); one in a ticket grows with its text.
+    if (fill) return void (el.style.height = "");
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [text]);
+  }, [text, fill]);
 
   // Focus the reply box when the agent is waiting on an answer.
   useEffect(() => {
@@ -700,10 +886,11 @@ function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => voi
 
   return (
     <div
-      className={`composer ${ticket.status === "blocked" ? "attention" : ""} ${attach.dropping ? "dropping" : ""}`}
+      className={`composer ${ticket.status === "blocked" ? "attention" : ""} ${attach.dropping ? "dropping" : ""} ${fill ? "composer-fill" : ""}`}
       data-testid="composer"
       {...attach.dropProps}
     >
+      {grip}
       <PromptAttachmentList items={attachments} ticketKey={null} onRemove={attach.remove} pending={attach.pending} />
       <div className="composer-row">
         {!approvalPending && (

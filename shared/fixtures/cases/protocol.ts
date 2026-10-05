@@ -756,6 +756,8 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "browser.frame", sessionId: "ses_31", tabId: 3, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768 },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]! },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[2]! },
+  { kind: "browser.frame", sessionId: "ses_31", tabId: 2, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768, viewerId: "v:spec-2" },
+  { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]!, viewerId: "v:spec-2" },
   { kind: "service.status", status: ServiceStatus[0]! },
 ];
 
@@ -784,6 +786,9 @@ export const ClientMessage: P.ClientMessage[] = [
   { type: "browser.unsubscribe", sessionId: "ses_31" },
   { type: "browser.input", sessionId: "ses_31", input: BrowserInput[0]! },
   { type: "browser.input", sessionId: "ses_31", tabId: 3, input: { type: "closeTab" } },
+  { type: "browser.subscribe", sessionId: "ses_31", tabId: 2, viewerId: "v:spec-2" },
+  { type: "browser.unsubscribe", sessionId: "ses_31", viewerId: "v:spec-2" },
+  { type: "browser.input", sessionId: "ses_31", input: { type: "back" }, viewerId: "v:spec-2" },
   { type: "ping" },
 ];
 

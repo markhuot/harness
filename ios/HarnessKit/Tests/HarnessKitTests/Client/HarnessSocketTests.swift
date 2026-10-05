@@ -106,6 +106,73 @@ struct HarnessSocketTests {
         await s.close()
     }
 
+    @Test func viewersOfOneSessionAreSubscribedReplayedAndDroppedSeparately() async {
+        let c1 = FakeConnection(), c2 = FakeConnection(), c3 = FakeConnection()
+        let sleep = ManualSleep()
+        let s = socket(FakeSocketFactory([c1, c2, c3]), sleep)
+        let status = Recorder(s.status)
+        let events = Recorder(s.events)
+        await eventually("first open") { status.items == [true] }
+
+        await s.subscribeBrowser("ses_1", tabId: 1, viewerId: "a")
+        await s.subscribeBrowser("ses_1", tabId: 2, viewerId: "b")
+        await s.subscribeBrowser("ses_1", tabId: 3, viewerId: "a") // a's switch: b keeps its tab
+        #expect(await s.browserSubscriptions == [
+            BrowserSubscription(sessionId: "ses_1", viewerId: "a", tabId: 3),
+            BrowserSubscription(sessionId: "ses_1", viewerId: "b", tabId: 2),
+        ])
+
+        // The service moved viewer b to a new tab: only b follows.
+        c1.push(eventText(#"{"kind":"browser.state","sessionId":"ses_1","viewerId":"b","state":{"sessionId":"ses_1","tabId":7,"url":"about:blank","title":"","loading":false}}"#))
+        await eventually("state seen") { events.items.count == 1 }
+
+        c1.drop()
+        await eventually("sleeping") { sleep.pending == 1 }
+        sleep.advance()
+        await eventually("second open") { status.items == [true, false, true] }
+        #expect(c2.sentMessages == [
+            hello, .browserSubscribe(sessionId: "ses_1", tabId: 3, viewerId: "a"), .browserSubscribe(sessionId: "ses_1", tabId: 7, viewerId: "b"),
+        ])
+
+        // Closing a's window unsubscribes a only; b is still replayed.
+        await s.unsubscribeBrowser("ses_1", viewerId: "a")
+        #expect(c2.sentMessages.last == .browserUnsubscribe(sessionId: "ses_1", viewerId: "a"))
+        c2.drop()
+        await eventually("sleeping again") { sleep.pending == 1 }
+        sleep.advance()
+        await eventually("third open") { status.items == [true, false, true, false, true] }
+        #expect(c3.sentMessages == [hello, .browserSubscribe(sessionId: "ses_1", tabId: 7, viewerId: "b")])
+        await s.close()
+    }
+
+    @Test func aStateWithoutAViewerMovesEveryViewerOfTheSession() async {
+        // An older service has one subscription per socket and names no viewer.
+        let c = FakeConnection()
+        let s = socket(FakeSocketFactory([c]), ManualSleep())
+        await eventually("hello sent") { c.sent.count == 1 }
+        await s.subscribeBrowser("ses_1", tabId: 1, viewerId: "a")
+        await s.subscribeBrowser("ses_1", tabId: 2, viewerId: "b")
+        await s.subscribeBrowser("ses_2", tabId: 4, viewerId: "a")
+        await s.noteBrowserTab("ses_1", tabId: 5)
+        #expect(await s.browserSubscriptions.map(\.tabId) == [5, 5, 4])
+        await s.close()
+    }
+
+    @Test func browserEventsAreFilteredByViewer() {
+        let state = BrowserState(sessionId: "s", tabId: 1, url: "about:blank", title: "", loading: false)
+        let mine = HarnessEvent.browserFrame(sessionId: "s", tabId: 1, data: "", width: 1, height: 1, viewerId: "a")
+        let theirs = HarnessEvent.browserState(sessionId: "s", state: state, viewerId: "b")
+        let everyone = HarnessEvent.browserFrame(sessionId: "s", data: "", width: 1, height: 1)
+        let otherSession = HarnessEvent.browserState(sessionId: "t", state: state, viewerId: "a")
+        #expect(isBrowserEvent(mine, for: "s", viewerId: "a"))
+        #expect(!isBrowserEvent(theirs, for: "s", viewerId: "a"))
+        #expect(isBrowserEvent(everyone, for: "s", viewerId: "a"))
+        #expect(isBrowserEvent(everyone, for: "s", viewerId: nil))
+        #expect(!isBrowserEvent(mine, for: "s", viewerId: nil))
+        #expect(!isBrowserEvent(otherSession, for: "s", viewerId: "a"))
+        #expect(!isBrowserEvent(.ticketDeleted(id: "s"), for: "s", viewerId: "a"))
+    }
+
     @Test func tabIdsAreOnTheWireOnlyWhenSet() async throws {
         let c = FakeConnection()
         let s = socket(FakeSocketFactory([c]), ManualSleep())

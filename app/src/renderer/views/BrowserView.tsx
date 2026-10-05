@@ -1,15 +1,36 @@
 // Live view of a session's headless Chrome: the screencast frames of one of its tabs drawn onto a
 // canvas, with mouse/keyboard input forwarded back to the page over the WebSocket. A strip above
 // the bar switches between the session's tabs once it has more than one.
+//
+// Each view is its own viewer of the session (`viewerId`, its pane's id), so a ticket's Browser and
+// a browser tab torn off beside it (or two torn-off tabs) stream side by side, each taking its own
+// input, and closing one leaves the others watching. In a ticket, a chip drags off into a pane
+// pinned to that browser tab (`pinnedTab`: no strip); a chip torn off shows a placeholder here.
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { BrowserInput, BrowserState, BrowserTab } from "@harness/shared";
+import { isBrowserEventFor, type BrowserInput, type BrowserState, type BrowserTab } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { fitRect, normalizeUrl, toPagePoint, type Rect } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { isAppChord } from "../state/keys";
 import { confirmsClose, confirmsNewTab, confirmsSwitch, frameIsForView, tabLabel, tabTooltip, type ViewTab } from "../state/browserTabs";
+import { returnTabPane, type TabDrag, type TornOff } from "../state/panes";
+import { usePane } from "../components/paneContext";
+import { dragProps, tabContextMenu } from "../components/paneDrag";
+import { TornMark, TornPlaceholder } from "../components/TornOff";
 import "./browser.css";
+
+/** A ticket's browser, where its chips tear off: the ticket, where its panes are, and which of its tabs are torn off. */
+export interface BrowserTear {
+  ticketKey: string;
+  /** The pane scope this view is in, and the board this window shows (useBoardScope). */
+  scope: string;
+  boardScope: string;
+  paneId: string;
+  torn: Map<string, TornOff>;
+}
+
+let viewerCounter = 0;
 
 function modifiersOf(e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) {
   return (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
@@ -23,9 +44,29 @@ const debugStats = { frames: 0, drawn: 0, errors: 0 };
 const PAGE_META_KEYS = new Set(["a", "c", "x", "z"]);
 
 
-export function BrowserView({ sessionId }: { sessionId: string }) {
+export function BrowserView({
+  sessionId,
+  pinnedTab,
+  tear,
+  onPinnedClosed,
+  onTitle,
+}: {
+  sessionId: string;
+  /** Show only this browser tab (a torn-off browser tab's pane): subscribed to it, with no chip strip. */
+  pinnedTab?: number;
+  /** In a ticket: chips tear off, and torn-off ones show a placeholder here. */
+  tear?: BrowserTear;
+  /** The pinned tab was closed (in the strip of another view, or by the agent). */
+  onPinnedClosed?: () => void;
+  /** The shown page's title, as it changes (a pinned tab's pane header). */
+  onTitle?: (title: string) => void;
+}) {
   const { socket, client, onEvent, epoch } = useStore();
   const act = useAction();
+  // This view's viewer: its pane's id (unique in this window), else one of its own.
+  const paneId = usePane()?.paneId;
+  const [ownId] = useState(() => `v${++viewerCounter}`);
+  const viewerId = paneId ?? ownId;
   const [state, setState] = useState<BrowserState | null>(null);
   const [hasFrame, setHasFrame] = useState(false);
   const [live, setLive] = useState(false);
@@ -52,9 +93,9 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
   const send = useCallback(
     (input: BrowserInput) => {
       const tab = viewTab.current;
-      socket.send(typeof tab === "number" ? { type: "browser.input", sessionId, tabId: tab, input } : { type: "browser.input", sessionId, input });
+      socket.send(typeof tab === "number" ? { type: "browser.input", sessionId, viewerId, tabId: tab, input } : { type: "browser.input", sessionId, viewerId, input });
     },
-    [socket, sessionId],
+    [socket, sessionId, viewerId],
   );
 
   // ------------------------------------------------------------------ drawing
@@ -147,35 +188,45 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
         if (viewTab.current !== undefined) clearFrame();
         viewTab.current = s.tabId;
       }
-      socket.noteBrowserTab(sessionId, s.tabId);
+      socket.noteBrowserTab(sessionId, s.tabId, viewerId);
       setState(s);
     },
-    [socket, sessionId, clearFrame],
+    [socket, sessionId, viewerId, clearFrame],
   );
 
   useEffect(() => {
     setState(null);
     clearFrame();
-    viewTab.current = undefined;
+    viewTab.current = pinnedTab;
     expecting.current = null;
-    socket.subscribeBrowser(sessionId);
+    socket.subscribeBrowser(sessionId, pinnedTab, viewerId);
     const off = onEvent((e) => {
-      if (e.kind === "browser.frame" && e.sessionId === sessionId) {
+      if (!isBrowserEventFor(e, sessionId, viewerId)) return;
+      if (e.kind === "browser.frame") {
         if (!frameIsForView(e.tabId, viewTab.current)) return;
         debugStats.frames++;
         lastFrameAt.current = Date.now();
         setLive(true);
         pending.current = { data: e.data, width: e.width, height: e.height };
         void decode();
-      } else if (e.kind === "browser.state" && e.sessionId === sessionId) {
+      } else {
         applyState(e.state);
       }
     });
     return () => {
       off();
-      socket.unsubscribeBrowser(sessionId);
+      // Only this viewer: another view of the session (a torn-off tab) keeps streaming.
+      socket.unsubscribeBrowser(sessionId, viewerId);
     };
-  }, [sessionId, socket, onEvent, decode, clearFrame, applyState]);
+  }, [sessionId, pinnedTab, viewerId, socket, onEvent, decode, clearFrame, applyState]);
+
+  // A pinned tab that's gone (closed in another view, or by the agent) takes its pane with it.
+  const pinnedGone = pinnedTab !== undefined && !!state?.tabs && !state.tabs.some((t) => t.id === pinnedTab);
+  useEffect(() => {
+    if (pinnedGone) onPinnedClosed?.();
+  }, [pinnedGone]);
+  const title = state ? tabLabel({ title: state.title ?? "", url: state.url ?? "" }) : "";
+  useEffect(() => onTitle?.(title), [title]);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,13 +286,13 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     subscribed.current = false;
     lastSize.current = "";
     const off = onEvent((e) => {
-      if (e.kind === "browser.state" && e.sessionId === sessionId && !subscribed.current) {
+      if (e.kind === "browser.state" && isBrowserEventFor(e, sessionId, viewerId) && !subscribed.current) {
         subscribed.current = true;
         scheduleResize(100);
       }
     });
     return off;
-  }, [sessionId, onEvent, scheduleResize, epoch]);
+  }, [sessionId, viewerId, onEvent, scheduleResize, epoch]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -380,15 +431,15 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
     editingUrl.current = false;
     setUrlDraft(tab.url);
     setState((s) => s && { ...s, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading });
-    socket.subscribeBrowser(sessionId, tab.id);
+    socket.subscribeBrowser(sessionId, tab.id, viewerId);
   };
 
   const newTab = () => {
-    // The service moves this socket to the new tab; its id comes with the next browser.state.
+    // The service moves this viewer to the new tab; its id comes with the next browser.state.
     clearFrame();
     viewTab.current = "pending";
     expectState(confirmsNewTab(tabs ?? []));
-    socket.send({ type: "browser.input", sessionId, input: { type: "newTab" } });
+    socket.send({ type: "browser.input", sessionId, viewerId, input: { type: "newTab" } });
     setUrlDraft("");
     urlInputRef.current?.focus();
   };
@@ -401,7 +452,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
       expectState(confirmsClose(tab.id));
     }
     setState((s) => s && { ...s, tabs: s.tabs?.filter((t) => t.id !== tab.id) });
-    socket.send({ type: "browser.input", sessionId, tabId: tab.id, input: { type: "closeTab" } });
+    socket.send({ type: "browser.input", sessionId, viewerId, tabId: tab.id, input: { type: "closeTab" } });
   };
 
   /** Arrow keys move between tabs (and switch to them), like a native tab list. */
@@ -416,29 +467,39 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
   };
 
   const empty = !hasFrame && !state;
+  const pinned = pinnedTab !== undefined;
+  /** The shown tab, when it's torn off into a pane or window of its own (it shows there, not here). */
+  const tornShown = !pinned && tear && typeof state?.tabId === "number" ? tear.torn.get(`browser:${state.tabId}`) : undefined;
+  const chipDrag = (tab: BrowserTab): TabDrag => ({ kind: "tab", ticketKey: tear!.ticketKey, tab: "browser", browserTab: tab.id });
 
   return (
     <div className="browser">
-      {tabs && tabs.length > 1 && (
+      {!pinned && tabs && tabs.length > 1 && (
         <div className="browser-tabs" role="tablist" aria-label="Browser tabs" ref={tabsRef}>
           {tabs.map((tab, i) => {
             const label = tabLabel(tab);
             const on = tab.id === state?.tabId;
+            const torn = tear?.torn.get(`browser:${tab.id}`);
             return (
-              <div key={tab.id} className={`browser-tab ${on ? "on" : ""} ${tab.suspended && !on ? "suspended" : ""}`} role="presentation">
+              <div key={tab.id} className={`browser-tab ${on ? "on" : ""} ${tab.suspended && !on ? "suspended" : ""} ${torn ? "torn" : ""}`} role="presentation">
                 <button
                   className="browser-tab-select"
                   role="tab"
                   aria-selected={on}
                   tabIndex={on ? 0 : -1}
                   data-tab-id={tab.id}
-                  title={tabTooltip(tab)}
+                  title={tabTooltip(tab) + (tear ? "\nDrag off to open it in a pane of its own" : "")}
                   onClick={() => switchTab(tab)}
                   onAuxClick={(e) => e.button === 1 && closeTab(tab)}
                   onKeyDown={(e) => onTabKey(e, i)}
+                  {...(tear && {
+                    ...dragProps(chipDrag(tab), { chip: tear.ticketKey, title: label, tab: "Browser" }, tear.boardScope),
+                    onContextMenu: (e) => void tabContextMenu(e, tear.scope, tear.boardScope, tear.paneId, chipDrag(tab), torn),
+                  })}
                 >
                   {tab.loading ? <span className="spinner browser-tab-spinner" /> : <Icon name="globe" size={11} className="browser-tab-icon" />}
                   <span className="truncate">{label}</span>
+                  {torn && <TornMark torn={torn} />}
                 </button>
                 <button className="browser-tab-close" title="Close tab" aria-label={`Close ${label}`} onClick={() => closeTab(tab)}>
                   <Icon name="x" size={11} strokeWidth={2} />
@@ -485,7 +546,7 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
           />
           {state?.title && <span className="browser-title truncate">{state.title}</span>}
         </div>
-        {tabs && (
+        {tabs && !pinned && (
           <button className="btn btn-ghost btn-icon btn-sm" title="New tab" aria-label="New tab" data-testid="browser-new-tab" onClick={newTab}>
             <Icon name="plus" />
           </button>
@@ -504,10 +565,15 @@ export function BrowserView({ sessionId }: { sessionId: string }) {
             <span>When the agent opens a page it appears here. You can also enter a URL above.</span>
           </div>
         )}
-        {!empty && !hasFrame && (
+        {!empty && !hasFrame && !tornShown && (
           <div className="browser-empty empty">
             <span className="spinner" />
             <span>Waiting for the first frame…</span>
+          </div>
+        )}
+        {tornShown && tear && (
+          <div className="browser-empty browser-torn">
+            <TornPlaceholder name={state?.title ? `“${tabLabel({ title: state.title, url: state.url ?? "" })}”` : "This tab"} torn={tornShown} onReturn={() => returnTabPane(tear.boardScope, tear.ticketKey, `browser:${tornShown.content.browserTab}`)} />
           </div>
         )}
       </div>

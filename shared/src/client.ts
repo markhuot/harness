@@ -409,14 +409,36 @@ export class HarnessClient {
   }
 }
 
-const browserSubscribe = (sessionId: string, tabId: number | undefined): ClientMessage =>
-  tabId === undefined ? { type: "browser.subscribe", sessionId } : { type: "browser.subscribe", sessionId, tabId };
+const browserSubscribe = (sessionId: string, tabId: number | undefined, viewerId: string | undefined): ClientMessage => ({
+  type: "browser.subscribe",
+  sessionId,
+  ...(tabId === undefined ? {} : { tabId }),
+  ...(viewerId ? { viewerId } : {}),
+});
+
+const subKey = (sessionId: string, viewerId: string | undefined) => `${sessionId}\u0000${viewerId ?? ""}`;
+
+/**
+ * Whether a browser.frame/browser.state event is for this viewer of `sessionId`. An event that
+ * names a viewer is for that viewer only; one without (an older service, or a viewer that sent no
+ * id) is for every viewer of the session.
+ */
+export function isBrowserEventFor(
+  e: HarnessEvent,
+  sessionId: string,
+  viewerId: string | undefined,
+): e is Extract<HarnessEvent, { kind: "browser.frame" | "browser.state" }> {
+  if (e.kind !== "browser.frame" && e.kind !== "browser.state") return false;
+  if (e.sessionId !== sessionId) return false;
+  return e.viewerId === undefined || e.viewerId === viewerId;
+}
 
 export class HarnessSocket {
   private ws: WebSocket | null = null;
   private closed = false;
   private retry = 250;
-  private browserSubs = new Map<string, number | undefined>();
+  /** One entry per viewer: `subKey(sessionId, viewerId)` → its session, viewer and tab. */
+  private browserSubs = new Map<string, { sessionId: string; viewerId: string | undefined; tabId: number | undefined }>();
 
   constructor(
     private url: string,
@@ -431,7 +453,7 @@ export class HarnessSocket {
     ws.onopen = () => {
       this.retry = 250;
       this.send({ type: "hello", client: "harness-client" });
-      for (const [id, tabId] of this.browserSubs) this.send(browserSubscribe(id, tabId));
+      for (const sub of this.browserSubs.values()) this.send(browserSubscribe(sub.sessionId, sub.tabId, sub.viewerId));
       this.handlers.onStatus?.(true);
     };
     ws.onmessage = (m) => {
@@ -455,18 +477,23 @@ export class HarnessSocket {
     if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(msg));
   }
 
-  /** Watch a session's browser; again with another `tabId` switches tabs. Remembered across reconnects. */
-  subscribeBrowser(sessionId: string, tabId?: number) {
-    this.browserSubs.set(sessionId, tabId);
-    this.send(browserSubscribe(sessionId, tabId));
+  /**
+   * Watch a session's browser; again with another `tabId` switches tabs. Remembered across
+   * reconnects. `viewerId` names this view, so several views of one session (torn-off browser
+   * tabs) can each watch their own tab over this one socket.
+   */
+  subscribeBrowser(sessionId: string, tabId?: number, viewerId?: string) {
+    this.browserSubs.set(subKey(sessionId, viewerId), { sessionId, viewerId, tabId });
+    this.send(browserSubscribe(sessionId, tabId, viewerId));
   }
-  /** Remember the tab a session's subscription is on (the service moved it, e.g. after a newTab), for reconnects. */
-  noteBrowserTab(sessionId: string, tabId: number | undefined) {
-    if (this.browserSubs.has(sessionId)) this.browserSubs.set(sessionId, tabId);
+  /** Remember the tab a viewer's subscription is on (the service moved it, e.g. after a newTab), for reconnects. */
+  noteBrowserTab(sessionId: string, tabId: number | undefined, viewerId?: string) {
+    const sub = this.browserSubs.get(subKey(sessionId, viewerId));
+    if (sub) sub.tabId = tabId;
   }
-  unsubscribeBrowser(sessionId: string) {
-    this.browserSubs.delete(sessionId);
-    this.send({ type: "browser.unsubscribe", sessionId });
+  unsubscribeBrowser(sessionId: string, viewerId?: string) {
+    this.browserSubs.delete(subKey(sessionId, viewerId));
+    this.send(viewerId ? { type: "browser.unsubscribe", sessionId, viewerId } : { type: "browser.unsubscribe", sessionId });
   }
 
   close() {

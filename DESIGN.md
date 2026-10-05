@@ -1424,15 +1424,21 @@ target in its own headless window (so every tab paints and can screencast). Numb
   could shift under another), so parallel sub-agents that each pass their own tab can't collide.
 - **Popups.** A page target whose `openerId` is one of a session's tabs (`target="_blank"`,
   `window.open`) is attached as that session's next tab. A page that closes itself drops its tab.
-- **Viewers.** Each WS socket is one subscriber per session and watches one tab:
-  `browser.subscribe { tabId? }` (again with another `tabId` switches; again without one is a
-  no-op). A subscriber whose tab closes falls back to the lowest open tab. Only watched tabs
+- **Viewers.** Each view of a session's browser is one subscriber and watches one tab:
+  `browser.subscribe { tabId?, viewerId? }` (again with another `tabId` switches; again without
+  one is a no-op). `viewerId` names the view, so one socket can hold several viewers of a session
+  (the ticket's Browser and torn-off browser tabs beside it, each streaming its own tab): the
+  manager's subscriber id is `<socketId>:<viewerId>`, `browser.frame`/`browser.state` sent to that
+  subscription carry the `viewerId` (clients filter with `isBrowserEventFor`), and
+  `browser.unsubscribe { viewerId }` drops only that one. The desktop's `BrowserView` uses its
+  pane's leaf id. Without a `viewerId` a socket is one viewer, as older clients expect. A
+  subscriber whose tab closes falls back to the lowest open tab. Only watched tabs
   screencast. `browser.state` carries the watched tab's url/title/loading as `tabId` plus every
   open tab in `tabs`, and goes to every subscriber whenever any tab changes, since all of them
   draw the tab strip. A subscriber that has just moved to a tab gets its state and then its last
   frame; frames carry `tabId` so a client drops in-flight frames from the tab it left.
-- **Viewer input.** `browser.input { tabId? }` without a tab goes to the socket's watched tab.
-  `newTab { url? }` opens a tab and moves that socket to it; `closeTab` closes the input's tab, and
+- **Viewer input.** `browser.input { tabId?, viewerId? }` without a tab goes to that viewer's
+  watched tab. `newTab { url? }` opens a tab and moves that viewer to it; `closeTab` closes the input's tab, and
   closing the last one while anyone watches leaves a blank tab in its place. `resize` sets the
   session's viewport for every tab, including ones opened later, so a switch needs no resize.
 - **Suspended tabs.** A tab outlives its Chrome page, since Chrome runs with background throttling
@@ -2243,11 +2249,11 @@ Settings, project settings, or on the board route the pane workspace.
   again by id when you come back, and a terminal re-attaches to its shell, which lives in the
   main process. Keeping every board mounted would mean running a board per project, each with its
   own search. Leaves show content (`{ kind: "board" }`, `{ kind: "ticket", ticketKey, tab }` or
-  `{ kind: "terminal", sessionId, cwd, title? }`, `{ kind: "file", root, path, startLine?, endLine?, tab? }`),
-  splits lay their children out side by side
+  `{ kind: "terminal", sessionId, cwd, title? }`, `{ kind: "file", root, path, startLine?, endLine?, tab? }`,
+  `{ kind: "ticketTab", ticketKey, tab, browserTab? }`), splits lay their children out side by side
   (`row`) or stacked (`column`) with sizes that sum to 1. Each scope always has exactly one board
-  pane, and a ticket, a terminal session or a file (its root plus path, `fileKey`) is open in at
-  most one pane of any scope. `PaneWorkspace.tsx`
+  pane, and a ticket, a torn-off tab (`tornKey`), a terminal session or a file (its root plus
+  path, `fileKey`) is open in at most one pane of any scope. `PaneWorkspace.tsx`
   renders the leaves as flat, absolutely positioned siblings (`layoutPanes` turns the tree into
   boxes), so reshaping the tree never remounts a pane: the board keeps its search and scroll, and
   a ticket keeps its transcript, browser canvas and plugin iframes. The zoomed pane fills the
@@ -2278,17 +2284,54 @@ Settings, project settings, or on the board route the pane workspace.
   button. File panes persist with the rest of the tree, follow a ticket rename, and close when
   their ticket is deleted. `scripts/file-pane-check.ts` drives the whole flow against the real
   service.
-- **Drag to split.** Board cards, a conductor's child rows, and a ticket pane's header grip are
-  drag sources (`components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`)
-  or the pane's leaf id (`application/x-harness-pane`) in the DataTransfer, along with a compact
-  key-and-title chip as the drag image. While one is being dragged, `PaneWorkspace` shows a drop
+- **Torn-off tabs.** Any tab of a ticket pane (Spec, Activity, Transcript, Agents, Tickets,
+  Changes, Details, Browser, sub-agent and plugin tabs), one chip of its browser strip, or its
+  composer can be torn off into a pane of its own: a `ticketTab` leaf, `tab` being a `TicketTab`
+  or the reserved `"composer"`, and `browserTab` pinning a Browser pane to one browser tab.
+  `views/TicketTabPane.tsx` renders it with a slim header (grip, key, the tab's name, a pinned
+  page's title; More has Return to ticket and the Move pane rows) and no strip. Its body is the
+  ticket pane's own (`TicketTabBody`, `MessageComposer`), with the same handlers, so it's fully
+  working, and it registers the ticket's actions (`useTicketActions`) and carries
+  `data-pane-ticket`, so the palette's ticket commands, j/k/Space/g/G and `i` (the ticket's one
+  composer, wherever it is: `focusTicketComposer`) work from it. A pinned browser pane has no chip
+  strip and closes when its tab does; a whole Browser tab torn off keeps its strip. Identity is
+  `tornKey` = ticket + `tornId` (`browser:<n>` for a pinned tab, else the tab's strip entry, so a
+  sub-agent's transcript is the Agents tab's; or `composer`), deduped by `normalize`,
+  `checkPanes`, `dropContent` and `replaceContent`; a rename follows it and deleting the ticket
+  closes it; closing the ticket pane leaves it open. Across a window's scopes (its board plus every
+  pop-out) the store ops dedupe too: `dropInStore` brings a ticket or tab back from a pop-out
+  instead of opening it twice, and moves a ticket pane showing the tab it just tore off to the
+  first tab still there. `tornOffTabs(store, ticketKey, boardScope)` says which tabs are torn off
+  and where, read from the shared store so the main window and pop-outs agree. The ticket pane
+  keeps a torn-off tab in its strip with a mark; selecting it shows "Transcript is in another
+  pane / window" with **Return to this window** (`returnTab`: close that pane or pop-out, then
+  show and focus the tab in the ticket pane). A torn-off chip's canvas gets the same placeholder,
+  and a torn-off composer leaves a one-line bar. Closing a torn-off pane any other way brings the
+  tab back by itself, since the placeholder is derived from the store. Each tab, chip and the
+  composer's grip has a context menu: Open to the Right/Below/Left/Above, Open in New Window, and
+  Return to this window once torn off. `scripts/tear-off-check.ts` drives all of it against the
+  real service and real Chrome.
+- **Drag to split.** Board cards, a conductor's child rows, a pane's header grip, a ticket's tab
+  buttons, browser chips and the composer's top-edge grip are drag sources (`dragProps` in
+  `components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`), the pane's
+  leaf id (`application/x-harness-pane`) or `{ ticketKey, tab, browserTab? }` as JSON
+  (`application/x-harness-ticket-tab`) in the DataTransfer, along with a compact key-and-title
+  chip (plus the tab's name) as the drag image. While one is being dragged, `PaneWorkspace` shows a drop
   layer over every pane, above plugin iframes and the browser canvas (which would otherwise
   swallow the drag). The layer is `no-drag` so the titlebar's window-drag regions don't take the
   drop. `zoneAt` picks the half of the pane under the pointer: the pane's diagonals cut it into
   four triangles, ties go to left/right, and the centre goes to the right. The preview is the
-  dropped pane's box in the layout that would result (`dropPreview`), and drop runs `applyDrop`
-  (`dropContent` for a ticket, `movePane` for a pane). A ticket that's already open moves with its
-  pane and keeps its tab, and a pane over itself isn't a target. Docking against the board leaves
+  dropped pane's box in the layout that would result (`dropPreview`), and drop runs `dropInStore`
+  (`applyDrop`: `dropContent` for a ticket or tab, `movePane` for a pane, across the window's
+  pop-outs). A ticket or torn-off tab that's already open moves with its pane and keeps its tab,
+  and a pane over itself isn't a target. **Out of the window:** `dragProps`' shared `dragend`
+  asks `dragOutPoint` (`state/dragOut.ts`): a drag nobody took (`dropEffect` "none") let go
+  outside the window's outer bounds pops what it carries into a window under the pointer. A grip
+  pops its pane out (`popOut`); a card or child row moves its ticket's open pane, else opens a new
+  ticket leaf; a tab, chip or the composer moves its torn-off pane, else opens a new one
+  (`popOutContent`, deduped like `dropContent`; content already in a window brings that window
+  forward). Escape ends a drag with the pointer inside the window, so it never pops out; a drag
+  let go over another app does, since no other app takes our types. Docking against the board leaves
   it 60%, the same split a click makes, while any other pane is split in half. A pane moved
   beside a sibling in its own split, along that split's axis (the right of three panes dropped
   between the other two), just changes places, and every pane keeps its size (`reorderSibling`).
@@ -2313,8 +2356,8 @@ Settings, project settings, or on the board route the pane workspace.
   board keeps its share and the others split the rest. ⌘= was Electron's Zoom In; Zoom In/Out
   are gone from the View menu, and Actual Size stays so an old zoom can be undone. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
-  taking the pointer. Minimums: the board 320 px wide, a ticket 360 px, a terminal 320 px, a file 360 px, any
-  pane 200 px tall.
+  taking the pointer. Minimums: the board 320 px wide, a ticket or torn-off tab 360 px, a terminal 320 px, a file 360 px, any
+  pane (a torn-off composer included) 200 px tall.
   They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
   each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
   never shows a pane below its minimum while there's room. The stored sizes stay as they were
@@ -2327,8 +2370,11 @@ Settings, project settings, or on the board route the pane workspace.
   focused ticket or file pane (never while a text field, modal, menu, the palette or a terminal has the
   focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
   pane, and a renamed key follows the rename.
-- **Pop-out windows.** A ticket or terminal pane's header has a pop-out button beside Maximize
-  (⇧⌘O for the focused pane), which moves the pane into a window of its own. The pane becomes its
+- **Pop-out windows.** Every pane but the board (and a New session, which isn't stored, so a
+  window couldn't read it) has a pop-out button beside Maximize (⇧⌘O for the focused pane), and a
+  drag out of the window does the same (see Drag to split), which moves the pane into a window of
+  its own; a drag opens it under the pointer (`popoutBounds`' optional point, held by its title
+  bar). The pane becomes its
   own scope in the pane store, `popout:<id>`, whose tree is just that leaf with no board
   (`popOut`; `popoutPanes` takes out the board the other operations put back). Everything that
   acts on a pane's scope works there unchanged: tabs, a child link replacing the pane, a
@@ -2558,8 +2604,18 @@ the conventions, and ios/README.md the build and test commands.
   them.
 - **iPad.** One universal build (device family `1,2`) that allows all four orientations, which
   iPad multitasking (Split View, Stage Manager) needs, so the window can be any size. The screens
-  are the phone's, laid out at the window's width. One scene only: the app has a single Router
-  and AppModel. `sim-check --ipad` shoots the walk-through's screens on iPad simulators.
+  are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
+  and store, a Router per window): at regular width a ticket opens in a window of its own. Any
+  ticket tab, any single browser tab and the composer tear off into a pinned window of their own:
+  dragged out of the window (the drag carries the window's NSUserActivity, so iPadOS opens it) or
+  from the thing's context menu (Open in New Window). A pinned window shows only that one tab,
+  fully working, under the ticket's title line. The ticket's other windows show **Return to this
+  window** in its place, which closes the pinned window; closing it any other way also brings the
+  tab back. Board cards drag out into a full ticket window; the board has no drop target, so a
+  drag never moves a card between columns (that's the card's Move to … menu). Two browser views
+  of one session stream side by side because each is its own viewer (`viewerId`, "Browser
+  tabs"). iPhone and compact width have none of this. `sim-check --ipad` shoots the
+  walk-through's screens on iPad simulators. See ios/ARCHITECTURE.md § Windows.
 - **Connection.** `harness://pair?url=…&token=…` (the desktop QR code) opens the app through its
   URL scheme, or the in-app scanner reads it; the app probes `GET /health`, then an authenticated
   request, before saving. Tokens live in the Keychain, one per saved Mac, readable after first
@@ -2588,7 +2644,10 @@ the conventions, and ios/README.md the build and test commands.
   a mouse drag (HarnessKit `BrowserInput`). A hidden text field carries the keyboard (diffed into
   text inserts and Backspaces). Resize follows the stage, only after the first `browser.state` and
   only on real changes. A + button opens a tab (`newTab`); with more than one tab a strip of chips
-  switches (resubscribing with its `tabId`) and closes them. See "Browser tabs".
+  switches (resubscribing with its `tabId`) and closes them. Each Browser view subscribes with
+  a viewer id of its own (one UUID per `BrowserTabModel`) and keeps only the frames and states
+  for it (`isBrowserEvent`, the port of `isBrowserEventFor`), so a torn-off browser tab and the
+  ticket's Browser tab stream at once. See "Browser tabs".
 - **Spec and Activity.** The app renders spec images inline, loading each `attachment:<id>` from
   `client.attachmentUrl(id)` (the query token, since the image loader and AVPlayer fetch on their
   own), and shows the Activity tab next to the Spec tab; the children of HARNESS-194 implement

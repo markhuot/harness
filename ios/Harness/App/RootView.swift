@@ -83,6 +83,7 @@ private struct SceneChrome: ViewModifier {
     @Environment(AppModel.self) private var app
     @Environment(\.colorScheme) private var scheme
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.supportsMultipleWindows) private var multipleWindows
 
     /// What the bar colors depend on: both appearances' text (BarAppearance).
     private var barColorKey: String {
@@ -100,6 +101,8 @@ private struct SceneChrome: ViewModifier {
             }
             .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
             .environment(\.palette, palette)
+            // Tabs, browser tabs, the composer and cards tear off into windows (TearOff.swift).
+            .environment(\.canTearOff, multipleWindows && sizeClass == .regular)
             .tint(palette.accent)
             .toastOverlay()
             .background(palette.bg.ignoresSafeArea())

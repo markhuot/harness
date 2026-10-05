@@ -299,12 +299,13 @@ const popouts = new Map<string, BrowserWindow>();
 /** Pop-outs being closed because their pane already went (closed, or back on a board). */
 const closingQuietly = new Set<string>();
 
-function createPopout({ id, route, bounds }: PopoutOpenOptions) {
+function createPopout({ id, route, bounds, at }: PopoutOpenOptions) {
   const open = popouts.get(id);
   if (open && !open.isDestroyed()) return void open.focus();
-  const display = bounds ? screen.getDisplayMatching(bounds) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  // On the display the pointer let go on (a drag out of a window), else the pane's, else the pointer's.
+  const display = at ? screen.getDisplayNearestPoint(at) : bounds ? screen.getDisplayMatching(bounds) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const win = new BrowserWindow({
-    ...popoutBounds(bounds, display.workArea),
+    ...popoutBounds(bounds, display.workArea, at),
     minWidth: POPOUT_MIN.width,
     minHeight: POPOUT_MIN.height,
     title: "Harness",

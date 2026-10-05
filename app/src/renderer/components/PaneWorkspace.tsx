@@ -15,8 +15,8 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
 import {
-  applyDrop,
   boardLeaf,
+  dropOnBoard,
   dropPreview,
   dropTargetAt,
   fileKey,
@@ -26,6 +26,7 @@ import {
   minSize,
   resizeSplit,
   setSizes,
+  tornKey,
   updatePanes,
   usePanes,
   type DividerBox,
@@ -44,6 +45,7 @@ import { TicketDetail } from "../views/TicketDetail";
 import { TerminalPane } from "../views/TerminalPane";
 import { DraftEditor } from "../views/DraftEditor";
 import { FilePane } from "../views/FilePane";
+import { TicketTabPane } from "../views/TicketTabPane";
 import { useDragOverlay } from "./ResizeHandle";
 import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
@@ -178,7 +180,8 @@ export function Pane({
     <section
       className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${active ? "active" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
       data-pane-id={leaf.id}
-      data-pane-ticket={c.kind === "ticket" ? c.ticketKey : undefined}
+      // A torn-off tab carries its ticket too: the ticket's commands and `i` find it (commands.tsx).
+      data-pane-ticket={c.kind === "ticket" || c.kind === "ticketTab" ? c.ticketKey : undefined}
       data-testid={`pane-${c.kind}`}
       style={leafStyle(rect)}
       aria-hidden={hidden || undefined}
@@ -205,6 +208,9 @@ export function Pane({
           // Keyed by the file: a link that swaps the file in this pane starts from a clean slate
           // (no old contents or diff under the new header, a fresh scroll to its range).
           <FilePane key={fileKey(c)} paneId={leaf.id} content={c} zoomed={zoomed} />
+        ) : c.kind === "ticketTab" ? (
+          // Keyed by what it shows: following a rename keeps it, another tab starts fresh.
+          <TicketTabPane key={tornKey(c)} paneId={leaf.id} content={c} zoomed={zoomed} />
         ) : (
           <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
         )}
@@ -355,7 +361,8 @@ function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; pan
         const src = dragSourceOf(e.dataTransfer);
         setHit(null);
         endDrag();
-        if (t && src) updatePanes(scope, (s) => applyDrop(s, src, t.leafId, t.zone));
+        // Across the window: a ticket or tab in a pop-out comes back from it (dropInStore).
+        if (t && src) dropOnBoard(scope, src, t.leafId, t.zone);
       }}
     >
       {hit && <div className="pane-drop-preview" data-testid="pane-drop-preview" data-zone={hit.zone} data-target={hit.leafId} style={leafStyle(hit.landing)} />}

@@ -373,8 +373,8 @@ const TicketCard = memo(function TicketCard({
       onMouseEnter={isConductor(t) ? () => onHoverConductor(t.id) : undefined}
       onMouseLeave={isConductor(t) ? () => onHoverConductor(null) : undefined}
       onClick={() => onOpen(t.key)}
-      // Drag onto a half of the board or an open ticket to open it in a split there.
-      {...dragProps(t.key, t.title, undefined, keyLabel(t))}
+      // Drag onto a half of the board or an open ticket to open it in a split there, or out of the window to open it in one.
+      {...dragProps({ kind: "ticket", ticketKey: t.key }, { chip: keyLabel(t), title: t.title }, scope)}
       onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined)}
       role="button"
       aria-label={`${draft ? "Draft " : ""}${keyLabel(t)} ${t.title || "Untitled"}`}

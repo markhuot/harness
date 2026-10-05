@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs
 import { connect } from "node:net";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
-import { HarnessApiError, HarnessClient, specConflict, type HarnessEvent } from "@harness/shared";
+import { HarnessApiError, HarnessClient, isBrowserEventFor, specConflict, type HarnessEvent } from "@harness/shared";
 import { onTempCleanup } from "@harness/shared/testing";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
@@ -12,6 +12,7 @@ import { mp4, png } from "../testing/media";
 import { fakeContext, fakeSession } from "../tools/fakes";
 import { git as runGit } from "../orchestrator/worktree";
 import { parseRange, serveFile } from "./http";
+import { subscriberIdOf, viewerIdOf } from "./ws";
 import { dummyTaskOutputDir } from "../task-output";
 
 let harness: Harness | null = null;
@@ -500,6 +501,71 @@ describe("http api", () => {
     await expect(client.browserNavigate(t.sessionId, "https://example.com", 5)).rejects.toThrow("No browser tab 5");
     await expect(client.browserNavigate(t.sessionId, "https://example.com", 0)).rejects.toThrow("positive whole number");
     a.socket.close();
+  });
+
+  test("one socket holds several browser viewers of a session: each gets its own frames and input; one leaving keeps the other; reconnect replays both", async () => {
+    const { client, dir, browser } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false, driver: "fake" });
+    const a = collect(client);
+    await a.ready;
+    const key = (viewer: string) => [...browser.subs.keys()].find((k) => k.startsWith(t.sessionId + "|") && k.endsWith(":" + viewer));
+    a.socket.subscribeBrowser(t.sessionId, 1, "v1");
+    a.socket.subscribeBrowser(t.sessionId, 2, "v2");
+    await until(() => !!key("v1") && !!key("v2"));
+    expect([browser.subs.get(key("v1")!)!.tab, browser.subs.get(key("v2")!)!.tab]).toEqual([1, 2]);
+
+    // Each viewer's frames and state carry its own viewerId.
+    browser.subs.get(key("v1")!)!.onFrame({ sessionId: t.sessionId, tabId: 1, data: "ONE", width: 1, height: 1 });
+    browser.subs.get(key("v2")!)!.onFrame({ sessionId: t.sessionId, tabId: 2, data: "TWO", width: 1, height: 1 });
+    browser.subs.get(key("v2")!)!.onState({ sessionId: t.sessionId, tabId: 2, url: "u", title: "", loading: false });
+    await until(() => a.events.filter((e) => e.kind === "browser.frame").length === 2 && a.events.some((e) => e.kind === "browser.state"));
+    const frames = a.events.flatMap((e) => (e.kind === "browser.frame" ? [[e.viewerId, e.data]] : []));
+    expect(frames).toEqual([["v1", "ONE"], ["v2", "TWO"]]);
+    expect(a.events.find((e) => e.kind === "browser.state")).toMatchObject({ viewerId: "v2" });
+
+    // Input without a tab goes through its viewer's subscriber, so it lands on that viewer's tab.
+    const inputs: any[] = [];
+    browser.input = async (sid, input, opts) => void inputs.push(opts?.subscriberId);
+    a.socket.send({ type: "browser.input", sessionId: t.sessionId, input: { type: "reload" }, viewerId: "v2" });
+    await until(() => inputs.length === 1);
+    expect(key("v2")!.endsWith(inputs[0])).toBe(true);
+    expect(inputs[0]).not.toBe(key("v1")!.split("|")[1]);
+
+    // One viewer leaving leaves the other subscribed.
+    a.socket.unsubscribeBrowser(t.sessionId, "v1");
+    await until(() => !key("v1"));
+    expect(key("v2")).toBeDefined();
+
+    // A dropped connection resubscribes every viewer that's still remembered, on its tab.
+    a.socket.subscribeBrowser(t.sessionId, 3, "v3");
+    await until(() => !!key("v3"));
+    (a.socket as any).ws.close();
+    await until(() => !key("v2"));
+    await until(() => !!key("v2") && !!key("v3"));
+    expect(key("v1")).toBeUndefined();
+    expect([browser.subs.get(key("v2")!)!.tab, browser.subs.get(key("v3")!)!.tab]).toEqual([2, 3]);
+    a.socket.close();
+  });
+
+  test("viewer-less events reach every viewer of the session; a named event only its viewer", () => {
+    const frame = (viewerId?: string) => ({ kind: "browser.frame" as const, sessionId: "s", tabId: 1, data: "", width: 1, height: 1, ...(viewerId ? { viewerId } : {}) });
+    expect(isBrowserEventFor(frame(), "s", "v1")).toBe(true);
+    expect(isBrowserEventFor(frame(), "s", undefined)).toBe(true);
+    expect(isBrowserEventFor(frame("v1"), "s", "v1")).toBe(true);
+    expect(isBrowserEventFor(frame("v2"), "s", "v1")).toBe(false);
+    expect(isBrowserEventFor(frame("v1"), "s", undefined)).toBe(false);
+    expect(isBrowserEventFor(frame("v1"), "other", "v1")).toBe(false);
+    expect(isBrowserEventFor({ kind: "ticket.deleted", key: "X-1" } as any, "s", "v1")).toBe(false);
+  });
+
+  test("a malformed viewerId counts as none", () => {
+    expect(viewerIdOf("p12")).toBe("p12");
+    expect(viewerIdOf("b:*")).toBe("");
+    expect(viewerIdOf("x".repeat(65))).toBe("");
+    expect(viewerIdOf(42)).toBe("");
+    expect(subscriberIdOf("sock", "")).toBe("sock");
+    expect(subscriberIdOf("sock", "p1")).toBe("sock:p1");
   });
 
   test("conductor with the real dummy driver + tools drives its children to done", async () => {
