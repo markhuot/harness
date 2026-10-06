@@ -142,6 +142,7 @@ describe("choosing at approval", () => {
     expect(run.systemPrompt).toContain("gh pr create --repo github.com/acme/web --base main");
     expect(run.prompt).toContain("Label it design.");
     expect(h.get(t)).toMatchObject({ status: "done", pullRequestUrl: expect.stringContaining("/pull/") });
+    expect(h.get(t).pullRequestHead).toBe(await h.git("rev-parse", "harness/web-1"));
   });
 
   test("an action the ticket doesn't offer is refused before anything changes", async () => {
@@ -197,7 +198,7 @@ describe("pull request completions", () => {
     h.driver.script = async function* (req) {
       if (req.kind === "complete") {
         try {
-          await req.toolContext.ops.recordPullRequest(req.toolContext, "https://github.com/acme/web/pull/9");
+          await req.toolContext.ops.recordPullRequest(req.toolContext, "https://github.com/acme/web/pull/9", "0123456789abcdef0123456789abcdef01234567");
         } catch (err) {
           refused = (err as Error).message;
         }
@@ -214,6 +215,32 @@ describe("pull request completions", () => {
     expect(refused).toContain("only for completion runs that open a pull request");
     expect(h.get(t).pullRequestUrl).toBeNull();
     expect(h.get(t).status).toBe("done");
+  });
+
+  test("record_pull_request wants the hash of a commit the repo has, and stores it in full", async () => {
+    const h = await setup();
+    const tried: string[] = [];
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      const head = (await runGit(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
+      for (const bad of ["HEAD", "harness/web-1", "0".repeat(40)]) {
+        await req.toolContext.ops.recordPullRequest(req.toolContext, "https://github.com/acme/web/pull/9", bad).catch((err: Error) => tried.push(err.message));
+      }
+      await req.toolContext.ops.recordPullRequest(req.toolContext, "https://github.com/acme/web/pull/9", head.slice(0, 10));
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    const u = h.get(t);
+    await runGit(["commit", "-q", "--allow-empty", "-m", "work"], u.workdir!);
+    const head = (await runGit(["rev-parse", "HEAD"], u.workdir!)).stdout.trim();
+    h.store.tickets.update(u.id, { status: "review", agentReview: "approved", hasChanges: true });
+    h.orch.humanReview(t.key, { decision: "approve", action: "pr" });
+    await h.orch.idle();
+    expect(tried).toHaveLength(3);
+    expect(tried[0]).toContain("not a branch or ref name");
+    expect(tried[1]).toContain("not a branch or ref name");
+    expect(tried[2]).toContain("isn't a commit in this ticket's repository");
+    expect(h.get(t)).toMatchObject({ status: "done", pullRequestHead: head });
   });
 });
 

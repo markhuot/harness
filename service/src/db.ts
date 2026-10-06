@@ -673,6 +673,11 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN message_draft TEXT;
   `,
+  // 34: tickets.pull_request_head: the commit a 'pr' completion pushed (record_pull_request), which
+  //     the git plugin pins as the ticket's Changes. NULL until one is recorded.
+  `
+  ALTER TABLE tickets ADD COLUMN pull_request_head TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

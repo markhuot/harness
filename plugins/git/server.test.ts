@@ -390,6 +390,54 @@ describe("pinned diffs (the worktree is gone)", () => {
     await pinsSettled();
     expect(await refs(repo, ticket.id)).toBe("");
   });
+
+  test("a completion run's disk is never pinned; the pull request head its agent records is", async () => {
+    const { repo, wt, branch, ticket } = await ticketWithWork("g-pr");
+    writeFileSync(join(wt, "wip.txt"), "uncommitted at approval\n");
+    await upsert(ticket.key, { status: "review" });
+    const approved = await refs(repo, ticket.id);
+    expect(approved).toContain("worktree ");
+
+    // The complete run starts, and its agent tears the worktree down while events arrive (PB-5:
+    // `git worktree remove` had deleted half the files when record_pull_request's event came in).
+    const run = h.store.runs.create({ sessionId: ticket.sessionId, kind: "complete", driver: "dummy", prompt: "p" });
+    expect(h.store.tickets.get(ticket.id)!.completing).toBe(true);
+    unlinkSync(join(wt, "a.txt"));
+    await upsert(ticket.key);
+    expect(await refs(repo, ticket.id)).toBe(approved);
+
+    // The agent commits the leftovers, pushes, and records the head it pushed.
+    writeFileSync(join(wt, "a.txt"), lines(5).replace("line 2", "line two"));
+    await git(wt, "add", "-A");
+    await git(wt, "commit", "-qm", "leftovers");
+    const pushed = await git(wt, "rev-parse", "HEAD");
+    await upsert(ticket.key, { pullRequestHead: pushed });
+    const base = await git(repo, "merge-base", "main", pushed);
+    expect(await refs(repo, ticket.id)).toBe(`base ${base}\nhead ${pushed}`);
+    await git(repo, "worktree", "remove", "--force", wt);
+    await upsert(ticket.key);
+    h.store.runs.finish(run.id, "succeeded");
+    await upsert(ticket.key, { status: "done" });
+
+    const c = await changes(ticket.key);
+    expect(c).toMatchObject({ mode: "pinned", head: pushed, worktree: null });
+    expect(c.files.map((x) => x.path)).toEqual(["a.txt", "gone.txt", "wip.txt"]);
+    expect((await log(ticket.key)).commits.map((x) => x.subject)).toEqual(["leftovers", "ticket work"]);
+
+    // Re-opened, changed and pushed again: the next completion moves the pin to its new head.
+    await git(repo, "worktree", "add", "-q", wt, branch);
+    writeFileSync(join(wt, "more.txt"), "round two\n");
+    await git(wt, "add", "-A");
+    await git(wt, "commit", "-qm", "round two");
+    h.store.tickets.update(ticket.id, { status: "review", pullRequestHead: null });
+    const run2 = h.store.runs.create({ sessionId: ticket.sessionId, kind: "complete", driver: "dummy", prompt: "p" });
+    await upsert(ticket.key);
+    expect(await refs(repo, ticket.id)).toBe(`base ${base}\nhead ${pushed}`);
+    const pushed2 = await git(wt, "rev-parse", "HEAD");
+    await upsert(ticket.key, { pullRequestHead: pushed2 });
+    expect(await refs(repo, ticket.id)).toBe(`base ${base}\nhead ${pushed2}`);
+    h.store.runs.finish(run2.id, "succeeded");
+  });
 });
 
 describe("git output parsers", () => {

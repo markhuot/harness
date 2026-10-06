@@ -6,6 +6,7 @@ import type { ToolResult } from "../tools/types";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dummyTaskOutputDir } from "../task-output";
+import { git } from "../orchestrator/worktree";
 import { executeTool, type Driver, type DriverEvent, type RunRequest } from "./types";
 
 export interface DummyState {
@@ -492,7 +493,8 @@ export class DummyDriver implements Driver {
         // A pull request completion only finishes once one is recorded; the dummy makes one up.
         const t = req.toolContext.ticket;
         if (t?.completionAction === "pr") {
-          yield* call("record_pull_request", { url: t.pullRequestUrl ?? `https://github.com/example/dummy/pull/${t.key.split("-").pop()}` });
+          const head = (await git(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
+          yield* call("record_pull_request", { url: t.pullRequestUrl ?? `https://github.com/example/dummy/pull/${t.key.split("-").pop()}`, head });
         }
         yield* call("post_note", { note: "Completed." });
         break;

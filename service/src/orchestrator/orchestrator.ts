@@ -121,6 +121,7 @@ import {
   commitsNotIn,
   currentBranch,
   ensureWorktree,
+  git,
   headCommit,
   hasChangesToLand,
   isAncestor,
@@ -2011,6 +2012,8 @@ export class Orchestrator {
       // back so the run's system prompt picks the same completion prompts.
       const action = completionOptions(t, this.store.projects.get(t.projectId), this.branchParent(t), this.baseBranchFor(t).branch).defaultAction;
       if (action !== t.completionAction) t = this.store.tickets.update(t.id, { completionAction: action })!;
+      // A head recorded by an earlier pr completion is stale now: this one records its own.
+      if (t.pullRequestHead) t = this.store.tickets.update(t.id, { pullRequestHead: null })!;
       this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, t.completionInstructions ?? undefined), this.completeLock(t));
     } finally {
       this.startingComplete.delete(ticket.id);
@@ -3081,20 +3084,29 @@ ${numberLines(r.body)}`;
     }
   }
 
-  /** record_pull_request: the pull request a "pr" completion opened (or updated). */
-  async recordPullRequest(ctx: ToolContext, url: string): Promise<string> {
+  /**
+   * record_pull_request: the pull request a "pr" completion opened (or updated), and the commit it
+   * pushed. The commit must be a hash the project repo has; it's stored in full, and the git plugin
+   * pins it as the ticket's Changes (DESIGN.md "Pinned diffs").
+   */
+  async recordPullRequest(ctx: ToolContext, url: string, head: string): Promise<string> {
     const t = this.ctxTicket(ctx);
     if (ctx.runKind !== "complete" || t.completionAction !== "pr") {
       throw new Error("record_pull_request is only for completion runs that open a pull request");
     }
     const u = String(url ?? "").trim();
     if (!/^https?:\/\/\S+$/.test(u)) throw new Error("url must be the pull request's http(s) link, as gh printed it");
-    const updated = this.store.tickets.update(t.id, { pullRequestUrl: u })!;
+    const h = String(head ?? "").trim();
+    if (!/^[0-9a-f]{7,64}$/i.test(h)) throw new Error("head must be the hash of the commit you pushed (`git rev-parse HEAD` in the worktree), not a branch or ref name");
+    const repo = [t.workdir, this.store.projects.get(t.projectId)?.path].find((d): d is string => !!d && existsSync(d));
+    const resolved = repo ? await git(["rev-parse", "--verify", "--quiet", `${h}^{commit}`], repo) : null;
+    if (!resolved || resolved.code !== 0 || !resolved.stdout) throw new Error(`head ${h} isn't a commit in this ticket's repository`);
+    const updated = this.store.tickets.update(t.id, { pullRequestUrl: u, pullRequestHead: resolved.stdout })!;
     this.bus.emit({ kind: "ticket.upserted", ticket: updated });
     this.appendStatus(t.sessionId, ctx.runId, `Pull request: ${u}`);
     const a = this.ctxActive(ctx);
     if (a) a.pullRequest = true;
-    return `Recorded ${u} on ${t.key}.`;
+    return `Recorded ${u} at ${resolved.stdout.slice(0, 8)} on ${t.key}.`;
   }
 
   /** `more`: a dispatch may follow earlier dispatches (one output can hold several items). */
@@ -4592,7 +4604,7 @@ ${numberLines(r.body)}`;
       // --- conductor ---
       reviewTicket: (c, k, d, n, a) => this.reviewTicket_(c, k, d, n, a),
       completeTicket: (c, k, i, a) => this.completeTicket_(c, k, i, a),
-      recordPullRequest: (c, u) => this.recordPullRequest(c, u),
+      recordPullRequest: (c, u, h) => this.recordPullRequest(c, u, h),
       // --- triage ---
       dispatchTicket: (c, i) => this.dispatchTicket(c, i),
       declineWork: (c, r, title) => this.declineWork(c, r, title),

@@ -630,7 +630,7 @@ How an approved ticket's work lands is chosen per approval (`CompletionAction`, 
 | Action | Prompts | What the complete run does |
 | --- | --- | --- |
 | `merge` ("Approve and merge") | `system.complete_merge`, `run.complete_merge` | Merges the ticket branch into the base branch by name, from wherever the base is checked out (`git worktree list`): merge there when a worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is `harness/<key>`, deleted from the worktree that has the base checked out (`branch -d` checks against what's checked out where it runs). A harness worktree left behind by `update_branch` is removed only once its commits are merged. |
-| `pr` ("Approve and open PR") | `system.complete_pr`, `run.complete_pr` | Commits leftovers, checks `gh auth status --hostname <host>`, pushes the branch (`git push -u <remote> <branch>`, never forced), then updates the open pull request for the branch (a comment on what changed) or opens one with `gh pr create --repo <host>/<owner>/<repo> --base <base>`, ready for review, following the repo's PR template. It calls `record_pull_request { url }`, removes the harness worktree and keeps the branch. It never merges: the pull request is the end of the ticket, and teammates review and merge it on GitHub. |
+| `pr` ("Approve and open PR") | `system.complete_pr`, `run.complete_pr` | Commits leftovers, checks `gh auth status --hostname <host>`, pushes the branch (`git push -u <remote> <branch>`, never forced), then updates the open pull request for the branch (a comment on what changed) or opens one with `gh pr create --repo <host>/<owner>/<repo> --base <base>`, ready for review, following the repo's PR template. It calls `record_pull_request { url, head }` with the commit it pushed, removes the harness worktree and keeps the branch. It never merges: the pull request is the end of the ticket, and teammates review and merge it on GitHub. |
 | `cleanup` ("Approve and clean up") | `system.complete_cleanup`, `run.complete_cleanup` | For work that already landed or never needed git: a ticket on an existing pull request's head branch that pushed there itself, a branch merged by hand, or an empty worktree after a database or config change. It merges, pushes and opens nothing. It stops if the worktree has uncommitted changes or the branch has commits on no remote branch (and, off the base, not in the base branch); otherwise it removes the harness worktree and deletes `harness/<key>` with `branch -D` (the check already proved its commits are safe; `-d` refuses commits that are only on a remote). A branch the harness didn't create is kept. Afterwards the service checks: while the harness worktree or `harness/<key>` is still there, the ticket moves to `blocked` ("Cleanup didn't finish") instead of done, so the human can deal with the commits. |
 | `custom` ("Approve and…") | `system.complete_custom`, `run.complete_custom` | Commits leftovers, then does what the approver's instructions say, merging, pushing or deleting nothing they don't ask for. With no instructions (the plain "Approve" of a folder outside git) it's a light wrap-up. |
 
@@ -679,7 +679,10 @@ own, before the first check, and when git can't say (the worktree is gone, a bra
 and null changes nothing.
 
 **Pull requests.** `record_pull_request` (complete runs only; refused unless the completion is a
-`pr` one) sets `Ticket.pullRequestUrl`, which the apps link to. A `pr` complete run that ends
+`pr` one) sets `Ticket.pullRequestUrl`, which the apps link to, and `Ticket.pullRequestHead`: the
+`head` the agent pushed, which must be a hash (not a ref) of a commit the repo has and is stored in
+full. The git plugin pins that commit as the ticket's Changes ("Pinned diffs"). Queueing a
+completion clears the head, so each completion records its own. A `pr` complete run that ends
 without recording one blocks the ticket ("Completion ended without opening a pull request")
 instead of moving it to done. After a re-open, `run.reopen` points the agent at the pull request's
 review comments, and the next `pr` completion pushes to the same branch and updates it. The
@@ -829,7 +832,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
-| `record_pull_request` | complete | `{ url }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`); refused in any other completion |
+| `record_pull_request` | complete | `{ url, head }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`) and the hash of the commit it pushed (`Ticket.pullRequestHead`, pinned as the ticket's Changes); refused in any other completion |
 | `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, spec, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
@@ -1539,7 +1542,7 @@ Directives are read from the run prompt:
 | work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/bgtask [n]` → a background `Bash` call (`run_in_background`) with its "Command running in background" result and a `bash` task report whose output file (under `/tmp/claude-<uid>/harness-dummy/<run>/`) gets `line 1`…`line n` (default 20, at most 500), one every 20× the word delay, every fifth in color, then the task's `succeeded` report and `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_note` + submit. Every submit here first calls `read_spec` and `edit_spec`, replacing the body of `## Status` (up to the next heading, with `expected` set to it) with one `* <note>` line, or adding the section when the spec has none; a run started by requested changes notes "addressed the review notes", then `submit_for_review` with `spec_is_up_to_date: true` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]`, or `[dummy:reject-once]` on round 1 only (a prompt without "Earlier review rounds") |
 | chat | text `(dummy chat) You said: "<message>"` (without the blocked note); `[dummy:unblock]` → `unblock`, `[dummy:resume]` → `resume_work`, then `[dummy:block]` → `block` or `[dummy:submit]` → `submit_for_review` |
-| complete | text + `post_note("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) |
+| complete | text + `post_note("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) and its cwd's `HEAD` |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
 | triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key (remote ID) is the first `KEY-123` in the fenced output, and a `[dummy:ticket KEY]` in the prompt section passes `ticket_key`. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
@@ -2560,17 +2563,24 @@ Tab **Changes** (`when: "workdir"`, kept by `showTab` while a pin exists). Route
 **Pinned diffs.** The complete run merges the branch, removes the worktree and deletes the branch,
 so the live diff can't be computed afterwards. On every `ticket.upserted` for a ticket that has a
 branch, a worktree on disk and isn't `done`, the plugin pins the diff as refs in the project repo
-(runs coalesce per ticket):
+(runs coalesce per ticket). While a complete run is queued or running (`Ticket.completing`), it
+doesn't read the worktree at all: the agent may be resolving a conflict or halfway through
+`git worktree remove`, and a snapshot then recorded every file it had deleted so far as a
+deletion. Instead, a `pr` completion's recorded `Ticket.pullRequestHead` is pinned
+(`pinCommit`): `base` = merge-base(base branch, that commit), `head` = that commit, no
+`worktree`. Each later completion records its own head, so a re-opened ticket's pin moves forward
+to the new push. Other completions keep the pin from before the run.
 
 | Ref | Points at |
 | --- | --- |
 | `refs/harness/changes/<ticket id>/base` | the merge-base with the base branch |
-| `refs/harness/changes/<ticket id>/head` | the branch head |
+| `refs/harness/changes/<ticket id>/head` | the branch head, or the head a `pr` completion recorded |
 | `refs/harness/changes/<ticket id>/worktree` | only when the worktree had uncommitted or untracked changes: a snapshot commit (parent: head, author "Harness") of the worktree tree, built from the same throwaway index |
 
 The diff is `base..(worktree ?? head)`. The ticket id (not the key) names the refs, since keys
-change when a project is renamed. Enqueueing the complete run emits `ticket.upserted`, so the last
-pin holds the work as approved. An empty diff never replaces an existing pin: after the merge,
+change when a project is renamed. Approving emits `ticket.upserted` before the complete run is
+queued, so the last pin holds the work as approved. The refs hold commit hashes, not the branch:
+the diff is always between two fixed commits. An empty diff never replaces an existing pin: after the merge,
 merge-base == HEAD and the live diff is empty, but the pin should keep showing what the ticket
 changed. The refs keep the commits reachable after a squash merge or `gc`. They sit outside
 `refs/heads` and `refs/tags`, so `git push` doesn't send them. Deleting the ticket removes them

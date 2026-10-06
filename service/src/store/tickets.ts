@@ -41,6 +41,7 @@ interface TicketRow {
   completion_action?: string | null;
   completion_instructions?: string | null;
   pull_request_url?: string | null;
+  pull_request_head?: string | null;
   has_changes?: number | null;
   draft?: number;
   prompt_attachments?: string;
@@ -48,6 +49,7 @@ interface TicketRow {
   message_draft?: string | null;
   completed_at: number | null;
   busy: number;
+  completing: number;
   child_count: number;
 }
 
@@ -85,9 +87,10 @@ export function canonicalJson(value: unknown): string {
 }
 
 const BUSY = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.status IN ('queued','running')) AS busy`;
+const COMPLETING = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.kind = 'complete' AND r.status IN ('queued','running')) AS completing`;
 const CHILD_COUNT = `(SELECT COUNT(*) FROM tickets c WHERE c.parent_id = t.id) AS child_count`;
 /** Columns computed per row on top of `t.*`. */
-const DERIVED = `${BUSY}, ${CHILD_COUNT}`;
+const DERIVED = `${BUSY}, ${COMPLETING}, ${CHILD_COUNT}`;
 const SELECT = `SELECT t.*, ${DERIVED} FROM tickets t`;
 
 type SqlParams = Record<string, string | number | null>;
@@ -144,6 +147,7 @@ export type TicketPatch = Partial<{
   completionAction: CompletionAction | null;
   completionInstructions: string | null;
   pullRequestUrl: string | null;
+  pullRequestHead: string | null;
   hasChanges: boolean | null;
   draft: boolean;
   kind: TicketKind;
@@ -175,6 +179,7 @@ const COLUMNS: Record<string, string> = {
   completionAction: "completion_action",
   completionInstructions: "completion_instructions",
   pullRequestUrl: "pull_request_url",
+  pullRequestHead: "pull_request_head",
   hasChanges: "has_changes",
   draft: "draft",
   kind: "kind",
@@ -241,6 +246,7 @@ export class TicketRepo {
       blockedReason: r.blocked_reason,
       permissionMode: (r.permission_mode as PermissionMode | null) ?? null,
       busy: bool(r.busy),
+      completing: bool(r.completing ?? 0),
       childCount: r.child_count ?? 0,
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
@@ -251,6 +257,7 @@ export class TicketRepo {
       completionAction: isCompletionAction(r.completion_action) ? r.completion_action : null,
       completionInstructions: r.completion_instructions ?? null,
       pullRequestUrl: r.pull_request_url ?? null,
+      pullRequestHead: r.pull_request_head ?? null,
       hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),

@@ -274,8 +274,34 @@ export async function pinChanges(exec: Exec, opts: { workdir: string; branch: st
       ? null
       : (await repo.ok(["commit-tree", "--no-gpg-sign", "-p", head, "-m", `Harness: uncommitted changes on ${opts.branch}`, tree], { env: SNAPSHOT_ENV })).trim();
   const pin: Pin = { base: baseSha, head, worktree };
-  const lines = PIN_NAMES.map((n) => (pin[n] ? `update ${pinRef(opts.ticketId, n)} ${pin[n]}` : `delete ${pinRef(opts.ticketId, n)}`));
+  await writePin(repo, opts.ticketId, pin);
+  return pin;
+}
+
+async function writePin(repo: Repo, ticketId: string, pin: Pin) {
+  const lines = PIN_NAMES.map((n) => (pin[n] ? `update ${pinRef(ticketId, n)} ${pin[n]}` : `delete ${pinRef(ticketId, n)}`));
   await repo.ok(["update-ref", "--stdin"], { stdin: lines.join("\n") + "\n" });
+}
+
+/**
+ * Pin a commit the completion agent recorded (the head it pushed to the pull request) as the
+ * ticket's diff: merge-base(base, commit)..commit, with no worktree snapshot. Works from the project
+ * repo, so it doesn't need the worktree, which the completion may be removing. Like pinChanges, an
+ * empty diff never replaces an existing pin. Returns the pin written, or null when nothing changed.
+ */
+export async function pinCommit(exec: Exec, opts: { repoPath: string; commit: string; branch: string; base?: string | null; ticketId: string }): Promise<Pin | null> {
+  const current = await readPin(exec, opts.repoPath, opts.ticketId);
+  const repo = await Repo.open(exec, opts.repoPath);
+  const head = await repo.revParse(opts.commit);
+  if (!head || (current?.head === head && !current.worktree)) return null;
+  const base = await resolveBase(repo, exec, opts.repoPath, opts.branch, opts.base);
+  const mb = base ? await repo.git(["merge-base", base, head]) : null;
+  const baseSha = mb?.code === 0 ? mb.stdout.trim() : null;
+  if (!baseSha) return null;
+  const [baseTree, headTree] = await Promise.all([repo.ok(["rev-parse", `${baseSha}^{tree}`]), repo.ok(["rev-parse", `${head}^{tree}`])]);
+  if (baseTree.trim() === headTree.trim()) return null;
+  const pin: Pin = { base: baseSha, head, worktree: null };
+  await writePin(repo, opts.ticketId, pin);
   return pin;
 }
 

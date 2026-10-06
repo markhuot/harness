@@ -241,6 +241,12 @@ export interface Ticket {
    */
   pullRequestUrl?: string | null;
   /**
+   * The commit that pull request's branch was pushed at, as the completion agent recorded it with
+   * record_pull_request. The git plugin pins it as the ticket's Changes (DESIGN.md "Pinned diffs").
+   * Cleared when the next completion is queued. Optional so older payloads type-check.
+   */
+  pullRequestHead?: string | null;
+  /**
    * Whether the ticket's worktree has anything to land: uncommitted changes, or commits its base
    * branch doesn't have. The service checks with git when the ticket moves to review and when it's
    * opened. false drops "merge" and "pr" from its completion choices (`completionOptions`); null
@@ -278,6 +284,11 @@ export interface Ticket {
   resumeAt?: number | null;
   /** True while any agent run for this ticket is queued or running */
   busy: boolean;
+  /**
+   * True while a complete run for this ticket is queued or running. Its agent may be merging,
+   * resolving conflicts or removing the worktree meanwhile. Optional so older payloads type-check.
+   */
+  completing?: boolean;
   /** A tool-permission request waiting on a human (claude-code driver). Ticket is blocked meanwhile. */
   pendingApproval: PendingApproval | null;
   /** Tools the human has allowed for every future call on this ticket ("Bash", "WebFetch", ...) */

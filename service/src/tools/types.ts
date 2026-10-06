@@ -324,8 +324,11 @@ export interface HarnessOps {
   /** `action`, with approve: how the child's work lands once it completes (DESIGN.md "Completion"). */
   reviewTicket(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string, action?: CompletionAction): Promise<Ticket>;
   completeTicket(ctx: ToolContext, key: string, instructions?: string, action?: CompletionAction): Promise<Ticket>;
-  /** record_pull_request: store the pull request a "pr" completion opened; refused in any other run. */
-  recordPullRequest(ctx: ToolContext, url: string): Promise<string>;
+  /**
+   * record_pull_request: store the pull request a "pr" completion opened and the commit it pushed
+   * (`head`, which becomes the ticket's pinned Changes); refused in any other run.
+   */
+  recordPullRequest(ctx: ToolContext, url: string, head: string): Promise<string>;
 
   // --- triage runs ---
   /**

@@ -201,12 +201,18 @@ export const reviewDecision = defineTool<{ decision: "approve" | "request_change
   },
 });
 
-export const recordPullRequest = defineTool<{ url: string }>({
+export const recordPullRequest = defineTool<{ url: string; head: string }>({
   name: "record_pull_request",
   description:
-    "Record the pull request this completion opened or updated, e.g. https://github.com/acme/web/pull/42. Only for completion runs that land the work as a pull request: the ticket moves to done only once one is recorded, and the board links to it.",
-  inputSchema: schema({ url: { type: "string", minLength: 1, description: "The pull request's link, as gh printed it." } }, ["url"]),
-  async run({ url }, ctx) {
-    return ctx.ops.recordPullRequest(ctx, url);
+    "Record the pull request this completion opened or updated, e.g. https://github.com/acme/web/pull/42, and the commit you pushed to it. Only for completion runs that land the work as a pull request: the ticket moves to done only once one is recorded, the board links to it, and the ticket's Changes tab shows that commit's diff from then on.",
+  inputSchema: schema(
+    {
+      url: { type: "string", minLength: 1, description: "The pull request's link, as gh printed it." },
+      head: { type: "string", minLength: 7, description: "The full hash of the commit you pushed, the pull request's head: `git rev-parse HEAD` in the worktree after the push." },
+    },
+    ["url", "head"],
+  ),
+  async run({ url, head }, ctx) {
+    return ctx.ops.recordPullRequest(ctx, url, head);
   },
 });

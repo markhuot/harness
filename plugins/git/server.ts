@@ -1,9 +1,10 @@
 // Git plugin server: /plugins/git/api/{changes,log,file}?ticket=KEY
 // While a ticket branch's worktree exists, every ticket event re-pins its diff as refs in the repo
-// (git.ts pinChanges). Once the worktree is gone, the routes and the tab read that pin instead.
+// (git.ts pinChanges), except during a completion run, when only the pull request head its agent
+// records is pinned (pinCommit). Once the worktree is gone, the routes and the tab read that pin.
 import { definePlugin, PluginHttpError, type PluginContext } from "@harness/plugin-sdk/server";
 import type { Project, Ticket } from "@harness/shared";
-import { commitLog, computeChanges, DEFAULT_MAX_PATCH_BYTES, fileContents, pinChanges, pinnedChanges, pinnedLog, readPin, unpinChanges, type Pin } from "./git";
+import { commitLog, computeChanges, DEFAULT_MAX_PATCH_BYTES, fileContents, pinChanges, pinCommit, pinnedChanges, pinnedLog, readPin, unpinChanges, type Pin } from "./git";
 
 /** `base`: the ticket's or project's base branch override (DESIGN.md "Branches"); null → git.ts resolveBase's fallbacks */
 type Target =
@@ -49,9 +50,18 @@ async function pin(ctx: PluginContext, ticket: Ticket) {
     while (state.again) {
       state.again = false;
       const found = ctx.getTicket(ticket.key);
+      const t = found?.ticket;
+      if (!found || !t?.branch) return;
+      const base = baseOverride(t, found.project);
+      // A completion run may be merging, resolving conflicts or removing the worktree, so its disk
+      // isn't the work: only the commit its agent recorded (the pull request's head) is pinned.
+      if (t.completing) {
+        if (t.pullRequestHead) await pinCommit(ctx.exec, { repoPath: found.project.path, commit: t.pullRequestHead, branch: t.branch, base, ticketId: t.id });
+        continue;
+      }
       const workdir = ctx.ticketWorkdir(ticket.key);
-      if (!found?.ticket.branch || !workdir || found.ticket.status === "done") return;
-      await pinChanges(ctx.exec, { workdir, branch: found.ticket.branch, projectPath: found.project.path, base: baseOverride(found.ticket, found.project), ticketId: found.ticket.id });
+      if (!workdir || t.status === "done") return;
+      await pinChanges(ctx.exec, { workdir, branch: t.branch, projectPath: found.project.path, base, ticketId: t.id });
     }
   } catch (err) {
     ctx.log.warn(`pinning ${ticket.key} failed: ${err instanceof Error ? err.message : err}`);

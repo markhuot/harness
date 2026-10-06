@@ -401,7 +401,7 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).toContain("gh auth status --hostname github.com");
     expect(text).toContain(`git -C ${worktree.workdir} push -u origin harness/nyt-3`);
     expect(text).toContain("gh pr create --repo github.com/nytimes/web --base main --head harness/nyt-3");
-    expect(text).toContain("`record_pull_request` { url }");
+    expect(text).toContain("`record_pull_request` { url, head }");
     expect(text).toContain(`worktree remove ${worktree.workdir}`);
     expect(text).toContain("keep `harness/nyt-3`: the pull request needs it");
     expect(text).toContain("never force-push");

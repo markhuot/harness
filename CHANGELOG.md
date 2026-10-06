@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A ticket completed with "Approve and open PR" no longer shows hundreds of deleted files in its
+  Changes tab. The tab had sometimes been saved while the worktree was being removed. It now shows
+  the commit the agent pushed to the pull request, and moves to the new push when you re-open the
+  ticket and open the PR again.
+
 ## [app-20261006.1130](https://github.com/markhuot/harness/releases/tag/app-20261006.1130) - 2026-10-06
 
 ### Changed

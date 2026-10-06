@@ -61,7 +61,7 @@ describe("tool catalogue", () => {
     expect(props("update_spec")).toEqual(["base_revision", "note", "spec", "title"]);
     expect(props("complete_ticket")).toEqual(["action", "instructions", "key"]);
     expect(props("review_ticket")).toEqual(["action", "decision", "key", "notes"]);
-    expect(props("record_pull_request")).toEqual(["url"]);
+    expect(props("record_pull_request")).toEqual(["head", "url"]);
     expect(props("list_tickets")).toEqual(["limit", "project_key", "scope", "status"]);
     expect(props("get_ticket")).toEqual(["include_transcript", "key"]);
     expect(props("search_tickets")).toEqual(["cursor", "limit", "project_key", "query"]);
