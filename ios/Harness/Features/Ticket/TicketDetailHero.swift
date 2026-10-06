@@ -107,14 +107,21 @@ struct TicketDetailHero: View {
             .foregroundStyle(c.text)
             .lineLimit(compact ? 1 : nil)
             .frame(maxWidth: .infinity, alignment: .leading)
+        // The whole header row takes the tap, its padding included, not just the text and chevron.
         return Button(action: toggle) {
             HStack(spacing: 8) {
                 text
                 Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
             }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, compact ? 10 : 5)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, -14)
+        .padding(.top, -10)
+        .padding(.bottom, compact ? -10 : -5)
         .accessibilityValue(expanded ? "Expanded" : "Collapsed")
         .accessibilityHint(expanded ? "Hides the ticket's status and actions" : "Shows the ticket's status and actions")
     }

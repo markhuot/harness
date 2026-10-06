@@ -1067,8 +1067,12 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   const heroShown = async () => (await labels(udid)).includes("Request changes");
   const stripY = async () => (await nodes(udid)).find((n) => n.AXLabel === "Transcript")?.frame.y ?? null;
   const title = (await ticketOf(key)).title || "Untitled";
-  // The hero's title comes before the Spec's first line in the tree, so it's the one tapped.
-  const expandHero = () => tapWhere(udid, (l) => l.startsWith(title.slice(0, 20)), { timeout: 3000 });
+  // A tap anywhere on the collapsed header expands it: tap its leading padding, beside the title
+  // text, rather than the title itself. (The title comes before the Spec's first line in the tree.)
+  const expandHero = async () => {
+    const el = await until("the hero's title", () => findElement(udid, (l) => l.startsWith(title.slice(0, 20))), 3000);
+    await axe("tap", "-x", "5", "-y", String(Math.round(el.frame.y + el.frame.height / 2)), "--udid", udid);
+  };
   await check("the hero collapses on scrolling the Spec and stays collapsed scrolling back", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=spec`);
     await until("the hero", async () => (await heroShown()) || null, 8000);
