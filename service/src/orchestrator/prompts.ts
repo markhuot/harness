@@ -367,8 +367,7 @@ function filesSection(info: PromptInfo, o: PromptOverrides | null | undefined): 
  * context size. Every run kind gets it; the edit rule only where the run changes files.
  */
 function turnsSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
-  const { editTool, writeTool } = fileTools(info.builtinTools ?? true);
-  return renderPrompt("system.turns", { canEdit: editsFiles(info.kind), editTool, writeTool }, o);
+  return renderPrompt("system.turns", { canEdit: editsFiles(info.kind) }, o);
 }
 
 /**

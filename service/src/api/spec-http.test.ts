@@ -106,7 +106,7 @@ describe("spec + Activity end to end (dummy driver)", () => {
     expect(reviews[1]!.prompt).toContain(`Round 1: changes requested at commit ${round1!.meta.commit}.`);
     expect(reviews[1]!.prompt).toContain(`git diff ${round1!.meta.commit}..HEAD`);
     // It names the approved baseline (rev 2) to read with read_spec, without inlining the diff.
-    expect(reviews[1]!.prompt).toContain("The human approved revision 2 by pressing Start; `read_spec` { revision: 2 }");
+    expect(reviews[1]!.prompt).toContain("The human approved revision 2; compare against it with `read_spec` { revision: 2 }");
 
     expect(events.filter((e) => e.kind === "spec.revised").map((e) => (e as { rev: number }).rev)).toEqual([2, 3, 4]);
     expect(events.some((e) => e.kind === "activity.added" && e.entry.kind === "review_approved")).toBe(true);

@@ -158,9 +158,9 @@ describe("systemPrompt tool references", () => {
       // only plan runs are pointed at update_spec for the first full spec
       expect(s!.includes("use it to write the first full spec")).toBe(kind === "plan");
       // the submit note is named only where the run can call submit_for_review
-      expect(s!.includes("and the note you submit with")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
+      expect(s!.includes("the submit note")).toBe(kind === "work" || kind === "conductor" || kind === "chat");
       // complete runs have no browser, so no save_to hint (and review has no image guidance at all)
-      expect(s!.includes("`save_to`")).toBe(kind !== "complete" && kind !== "review");
+      expect(s!.includes("save_to")).toBe(kind !== "complete" && kind !== "review");
       // read-only run kinds are told their save_to goes to the scratch folder
       expect(s!.includes("a relative path goes to this run's scratch folder")).toBe(kind === "plan");
     }
@@ -178,7 +178,7 @@ describe("systemPrompt tool references", () => {
     const section = /## Browser\n([\s\S]*?)(?=\n## |$)/.exec(sys("work", ticket(worktree)))?.[1] ?? "";
     const named = new Set([...section.matchAll(/`(browser_\w+)`/g)].map((m) => m[1]!));
     expect([...named].sort()).toEqual(browserTools.map((t) => t.name).sort());
-    expect(section).toContain("never with `sleep` in a shell");
+    expect(section).toContain("never `sleep` in a shell");
     expect(section).not.toContain(WAIT_CONDITION_DOC);
     expect(section).not.toContain(SCRIPT_API);
     // The detail the prompt no longer carries is in the tools' own descriptions, which tool_search returns.
@@ -221,20 +221,19 @@ describe("systemPrompt context and kind-specific rules", () => {
 
   test("work in a worktree commits on the ticket branch", () => {
     const text = sys("work", ticket(worktree));
-    expect(text).toContain("Commit your work to this branch");
+    expect(text).toContain("Commit in logical steps");
     expect(text).toContain("`harness/nyt-3`");
   });
 
   test("work without a worktree does not commit by default", () => {
     const text = sys("work");
-    expect(text).toContain("Do not commit");
-    expect(text).not.toContain("Commit your work to this branch");
+    expect(text).toContain("Don't commit");
+    expect(text).not.toContain("Commit in logical steps");
   });
 
-  test("plan and chat runs say the answer stays in the transcript, never Activity", () => {
+  test("plan and chat runs never send the answer to Activity", () => {
     expect(sys("plan", ticket({ status: "planning" }))).not.toContain("your last message goes there as your answer");
     const chat = sys("chat", ticket({ status: "blocked" }));
-    expect(chat).toContain("Their message is in the transcript, and so is your answer.");
     expect(chat).not.toContain("in the ticket's Activity");
   });
 
@@ -249,20 +248,21 @@ describe("systemPrompt context and kind-specific rules", () => {
 
   test("a chat about a blocked ticket names its question and says to unblock only when the message resolves it", () => {
     const text = sys("chat", ticket({ status: "blocked", blockedReason: "Which database?" }));
-    expect(text).toContain("The ticket is blocked on: Which database?");
-    expect(text).toContain("call `unblock` { note? } before you continue");
+    expect(text).toContain("It is blocked on: Which database?");
+    expect(text).toContain("call `unblock` { note? } before continuing");
     expect(text).toContain("answer it and leave the ticket blocked");
     expect(text).not.toContain("switch");
   });
 
   test("a chat about a review ticket submits again only when the work changed; a done one re-opens only to work", () => {
     const review = sys("chat", ticket({ status: "review" }));
-    expect(review).toContain("call `submit_for_review` { note, spec_is_up_to_date: true } again, which starts both reviews over");
+    expect(review).toContain("call `submit_for_review` { note, spec_is_up_to_date: true } again, which restarts both reviews");
+    expect(review).toContain("answering or investigating leaves it in review");
     expect(review).not.toContain("`unblock` { note? } before");
     const done = sys("chat", ticket({ status: "done" }));
-    expect(done).toContain("call `resume_work` { note? } first: it re-opens the ticket");
-    expect(done).toContain("A question answered or the work explained leaves the ticket done");
-    expect(done).not.toContain("starts both reviews over");
+    expect(done).toContain("call `resume_work` { note? }: it re-opens the ticket");
+    expect(done).toContain("Answering or explaining leaves it done");
+    expect(done).not.toContain("restarts both reviews");
     expect(done).not.toContain("Re-open button");
   });
 
@@ -289,7 +289,7 @@ describe("systemPrompt context and kind-specific rules", () => {
   test("review runs call review_decision exactly once and don't edit", () => {
     const text = sys("review", ticket(worktree));
     expect(text).toContain("`review_decision` exactly once");
-    expect(text).toContain("Do not modify files");
+    expect(text).toContain("Don't modify files");
     expect(text).toContain("`harness/nyt-3`");
   });
 
@@ -543,7 +543,7 @@ describe("systemPrompt file tools", () => {
       expect(fileToolsMentioned(sys(kind, t, { builtinTools: false }), WRITE_TOOLS.native)).toEqual(edits ? WRITE_TOOLS.native : []);
     }
     expect(sys("work")).toContain("never through Bash");
-    expect(sys("work")).toContain("even if other instructions say shell edits are fine");
+    expect(sys("work")).toContain("even if other instructions allow shell edits");
   });
 
   test("triage runs get no Files section", () => {
@@ -553,7 +553,7 @@ describe("systemPrompt file tools", () => {
 });
 
 describe("systemPrompt explore through a sub-agent", () => {
-  const RULE = "You MUST use a sub-agent";
+  const RULE = "You MUST explore the codebase through a sub-agent";
   const exploring: RunKind[] = ["plan", "work", "conductor", "chat"];
   const drivers = [
     { name: "claude-code", tool: new ClaudeCodeDriver({} as never).subagentTool, names: ["`Agent`", "`Explore`"] },
@@ -568,7 +568,7 @@ describe("systemPrompt explore through a sub-agent", () => {
         const files = text.split(/^## /m).find((s) => s.startsWith("Files\n")) ?? "";
         expect(files).toContain(RULE);
         for (const n of d.names) expect(files).toContain(n);
-        expect(files).toContain("only that line range");
+        expect(files).toContain("only that range");
       }
     });
     test(`${d.name}: review and complete runs get no explore rule`, () => {
@@ -595,15 +595,13 @@ describe("systemPrompt working efficiently", () => {
     test(`${kind} runs batch turns, run checks together, block on builds and downscale screenshots`, () => {
       const text = turns(kind);
       expect(text).toContain("in parallel");
-      expect(text).toContain("tests and the typecheck together in one command");
+      expect(text).toContain("tests and the typecheck in one command");
       expect(text).toContain("one blocking command");
       expect(text).toContain("sips -Z 800");
+      // The edit-tool rule lives once, in Files; this section only adds batching the edits.
       const edits = kind === "work" || kind === "complete" || kind === "chat";
-      expect(text.includes("`sed -i`")).toBe(edits);
-      if (edits) {
-        expect(text).toContain("`Edit` and `Write`");
-        expect(turns(kind, { builtinTools: false })).toContain("`edit_file` and `write_file`");
-      }
+      expect(text.includes("independent edits")).toBe(edits);
+      expect(text).not.toContain("`sed -i`");
     });
   }
 });
@@ -639,13 +637,13 @@ describe("systemPrompt file links", () => {
 describe("work-run conduct rules", () => {
   test("trivial or conversational requests are answered and submitted, not scaffolded", () => {
     const text = sys("work");
-    expect(text).toMatch(/conversational or trivially answerable/);
-    expect(text).toMatch(/answer it in text and call `submit_for_review` with your answer as the note and `spec_is_up_to_date` true/);
-    expect(text).toMatch(/Don't scaffold a project/);
+    expect(text).toMatch(/conversational or trivial/);
+    expect(text).toMatch(/answer it in text and call `submit_for_review` with the answer as the note and `spec_is_up_to_date` true/);
+    expect(text).toMatch(/Don't create files unless asked/);
   });
 
   test("questions go through block, never plain text", () => {
-    expect(sys("work")).toMatch(/Never end a run with a question to the human in plain text[^\n]*Call `block`/);
+    expect(sys("work")).toMatch(/Never end with a question in plain text[^\n]*call `block`/);
   });
 
   test("denied-pending-approval tool calls mean stop, for every run kind that can hit a prompt", () => {
@@ -661,7 +659,7 @@ describe("work-run conduct rules", () => {
   test("config changes are explained as human-approved, and only to runs that can make them", () => {
     for (const kind of ["work", "conductor"] as RunKind[]) {
       const text = sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket());
-      expect(text).toContain("A human approves every one of these calls");
+      expect(text).toContain("A human approves each call");
       expect(text).toContain("make exactly the same call again");
       expect(text).toContain("`create_watcher`");
     }
@@ -672,7 +670,7 @@ describe("work-run conduct rules", () => {
     for (const kind of ["plan", "review", "complete"] as RunKind[]) {
       const text = sys(kind);
       expect(text).toContain("## Harness configuration");
-      expect(text).not.toContain("A human approves every one of these calls");
+      expect(text).not.toContain("A human approves each call");
     }
   });
 });
@@ -736,12 +734,12 @@ describe("run prompts", () => {
 
   test("reviewPrompt points at the approved baseline revision instead of inlining a diff, or says the spec is unchanged", () => {
     const changed = reviewPrompt(ticket({ specRevision: 3 }), { ...firstReview, baselineRevision: 2 });
-    expect(changed).toContain("The human approved revision 2 by pressing Start; `read_spec` { revision: 2 } shows it, to compare against.");
+    expect(changed).toContain("The human approved revision 2; compare against it with `read_spec` { revision: 2 }.");
     expect(changed).not.toContain("```diff");
     expect(changed).not.toContain("## Spec changes");
     const same = reviewPrompt(ticket({ specRevision: 2 }), { ...firstReview, baselineRevision: 2 });
-    expect(same).toContain("The spec is still revision 2, as the human approved it by pressing Start.");
-    expect(same).not.toContain("{ revision: 2 } shows it");
+    expect(same).toContain("It is unchanged since the human approved it.");
+    expect(same).not.toContain("compare against it");
   });
 
   test("a re-review lists earlier rounds and diffs from the last reviewed commit", () => {

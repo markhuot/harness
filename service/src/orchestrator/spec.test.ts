@@ -301,14 +301,14 @@ describe("review runs", () => {
   test("the review prompt points at the approved baseline revision without inlining the spec's diff", async () => {
     const { h, t, reviews } = await reviewRounds({ edit: true });
     expect(h.fresh(t).specBaselineRevision).toBe(1);
-    expect(reviews[0]).toContain("The human approved revision 1 by pressing Start; `read_spec` { revision: 1 } shows it");
+    expect(reviews[0]).toContain("The human approved revision 1; compare against it with `read_spec` { revision: 1 }");
     expect(reviews[0]).not.toContain("+* Round 1");
     expect(reviews[1]).not.toContain("+* Round 2");
   });
 
   test("an untouched spec says it is still the approved revision", async () => {
     const { reviews } = await reviewRounds({ edit: false });
-    expect(reviews[0]).toContain("The spec is still revision 1, as the human approved it by pressing Start.");
+    expect(reviews[0]).toContain("It is unchanged since the human approved it.");
     expect(reviews[0]).not.toContain("```diff");
   });
 });

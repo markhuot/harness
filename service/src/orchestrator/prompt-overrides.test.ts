@@ -35,7 +35,7 @@ describe("renderPrompt precedence", () => {
 
   test("unset, null or an empty override is the built-in", () => {
     const builtin = renderPrompt("system.work", vars);
-    expect(builtin).toContain("on branch `harness/x`");
+    expect(builtin).toContain("on `harness/x`");
     expect(renderPrompt("system.work", vars, {})).toBe(builtin);
     expect(renderPrompt("system.work", vars, { "system.work": null })).toBe(builtin);
     expect(renderPrompt("system.work", vars, { "system.work": "" })).toBe(builtin);
@@ -209,7 +209,7 @@ describe("overrides reach runs", () => {
     h.orch.humanReview(t.key, { decision: "request_changes", notes: "again" });
     await h.orch.idle();
     const again = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
-    expect(again.systemPrompt).toContain("Do the work the ticket describes");
+    expect(again.systemPrompt).toContain("Do the ticket's work");
     expect(h.orch.publicSettings().prompts).toMatchObject({ "system.work": null, "run.work_start": expect.stringContaining("Start") });
   });
 
