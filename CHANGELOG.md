@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261006.1929](https://github.com/markhuot/harness/releases/tag/app-20261006.1929) - 2026-10-06
+
 ### Changed
 
 - On the Mac, closing, moving or popping out a pane gives its space to the board instead of
