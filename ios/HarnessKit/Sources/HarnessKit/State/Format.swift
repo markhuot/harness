@@ -107,6 +107,49 @@ public enum Format {
         return String(String.UnicodeScalarView(s[(i + 2)...]))
     }
 
+    /// The harness MCP server's dispatcher tool (`call_tool { name, input }`, CALL_TOOL_NAME).
+    public static let callToolName = "call_tool"
+
+    /// A tool call's name and input, as `unwrapToolCall` / `shownToolCall` return them.
+    public struct ToolCall: Codable, Sendable, Equatable {
+        public var name: String
+        public var input: JSONValue?
+        public init(name: String, input: JSONValue?) {
+            self.name = name
+            self.input = input
+        }
+    }
+
+    /// call_tool { name, input } → the inner tool's name and input; any other call as it is
+    /// (shared/src/toolCalls.ts `unwrapToolCall`). The MCP prefix is kept
+    /// (mcp__harness__call_tool → mcp__harness__browser_open). Missing or null input is {}, and a
+    /// string holding JSON is parsed. A call_tool call without a usable name is left as it is.
+    public static func unwrapToolCall(_ name: String, input: JSONValue?) -> ToolCall {
+        let short = shortToolName(name)
+        guard scalarsEqual(short, callToolName), case let .object(o)? = input else { return ToolCall(name: name, input: input) }
+        let inner = o["name"]?.stringValue.map(JSCompat.trim) ?? ""
+        guard !inner.isEmpty else { return ToolCall(name: name, input: input) }
+        let prefix = String(String.UnicodeScalarView(name.unicodeScalars.dropLast(short.unicodeScalars.count)))
+        var innerInput: JSONValue = switch o["input"] {
+        case nil, .null?: .object([:])
+        case let v?: v
+        }
+        if case let .string(s) = innerInput {
+            if JSCompat.trim(s).isEmpty {
+                innerInput = .object([:])
+            } else if let parsed = try? JSONDecoder().decode(JSONValue.self, from: Data(s.utf8)) {
+                innerInput = parsed
+            }
+        }
+        return ToolCall(name: prefix + inner, input: innerInput)
+    }
+
+    /// A tool call as a row or card shows it: the short name and the input, looking through call_tool.
+    public static func shownToolCall(_ name: String, input: JSONValue?) -> ToolCall {
+        let call = unwrapToolCall(name, input: input)
+        return ToolCall(name: shortToolName(call.name), input: call.input)
+    }
+
     public struct ShownInput: Codable, Sendable, Equatable {
         public var label: String
         public var value: String
@@ -129,11 +172,14 @@ public enum Format {
         }
     }
 
-    /// Pick the part of a tool input a human needs to judge an approval request.
+    /// Pick the part of a tool input a human needs to judge an approval request (call_tool: its
+    /// inner tool's).
     ///
     /// Deviation: a non-object input is shown as `JSON.stringify(input, null, 2)`, and objects nested
     /// in it print with sorted keys (JSONValue objects are unordered), where TS keeps insertion order.
-    public static func describeApprovalInput(_ toolName: String, input: JSONValue?) -> ApprovalInput {
+    public static func describeApprovalInput(_ rawToolName: String, input rawInput: JSONValue?) -> ApprovalInput {
+        let call = unwrapToolCall(rawToolName, input: rawInput)
+        let toolName = call.name, input = call.input
         guard case let .object(object)? = input else {
             let primary: ShownInput? = switch input {
             case nil, .null?: nil
@@ -261,12 +307,13 @@ public enum Format {
 
     static let previewKeys = ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "note", "expression", "text"]
 
-    /// One-line preview of a tool input, e.g. the bash command or file path.
+    /// One-line preview of a tool input, e.g. the bash command or file path (call_tool: its inner
+    /// tool's input).
     ///
     /// Deviation: with no preview field, an object prints as compact JSON with sorted keys (JSONValue
     /// objects are unordered), where TS keeps insertion order.
-    public static func toolPreview(_ name: String, input: JSONValue?) -> String {
-        switch input {
+    public static func toolPreview(_ name: String, input rawInput: JSONValue?) -> String {
+        switch unwrapToolCall(name, input: rawInput).input {
         case nil, .null?: return ""
         case let .object(o)?:
             for k in previewKeys {

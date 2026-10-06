@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { TranscriptEntry } from "../protocol";
 import { inlineTokens, parseBlocks, plainText } from "./markdown";
-import { describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, toPagePoint, toolPreview } from "./index";
+import { describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, shownToolCall, toPagePoint, toolPreview, unwrapToolCall } from "./index";
 
 test("fenced code keeps list- and heading-looking lines verbatim", () => {
   const blocks = parseBlocks("Intro\n```ts\n- not a list\n# not a heading\n```\n- real item");
@@ -149,6 +149,18 @@ test("toolPreview picks the meaningful field", () => {
   expect(toolPreview("browser_open", { url: "https://a" })).toBe("https://a");
   expect(toolPreview("x", {})).toBe("");
   expect(toolPreview("x", { n: 1 })).toBe('{"n":1}');
+});
+
+test("call_tool calls are shown and judged as the tool they run", () => {
+  const call = { name: "browser_open", input: { url: "https://a" } };
+  expect(unwrapToolCall("mcp__harness__call_tool", call)).toEqual({ name: "mcp__harness__browser_open", input: { url: "https://a" } });
+  expect(shownToolCall("mcp__harness__call_tool", call)).toEqual({ name: "browser_open", input: { url: "https://a" } });
+  expect(shownToolCall("call_tool", { name: "list_watchers" })).toEqual({ name: "list_watchers", input: {} });
+  expect(shownToolCall("call_tool", { name: "x", input: '{"a":1}' }).input).toEqual({ a: 1 });
+  expect(shownToolCall("call_tool", { name: " " })).toEqual({ name: "call_tool", input: { name: " " } });
+  expect(shownToolCall("mcp__harness__post_note", { note: "n" })).toEqual({ name: "post_note", input: { note: "n" } });
+  expect(toolPreview("call_tool", call)).toBe("https://a");
+  expect(describeApprovalInput("mcp__harness__call_tool", { name: "delete_ticket", input: { key: "A-1" } }).primary).toEqual({ label: "Ticket", value: "A-1", code: false });
 });
 
 

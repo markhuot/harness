@@ -453,6 +453,30 @@ describe("StreamJsonParser background tasks", () => {
     expect(p.finished).toBe(true);
   });
 
+  test("a finishing tool run through call_tool marks the run finished; other call_tool calls don't", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "y", name: "mcp__harness__call_tool", input: { name: "post_note", input: { note: "n" } } }] } });
+    expect(p.finished).toBe(false);
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "z", name: "mcp__harness__call_tool", input: { name: "submit_for_review", input: { note: "done" } } }] } });
+    expect(p.finished).toBe(true);
+  });
+
+  test("a classifier denial of a call_tool call is logged as the tool it ran", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "c1", name: "mcp__harness__call_tool", input: { name: "browser_open", input: { url: "https://x.test" } } }] } });
+    const evs = p.handle({
+      type: "user",
+      message: { content: [{ type: "tool_result", tool_use_id: "c1", is_error: true, content: "Permission for this action has been denied by the Claude Code auto mode classifier. Reason: [nope]. If you have other tasks" }] },
+    });
+    const perm = evs.find((e) => e.type === "permission") as Extract<DriverEvent, { type: "permission" }>;
+    expect(perm.log).toMatchObject({ tool: "browser_open", summary: expect.stringContaining("https://x.test") });
+    // The transcript and the denial keep the raw call, which is what the CLI grants match.
+    expect(evs.find((e) => e.type === "tool_result")).toMatchObject({ name: "call_tool" });
+    expect(evs.find((e) => e.type === "permission_denied")).toMatchObject({ toolName: "call_tool", input: { name: "browser_open" } });
+  });
+
   test("a second turn in the same process is charged only its own cost", () => {
     const p = new StreamJsonParser({ sessionId: "sess-1", costUsd: 1 }, { requested: "auto", mode: "auto" });
     const first = [{ ...init(), permissionMode: "default" }, success({ total_cost_usd: 1.5 })].flatMap((m) => p.handle(m));

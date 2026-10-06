@@ -131,7 +131,7 @@ private struct TicketDetailChildRow: View {
                 }
             }
             if let approval = child.pendingApproval {
-                Text("\(Image(icon: "lock")) Needs approval: \(Text(Format.shortToolName(approval.toolName)).font(.mono(13)))")
+                Text("\(Image(icon: "lock")) Needs approval: \(Text(Format.shownToolCall(approval.toolName, input: approval.input).name).font(.mono(13)))")
                     .font(.scaled(size: 13))
                     .foregroundStyle(c.amber)
             } else if child.status == .blocked {

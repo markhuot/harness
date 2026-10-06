@@ -4,7 +4,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
+import { unwrapToolCall, type CommandMatch, type DriverInfo, type ModelInfo, type PermissionMode, type Settings, type SubagentKind, type SubagentStatus, type ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
 import type { Driver, DriverEvent, RunGrants, RunImage, RunRequest } from "./types";
@@ -632,7 +632,8 @@ export class StreamJsonParser {
             const input = block.input ?? {};
             this.toolNames.set(callId, name);
             this.toolInputs.set(callId, input);
-            if (!subagentId && FINISHING_TOOLS.has(name)) this.finished = true;
+            // call_tool can run a finishing tool too (submit_for_review through the dispatcher).
+            if (!subagentId && FINISHING_TOOLS.has(unwrapToolCall(name, input).name)) this.finished = true;
             events.push({ type: "tool_call", callId, name, input, ...from });
             if (AGENT_TOOLS.has(name) && !this.subagents.has(callId)) {
               this.subagents.add(callId);
@@ -679,11 +680,12 @@ export class StreamJsonParser {
             const denied = CLASSIFIER_DENIAL.exec(text);
             if (denied) {
               const reason = denied[1]?.trim().replace(/\.$/, "") || "denied by Claude Code's auto mode classifier";
+              const shown = unwrapToolCall(name, this.toolInputs.get(callId));
               events.push({
                 type: "permission",
                 log: {
-                  tool: name,
-                  summary: summarizeInput(this.toolInputs.get(callId)),
+                  tool: shown.name,
+                  summary: summarizeInput(shown.input),
                   decision: "deny",
                   reason,
                   source: "classifier",

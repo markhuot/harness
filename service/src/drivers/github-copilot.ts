@@ -17,7 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DriverInfo, ModelInfo, PermissionMode, Settings, ToolResultContent } from "@harness/shared";
+import { unwrapToolCall, type DriverInfo, type ModelInfo, type PermissionMode, type Settings, type ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
 import { ModelListError, type Driver, type DriverEvent, type RunGrants, type RunRequest } from "./types";
 
@@ -309,9 +309,10 @@ export class CopilotJsonParser {
         if (data.error?.code === "denied") {
           const input = this.toolInputs.get(callId) ?? {};
           const reason = "not allowed by the ticket's permission mode";
+          const shown = unwrapToolCall(name, input);
           events.push({
             type: "permission",
-            log: { tool: name, summary: summarizeInput(input), decision: "deny", reason, source: "policy", backend: "github-copilot", mode: this.mode },
+            log: { tool: shown.name, summary: summarizeInput(shown.input), decision: "deny", reason, source: "policy", backend: "github-copilot", mode: this.mode },
           });
           events.push({ type: "permission_denied", callId, toolName: name, input, reason });
         }

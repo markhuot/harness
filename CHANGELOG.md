@@ -15,6 +15,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   instead of picking up the whole conversation from the work. A second chat on a finished ticket
   carries on from the first. Starting work on a planned ticket and completing a ticket also start
   the agent fresh, so they're quicker and use fewer tokens.
+- Tool calls the agent makes through the harness's tool search show their real names (browser_open,
+  create_ticket, …) and their own details in the transcript, on approval cards, on board cards and
+  in Activity, on the Mac and on iPhone and iPad, instead of "call_tool". Permission checks judge
+  them as the tool they run.
 
 ## [app-20261005.2151](https://github.com/markhuot/harness/releases/tag/app-20261005.2151) - 2026-10-05
 
