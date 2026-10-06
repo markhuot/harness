@@ -161,7 +161,7 @@ describe("anthropic-api driver", () => {
     expect(p.tools!.map((t: any) => t.name)).not.toContain("call_tool");
     const stub = p.tools!.find((t: any) => t.name === "list_tickets") as Anthropic.Tool;
     expect(stub.description).toBe("");
-    expect(JSON.stringify(stub.input_schema)).not.toContain('"description":"');
+    expect(stub.input_schema).toEqual({ type: "object" });
     const rd = p.tools!.find((t: any) => t.name === "review_decision") as Anthropic.Tool;
     expect(rd.input_schema).toEqual(req.tools.find((t) => t.name === "review_decision")!.inputSchema as any);
     expect(p.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Review it" }] }]);

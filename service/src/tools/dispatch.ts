@@ -121,10 +121,12 @@ function toolSearchTool(searchable: ToolDefinition[]): ToolDefinition<{ query?: 
  * - "schema": an empty description, the schema without descriptions
  * - "bare": an empty description, `{ "type": "object" }`
  * - "none": no description field at all, `{ "type": "object" }`
+ * "bare" is the default: the shortest stub every Copilot dry run passed with in HARNESS-307
+ * (a wrong first call is answered with the real schema and fixed in one step).
  */
 export const TOOL_STUB_VARIANTS = ["full", "line", "schema", "bare", "none"] as const;
 export type ToolStubVariant = (typeof TOOL_STUB_VARIANTS)[number];
-export const DEFAULT_TOOL_STUB_VARIANT: ToolStubVariant = "schema";
+export const DEFAULT_TOOL_STUB_VARIANT: ToolStubVariant = "bare";
 const STUB_LINE_MAX = 80;
 
 export function toolStubVariant(env: string | undefined = process.env.HARNESS_TOOL_STUBS): ToolStubVariant {

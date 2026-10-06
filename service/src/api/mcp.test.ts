@@ -194,8 +194,7 @@ describe("stubs and tool_search", () => {
       for (const real of rest) {
         const stub = listed.find((t) => t.name === real.name);
         expect(stub.description).toBe("");
-        expect(JSON.stringify(stub.inputSchema).length).toBeLessThan(JSON.stringify(real.inputSchema).length + 1);
-        expect(JSON.stringify(stub.inputSchema)).not.toContain('"description":"');
+        expect(stub.inputSchema).toEqual({ type: "object" });
       }
       expect(listed.map((t) => t.name)).not.toContain("call_tool");
     }
@@ -208,6 +207,11 @@ describe("stubs and tool_search", () => {
       const none = (await listFor("work")).find((t) => t.name === "browser_open");
       expect(none).not.toHaveProperty("description");
       expect(none.inputSchema).toEqual({ type: "object" });
+      process.env.HARNESS_TOOL_STUBS = "schema";
+      const schema = (await listFor("work")).find((t) => t.name === "browser_open");
+      expect(schema.description).toBe("");
+      expect(schema.inputSchema.properties).toHaveProperty("url");
+      expect(JSON.stringify(schema.inputSchema)).not.toContain('"description":"');
       process.env.HARNESS_TOOL_STUBS = "line";
       const line = (await listFor("work")).find((t) => t.name === "browser_open");
       expect(line.description.length).toBeGreaterThan(0);
