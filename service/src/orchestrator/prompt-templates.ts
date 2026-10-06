@@ -546,14 +546,14 @@ This session has its own Chrome browser, which the human can watch live in the a
     group: "run",
     label: "Agent review",
     description:
-      "Starts an agent review run once the work is submitted: the spec revision to read, its changes since the approved baseline, earlier rounds and recent Activity.",
+      "Starts an agent review run once the work is submitted: the spec revision to read, the approved baseline revision, earlier rounds and recent Activity.",
     variables: {
       ticket: TICKET,
       key: "The ticket's local key, what get_ticket takes",
       specEmpty: "True when the spec is empty, so the title is the whole spec",
       specRevision: "The spec's current revision number, the one the reviewer reads with read_spec",
       baselineRevision: "The revision the human approved by pressing Start, or empty when there is none",
-      baselineDiff: "A unified diff (in a diff code fence) from the approved baseline to the current spec, or empty when they're the same",
+      baselineChanged: "True when there is an approved baseline and the spec has changed since it",
       round: "The review round: 1 for the first agent review of this ticket",
       rereview: "True from round 2 on",
       earlierRounds: "Each earlier round's decision, the commit it reviewed and its notes, oldest first, or empty",
@@ -564,10 +564,7 @@ This session has its own Chrome browser, which the human can watch live in the a
 
 ## Spec (revision {{specRevision}})
 {{#if specEmpty}}The spec is empty; the title is the whole spec.{{else}}Read it first with \`read_spec\` { revision: {{specRevision}} }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.{{/if}}
-
-## Spec changes since the human approved it
-{{#if baselineDiff}}Revision {{baselineRevision}} is what the human approved by pressing Start:
-{{baselineDiff}}{{else if baselineRevision}}None: the spec is still revision {{baselineRevision}}, as the human approved it.{{else}}There is no approved baseline (the ticket started without planning), so judge the spec as written.{{/if}}{{#if rereview}}
+{{#if baselineChanged}}The human approved revision {{baselineRevision}} by pressing Start; \`read_spec\` { revision: {{baselineRevision}} } shows it, to compare against.{{else if baselineRevision}}The spec is still revision {{baselineRevision}}, as the human approved it by pressing Start.{{else}}There is no approved baseline (the ticket started without planning), so judge the spec as written.{{/if}}{{#if rereview}}
 
 ## Earlier review rounds
 {{earlierRounds}}

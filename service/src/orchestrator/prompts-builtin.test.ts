@@ -257,20 +257,19 @@ describe("built-in run prompts", () => {
     createdAt: 0,
   });
   test("reviewPrompt · round 1, no baseline", () => {
-    expect(reviewPrompt(ticket({ specBaselineRevision: null }), { round: 1, earlier: [], baselineRevision: null, baselineDiff: "", activity: [] })).toMatchSnapshot();
+    expect(reviewPrompt(ticket({ specBaselineRevision: null }), { round: 1, earlier: [], baselineRevision: null, activity: [] })).toMatchSnapshot();
   });
   test("reviewPrompt · round 1, spec untouched since the baseline", () => {
     expect(
-      reviewPrompt(ticket(), { round: 1, earlier: [], baselineRevision: 3, baselineDiff: "", activity: [entry("note", "Toggle wired up"), entry("submitted", "Toggle done; tests pass")] }),
+      reviewPrompt(ticket(), { round: 1, earlier: [], baselineRevision: 3, activity: [entry("note", "Toggle wired up"), entry("submitted", "Toggle done; tests pass")] }),
     ).toMatchSnapshot();
   });
-  test("reviewPrompt · round 2, with a baseline diff and earlier rounds", () => {
+  test("reviewPrompt · round 2, with a changed spec and earlier rounds", () => {
     expect(
       reviewPrompt(ticket(), {
         round: 2,
         earlier: [{ round: 1, decision: "request_changes", notes: "The toggle forgets its state.\nAlso the icon.", commit: "0123456789abcdef0123456789abcdef01234567" }],
         baselineRevision: 2,
-        baselineDiff: "--- spec rev 2\n+++ spec rev 3\n@@ -1,1 +1,1 @@\n-Status: not started\n+Status: done",
         activity: [entry("message", "Use localStorage"), entry("submitted", "Persisted the toggle")],
       }),
     ).toMatchSnapshot();

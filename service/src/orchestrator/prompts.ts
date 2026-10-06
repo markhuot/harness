@@ -67,8 +67,6 @@ export interface ReviewContext {
   earlier: { round: number; decision: "approve" | "request_changes"; notes: string; commit: string | null }[];
   /** The approved baseline revision (null: the ticket never went through Start) */
   baselineRevision: number | null;
-  /** Unified diff from the baseline to the current spec; "" when unchanged or there's no baseline */
-  baselineDiff: string;
   /** Activity since the last agent review (all of it on the first), oldest first */
   activity: ActivityEntry[];
 }
@@ -446,24 +444,24 @@ export function workStartPrompt(ticket: Ticket, overrides?: PromptOverrides | nu
 }
 
 /**
- * The review run's message: the spec revision to read, its changes since the approved baseline,
- * the earlier review rounds and the Activity since the last one. The spec itself isn't inlined:
- * revisions never change once written, so the revision number pins exactly what was submitted and
- * the reviewer reads it once with read_spec (instead of here and again in get_ticket). A re-review
+ * The review run's message: the spec revision to read, the approved baseline revision, the
+ * earlier review rounds and the Activity since the last one. Neither the spec nor its diff from the
+ * baseline is inlined: revisions never change once written, so the revision numbers pin exactly
+ * what was submitted and approved, and the reviewer reads them with read_spec. A re-review
  * (round 2 on) is told to look at what changed since the commit the last round reviewed.
  */
 export function reviewPrompt(ticket: Ticket, ctx: ReviewContext, overrides?: PromptOverrides | null): string {
   const last = ctx.earlier.at(-1);
-  const diffFence = fenceFor(ctx.baselineDiff);
+  const specRevision = ticket.specRevision ?? 1;
   return renderPrompt(
     "run.review",
     {
       ticket: ticketLabel(ticket),
       key: ticket.key,
       specEmpty: !ticket.spec.trim(),
-      specRevision: String(ticket.specRevision ?? 1),
+      specRevision: String(specRevision),
       baselineRevision: ctx.baselineRevision ? String(ctx.baselineRevision) : "",
-      baselineDiff: ctx.baselineDiff ? `${diffFence}diff\n${ctx.baselineDiff}\n${diffFence}` : "",
+      baselineChanged: !!ctx.baselineRevision && ctx.baselineRevision !== specRevision,
       round: String(ctx.round),
       rereview: ctx.earlier.length > 0,
       earlierRounds: ctx.earlier

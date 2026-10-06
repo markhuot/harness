@@ -1,6 +1,6 @@
 // The spec and Activity through the orchestrator (DESIGN.md "Spec revisions and attachments",
 // "Activity"): edit_spec's all-or-nothing errors against a human's concurrent edit, images in
-// update_spec, the submit flag, what review runs read (baseline diff, earlier rounds) and which
+// update_spec, the submit flag, what review runs read (baseline revision, earlier rounds) and which
 // tools they get, and which messages land in Activity.
 
 import { describe, expect, test } from "bun:test";
@@ -298,17 +298,17 @@ describe("review runs", () => {
     expect(approved.meta).toMatchObject({ by: "agent", round: 2 });
   });
 
-  test("the review prompt carries the spec's diff from the approved baseline", async () => {
+  test("the review prompt points at the approved baseline revision without inlining the spec's diff", async () => {
     const { h, t, reviews } = await reviewRounds({ edit: true });
     expect(h.fresh(t).specBaselineRevision).toBe(1);
-    expect(reviews[0]).toContain("Revision 1 is what the human approved by pressing Start:");
-    expect(reviews[0]).toContain("-* Not started\n+* Round 1");
-    expect(reviews[1]).toContain("-* Not started\n+* Round 2");
+    expect(reviews[0]).toContain("The human approved revision 1 by pressing Start; `read_spec` { revision: 1 } shows it");
+    expect(reviews[0]).not.toContain("+* Round 1");
+    expect(reviews[1]).not.toContain("+* Round 2");
   });
 
-  test("an untouched spec has no baseline diff", async () => {
+  test("an untouched spec says it is still the approved revision", async () => {
     const { reviews } = await reviewRounds({ edit: false });
-    expect(reviews[0]).toContain("None: the spec is still revision 1, as the human approved it.");
+    expect(reviews[0]).toContain("The spec is still revision 1, as the human approved it by pressing Start.");
     expect(reviews[0]).not.toContain("```diff");
   });
 });

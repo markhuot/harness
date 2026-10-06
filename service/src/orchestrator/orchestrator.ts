@@ -3974,21 +3974,18 @@ ${numberLines(r.body)}`;
 
   /**
    * What a review run reads (DESIGN.md "Agent review"): the round, the earlier rounds' notes and
-   * reviewed commits, the spec's diff from the approved baseline, and the Activity since the last
-   * review (all of it on the first).
+   * reviewed commits, the approved baseline revision, and the Activity since the last review (all
+   * of it on the first).
    */
   reviewContext(t: Ticket): prompts.ReviewContext {
     const activity = this.store.activity.listBySession(t.sessionId);
     const rounds = this.agentReviewRounds(t);
     const last = rounds.at(-1);
     const since = last ? activity.slice(activity.findIndex((e) => e.id === last.id) + 1) : activity;
-    const baseline = t.specBaselineRevision ? this.store.specs.get(t.id, t.specBaselineRevision) : null;
-    const current = t.specRevision ?? 1;
     return {
       round: rounds.length + 1,
       earlier: rounds.map((e) => ({ round: e.meta.round ?? 0, decision: e.kind === "review_approved" ? "approve" : "request_changes", notes: e.meta.detail ?? e.body, commit: e.meta.commit ?? null })),
-      baselineRevision: baseline?.rev ?? null,
-      baselineDiff: baseline ? unifiedDiff(baseline.body, t.spec, `spec rev ${baseline.rev} (approved baseline)`, `spec rev ${current} (current)`) : "",
+      baselineRevision: t.specBaselineRevision ?? null,
       activity: since.slice(-30),
     };
   }

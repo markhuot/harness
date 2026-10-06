@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Agent reviews start with a shorter prompt: instead of a copy of the spec's changes since you
+  approved it, the reviewer is told which revision you approved and reads it with `read_spec`. The
+  Agent review prompt template no longer has a `baselineDiff` variable; `baselineChanged` says
+  whether the spec changed since the approved revision.
+
 ## [app-20261006.0855](https://github.com/markhuot/harness/releases/tag/app-20261006.0855) - 2026-10-06
 
 ### Changed
