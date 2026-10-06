@@ -303,6 +303,17 @@ export function draftEditorKey(leafId: string, ticketId: string): string {
   return `draft:${s?.composeId && s.saved?.id === ticketId ? s.composeId : ticketId}`;
 }
 
+/**
+ * The draft pane `leafId` is editing, when it's draft `key`: the session's last save. The pane
+ * store re-renders before the app store has the save (the first one turns the New session into the
+ * draft's pane; a project change renames it), and without this the pane would show the ticket for
+ * that render, remounting the editor and dropping its focus.
+ */
+export function paneSavedDraft(leafId: string, key: string): Ticket | undefined {
+  const saved = sessions.get(leafId)?.saved;
+  return saved?.draft && saved.key.toUpperCase() === key.toUpperCase() ? saved : undefined;
+}
+
 /** The pane no longer shows the session's draft (closed, or showing something else): save what's waiting, and forget it. */
 export function releaseDraftSession(leafId: string, s: DraftSession, stillShown: boolean) {
   if (stillShown || sessions.get(leafId) !== s) return;

@@ -1606,6 +1606,13 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* Shown project picker | Task | Conductor; the source has them the other way round for Shift+Tab. */
+.draft-top > .project-picker {
+  order: -1;
+}
+.draft-top > .draft-kind {
+  order: 1;
+}
 .project-picker {
   display: flex;
   align-items: center;

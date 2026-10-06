@@ -15,6 +15,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   title on one line with a chevron that expands it to the status, badges and actions.
 - Board cards no longer show a PR tag on finished tickets, on the Mac or on iPhone and iPad. The
   pull request link is still on the ticket itself.
+- On the Mac, the New session pane's Task | Conductor switch is a single Tab stop: use the arrow
+  keys to pick Task or Conductor. Shift+Tab from the prompt now goes to the project picker first,
+  then to Task | Conductor; both stay where they were on screen.
+
+### Fixed
+
+- On the Mac, changing the project of a New session or draft from the keyboard keeps the focus on
+  the project picker, instead of reloading the pane and moving the focus to its title.
 
 ## [app-20261006.1929](https://github.com/markhuot/harness/releases/tag/app-20261006.1929) - 2026-10-06
 

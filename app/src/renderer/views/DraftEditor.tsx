@@ -4,7 +4,7 @@
 // keeping creates the draft and turns the New session pane into the draft's pane in place; the
 // editing session (state/draftSession.ts) outlives that swap, so nothing typed meanwhile is lost.
 //
-// Top to bottom: the project and Task | Conductor, the spec (it fills the pane), Options (the
+// Top to bottom: the project and Task | Conductor (a radio group: one tab stop, arrows pick), the spec (it fills the pane), Options (the
 // same TicketSettings rows as a ticket's Details, collapsed to a one-line summary), then Plan first
 // (⇧⌘↩) and Start session (⌘↩).
 
@@ -344,7 +344,44 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
       </div>
 
       <div className="draft-body">
+        {/* Task | Conductor comes first in the source but shows on the right (CSS order), so
+            Shift+Tab from the prompt reaches the project picker, then Task | Conductor. */}
         <div className="draft-top">
+          <div
+            className="segmented draft-kind"
+            role="radiogroup"
+            aria-label="Kind"
+            data-testid="draft-kind"
+            onKeyDown={(e) => {
+              // One tab stop: the arrows pick (and focus) the other kind, as a native radio group does.
+              const next = { ArrowLeft: "task", ArrowUp: "task", ArrowRight: "conductor", ArrowDown: "conductor" }[e.key];
+              if (!next || !session || e.metaKey || e.ctrlKey || e.altKey) return;
+              e.preventDefault();
+              if (session.local.kind !== next) session.edit({ kind: next as "task" | "conductor" });
+              e.currentTarget.querySelector<HTMLElement>(`[data-kind="${next}"]`)?.focus();
+            }}
+          >
+            {(["task", "conductor"] as const).map((k) => {
+              const on = (view?.kind === "conductor") === (k === "conductor");
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  data-kind={k}
+                  className={on ? "on" : ""}
+                  aria-checked={on}
+                  tabIndex={on ? 0 : -1}
+                  disabled={!session}
+                  onClick={() => session?.edit({ kind: k })}
+                  title={k === "conductor" ? "Orchestrates child tickets" : undefined}
+                >
+                  {k === "conductor" ? "Conductor" : "Task"}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grow" />
           <div className="project-picker">
             {project && <ProjectKey project={project} />}
             <select
@@ -365,15 +402,6 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
               ))}
               <option value={ADD_PROJECT}>Add project…</option>
             </select>
-          </div>
-          <div className="grow" />
-          <div className="segmented" role="group" aria-label="Kind">
-            <button className={view?.kind !== "conductor" ? "on" : ""} aria-pressed={view?.kind !== "conductor"} disabled={!session} onClick={() => session?.edit({ kind: "task" })}>
-              Task
-            </button>
-            <button className={view?.kind === "conductor" ? "on" : ""} aria-pressed={view?.kind === "conductor"} disabled={!session} onClick={() => session?.edit({ kind: "conductor" })} title="Orchestrates child tickets">
-              Conductor
-            </button>
           </div>
         </div>
 

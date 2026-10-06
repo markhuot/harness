@@ -39,7 +39,7 @@ import {
 } from "../state/panes";
 import { ticketByKey } from "@harness/shared/state";
 import { useStore } from "../state/store";
-import { draftEditorKey } from "../state/draftSession";
+import { draftEditorKey, paneSavedDraft } from "../state/draftSession";
 import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
 import { TerminalPane } from "../views/TerminalPane";
@@ -175,7 +175,7 @@ export function Pane({
   // New session it started as: the first save swaps the content to the ticket without remounting
   // the editor, so the prompt keeps the keyboard and what's typed after it.
   const { state } = useStore();
-  const draft = c.kind === "ticket" ? ticketByKey(state, c.ticketKey) : undefined;
+  const draft = c.kind === "ticket" ? ticketByKey(state, c.ticketKey) ?? paneSavedDraft(leaf.id, c.ticketKey) : undefined;
   return (
     <section
       className={`pane pane-${c.kind} ${rect.y === 0 || zoomed ? "pane-top" : ""} ${focused ? "focused" : ""} ${active ? "active" : ""} ${corner ? "pane-corner" : ""} ${zoomed ? "zoomed" : ""} ${hidden ? "covered" : ""}`}
