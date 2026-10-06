@@ -9,7 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RunKind } from "@harness/shared";
+import { unwrapToolCall, type RunKind } from "@harness/shared";
 import type { AutoModeRules } from "./rules";
 
 export type ClassifierVerdict = "allow" | "soft_deny" | "hard_deny";
@@ -84,11 +84,13 @@ ${bullets(rules.hard_deny)}
 
 Answer with JSON only: {"decision": "allow" | "soft_deny" | "hard_deny", "reason": "<one short sentence naming what the action does and why>"}.`;
 
+  // A call through the harness's call_tool dispatcher is judged as the tool it runs.
+  const call = unwrapToolCall(req.tool, req.input);
   let input: string;
   try {
-    input = typeof req.input === "string" ? req.input : JSON.stringify(req.input, null, 2);
+    input = typeof call.input === "string" ? call.input : JSON.stringify(call.input, null, 2);
   } catch {
-    input = String(req.input);
+    input = String(call.input);
   }
   const lines = [
     `Working directory: ${req.cwd}`,
@@ -98,7 +100,7 @@ Answer with JSON only: {"decision": "allow" | "soft_deny" | "hard_deny", "reason
   if (req.ticket?.spec.trim()) lines.push("", "Ticket spec:", "<<<", clip(req.ticket.spec.trim(), MAX_SPEC), ">>>");
   lines.push("", "Recent transcript (oldest first):");
   lines.push(...(req.transcript.length ? req.transcript.map((l) => clip(l, MAX_LINE)) : ["(empty)"]));
-  lines.push("", "Proposed tool call:", `tool: ${req.tool}`, "input:", clip(input, MAX_INPUT));
+  lines.push("", "Proposed tool call:", `tool: ${call.name}`, "input:", clip(input, MAX_INPUT));
   return { system, user: lines.join("\n") };
 }
 
