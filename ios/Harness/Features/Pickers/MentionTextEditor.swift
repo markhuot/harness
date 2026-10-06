@@ -98,6 +98,7 @@ struct MentionTextEditor: View {
             }),
             selection: $selection,
             focused: $focused,
+            shown: current,
             revision: revision,
             placeholder: placeholder,
             placeholderColor: placeholderColor,
@@ -195,10 +196,15 @@ struct MentionTextEditor: View {
 /// MentionTextEditor's text field. Equatable on everything but its bindings, so a parent redrawing
 /// with the same look leaves the text view alone (see MentionTextEditor); `revision` redraws it when
 /// the editor hands it a text or selection it didn't type.
+///
+/// `shown` (the editor's buffer) redraws it after typing too. TextField keeps the text it was last
+/// drawn with and writes it back over the field when the caret moves, so a field left undrawn since
+/// it was empty would empty itself on the first tap that moves the caret.
 private struct MentionField: View, Equatable {
     let text: Binding<String>
     let selection: Binding<TextSelection?>
     let focused: FocusState<Bool>.Binding
+    let shown: String
     let revision: Int
     let placeholder: String
     let placeholderColor: Color?
@@ -213,7 +219,7 @@ private struct MentionField: View, Equatable {
     @Environment(\.palette) private var c
 
     nonisolated static func == (a: MentionField, b: MentionField) -> Bool {
-        a.revision == b.revision && a.placeholder == b.placeholder && a.placeholderColor == b.placeholderColor
+        a.revision == b.revision && a.shown.unicodeScalars.elementsEqual(b.shown.unicodeScalars) && a.placeholder == b.placeholder && a.placeholderColor == b.placeholderColor
             && a.minHeight == b.minHeight && a.maxLines == b.maxLines && a.boxed == b.boxed && a.fieldBox == b.fieldBox
             && a.fieldLabel == b.fieldLabel && a.autofocus == b.autofocus && a.focusRequest == b.focusRequest
     }

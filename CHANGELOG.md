@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, tapping to move the cursor in New session's prompt or a ticket's message
+  field no longer erases what you've typed.
+
 ## [app-20261006.0855](https://github.com/markhuot/harness/releases/tag/app-20261006.0855) - 2026-10-06
 
 ### Changed

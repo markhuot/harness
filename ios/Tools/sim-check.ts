@@ -1356,6 +1356,22 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
     return `"${d.text}" from ${origin}`;
   });
 
+  await check("composer: moving the caret keeps what's typed", async () => {
+    const el = await until("the composer", () => findElement(udid, (l) => l.startsWith("Message the agent")), 4000);
+    const y = String(Math.round(el.frame.y + el.frame.height / 2));
+    // Near the start of the text, then back near its end: each tap only moves the caret.
+    for (const x of [el.frame.x + 22, el.frame.x + el.frame.width / 2]) {
+      await axe("tap", "-x", String(Math.round(x)), "-y", y, "--udid", udid);
+      await Bun.sleep(700);
+      const shown = await field();
+      if (shown.toLowerCase() !== "started on the phone") throw new Error(`after moving the caret the field shows ${JSON.stringify(shown)}`);
+    }
+    await Bun.sleep(1200);
+    const d = await saved();
+    if (d?.text.toLowerCase() !== "started on the phone") throw new Error(`the draft is ${JSON.stringify(d)}`);
+    return "kept";
+  });
+
   await check("composer: another device's draft waits while the field is being typed in", async () => {
     await fromMac("Finished on the Mac");
     await Bun.sleep(1200);
