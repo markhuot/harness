@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261006.0931](https://github.com/markhuot/harness/releases/tag/app-20261006.0931) - 2026-10-06
+
 ### Changed
 
 - Agent reviews start with a shorter prompt: instead of a copy of the spec's changes since you
