@@ -372,6 +372,62 @@ describe("cleanup completions", () => {
     expect(h.get(t).status).toBe("done");
     expect(await h.git("branch", "--list", "harness/web-1")).toBe("");
   });
+
+  test("a ticket with a pull request open cleans up by default: it pushes the branch and records the pushed head", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    const url = "https://github.com/acme/web/pull/1";
+    h.store.tickets.update(t.id, { pullRequestUrl: url });
+    let recorded = "";
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      const head = (await runGit(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
+      recorded = await req.toolContext.ops.recordPullRequest(req.toolContext, url, head);
+      await h.git("worktree", "remove", req.toolContext.ticket!.workdir!);
+      await h.git("branch", "-D", "harness/web-1");
+    };
+    const head = await h.git("rev-parse", "harness/web-1");
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    const run = h.completes()[0]!;
+    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup", pullRequestUrl: url, pullRequestHead: head });
+    expect(recorded).toContain(url);
+    expect(run.systemPrompt).toContain("## This run: completion (clean up)");
+    expect(run.systemPrompt).toContain("push -u origin harness/web-1`");
+    expect(run.systemPrompt).toContain(`record_pull_request\` { url: "${url}", head }`);
+    expect(run.prompt).toContain("Push `harness/web-1` to origin");
+  });
+
+  test("without a remote a cleanup has nothing to push to, and record_pull_request stays refused without a pull request", async () => {
+    const h = await setup({ remote: null });
+    const t = await h.inReview();
+    let refused = "";
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      await req.toolContext.ops.recordPullRequest(req.toolContext, "https://github.com/acme/web/pull/9", "0123456789abcdef0123456789abcdef01234567").catch((err: Error) => (refused = err.message));
+    };
+    h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
+    await h.orch.idle();
+    const run = h.completes()[0]!;
+    expect(run.systemPrompt).not.toContain("push -u");
+    expect(run.prompt).toContain("there is nothing to merge or push");
+    expect(refused).toContain("only for completion runs that open a pull request");
+  });
+
+  test("re-opening a done ticket forgets the landing it chose, so a ticket with a pull request then preselects clean up", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    h.orch.humanReview(t.key, { decision: "approve", action: "pr", instructions: "Label it design." });
+    await h.orch.idle();
+    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "pr", pullRequestUrl: expect.stringContaining("/pull/") });
+    await h.orch.reopenTicket(t.key, { notes: "Address the review comments" });
+    await h.orch.idle();
+    expect(h.get(t)).toMatchObject({ status: "review", completionAction: null, completionInstructions: null });
+    h.driver.script = async function* () {};
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.completes()[1]!.systemPrompt).toContain("## This run: completion (clean up)");
+  });
 });
 
 describe("Approve and take no action", () => {

@@ -115,7 +115,7 @@ struct CompletionTests {
         opened.pullRequestUrl = .value("https://github.com/o/r/pull/1")
         var mergeProject = project
         mergeProject.completionAction = .merge
-        #expect(Completion.completionOptions(ticket: opened, project: mergeProject).defaultAction == .pr)
+        #expect(Completion.completionOptions(ticket: opened, project: mergeProject).defaultAction == .cleanup)
         // A ticket with no branch of its own (it worked in the project checkout) drops merge and pr.
         #expect(Completion.completionOptions(ticket: child, project: project) == Completion.Options(actions: [.cleanup, .custom], defaultAction: .cleanup))
         // A ticket whose branch is its effective base (here the settings' default) drops merge and pr.

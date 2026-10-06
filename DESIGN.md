@@ -631,7 +631,7 @@ How an approved ticket's work lands is chosen per approval (`CompletionAction`, 
 | --- | --- | --- |
 | `merge` ("Approve and merge") | `system.complete_merge`, `run.complete_merge` | Merges the ticket branch into the base branch by name, from wherever the base is checked out (`git worktree list`): merge there when a worktree has it; when none does, fast-forward it with `git fetch . <branch>:<base>` or merge in a temporary worktree. When the ticket branch is the base branch there is nothing to merge. Only what the harness made is removed: the worktree when it's inside `worktrees/`, the branch when it is `harness/<key>`, deleted from the worktree that has the base checked out (`branch -d` checks against what's checked out where it runs). A harness worktree left behind by `update_branch` is removed only once its commits are merged. |
 | `pr` ("Approve and open PR") | `system.complete_pr`, `run.complete_pr` | Commits leftovers, checks `gh auth status --hostname <host>`, pushes the branch (`git push -u <remote> <branch>`, never forced), then updates the open pull request for the branch (a comment on what changed) or opens one with `gh pr create --repo <host>/<owner>/<repo> --base <base>`, ready for review, following the repo's PR template. It calls `record_pull_request { url, head }` with the commit it pushed, removes the harness worktree and keeps the branch. It never merges: the pull request is the end of the ticket, and teammates review and merge it on GitHub. |
-| `cleanup` ("Approve and clean up") | `system.complete_cleanup`, `run.complete_cleanup` | For work that already landed or never needed git: a ticket on an existing pull request's head branch that pushed there itself, a branch merged by hand, or an empty worktree after a database or config change. It merges, pushes and opens nothing. It stops if the worktree has uncommitted changes or the branch has commits on no remote branch (and, off the base, not in the base branch); otherwise it removes the harness worktree and deletes `harness/<key>` with `branch -D` (the check already proved its commits are safe; `-d` refuses commits that are only on a remote). A branch the harness didn't create is kept. Afterwards the service checks: while the harness worktree or `harness/<key>` is still there, the ticket moves to `blocked` ("Cleanup didn't finish") instead of done, so the human can deal with the commits. |
+| `cleanup` ("Approve and clean up") | `system.complete_cleanup`, `run.complete_cleanup` | For work that lives on its branch rather than being merged here: a ticket with a pull request open (its own, or one on an existing pull request's head branch it works on), a branch merged by hand, or an empty worktree after a database or config change. It merges and opens nothing. When the repo has a remote (`origin`, or the only one: `pushRemote` in `store/remotes.ts`), it first pushes the branch if it has work to keep, meaning commits the base branch doesn't have (off the base) or a copy on that remote already (`git push -u <remote> <branch>`, never forced); for a ticket with a `pullRequestUrl` that push updates the pull request, and it calls `record_pull_request` with the pushed commit. It then stops if the worktree has uncommitted changes or the branch has commits on no remote branch (and, off the base, not in the base branch); otherwise it removes the harness worktree and deletes `harness/<key>` with `branch -D` (the check already proved its commits are safe; `-d` refuses commits that are only on a remote). A branch the harness didn't create is kept. Afterwards the service checks: while the harness worktree or `harness/<key>` is still there, the ticket moves to `blocked` ("Cleanup didn't finish") instead of done, so the human can deal with the commits. |
 | `custom` ("Approve and…") | `system.complete_custom`, `run.complete_custom` | Commits leftovers, then does what the approver's instructions say, merging, pushing or deleting nothing they don't ask for. With no instructions (the plain "Approve" of a folder outside git) it's a light wrap-up. |
 
 **What a project offers** (`Project.completionActions`, worked out on every read like `isGit`):
@@ -662,9 +662,12 @@ pull request from (`nothingToLand`): the ticket's branch is its effective base b
 (`worksOnBase`; triage makes such tickets with `dispatch_ticket { branch, base_branch }` for work
 on an existing pull request's branch), it has no branch of its own (`hasNoBranch`: `branch` is
 null, it ran in the project checkout), or its worktree has no changes (`Ticket.hasChanges` false).
-It preselects the ticket's earlier choice, then `pr` for a ticket that already has a
-`pullRequestUrl` (a re-approval updates the same pull request), then the project default, then the
-first action left (so such a ticket preselects `cleanup`). The apps pass the base branch they resolve (`resolveBaseBranch`); the
+It preselects the ticket's earlier choice, then `cleanup` for a ticket that already has a
+`pullRequestUrl` (the cleanup pushes the branch, which updates the same pull request), then the
+project default, then the first action left (so a ticket with nothing to land preselects
+`cleanup`). The choice is spent once the ticket is done: moving a done ticket anywhere else
+(re-open, a message, `resume_work`) clears `completionAction` and `completionInstructions`, so the
+next approval starts from these defaults rather than the last landing. The apps pass the base branch they resolve (`resolveBaseBranch`); the
 service passes its own, which can also fall back to the main checkout's branch. An action the
 ticket doesn't offer is a 400. `enqueueComplete` writes the resolved action back to the
 ticket, so the run's system prompt and first message agree.
@@ -679,13 +682,13 @@ own, before the first check, and when git can't say (the worktree is gone, a bra
 and null changes nothing.
 
 **Pull requests.** `record_pull_request` (complete runs only; refused unless the completion is a
-`pr` one) sets `Ticket.pullRequestUrl`, which the apps link to, and `Ticket.pullRequestHead`: the
+`pr` one, or a `cleanup` of a ticket that has a `pullRequestUrl`) sets `Ticket.pullRequestUrl`, which the apps link to, and `Ticket.pullRequestHead`: the
 `head` the agent pushed, which must be a hash (not a ref) of a commit the repo has and is stored in
 full. The git plugin pins that commit as the ticket's Changes ("Pinned diffs"). Queueing a
 completion clears the head, so each completion records its own. A `pr` complete run that ends
 without recording one blocks the ticket ("Completion ended without opening a pull request")
 instead of moving it to done. After a re-open, `run.reopen` points the agent at the pull request's
-review comments, and the next `pr` completion pushes to the same branch and updates it. The
+review comments, and the next approval preselects `cleanup`, which pushes to the same branch and so updates it (a `pr` completion does too, and comments on what changed). The
 harness doesn't follow the pull request after that: review and merge happen on GitHub.
 
 **Approve and take no action** is `POST /complete { skipAgent: true }`, the same as Mark done: no
@@ -832,7 +835,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
-| `record_pull_request` | complete | `{ url, head }`: the pull request a `pr` completion opened or updated (`Ticket.pullRequestUrl`) and the hash of the commit it pushed (`Ticket.pullRequestHead`, pinned as the ticket's Changes); refused in any other completion |
+| `record_pull_request` | complete | `{ url, head }`: the pull request a `pr` completion opened or updated, or a `cleanup` of a ticket with a pull request pushed to (`Ticket.pullRequestUrl`), and the hash of the commit it pushed (`Ticket.pullRequestHead`, pinned as the ticket's Changes); refused in any other completion |
 | `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, spec, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |

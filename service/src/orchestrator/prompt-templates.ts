@@ -218,7 +218,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
   "system.complete_cleanup": {
     group: "system",
     label: "Completion run instructions: clean up",
-    description: "Completion runs approved with \"Approve and clean up\": the work already landed, so remove the ticket's worktree and branch without merging or pushing.",
+    description: "Completion runs approved with \"Approve and clean up\": push the ticket's branch when it has work to keep (updating its pull request, if it has one), then remove the ticket's worktree and branch without merging.",
     variables: {
       branch: BRANCH,
       baseBranch: BASE,
@@ -232,13 +232,16 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
       leftoverPath: "An earlier harness worktree of this ticket still on disk after it moved branches, or empty",
       leftoverBranch: "That leftover worktree's branch, or empty",
       leftoverIsHarness: "True when the leftover worktree's branch is the harness's own",
+      remoteName: "The git remote the branch is pushed to (origin, or the only remote), or empty when the repo has none",
+      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
     },
     template: `## This run: completion (clean up)
-{{#if branch}}The ticket was approved to clean up: its work has already landed{{#if onBase}} on \`{{branch}}\`, which is its base branch{{else}} (pushed, or merged by hand){{/if}}. Don't merge, push, or open a pull request. Remove only what the harness made for the ticket, and only when nothing would be lost:
+{{#if branch}}The ticket was approved to clean up: {{#if onBase}}its work is on \`{{branch}}\`, which is its base branch{{else}}its work has landed (merged by hand) or lives on its branch{{/if}}{{#if pullRequestUrl}}, and it has the pull request {{pullRequestUrl}}{{/if}}. Don't merge or open a pull request. {{#if remoteName}}Make sure the branch is pushed, then remove{{else}}Remove{{/if}} only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree ({{#if workdir}}{{workdir}}{{else}}the working directory{{/if}}), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and list the changes in \`post_note\`.
-2. Fetch (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} fetch --all --prune\`), then list the commits that would be lost: \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} log --oneline {{branch}} --not --remotes{{#if onBase}}{{else}} {{baseBranch}}{{/if}}\`{{#if onBase}} (commits on no remote branch){{else}} (commits on no remote branch and not in \`{{baseBranch}}\`){{/if}}. If it lists any, stop here: leave the worktree and branch in place, and list those commits in \`post_note\`.
-3. {{#if ownsWorktree}}Remove the worktree: \`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`.{{else}}Leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it.{{/if}}
-4. {{#if isHarnessBranch}}Delete \`{{branch}}\`: \`git -C {{mainCheckout}} branch -D {{branch}}\`. Step 2 checked that its commits are safe; \`-d\` would refuse a branch whose commits are only on a remote.{{else}}Keep \`{{branch}}\`: the harness didn't create it{{#if onBase}}, and it is the base branch{{/if}}.{{/if}}{{#if leftoverPath}}
+{{#if remoteName}}2. Push \`{{branch}}\` when it has work to keep: when {{#if onBase}}{{else}}it has commits that \`{{baseBranch}}\` doesn't (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} log --oneline {{baseBranch}}..{{branch}}\`), or when {{/if}}{{remoteName}} already has it (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} ls-remote --heads {{remoteName}} {{branch}}\`); otherwise there is nothing to push. Push with \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} push -u {{remoteName}} {{branch}}\`. If the push is rejected because \`{{remoteName}}/{{branch}}\` has commits you don't, fetch and merge them, then push again. Never force-push.{{#if pullRequestUrl}} The push updates the pull request {{pullRequestUrl}}: call \`record_pull_request\` { url: "{{pullRequestUrl}}", head } with the full hash of the commit you pushed (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} rev-parse HEAD\`), so the ticket's Changes keep showing it.{{/if}}
+3.{{else}}2.{{/if}} Fetch (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} fetch --all --prune\`), then list the commits that would be lost: \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} log --oneline {{branch}} --not --remotes{{#if onBase}}{{else}} {{baseBranch}}{{/if}}\`{{#if onBase}} (commits on no remote branch){{else}} (commits on no remote branch and not in \`{{baseBranch}}\`){{/if}}. If it lists any, stop here: leave the worktree and branch in place, and list those commits in \`post_note\`.
+{{#if remoteName}}4.{{else}}3.{{/if}} {{#if ownsWorktree}}Remove the worktree: \`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`.{{else}}Leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it.{{/if}}
+{{#if remoteName}}5.{{else}}4.{{/if}} {{#if isHarnessBranch}}Delete \`{{branch}}\`: \`git -C {{mainCheckout}} branch -D {{branch}}\`. The check above proved its commits are safe; \`-d\` would refuse a branch whose commits are only on a remote.{{else}}Keep \`{{branch}}\`: the harness didn't create it{{#if onBase}}, and it is the base branch{{/if}}.{{/if}}{{#if leftoverPath}}
 
 An earlier harness worktree of this ticket is still at {{leftoverPath}}{{#if leftoverBranch}} (branch \`{{leftoverBranch}}\`){{/if}}, left behind when the ticket moved to \`{{branch}}\`. Clean it up the same way: when it has no uncommitted changes and no commits that would be lost, remove it (\`git -C {{mainCheckout}} worktree remove {{leftoverPath}}\`{{#if leftoverIsHarness}} and \`git -C {{mainCheckout}} branch -D {{leftoverBranch}}\`{{/if}}); otherwise leave it and say so.{{/if}}
 
@@ -620,11 +623,13 @@ When you are finished, call \`post_note\` with what you did.`,
       onBase: ON_BASE,
       ownsWorktree: "True when the harness created the ticket's worktree, so the completion removes it",
       isHarnessBranch: "True when the ticket's branch is the harness's own (so it is deleted)",
+      remoteName: "The git remote the branch is pushed to (origin, or the only remote), or empty when the repo has none",
+      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
       instructions: INSTRUCTIONS,
     },
-    template: `{{ticket}} is approved to clean up: its work has already landed, so there is nothing to merge or push.
+    template: `{{ticket}} is approved to clean up: {{#if remoteName}}push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.{{else}}its work has already landed, so there is nothing to merge or push.{{/if}}
 
-{{#if branch}}Check that nothing on \`{{branch}}\` would be lost: no uncommitted changes, and no commits missing from every remote branch{{#if onBase}}{{else}} and from \`{{baseBranch}}\`{{/if}}. Then {{#if ownsWorktree}}remove the worktree{{else}}leave the worktree in place: the harness didn't create it{{/if}}, and {{#if isHarnessBranch}}delete \`{{branch}}\`{{else}}keep \`{{branch}}\`: the harness didn't create it{{/if}}. If something would be lost, leave everything in place and list it.{{else}}There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.{{/if}}{{#if instructions}}
+{{#if branch}}{{#if remoteName}}Push \`{{branch}}\` to {{remoteName}} when {{#if onBase}}{{else}}it has commits \`{{baseBranch}}\` doesn't, or when {{/if}}{{remoteName}} already has it{{#if pullRequestUrl}} (it updates the pull request {{pullRequestUrl}}: call \`record_pull_request\` with its link and the commit you pushed){{/if}}; never force-push. {{/if}}Check that nothing on \`{{branch}}\` would be lost: no uncommitted changes, and no commits missing from every remote branch{{#if onBase}}{{else}} and from \`{{baseBranch}}\`{{/if}}. Then {{#if ownsWorktree}}remove the worktree{{else}}leave the worktree in place: the harness didn't create it{{/if}}, and {{#if isHarnessBranch}}delete \`{{branch}}\`{{else}}keep \`{{branch}}\`: the harness didn't create it{{/if}}. If something would be lost, leave everything in place and list it.{{else}}There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.{{/if}}{{#if instructions}}
 
 ## Instructions from the human
 {{instructions}}{{/if}}

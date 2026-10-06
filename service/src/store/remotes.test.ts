@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
-import { ghHosts, parseRemotes, parseRemoteUrl, pickRemote, pullRequestTarget } from "./remotes";
+import { ghHosts, parseRemotes, parseRemoteUrl, pickRemote, pullRequestTarget, pushRemote } from "./remotes";
 
 describe("remote URLs", () => {
   test("https, ssh and scp forms give host and owner/repo; local paths give nothing", () => {
@@ -83,5 +83,13 @@ describe("pullRequestTarget", () => {
     const wt = tempDir("harness-wt-");
     writeFileSync(join(wt, ".git"), `gitdir: ${wtGit}\n`);
     expect(pullRequestTarget(join(wt), env)?.repo).toBe("github.com/acme/web");
+  });
+
+  test("pushRemote: origin, else the only remote, on any host and without gh; null without one or outside git", () => {
+    expect(pushRemote(repo(origin("https://gitlab.com/acme/web.git")))).toBe("origin");
+    expect(pushRemote(repo(`[remote "upstream"]\n\turl = /Users/me/bare.git\n`))).toBe("upstream");
+    expect(pushRemote(repo(`[remote "a"]\n\turl = x:a/b\n[remote "b"]\n\turl = x:c/d\n`))).toBeNull();
+    expect(pushRemote(repo("[core]\n\tbare = false\n"))).toBeNull();
+    expect(pushRemote(tempDir("harness-plain-"))).toBeNull();
   });
 });

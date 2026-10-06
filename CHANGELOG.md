@@ -14,6 +14,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - After a review or a re-open, agents rewrite the ticket's spec to describe where the work stands,
   instead of adding a section per review round with commit hashes. The spec's revision history
   still shows what changed between rounds.
+- Approving a ticket that already has a pull request open now preselects "Approve and clean up"
+  instead of "Approve and open PR". Clean up pushes the branch, which updates the pull request,
+  then removes the worktree.
+- "Approve and clean up" now makes sure the branch is pushed before it removes anything: it pushes
+  when the branch has commits the base branch doesn't, or when the remote already has the branch.
+  Before, it stopped with the ticket blocked whenever the branch had unpushed commits.
+- Re-opening a done ticket forgets how it was landed last time, so its next approval starts from
+  the usual default rather than the last choice.
 
 ### Fixed
 

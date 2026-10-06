@@ -188,8 +188,8 @@ const COMPLETION_ACTION_NAMES: Record<CompletionAction, string> = { merge: "Merg
 function CompletionActionRow({ project, onChange }: { project: Project; onChange: (v: CompletionAction) => void }) {
   const offered = offeredCompletionActions(project);
   const sub = project.pullRequestHost
-    ? "What Approve does by default: merge the branch, open a pull request, clean up a branch that's already pushed, or follow instructions you give. The Approve menu offers the others."
-    : "What Approve does by default: merge the branch, clean up a branch that's already pushed, or follow instructions you give. Open PR needs a remote on a host the gh CLI is logged into (gh auth login).";
+    ? "What Approve does by default: merge the branch, open a pull request, push the branch and clean up, or follow instructions you give. The Approve menu offers the others."
+    : "What Approve does by default: merge the branch, push the branch and clean up, or follow instructions you give. Open PR needs a remote on a host the gh CLI is logged into (gh auth login).";
   return (
     <Row title="When approved" sub={sub}>
       <select className="select" data-testid="completion-action" aria-label="When approved" value={projectCompletionDefault(project)} onChange={(e) => onChange(e.target.value as CompletionAction)}>

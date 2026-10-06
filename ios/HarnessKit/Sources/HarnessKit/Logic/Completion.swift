@@ -153,8 +153,8 @@ public enum Completion {
     /// its base branch (`base`, the effective base branch, when the caller knows it), one with no
     /// branch of its own, or one with no changes in its worktree (`nothingToLand`) has nothing to merge
     /// or open a pull request from, so those two drop out. Preselects the ticket's earlier
-    /// choice, then pr when the ticket already opened a pull request (so a re-approval updates it),
-    /// then the project default, then the first action left.
+    /// choice, then cleanup when the ticket already has a pull request open (the cleanup pushes the
+    /// branch, which updates it), then the project default, then the first action left.
     public static func completionOptions(_ ticket: TicketInfo?, _ project: ProjectInfo?, parent: ParentInfo? = nil, base: String? = nil) -> Options {
         if let branch = Branches.parentLandingBranch(ticketBaseBranch: ticket?.baseBranch, parentBranch: parent?.branch, parentStatus: parent?.status) {
             return Options(actions: [.merge], defaultAction: .merge, parentBranch: branch)
@@ -165,8 +165,8 @@ public enum Completion {
         var defaultAction = actions.contains(projectDefault) ? projectDefault : actions.first ?? .custom
         if let earlier = ticket?.completionAction, !earlier.rawValue.isEmpty, actions.contains(earlier) {
             defaultAction = earlier
-        } else if nonEmpty(ticket?.pullRequestUrl) != nil, actions.contains(.pr) {
-            defaultAction = .pr
+        } else if nonEmpty(ticket?.pullRequestUrl) != nil, actions.contains(.cleanup) {
+            defaultAction = .cleanup
         }
         return Options(actions: actions, defaultAction: defaultAction, parentBranch: nil)
     }

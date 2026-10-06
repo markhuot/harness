@@ -21,13 +21,16 @@ test("the project default falls back pr → merge → custom when the project st
   expect(projectCompletionDefault({ ...git })).toBe("merge");
 });
 
-test("preselection: the ticket's earlier choice, then pr for a ticket with a pull request, then the project default", () => {
+test("preselection: the ticket's earlier choice, then cleanup for a ticket with a pull request open, then the project default", () => {
   const project = { ...gh, completionAction: "merge" } as const;
   expect(completionOptions({ completionAction: "custom", pullRequestUrl: "https://github.com/a/b/pull/1" }, project).defaultAction).toBe("custom");
-  expect(completionOptions({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, project).defaultAction).toBe("pr");
+  expect(completionOptions({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, project).defaultAction).toBe("cleanup");
+  expect(approveLabel(completionOptions({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, project))).toBe("Approve and clean up");
+  // Without a gh login the pull request is still there, so clean up still pushes to it.
+  expect(completionOptions({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, git).defaultAction).toBe("cleanup");
   expect(completionOptions({ completionAction: null, pullRequestUrl: null }, project).defaultAction).toBe("merge");
   // An earlier pr choice the project no longer offers doesn't stick.
-  expect(completionOptions({ completionAction: "pr", pullRequestUrl: "x" }, { ...git, completionAction: "merge" }).defaultAction).toBe("merge");
+  expect(completionOptions({ completionAction: "pr", pullRequestUrl: "x" }, { ...git, completionAction: "merge" }).defaultAction).toBe("cleanup");
 });
 
 test("a child of a parent on a branch only merges, into that branch", () => {

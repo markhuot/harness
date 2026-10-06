@@ -85,6 +85,7 @@ import {
 import { SpecConflictError, type Store } from "../store";
 import { canonicalJson, grantKey, type TicketPatch } from "../store/tickets";
 import { cachedPullRequestTarget, insideGitCheckout } from "../store/projects";
+import { pushRemote } from "../store/remotes";
 import { clampLimit, CursorError, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, searchSnippet } from "../store/search";
 import type { WatcherInput } from "../store/watchers";
 import type { EventBus } from "../events";
@@ -3085,13 +3086,15 @@ ${numberLines(r.body)}`;
   }
 
   /**
-   * record_pull_request: the pull request a "pr" completion opened (or updated), and the commit it
-   * pushed. The commit must be a hash the project repo has; it's stored in full, and the git plugin
-   * pins it as the ticket's Changes (DESIGN.md "Pinned diffs").
+   * record_pull_request: the pull request a "pr" completion opened (or updated), or a "cleanup" of a
+   * ticket with a pull request pushed to, and the commit it pushed. The commit must be a hash the
+   * project repo has; it's stored in full, and the git plugin pins it as the ticket's Changes
+   * (DESIGN.md "Pinned diffs").
    */
   async recordPullRequest(ctx: ToolContext, url: string, head: string): Promise<string> {
     const t = this.ctxTicket(ctx);
-    if (ctx.runKind !== "complete" || t.completionAction !== "pr") {
+    const pushesToPullRequest = t.completionAction === "pr" || (t.completionAction === "cleanup" && !!t.pullRequestUrl);
+    if (ctx.runKind !== "complete" || !pushesToPullRequest) {
       throw new Error("record_pull_request is only for completion runs that open a pull request");
     }
     const u = String(url ?? "").trim();
@@ -3556,7 +3559,8 @@ ${numberLines(r.body)}`;
       if (existsSync(old)) leftover = { path: old, branch: branchForKey(ticket.key) };
     }
     const pullRequest = project && ticket?.completionAction === "pr" ? cachedPullRequestTarget(project.path) : null;
-    return { base: base.branch, baseSource: base.source, ownsWorktree, worktreesDir: this.paths.worktreesDir, leftover, pullRequest };
+    const remote = project && ticket?.completionAction === "cleanup" ? pushRemote(project.path) : null;
+    return { base: base.branch, baseSource: base.source, ownsWorktree, worktreesDir: this.paths.worktreesDir, leftover, pullRequest, pushRemote: remote };
   }
 
   private completePromptFor(t: Ticket, instructions?: string): string {
@@ -3837,7 +3841,10 @@ ${numberLines(r.body)}`;
     const recorded = pending?.to === to && this.store.activity.listBySession(ticket.sessionId).at(-1)?.id === pending.entryId;
     // A scheduled restart is for the block that set it: any move (or a new block) drops it.
     const resume = patch.resumeAt === undefined && ticket.resumeAt ? { resumeAt: null } : {};
-    const t = this.store.tickets.update(ticket.id, { ...patch, ...resume, status: to })!;
+    // A completion's choice is spent once the ticket is done: a re-opened ticket's next approval
+    // starts from the defaults again (clean up when it has a pull request open).
+    const spent: TicketPatch = from === "done" && to !== "done" ? { completionAction: null, completionInstructions: null } : {};
+    const t = this.store.tickets.update(ticket.id, { ...spent, ...patch, ...resume, status: to })!;
     if (patch.resumeAt !== undefined || "resumeAt" in resume) this.armResume();
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
