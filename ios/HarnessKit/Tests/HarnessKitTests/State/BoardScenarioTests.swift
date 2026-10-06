@@ -43,7 +43,7 @@ enum BoardProbe {
     /// Every probe this runner knows; checked against PROBE_NAMES in board.ts.
     static let names = [
         "boardColumns", "canLoadMoreDone", "canLoadMoreSearch", "childrenOf", "composerCandidates", "composerProject", "conductorsNeedingChildren",
-        "defaultDriverOf", "dependencyStates", "dependentsOf", "doneColumn", "doneCount", "hasCustomDriver", "latestActivity",
+        "defaultDriverOf", "defaultModelOf", "dependencyStates", "dependentsOf", "doneColumn", "doneCount", "hasCustomDriver", "hasCustomModel", "latestActivity",
         "liveDelta", "matchesQuery", "needsFirstDonePage", "searchColumns", "searchStatusText", "sortedProjects", "specBody", "specRevisions",
         "subagentById", "subagentPath", "subagentTranscript", "subagentsOf", "taskOutputOf", "ticketByKey", "ticketLinkable",
         "ticketsForProject", "transcript", "triageSessions", "unresolvedKeys",
@@ -96,6 +96,8 @@ enum BoardProbe {
         case "triageSessions": return strings(s.triageSessions().map(\.id))
         case "defaultDriverOf": return opt(s.defaultDriverOf(try arg(0)))
         case "hasCustomDriver": return .bool(s.hasCustomDriver(try arg(0, Ticket.self)))
+        case "defaultModelOf": return opt(s.defaultModelOf(try arg(0), driver: try arg(1)))
+        case "hasCustomModel": return .bool(s.hasCustomModel(try arg(0, Ticket.self), models: args.count > 1 ? try arg(1, [ModelInfo]?.self) : nil))
         case "childrenOf": return ids(s.childrenOf(try arg(0)))
         case "ticketsForProject": return ids(s.ticketsForProject(try arg(0, String?.self)))
         case "sortedProjects": return strings(s.sortedProjects().map(\.id))

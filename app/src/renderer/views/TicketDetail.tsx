@@ -540,7 +540,7 @@ function DetailHeader({
           <TicketKey ticket={ticket} />
         </span>
         <StatusPill status={ticket.status} />
-        <ModelBadge model={ticket.model} driver={ticket.driver} />
+        <ModelBadge ticket={ticket} />
         <div className="grow" />
         <MenuButton
           trigger={(toggle) => (

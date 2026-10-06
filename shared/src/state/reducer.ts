@@ -23,6 +23,7 @@ import type {
 import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
 import { dispatchedKey } from "./format";
+import { inheritedModel } from "./models";
 import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
@@ -560,6 +561,22 @@ export function defaultDriverOf(state: State, projectId: string): string | null 
 export function hasCustomDriver(state: State, ticket: Ticket): boolean {
   const d = defaultDriverOf(state, ticket.projectId);
   return d !== null && ticket.driver !== d;
+}
+
+/** The model a ticket on `driver` runs with when it picks none (inheritedModel at the ticket level; null: the driver's own). */
+export function defaultModelOf(state: State, projectId: string, driver: string): string | null {
+  return inheritedModel(driver, "ticket", state.projects[projectId], state.settings);
+}
+
+/**
+ * Whether a ticket picked a model other than the one it would run with by default, i.e. worth
+ * labelling. With no configured default, the driver's own default (from its model list, when
+ * loaded) counts as the default.
+ */
+export function hasCustomModel(state: State, ticket: Ticket, models?: { id: string; default?: boolean }[] | null): boolean {
+  if (!ticket.model || !state.settings) return false;
+  const d = defaultModelOf(state, ticket.projectId, ticket.driver) ?? models?.find((m) => m.default)?.id ?? null;
+  return ticket.model !== d;
 }
 
 export function childrenOf(state: State, ticketId: string): Ticket[] {

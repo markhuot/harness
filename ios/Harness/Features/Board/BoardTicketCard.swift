@@ -136,10 +136,10 @@ struct BoardTicketCard: View {
                 }
             }
 
-            if customDriver || (t.model?.isEmpty == false) {
+            if customDriver || state.hasCustomModel(t) {
                 FlowLayout(spacing: 5) {
                     if customDriver { DriverBadge(driver: t.driver, drivers: state.drivers) }
-                    ModelBadge(model: t.model, driver: t.driver)
+                    ModelBadge(ticket: t, state: state)
                 }
             }
         }

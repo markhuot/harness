@@ -51,11 +51,6 @@ export function modelOptions(
   return out;
 }
 
-/** A model badge is only worth showing when the ticket picked a model itself. */
-export function ticketModelBadge(model: string | null, models: ModelInfo[] | undefined): string | null {
-  return model ? modelName(models, model) : null;
-}
-
 // ---------------------------------------------------------------------------
 // Combined driver + model select (watchers): models grouped under their driver
 // ---------------------------------------------------------------------------

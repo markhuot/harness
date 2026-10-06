@@ -8,7 +8,7 @@
 // order (which Swift dictionaries don't have) are sorted here and in Swift; see BoardState.swift.
 // Not a case file itself: it lives outside cases/ so the exporter doesn't write it out.
 
-import type { ActivityEntry, Project, Run, Session, SpecRevisionInfo, Subagent, Ticket, TicketDetail, TicketPage, TranscriptEntry, Watcher } from "../src/protocol";
+import type { ActivityEntry, ModelInfo, Project, Run, Session, SpecRevisionInfo, Subagent, Ticket, TicketDetail, TicketPage, TranscriptEntry, Watcher } from "../src/protocol";
 import {
   boardColumns,
   canLoadMoreDone,
@@ -18,11 +18,13 @@ import {
   composerProject,
   conductorsNeedingChildren,
   defaultDriverOf,
+  defaultModelOf,
   dependencyStates,
   dependentsOf,
   doneColumn,
   doneCount,
   hasCustomDriver,
+  hasCustomModel,
   initialState,
   latestActivity,
   liveDelta,
@@ -261,6 +263,8 @@ const PROBES: Record<string, (s: State, ...args: never[]) => unknown> = {
   triageSessions: (s) => triageSessions(s).map((x) => x.id),
   defaultDriverOf: (s, projectId: string) => defaultDriverOf(s, projectId),
   hasCustomDriver: (s, t: Ticket) => hasCustomDriver(s, t),
+  defaultModelOf: (s, projectId: string, driver: string) => defaultModelOf(s, projectId, driver),
+  hasCustomModel: (s, t: Ticket, models?: ModelInfo[] | null) => hasCustomModel(s, t, models),
   childrenOf: (s, id: string) => ids(childrenOf(s, id)),
   ticketsForProject: (s, projectId: string | null) => sorted(ids(ticketsForProject(s, projectId))),
   sortedProjects: (s) => sortedProjects(s).map((p) => p.id),

@@ -77,7 +77,7 @@ struct TicketDetailHero: View {
                 if let project { ProjectKeyBadge(project.key, color: project.color) }
                 StatusPill(status: ticket.status)
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
-                ModelBadge(model: ticket.model, driver: ticket.driver)
+                ModelBadge(ticket: ticket, state: state)
                 KindBadge(ticket: ticket, childCount: ticket.isConductor ? state.childrenOf(ticket.id).count : nil)
                 if let branch = ticket.branch { Badge(branch, outline: true, icon: "branch") }
                 if let url = ticket.pullRequestUrl.optional { pullRequestBadge(url) }

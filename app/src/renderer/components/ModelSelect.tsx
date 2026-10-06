@@ -2,9 +2,9 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import type { ModelInfo, TriageChoice } from "@harness/shared";
+import type { ModelInfo, Ticket, TriageChoice } from "@harness/shared";
 import { useStore } from "../state/store";
-import { decodeChoice, driverModelChoices, encodeChoice, modelCacheFor, modelName, modelOptions } from "@harness/shared/state";
+import { decodeChoice, driverModelChoices, encodeChoice, hasCustomModel, modelCacheFor, modelName, modelOptions } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
@@ -68,12 +68,14 @@ export function ModelSelect({
   );
 }
 
-/** Small badge for a ticket that picked its own model. */
-export function ModelBadge({ model, driver }: { model: string | null; driver: string }) {
-  const { client, epoch } = useStore();
-  const { data } = useDriverModels(client, model ? driver : "", epoch);
-  if (!model) return null;
-  return <ModelBadgeView name={modelName(data?.models as ModelInfo[] | undefined, model)} model={model} />;
+/** Small badge for a ticket that picked a model other than its default one (hasCustomModel). */
+export function ModelBadge({ ticket }: { ticket: Ticket }) {
+  const { state, client, epoch } = useStore();
+  const model = ticket.model;
+  const { data } = useDriverModels(client, model ? ticket.driver : "", epoch);
+  const models = data?.models as ModelInfo[] | undefined;
+  if (!model || !hasCustomModel(state, ticket, models)) return null;
+  return <ModelBadgeView name={modelName(models, model)} model={model} />;
 }
 
 export function ModelBadgeView({ name, model }: { name: string; model: string }) {

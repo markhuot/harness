@@ -20,6 +20,11 @@ const board = [
 
 const withProjects = (...ps: ReturnType<typeof project>[]): State => ({ ...initialState, projects: Object.fromEntries(ps.map((p) => [p.id, p])) });
 const withDriver = (p1Driver: string | null): State => ({ ...initialState, settings, projects: { p1: project("p1", "HAR", { defaultDriver: p1Driver }) } }) as State;
+const withModels = {
+  ...initialState,
+  settings: { ...settings, defaultModels: { "claude-code": "opus", codex: "luna", dummy: null } },
+  projects: { p1: project("p1", "HAR"), p2: project("p2", "TWO", { defaultModels: { "claude-code": "sonnet" } }) },
+} as State;
 
 export const scenarios = [
   // transcript
@@ -308,6 +313,36 @@ export const scenarios = [
     { probes: [["hasCustomDriver", ticket("a", { driver: "codex" })], ["hasCustomDriver", ticket("a", { driver: "claude-code" })], ["defaultDriverOf", "p1"]] },
   ], withDriver("codex")),
   scenario("hasCustomDriver stays quiet until settings load", [{ probes: [["hasCustomDriver", ticket("a", { driver: "codex" })], ["defaultDriverOf", "p1"]] }]),
+  scenario("hasCustomModel: a model that matches the default for its driver isn't custom", [
+    {
+      probes: [
+        ["hasCustomModel", ticket("a", { model: null })],
+        ["hasCustomModel", ticket("a", { model: "" })],
+        ["hasCustomModel", ticket("a", { driver: "claude-code", model: "opus" })],
+        ["hasCustomModel", ticket("a", { driver: "claude-code", model: "sonnet" })],
+        ["hasCustomModel", ticket("a", { driver: "codex", model: "luna" })],
+        ["hasCustomModel", ticket("a", { driver: "codex", model: "sol" })],
+        ["hasCustomModel", ticket("b", { projectId: "p2", driver: "claude-code", model: "sonnet" })],
+        ["hasCustomModel", ticket("b", { projectId: "p2", driver: "claude-code", model: "opus" })],
+        ["defaultModelOf", "p1", "claude-code"],
+        ["defaultModelOf", "p2", "claude-code"],
+        ["defaultModelOf", "p1", "codex"],
+        ["defaultModelOf", "p1", "dummy"],
+      ],
+    },
+  ], withModels),
+  scenario("hasCustomModel: with no configured default, the driver's own default counts", [
+    {
+      probes: [
+        ["hasCustomModel", ticket("a", { driver: "dummy", model: "fast" })],
+        ["hasCustomModel", ticket("a", { driver: "dummy", model: "fast" }), [{ id: "fast", name: "Fast", default: true }, { id: "slow", name: "Slow" }]],
+        ["hasCustomModel", ticket("a", { driver: "dummy", model: "slow" }), [{ id: "fast", name: "Fast", default: true }, { id: "slow", name: "Slow" }]],
+        ["hasCustomModel", ticket("a", { driver: "dummy", model: "fast" }), [{ id: "fast", name: "Fast" }]],
+        ["hasCustomModel", ticket("a", { driver: "claude-code", model: "opus" }), [{ id: "sonnet", name: "Sonnet", default: true }]],
+      ],
+    },
+  ], withModels),
+  scenario("hasCustomModel stays quiet until settings load", [{ probes: [["hasCustomModel", ticket("a", { driver: "claude-code", model: "opus" })], ["defaultModelOf", "p1", "claude-code"]] }]),
   scenario("composerProject resolves to a real project when the modal mounted before projects loaded", [
     { probes: [["composerProject", "", [null, null]]] },
   ]),

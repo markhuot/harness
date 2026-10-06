@@ -15,7 +15,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   spreading it over its neighbours, so every other pane keeps the size you gave it. Closing the
   middle of [board 50%, ticket 25%, ticket 25%] leaves [board 75%, ticket 25%]. When the board
   isn't beside the pane, the neighbour on the board's side takes the space.
-
+- Ticket cards and the ticket header show a model badge only when the ticket uses a model other
+  than its default one (the project's, else the app's, else the driver's own), just as the driver
+  badge shows only for a driver other than the default. A ticket on the default driver and model
+  shows neither.
 - On iPhone and iPad, every ticket tab now shares the header the Changes tab had: the ticket's
   title on one line with a chevron that shows its status, badges and actions. It opens in full
   on the Spec and collapses as you scroll the Spec or move to another tab; once collapsed, it
