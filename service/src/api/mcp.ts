@@ -2,7 +2,7 @@
 // Mounted at POST /mcp/:runToken; the caller resolves the token to the run (or null).
 
 import type { ToolResultContent } from "@harness/shared";
-import { dispatcherTools } from "../tools/dispatch";
+import { advertisedDescription, advertisedTools } from "../tools/dispatch";
 import type { ToolAnnotations, ToolContext, ToolDefinition, ToolResult } from "../tools/types";
 
 export const MCP_SUPPORTED_PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"] as const;
@@ -67,9 +67,9 @@ export function toolAnnotations(t: ToolDefinition): ToolAnnotations {
 async function callTool(run: McpRun, id: JsonRpcId, params: unknown): Promise<JsonRpcResponse> {
   const p = (params ?? {}) as { name?: unknown; arguments?: unknown };
   if (typeof p.name !== "string") return rpcError(id, JSONRPC_INVALID_PARAMS, "tools/call requires params.name");
-  // The advertised view first (tool_search, call_tool); a hidden tool of the run called by its own
-  // name still runs, since it's in the run's allowed set either way.
-  const tool = dispatcherTools(run.tools).find((t) => t.name === p.name) ?? run.tools.find((t) => t.name === p.name);
+  // The advertised view: core tools as they are, tool_search, and the stubs that validate input
+  // against the real schema before running the tool. Nothing outside the run's allowed set runs.
+  const tool = advertisedTools(run.tools).find((t) => t.name === p.name);
   if (!tool) return rpcError(id, JSONRPC_INVALID_PARAMS, `Unknown tool: ${p.name}`);
   if (p.arguments !== undefined && (typeof p.arguments !== "object" || p.arguments === null || Array.isArray(p.arguments))) {
     return rpcError(id, JSONRPC_INVALID_PARAMS, "tools/call params.arguments must be an object");
@@ -115,7 +115,7 @@ async function handleMessage(run: McpRun, msg: unknown): Promise<JsonRpcResponse
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "harness", version: "0.1.0" },
           instructions:
-            "Harness tools for the current ticket run: report progress, change ticket state, and drive the session browser. Tools not listed directly (browser, board, settings, conductor tools and more) are found with tool_search and run with call_tool.",
+            "Harness tools for the current ticket run: report progress, change ticket state, and drive the session browser. Tools beyond the core ones are listed by name only: call tool_search with a tool's name or a keyword for its description and parameters before calling it the first time.",
         },
       };
     }
@@ -126,9 +126,9 @@ async function handleMessage(run: McpRun, msg: unknown): Promise<JsonRpcResponse
         jsonrpc: "2.0",
         id,
         result: {
-          tools: dispatcherTools(run.tools).map((t) => ({
+          tools: advertisedTools(run.tools).map((t) => ({
             name: t.name,
-            description: t.description,
+            ...(advertisedDescription(t) === undefined ? {} : { description: t.description }),
             inputSchema: t.inputSchema,
             annotations: toolAnnotations(t),
           })),

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import Anthropic from "@anthropic-ai/sdk";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeBrowser, fakeContext, fakeOps } from "../tools/fakes";
-import { dispatcherTools, toolsForRun } from "../tools/index";
+import { advertisedTools, toolsForRun } from "../tools/index";
 import type { ToolDefinition } from "../tools/types";
 import { AnthropicApiDriver, DEFAULT_ANTHROPIC_MODEL, MAX_ITERATIONS, SAVED_IMAGE_PLACEHOLDER, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
 import { RunInput, type DriverEvent, type RunRequest } from "./types";
@@ -154,9 +154,14 @@ describe("anthropic-api driver", () => {
     expect(p.model).toBe("claude-test-model");
     expect(p.system).toBe("You are a harness agent.");
     expect(p.max_tokens).toBeGreaterThan(1000);
-    // The dispatcher view: core and native tools directly, the rest through tool_search / call_tool
-    expect(p.tools!.map((t: any) => t.name)).toEqual(dispatcherTools(req.tools).map((t) => t.name));
-    expect(p.tools!.map((t: any) => t.name)).toEqual(["post_note", "read_spec", "edit_spec", "review_decision", "read_file", "list_files", "bash", "tool_search", "call_tool"]);
+    // Core and native tools in full, tool_search, then the rest as stubs (the MCP server's view)
+    expect(p.tools!.map((t: any) => t.name)).toEqual(advertisedTools(req.tools).map((t) => t.name));
+    expect(p.tools!.map((t: any) => t.name).slice(0, 8)).toEqual(["post_note", "read_spec", "edit_spec", "review_decision", "read_file", "list_files", "bash", "tool_search"]);
+    expect(p.tools!.map((t: any) => t.name)).toEqual(expect.arrayContaining(["browser_open", "list_tickets"]));
+    expect(p.tools!.map((t: any) => t.name)).not.toContain("call_tool");
+    const stub = p.tools!.find((t: any) => t.name === "list_tickets") as Anthropic.Tool;
+    expect(stub.description).toBe("");
+    expect(stub.input_schema).toEqual({ type: "object" });
     const rd = p.tools!.find((t: any) => t.name === "review_decision") as Anthropic.Tool;
     expect(rd.input_schema).toEqual(req.tools.find((t) => t.name === "review_decision")!.inputSchema as any);
     expect(p.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Review it" }] }]);
@@ -183,6 +188,7 @@ describe("anthropic-api driver", () => {
           toolUse("tu_2", "post_note", {}), // invalid: missing note
           toolUse("tu_3", "nope_tool", {}),
           toolUse("tu_4", "browser_screenshot", {}),
+          toolUse("tu_5", "browser_open", {}), // a stub: invalid, answered with the full schema
         ],
         stop_reason: "tool_use",
       },
@@ -205,12 +211,14 @@ describe("anthropic-api driver", () => {
       ["tu_2", true],
       ["tu_3", true],
       ["tu_4", false],
+      ["tu_5", true],
     ]);
     expect(JSON.stringify(blocks[2]!.content)).toContain("Unknown tool");
+    expect(JSON.stringify(blocks[4]!.content)).toContain("Input schema:");
     expect((blocks[3]!.content as any[])[0]).toEqual({ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } });
 
     const kinds = events.filter((e) => e.type === "tool_call" || e.type === "tool_result").map((e: any) => `${e.type}:${e.callId}`);
-    expect(kinds).toEqual(["tool_call:tu_1", "tool_result:tu_1", "tool_call:tu_2", "tool_result:tu_2", "tool_call:tu_3", "tool_result:tu_3", "tool_call:tu_4", "tool_result:tu_4"]);
+    expect(kinds).toEqual(["tool_call:tu_1", "tool_result:tu_1", "tool_call:tu_2", "tool_result:tu_2", "tool_call:tu_3", "tool_result:tu_3", "tool_call:tu_4", "tool_result:tu_4", "tool_call:tu_5", "tool_result:tu_5"]);
     expect(events.filter((e) => e.type === "text").map((e: any) => e.text)).toEqual(["Working.", "Done."]);
   });
 

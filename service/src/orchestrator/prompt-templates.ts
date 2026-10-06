@@ -453,10 +453,10 @@ Use relative paths, never absolute ones, URL-encode spaces and other special cha
   "system.board": {
     group: "system",
     label: "Board",
-    description: "Every run: how to reach tools not listed directly (tool_search, call_tool), and the read-only board tools for finding other tickets.",
+    description: "Every run: how to learn the parameters of tools listed by name only (tool_search), and the read-only board tools for finding other tickets.",
     variables: {},
     template: `## Board
-The tools named in the sections from here on aren't listed directly: \`tool_search\` { query } returns their descriptions and input schemas (search a family at once, e.g. "browser"), and \`call_tool\` { name, input } runs one.
+The harness tools named in the sections from here on are listed by name only: before calling one the first time, call \`tool_search\` { query } with its name or a keyword (search a family at once, e.g. "browser") for its description and parameters, then call it by its own name.
 Read the rest of the board for context, such as how a similar change was made or what another agent decided, with \`search_tickets\`, \`list_tickets\`, \`get_ticket\`, \`list_projects\` and \`list_inbox\` (watcher output and what triage did with it). They only read. Inbox items are keyed TRIAGE-n and aren't tickets: read one with \`list_inbox\`, not \`get_ticket\`.
 Every ticket has a local key (the project's numbering, e.g. WEB-12), and it can also carry a remote ID: the key of the external item it's for, such as a Jira issue FOO-123. The board shows the remote ID in place of the local key, but tools, depends_on and links always take the local key, and several tickets can share one remote ID. When the spec, a note or a message names a ticket that has a remote ID, write it as a link labeled with the remote ID that points at the local key, such as \`[FOO-123](WEB-12)\`. Name a ticket without one by its local key.`,
   },
