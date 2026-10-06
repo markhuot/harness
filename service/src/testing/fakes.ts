@@ -409,6 +409,7 @@ export class FakeDriver implements Driver {
         return;
       }
       case "complete": {
+        yield { type: "state", state: { completer: true } };
         yield { type: "text", text: "Finalized." };
         // A pull request completion records one, unless its instructions say [no-pr].
         if (ctx.ticket?.completionAction === "pr" && !p.includes("[no-pr]")) {

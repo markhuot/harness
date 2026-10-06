@@ -93,15 +93,78 @@ describe("ticket lifecycle", () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
     await h.orch.startTicket(t.key);
     await h.orch.idle();
     const [plan, work, review] = h.driver.calls;
     expect(plan!.state).toBeNull();
-    expect(work!.state).toEqual({ turns: 1 });
+    // Work is a phase of its own: it doesn't carry on the planning conversation.
+    expect(work!.kind).toBe("work");
+    expect(work!.state).toBeNull();
     expect(review!.kind).toBe("review");
     expect(review!.state).toBeNull();
     // The reviewer's { reviewer: true } state must not leak into the session
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+  });
+
+  test("requested changes resume the work conversation", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    h.orch.humanReview(t.key, { decision: "request_changes", notes: "rename it" });
+    await h.orch.idle();
+    const works = h.driver.calls.filter((c) => c.kind === "work");
+    expect(works.map((c) => c.state)).toEqual([null, { turns: 1 }]);
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
+  });
+
+  test("a complete run starts fresh and saves nothing; chats on Done start a new conversation and keep it", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { instructions: "merge it" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    const complete = h.driver.calls.find((c) => c.kind === "complete")!;
+    expect(complete.state).toBeNull();
+    // Neither the completer's state nor the work's survives into done.
+    expect(h.store.sessions.getDriverState(t.sessionId)).toBeNull();
+
+    await h.orch.sendMessage(t.key, "what did you change?");
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "and why?");
+    await h.orch.idle();
+    const chats = h.driver.calls.filter((c) => c.kind === "chat");
+    expect(chats.map((c) => c.state)).toEqual([null, { turns: 1 }]);
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
+  });
+
+  test("a reopened ticket starts its work fresh", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { instructions: "merge it" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "a question");
+    await h.orch.idle();
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+    await h.orch.reopenTicket(t.key, { notes: "one more fix" });
+    await h.orch.idle();
+    const works = h.driver.calls.filter((c) => c.kind === "work");
+    expect(works).toHaveLength(2);
+    expect(works[1]!.state).toBeNull();
+  });
+
+  test("a run that outlives its phase doesn't write its conversation back", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /hold /nosubmit" });
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    await h.orch.updateTicket(t.key, { status: "done" });
+    h.driver.release();
+    await h.orch.idle();
+    expect(runKinds(h, t)).toEqual(["work:succeeded"]);
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
+    expect(h.store.sessions.getDriverState(t.sessionId)).toBeNull();
   });
 
   test("block → blocked; the human's answer resumes the agent with its tools, which unblocks and submits", async () => {
