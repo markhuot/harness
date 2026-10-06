@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261006.1130](https://github.com/markhuot/harness/releases/tag/app-20261006.1130) - 2026-10-06
+
+### Changed
+
+- The built-in instructions agents get on every run are about 30% shorter, so each turn re-reads
+  less text and runs a little faster and cheaper. The defaults shown under Settings → Prompts
+  reflect the new wording.
+
 ## [app-20261006.0931](https://github.com/markhuot/harness/releases/tag/app-20261006.0931) - 2026-10-06
 
 ### Changed
