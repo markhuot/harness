@@ -288,7 +288,7 @@ async function runStep(job: Job, method: string, args: unknown[]): Promise<unkno
       const o = opt(args[1]);
       const scope = await ctx.ops.fileOutputScope(ctx);
       const path = typeof args[0] === "string" && args[0] ? args[0] : join(scope.scratchDir, "browser-run", `job-${job.id}-${job.nextStep()}.png`);
-      await exec(browserScreenshot, { save_to: path, wait_for: o.wait_for });
+      await exec(browserScreenshot, { save_to: path, full_page: o.full_page, selector: o.selector, wait_for: o.wait_for });
       return resolve(scope.readOnly ? scope.scratchDir : ctx.cwd, path);
     }
     case "open": {
@@ -494,7 +494,7 @@ function report(job: Job): ToolResult {
 
 /** The script's functions, for browser_run's description and the Browser prompt section. */
 export const SCRIPT_API =
-  "click(selector, { wait_for }), type(selector, text, { submit, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, wait_for }) (runs in the page and returns the value), content(selector?, { format, max_chars, wait_for }), screenshot(path?, { wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms)";
+  "click(selector, { wait_for }), type(selector, text, { submit, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, wait_for }) (runs in the page and returns the value), content(selector?, { format, max_chars, wait_for }), screenshot(path?, { full_page, selector, wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms)";
 
 const WAIT_PARAM = {
   type: "number",

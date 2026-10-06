@@ -35,8 +35,10 @@ import type {
   BrowserTabStore,
   BrowserTabSummary,
   StoredBrowserTab,
+  ScreenshotOptions,
   TabOption,
 } from "./types.ts";
+import { MAX_SCREENSHOT_HEIGHT } from "./types.ts";
 
 export interface BrowserManagerOptions {
   profileDir: string;
@@ -568,9 +570,41 @@ export class BrowserManager implements BrowserService {
     return () => void entry.listeners.delete(listener);
   }
 
-  async screenshot(sessionId: string, opts: TabOption = {}): Promise<string> {
+  async screenshot(sessionId: string, opts: TabOption & ScreenshotOptions = {}): Promise<string> {
     const tab = await this.agentTab(sessionId, opts.tab);
-    const res = await tab.session.send("Page.captureScreenshot", { format: "png" });
+    let clip: { x: number; y: number; width: number; height: number } | undefined;
+    if (opts.selector) {
+      const box = (await this.evalValue(
+        tab,
+        `(() => {
+          const el = document.querySelector(${JSON.stringify(opts.selector)});
+          if (!el) return { found: false };
+          const r = el.getBoundingClientRect();
+          return { found: true, x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
+        })()`,
+      )) as { found: boolean; x?: number; y?: number; width?: number; height?: number };
+      if (!box.found) throw new Error(`No element matches selector: ${opts.selector}`);
+      if (!box.width || !box.height) throw new Error(`The element has no size to capture: ${opts.selector}`);
+      clip = { x: box.x!, y: box.y!, width: box.width, height: box.height };
+    } else if (opts.fullPage) {
+      const metrics = await tab.session.send("Page.getLayoutMetrics");
+      const size = (metrics.cssContentSize ?? metrics.contentSize) as { width: number; height: number };
+      clip = { x: 0, y: 0, width: size.width, height: size.height };
+    }
+    if (!clip) {
+      const res = await tab.session.send("Page.captureScreenshot", { format: "png" });
+      return res.data as string;
+    }
+    // Whole CSS pixels, so the edges aren't blurred, and no taller than Chrome can paint.
+    const x = Math.max(0, Math.floor(clip.x));
+    const y = Math.max(0, Math.floor(clip.y));
+    const width = Math.max(1, Math.ceil(clip.x + clip.width) - x);
+    const height = Math.max(1, Math.min(MAX_SCREENSHOT_HEIGHT, Math.ceil(clip.y + clip.height) - y));
+    const res = await tab.session.send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+      clip: { x, y, width, height, scale: 1 },
+    });
     return res.data as string;
   }
 

@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Agents can take a screenshot of a whole page, top to bottom, not just the part that fits in the
+  browser window, or of a single element on the page, so screenshots in a ticket's spec can show
+  exactly what the change is about.
+
 ### Changed
 
 - On iPhone and iPad, the ticket's Browser tab now shows the same header as the other tabs: the

@@ -89,6 +89,12 @@ function fixtures(req: Request): Response {
          <div style="height:3000px"></div>`,
         "Elements",
       );
+    case "/tall":
+      return html(
+        `<style>body{margin:0} #top{height:2500px;background:#fc0} #card{position:absolute;left:40px;top:2200px;width:300px;height:500px;background:#09f}</style>
+         <div id="top"></div><div style="height:500px"></div><div id="card"></div><div id="empty"></div>`,
+        "Tall",
+      );
     case "/halves":
       return html(
         `<style>body{margin:0} div{position:fixed;top:0;bottom:0;width:50%} #a{left:0;background:#fc0} #b{right:0;background:#09f}</style>
@@ -325,6 +331,25 @@ withChrome("BrowserManager (real Chrome)", () => {
       expect([shot.tabId, shot.url, shot.title]).toEqual([1, `${base}/`, "Home Page"]);
       await expect(browser.capture("s-eval", { tab: 9 })).rejects.toThrow();
     });
+
+    test("full_page captures the whole page and selector one element, leaving the viewport alone", async () => {
+      await browser.open("s-tall", `${base}/tall`);
+      const dims = async (opts: Parameters<BrowserManager["screenshot"]>[1]) => {
+        const png = Buffer.from(await browser.screenshot("s-tall", opts), "base64");
+        return [png.readUInt32BE(16), png.readUInt32BE(20)] as const;
+      };
+      const [fullW, fullH] = await dims({ fullPage: true });
+      expect(fullH).toBe(3000);
+      expect(fullW).toBeGreaterThan(1200);
+      expect(await dims({ selector: "#card" })).toEqual([300, 500]);
+      // The element is found even when scrolled out of view, from wherever the page is scrolled.
+      await browser.evaluate("s-tall", "window.scrollTo(0, 2600)");
+      expect(await dims({ selector: "#top" })).toEqual([fullW, 2500]);
+      expect(await dims({})).toEqual([1280, 800]);
+      expect(await browser.evaluate("s-tall", "[innerWidth, innerHeight]")).toBe("[1280,800]");
+      await expect(browser.screenshot("s-tall", { selector: "#nope" })).rejects.toThrow(/No element matches selector: #nope/);
+      await expect(browser.screenshot("s-tall", { selector: "#empty" })).rejects.toThrow(/no size/);
+    }, 30_000);
   });
 
   test("sessions get isolated tabs", async () => {

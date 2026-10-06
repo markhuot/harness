@@ -46,7 +46,7 @@ describe("tool catalogue", () => {
     expect(props("browser_click")).toEqual(["selector", "tab", "wait_for"]);
     expect(props("browser_type")).toEqual(["selector", "submit", "tab", "text", "wait_for"]);
     expect(props("browser_eval")).toEqual(["expression", "tab", "wait_for"]);
-    expect(props("browser_screenshot")).toEqual(["save_to", "tab", "wait_for"]);
+    expect(props("browser_screenshot")).toEqual(["full_page", "save_to", "selector", "tab", "wait_for"]);
     expect(props("browser_wait")).toEqual(["idle", "selector", "state", "tab", "text", "timeout", "url"]);
     expect(props("browser_run")).toEqual(["script", "tab", "timeout", "wait"]);
     expect(props("browser_run_status")).toEqual(["job", "wait"]);
@@ -539,6 +539,20 @@ describe("wait_for and browser_wait", () => {
       ["screenshot", { tab: 2 }],
     ]);
     expect(browser.calls.find((c) => c.method === "waitFor")!.args[1]).toEqual(cond);
+  });
+
+  test("browser_screenshot passes full_page or selector through, but not both", async () => {
+    const browser = fakeBrowser();
+    const ctx = fakeContext({ browser });
+    await tool("browser_screenshot").execute({ full_page: true, tab: 2 }, ctx);
+    await tool("browser_screenshot").execute({ selector: "#card" }, ctx);
+    const both = await tool("browser_screenshot").execute({ full_page: true, selector: "#card" }, ctx);
+    expect(both.isError).toBe(true);
+    expect(text(both)).toContain("not both");
+    expect(browser.calls.filter((c) => c.method === "screenshot").map((c) => c.args.at(-1))).toEqual([
+      { tab: 2, fullPage: true },
+      { tab: undefined, selector: "#card" },
+    ]);
   });
 
   test("a timed-out wait makes the result an error but keeps what the tool did or read", async () => {

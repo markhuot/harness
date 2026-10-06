@@ -123,6 +123,17 @@ export interface TabOption {
   tab?: number;
 }
 
+/** What browser_screenshot captures: the viewport by default. */
+export interface ScreenshotOptions {
+  /** The whole scrollable page, not just the viewport. */
+  fullPage?: boolean;
+  /** Only the first element matching this CSS selector. */
+  selector?: string;
+}
+
+/** The tallest full-page or element screenshot, in CSS px; Chrome can't paint much past this. */
+export const MAX_SCREENSHOT_HEIGHT = 16_384;
+
 export interface BrowserService {
   /** Navigate a tab (`newTab`: a new one) and wait for load; `size` is applied before it loads. */
   open(sessionId: string, url: string, opts?: TabOption & { newTab?: boolean; size?: BrowserSizeChange }): Promise<BrowserState>;
@@ -158,8 +169,12 @@ export interface BrowserService {
   waitFor(sessionId: string, condition: WaitCondition, opts?: TabOption): Promise<WaitResult>;
   /** Follow every tab of the session as its pages log, navigate, fail requests and close. Returns the unsubscribe. */
   watch(sessionId: string, listener: (event: BrowserPageEvent) => void): () => void;
-  /** PNG screenshot as base64 */
-  screenshot(sessionId: string, opts?: TabOption): Promise<string>;
+  /**
+   * PNG screenshot as base64: the viewport; with `fullPage`, the whole scrollable page (capped at
+   * MAX_SCREENSHOT_HEIGHT CSS px); with `selector`, just the first matching element's box, even the
+   * parts outside the viewport. Throws if the selector matches nothing or only an empty box.
+   */
+  screenshot(sessionId: string, opts?: TabOption & ScreenshotOptions): Promise<string>;
   /**
    * A PNG of the tab's viewport (not the full page) with what's needed to map its pixels back onto
    * the page: the PNG's size, the viewport in CSS pixels, the device scale, and the tab's

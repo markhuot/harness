@@ -857,7 +857,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `browser_click` | ″ | `{ selector, tab?, wait_for? }` → says so when the target was disabled or inside `[aria-busy]` |
 | `browser_type` | ″ | `{ selector, text, submit?, tab?, wait_for? }` |
 | `browser_eval` | ″ | `{ expression, tab?, wait_for? }` → JSON from Chrome's deep serialization (elements as `tag#id.class`, cycles as `"[Circular]"`); a navigation mid-expression is an error naming the new URL |
-| `browser_screenshot` | ″ | `{ save_to?, tab?, wait_for? }` → image; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
+| `browser_screenshot` | ″ | `{ save_to?, full_page?, selector?, tab?, wait_for? }` → image of the viewport; `full_page` captures the whole scrollable page (up to 16384 CSS px tall) and `selector` just the first matching element, both without resizing the tab; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
 | `browser_wait` | ″ | `{ selector?, state?, text?, url?, idle?, timeout?, tab? }`: the `wait_for` wait without an action. See "Browser waits and scripts" |
 | `browser_run` | ″ | `{ script, tab?, timeout?, wait? }` → starts a script job, returns its number and log after `wait` s. See "Browser waits and scripts" |
 | `browser_run_status` | ″ | `{ job, wait? }` → the job's state and its new log lines; a failure adds the script line, step, URL and a screenshot |

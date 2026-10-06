@@ -4,7 +4,7 @@
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserDevice, type BrowserSize, type ToolResultContent } from "@harness/shared";
-import type { BrowserTabInfo, BrowserTabSummary } from "../browser/types";
+import { MAX_SCREENSHOT_HEIGHT, type BrowserTabInfo, type BrowserTabSummary } from "../browser/types";
 import { WAIT_CONDITION_DOC, WAIT_CONDITION_PROPERTIES, checkCondition, type WaitCondition, type WaitResult } from "../browser/wait";
 import type { ToolContext, ToolResult } from "./types";
 import { defineTool, errorResult, schema } from "./util";
@@ -370,10 +370,10 @@ export function resolveSaveTo(saveTo: string, scope: { cwd: string; scratchDir: 
   return target;
 }
 
-export const browserScreenshot = defineTool<{ save_to?: string; tab?: number } & WaitInput>({
+export const browserScreenshot = defineTool<{ save_to?: string; full_page?: boolean; selector?: string; tab?: number } & WaitInput>({
   name: "browser_screenshot",
   description:
-    "Take a PNG screenshot of the current viewport. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec. Pass wait_for so it captures the finished page, not a spinner: it waits before capturing (and still captures on a timeout, showing where the page got stuck).",
+    `Take a PNG screenshot of the current viewport, or with full_page the whole scrollable page (up to ${MAX_SCREENSHOT_HEIGHT} CSS px tall), or with selector just one element. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec. Pass wait_for so it captures the finished page, not a spinner: it waits before capturing (and still captures on a timeout, showing where the page got stuck).`,
   inputSchema: schema({
     save_to: {
       type: "string",
@@ -381,17 +381,27 @@ export const browserScreenshot = defineTool<{ save_to?: string; tab?: number } &
       description:
         "Also save the PNG here, e.g. \"screenshots/after.png\". It must be inside your working directory or this run's scratch folder, and a relative path resolves against the working directory. In read-only runs (plan, review, or a read-only ticket) only the scratch folder is allowed and relative paths resolve there. Parent folders are created; an existing file is replaced only if it is a PNG.",
     },
+    full_page: {
+      type: "boolean",
+      description: "Capture the whole page, top to bottom, even the parts below the viewport, not just what's on screen. The tab's width and size stay as they are.",
+    },
+    selector: {
+      type: "string",
+      minLength: 1,
+      description: "Capture only the first element matching this CSS selector (its whole box, even the parts outside the viewport), e.g. \"#pricing\" or \"form.login\".",
+    },
     ...TAB,
     ...waitForParam("before", "capturing"),
   }),
-  async run({ save_to, tab, wait_for }, ctx) {
+  async run({ save_to, full_page, selector, tab, wait_for }, ctx) {
+    if (full_page && selector) return errorResult("Pass full_page or selector, not both.");
     const wait = parseWaitFor({ wait_for });
     if (wait.error) return errorResult(wait.error);
     // Check the path before taking the shot, so a refused save_to costs nothing.
     const scope = save_to ? await ctx.ops.fileOutputScope(ctx) : null;
     const path = save_to && scope ? resolveSaveTo(save_to, { cwd: ctx.cwd, ...scope }) : null;
     const waited = await waitOn(ctx, wait.condition, tab);
-    const data = await ctx.browser.screenshot(ctx.session.id, { tab });
+    const data = await ctx.browser.screenshot(ctx.session.id, { tab, ...(full_page ? { fullPage: true } : {}), ...(selector ? { selector } : {}) });
     const content: ToolResultContent[] = [{ type: "image", data, mimeType: "image/png" }];
     if (path && scope) {
       mkdirSync(dirname(path), { recursive: true });
