@@ -1929,11 +1929,13 @@ since its history lives in its revisions.
   `submit_for_review` takes `spec_is_up_to_date`, which must be `true`, so a submit is a
   confirmation that the spec already describes the finished work. See "Tools".
 - **Prompts.** `system.spec` ("Spec and Activity", every ticket run) names the current revision
-  and the baseline, asks to change only what changed, lists the sections, explains images, holds
+  and the baseline, asks to change only what changed and to state the current state rather than
+  a log of rounds or commits, lists the sections, explains images, holds
   Activity notes to one line without repeating the spec, says each spec revision's note becomes its
   Activity line (so it isn't repeated with `post_note`), asks work runs for a progress note at
   least every 10 minutes, and ends with the last five Activity entries. `run.work_start`, `run.changes_requested` and `run.reopen` name the
-  revision, and the latter two ask for edits to the parts this round changed.
+  revision, and the latter two ask to rewrite the Status statements the round changes, with no
+  section for the round.
 
 **Attachments.** Agents show their work with images and videos in the spec: markdown images that
 point at local files (`![After](shots/after.png)`, absolute or relative to the run's cwd) in

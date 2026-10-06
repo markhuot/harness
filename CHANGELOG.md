@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- After a review or a re-open, agents rewrite the ticket's spec to describe where the work stands,
+  instead of adding a section per review round with commit hashes. The spec's revision history
+  still shows what changed between rounds.
+
 ### Fixed
 
 - A ticket completed with "Approve and open PR" no longer shows hundreds of deleted files in its
