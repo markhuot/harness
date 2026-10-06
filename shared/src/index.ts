@@ -6,6 +6,7 @@ export * from "./branches";
 export * from "./pairing";
 export * from "./watchers";
 export * from "./commandLine";
+export * from "./toolCalls";
 export * from "./projectColors";
 export * from "./mentions";
 export * from "./commands";

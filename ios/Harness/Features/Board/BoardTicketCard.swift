@@ -109,7 +109,7 @@ struct BoardTicketCard: View {
 
             if let approval = t.pendingApproval {
                 note(icon: "lock", tone: .amber) {
-                    Text("Needs approval: \(Text(Format.shortToolName(approval.toolName)).font(.mono(13, weight: .semibold)))")
+                    Text("Needs approval: \(Text(Format.shownToolCall(approval.toolName, input: approval.input).name).font(.mono(13, weight: .semibold)))")
                         .lineLimit(2)
                 }
             } else if t.status == .blocked, let reason = t.blockedReason, !reason.isEmpty {
