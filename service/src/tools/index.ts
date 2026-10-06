@@ -19,6 +19,7 @@ export * from "./board-write";
 export * from "./browser";
 export * from "./browser-run";
 export * from "./conductor";
+export * from "./dispatch";
 export * from "./config";
 export * from "./native";
 export * from "./permission";

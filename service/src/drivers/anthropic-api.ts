@@ -3,6 +3,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { DriverInfo, ModelInfo, Settings } from "@harness/shared";
+import { dispatcherTools } from "../tools/dispatch";
 import type { ToolDefinition, ToolResult } from "../tools/types";
 import { executeTool, type Driver, type DriverEvent, type RunImage, type RunRequest } from "./types";
 
@@ -188,7 +189,11 @@ export class AnthropicApiDriver implements Driver {
     }
     const model = req.model || DEFAULT_ANTHROPIC_MODEL;
     const client = this.client(key.key);
-    const tools = toAnthropicTools(req.tools);
+    // The same dispatcher view the MCP server advertises (DESIGN.md "Tools"): core and native tools
+    // directly, the rest through tool_search / call_tool.
+    const view = dispatcherTools(req.tools);
+    const tools = toAnthropicTools(view);
+    const runnable = [...view, ...req.tools];
 
     const messages = readState(req.state);
     const pending = danglingToolResults(messages);
@@ -283,7 +288,7 @@ export class AnthropicApiDriver implements Driver {
           throw abortError();
         }
         yield { type: "tool_call", callId: use.id, name: use.name, input: use.input };
-        const result = await executeTool(req.tools, use.name, use.input, req.toolContext);
+        const result = await executeTool(runnable, use.name, use.input, req.toolContext);
         yield { type: "tool_result", callId: use.id, name: use.name, result };
         results.push(toToolResultBlock(use.id, result));
       }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
-import { toolsForRun } from "./index";
+import { CORE_TOOL_NAMES, dispatcherTools, rankTools, toolsForRun } from "./index";
 
 const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot", "browser_wait", "browser_run", "browser_run_status", "browser_run_stop"];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
@@ -121,5 +121,56 @@ describe("toolsForRun", () => {
 
   test("unknown run kind throws", () => {
     expect(() => toolsForRun("nope" as RunKind, builtin)).toThrow("Unknown run kind");
+  });
+});
+
+describe("dispatcherTools", () => {
+  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
+  const view = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermissionPromptTool?: boolean }) => dispatcherTools(toolsForRun(kind, driver));
+
+  test("each run kind advertises its core tools, its native tools, then tool_search and call_tool", () => {
+    for (const kind of kinds) {
+      for (const driver of [builtin, bare, { hasBuiltinTools: true, usesPermissionPromptTool: true }]) {
+        const all = toolsForRun(kind, driver);
+        const direct = all.filter((t) => t.group === "native" || CORE_TOOL_NAMES.has(t.name)).map((t) => t.name);
+        expect(view(kind, driver).map((t) => t.name)).toEqual([...direct, "tool_search", "call_tool"]);
+      }
+    }
+    expect(view("work", bare).map((t) => t.name)).toEqual(["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", ...NATIVE_FULL, "tool_search", "call_tool"]);
+    expect(view("triage", builtin).map((t) => t.name)).toEqual(["dispatch_ticket", "decline_work", "tool_search", "call_tool"]);
+  });
+
+  test("toolsForRun still returns the whole allowed set; the view hides the rest", () => {
+    const work = toolsForRun("work", builtin).map((t) => t.name);
+    const shown = view("work", builtin).map((t) => t.name);
+    for (const hidden of [...BROWSER, ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, "update_branch"]) {
+      expect(work).toContain(hidden);
+      expect(shown).not.toContain(hidden);
+    }
+  });
+
+  test("the view is the same objects for the same tools array, so it never changes mid-run", () => {
+    const tools = toolsForRun("work", builtin);
+    expect(dispatcherTools(tools)).toBe(dispatcherTools(tools));
+  });
+
+  test("a run with nothing to search gets its tools as they are", () => {
+    const tools = toolsForRun("work", builtin).filter((t) => CORE_TOOL_NAMES.has(t.name));
+    expect(dispatcherTools(tools).map((t) => t.name)).toEqual(tools.map((t) => t.name));
+  });
+
+  test("tool_search and call_tool are harness tools (advertised read-only)", () => {
+    const tools = view("review", builtin);
+    for (const name of ["tool_search", "call_tool"]) expect(tools.find((t) => t.name === name)!.group).toBe("harness");
+  });
+
+  test("rankTools: exact names first, then whole-word name matches, then descriptions", () => {
+    const hidden = toolsForRun("work", builtin).filter((t) => !CORE_TOOL_NAMES.has(t.name));
+    const rank = (q: string) => rankTools(hidden, q).map((t) => t.name);
+    expect(rank("browser_run_stop")[0]).toBe("browser_run_stop");
+    expect(rank("inbox")[0]).toBe("list_inbox");
+    expect(rank("watcher").slice(0, 5).sort()).toEqual(["create_watcher", "delete_watcher", "list_watchers", "run_watcher", "update_watcher"]);
+    expect(rank("branch")[0]).toBe("update_branch");
+    expect(rank("the of")).toEqual([]);
   });
 });
