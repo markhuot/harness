@@ -788,7 +788,8 @@ shape) is sent as its one-line JSON.
 
 ## Tools
 
-Harness tools (always exposed, via MCP for claude-code):
+Harness tools (always exposed, via MCP for claude-code; all but the core ones are reached through
+`tool_search` and `call_tool`, see "Tool search and call_tool" below):
 
 | Tool | Run kinds | Input |
 | --- | --- | --- |
@@ -1003,7 +1004,53 @@ scenario by hand with the real claude-code driver for both the setup and triage,
 throwaway `HARNESS_HOME`.
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
-non-read-only MCP tools in `--permission-mode plan`.
+non-read-only MCP tools in `--permission-mode plan`. That includes `tool_search` and `call_tool`.
+
+### Tool search and call_tool (the dispatcher view)
+
+`toolsForRun` is a run's allowed set (`run.tools`), but the model doesn't see all of it: sending
+every schema on every call cost a work run ~22k tokens of prompt prefix (49 tools), a review run
+~12k, for tools most runs never use. `dispatcherTools(run.tools)` (`service/src/tools/dispatch.ts`)
+is what's advertised instead:
+
+- **Core tools**, with full schemas, whichever of these the run kind has (`CORE_TOOL_NAMES`):
+  `post_note`, `read_spec`, `edit_spec`, `update_spec`, `submit_for_review`, `block`, `unblock`,
+  `resume_work`, `review_decision`, `record_pull_request`, `permission_prompt`, plus triage's
+  `dispatch_ticket` and `decline_work` (every triage ends with one of them, the way a work run ends
+  with `submit_for_review`). Native tools (group `native`) are core too.
+- **`tool_search { query }`**: ranks the rest of the allowed set (browser, board reads and writes,
+  config, conductor tools, `update_branch`, …) over names and descriptions: an exact name (several
+  may be given) first, then whole words of the name, part of the name, then description words
+  (lowercased, plural `s` stripped, stop words dropped). It returns at most
+  `TOOL_SEARCH_MAX_RESULTS` (8) tools, each with its full description and JSON input schema as
+  text, and names the rest of the matches with a hint to search one of them or narrow the query.
+  An empty query lists every searchable tool with a one-line summary. Its description names every
+  searchable tool of the run, so the model knows what exists without a search.
+- **`call_tool { name, input }`**: runs any tool in `run.tools` (core ones too) and refuses
+  everything else: an unknown name, `tool_search`/`call_tool` themselves, and a tool the run kind
+  lacks ("isn't available in this run"), so the dispatcher never widens a run's tools. `input`
+  (an object, or a JSON string of one) is validated on the server with
+  `validateInput(…, deep = true)`, which also checks nested objects (their properties, required
+  keys and `additionalProperties: false`); a failure is an error result ending in the tool's input
+  schema, so the model can retry in one step. The inner tool's result or error passes through
+  unchanged. Human-gated tools gate inside the tool (`defineGatedTool`), so they ask a human
+  through `call_tool` exactly as they would directly: the approval names the inner tool and input.
+
+When nothing is left to search, the view is the tools as they are. The view is fixed for the whole
+run (cached per `run.tools` array): a dynamic `tools/list` with `list_changed` would change the tool
+definitions mid-run, which invalidates the prompt cache for the whole conversation, and client
+support varies. Claude Code's own ToolSearch (`_meta["anthropic/alwaysLoad"]`) works only on
+claude-code, which is why the dispatcher is the harness's own. The guidance to use it lives in the
+two tools' descriptions and the MCP `initialize` instructions.
+
+Per driver:
+- **claude-code, github-copilot** (MCP): `tools/list` returns the dispatcher view. `tools/call`
+  looks a name up in the view, then in `run.tools`, so a hidden tool the model calls by its own
+  name still runs (it's in the allowed set either way).
+- **anthropic-api** (native loop): sends the same dispatcher view as its `tools` and executes
+  through it, falling back to `run.tools` by name like MCP. Its native tools stay direct.
+- **dummy** (tests and scripted runs): keeps the full list and calls tools by name, since it
+  sends no schemas to any model.
 
 Native tools (only for drivers with `hasBuiltinTools: false`): `bash {command, timeout_ms?}`,
 `read_file {path, offset?, limit?}`, `write_file {path, content}`,
@@ -1013,7 +1060,8 @@ tools (`read_file`, `list_files`, `bash`); triage gets none. Every native call f
 `HarnessOps.checkPermission` (the PermissionGate, see "Permissions"); a deny becomes the tool's
 error result.
 
-`toolsForRun(kind, driver)` in `service/src/tools/index.ts` is the single source of truth.
+`toolsForRun(kind, driver)` in `service/src/tools/index.ts` is the single source of truth for a
+run's allowed set; `dispatcherTools` only decides which of them are advertised directly.
 
 File tools over the shell: every ticket run's system prompt has a "Files" section telling the
 model to read and edit through its file tools (claude-code's `Read`/`Edit`/`Write`/`Grep`/`Glob`,
@@ -1042,7 +1090,9 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   stream-json --verbose --include-partial-messages`), which carries your **team-plan OAuth** login
   (`claude auth login --claudeai`; status via `claude auth status --json`), plus
   `--replay-user-messages` for steering (see "Steering"). Harness tools are
-  injected with `--mcp-config` pointing at `POST /mcp/:runToken`. Conversation continuity via
+  injected with `--mcp-config` pointing at `POST /mcp/:runToken`, whose `tools/list` is the
+  run's dispatcher view (core tools plus `tool_search` / `call_tool`, see "Tool search and
+  call_tool"). Conversation continuity via
   `--resume <session_id>` (stored as driver state). `--permission-mode` comes from the ticket's
   harness permission mode (see "Permissions"); plan runs use `--permission-mode plan`. Every
   prompt the mode doesn't auto-allow goes to `--permission-prompt-tool

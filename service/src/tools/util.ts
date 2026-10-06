@@ -17,9 +17,15 @@ type PropSchema = {
   type?: string;
   enum?: unknown[];
   items?: PropSchema;
+  properties?: Record<string, PropSchema>;
+  required?: string[];
+  additionalProperties?: boolean;
   minimum?: number;
   maximum?: number;
   minLength?: number;
+  maxLength?: number;
+  minItems?: number;
+  maxItems?: number;
 };
 
 function typeOk(value: unknown, schema: PropSchema): boolean {
@@ -43,7 +49,7 @@ function typeOk(value: unknown, schema: PropSchema): boolean {
   }
 }
 
-function checkProp(toolName: string, key: string, value: unknown, schema: PropSchema): void {
+function checkProp(toolName: string, key: string, value: unknown, schema: PropSchema, deep: boolean): void {
   if (!typeOk(value, schema)) {
     throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must be ${schema.type === "integer" ? "an integer" : `a ${schema.type}`}.`);
   }
@@ -57,30 +63,49 @@ function checkProp(toolName: string, key: string, value: unknown, schema: PropSc
   if (typeof value === "string" && schema.minLength !== undefined && value.trim().length < schema.minLength) {
     throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must not be empty.`);
   }
-  if (Array.isArray(value) && schema.items) {
-    value.forEach((item, i) => checkProp(toolName, `${key}[${i}]`, item, schema.items!));
+  if (typeof value === "string" && schema.maxLength !== undefined && value.length > schema.maxLength) {
+    throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must be at most ${schema.maxLength} characters.`);
+  }
+  if (Array.isArray(value)) {
+    if (schema.minItems !== undefined && value.length < schema.minItems) throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must have at least ${schema.minItems} item${schema.minItems === 1 ? "" : "s"}.`);
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must have at most ${schema.maxItems} items.`);
+    if (schema.items) value.forEach((item, i) => checkProp(toolName, `${key}[${i}]`, item, schema.items!, deep));
+  }
+  if (deep && schema.properties && typeof value === "object" && value !== null && !Array.isArray(value)) {
+    checkObject(toolName, value as Record<string, unknown>, schema, `${key}.`, deep);
+  }
+}
+
+function checkObject(toolName: string, obj: Record<string, unknown>, schema: PropSchema, prefix: string, deep: boolean): void {
+  for (const key of schema.required ?? []) {
+    if (obj[key] === undefined || obj[key] === null) throw new ToolInputError(`Invalid input for ${toolName}: "${prefix}${key}" is required.`);
+  }
+  const properties = schema.properties ?? {};
+  if (deep && schema.additionalProperties === false) {
+    const extra = Object.keys(obj).find((k) => !(k in properties) && obj[k] !== undefined);
+    if (extra) throw new ToolInputError(`Invalid input for ${toolName}: "${prefix}${extra}" is not a known property (expected ${Object.keys(properties).join(", ") || "none"}).`);
+  }
+  for (const [key, propSchema] of Object.entries(properties)) {
+    const v = obj[key];
+    if (v === undefined || v === null) continue;
+    checkProp(toolName, `${prefix}${key}`, v, propSchema, deep);
   }
 }
 
 /**
- * Minimal JSON-schema validation for the subset our tool schemas use
- * (flat objects of string/boolean/number/integer/array-of-primitive properties).
- * Unknown extra properties are ignored so small model slips don't fail a call.
+ * JSON-schema validation for the subset our tool schemas use: type, required, properties, enum,
+ * items, minimum/maximum, minLength/maxLength, minItems/maxItems. Unknown extra properties are
+ * ignored so small model slips don't fail a call. `deep` (call_tool) also checks nested objects'
+ * properties and required keys and enforces additionalProperties: false; without it, nested
+ * objects are left to the tool, which can explain its own conditions (browser wait_for).
  */
-export function validateInput(toolName: string, schema: JsonSchema, input: unknown): Record<string, unknown> {
+export function validateInput(toolName: string, schema: JsonSchema, input: unknown, deep = false): Record<string, unknown> {
   const value = input === undefined || input === null ? {} : input;
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new ToolInputError(`Invalid input for ${toolName}: expected an object.`);
   }
   const obj = value as Record<string, unknown>;
-  for (const key of schema.required ?? []) {
-    if (obj[key] === undefined || obj[key] === null) throw new ToolInputError(`Invalid input for ${toolName}: "${key}" is required.`);
-  }
-  for (const [key, propSchema] of Object.entries(schema.properties)) {
-    const v = obj[key];
-    if (v === undefined || v === null) continue;
-    checkProp(toolName, key, v, propSchema as PropSchema);
-  }
+  checkObject(toolName, obj, schema as PropSchema, "", deep);
   return obj;
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import Anthropic from "@anthropic-ai/sdk";
 import type { RunKind, Settings } from "@harness/shared";
 import { fakeBrowser, fakeContext, fakeOps } from "../tools/fakes";
-import { toolsForRun } from "../tools/index";
+import { dispatcherTools, toolsForRun } from "../tools/index";
 import type { ToolDefinition } from "../tools/types";
 import { AnthropicApiDriver, DEFAULT_ANTHROPIC_MODEL, MAX_ITERATIONS, SAVED_IMAGE_PLACEHOLDER, type MessageStreamLike, type MessagesClientLike } from "./anthropic-api";
 import { RunInput, type DriverEvent, type RunRequest } from "./types";
@@ -154,7 +154,9 @@ describe("anthropic-api driver", () => {
     expect(p.model).toBe("claude-test-model");
     expect(p.system).toBe("You are a harness agent.");
     expect(p.max_tokens).toBeGreaterThan(1000);
-    expect(p.tools!.map((t: any) => t.name)).toEqual(req.tools.map((t) => t.name));
+    // The dispatcher view: core and native tools directly, the rest through tool_search / call_tool
+    expect(p.tools!.map((t: any) => t.name)).toEqual(dispatcherTools(req.tools).map((t) => t.name));
+    expect(p.tools!.map((t: any) => t.name)).toEqual(["post_note", "read_spec", "edit_spec", "review_decision", "read_file", "list_files", "bash", "tool_search", "call_tool"]);
     const rd = p.tools!.find((t: any) => t.name === "review_decision") as Anthropic.Tool;
     expect(rd.input_schema).toEqual(req.tools.find((t) => t.name === "review_decision")!.inputSchema as any);
     expect(p.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Review it" }] }]);
