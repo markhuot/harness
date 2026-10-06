@@ -9,12 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261006.0855](https://github.com/markhuot/harness/releases/tag/app-20261006.0855) - 2026-10-06
+
 ### Changed
 
 - Chats on finished tickets and reopened tickets start a fresh conversation with the agent,
   instead of picking up the whole conversation from the work. A second chat on a finished ticket
   carries on from the first. Starting work on a planned ticket and completing a ticket also start
   the agent fresh, so they're quicker and use fewer tokens.
+- Agents start each run with a shorter prompt and a smaller tool list: they explore the code
+  through their sub-agents, make independent calls in parallel, and look up the full details of
+  less common Harness tools only when they need them, so runs use fewer tokens.
 
 ## [app-20261005.2151](https://github.com/markhuot/harness/releases/tag/app-20261005.2151) - 2026-10-05
 
