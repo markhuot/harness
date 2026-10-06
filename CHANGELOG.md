@@ -9,6 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Approving a ticket that already has a pull request open now preselects "Approve and clean up"
+  instead of "Approve and open PR". Clean up pushes the branch, which updates the pull request,
+  then removes the worktree.
+- "Approve and clean up" now makes sure the branch is pushed before it removes anything: it pushes
+  when the branch has commits the base branch doesn't, or when the remote already has the branch.
+  Before, it stopped with the ticket blocked whenever the branch had unpushed commits.
+- Re-opening a done ticket forgets how it was landed last time, so its next approval starts from
+  the usual default rather than the last choice.
+
 ### Fixed
 
 - A ticket completed with "Approve and open PR" no longer shows hundreds of deleted files in its
