@@ -4,6 +4,7 @@ import {
   boardColumns,
   dependencyStates,
   hasCustomDriver,
+  hasCustomModel,
   initialState,
   isReady,
   latestActivity,
@@ -551,6 +552,33 @@ describe("hasCustomDriver", () => {
 
   test("stays quiet until settings load", () => {
     expect(hasCustomDriver(initialState, ticket("a", { driver: "codex" }))).toBe(false);
+  });
+});
+
+describe("hasCustomModel", () => {
+  const settings = { defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: "auto", classifier: "claude-cli", defaultModels: { "claude-code": "opus", dummy: null }, reviewModels: {}, anthropicApiKeySet: false } as const;
+  const s = { ...initialState, settings, projects: { p1: project("p1", "HAR"), p2: { ...project("p2", "TWO"), defaultModels: { "claude-code": "sonnet" } } } } as State;
+
+  test("no model of its own, or the default one, isn't custom", () => {
+    expect(hasCustomModel(s, ticket("a", { model: null }))).toBe(false);
+    expect(hasCustomModel(s, ticket("a", { driver: "claude-code", model: "opus" }))).toBe(false);
+    expect(hasCustomModel(s, ticket("a", { driver: "claude-code", model: "sonnet" }))).toBe(true);
+  });
+
+  test("a project's own default overrides the global one", () => {
+    expect(hasCustomModel(s, ticket("a", { projectId: "p2", driver: "claude-code", model: "sonnet" }))).toBe(false);
+    expect(hasCustomModel(s, ticket("a", { projectId: "p2", driver: "claude-code", model: "opus" }))).toBe(true);
+  });
+
+  test("with no configured default, the driver's own default counts once its list loads", () => {
+    const models = [{ id: "fast", name: "Fast", default: true }, { id: "slow", name: "Slow" }];
+    expect(hasCustomModel(s, ticket("a", { driver: "dummy", model: "fast" }))).toBe(true);
+    expect(hasCustomModel(s, ticket("a", { driver: "dummy", model: "fast" }), models)).toBe(false);
+    expect(hasCustomModel(s, ticket("a", { driver: "dummy", model: "slow" }), models)).toBe(true);
+  });
+
+  test("stays quiet until settings load", () => {
+    expect(hasCustomModel(initialState, ticket("a", { driver: "claude-code", model: "opus" }))).toBe(false);
   });
 });
 

@@ -562,6 +562,22 @@ export function hasCustomDriver(state: State, ticket: Ticket): boolean {
   return d !== null && ticket.driver !== d;
 }
 
+/** The model a ticket on `driver` runs with when it picks none: the project's default for that driver, else the global one (null: the driver's own). */
+export function defaultModelOf(state: State, projectId: string, driver: string): string | null {
+  return state.projects[projectId]?.defaultModels?.[driver] || state.settings?.defaultModels?.[driver] || null;
+}
+
+/**
+ * Whether a ticket picked a model other than the one it would run with by default, i.e. worth
+ * labelling. With no configured default, the driver's own default (from its model list, when
+ * loaded) counts as the default.
+ */
+export function hasCustomModel(state: State, ticket: Ticket, models?: { id: string; default?: boolean }[] | null): boolean {
+  if (!ticket.model || !state.settings) return false;
+  const d = defaultModelOf(state, ticket.projectId, ticket.driver) ?? models?.find((m) => m.default)?.id ?? null;
+  return ticket.model !== d;
+}
+
 export function childrenOf(state: State, ticketId: string): Ticket[] {
   return Object.values(state.tickets)
     .filter((t) => t.parentId === ticketId)

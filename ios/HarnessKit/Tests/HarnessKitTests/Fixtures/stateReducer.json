@@ -316,11 +316,13 @@
     "composerProject",
     "conductorsNeedingChildren",
     "defaultDriverOf",
+    "defaultModelOf",
     "dependencyStates",
     "dependentsOf",
     "doneColumn",
     "doneCount",
     "hasCustomDriver",
+    "hasCustomModel",
     "latestActivity",
     "liveDelta",
     "matchesQuery",
@@ -8950,6 +8952,900 @@
               "fn": "defaultDriverOf",
               "args": [
                 "p1"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {},
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": null,
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "hasCustomModel: a model that matches the default for its driver isn't custom",
+      "initial": {
+        "connected": false,
+        "ready": false,
+        "projects": {
+          "p1": {
+            "id": "p1",
+            "key": "HAR",
+            "name": "har",
+            "path": "/tmp/HAR",
+            "nextSeq": 1,
+            "defaultDriver": null,
+            "defaultModels": {},
+            "useWorktrees": false,
+            "skipAgentReview": false,
+            "skipHumanReview": false,
+            "permissionMode": null,
+            "color": null,
+            "createdAt": 1,
+            "updatedAt": 1
+          },
+          "p2": {
+            "id": "p2",
+            "key": "TWO",
+            "name": "two",
+            "path": "/tmp/TWO",
+            "nextSeq": 1,
+            "defaultDriver": null,
+            "defaultModels": {
+              "claude-code": "sonnet"
+            },
+            "useWorktrees": false,
+            "skipAgentReview": false,
+            "skipHumanReview": false,
+            "permissionMode": null,
+            "color": null,
+            "createdAt": 1,
+            "updatedAt": 1
+          }
+        },
+        "tickets": {},
+        "sessions": {},
+        "runs": {},
+        "activity": {},
+        "specRevisions": {},
+        "specBodies": {},
+        "transcripts": {},
+        "subagents": {},
+        "taskOutputs": {},
+        "deltas": {},
+        "watchers": {},
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "codex": "luna",
+            "dummy": null
+          },
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        },
+        "drivers": [],
+        "donePaging": {},
+        "search": null,
+        "keyAliases": {},
+        "missingKeys": {},
+        "childrenLoaded": {},
+        "dependents": {},
+        "ticketsAsOf": null
+      },
+      "steps": [
+        {
+          "actions": [],
+          "probes": [
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": null,
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": false
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": false
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "claude-code",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "opus",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": false
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "claude-code",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "sonnet",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": true
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "codex",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "luna",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": false
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "codex",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "sol",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": true
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "b",
+                  "key": "B",
+                  "projectId": "p2",
+                  "kind": "task",
+                  "title": "b",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-b",
+                  "driver": "claude-code",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "sonnet",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": false
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "b",
+                  "key": "B",
+                  "projectId": "p2",
+                  "kind": "task",
+                  "title": "b",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-b",
+                  "driver": "claude-code",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "opus",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": true
+            },
+            {
+              "fn": "defaultModelOf",
+              "args": [
+                "p1",
+                "claude-code"
+              ],
+              "output": "opus"
+            },
+            {
+              "fn": "defaultModelOf",
+              "args": [
+                "p2",
+                "claude-code"
+              ],
+              "output": "sonnet"
+            },
+            {
+              "fn": "defaultModelOf",
+              "args": [
+                "p1",
+                "codex"
+              ],
+              "output": "luna"
+            },
+            {
+              "fn": "defaultModelOf",
+              "args": [
+                "p1",
+                "dummy"
+              ],
+              "output": null
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {
+              "p1": {
+                "id": "p1",
+                "key": "HAR",
+                "name": "har",
+                "path": "/tmp/HAR",
+                "nextSeq": 1,
+                "defaultDriver": null,
+                "defaultModels": {},
+                "useWorktrees": false,
+                "skipAgentReview": false,
+                "skipHumanReview": false,
+                "permissionMode": null,
+                "color": null,
+                "createdAt": 1,
+                "updatedAt": 1
+              },
+              "p2": {
+                "id": "p2",
+                "key": "TWO",
+                "name": "two",
+                "path": "/tmp/TWO",
+                "nextSeq": 1,
+                "defaultDriver": null,
+                "defaultModels": {
+                  "claude-code": "sonnet"
+                },
+                "useWorktrees": false,
+                "skipAgentReview": false,
+                "skipHumanReview": false,
+                "permissionMode": null,
+                "color": null,
+                "createdAt": 1,
+                "updatedAt": 1
+              }
+            },
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": {
+              "defaultDriver": "claude-code",
+              "maxConcurrentRuns": 4,
+              "permissionMode": "auto",
+              "classifier": "claude-cli",
+              "defaultModels": {
+                "claude-code": "opus",
+                "codex": "luna",
+                "dummy": null
+              },
+              "reviewModels": {},
+              "anthropicApiKeySet": false
+            },
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "hasCustomModel: with no configured default, the driver's own default counts",
+      "initial": {
+        "connected": false,
+        "ready": false,
+        "projects": {
+          "p1": {
+            "id": "p1",
+            "key": "HAR",
+            "name": "har",
+            "path": "/tmp/HAR",
+            "nextSeq": 1,
+            "defaultDriver": null,
+            "defaultModels": {},
+            "useWorktrees": false,
+            "skipAgentReview": false,
+            "skipHumanReview": false,
+            "permissionMode": null,
+            "color": null,
+            "createdAt": 1,
+            "updatedAt": 1
+          },
+          "p2": {
+            "id": "p2",
+            "key": "TWO",
+            "name": "two",
+            "path": "/tmp/TWO",
+            "nextSeq": 1,
+            "defaultDriver": null,
+            "defaultModels": {
+              "claude-code": "sonnet"
+            },
+            "useWorktrees": false,
+            "skipAgentReview": false,
+            "skipHumanReview": false,
+            "permissionMode": null,
+            "color": null,
+            "createdAt": 1,
+            "updatedAt": 1
+          }
+        },
+        "tickets": {},
+        "sessions": {},
+        "runs": {},
+        "activity": {},
+        "specRevisions": {},
+        "specBodies": {},
+        "transcripts": {},
+        "subagents": {},
+        "taskOutputs": {},
+        "deltas": {},
+        "watchers": {},
+        "settings": {
+          "defaultDriver": "claude-code",
+          "maxConcurrentRuns": 4,
+          "permissionMode": "auto",
+          "classifier": "claude-cli",
+          "defaultModels": {
+            "claude-code": "opus",
+            "codex": "luna",
+            "dummy": null
+          },
+          "reviewModels": {},
+          "anthropicApiKeySet": false
+        },
+        "drivers": [],
+        "donePaging": {},
+        "search": null,
+        "keyAliases": {},
+        "missingKeys": {},
+        "childrenLoaded": {},
+        "dependents": {},
+        "ticketsAsOf": null
+      },
+      "steps": [
+        {
+          "actions": [],
+          "probes": [
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "fast",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": true
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "fast",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                [
+                  {
+                    "id": "fast",
+                    "name": "Fast",
+                    "default": true
+                  },
+                  {
+                    "id": "slow",
+                    "name": "Slow"
+                  }
+                ]
+              ],
+              "output": false
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "slow",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                [
+                  {
+                    "id": "fast",
+                    "name": "Fast",
+                    "default": true
+                  },
+                  {
+                    "id": "slow",
+                    "name": "Slow"
+                  }
+                ]
+              ],
+              "output": true
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "dummy",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "fast",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                [
+                  {
+                    "id": "fast",
+                    "name": "Fast"
+                  }
+                ]
+              ],
+              "output": true
+            },
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "claude-code",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "opus",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                },
+                [
+                  {
+                    "id": "sonnet",
+                    "name": "Sonnet",
+                    "default": true
+                  }
+                ]
+              ],
+              "output": false
+            }
+          ],
+          "state": {
+            "connected": false,
+            "ready": false,
+            "projects": {
+              "p1": {
+                "id": "p1",
+                "key": "HAR",
+                "name": "har",
+                "path": "/tmp/HAR",
+                "nextSeq": 1,
+                "defaultDriver": null,
+                "defaultModels": {},
+                "useWorktrees": false,
+                "skipAgentReview": false,
+                "skipHumanReview": false,
+                "permissionMode": null,
+                "color": null,
+                "createdAt": 1,
+                "updatedAt": 1
+              },
+              "p2": {
+                "id": "p2",
+                "key": "TWO",
+                "name": "two",
+                "path": "/tmp/TWO",
+                "nextSeq": 1,
+                "defaultDriver": null,
+                "defaultModels": {
+                  "claude-code": "sonnet"
+                },
+                "useWorktrees": false,
+                "skipAgentReview": false,
+                "skipHumanReview": false,
+                "permissionMode": null,
+                "color": null,
+                "createdAt": 1,
+                "updatedAt": 1
+              }
+            },
+            "tickets": {},
+            "sessions": {},
+            "runs": {},
+            "activity": {},
+            "specRevisions": {},
+            "specBodies": {},
+            "transcripts": {},
+            "subagents": {},
+            "taskOutputs": {},
+            "deltas": {},
+            "watchers": {},
+            "settings": {
+              "defaultDriver": "claude-code",
+              "maxConcurrentRuns": 4,
+              "permissionMode": "auto",
+              "classifier": "claude-cli",
+              "defaultModels": {
+                "claude-code": "opus",
+                "codex": "luna",
+                "dummy": null
+              },
+              "reviewModels": {},
+              "anthropicApiKeySet": false
+            },
+            "drivers": [],
+            "donePaging": {},
+            "search": null,
+            "keyAliases": {},
+            "missingKeys": {},
+            "childrenLoaded": {},
+            "dependents": {},
+            "ticketsAsOf": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "hasCustomModel stays quiet until settings load",
+      "steps": [
+        {
+          "actions": [],
+          "probes": [
+            {
+              "fn": "hasCustomModel",
+              "args": [
+                {
+                  "id": "a",
+                  "key": "A",
+                  "projectId": "p1",
+                  "kind": "task",
+                  "title": "a",
+                  "spec": "",
+                  "status": "planning",
+                  "sessionId": "s-a",
+                  "driver": "claude-code",
+                  "parentId": null,
+                  "dependsOn": [],
+                  "autoStart": false,
+                  "agentReview": "pending",
+                  "humanReview": "pending",
+                  "externalRef": null,
+                  "workdir": null,
+                  "branch": null,
+                  "blockedReason": null,
+                  "permissionMode": null,
+                  "busy": false,
+                  "pendingApproval": null,
+                  "allowedTools": [],
+                  "model": "opus",
+                  "position": 0,
+                  "createdAt": 0,
+                  "updatedAt": 0
+                }
+              ],
+              "output": false
+            },
+            {
+              "fn": "defaultModelOf",
+              "args": [
+                "p1",
+                "claude-code"
               ],
               "output": null
             }

@@ -151,19 +151,22 @@ struct KindBadge: View {
     }
 }
 
-/// The ticket's model, by its display name when the driver's model list has it. The
-/// list comes from the store's shared per-driver cache, loaded only when there's
-/// a model to name; without a store in the environment (previews) it shows the raw id.
+/// The ticket's model, by its display name when the driver's model list has it, shown only when
+/// it isn't the model the ticket would run with by default (`hasCustomModel`). The list comes from
+/// the store's shared per-driver cache, loaded only when there's a model to name; without a store
+/// in the environment (previews) it shows the raw id.
 struct ModelBadge: View {
-    let model: String?
-    let driver: String
+    let ticket: Ticket
+    let state: BoardState
 
     @Environment(BoardStore.self) private var store: BoardStore?
 
     var body: some View {
-        if let model, !model.isEmpty {
-            let cache = store?.sharedModelCache
-            Badge(Models.modelName(cache?.get(driver).data?.models, model), outline: true, icon: "layers")
+        let driver = ticket.driver
+        let cache = store?.sharedModelCache
+        let models = cache?.get(driver).data?.models
+        if let model = ticket.model, !model.isEmpty, state.hasCustomModel(ticket, models: models) {
+            Badge(Models.modelName(models, model), outline: true, icon: "layers")
                 .task(id: "\(driver)#\(store?.epoch ?? 0)#\(store.map { ObjectIdentifier($0).hashValue } ?? 0)") {
                     guard let store, let cache else { return }
                     cache.syncEpoch(store.epoch)

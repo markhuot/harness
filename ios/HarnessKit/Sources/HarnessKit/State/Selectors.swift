@@ -65,6 +65,22 @@ extension BoardState {
         return ticket.driver != d
     }
 
+    /// The model a ticket on `driver` runs with when it picks none: the project's default for that driver, else the global one (nil: the driver's own).
+    public func defaultModelOf(_ projectId: String, driver: String) -> String? {
+        if let m = projects[projectId]?.defaultModels[driver], !m.isEmpty { return m }
+        if let m = settings?.defaultModels[driver] ?? nil, !m.isEmpty { return m }
+        return nil
+    }
+
+    /// Whether a ticket picked a model other than the one it would run with by default, i.e. worth
+    /// labelling. With no configured default, the driver's own default (from its model list, when
+    /// loaded) counts as the default.
+    public func hasCustomModel(_ ticket: Ticket, models: [ModelInfo]? = nil) -> Bool {
+        guard let model = ticket.model, !model.isEmpty, settings != nil else { return false }
+        let d = defaultModelOf(ticket.projectId, driver: ticket.driver) ?? models?.first { $0.default == true }?.id
+        return model != d
+    }
+
     /// A conductor's children, oldest first.
     public func childrenOf(_ ticketId: String) -> [Ticket] {
         tickets.values.filter { $0.parentId == ticketId }.sorted { a, b in

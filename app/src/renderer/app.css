@@ -448,6 +448,10 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   flex-wrap: wrap;
   margin-top: 1px;
 }
+/* The model badge hides itself once the driver's model list shows its model is the default one */
+.card-foot:empty {
+  display: none;
+}
 .pending-dot {
   width: 6px;
   height: 6px;

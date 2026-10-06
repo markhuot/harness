@@ -15,6 +15,7 @@ import {
   workingTitle,
   doneCount,
   hasCustomDriver,
+  hasCustomModel,
   hideOnBoard,
   latestActivity,
   NEWS_KINDS,
@@ -463,10 +464,10 @@ const TicketCard = memo(function TicketCard({
         </div>
       )}
 
-      {(customDriver || t.model) && (
+      {(customDriver || hasCustomModel(state, t)) && (
         <div className="card-foot">
           {customDriver && <DriverBadge driver={t.driver} />}
-          <ModelBadge model={t.model} driver={t.driver} />
+          <ModelBadge ticket={t} />
         </div>
       )}
     </article>
