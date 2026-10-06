@@ -6,28 +6,29 @@ import SwiftUI
 // the hero's collapse state, the scroll trackers a tab body attaches, the tab opener the Agents and
 // Transcript slots use to open a sub-agent, and a wrapping row layout.
 
-/// The ticket hero's collapse: HeroCollapse's rules fed by the tab body's
-/// scroll gestures. `show()` brings it back (another tab, news on the ticket); `measured` takes the
-/// hero's height while it's shown.
+/// The ticket hero's disclosure, shared by every tab: in full (crumb, title, badges, actions) or
+/// collapsed to its title line with a chevron (HeroDisclosure). Only the Spec opens it in full; a
+/// forward scroll gesture on the tab body (HeroCollapse's rules) or another tab collapses it, and
+/// only the chevron (`toggle`) expands it again. `measured` takes the hero's height.
 ///
-/// Hiding or showing the hero changes no layout. The tab strip and pager are always laid out as if
-/// the hero were gone, under it, and sit `distance` lower while it shows (HeroSlide, a render-time
-/// offset); a toggle animates only that offset, and the tab bodies keep the hero's room at their
-/// end (`distance` as a bottom inset). Changing the layout instead re-laid out the tab body twice
-/// per toggle, as the slide started and as it ended, which on a long transcript dropped frames.
+/// The tab strip and pager are laid out as if the hero were gone, under it, and sit `distance`
+/// lower (HeroSlide, a render-time offset); when the hero's height changes they slide there, and
+/// the tab bodies keep the hero's room at their end (`distance` as a bottom inset). Moving them
+/// through layout instead would re-lay out the tab body on every frame of the slide, which on a
+/// long transcript dropped frames.
 ///
-/// Only TicketHeroSlot, HeroSlide and HeroRoom read its state, never the ticket screen's body: a
-/// toggle runs in the middle of a scroll, and re-rendering the screen from there redrew every tab
-/// body on the frame the slide starts.
+/// Only the hero, HeroSlide, PagerSlide and HeroRoom read its state, never the ticket screen's body:
+/// a collapse runs in the middle of a scroll, and re-rendering the screen from there redrew every
+/// tab body on the frame the slide starts.
 @MainActor
 @Observable
 final class TicketDetailHeroCollapse {
-    private(set) var hidden = false
-    /// 1 hidden, 0 shown, animated between them: how far the slide has gone.
-    private(set) var progress: Double = 0
-    /// The hero's height (while it last showed): how far below it the tab strip sits while it shows,
-    /// and the room the tab bodies keep at their end.
+    private(set) var expanded: Bool
+    /// The hero's height: how far below it the tab strip and pager sit, and the room the tab bodies
+    /// keep at their end. Changes at once.
     private(set) var distance: Double = 0
+    /// The tab strip's offset, animated toward `distance` as the hero changes height.
+    private(set) var stripOffset: Double = 0
     /// The slide is under way. A global frame read inside the sliding views moves with the slide's
     /// offset until it ends, so geometry the screen lays out from ignores readings until then.
     @ObservationIgnored private(set) var sliding = false
@@ -37,24 +38,55 @@ final class TicketDetailHeroCollapse {
     @ObservationIgnored private var slides = 0
 
     private static let slideDuration = 0.22
+    private static let slide = Animation.easeInOut(duration: slideDuration)
 
+    init(expanded: Bool) { self.expanded = expanded }
+
+    /// A scroll event from the tab body on screen: a forward gesture collapses the hero; nothing a
+    /// scroll does expands it.
     func send(_ e: CollapseEvent) {
-        let next = HeroCollapse.step(state, e, heroHeight: distance)
+        let next = HeroCollapse.step(state, e, heroHeight: 0)
+        let keep = HeroDisclosure.expanded(expanded, scrolledFrom: state, to: next)
         state = next
-        guard next.hidden != hidden else { return }
+        if !keep { set(expanded: false) }
+    }
+
+    /// The chevron on the hero's title.
+    func toggle() { set(expanded: !expanded) }
+
+    /// Another tab is showing: any but the Spec collapses the hero.
+    func moved(to tab: TicketTab) {
+        if !HeroDisclosure.expanded(expanded, afterMovingTo: tab) { set(expanded: false) }
+    }
+
+    private func set(expanded value: Bool) {
+        guard value != expanded else { return }
         // Instruments' Points of Interest: each toggle, to line up with the hitches around it.
-        Self.signposter.emitEvent("Hero toggle", "\(next.hidden ? "hide" : "show")")
+        Self.signposter.emitEvent("Hero toggle", "\(value ? "expand" : "collapse")")
+        // A fresh gesture has to scroll forward again before the hero collapses once more.
+        state = HeroCollapse.shown
+        withAnimation(Self.slide) { expanded = value }
+    }
+
+    func measured(_ height: Double) {
+        guard height != distance else { return }
+        let old = distance
         var instant = Transaction(animation: nil)
         instant.disablesAnimations = true
-        withTransaction(instant) { hidden = next.hidden }
+        withTransaction(instant) { distance = height }
+        // The first measurement: nothing to slide from.
+        guard old > 0 else {
+            withTransaction(instant) { stripOffset = height }
+            return
+        }
         // The pager takes its new place at once (PagerSlide) and slides there on its layer, an
         // additive Core Animation the render server runs: moving it through SwiftUI instead
         // recomputed the geometry and hit testing of every view in the tab body on every frame,
         // which a long transcript couldn't keep up with. Additive, so a slide cut short by the next
-        // toggle carries on from where it was.
-        if let layer = pager?.layer, distance > 0 {
+        // change carries on from where it was.
+        if let layer = pager?.layer {
             let slide = CABasicAnimation(keyPath: "transform.translation.y")
-            slide.fromValue = next.hidden ? distance : -distance
+            slide.fromValue = old - height
             slide.toValue = 0.0
             slide.isAdditive = true
             slide.duration = Self.slideDuration
@@ -65,81 +97,55 @@ final class TicketDetailHeroCollapse {
         slides += 1
         let slide = slides
         sliding = true
-        withAnimation(.easeInOut(duration: Self.slideDuration), completionCriteria: .removed) {
-            progress = next.hidden ? 1 : 0
+        withAnimation(Self.slide, completionCriteria: .removed) {
+            stripOffset = height
         } completion: { [weak self] in
             guard let self, slide == slides else { return }
             sliding = false
         }
     }
 
-    func show() { send(.show) }
-
-    func measured(_ height: Double) {
-        guard !state.hidden, height != distance else { return }
-        var instant = Transaction(animation: nil)
-        instant.disablesAnimations = true
-        withTransaction(instant) { distance = height }
-    }
-
-    /// Where the tab strip and pager sit below their layout once a slide is over.
-    var restingOffset: Double { hidden ? 0 : distance }
-
     private static let signposter = OSSignposter(subsystem: "com.markhuot.harness", category: .pointsOfInterest)
 }
 
-/// On the hero: hidden, it keeps drawing under the tab strip and pager, which cover it (HeroSlide),
-/// but takes no taps and is out of VoiceOver.
-struct TicketHeroSlot: ViewModifier {
-    let hero: TicketDetailHeroCollapse
-
-    func body(content: Content) -> some View {
-        content
-            .allowsHitTesting(!hero.hidden)
-            .accessibilityHidden(hero.hidden)
-    }
-}
-
-/// On the tab strip: `distance` lower while the hero shows, sliding up over it as it hides. Only
-/// `progress` is interpolated, and only into a visual effect, so no frame of the slide lays
-/// anything out. The strip is small; the pager below it slides on its layer instead (PagerSlide).
+/// On the tab strip: `distance` lower, under the hero, sliding as the hero changes height. Only the
+/// offset is interpolated, and only into a visual effect, so no frame of the slide lays anything
+/// out. The strip is small; the pager below it slides on its layer instead (PagerSlide).
 struct HeroSlide: ViewModifier {
     let hero: TicketDetailHeroCollapse
 
     func body(content: Content) -> some View {
-        content.modifier(HeroSlideOffset(progress: hero.progress, distance: hero.distance))
+        content.modifier(HeroSlideOffset(offset: hero.stripOffset))
     }
 }
 
 private struct HeroSlideOffset: ViewModifier, Animatable {
-    var progress: Double
-    let distance: Double
+    var offset: Double
 
     nonisolated var animatableData: Double {
-        get { progress }
-        set { progress = newValue }
+        get { offset }
+        set { offset = newValue }
     }
 
     func body(content: Content) -> some View {
-        let y = distance * (1 - progress)
+        let y = offset
         content.visualEffect { c, _ in c.offset(y: y) }
     }
 }
 
-/// On the pager: `distance` lower while the hero shows, changed at once on a toggle (no SwiftUI
-/// animation); the hero collapse slides it on its layer.
+/// On the pager: `distance` lower, changed at once (no SwiftUI animation); the hero collapse slides
+/// it on its layer.
 struct PagerSlide: ViewModifier {
     let hero: TicketDetailHeroCollapse
 
     func body(content: Content) -> some View {
-        let y = hero.restingOffset
+        let y = hero.distance
         content.visualEffect { c, _ in c.offset(y: y) }
     }
 }
 
-/// On a tab page: its bottom inset, the composer's overlap plus the hero's room. While the hero
-/// shows, the page sits `distance` lower, so its last `distance` is below the screen; keeping that
-/// room at the end at all times means a toggle changes no inset (and lays nothing out).
+/// On a tab page: its bottom inset, the composer's overlap plus the hero's room. The page sits
+/// `distance` lower, so its last `distance` is below the screen.
 struct HeroRoom: ViewModifier {
     let hero: TicketDetailHeroCollapse
     let overlap: CGFloat
@@ -172,7 +178,6 @@ struct TicketDetailTabOpener: Sendable {
 /// markdown. These call through to whatever the screen set last (`update`), so they stay current.
 @MainActor
 final class TicketDetailRelay {
-    private var hero: TicketDetailHeroCollapse?
     private var onTab: (TicketTab) -> Void = { _ in }
     private var annotate: (AnnotationRequest) -> Void = { _ in }
     private var focusComposer: () -> Void = {}
@@ -180,10 +185,9 @@ final class TicketDetailRelay {
     private var tabs: [TicketTab] = []
     private var shown: TicketTab?
 
-    func update(hero: TicketDetailHeroCollapse, onTab: @escaping (TicketTab) -> Void,
+    func update(onTab: @escaping (TicketTab) -> Void,
                 annotate: @escaping (AnnotationRequest) -> Void, focusComposer: @escaping () -> Void,
                 tabs: [TicketTab], shown: TicketTab) {
-        self.hero = hero
         self.onTab = onTab
         self.annotate = annotate
         self.focusComposer = focusComposer
@@ -194,12 +198,10 @@ final class TicketDetailRelay {
     /// Next Tab (1) and Previous Tab (-1), round the ends (Tabs.nextTab), for ⇧⌘] and ⇧⌘[ (WindowShortcuts).
     func step(_ delta: Int) {
         guard tabs.count > 1, let shown, let t = Tabs.nextTab(tabs, current: shown, delta: delta) else { return }
-        hero?.show()
         onTab(t)
     }
 
     private(set) lazy var tabOpener = TicketDetailTabOpener { [weak self] t in
-        self?.hero?.show()
         self?.onTab(t)
     }
 
@@ -266,8 +268,8 @@ struct AnnotatorOpener: Sendable {
 }
 
 extension View {
-    /// On a tab body's ScrollView or List: its drags and flings hide and bring back the ticket hero.
-    /// Does nothing outside a ticket screen.
+    /// On a tab body's ScrollView or List: a forward drag or fling collapses the ticket hero; nothing
+    /// a scroll does expands it. Does nothing outside a ticket screen.
     func ticketHeroScroll() -> some View { modifier(TicketDetailHeroScroll()) }
 
     /// On a ScrollView whose newest content is last: opens at the bottom,

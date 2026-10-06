@@ -11,6 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone and iPad, every ticket tab now shares the header the Changes tab had: the ticket's
+  title on one line with a chevron that shows its status, badges and actions. It opens in full
+  on the Spec and collapses as you scroll the Spec or move to another tab; once collapsed, it
+  stays that way (scrolling back, switching tabs or ticket news no longer brings it back) until
+  you tap the chevron.
 - After a review or a re-open, agents rewrite the ticket's spec to describe where the work stands,
   instead of adding a section per review round with commit hashes. The spec's revision history
   still shows what changed between rounds.

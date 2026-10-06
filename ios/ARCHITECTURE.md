@@ -640,8 +640,9 @@ get them there.
 TicketDetailScreen (HARNESS-139) hosts the other Ticket slots as tab bodies. What a tab body gets
 from it (Ticket/TicketDetailSupport.swift):
 
-- **`.ticketHeroScroll()`** on a tab body's ScrollView or List: its drags and flings hide the hero
-  and bring it back (HarnessKit `HeroCollapse`, checked against frozen fixtures).
+- **`.ticketHeroScroll()`** on a tab body's ScrollView or List: a forward drag or fling collapses
+  the hero to its title line (HarnessKit `HeroCollapse`, checked against frozen fixtures, then
+  `HeroDisclosure`); nothing a scroll does expands it again, only its chevron.
   TranscriptView and AgentsTabView should attach it, since sim-check `--stick` checks the hero on
   the Transcript. Outside a ticket screen it does nothing.
 - **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Activity, and the
@@ -887,7 +888,7 @@ native-pattern difference, not a missing feature.
 | Hero: crumb, title (compact on plugin/sub-agent, gone on Browser but for an approval card), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |
 | Start work, Approve (+ menu incl. clean up), Request changes, Complete (+ menu), agent review, Re-open, Cancel run | screens/TicketDetail, lib/approve, shared/completion | TicketDetailHero, TicketDetailSheets, HarnessKit Approve/Completion/TicketDetailLogic | done |
 | Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |
-| Hero collapse on scroll, back on tab change, news or a status-bar tap | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, HarnessKit HeroCollapse | done |
+| Hero on every tab: in full on opening the Spec, collapsed to its title line with a chevron elsewhere; a Spec scroll or another tab collapses it, only the chevron expands it | ui/heroCollapse, lib/heroCollapse | TicketDetailSupport, TicketDetailHero, HarnessKit HeroCollapse/HeroDisclosure | done |
 | Tab strip: order, counts, live dots, plugin icons, sub-agent highlights Agents | screens/TicketDetail, shared/state/tabs | TicketDetailTabStrip, HarnessKit Tabs/ChangesTab | done |
 | Spec: the living spec, history bar (step, scrub, follow the newest, approved-plan tag), Show changes marking edits in the rendered spec, depends-on chips | (HARNESS-199, HARNESS-211) | TicketDetailSpecTab, MarkdownView (`previous`), HarnessKit SpecHistory/SpecScrubber/MarkdownDiff | done |
 | Activity: typed timeline, blocked card, review round and commit, full text behind a one-line body (`meta.detail`), legacy message/answer bubbles, stick to bottom | (HARNESS-199, HARNESS-213) | TicketDetailActivityTab, HarnessKit ActivityRows | done |

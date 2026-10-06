@@ -3,12 +3,14 @@ import SwiftUI
 
 /// The top of the ticket screen: the "Part of" crumb, the title, badges,
 /// the approval card and the actions for the ticket's state. It scrolls on its own, up to
-/// `maxHeight`. On the plugin and sub-agent tabs (`compactTab`) it shrinks to the title on one line,
-/// which expands it on tap. On the Browser tab (`collapsed`) it's gone, as the Transcript's hides
-/// while it scrolls, so the page gets the room; only an approval card waiting on the human shows.
+/// `maxHeight`. Collapsed, it shrinks to the title on one line with a chevron that expands it (an
+/// approval card waiting on the human still shows). `disclosure` is the ticket screen's, shared by
+/// every tab (HeroDisclosure); without one (a pinned window) it starts collapsed and keeps its own.
+/// On the Browser tab (`collapsed`) it's gone, so the page gets the room; only an approval card
+/// waiting on the human shows.
 struct TicketDetailHero: View {
     let ticket: Ticket
-    let compactTab: Bool
+    var disclosure: TicketDetailHeroCollapse?
     var collapsed = false
     let maxHeight: CGFloat
 
@@ -16,16 +18,25 @@ struct TicketDetailHero: View {
     @Environment(Router.self) private var router
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
-    @State private var expanded = false
+    @State private var localExpanded = false
     @State private var contentHeight: CGFloat = 0
     @State private var requestingChanges = false
     @State private var reopening = false
     @State private var approvingCustom = false
 
     private var api: HarnessClient? { store.api }
+    private var expanded: Bool { disclosure?.expanded ?? localExpanded }
+
+    private func toggle() {
+        if let disclosure {
+            disclosure.toggle()
+        } else {
+            withAnimation(.snappy) { localExpanded.toggle() }
+        }
+    }
 
     var body: some View {
-        let compact = compactTab && !expanded
+        let compact = !expanded
         // Collapsed with nothing waiting: zero high, so the tab strip and pager sit right under the bar.
         let gone = collapsed && ticket.pendingApproval == nil
         ScrollView {
@@ -96,21 +107,16 @@ struct TicketDetailHero: View {
             .foregroundStyle(c.text)
             .lineLimit(compact ? 1 : nil)
             .frame(maxWidth: .infinity, alignment: .leading)
-        return Group {
-            if compactTab {
-                Button { withAnimation(.snappy) { expanded.toggle() } } label: {
-                    HStack(spacing: 8) {
-                        text
-                        Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
-                    }
-                    .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Shows the ticket's status and actions")
-            } else {
-                text.textSelection(.enabled)
+        return Button(action: toggle) {
+            HStack(spacing: 8) {
+                text
+                Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
             }
+            .contentShape(.rect)
         }
+        .buttonStyle(.plain)
+        .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+        .accessibilityHint(expanded ? "Hides the ticket's status and actions" : "Shows the ticket's status and actions")
     }
 
     /// The PR a "pr" completion opened, as a tappable badge.

@@ -32,7 +32,8 @@
 //      swipes the Transcript tab
 //      and checks it follows new content at the bottom, stays put once scrolled up, and follows again
 //      after scrolling back down; the Activity tab opens at the bottom and follows; the ticket's hero
-//      scrolls away with the transcript and comes back on scrolling back or a tap on the tab; a
+//      opens in full on the Spec, collapses on scrolling it and stays collapsed scrolling back or
+//      moving to another tab, and opens collapsed on the other tabs; a
 //      sideways swipe moves between the tabs, and a right swipe on the Spec still goes back
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
@@ -256,9 +257,9 @@ async function dismissMenu(udid: string) {
  * the tree, so it swipes a fixed distance until one shows up, then just far enough. One above the
  * screen (or under the header) is scrolled back down to.
  *
- * A ticket's hero hides while its tab scrolls forward and comes back on scrolling back, which moves
- * the tab body another ~240pt. The swipes aim at 420 (forward) and 220 (back), so the element lands
- * inside the 140–520 band whether or not the hero toggles.
+ * A ticket's hero collapses while the Spec scrolls forward, which moves the tab body up by the
+ * difference. The swipes aim at 420 (forward) and 220 (back), so the element lands inside the
+ * 140–520 band whether or not the hero collapses.
  */
 async function scrollTo(udid: string, match: (label: string) => boolean, tries = 10) {
   for (let i = 0; i < tries; i++) {
@@ -1059,28 +1060,46 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     await shot(udid, `stick-under-composer-${tab}`);
   }
 
-  // The hero (title, badges, the review buttons) scrolls out of the way with the tab body, and
-  // the tab strip moves up into its place (lib/heroCollapse has the rules, unit-tested).
+  // One header on every tab: the Spec opens it in full (title, badges, the review buttons), and
+  // scrolling the Spec forward collapses it to the title line, the tab strip moving up into its
+  // place. Nothing but the title's chevron expands it again: not scrolling back, not another tab.
+  // Every other tab opens with it collapsed (lib/heroCollapse and HeroDisclosure have the rules).
   const heroShown = async () => (await labels(udid)).includes("Request changes");
   const stripY = async () => (await nodes(udid)).find((n) => n.AXLabel === "Transcript")?.frame.y ?? null;
-  await check("the hero scrolls away with the transcript and comes back", async () => {
-    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`);
+  const title = (await ticketOf(key)).title || "Untitled";
+  // The hero's title comes before the Spec's first line in the tree, so it's the one tapped.
+  const expandHero = () => tapWhere(udid, (l) => l.startsWith(title.slice(0, 20)), { timeout: 3000 });
+  await check("the hero collapses on scrolling the Spec and stays collapsed scrolling back", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=spec`);
     await until("the hero", async () => (await heroShown()) || null, 8000);
     const before = await stripY();
-    await swipe("down", 2); // away from the bottom, toward older messages: nothing to hide yet
-    if (!(await heroShown())) throw new Error("hid while scrolling back");
     await swipe("up", 1);
-    if (await heroShown()) throw new Error("still shown after scrolling forward");
+    if (await heroShown()) throw new Error("still expanded after scrolling forward");
     const after = await stripY();
     if (before === null || after === null || after >= before - 40) throw new Error(`tab strip ${before}→${after}`);
-    await shot(udid, "hero-hidden");
-    await swipe("down", 1);
-    if (!(await heroShown())) throw new Error("didn't come back after scrolling back");
-    await swipe("up", 1);
-    if (await heroShown()) throw new Error("didn't hide a second time");
+    await shot(udid, "hero-collapsed");
+    await swipe("down", 3);
+    if (await heroShown()) throw new Error("expanded on scrolling back");
+    return `tab strip ${Math.round(before)}→${Math.round(after)}; stayed collapsed scrolling back to the top`;
+  });
+  await check("another tab collapses the hero, and back on the Spec it stays collapsed", async () => {
+    await expandHero();
+    await until("the hero after tapping its title", async () => (await heroShown()) || null, 3000);
+    await shot(udid, "hero-expanded");
     await tapLabel(udid, "Transcript");
-    await until("the hero after tapping the tab", async () => (await heroShown()) || null, 3000);
-    return `tab strip ${Math.round(before)}→${Math.round(after)}; back on scrolling back and on a tap on the tab`;
+    await until("the hero collapsed on the Transcript", async () => !(await heroShown()) || null, 3000);
+    await tapLabel(udid, "Spec");
+    await Bun.sleep(800);
+    if (await heroShown()) throw new Error("expanded back on the Spec");
+    return "collapsed on the Transcript and still collapsed back on the Spec";
+  });
+  await check("other tabs open with the hero collapsed", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`);
+    await until("the tab strip", stripY, 8000);
+    await Bun.sleep(800);
+    if (await heroShown()) throw new Error("opened expanded");
+    await shot(udid, "hero-transcript");
+    return "collapsed";
   });
 
   // The tab bodies sit side by side in a pager: a sideways swipe moves to the neighbouring tab, and

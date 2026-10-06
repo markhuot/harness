@@ -21,13 +21,15 @@ struct TicketDetailScreen: View {
     @State private var missing = false
     @State private var tab: TicketTab
     @State private var pluginTabs: [PluginTab]?
-    @State private var hero = TicketDetailHeroCollapse()
+    @State private var hero: TicketDetailHeroCollapse
 
     init(key: String, initialTab: TicketTab?, pinned: TicketWindowValue? = nil) {
         self.key = key
         self.initialTab = initialTab
         self.pinned = pinned
-        _tab = State(initialValue: initialTab ?? Tabs.openingTab())
+        let opening = initialTab ?? Tabs.openingTab()
+        _tab = State(initialValue: opening)
+        _hero = State(initialValue: TicketDetailHeroCollapse(expanded: HeroDisclosure.expandedOnOpen(opening)))
     }
 
     private var ticketKey: String { renamedTo ?? key }
@@ -90,13 +92,10 @@ struct TicketDetailScreen: View {
         .onChange(of: ticket?.draft == true, initial: true) { _, draft in
             if draft { openDraft() }
         }
-        // News that needs a look brings the hero back.
-        .onChange(of: ticket?.status) { hero.show() }
-        .onChange(of: ticket?.pendingApproval?.id) { hero.show() }
     }
 
     private func pick(_ t: TicketTab) {
-        hero.show()
+        hero.moved(to: t)
         tab = t
     }
 
@@ -161,23 +160,20 @@ private struct TicketDetailBody: View {
         let attachTarget: (any PromptAttachmentTarget)? = TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
-        let compact = shown == .changes || Tabs.parsePluginTab(shown) != nil || Tabs.parseSubagentTab(shown) != nil
         let tabs = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
-        let _ = relay.update(hero: hero, onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 },
+        let _ = relay.update(onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 },
                              tabs: tabs, shown: shown)
         ZStack(alignment: .top) {
             // The tab strip and pager are laid out over the hero, as if it were gone, and sit below it
-            // while it shows (HeroSlide, PagerSlide); hiding slides them up over it. No layout changes, so a
-            // toggle mid-scroll re-lays out no tab body. The hero's state is read only in the
-            // modifiers, so a toggle doesn't re-render this body either.
-            TicketDetailHero(ticket: ticket, compactTab: compact, collapsed: shown == .browser, maxHeight: height * 0.45)
+            // (HeroSlide, PagerSlide), sliding as it collapses or expands. No layout changes, so a
+            // collapse mid-scroll re-lays out no tab body. The hero's state is read only in the hero
+            // and the modifiers, so a toggle doesn't re-render this body either.
+            TicketDetailHero(ticket: ticket, disclosure: hero, collapsed: shown == .browser, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
-                .modifier(TicketHeroSlot(hero: hero))
             // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
             // up under the bar, the strip's background would slide down over the hero.
             VStack(spacing: 0) {
                 TicketDetailTabStrip(ticket: ticket, tab: shown, pluginTabs: pluginTabs, tornOff: tornOff) { t in
-                    hero.show()
                     onTab(t)
                 }
                 .background(c.bg, ignoresSafeAreaEdges: [])
@@ -217,7 +213,7 @@ private struct TicketDetailBody: View {
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
-        .annotator($annotating) { hero.show() }
+        .annotator($annotating)
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the
@@ -232,7 +228,6 @@ private struct TicketDetailBody: View {
         let selection = Binding<TicketTab>(get: { strip }, set: { t in
             guard t != strip else { return }
             haptic(.select)
-            hero.show()
             onTab(t)
         })
         return TabView(selection: selection) {
@@ -244,11 +239,10 @@ private struct TicketDetailBody: View {
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
                     // The frame includes PagerSlide's offset, so it's taken back to the layout's
-                    // (the hero's resting offset off). Readings while a slide is under way are
-                    // skipped.
+                    // (the hero's height off). Readings while a slide is under way are skipped.
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
                         guard page == strip, !hero.sliding else { return }
-                        let laidOut = y - hero.restingOffset
+                        let laidOut = y - hero.distance
                         if pageBottom != laidOut { pageBottom = laidOut }
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
@@ -342,7 +336,7 @@ private struct TicketPinnedBody: View {
         let outgoing = draft.attachments
         let attachTarget: (any PromptAttachmentTarget)? = isComposer && TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         VStack(spacing: 0) {
-            TicketDetailHero(ticket: ticket, compactTab: true, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket, maxHeight: height * 0.45)
             if isComposer {
                 Spacer(minLength: 0)
             } else {
