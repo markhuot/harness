@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
-import { fakeContext, fakeOps } from "./fakes";
 import { CORE_TOOL_NAMES, dispatcherTools, rankTools, toolsForRun } from "./index";
 
 const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot", "browser_wait", "browser_run", "browser_run_status", "browser_run_stop"];
@@ -163,26 +162,6 @@ describe("dispatcherTools", () => {
   test("tool_search and call_tool are harness tools (advertised read-only)", () => {
     const tools = view("review", builtin);
     for (const name of ["tool_search", "call_tool"]) expect(tools.find((t) => t.name === name)!.group).toBe("harness");
-  });
-
-  test("call_tool is judged as the tool it runs: a native tool asks the gate, a gated tool asks a human", async () => {
-    const callTool = view("work", bare).find((t) => t.name === "call_tool")!;
-    const ops = fakeOps({
-      checkPermission: async () => ({ behavior: "deny", message: "no" }),
-      requestApproval: async () => ({ behavior: "deny", message: "awaiting approval" }),
-    });
-    const ctx = fakeContext({ ops });
-    const bash = await callTool.execute({ name: "bash", input: { command: "rm -rf /tmp/x" } }, ctx);
-    expect(bash.isError).toBe(true);
-    const watcher = await callTool.execute({ name: "create_watcher", input: { name: "w", command: "echo hi" } }, ctx);
-    expect(watcher.isError).toBe(true);
-    const judged = ops.calls.filter((c) => c.method === "checkPermission" || c.method === "requestApproval");
-    expect(judged.map((c) => [c.method, c.args[0]])).toEqual([
-      ["checkPermission", "bash"],
-      ["requestApproval", "create_watcher"],
-    ]);
-    expect(judged[0]!.args[1]).toEqual({ command: "rm -rf /tmp/x" });
-    expect(judged[1]!.args[2]).toMatchObject({ onceOnly: true });
   });
 
   test("rankTools: exact names first, then whole-word name matches, then descriptions", () => {

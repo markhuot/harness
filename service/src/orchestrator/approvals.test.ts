@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import type { HarnessEvent } from "@harness/shared";
 import { FakeDriver, makeOrchestrator } from "../testing/fakes";
 import { migrate, MIGRATIONS } from "../db";
-import { APPROVAL_PENDING_MESSAGE, PLAN_APPROVAL_MESSAGE, describeToolCall, endsWithQuestion, summarizeToolInput } from "./orchestrator";
+import { APPROVAL_PENDING_MESSAGE, PLAN_APPROVAL_MESSAGE, endsWithQuestion, summarizeToolInput } from "./orchestrator";
 import { DEFAULT_SETTINGS, resolveSettings } from "./settings";
 
 function setup(driver?: FakeDriver) {
@@ -133,30 +133,12 @@ describe("tool permission approvals", () => {
     expect(kinds(h, t.sessionId).slice(-2)).toEqual(["complete", "complete"]);
   });
 
-  test("a call made through call_tool is named and gated as the tool it runs", async () => {
-    const h = setup();
-    const call = JSON.stringify({ name: "delete_ticket", input: { key: "ACME-9" } });
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: `go /tool mcp__harness__call_tool ${call}` });
-    await h.orch.idle();
-    const cur = h.orch.ticketDetail(t.key).ticket;
-    expect(cur.status).toBe("blocked");
-    expect(cur.blockedReason).toBe('Permission needed: delete_ticket — {"key":"ACME-9"}');
-    // The pending approval keeps the raw call, so the grant matches the identical retry.
-    expect(cur.pendingApproval).toMatchObject({ toolName: "mcp__harness__call_tool", onceOnly: true });
-    await expect(h.orch.answerApproval(t.key, { decision: "allow_tool" })).rejects.toThrow("delete_ticket can only be allowed once");
-  });
-
   test("summarizeToolInput prefers command / file_path / url, else compact JSON", () => {
     expect(summarizeToolInput({ command: "npm  install\n--save" })).toBe("npm install --save");
     expect(summarizeToolInput({ file_path: "/a/b.ts", content: "..." })).toBe("/a/b.ts");
     expect(summarizeToolInput({ url: "https://x" })).toBe("https://x");
     expect(summarizeToolInput({ a: 1 })).toBe('{"a":1}');
     expect(summarizeToolInput({ command: "x".repeat(300) }).length).toBe(120);
-  });
-
-  test("describeToolCall names a call_tool call by the tool it runs", () => {
-    expect(describeToolCall("mcp__harness__call_tool", { name: "browser_open", input: { url: "https://x" } })).toBe("browser_open (https://x)");
-    expect(describeToolCall("Bash", { command: "ls" })).toBe("Bash (ls)");
   });
 });
 

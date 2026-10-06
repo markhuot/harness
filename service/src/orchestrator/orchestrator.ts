@@ -79,7 +79,6 @@ import {
   PROMPT_IDS,
   rankCommands,
   TICKET_STATUSES,
-  unwrapToolCall,
   watcherDriver,
   watcherModel,
 } from "@harness/shared";
@@ -110,7 +109,7 @@ import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, stopBrowserJobs, toolsForRun } from "../tools/index";
-import { positionForDrop, shownToolCall } from "@harness/shared/state";
+import { positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
@@ -339,17 +338,6 @@ export function summarizeToolInput(input: unknown, max = 120): string {
   } else text = JSON.stringify(input ?? null);
   text = text.replace(/\s+/g, " ").trim();
   return text.length > max ? text.slice(0, max - 1) + "…" : text;
-}
-
-/** "name (summary)" for a tool call, call_tool shown as the inner tool it runs. */
-export function describeToolCall(toolName: string, input: unknown, max = 120): string {
-  const shown = shownToolCall(toolName, input);
-  return `${shown.name} (${summarizeToolInput(shown.input, max)})`;
-}
-
-/** Whether a call is a human-gated harness tool, looking through call_tool and the MCP prefix. */
-function isGatedToolCall(toolName: string, input: unknown): boolean {
-  return GATED_TOOL_NAMES.has(toolName) || GATED_TOOL_NAMES.has(shownToolCall(toolName, input).name);
 }
 
 /** True when text ends with a question, ignoring trailing emoji, punctuation and closing markdown. */
@@ -1914,10 +1902,10 @@ export class Orchestrator {
     if (decision !== "allow_once" && decision !== "allow_tool" && decision !== "deny") {
       throw badRequest("decision must be allow_once, allow_tool or deny");
     }
-    if (decision === "allow_tool" && (pa.onceOnly || isGatedToolCall(pa.toolName, pa.input))) {
-      throw badRequest(`${shownToolCall(pa.toolName, pa.input).name} can only be allowed once: every call needs its own approval`);
+    if (decision === "allow_tool" && (pa.onceOnly || GATED_TOOL_NAMES.has(pa.toolName))) {
+      throw badRequest(`${pa.toolName} can only be allowed once: every call needs its own approval`);
     }
-    const what = pa.summary ? `${shownToolCall(pa.toolName, pa.input).name} (${pa.summary})` : describeToolCall(pa.toolName, pa.input);
+    const what = `${pa.toolName} (${pa.summary ?? summarizeToolInput(pa.input)})`;
     const note = typeof body.message === "string" ? body.message.trim().replace(/[.\s]+$/, "") : "";
     let prompt: string;
     let allowedTools = ticket.allowedTools;
@@ -3385,7 +3373,7 @@ ${numberLines(r.body)}`;
     // A matching one-time grant is used up first, even when the tool is also allowed outright.
     if (this.store.tickets.consumeGrant(t.id, toolName, input)) return { behavior: "allow", updatedInput: input };
     // Gated harness tools are never allowed wholesale, even if a name ended up in allowedTools.
-    const onceOnly = !!meta.onceOnly || isGatedToolCall(toolName, input);
+    const onceOnly = !!meta.onceOnly || GATED_TOOL_NAMES.has(toolName);
     if (!onceOnly && t.allowedTools.includes(toolName)) return { behavior: "allow", updatedInput: input };
     if (meta.viaPromptTool && !onceOnly && this.permissionModeFor(t) === "auto") {
       // An auto-mode ticket whose run is in ask mode only to deliver a grant (planGrants): judge
@@ -3410,8 +3398,7 @@ ${numberLines(r.body)}`;
     if (meta.source) pending.source = meta.source;
     if (meta.summary) pending.summary = meta.summary;
     if (meta.onceOnly) pending.onceOnly = true;
-    const shown = unwrapToolCall(toolName, input);
-    const reason = `Permission needed: ${shownToolCall(toolName, input).name} — ${meta.summary ?? summarizeToolInput(shown.input)}`;
+    const reason = `Permission needed: ${toolName} — ${meta.summary ?? summarizeToolInput(input)}`;
     // The approval card shows the classifier's or policy's reason; Activity gets the one line.
     const stays = t.status === "blocked" || this.store.runs.get(runId)?.kind === "chat";
     this.addActivityLine(t, "permission", "system", reason, {
@@ -3464,7 +3451,7 @@ ${numberLines(r.body)}`;
       // The agent found another way and submitted: the review goes ahead, and the denied calls
       // are on record for the reviewer and the human.
       const calls = [...new Map(active.denials.map((d) => [grantKey(d.toolName, d.input), d])).values()];
-      const lines = calls.map((d) => `- ${describeToolCall(d.toolName, d.input)}: ${d.reason}`);
+      const lines = calls.map((d) => `- ${d.toolName} (${summarizeToolInput(d.input)}): ${d.reason}`);
       const summary = `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}`;
       this.addActivity(t, "permission", "system", `${summary}.`, { detail: `${summary}:\n${lines.join("\n")}` });
       this.appendStatus(t.sessionId, run.id, `${summary}:\n${lines.join("\n")}`);
@@ -3476,7 +3463,7 @@ ${numberLines(r.body)}`;
     const key = grantKey(denial.toolName, denial.input);
     // The exact rule for this call was passed and it was still denied: next time, ask instead.
     if (active.appliedGrants.has(key)) this.ruleFailures.add(`${t.id}\u0000${key}`);
-    const what = describeToolCall(denial.toolName, denial.input);
+    const what = `${denial.toolName} (${summarizeToolInput(denial.input)})`;
     const retries = this.autoRetries.get(t.id) ?? 0;
     if (t.allowedTools.includes(denial.toolName) && retries < MAX_AUTO_RETRIES) {
       this.autoRetries.set(t.id, retries + 1);
@@ -3701,18 +3688,13 @@ ${numberLines(r.body)}`;
   private recentTranscript(sessionId: string, max = 16): string[] {
     const entries = this.store.transcript.list(sessionId).slice(-60);
     const lines: string[] = [];
-    // call_tool calls read as the tool they ran, and so do their results.
-    const callNames = new Map<string, string>();
     for (const e of entries) {
       const c = e.content;
       if (c.type === "text") lines.push(`[${e.role === "user" ? "human" : e.role}] ${c.text}`);
-      else if (c.type === "tool_call") {
-        const shown = unwrapToolCall(c.name, c.input);
-        callNames.set(c.callId, shown.name);
-        lines.push(`[tool_call ${shown.name}] ${summarizeToolInput(shown.input, 300)}`);
-      } else if (c.type === "tool_result") {
+      else if (c.type === "tool_call") lines.push(`[tool_call ${c.name}] ${summarizeToolInput(c.input, 300)}`);
+      else if (c.type === "tool_result") {
         const text = c.output.map((o) => (o.type === "text" ? o.text : `[${o.type}]`)).join(" ");
-        lines.push(`[tool_result ${callNames.get(c.callId) ?? c.name}${c.isError ? " error" : ""}] ${text.replace(/\s+/g, " ").slice(0, 300)}`);
+        lines.push(`[tool_result ${c.name}${c.isError ? " error" : ""}] ${text.replace(/\s+/g, " ").slice(0, 300)}`);
       }
     }
     return lines.slice(-max);

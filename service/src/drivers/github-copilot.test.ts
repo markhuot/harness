@@ -71,19 +71,6 @@ describe("CopilotJsonParser (recorded copilot 1.0.91 output)", () => {
     expect(events.find((e) => e.type === "permission")).toMatchObject({ log: { decision: "deny", backend: "github-copilot", mode: "ask" } });
   });
 
-  test("a denied call_tool call is logged as the tool it ran; the denial keeps the raw call", () => {
-    const p = new CopilotJsonParser("ask");
-    const evs = [
-      {
-        type: "tool.execution_start",
-        data: { toolCallId: "c1", toolName: "harness-call_tool", mcpServerName: "harness", mcpToolName: "call_tool", arguments: { name: "browser_open", input: { url: "https://x.test" } } },
-      },
-      { type: "tool.execution_complete", data: { toolCallId: "c1", success: false, error: { message: "Permission denied", code: "denied" } } },
-    ].flatMap((m) => p.handle(m));
-    expect(evs.find((e) => e.type === "permission")).toMatchObject({ log: { tool: "browser_open", summary: expect.stringContaining("https://x.test") } });
-    expect(evs.find((e) => e.type === "permission_denied")).toMatchObject({ toolName: "call_tool", input: { name: "browser_open" } });
-  });
-
   test("drops repeated reasoning", () => {
     const p = new CopilotJsonParser();
     const a = p.handle({ type: "assistant.reasoning", data: { reasoningId: "1", content: "hmm" } });

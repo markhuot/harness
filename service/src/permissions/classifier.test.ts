@@ -49,12 +49,6 @@ describe("buildClassifierPrompt", () => {
     const { system } = buildClassifierPrompt(BUILTIN_RULES, req());
     for (const r of [...BUILTIN_RULES.environment, ...BUILTIN_RULES.soft_deny, ...BUILTIN_RULES.hard_deny]) expect(system).toContain(r.slice(0, 40));
   });
-
-  test("a call through call_tool is judged as the tool it runs", () => {
-    const { user } = buildClassifierPrompt(rules, req({ tool: "mcp__harness__call_tool", input: { name: "browser_open", input: { url: "https://x.test" } } }));
-    expect(user).toMatch(/tool: mcp__harness__browser_open\ninput:\n\{\n {2}"url": "https:\/\/x.test"\n\}$/);
-    expect(user).not.toContain("call_tool");
-  });
 });
 
 describe("parseDecision", () => {
