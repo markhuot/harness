@@ -95,7 +95,6 @@ struct BoardTicketCard: View {
                 } else if !waiting.isEmpty || Conductor.restartsAt(t) != nil {
                     Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
                 }
-                if t.status == .done, case .value = t.pullRequestUrl { Badge("PR", tone: .violet, icon: "external") }
             }
             .frame(minHeight: 21)
 

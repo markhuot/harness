@@ -491,11 +491,10 @@ try {
     await until("site settings", () => exists("#settings-project-agents"));
     check("no git: When approved is hidden (custom is the only choice)", !(await js<boolean>(`!!${whenApproved}`)));
 
-    // A done ticket that opened a pull request: a chip on its card, a link on the ticket.
+    // A done ticket that opened a pull request: no chip on its card, a link on the ticket.
     await js(`location.hash = "#/board/${nyProject.id}"`);
-    const chip = await until("PR chip", () => js<string>(`document.querySelector('.card[data-key="NYTIMES-5"] [data-testid=card-pr]')?.textContent ?? ""`).then((t) => t && t));
-    check("a done card with a pull request shows a PR chip", chip === "PR #318", chip);
-    check("cards without a pull request have no chip", (await js<number>(`document.querySelectorAll("[data-testid=card-pr]").length`)) === 1);
+    await until("NYTIMES-5 card", () => exists('.card[data-key="NYTIMES-5"]'));
+    check("board cards show no PR chip", (await js<number>(`document.querySelectorAll("[data-testid=card-pr]").length`)) === 0);
     await js(`location.hash = "#/board/all/ticket/NYTIMES-5"`);
     const link = await until("PR link", () => js<string>(`document.querySelector("[data-testid=pr-link]")?.textContent ?? ""`).then((t) => t && t));
     check("the ticket shows its pull request next to the branch", link === "PR #318", link);
