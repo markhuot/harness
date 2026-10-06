@@ -6,12 +6,9 @@ import SwiftUI
 /// `maxHeight`. Collapsed, it shrinks to the title on one line with a chevron that expands it (an
 /// approval card waiting on the human still shows). `disclosure` is the ticket screen's, shared by
 /// every tab (HeroDisclosure); without one (a pinned window) it starts collapsed and keeps its own.
-/// On the Browser tab (`collapsed`) it's gone, so the page gets the room; only an approval card
-/// waiting on the human shows.
 struct TicketDetailHero: View {
     let ticket: Ticket
     var disclosure: TicketDetailHeroCollapse?
-    var collapsed = false
     let maxHeight: CGFloat
 
     @Environment(BoardStore.self) private var store
@@ -37,17 +34,9 @@ struct TicketDetailHero: View {
 
     var body: some View {
         let compact = !expanded
-        // Collapsed with nothing waiting: zero high, so the tab strip and pager sit right under the bar.
-        let gone = collapsed && ticket.pendingApproval == nil
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if collapsed {
-                    if let approval = ticket.pendingApproval {
-                        TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
-                    }
-                } else {
-                    content(compact: compact)
-                }
+                content(compact: compact)
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
@@ -56,9 +45,8 @@ struct TicketDetailHero: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
         .scrollBounceBehavior(.basedOnSize)
-        .frame(height: gone ? 0 : min(contentHeight, maxHeight))
-        .opacity(gone ? 0 : 1)
-        .overlay(alignment: .bottom) { if !gone { Rectangle().fill(c.border).frame(height: 1 / 3) } }
+        .frame(height: min(contentHeight, maxHeight))
+        .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
         .sheet(isPresented: $requestingChanges) { TicketDetailNotesSheet(ticket: ticket) }
         .sheet(isPresented: $reopening) { TicketDetailNotesSheet(ticket: ticket, reopen: true) }
         .sheet(isPresented: $approvingCustom) { TicketDetailApproveCustomSheet(ticket: ticket) }

@@ -1105,6 +1105,19 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     await shot(udid, "hero-transcript");
     return "collapsed";
   });
+  await check("the Browser tab shows the same collapsed header, and a tap expands it", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=browser`);
+    await until("the tab strip", stripY, 8000);
+    await Bun.sleep(800);
+    if (await heroShown()) throw new Error("opened expanded");
+    await shot(udid, "hero-browser");
+    await expandHero();
+    await until("the hero after tapping its title", async () => (await heroShown()) || null, 3000);
+    await shot(udid, "hero-browser-expanded");
+    await expandHero();
+    await until("the hero collapsed again", async () => !(await heroShown()) || null, 3000);
+    return "collapsed title row on open; a tap expands and collapses it";
+  });
 
   // The tab bodies sit side by side in a pager: a sideways swipe moves to the neighbouring tab, and
   // a right swipe on the first tab (the Spec) still goes back, as it did before they paged. A page

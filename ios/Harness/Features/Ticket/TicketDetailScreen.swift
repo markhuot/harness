@@ -168,7 +168,7 @@ private struct TicketDetailBody: View {
             // (HeroSlide, PagerSlide), sliding as it collapses or expands. No layout changes, so a
             // collapse mid-scroll re-lays out no tab body. The hero's state is read only in the hero
             // and the modifiers, so a toggle doesn't re-render this body either.
-            TicketDetailHero(ticket: ticket, disclosure: hero, collapsed: shown == .browser, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket, disclosure: hero, maxHeight: height * 0.45)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
             // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
             // up under the bar, the strip's background would slide down over the hero.

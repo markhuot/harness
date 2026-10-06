@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and iPad, the ticket's Browser tab now shows the same header as the other tabs: the
+  title on one line with a chevron that expands it to the status, badges and actions.
+
 ## [app-20261006.1929](https://github.com/markhuot/harness/releases/tag/app-20261006.1929) - 2026-10-06
 
 ### Changed
