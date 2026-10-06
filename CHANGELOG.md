@@ -9,6 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Chats on finished tickets and reopened tickets start a fresh conversation with the agent,
+  instead of picking up the whole conversation from the work. A second chat on a finished ticket
+  carries on from the first. Starting work on a planned ticket and completing a ticket also start
+  the agent fresh, so they're quicker and use fewer tokens.
+
 ## [app-20261005.2151](https://github.com/markhuot/harness/releases/tag/app-20261005.2151) - 2026-10-05
 
 ### Changed

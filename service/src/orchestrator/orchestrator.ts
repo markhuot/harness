@@ -243,6 +243,8 @@ interface ActiveRun {
   input: RunInput | null;
   /** The run's working directory, for @-mentions in steered messages */
   cwd: string | null;
+  /** The session's phase epoch when the run started (Orchestrator.phaseEpochs) */
+  phaseEpoch: number;
 }
 
 interface TriageMeta {
@@ -285,6 +287,13 @@ const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat"];
 const CONFIG_RUNS: RunKind[] = ["work", "conductor", "chat"];
 /** The agent's own runs of a ticket: a message for one of them can steer any other that's going. */
 const AGENT_RUNS = new Set<RunKind>(["work", "conductor", "chat"]);
+/**
+ * Runs that start a new driver conversation and never save theirs (DESIGN.md "Driver state"): a
+ * reviewer judges the work cold, and a completion needs only its own prompt, not the work's history.
+ */
+const FRESH_RUN_KINDS = new Set<RunKind>(["review", "complete"]);
+/** A ticket's phase: each keeps its own driver conversation, and moving to another starts a new one. */
+const phaseOf = (s: TicketStatus): "plan" | "work" | "done" => (s === "planning" ? "plan" : s === "done" ? "done" : "work");
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
 const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 /**
@@ -440,6 +449,12 @@ export class Orchestrator {
    * goes to and the entry, which only counts while it's still the ticket's newest.
    */
   private movesRecorded = new Map<string, { to: TicketStatus; entryId: string }>();
+  /**
+   * sessionId → how many times its ticket has changed phase (planning, work, done) since the
+   * service started. A run saves its driver state only while this is what it was when the run
+   * started, so a run that outlives its phase can't write the old conversation back.
+   */
+  private phaseEpochs = new Map<string, number>();
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
   /**
@@ -3815,6 +3830,7 @@ ${numberLines(r.body)}`;
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
     if (from !== to) {
+      if (phaseOf(from) !== phaseOf(to)) this.newPhase(t.sessionId);
       if (!recorded) this.addActivityLine(t, "moved", move.by ?? "system", move.line ?? status ?? "", { from, to });
       if (t.parentId && !(from === "planning" && to === "in_progress")) {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
@@ -3829,6 +3845,15 @@ ${numberLines(r.body)}`;
       }
     }
     return t;
+  }
+
+  /**
+   * The ticket entered another phase (planning, work, done): its next agent run starts a new
+   * driver conversation, and runs still going from the old phase no longer save theirs.
+   */
+  private newPhase(sessionId: string) {
+    this.store.sessions.setDriverState(sessionId, null);
+    this.phaseEpochs.set(sessionId, (this.phaseEpochs.get(sessionId) ?? 0) + 1);
   }
 
   /** A child its conductor still approves and lands (`managingConductor`: the parent isn't done). */
@@ -4136,6 +4161,7 @@ ${numberLines(r.body)}`;
       // From the start, so a message sent while the run gets going is waiting when the driver starts.
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
       cwd: null,
+      phaseEpoch: this.phaseEpochs.get(session.id) ?? 0,
     };
     this.active.set(run.id, active);
     let error: string | null;
@@ -4261,7 +4287,7 @@ ${numberLines(r.body)}`;
           model,
           permissionMode: this.permissionModeFor(ticket, project),
           grants: this.runGrants(run.kind, ticket, project, active),
-          state: run.kind === "review" ? null : this.store.sessions.getDriverState(session.id),
+          state: FRESH_RUN_KINDS.has(run.kind) ? null : this.store.sessions.getDriverState(session.id),
           tools,
           toolContext: ctx,
           mcp: { url: `${this.baseUrl().replace(/\/$/, "")}/mcp/${token}`, headers: {} },
@@ -4390,7 +4416,9 @@ ${numberLines(r.body)}`;
         return null;
       }
       case "state":
-        if (run.kind !== "review") this.store.sessions.setDriverState(run.sessionId, ev.state);
+        if (!FRESH_RUN_KINDS.has(run.kind) && active.phaseEpoch === (this.phaseEpochs.get(run.sessionId) ?? 0)) {
+          this.store.sessions.setDriverState(run.sessionId, ev.state);
+        }
         return null;
       case "usage":
         return null;
