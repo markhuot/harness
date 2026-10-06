@@ -11716,8 +11716,6 @@ exports[`built-in run prompts reviewPrompt · round 1, no baseline 1`] = `
 
 ## Spec (revision 3)
 Read it first with \`read_spec\` { revision: 3 }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.
-
-## Spec changes since the human approved it
 There is no approved baseline (the ticket started without planning), so judge the spec as written.
 
 ## Activity so far
@@ -11731,9 +11729,7 @@ exports[`built-in run prompts reviewPrompt · round 1, spec untouched since the 
 
 ## Spec (revision 3)
 Read it first with \`read_spec\` { revision: 3 }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.
-
-## Spec changes since the human approved it
-None: the spec is still revision 3, as the human approved it.
+The spec is still revision 3, as the human approved it by pressing Start.
 
 ## Activity so far
 * note, agent: Toggle wired up
@@ -11742,21 +11738,12 @@ None: the spec is still revision 3, as the human approved it.
 \`get_ticket\` { key: "NYT-3" } has the full Activity and the stored path of each attachment the spec shows. Verify the work yourself, then call \`review_decision\` exactly once."
 `;
 
-exports[`built-in run prompts reviewPrompt · round 2, with a baseline diff and earlier rounds 1`] = `
+exports[`built-in run prompts reviewPrompt · round 2, with a changed spec and earlier rounds 1`] = `
 "Review NYT-3 "Add dark mode": round 2, a re-review.
 
 ## Spec (revision 3)
 Read it first with \`read_spec\` { revision: 3 }: the work was submitted against that revision. Revisions never change once written, so it reads the same however long the review takes, even if someone edits the spec meanwhile.
-
-## Spec changes since the human approved it
-Revision 2 is what the human approved by pressing Start:
-\`\`\`diff
---- spec rev 2
-+++ spec rev 3
-@@ -1,1 +1,1 @@
--Status: not started
-+Status: done
-\`\`\`
+The human approved revision 2 by pressing Start; \`read_spec\` { revision: 2 } shows it, to compare against.
 
 ## Earlier review rounds
 Round 1: changes requested at commit 0123456789abcdef0123456789abcdef01234567.

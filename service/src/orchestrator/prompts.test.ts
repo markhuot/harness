@@ -678,7 +678,7 @@ describe("work-run conduct rules", () => {
 });
 
 describe("run prompts", () => {
-  const firstReview: ReviewContext = { round: 1, earlier: [], baselineRevision: null, baselineDiff: "", activity: [] };
+  const firstReview: ReviewContext = { round: 1, earlier: [], baselineRevision: null, activity: [] };
 
   test("workStartPrompt carries the approved spec and its revision", () => {
     const text = workStartPrompt(ticket({ spec: "1. Do X\n2. Do Y", specRevision: 4 }));
@@ -734,12 +734,14 @@ describe("run prompts", () => {
     expect(empty).not.toContain("read_spec");
   });
 
-  test("reviewPrompt shows the diff from the approved baseline, or says the spec is unchanged", () => {
-    const changed = reviewPrompt(ticket({ specRevision: 3 }), { ...firstReview, baselineRevision: 2, baselineDiff: "-old\n+new" });
-    expect(changed).toContain("Revision 2 is what the human approved by pressing Start:\n```diff\n-old\n+new\n```");
+  test("reviewPrompt points at the approved baseline revision instead of inlining a diff, or says the spec is unchanged", () => {
+    const changed = reviewPrompt(ticket({ specRevision: 3 }), { ...firstReview, baselineRevision: 2 });
+    expect(changed).toContain("The human approved revision 2 by pressing Start; `read_spec` { revision: 2 } shows it, to compare against.");
+    expect(changed).not.toContain("```diff");
+    expect(changed).not.toContain("## Spec changes");
     const same = reviewPrompt(ticket({ specRevision: 2 }), { ...firstReview, baselineRevision: 2 });
-    expect(same).toContain("None: the spec is still revision 2, as the human approved it.");
-    expect(same).not.toContain("```diff");
+    expect(same).toContain("The spec is still revision 2, as the human approved it by pressing Start.");
+    expect(same).not.toContain("{ revision: 2 } shows it");
   });
 
   test("a re-review lists earlier rounds and diffs from the last reviewed commit", () => {

@@ -345,8 +345,10 @@ Mac's zone when none is named). Errors that name no reset time block without a r
   text isn't inlined: revisions never change once written, so the number pins exactly what was
   submitted even if someone edits the spec mid-review, and a long spec doesn't land in the context
   twice (the prompt, then `get_ticket`);
-- the unified diff from the approved baseline (`specBaselineRevision`) to the current spec, or a
-  note that there is none (the ticket started without planning);
+- the approved baseline revision (`specBaselineRevision`), which the reviewer reads with
+  `read_spec { revision }` to compare when the spec has changed since (the diff isn't inlined
+  either), or a note that the spec is unchanged or that there is none (the ticket started without
+  planning);
 - from round 2 on, the earlier rounds: each decision, its notes and the commit it reviewed. The
   re-review is told to focus on `git diff <lastCommit>..HEAD`, confirm each earlier point was
   addressed, and check the rest only for regressions;
