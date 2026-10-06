@@ -13,8 +13,9 @@ import {
 } from "./prompts";
 import type { ReviewContext } from "./prompts";
 import { promptTemplateError } from "./prompt-templates";
-import { browserTools, nativeTools, readOnlyNativeTools } from "../tools";
+import { allTools, browserTools, nativeTools, readOnlyNativeTools } from "../tools";
 import { WAIT_CONDITION_DOC } from "../browser/wait";
+import { SCRIPT_API } from "../tools/browser-run";
 import { AnthropicApiDriver } from "../drivers/anthropic-api";
 import { ClaudeCodeDriver } from "../drivers/claude-code";
 import { DummyDriver } from "../drivers/dummy";
@@ -173,25 +174,32 @@ describe("systemPrompt tool references", () => {
     }
   });
 
-  test("the Browser section's wait paragraph names exactly the tools that take wait_for, in the tools' own wording", () => {
+  test("the Browser section indexes every browser tool and leaves their parameters to the tool descriptions", () => {
     const section = /## Browser\n([\s\S]*?)(?=\n## |$)/.exec(sys("work", ticket(worktree)))?.[1] ?? "";
-    const wait = section.split("\n").find((l) => l.startsWith("Wait for the page with `wait_for`")) ?? "";
-    const named = new Set([...wait.matchAll(/`(browser_\w+)`/g)].map((m) => m[1]!).filter((n) => n !== "browser_wait"));
+    const named = new Set([...section.matchAll(/`(browser_\w+)`/g)].map((m) => m[1]!));
+    expect([...named].sort()).toEqual(browserTools.map((t) => t.name).sort());
+    expect(section).toContain("never with `sleep` in a shell");
+    expect(section).not.toContain(WAIT_CONDITION_DOC);
+    expect(section).not.toContain(SCRIPT_API);
+    // The detail the prompt no longer carries is in the tools' own descriptions, which tool_search returns.
     const takes = browserTools.filter((t) => "wait_for" in t.inputSchema.properties).map((t) => t.name);
-    // A tool that gains wait_for without being documented here (or the other way round) fails.
-    expect([...named].sort()).toEqual(takes.sort());
     expect(takes).not.toContain("browser_tabs");
     expect(takes).not.toContain("browser_close_tab");
-    expect(wait).toContain("never with `sleep` in a shell");
-    // One wording for the condition: the prompt, browser_wait and every wait_for param.
-    expect(wait).toContain(WAIT_CONDITION_DOC);
     expect(browserTools.find((t) => t.name === "browser_wait")!.description).toContain(WAIT_CONDITION_DOC);
     for (const t of browserTools.filter((t) => takes.includes(t.name))) {
       expect((t.inputSchema.properties.wait_for as { description: string }).description).toContain(WAIT_CONDITION_DOC);
     }
-    const run = section.split("\n").find((l) => l.startsWith("For steps that span reloads")) ?? "";
-    expect(run).toContain("call `browser_run_status` { job } until the job isn't running");
-    expect(run).toContain("`browser_run_stop` { job }");
+    expect(browserTools.find((t) => t.name === "browser_run")!.description).toContain(SCRIPT_API);
+    expect(browserTools.find((t) => t.name === "browser_run_status")!.description).toContain("browser_run_stop as soon as the log shows it going wrong");
+  });
+
+  test("tool_search and call_tool are introduced once, in the Board section", () => {
+    for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as RunKind[]) {
+      const text = sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree));
+      expect(text.match(/`tool_search`/g)?.length).toBe(1);
+      expect(text.match(/`call_tool`/g)?.length).toBe(1);
+      expect(/## Board\n[^\n]*`tool_search`/.test(text)).toBe(true);
+    }
   });
 
   test("complete runs get no browser section", () => {
@@ -655,8 +663,12 @@ describe("work-run conduct rules", () => {
       const text = sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket());
       expect(text).toContain("A human approves every one of these calls");
       expect(text).toContain("make exactly the same call again");
-      expect(text).toMatch(/command line in command and their instructions for its output[^\n]*in prompt/);
+      expect(text).toContain("`create_watcher`");
     }
+    // How to fill a watcher in from a plain-English request is create_watcher's own description (tool_search returns it).
+    const createWatcherTool = allTools.find((t) => t.name === "create_watcher")!;
+    expect(createWatcherTool.description).toContain("command: the user's shell command line");
+    expect(createWatcherTool.description).toContain("prompt: the user's instructions to the triage agent");
     for (const kind of ["plan", "review", "complete"] as RunKind[]) {
       const text = sys(kind);
       expect(text).toContain("## Harness configuration");

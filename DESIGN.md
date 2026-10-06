@@ -1051,7 +1051,11 @@ run (cached per `run.tools` array): a dynamic `tools/list` with `list_changed` w
 definitions mid-run, which invalidates the prompt cache for the whole conversation, and client
 support varies. Claude Code's own ToolSearch (`_meta["anthropic/alwaysLoad"]`) works only on
 claude-code, which is why the dispatcher is the harness's own. The guidance to use it lives in the
-two tools' descriptions and the MCP `initialize` instructions.
+two tools' descriptions, the MCP `initialize` instructions, and one line at the top of the system
+prompt's Board section (`system.board`). The Board, Changing other tickets, Harness configuration
+and Browser sections only index tool names and keep the behavioral rules; every parameter and
+how-to detail (the wait condition, the `browser_run` script API, watcher fields, …) lives in the
+tool's own description, which `tool_search` returns.
 
 Per driver:
 - **claude-code, github-copilot** (MCP): `tools/list` returns the dispatcher view. `tools/call`

@@ -551,7 +551,7 @@ function sessionJob(ctx: ToolContext, id: number): Job | string {
 
 export const browserRunStatus = defineTool<{ job: number; wait?: number }>({
   name: "browser_run_status",
-  description: `A browser_run job's state and the log lines since you last looked. It waits up to wait seconds for a new line (or the job's end) before answering, so call it again until the job isn't running. A finished job gives its result, or for a failure the script line, the step, the URL and a screenshot.`,
+  description: `A browser_run job's state and the log lines since you last looked. It waits up to wait seconds for a new line (or the job's end) before answering, so call it again until the job isn't running, reading each batch of log lines as it comes, and stop it with browser_run_stop as soon as the log shows it going wrong. A finished job gives its result, or for a failure the script line, the step, the URL and a screenshot.`,
   inputSchema: schema({ job: { type: "integer", minimum: 1, description: "The job number browser_run returned." }, wait: WAIT_PARAM }, ["job"]),
   async run({ job: id, wait }, ctx) {
     const job = sessionJob(ctx, id);

@@ -156,7 +156,7 @@ export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boo
 export const browserTabs = defineTool<{ tab?: number }>({
   name: "browser_tabs",
   description:
-    "List this session's browser tabs: number, title, URL, mode and size of each, and how many failed requests and console errors its page has. With tab, report that one tab in full: its state, mode and size, scroll position, the network requests since its page loaded (failed ones first) and its console errors and warnings. A suspended tab's page was closed to save memory; using it reloads its URL (browser_tabs doesn't).",
+    "List this session's browser tabs: number, title, URL, mode and size of each, and how many failed requests and console errors its page has. With tab, report that one tab in full: its state, mode and size, scroll position, the network requests since its page loaded (failed ones first) and its console errors and warnings. Pages a tab opens itself (a target=\"_blank\" link, window.open) arrive as new tabs. Tabs last between runs, but their pages don't: a tab nobody has used for a few minutes (unless the human has it open in the app), and every tab of a done ticket, is suspended. A suspended tab's page was closed to save memory; using it reloads its URL as a fresh page (browser_tabs doesn't), so don't count on what was only in the page (form input, scroll position, script state).",
   inputSchema: schema({ tab: { type: "integer", minimum: 1, description: "Report this tab in full instead of listing them all." } }),
   async run({ tab }, ctx) {
     if (tab !== undefined) return tabReport(await ctx.browser.tabInfo(ctx.session.id, tab));
@@ -168,7 +168,7 @@ export const browserTabs = defineTool<{ tab?: number }>({
 export const browserResize = defineTool<{ tab?: number } & SizeInput & WaitInput>({
   name: "browser_resize",
   description:
-    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. Either way the size then holds still: the tab stops following a human's pane (Responsive), which new tabs do. Resize the tabs you opened or navigated; leave a tab another agent is using alone unless it was handed to you or the human asks. Pass wait_for to wait for the layout to change (a mobile menu, say) before returning.",
+    "Change a tab's mode and size. device alone resets the tab to that mode's size and reloads the page (so the server sees the new user agent too), like the Desktop | Mobile buttons the human has; width and height alone resize it without a reload, keeping its mode; together they set both, e.g. device \"mobile\" at 1024×1366 for a tablet. Either way the size then holds still: the tab stops following a human's pane (Responsive), which new tabs do. Resize the tabs you opened or navigated (tab 1 too, if it was empty when you started); leave a tab another agent is using alone unless it was handed to you or the human asks. Pass wait_for to wait for the layout to change (a mobile menu, say) before returning.",
   inputSchema: schema({ ...SIZE, ...TAB, ...waitForParam("after", "resizing") }),
   async run({ tab, wait_for, ...size }, ctx) {
     const change = sizeChange(size);
@@ -183,7 +183,8 @@ export const browserResize = defineTool<{ tab?: number } & SizeInput & WaitInput
 
 export const browserCloseTab = defineTool<{ tab: number }>({
   name: "browser_close_tab",
-  description: "Close a browser tab you opened and no longer need. It's removed for good (a suspended tab too). Tab numbers aren't reused.",
+  description:
+    "Close a browser tab you opened and no longer need: every open page keeps running in Chrome, so close each one as soon as you're done with it, and leave one open only when the human should look at it (a page you point to when you submit or block). It's removed for good (a suspended tab too). Tab numbers aren't reused.",
   inputSchema: schema({ tab: { ...TAB.tab, description: "Number of the tab to close." } }, ["tab"]),
   async run({ tab }, ctx) {
     await ctx.browser.closeTab(ctx.session.id, tab);
@@ -223,7 +224,7 @@ export const browserContent = defineTool<{ selector?: string; format?: "text" | 
 export const browserClick = defineTool<{ selector: string; tab?: number } & WaitInput>({
   name: "browser_click",
   description:
-    "Click the first element matching a CSS selector. It returns once a navigation the click starts has loaded, but not for a page that updates by script: pass wait_for to wait for the page to react (e.g. { idle: true }, or { selector: \".spinner\", state: \"gone\" }) before returning, instead of sleeping.",
+    "Click the first element matching a CSS selector. It returns once a navigation the click starts has loaded, but not for a page that updates by script: pass wait_for to wait for the page to react (e.g. { idle: true }, or { selector: \".spinner\", state: \"gone\" }) before returning, instead of sleeping. A click on something disabled or inside [aria-busy] says so: wait for { selector, state: \"enabled\" } and click again.",
   inputSchema: schema(
     { selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." }, ...TAB, ...waitForParam("after", "clicking") },
     ["selector"],
