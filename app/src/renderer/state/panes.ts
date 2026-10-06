@@ -470,8 +470,10 @@ function insertLeaf(root: PaneNode, targetId: string, zone: DropZone, leaf: Pane
 }
 
 /**
- * Remove the leaf `id`, handing its share to its neighbours (half each, or all of it to the only
- * one). `neighbour` is the nearest leaf in the pane that slides into its place: the next sibling's
+ * Remove the leaf `id`, handing its whole share to one sibling so every other pane keeps its size:
+ * the sibling holding the board when there is one, otherwise the neighbour on the board's side
+ * (the previous one when there's no board, as in a pop-out, or nothing on that side).
+ * `neighbour` is the nearest leaf in the pane that slides into its place: the next sibling's
  * first leaf, or the previous sibling's last leaf when it was the last child.
  */
 function removeLeaf(root: PaneNode, id: string): { root: PaneNode | null; neighbour: string | null } {
@@ -480,12 +482,15 @@ function removeLeaf(root: PaneNode, id: string): { root: PaneNode | null; neighb
   const parent = path.at(-1);
   if (!parent) return { root: null, neighbour: null };
   const { split, index } = parent;
-  const s = split.sizes[index]!;
   const sizes = [...split.sizes];
   const hasPrev = index > 0;
   const hasNext = index < split.children.length - 1;
-  if (hasPrev) sizes[index - 1]! += hasNext ? s / 2 : s;
-  if (hasNext) sizes[index + 1]! += hasPrev ? s / 2 : s;
+  const order = leaves(root);
+  const board = order.findIndex((l) => l.content.kind === "board");
+  const boardAfter = board > order.findIndex((l) => l.id === id);
+  const holdsBoard = split.children.findIndex((c) => c.id !== id && leaves(c).some((l) => l.content.kind === "board"));
+  const heir = holdsBoard >= 0 ? holdsBoard : hasNext && (boardAfter || !hasPrev) ? index + 1 : index - 1;
+  sizes[heir]! += sizes[index]!;
   sizes.splice(index, 1);
   const children = split.children.filter((_, i) => i !== index);
   const neighbour = hasNext ? leaves(split.children[index + 1]!)[0]!.id : leaves(split.children[index - 1]!).at(-1)!.id;
@@ -732,7 +737,7 @@ export function movePane(state: PaneState, leafId: string, targetLeafId: string,
 }
 
 /**
- * Close a pane; its neighbours take its space. The board can't be closed. Closing the focused pane
+ * Close a pane; the board takes its space where it can (removeLeaf). The board can't be closed. Closing the focused pane
  * focuses its nearest neighbour; closing the zoomed pane ends the zoom.
  */
 export function closePane(state: PaneState, leafId: string): PaneState {
@@ -1207,12 +1212,14 @@ const SESSION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** The panes as stored: New session panes aren't (see ComposeContent), so they drop out and their neighbours take their space. */
+/** The panes as stored: New session panes aren't (see ComposeContent), so they drop out and their space goes where closing them would send it (removeLeaf). */
 function withoutCompose(s: PaneState): PaneState {
-  if (!leaves(s.root).some((l) => l.content.kind === "compose")) return s;
-  const root = prune(s.root, (l) => l.content.kind !== "compose");
+  const composes = leaves(s.root).filter((l) => l.content.kind === "compose");
+  if (!composes.length) return s;
+  let root: PaneNode | null = s.root;
+  for (const c of composes) root = root && removeLeaf(root, c.id).root;
   const kept = (id: string | null) => (id && root && findLeaf(root, id) ? id : null);
-  return { root: (root && normalizeNode(root)) ?? s.root, focusedId: kept(s.focusedId), zoomedId: kept(s.zoomedId) };
+  return { root: root ?? s.root, focusedId: kept(s.focusedId), zoomedId: kept(s.zoomedId) };
 }
 
 function parseContent(v: unknown): PaneContent | null {
@@ -1381,7 +1388,7 @@ function withScope(store: PaneStore, scope: string, next: PaneState | null): Pan
 
 /**
  * Pop the pane `leafId` of `scope` out into the new scope `popoutScope(id)`: it leaves the board's
- * tree (its neighbours take its space) and becomes the pop-out's only pane, keeping its id. The same
+ * tree (the board takes its space, as when it closes) and becomes the pop-out's only pane, keeping its id. The same
  * store when there's no such pane, it can't pop out, it's already popped out, or `id` is taken.
  */
 export function popOut(store: PaneStore, scope: string, leafId: string, id: string): PaneStore {

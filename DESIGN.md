@@ -2773,7 +2773,9 @@ Settings, project settings, or on the board route the pane workspace.
 - **Focus, close, zoom.** Clicking into a pane, or tabbing into it, focuses it (a faint header
   tint). Focus that code moves with no key or pointer input in the last 300 ms (an autofocus, a
   blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket,
-  file or terminal pane and its neighbours take its room. The board can't be closed, so ⌘W with the board
+  file or terminal pane, and its whole room goes to one pane so every other pane keeps its size: the
+  board (or the pane holding it) when it shares the split, otherwise the neighbour on the board's
+  side. Pane sizes change only when you drag a divider or equalize. The board can't be closed, so ⌘W with the board
   focused closes the window. Maximize (⇧⌘↩) zooms a pane. Escape ends a zoom, or else closes the
   focused ticket or file pane (never while a text field, modal, menu, the palette or a terminal has the
   focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its

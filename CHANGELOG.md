@@ -11,6 +11,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On the Mac, closing, moving or popping out a pane gives its space to the board instead of
+  spreading it over its neighbours, so every other pane keeps the size you gave it. Closing the
+  middle of [board 50%, ticket 25%, ticket 25%] leaves [board 75%, ticket 25%]. When the board
+  isn't beside the pane, the neighbour on the board's side takes the space.
+
 - On iPhone and iPad, every ticket tab now shares the header the Changes tab had: the ticket's
   title on one line with a chevron that shows its status, badges and actions. It opens in full
   on the Spec and collapses as you scroll the Spec or move to another tab; once collapsed, it

@@ -332,8 +332,8 @@ describe("dropContent", () => {
   test("an already-open ticket moves (keeping its pane id) and takes the dropped tab", () => {
     const start = st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25]));
     const s = valid(dropContent(start, "B", "bottom", ticketContent("A-2", "transcript")));
-    // A-2's share went to A-1; the board's column holds it now.
-    expect(shape(s.root)).toBe("row[col[board 0.6, A-2 0.4] 0.5, A-1 0.5]");
+    // A-2's share went to the board; the board's column holds it now.
+    expect(shape(s.root)).toBe("row[col[board 0.6, A-2 0.4] 0.75, A-1 0.25]");
     expect(findLeaf(s.root, "A-2")!.content).toEqual(ticketContent("A-2", "transcript"));
     expect(s.focusedId).toBe("A-2");
   });
@@ -389,8 +389,8 @@ describe("movePane", () => {
 
   test("a move across the split's axis, or into another split, splits the target's space evenly", () => {
     const start = st(row("r", [B, T("A"), T("C")], [0.25, 0.5, 0.25]));
-    // C can't keep its width once it's stacked with A: A's column (with C's old share) is shared 50/50.
-    expect(shape(valid(movePane(start, "C", "A", "bottom")).root)).toBe("row[board 0.25, col[A 0.5, C 0.5] 0.75]");
+    // C can't keep its width once it's stacked with A: its old share goes to the board, and A's column is shared 50/50.
+    expect(shape(valid(movePane(start, "C", "A", "bottom")).root)).toBe("row[board 0.5, col[A 0.5, C 0.5] 0.5]");
   });
 
   test("the board can be moved, and moving onto itself or an unknown pane is a no-op", () => {
@@ -409,10 +409,27 @@ describe("closePane", () => {
     expect(closePane(start, "nope")).toBe(start);
   });
 
-  test("a middle pane's share is split between its neighbours; an edge pane's goes to the one neighbour", () => {
-    const start = st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.2, 0.3]));
-    expect(shape(valid(closePane(start, "A-1")).root)).toBe("row[board 0.6, A-2 0.4]");
-    expect(shape(valid(closePane(start, "A-2")).root)).toBe("row[board 0.5, A-1 0.5]");
+  test("a closed pane's whole share goes to the board, so every other pane keeps its size", () => {
+    const start = st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25]));
+    expect(shape(valid(closePane(start, "A-1")).root)).toBe("row[board 0.75, A-2 0.25]");
+    expect(shape(valid(closePane(start, "A-2")).root)).toBe("row[board 0.75, A-1 0.25]");
+    // [board 25%, stack of A-1 over A-2 50%, A-3 25%]: closing A-3 grows only the board.
+    const wild = st(row("r", [B, col("c", [T("A-1"), T("A-2")]), T("A-3")], [0.25, 0.5, 0.25]));
+    expect(shape(valid(closePane(wild, "A-3")).root)).toBe("row[board 0.5, col[A-1 0.5, A-2 0.5] 0.5]");
+  });
+
+  test("the sibling holding the board takes the share when the board is nested", () => {
+    const start = st(row("r", [col("c", [B, T("A-1")]), T("A-2"), T("A-3")], [0.5, 0.25, 0.25]));
+    expect(shape(valid(closePane(start, "A-3")).root)).toBe("row[col[board 0.5, A-1 0.5] 0.75, A-2 0.25]");
+  });
+
+  test("away from the board, the neighbour on the board's side takes the share", () => {
+    // The column doesn't hold the board, so A-2's height goes to A-1 (above, toward the board) only.
+    const start = st(row("r", [B, col("c", [T("A-1"), T("A-2"), T("A-3")], [0.2, 0.3, 0.5])], [0.5, 0.5]));
+    expect(shape(valid(closePane(start, "A-2")).root)).toBe("row[board 0.5, col[A-1 0.5, A-3 0.5] 0.5]");
+    // Board after the closed pane: the next neighbour grows.
+    const after = st(row("r", [col("c", [T("A-1"), T("A-2"), T("A-3")], [0.5, 0.3, 0.2]), B], [0.5, 0.5]));
+    expect(shape(valid(closePane(after, "A-2")).root)).toBe("row[col[A-1 0.5, A-3 0.5] 0.5, board 0.5]");
   });
 
   test("closing the last ticket leaves just the board", () => {
@@ -633,7 +650,7 @@ describe("renameTicketKey / pruneTickets", () => {
 
   test("if the new key is already open, the old pane closes and focus follows to the open one", () => {
     const s = valid(renameTicketKey(st(row("r", [B, T("A-1"), T("Z-1")]), "A-1"), "A-1", "Z-1"));
-    expect(shape(s.root)).toBe("row[board 0.5, Z-1 0.5]");
+    expect(shape(s.root)).toBe("row[board 0.667, Z-1 0.333]");
     expect(focusedLabel(s)).toBe("Z-1");
   });
 
@@ -646,7 +663,7 @@ describe("renameTicketKey / pruneTickets", () => {
   test("pruneTickets closes panes for missing tickets and returns the same state when nothing is missing", () => {
     const start = st(row("r", [B, T("A-1"), col("c", [T("A-2"), T("A-3")])]), "A-2");
     const s = valid(pruneTickets(start, (k) => k === "A-3"));
-    expect(shape(s.root)).toBe("row[board 0.5, A-3 0.5]");
+    expect(shape(s.root)).toBe("row[board 0.667, A-3 0.333]");
     expect(focusedLabel(s)).toBe("A-3");
     expect(pruneTickets(start, () => true)).toBe(start);
   });
@@ -1012,8 +1029,8 @@ describe("dropPreview", () => {
   });
 
   test("a moved pane's old space closes up first", () => {
-    // A-2 leaves (A-1 takes its quarter), then splits A-1's half.
-    expect(rr(dropPreview(three, { kind: "pane", leafId: "A-2" }, "A-1", "bottom"))).toEqual([0.5, 0.5, 0.5, 0.5]);
+    // A-2 leaves (the board takes its quarter), then splits A-1's quarter.
+    expect(rr(dropPreview(three, { kind: "pane", leafId: "A-2" }, "A-1", "bottom"))).toEqual([0.75, 0.5, 0.25, 0.5]);
   });
 
   test("is null when the drop would do nothing", () => {
@@ -1051,7 +1068,7 @@ describe("applyDrop", () => {
   test("an open ticket's card moves its pane and keeps its tab", () => {
     const start = st(row("r", [B, T("A-1", "transcript"), T("A-2")], [0.5, 0.25, 0.25]));
     const s = valid(applyDrop(start, { kind: "ticket", ticketKey: "A-1" }, "A-2", "bottom"));
-    expect(shape(s.root)).toBe("row[board 0.625, col[A-2 0.5, A-1 0.5] 0.375]");
+    expect(shape(s.root)).toBe("row[board 0.75, col[A-2 0.5, A-1 0.5] 0.25]");
     expect(findLeaf(s.root, "A-1")!.content).toEqual(ticketContent("A-1", "transcript"));
   });
 
@@ -1064,7 +1081,7 @@ describe("applyDrop", () => {
 
   test("a pane dragged by its header re-docks", () => {
     const s = valid(applyDrop(st(row("r", [B, T("A-1"), T("A-2")], [0.5, 0.25, 0.25])), { kind: "pane", leafId: "A-2" }, "B", "top"));
-    expect(shape(s.root)).toBe("row[col[A-2 0.4, board 0.6] 0.5, A-1 0.5]");
+    expect(shape(s.root)).toBe("row[col[A-2 0.4, board 0.6] 0.75, A-1 0.25]");
   });
 });
 
@@ -1210,7 +1227,7 @@ describe("terminal panes alongside the other operations", () => {
 
   test("dropping an open terminal's content moves its pane instead of opening it twice", () => {
     const s = valid(dropContent(st(row("r", [B, TT("t:1"), T("A-1")])), "A-1", "bottom", term("t:1")));
-    expect(shape(s.root)).toBe("row[board 0.5, col[A-1 0.5, $t:1 0.5] 0.5]");
+    expect(shape(s.root)).toBe("row[board 0.667, col[A-1 0.5, $t:1 0.5] 0.333]");
   });
 
   test("moving a terminal pane keeps its session and leaf", () => {
@@ -1464,18 +1481,18 @@ describe("New session panes (compose)", () => {
   test("saving as a ticket that's already open closes the New session and focuses that pane", () => {
     const start = normalize(st(row("r", [B, T("A-1"), C("x")], [0.5, 0.2, 0.3]), "c-x"));
     const s = valid(composeToTicket(start, "x", "A-1"));
-    expect(shape(s.root)).toBe("row[board 0.5, A-1 0.5]");
+    expect(shape(s.root)).toBe("row[board 0.8, A-1 0.2]");
     expect(s.focusedId).toBe("A-1");
   });
 
   test("New session panes are never stored: serializing drops them, and their focus", () => {
     const s = normalize(st(row("r", [B, T("A-1"), C("x")], [0.5, 0.25, 0.25]), "c-x", "c-x"));
     const back = parsePanes(serializePanes(s));
-    expect(shape(back.root)).toBe("row[board 0.667, A-1 0.333]");
+    expect(shape(back.root)).toBe("row[board 0.75, A-1 0.25]");
     expect(back.focusedId).toBeNull();
     expect(back.zoomedId).toBeNull();
     const store = parsePaneStore(serializePaneStore({ scopes: { [ALL_SCOPE]: s, p1: normalize(st(row("r2", [{ ...B, id: "B2" }, C("y")]))) } }));
-    expect(shape(store.scopes[ALL_SCOPE]!.root)).toBe("row[board 0.667, A-1 0.333]");
+    expect(shape(store.scopes[ALL_SCOPE]!.root)).toBe("row[board 0.75, A-1 0.25]");
     expect(shape(store.scopes.p1!.root)).toBe("board");
   });
 
@@ -1594,7 +1611,7 @@ describe("file panes", () => {
   test("a rename onto a key whose file pane is already open closes the duplicate", () => {
     const s0 = st(row("r", [B, F("f", file("a.ts")), F("g", file("a.ts", {}, { ticketKey: "Z-1" }))]), "f");
     const s = valid(renameTicketKey(s0, "A-1", "Z-1"));
-    expect(shape(s.root)).toBe("row[board 0.5, @a.ts 0.5]");
+    expect(shape(s.root)).toBe("row[board 0.667, @a.ts 0.333]");
     expect(s.focusedId).toBe("g");
   });
 
@@ -1677,7 +1694,7 @@ describe("torn-off tabs", () => {
     const id = once.focusedId!;
     expect(label(findLeaf(once.root, id)!)).toBe("A-1/transcript");
     const twice = valid(applyDrop(once, tabDrag("A-1", "transcript"), "A-2", "bottom"));
-    expect(shape(twice.root)).toBe("row[board 0.333, A-1 0.25, col[A-2 0.5, A-1/transcript 0.5] 0.417]");
+    expect(shape(twice.root)).toBe("row[board 0.5, A-1 0.167, col[A-2 0.5, A-1/transcript 0.5] 0.333]");
     expect(twice.focusedId).toBe(id);
     // dropContent dedupes the same way.
     const again = valid(dropContent(twice, "B", "left", tabContent({ ticketKey: "A-1", tab: "transcript" })));
