@@ -24,7 +24,7 @@
       "output": "Approve"
     },
     {
-      "name": "an open PR preselects pr",
+      "name": "an open PR preselects cleanup",
       "input": {
         "ticket": {
           "completionAction": null,
@@ -34,6 +34,20 @@
           "isGit": true,
           "pullRequestHost": "github.com",
           "completionAction": "merge"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "an earlier pr the project still offers beats an open PR",
+      "input": {
+        "ticket": {
+          "completionAction": "pr",
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
         }
       },
       "output": "Approve and open PR"
@@ -66,7 +80,7 @@
           "completionAction": "merge"
         }
       },
-      "output": "Approve and merge"
+      "output": "Approve and clean up"
     },
     {
       "name": "an open PR without a PR host",
@@ -77,6 +91,37 @@
         "project": {
           "isGit": true,
           "pullRequestHost": null
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "an open PR, project default custom",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "custom"
+        }
+      },
+      "output": "Approve and clean up"
+    },
+    {
+      "name": "an open PR when the service offers no cleanup",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": [
+            "merge",
+            "pr"
+          ]
         }
       },
       "output": "Approve and merge"
@@ -624,7 +669,7 @@
       }
     },
     {
-      "name": "an open PR preselects pr",
+      "name": "an open PR preselects cleanup",
       "input": {
         "ticket": {
           "completionAction": null,
@@ -634,6 +679,29 @@
           "isGit": true,
           "pullRequestHost": "github.com",
           "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an earlier pr the project still offers beats an open PR",
+      "input": {
+        "ticket": {
+          "completionAction": "pr",
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com"
         }
       },
       "output": {
@@ -690,7 +758,7 @@
           "cleanup",
           "custom"
         ],
-        "defaultAction": "merge",
+        "defaultAction": "cleanup",
         "parentBranch": null
       }
     },
@@ -710,6 +778,53 @@
           "merge",
           "cleanup",
           "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an open PR, project default custom",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "custom"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "an open PR when the service offers no cleanup",
+      "input": {
+        "ticket": {
+          "pullRequestUrl": "https://github.com/a/b/pull/1"
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionActions": [
+            "merge",
+            "pr"
+          ]
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr"
         ],
         "defaultAction": "merge",
         "parentBranch": null

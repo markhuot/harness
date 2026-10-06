@@ -25,8 +25,8 @@ describe("landMenu", () => {
     expect(m.items).toEqual([{ kind: "sheet", action: "custom", required: true, label: "Approve and…" }]);
   });
 
-  test("a ticket that opened a PR preselects it", () => {
-    expect(landMenu({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, gh).primary).toMatchObject({ action: "pr", label: "Approve and open PR" });
+  test("a ticket with a pull request open preselects clean up, which pushes to it", () => {
+    expect(landMenu({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, gh).primary).toMatchObject({ action: "cleanup", label: "Approve and clean up" });
   });
 
   test("the choice an earlier approval stored stays preselected (a completion that was stopped)", () => {

@@ -86,8 +86,9 @@ export interface CompletionOptions {
  * its base branch (`base`, the effective base branch, when the caller knows it), one with no
  * branch of its own, or one with no changes in its worktree (`nothingToLand`) has nothing to merge
  * or open a pull request from, so those two drop out. Preselects
- * the ticket's earlier choice, then pr when the ticket already opened a pull request (so a
- * re-approval updates it), then the project default, then the first action left.
+ * the ticket's earlier choice, then cleanup when the ticket already has a pull request open (the
+ * cleanup pushes the branch, which updates it), then the project default, then the first action
+ * left.
  */
 export function completionOptions(ticket: TicketLike | null | undefined, project: ProjectLike | null | undefined, parent?: ParentLike, base?: string | null): CompletionOptions {
   const parentBranch = parentLandingBranch(ticket, parent);
@@ -98,7 +99,7 @@ export function completionOptions(ticket: TicketLike | null | undefined, project
   const projectDefault = projectCompletionDefault(project);
   let defaultAction = actions.includes(projectDefault) ? projectDefault : actions[0] ?? "custom";
   if (earlier && actions.includes(earlier)) defaultAction = earlier;
-  else if (ticket?.pullRequestUrl && actions.includes("pr")) defaultAction = "pr";
+  else if (ticket?.pullRequestUrl && actions.includes("cleanup")) defaultAction = "cleanup";
   return { actions, defaultAction, parentBranch: null };
 }
 
