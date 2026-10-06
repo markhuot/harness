@@ -193,11 +193,11 @@ describe("systemPrompt tool references", () => {
     expect(browserTools.find((t) => t.name === "browser_run_status")!.description).toContain("browser_run_stop as soon as the log shows it going wrong");
   });
 
-  test("tool_search and call_tool are introduced once, in the Board section", () => {
+  test("tool_search is introduced once, in the Board section, and call_tool is gone", () => {
     for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as RunKind[]) {
       const text = sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree));
       expect(text.match(/`tool_search`/g)?.length).toBe(1);
-      expect(text.match(/`call_tool`/g)?.length).toBe(1);
+      expect(text).not.toContain("call_tool");
       expect(/## Board\n[^\n]*`tool_search`/.test(text)).toBe(true);
     }
   });

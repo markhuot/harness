@@ -443,13 +443,13 @@ describe("http api", () => {
     const names = list.result.tools.map((x: any) => x.name);
     expect(names).toContain("submit_for_review");
     expect(names).not.toContain("review_decision");
-    // Non-core tools are reached through the dispatcher, not listed
+    // Non-core tools are listed as stubs and called by their own names
     expect(names).toContain("tool_search");
-    expect(names).toContain("call_tool");
-    expect(names).not.toContain("list_tickets");
-    const viaDispatcher = await (await rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "call_tool", arguments: { name: "get_ticket", input: { key: t.key } } } })).json();
-    expect(viaDispatcher.result.isError).toBe(false);
-    expect(viaDispatcher.result.content[0].text).toContain(t.key);
+    expect(names).not.toContain("call_tool");
+    expect(list.result.tools.find((x: any) => x.name === "list_tickets").description).toBe("");
+    const stubbed = await (await rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "get_ticket", arguments: { key: t.key } } })).json();
+    expect(stubbed.result.isError).toBe(false);
+    expect(stubbed.result.content[0].text).toContain(t.key);
     // Calling a tool over MCP drives the orchestrator
     const call = await (await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "post_note", arguments: { note: "via mcp" } } })).json();
     expect(call.result.isError).toBe(false);

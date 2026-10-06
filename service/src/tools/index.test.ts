@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
 import { fakeContext, fakeOps } from "./fakes";
-import { CORE_TOOL_NAMES, dispatcherTools, rankTools, toolsForRun } from "./index";
+import { advertisedDescription, advertisedTools, CORE_TOOL_NAMES, DEFAULT_TOOL_STUB_VARIANT, rankTools, stripSchemaDescriptions, type ToolStubVariant, toolStubVariant, toolsForRun } from "./index";
+import type { ToolDefinition } from "./types";
 
 const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot", "browser_wait", "browser_run", "browser_run_status", "browser_run_stop"];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
@@ -125,64 +126,110 @@ describe("toolsForRun", () => {
   });
 });
 
-describe("dispatcherTools", () => {
+describe("advertisedTools", () => {
   const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
-  const view = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermissionPromptTool?: boolean }) => dispatcherTools(toolsForRun(kind, driver));
+  const view = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermissionPromptTool?: boolean }, variant: ToolStubVariant = "schema") =>
+    advertisedTools(toolsForRun(kind, driver), variant);
+  const isCore = (t: ToolDefinition) => t.group === "native" || CORE_TOOL_NAMES.has(t.name);
 
-  test("each run kind advertises its core tools, its native tools, then tool_search and call_tool", () => {
+  test("each run kind advertises its core and native tools in full, tool_search, then every other tool as a stub", () => {
     for (const kind of kinds) {
       for (const driver of [builtin, bare, { hasBuiltinTools: true, usesPermissionPromptTool: true }]) {
         const all = toolsForRun(kind, driver);
-        const direct = all.filter((t) => t.group === "native" || CORE_TOOL_NAMES.has(t.name)).map((t) => t.name);
-        expect(view(kind, driver).map((t) => t.name)).toEqual([...direct, "tool_search", "call_tool"]);
+        const shown = view(kind, driver);
+        expect(shown.map((t) => t.name)).toEqual([...all.filter(isCore).map((t) => t.name), "tool_search", ...all.filter((t) => !isCore(t)).map((t) => t.name)]);
+        for (const t of all.filter(isCore)) expect(shown.find((s) => s.name === t.name)).toBe(t);
+        for (const t of all.filter((t) => !isCore(t))) {
+          const stub = shown.find((s) => s.name === t.name)!;
+          expect(stub).not.toBe(t);
+          expect(stub.description).toBe("");
+          expect(stub.group).toBe(t.group);
+        }
+        expect(shown.map((t) => t.name)).not.toContain("call_tool");
       }
     }
-    expect(view("work", bare).map((t) => t.name)).toEqual(["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", ...NATIVE_FULL, "tool_search", "call_tool"]);
-    expect(view("triage", builtin).map((t) => t.name)).toEqual(["dispatch_ticket", "decline_work", "tool_search", "call_tool"]);
+    expect(view("triage", builtin).map((t) => t.name)).toEqual(["dispatch_ticket", "decline_work", "tool_search", ...BOARD, ...CONFIG_READ]);
   });
 
-  test("toolsForRun still returns the whole allowed set; the view hides the rest", () => {
-    const work = toolsForRun("work", builtin).map((t) => t.name);
-    const shown = view("work", builtin).map((t) => t.name);
-    for (const hidden of [...BROWSER, ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, "update_branch"]) {
-      expect(work).toContain(hidden);
-      expect(shown).not.toContain(hidden);
-    }
+  test("stub variants: line keeps a short first sentence, schema drops descriptions, bare and none drop the schema", () => {
+    const real = toolsForRun("work", builtin).find((t) => t.name === "create_ticket")!;
+    const of = (variant: ToolStubVariant) => view("work", builtin, variant).find((t) => t.name === "create_ticket")!;
+    expect(of("full")).toBe(real);
+    const line = of("line");
+    expect(line.description.length).toBeLessThanOrEqual(80);
+    expect(real.description.startsWith(line.description.replace(/…$/, ""))).toBe(true);
+    const schema = of("schema").inputSchema as any;
+    expect(Object.keys(schema.properties)).toEqual(Object.keys((real.inputSchema as any).properties));
+    expect(schema.required).toEqual((real.inputSchema as any).required);
+    expect(JSON.stringify(schema)).not.toContain('"description":"');
+    expect(line.inputSchema).toEqual(schema);
+    for (const v of ["bare", "none"] as const) expect(of(v).inputSchema as unknown).toEqual({ type: "object" });
+    expect(advertisedDescription(of("bare"))).toBe("");
+    expect(advertisedDescription(of("none"))).toBeUndefined();
+    expect(advertisedDescription(real)).toBe(real.description);
+  });
+
+  test("stripSchemaDescriptions keeps a property named description", () => {
+    const s = { type: "object", description: "x", properties: { description: { type: "string", description: "y" }, n: { type: "array", items: { type: "string", enum: ["a"], description: "z" } } }, required: ["description"] };
+    expect(stripSchemaDescriptions(s)).toEqual({ type: "object", properties: { description: { type: "string" }, n: { type: "array", items: { type: "string", enum: ["a"] } } }, required: ["description"] });
+  });
+
+  test("HARNESS_TOOL_STUBS picks the variant; anything else is the default", () => {
+    expect(toolStubVariant("bare")).toBe("bare");
+    expect(toolStubVariant(" LINE ")).toBe("line");
+    expect(toolStubVariant("nope")).toBe(DEFAULT_TOOL_STUB_VARIANT);
+    expect(toolStubVariant(undefined)).toBe(DEFAULT_TOOL_STUB_VARIANT);
   });
 
   test("the view is the same objects for the same tools array, so it never changes mid-run", () => {
     const tools = toolsForRun("work", builtin);
-    expect(dispatcherTools(tools)).toBe(dispatcherTools(tools));
+    expect(advertisedTools(tools, "bare")).toBe(advertisedTools(tools, "bare"));
   });
 
-  test("a run with nothing to search gets its tools as they are", () => {
+  test("a run with nothing to stub gets its tools as they are", () => {
     const tools = toolsForRun("work", builtin).filter((t) => CORE_TOOL_NAMES.has(t.name));
-    expect(dispatcherTools(tools).map((t) => t.name)).toEqual(tools.map((t) => t.name));
+    expect(advertisedTools(tools).map((t) => t.name)).toEqual(tools.map((t) => t.name));
   });
 
-  test("tool_search and call_tool are harness tools (advertised read-only)", () => {
-    const tools = view("review", builtin);
-    for (const name of ["tool_search", "call_tool"]) expect(tools.find((t) => t.name === name)!.group).toBe("harness");
+  test("tool_search is a harness tool (advertised read-only)", () => {
+    expect(view("review", builtin).find((t) => t.name === "tool_search")!.group).toBe("harness");
   });
 
-  test("call_tool is judged as the tool it runs: a native tool asks the gate, a gated tool asks a human", async () => {
-    const callTool = view("work", bare).find((t) => t.name === "call_tool")!;
+  test("a stub validates against the real schema and answers a bad call with the full description and schema", async () => {
+    const stub = view("work", builtin, "bare").find((t) => t.name === "browser_open")!;
+    const real = toolsForRun("work", builtin).find((t) => t.name === "browser_open")!;
+    const bad = await stub.execute({ url: 42 }, fakeContext());
+    expect(bad.isError).toBe(true);
+    const text = (bad.content[0] as { text: string }).text;
+    expect(text).toContain('"url" must be a string');
+    expect(text).toContain(real.description);
+    expect(text).toContain(JSON.stringify(real.inputSchema));
+    // Nested objects are checked too (the tool itself leaves them to its own code).
+    const nested = await stub.execute({ url: "https://x.test", wait_for: { timeout: "soon" } }, fakeContext());
+    expect((nested.content[0] as { text: string }).text).toContain('"wait_for.timeout" must be a number');
+  });
+
+  test("a stubbed gated tool still asks a human", async () => {
     const ops = fakeOps({
       checkPermission: async () => ({ behavior: "deny", message: "no" }),
       requestApproval: async () => ({ behavior: "deny", message: "awaiting approval" }),
     });
     const ctx = fakeContext({ ops });
-    const bash = await callTool.execute({ name: "bash", input: { command: "rm -rf /tmp/x" } }, ctx);
-    expect(bash.isError).toBe(true);
-    const watcher = await callTool.execute({ name: "create_watcher", input: { name: "w", command: "echo hi" } }, ctx);
-    expect(watcher.isError).toBe(true);
-    const judged = ops.calls.filter((c) => c.method === "checkPermission" || c.method === "requestApproval");
-    expect(judged.map((c) => [c.method, c.args[0]])).toEqual([
-      ["checkPermission", "bash"],
-      ["requestApproval", "create_watcher"],
-    ]);
-    expect(judged[0]!.args[1]).toEqual({ command: "rm -rf /tmp/x" });
-    expect(judged[1]!.args[2]).toMatchObject({ onceOnly: true });
+    const watcher = view("work", bare).find((t) => t.name === "create_watcher")!;
+    expect((await watcher.execute({ name: "w", command: "echo hi" }, ctx)).isError).toBe(true);
+    const judged = ops.calls.filter((c) => c.method === "requestApproval");
+    expect(judged.map((c) => c.args[0])).toEqual(["create_watcher"]);
+    expect(judged[0]!.args[2]).toMatchObject({ onceOnly: true });
+  });
+
+  test("tool_search returns the full description and schema of a stubbed tool", async () => {
+    const search = view("work", builtin).find((t) => t.name === "tool_search")!;
+    const real = toolsForRun("work", builtin).find((t) => t.name === "browser_open")!;
+    const text = ((await search.execute({ query: "browser_open" }, fakeContext())).content[0] as { text: string }).text;
+    expect(text).toStartWith("## browser_open\n");
+    expect(text).toContain(real.description);
+    expect(text).toContain(JSON.stringify(real.inputSchema));
+    expect(text).not.toContain("call_tool");
   });
 
   test("rankTools: exact names first, then whole-word name matches, then descriptions", () => {

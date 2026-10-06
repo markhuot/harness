@@ -95,7 +95,7 @@ function checkObject(toolName: string, obj: Record<string, unknown>, schema: Pro
 /**
  * JSON-schema validation for the subset our tool schemas use: type, required, properties, enum,
  * items, minimum/maximum, minLength/maxLength, minItems/maxItems. Unknown extra properties are
- * ignored so small model slips don't fail a call. `deep` (call_tool) also checks nested objects'
+ * ignored so small model slips don't fail a call. `deep` (a stubbed tool's call) also checks nested objects'
  * properties and required keys and enforces additionalProperties: false; without it, nested
  * objects are left to the tool, which can explain its own conditions (browser wait_for).
  */
