@@ -361,6 +361,7 @@ export class GitHubCopilotDriver implements Driver {
   readonly name = "GitHub Copilot";
   readonly description = "Runs the GitHub Copilot CLI with your Copilot subscription. Harness tools are provided over MCP.";
   readonly hasBuiltinTools = true;
+  readonly subagentTool = "Copilot's `task` tool with the `explore` agent type";
   readonly supportsSteering = false;
 
   /**

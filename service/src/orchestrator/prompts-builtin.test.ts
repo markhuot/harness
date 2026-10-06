@@ -218,6 +218,11 @@ describe("built-in system prompts", () => {
     expect(systemPrompt({ kind: "chat", project, ticket: null, session: { ...session, cwd: "/tmp/x" } })).toMatchSnapshot();
   });
 
+  // A driver with a sub-agent tool (claude-code, github-copilot) gets the explore rule in Files.
+  test("work with a sub-agent tool", () => {
+    expect(systemPrompt({ kind: "work", project, ticket: ticket(), session, subagentTool: "the `task` tool with the `explore` agent type" })).toMatchSnapshot();
+  });
+
   test("work without a ticket, project or cwd", () => {
     expect(systemPrompt({ kind: "work", project: null, ticket: null, session: { ...session, cwd: "" } })).toMatchSnapshot();
   });

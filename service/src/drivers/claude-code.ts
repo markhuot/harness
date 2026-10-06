@@ -760,6 +760,7 @@ export class ClaudeCodeDriver implements Driver {
   readonly name = "Claude Code";
   readonly description = "Runs the claude CLI with your Claude login (team plan). Harness tools are provided over MCP.";
   readonly hasBuiltinTools = true;
+  readonly subagentTool = "Claude Code's `Agent` tool (`Task` in older versions) with the `Explore` subagent type";
   readonly usesPermissionPromptTool = true;
   readonly supportsSteering = true;
 

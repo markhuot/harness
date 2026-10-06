@@ -875,6 +875,7 @@ export const PROMPT_IDS = [
   "system.children",
   "system.branches",
   "system.files",
+  "system.turns",
   "system.spec",
   "system.file_links",
   "system.board",

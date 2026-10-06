@@ -390,7 +390,7 @@ public enum WatcherLiveState: OpenEnum {
 public enum PromptId: OpenEnum {
     case systemIntro, systemContext, systemLifecycle, systemPlan, systemWork, systemReview
     case systemCompleteMerge, systemCompletePr, systemCompleteCleanup, systemCompleteCustom, systemConductor, systemChat
-    case systemTriage, systemChildren, systemBranches, systemFiles, systemSpec, systemFileLinks
+    case systemTriage, systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
     case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
     case runConductorUpdate, runChangesRequested, runReopen, runTriage
@@ -399,7 +399,7 @@ public enum PromptId: OpenEnum {
     public static let allKnown: [Self] = [
         .systemIntro, .systemContext, .systemLifecycle, .systemPlan, .systemWork, .systemReview,
         .systemCompleteMerge, .systemCompletePr, .systemCompleteCleanup, .systemCompleteCustom, .systemConductor, .systemChat,
-        .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemSpec, .systemFileLinks,
+        .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
         .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
         .runConductorUpdate, .runChangesRequested, .runReopen, .runTriage,
@@ -422,6 +422,7 @@ public enum PromptId: OpenEnum {
         case .systemChildren: "system.children"
         case .systemBranches: "system.branches"
         case .systemFiles: "system.files"
+        case .systemTurns: "system.turns"
         case .systemSpec: "system.spec"
         case .systemFileLinks: "system.file_links"
         case .systemBoard: "system.board"

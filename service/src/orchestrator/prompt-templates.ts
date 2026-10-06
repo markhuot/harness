@@ -379,11 +379,31 @@ This ticket's work is on \`{{branch}}\` and lands on \`{{baseBranch}}\` when the
       editTool: "The tool that edits part of a file, in backticks, e.g. `Edit`",
       writeTool: "The tool that writes a whole file, in backticks, e.g. `Write`",
       shell: "The shell tool's name, e.g. Bash",
+      subagentTool: "The driver's sub-agent tool for exploring, e.g. Copilot's `task` tool with the `explore` agent type; empty when the driver has none, and outside planning, work, conductor and chat runs",
     },
     template: `## Files
-Read files with {{readTool}} and find them with {{searchTools}}, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through {{shell}}.{{#if canEdit}}
+{{#if subagentTool}}You MUST use a sub-agent ({{subagentTool}}) to explore the codebase: to find where something lives, survey unfamiliar code, or answer how something works. Don't read or search files in your own context to explore. Read a file yourself only to edit it or check a line the sub-agent pointed to, and then only that line range. Give the sub-agent one specific question and ask for file paths with line numbers in its answer.
+{{/if}}Read files with {{readTool}} and find them with {{searchTools}}, not with \`cat\`, \`head\`, \`sed -n\` or \`find\` through {{shell}}.{{#if canEdit}}
 Change files with {{editTool}} (part of a file) and {{writeTool}} (a new file or a full rewrite), never through {{shell}}: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\` or throwaway scripts that write files. File tool edits inside the working directory usually run without a human's approval, where the same change through {{shell}} may stop for one, and the human can follow them on the board. This holds even if other instructions say shell edits are fine.
 Keep {{shell}} for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).{{/if}}`,
+  },
+
+  "system.turns": {
+    group: "system",
+    label: "Working efficiently",
+    description: "Every run: fewer, bigger turns (parallel tool calls, one test command, blocking waits, small screenshots, file-tool edits).",
+    variables: {
+      canEdit: "True in runs that change files (work, completion and chat runs)",
+      editTool: "The tool that edits part of a file, in backticks, e.g. `Edit`",
+      writeTool: "The tool that writes a whole file, in backticks, e.g. `Write`",
+    },
+    template: `## Working efficiently
+Every turn re-reads this whole conversation, so each tool call you save makes the run faster and cheaper. Take fewer, bigger turns:
+* Batch independent reads, searches and checks into one turn: make the calls in parallel, not one after another.
+* Run the tests and the typecheck together in one command (chain them with \`&&\`), not one per turn.
+* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends) instead of polling it turn after turn.
+* Downscale a screenshot before you read it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.{{#if canEdit}}
+* Change files with {{editTool}} and {{writeTool}}, as Files says, never with \`python3 - <<EOF\`, \`sed -i\` or other edit scripts, and make independent edits in the same turn.{{/if}}`,
   },
 
   "system.spec": {

@@ -4254,6 +4254,7 @@ ${numberLines(r.body)}`;
             parent,
             children,
             builtinTools: driver.hasBuiltinTools,
+            subagentTool: driver.subagentTool,
             branches: ticket ? this.branchContext(ticket, project) : undefined,
             activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
           }),

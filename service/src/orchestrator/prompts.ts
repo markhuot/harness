@@ -49,6 +49,8 @@ export interface PromptInfo {
   children?: Ticket[];
   /** The driver brings its own file tools (claude-code's Read/Edit/Write); false → harness native tools. Default true. */
   builtinTools?: boolean;
+  /** The driver's sub-agent tool for exploring (Driver.subagentTool); unset → no explore rule */
+  subagentTool?: string;
   /** Base branch and worktree ownership. Omitted: resolved from the ticket and project alone, worktree owned. */
   branches?: BranchContext;
   /** The user's prompt overrides (settings.prompts). Omitted: the built-in prompts. */
@@ -332,16 +334,43 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
   }
 }
 
+/** The driver's file tools as the Files and Working efficiently sections name them. */
+function fileTools(builtinTools: boolean) {
+  return builtinTools
+    ? { readTool: "`Read`", searchTools: "`Grep` and `Glob`", editTool: "`Edit`", writeTool: "`Write`", shell: "Bash" }
+    : { readTool: "`read_file`", searchTools: "`list_files`", editTool: "`edit_file`", writeTool: "`write_file`", shell: "bash" };
+}
+
+/** Runs that change files (work, completion and chat runs). */
+function editsFiles(kind: RunKind): boolean {
+  return kind === "work" || kind === "complete" || kind === "chat";
+}
+
 /**
  * File tools over the shell. Claude Code's auto mode tells the model shell edits (sed, heredocs)
  * are fine; in ask mode those need a human's approval where Edit/Write in the workdir don't, and
  * they read worse on the board. Read-only runs (plan, review, conductor) get the read half.
+ * Exploring the codebase in the agent's own context fills it with whole files that every later
+ * turn re-reads, so runs that explore (plan, work, conductor, chat) must hand that to the driver's
+ * sub-agent when it has one (Driver.subagentTool).
  */
-function filesSection(kind: RunKind, builtinTools: boolean, o: PromptOverrides | null | undefined): string {
-  const t = builtinTools
-    ? { readTool: "`Read`", searchTools: "`Grep` and `Glob`", editTool: "`Edit`", writeTool: "`Write`", shell: "Bash" }
-    : { readTool: "`read_file`", searchTools: "`list_files`", editTool: "`edit_file`", writeTool: "`write_file`", shell: "bash" };
-  return renderPrompt("system.files", { ...t, canEdit: kind === "work" || kind === "complete" || kind === "chat" }, o);
+function filesSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
+  const { kind } = info;
+  const explores = kind === "plan" || kind === "work" || kind === "conductor" || kind === "chat";
+  return renderPrompt(
+    "system.files",
+    { ...fileTools(info.builtinTools ?? true), canEdit: editsFiles(kind), subagentTool: explores ? (info.subagentTool ?? "") : "" },
+    o,
+  );
+}
+
+/**
+ * Fewer, bigger turns: every API call re-reads the whole context, so cost grows with calls ×
+ * context size. Every run kind gets it; the edit rule only where the run changes files.
+ */
+function turnsSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
+  const { editTool, writeTool } = fileTools(info.builtinTools ?? true);
+  return renderPrompt("system.turns", { canEdit: editsFiles(info.kind), editTool, writeTool }, o);
 }
 
 /**
@@ -390,7 +419,8 @@ export function systemPrompt(info: PromptInfo): string {
     changes &&
       !!ticket?.branch &&
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
-    ticketRun && filesSection(kind, info.builtinTools ?? true, o),
+    ticketRun && filesSection(info, o),
+    turnsSection(info, o),
     ticketRun && specSection(info, browser, o),
     // harness://file links (shared/src/fileLinks.ts) open the file pane from any message, note or spec.
     ticketRun && renderPrompt("system.file_links", {}, o),

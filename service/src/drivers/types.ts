@@ -139,6 +139,12 @@ export interface Driver {
   /** True if the driver brings its own file/shell tools (so "native" group tools are withheld). */
   hasBuiltinTools: boolean;
   /**
+   * The driver's own sub-agent tool for exploring the codebase, as prompt text (e.g. "the `task`
+   * tool with the `explore` agent type"). The system prompt then makes exploring through it a rule.
+   * Unset: the driver has no sub-agents, and the rule is left out.
+   */
+  subagentTool?: string;
+  /**
    * True if the driver answers tool-permission prompts through the harness
    * `permission_prompt` tool (claude-code's --permission-prompt-tool). toolsForRun adds it.
    */

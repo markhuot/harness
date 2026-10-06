@@ -15,6 +15,11 @@ import type { ReviewContext } from "./prompts";
 import { promptTemplateError } from "./prompt-templates";
 import { browserTools, nativeTools, readOnlyNativeTools } from "../tools";
 import { WAIT_CONDITION_DOC } from "../browser/wait";
+import { AnthropicApiDriver } from "../drivers/anthropic-api";
+import { ClaudeCodeDriver } from "../drivers/claude-code";
+import { DummyDriver } from "../drivers/dummy";
+import { GitHubCopilotDriver } from "../drivers/github-copilot";
+import type { Driver } from "../drivers/types";
 
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
 // the prompts module so a prompt that names a tool its run can't call fails here.
@@ -537,6 +542,62 @@ describe("systemPrompt file tools", () => {
     const text = sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } });
     expect(text).not.toContain("## Files");
   });
+});
+
+describe("systemPrompt explore through a sub-agent", () => {
+  const RULE = "You MUST use a sub-agent";
+  const exploring: RunKind[] = ["plan", "work", "conductor", "chat"];
+  const drivers = [
+    { name: "claude-code", tool: new ClaudeCodeDriver({} as never).subagentTool, names: ["`Agent`", "`Explore`"] },
+    { name: "github-copilot", tool: new GitHubCopilotDriver({} as never).subagentTool, names: ["`task`", "`explore`"] },
+  ];
+  const tFor = (kind: RunKind) => (kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree));
+
+  for (const d of drivers) {
+    test(`${d.name}: plan, work, conductor and chat runs must explore through its sub-agent tool`, () => {
+      for (const kind of exploring) {
+        const text = sys(kind, tFor(kind), { subagentTool: d.tool });
+        const files = text.split(/^## /m).find((s) => s.startsWith("Files\n")) ?? "";
+        expect(files).toContain(RULE);
+        for (const n of d.names) expect(files).toContain(n);
+        expect(files).toContain("only that line range");
+      }
+    });
+    test(`${d.name}: review and complete runs get no explore rule`, () => {
+      for (const kind of ["review", "complete"] as RunKind[]) expect(sys(kind, tFor(kind), { subagentTool: d.tool })).not.toContain(RULE);
+    });
+  }
+
+  test("a driver without sub-agents gets no explore rule", () => {
+    const drivers: Driver[] = [new AnthropicApiDriver({} as never), new DummyDriver()];
+    for (const d of drivers) expect(d.subagentTool).toBeUndefined();
+    for (const kind of exploring) expect(sys(kind, tFor(kind), { builtinTools: false })).not.toContain(RULE);
+  });
+});
+
+describe("systemPrompt working efficiently", () => {
+  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "chat", "triage"];
+  const triage = { project: null, session: { ...session, kind: "triage" as const, key: "TRIAGE-1", ticketId: null } };
+  const turns = (kind: RunKind, extra = {}) => {
+    const text = kind === "triage" ? sys("triage", null, { ...triage, ...extra }) : sys(kind, kind === "conductor" ? ticket({ kind: "conductor" }) : ticket(worktree), extra);
+    return text.split(/^## /m).find((s) => s.startsWith("Working efficiently\n")) ?? "";
+  };
+
+  for (const kind of kinds) {
+    test(`${kind} runs batch turns, run checks together, block on builds and downscale screenshots`, () => {
+      const text = turns(kind);
+      expect(text).toContain("in parallel");
+      expect(text).toContain("tests and the typecheck together in one command");
+      expect(text).toContain("one blocking command");
+      expect(text).toContain("sips -Z 800");
+      const edits = kind === "work" || kind === "complete" || kind === "chat";
+      expect(text.includes("`sed -i`")).toBe(edits);
+      if (edits) {
+        expect(text).toContain("`Edit` and `Write`");
+        expect(turns(kind, { builtinTools: false })).toContain("`edit_file` and `write_file`");
+      }
+    });
+  }
 });
 
 describe("systemPrompt file links", () => {
