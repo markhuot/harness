@@ -23,6 +23,7 @@ import type {
 import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
 import { dispatchedKey } from "./format";
+import { inheritedModel } from "./models";
 import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
@@ -562,9 +563,9 @@ export function hasCustomDriver(state: State, ticket: Ticket): boolean {
   return d !== null && ticket.driver !== d;
 }
 
-/** The model a ticket on `driver` runs with when it picks none: the project's default for that driver, else the global one (null: the driver's own). */
+/** The model a ticket on `driver` runs with when it picks none (inheritedModel at the ticket level; null: the driver's own). */
 export function defaultModelOf(state: State, projectId: string, driver: string): string | null {
-  return state.projects[projectId]?.defaultModels?.[driver] || state.settings?.defaultModels?.[driver] || null;
+  return inheritedModel(driver, "ticket", state.projects[projectId], state.settings);
 }
 
 /**

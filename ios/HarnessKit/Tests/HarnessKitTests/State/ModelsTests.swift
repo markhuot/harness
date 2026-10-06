@@ -30,11 +30,6 @@ struct InheritedModelInput: Decodable, Sendable {
     let settings: ModelSettings?
 }
 
-struct ModelBadgeInput: Decodable, Sendable {
-    let model: String?
-    let models: [ModelInfo]?
-}
-
 struct DriverModelChoicesInput: Decodable, Sendable {
     struct O: Decodable, Sendable {
         let defaultLabel: String?
@@ -137,11 +132,6 @@ struct ModelsTests {
     @Test(arguments: Fixture.cases("stateModels", "inheritedModelCases", input: InheritedModelInput.self, output: String?.self))
     func inheritedModel(_ c: Fixture.Case<InheritedModelInput, String?>) {
         #expect(Models.inheritedModel(c.input.driver, level: c.input.level, project: c.input.project, settings: c.input.settings) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("stateModels", "ticketModelBadgeCases", input: ModelBadgeInput.self, output: String?.self))
-    func ticketModelBadge(_ c: Fixture.Case<ModelBadgeInput, String?>) {
-        #expect(Models.ticketModelBadge(c.input.model, c.input.models) == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateModels", "encodeChoiceCases", input: TriageChoice.self, output: String.self))

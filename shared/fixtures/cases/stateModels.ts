@@ -16,7 +16,6 @@ import {
   settingsChoicePatch,
   ticketChoice,
   ticketChoicePatch,
-  ticketModelBadge,
   ticketResolvedChoice,
   type ChoiceGroup,
 } from "../../src/state/models";
@@ -37,7 +36,7 @@ const MODELS: P.ModelInfo[] = [
 export const sep = "\u0001";
 
 // ---------------------------------------------------------------------------
-// modelName / modelOptions / inheritedModel / ticketModelBadge
+// modelName / modelOptions / inheritedModel
 // ---------------------------------------------------------------------------
 
 export const modelNameCases = cases(({ models, id }: { models: P.ModelInfo[] | null; id: string }) => modelName(models ?? undefined, id), {
@@ -85,13 +84,6 @@ export const inheritedModelCases = cases(({ driver, level, project, settings }: 
   "ticket: empty project model falls through": { driver: "empty", level: "ticket", project: iProject, settings: iSettings },
   "project: null settings entry": { driver: "nulled", level: "project", project: iProject, settings: iSettings },
   "project: ignores the project's own model": { driver: "claude-code", level: "project", project: iProject, settings: null },
-});
-
-export const ticketModelBadgeCases = cases(({ model, models }: { model: string | null; models: P.ModelInfo[] | null }) => ticketModelBadge(model, models ?? undefined), {
-  "no model": { model: null, models: MODELS },
-  "empty model": { model: "", models: MODELS },
-  "known model": { model: "sonnet", models: MODELS },
-  "no list": { model: "haiku", models: null },
 });
 
 // ---------------------------------------------------------------------------

@@ -144,11 +144,6 @@ public enum Models {
         return out
     }
 
-    /// A model badge is only worth showing when the ticket picked a model itself.
-    public static func ticketModelBadge(_ model: String?, _ models: [ModelInfo]?) -> String? {
-        nonEmpty(model).map { modelName(models, $0) }
-    }
-
     // MARK: Combined driver + model select (watchers): models grouped under their driver
 
     static let sep: Unicode.Scalar = "\u{1}"

@@ -15,7 +15,6 @@ import {
   settingsChoicePatch,
   ticketChoice,
   ticketChoicePatch,
-  ticketModelBadge,
   ticketResolvedChoice,
 } from "./models";
 
@@ -63,13 +62,6 @@ describe("inheritedModel", () => {
   });
 });
 
-describe("ticketModelBadge", () => {
-  test("only for tickets with their own model; uses the display name when known", () => {
-    expect(ticketModelBadge(null, MODELS)).toBeNull();
-    expect(ticketModelBadge("sonnet", MODELS)).toBe("Sonnet 5");
-    expect(ticketModelBadge("haiku", undefined)).toBe("haiku");
-  });
-});
 
 describe("ModelListCache", () => {
   const reply = (driverId: string, ids: string[]): DriverModels => ({ driverId, models: ids.map((id) => ({ id, name: id })), error: null, fetchedAt: 1 });

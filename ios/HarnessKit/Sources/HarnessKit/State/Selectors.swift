@@ -65,11 +65,9 @@ extension BoardState {
         return ticket.driver != d
     }
 
-    /// The model a ticket on `driver` runs with when it picks none: the project's default for that driver, else the global one (nil: the driver's own).
+    /// The model a ticket on `driver` runs with when it picks none (`Models.inheritedModel` at the ticket level; nil: the driver's own).
     public func defaultModelOf(_ projectId: String, driver: String) -> String? {
-        if let m = projects[projectId]?.defaultModels[driver], !m.isEmpty { return m }
-        if let m = settings?.defaultModels[driver] ?? nil, !m.isEmpty { return m }
-        return nil
+        Models.inheritedModel(driver, level: .ticket, project: projects[projectId].map(ModelProject.init), settings: settings.map(ModelSettings.init))
     }
 
     /// Whether a ticket picked a model other than the one it would run with by default, i.e. worth
