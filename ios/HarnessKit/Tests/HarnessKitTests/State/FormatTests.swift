@@ -153,16 +153,6 @@ struct FormatTests {
         #expect(Format.shortToolName(c.input) == c.output)
     }
 
-    @Test(arguments: Fixture.cases("stateFormat", "unwrapToolCallCases", input: ToolPreviewInput.self, output: Format.ToolCall.self))
-    func unwrapToolCall(_ c: Fixture.Case<ToolPreviewInput, Format.ToolCall>) {
-        #expect(Format.unwrapToolCall(c.input.name, input: c.input.input) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("stateFormat", "shownToolCallCases", input: ToolPreviewInput.self, output: Format.ToolCall.self))
-    func shownToolCall(_ c: Fixture.Case<ToolPreviewInput, Format.ToolCall>) {
-        #expect(Format.shownToolCall(c.input.name, input: c.input.input) == c.output)
-    }
-
     @Test(arguments: Fixture.cases("stateFormat", "describeApprovalInputCases", input: ToolInput.self, output: Format.ApprovalInput.self))
     func describeApprovalInput(_ c: Fixture.Case<ToolInput, Format.ApprovalInput>) {
         #expect(Format.describeApprovalInput(c.input.toolName, input: c.input.input) == c.output)

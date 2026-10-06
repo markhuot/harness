@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, shownToolCall, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -216,9 +216,8 @@ const ToolRow = memo(function ToolRow({
   onOpenAgent?: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const shown = call ? shownToolCall(call.content.name, call.content.input) : { name: shortToolName(result?.content.name ?? "tool"), input: undefined };
-  const name = shown.name;
-  const preview = call ? toolPreview(name, shown.input) : "";
+  const name = shortToolName(call?.content.name ?? result?.content.name ?? "tool");
+  const preview = call ? toolPreview(name, call.content.input) : "";
   const isError = result?.content.isError;
   return (
     <div className={`t-tool ${open ? "open" : ""} ${isError ? "error" : ""}`}>
@@ -245,7 +244,7 @@ const ToolRow = memo(function ToolRow({
           {call && (
             <>
               <div className="t-label">Input</div>
-              <pre>{JSON.stringify(shown.input, null, 2)}</pre>
+              <pre>{JSON.stringify(call.content.input, null, 2)}</pre>
             </>
           )}
           {result && (

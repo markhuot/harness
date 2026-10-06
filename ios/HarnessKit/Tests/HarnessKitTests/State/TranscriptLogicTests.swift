@@ -69,10 +69,6 @@ struct TranscriptLogicTests {
         // An orphan result names the row by its own tool.
         #expect(TranscriptLogic.toolName(call: nil, result: orphan) == "Read")
         #expect(TranscriptLogic.toolName(call: nil, result: nil) == "tool")
-        // A call made through call_tool is named by its inner tool.
-        let wrapped = Self.entry("w", .toolCall(callId: "k2", name: "mcp__harness__call_tool",
-                                                input: .object(["name": .string("browser_open"), "input": .object(["url": .string("https://a")])])), seq: 4)
-        #expect(TranscriptLogic.toolName(call: wrapped, result: nil) == "browser_open")
     }
 
     @Test("sub-agents don't stream, and work while they run")

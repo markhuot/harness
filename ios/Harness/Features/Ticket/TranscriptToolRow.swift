@@ -18,7 +18,7 @@ struct TranscriptToolRow: View {
 
     var body: some View {
         let name = TranscriptLogic.toolName(call: call, result: result)
-        let input: JSONValue? = if case let .toolCall(_, callName, input)? = call?.content { Format.shownToolCall(callName, input: input).input } else { nil }
+        let input: JSONValue? = if case let .toolCall(_, _, input)? = call?.content { input } else { nil }
         let preview = input.map { Format.toolPreview(name, input: $0) } ?? ""
         let state = TranscriptLogic.toolState(result: result)
         VStack(alignment: .leading, spacing: 0) {

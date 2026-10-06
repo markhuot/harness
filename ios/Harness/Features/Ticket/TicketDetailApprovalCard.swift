@@ -18,7 +18,7 @@ struct TicketDetailApprovalCard: View {
     @FocusState private var messageFocused: Bool
 
     var body: some View {
-        let tool = Format.shownToolCall(approval.toolName, input: approval.input).name
+        let tool = Format.shortToolName(approval.toolName)
         let input = Format.describeApprovalInput(approval.toolName, input: approval.input)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {

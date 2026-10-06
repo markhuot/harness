@@ -116,7 +116,7 @@ public enum WidgetFeed {
         return WidgetTicket(
             key: t.key, displayKey: Keys.displayKey(t), title: BoardScreenRules.cardTitle(t), status: t.status,
             projectKey: project?.key, projectColor: project?.color, working: working,
-            approvalTool: t.pendingApproval.map { Format.shownToolCall($0.toolName, input: $0.input).name }, blockedReason: blocked, news: line,
+            approvalTool: t.pendingApproval.map { Format.shortToolName($0.toolName) }, blockedReason: blocked, news: line,
             updatedAt: t.updatedAt
         )
     }

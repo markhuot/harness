@@ -73,9 +73,9 @@ public enum TranscriptLogic {
         return subagents?.first { $0.id == callId }
     }
 
-    /// The name a tool row shows: the call's (call_tool's inner tool), else the result's, shortened.
+    /// The name a tool row shows: the call's, else the result's, shortened.
     public static func toolName(call: TranscriptEntry?, result: TranscriptEntry?) -> String {
-        if case let .toolCall(_, name, input)? = call?.content { return Format.shownToolCall(name, input: input).name }
+        if case let .toolCall(_, name, _)? = call?.content { return Format.shortToolName(name) }
         if case let .toolResult(_, name, _, _)? = result?.content { return Format.shortToolName(name) }
         return Format.shortToolName("tool")
     }

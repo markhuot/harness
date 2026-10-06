@@ -7,7 +7,7 @@ import { useAction, useStore } from "../state/store";
 import { Icon } from "../components/Icon";
 import { relativeTime, useNow } from "../components/bits";
 import { ApprovalReason } from "../components/PermissionLog";
-import { approvalToast, describeApprovalInput, shownToolCall, type ShownInput } from "@harness/shared/state";
+import { approvalToast, describeApprovalInput, shortToolName, type ShownInput } from "@harness/shared/state";
 
 type Shown = ShownInput;
 
@@ -20,7 +20,7 @@ export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: P
   const [denying, setDenying] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const tool = shownToolCall(approval.toolName, approval.input).name;
+  const tool = shortToolName(approval.toolName);
   const { primary, description, rest } = describeApprovalInput(approval.toolName, approval.input);
 
   const answer = async (decision: "allow_once" | "allow_tool" | "deny") => {

@@ -20,14 +20,12 @@ import {
   permissionVerb,
   relativeTime,
   shortToolName,
-  shownToolCall,
   STATUS_LABEL,
   tildify,
   toolIcon,
   toolPreview,
   toPagePoint,
   TRIAGE_LABEL,
-  unwrapToolCall,
   type Rect,
 } from "../../src/state/format";
 import { cases } from "../case";
@@ -147,31 +145,6 @@ export const shortToolNameCases = cases(shortToolName, {
   empty: "",
 });
 
-type CallInput = { name: string; input?: unknown };
-const callToolCases = {
-  "harness call_tool unwraps, keeping the prefix": { name: "mcp__harness__call_tool", input: { name: "browser_open", input: { url: "https://a" } } },
-  "bare call_tool": { name: "call_tool", input: { name: "edit_spec", input: { base_revision: 3, note: "n", edits: [] } } },
-  "inner name is trimmed": { name: "call_tool", input: { name: "  get_ticket\n", input: { key: "A-1" } } },
-  "missing input is {}": { name: "call_tool", input: { name: "list_watchers" } },
-  "null input is {}": { name: "call_tool", input: { name: "list_watchers", input: null } },
-  "JSON string input is parsed": { name: "call_tool", input: { name: "browser_open", input: '{"url":"https://b"}' } },
-  "blank string input is {}": { name: "call_tool", input: { name: "list_watchers", input: "  " } },
-  "non-JSON string input stays a string": { name: "call_tool", input: { name: "browser_open", input: "not json" } },
-  "array input passes through": { name: "call_tool", input: { name: "x", input: [1] } },
-  "blank name is left alone": { name: "mcp__harness__call_tool", input: { name: " ", input: { a: 1 } } },
-  "non-string name is left alone": { name: "call_tool", input: { name: 5 } },
-  "non-object input is left alone": { name: "call_tool", input: "browser_open" },
-  "missing input is left alone": { name: "call_tool" },
-  "other tools pass through": { name: "mcp__harness__tool_search", input: { query: "browser" } },
-  "suffix doesn't match": { name: "mcp__harness__call_tools", input: { name: "x" } },
-  "case-sensitive": { name: "Call_Tool", input: { name: "x" } },
-  "empty server name doesn't match": { name: "mcp____call_tool", input: { name: "x" } },
-  "only one prefix": { name: "mcp__a__mcp__b__call_tool", input: { name: "x" } },
-} satisfies Record<string, CallInput>;
-
-export const unwrapToolCallCases = cases(({ name, input }: CallInput) => unwrapToolCall(name, input), callToolCases);
-export const shownToolCallCases = cases(({ name, input }: CallInput) => shownToolCall(name, input), callToolCases);
-
 type ApprovalInput = { toolName: string; input?: unknown };
 const approval = ({ toolName, input }: ApprovalInput) => describeApprovalInput(toolName, input);
 
@@ -230,11 +203,6 @@ export const describeApprovalInputCases = cases(approval, {
   "raw array is pretty-printed": { toolName: "Odd", input: [1, "two", [3, []], {}] },
   null: { toolName: "Odd", input: null },
   "undefined (missing)": { toolName: "Odd" },
-  "call_tool is judged by its inner tool": {
-    toolName: "mcp__harness__call_tool",
-    input: { name: "create_watcher", input: { name: "status", command: "while true; do curl -s https://x.test; sleep 60; done" } },
-  },
-  "call_tool with a bare name": { toolName: "call_tool", input: { name: "delete_ticket", input: { key: "ACME-3" } } },
 });
 
 export const approvalToastCases = cases(({ decision, tool, ticketKey }: { decision: "allow_once" | "allow_tool" | "deny"; tool: string; ticketKey: string }) => approvalToast(decision, tool, ticketKey), {
@@ -337,8 +305,6 @@ export const toolPreviewCases = cases(({ name, input }: { name: string; input?: 
   "empty string input": { name: "x", input: "" },
   null: { name: "x", input: null },
   "undefined (missing)": { name: "x" },
-  "call_tool previews its inner input": { name: "mcp__harness__call_tool", input: { name: "browser_open", input: { url: "https://a" } } },
-  "call_tool with nothing to pick": { name: "call_tool", input: { name: "list_watchers" } },
 });
 
 // JSONValue objects in Swift are unordered dictionaries, so where TS prints an object in insertion

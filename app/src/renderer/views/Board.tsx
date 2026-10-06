@@ -25,7 +25,6 @@ import {
   scopeGroup,
   searchColumns,
   searchStatusText,
-  shownToolCall,
   ticketByKey,
   type State,
 } from "@harness/shared/state";
@@ -437,10 +436,10 @@ const TicketCard = memo(function TicketCard({
       <div className="card-title">{t.title || "Untitled"}</div>
 
       {t.pendingApproval ? (
-        <div className="card-approval" title={`The agent is waiting for permission to use ${shownToolCall(t.pendingApproval.toolName, t.pendingApproval.input).name}`}>
+        <div className="card-approval" title={`The agent is waiting for permission to use ${t.pendingApproval.toolName}`}>
           <Icon name="lock" size={12} />
           <span>
-            Needs approval: <strong>{shownToolCall(t.pendingApproval.toolName, t.pendingApproval.input).name}</strong>
+            Needs approval: <strong>{t.pendingApproval.toolName.replace(/^mcp__[^_]+__/, "")}</strong>
           </span>
         </div>
       ) : t.status === "blocked" && t.blockedReason && (

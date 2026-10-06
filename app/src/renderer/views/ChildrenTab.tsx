@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { keyLabel, type Ticket } from "@harness/shared";
 import { useStore } from "../state/store";
-import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, NEWS_KINDS, plainText, progressLabel, progressOf, shownToolCall, workingTitle } from "@harness/shared/state";
+import { attentionOf, childrenOfTicket, depChipTitle, depStates, groupChildren, hasCustomDriver, isWorking, latestActivity, NEWS_KINDS, plainText, progressLabel, progressOf, workingTitle } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, ReviewMark, STATUS_LABEL, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { ProgressBar } from "../components/Conductor";
@@ -135,7 +135,7 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
           <div className="child-note note-approval">
             <Icon name="lock" size={11} />
             <span>
-              Needs approval: <strong>{shownToolCall(c.pendingApproval.toolName, c.pendingApproval.input).name}</strong>
+              Needs approval: <strong>{c.pendingApproval.toolName.replace(/^mcp__[^_]+__/, "")}</strong>
             </span>
           </div>
         ) : c.status === "blocked" ? (

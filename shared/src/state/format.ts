@@ -14,9 +14,6 @@ import type {
 } from "../protocol";
 import { PERMISSION_MODE_LABELS } from "../permissions";
 import { commandLine } from "../commandLine";
-import { unwrapToolCall } from "../toolCalls";
-
-export { CALL_TOOL_NAME, toolCallName, unwrapToolCall } from "../toolCalls";
 
 export const STATUS_LABEL: Record<TicketStatus, string> = {
   planning: "Planning",
@@ -87,20 +84,10 @@ export function newSessionPlaceholder(kind: TicketKind): string {
 /** mcp__harness__post_note → post_note */
 export const shortToolName = (name: string) => name.replace(/^mcp__[^_]+__/, "");
 
-/**
- * A tool call as a row or card shows it: the short name and the input, looking through call_tool
- * (mcp__harness__call_tool { name: "browser_open", input } → browser_open with that input).
- */
-export function shownToolCall(name: string, input: unknown): { name: string; input: unknown } {
-  const call = unwrapToolCall(name, input);
-  return { name: shortToolName(call.name), input: call.input };
-}
-
 export type ShownInput = { label: string; value: string; code: boolean };
 
-/** Pick the part of a tool input a human needs to judge an approval request (call_tool: its inner tool's). */
-export function describeApprovalInput(toolName: string, rawInput: unknown): { primary: ShownInput | null; description: string | null; rest: Record<string, unknown> | null } {
-  const { name, input } = unwrapToolCall(toolName, rawInput);
+/** Pick the part of a tool input a human needs to judge an approval request. */
+export function describeApprovalInput(toolName: string, input: unknown): { primary: ShownInput | null; description: string | null; rest: Record<string, unknown> | null } {
   const o = input && typeof input === "object" && !Array.isArray(input) ? { ...(input as Record<string, unknown>) } : null;
   if (!o) return { primary: input === undefined || input === null ? null : { label: "Input", value: JSON.stringify(input, null, 2), code: true }, description: null, rest: null };
   const take = (k: string) => {
@@ -109,7 +96,7 @@ export function describeApprovalInput(toolName: string, rawInput: unknown): { pr
     return typeof v === "string" ? v : null;
   };
   const description = take("description");
-  const tool = shortToolName(name);
+  const tool = shortToolName(toolName);
   let primary: ShownInput | null = null;
   const pick = (k: string, label: string, code: boolean) => {
     if (primary || typeof o[k] !== "string") return;
@@ -197,9 +184,8 @@ export function groupTranscript(entries: TranscriptEntry[]): TranscriptItem[] {
   return items;
 }
 
-/** One-line preview of a tool input, e.g. the bash command or file path (call_tool: its inner tool's input). */
-export function toolPreview(name: string, rawInput: unknown): string {
-  const { input } = unwrapToolCall(name, rawInput);
+/** One-line preview of a tool input, e.g. the bash command or file path. */
+export function toolPreview(name: string, input: unknown): string {
   if (input && typeof input === "object") {
     const o = input as Record<string, unknown>;
     for (const k of ["command", "url", "path", "file_path", "selector", "pattern", "key", "title", "question", "note", "expression", "text"]) {
