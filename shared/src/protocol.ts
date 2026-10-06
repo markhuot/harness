@@ -135,8 +135,8 @@ export type TicketKind = "task" | "conductor";
 /**
  * How an approved ticket's work lands (DESIGN.md "Completion"), each with its own completion
  * prompts: "merge" merges the branch into its base branch locally, "pr" pushes it and opens a
- * GitHub pull request with gh, "cleanup" only removes the ticket's worktree and branch (the work
- * already landed, e.g. pushed to an existing pull request's branch), "custom" follows the
+ * GitHub pull request with gh, "cleanup" pushes the branch when it has work to keep (updating an
+ * open pull request) and removes the ticket's worktree and branch, "custom" follows the
  * approver's own instructions.
  */
 export const COMPLETION_ACTIONS = ["merge", "pr", "cleanup", "custom"] as const;

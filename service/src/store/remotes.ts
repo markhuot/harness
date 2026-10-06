@@ -117,6 +117,17 @@ export function ghInstalled(env: Env = process.env): boolean {
   return found;
 }
 
+/** The remote the checkout at `path` pushes branches to (origin, or the only remote), or null without one. */
+export function pushRemote(path: string): string | null {
+  const gitDir = commonGitDir(path);
+  if (!gitDir) return null;
+  try {
+    return pickRemote(parseRemotes(readFileSync(join(gitDir, "config"), "utf8")))?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Where a pull request for the checkout at `path` would open, or null when it can't: no git repo,
  * no usable remote, a remote on a host gh isn't logged into (Bitbucket, GitLab, an Enterprise host

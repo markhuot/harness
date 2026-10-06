@@ -120,7 +120,7 @@ const TICKETS: Record<string, { t: Partial<Ticket>; b?: BranchContext; p?: Parti
 
 const GH = { host: "github.com", remote: "origin", repo: "github.com/nytimes/web" };
 const GHE = { host: "ghe.acme.com", remote: "upstream", repo: "ghe.acme.com/web/site" };
-const COMPLETION_VARIANTS: Record<string, Record<string, { t?: Partial<Ticket>; pullRequest?: BranchContext["pullRequest"]; instructions?: string }>> = {
+const COMPLETION_VARIANTS: Record<string, Record<string, { t?: Partial<Ticket>; pullRequest?: BranchContext["pullRequest"]; pushRemote?: string | null; instructions?: string }>> = {
   pr: {
     github: { pullRequest: GH },
     "enterprise, existing pull request": { pullRequest: GHE, t: { pullRequestUrl: "https://ghe.acme.com/web/site/pull/7" }, instructions: "Add the design label." },
@@ -128,6 +128,8 @@ const COMPLETION_VARIANTS: Record<string, Record<string, { t?: Partial<Ticket>; 
   cleanup: {
     "no instructions": {},
     instructions: { t: { completionInstructions: "Also prune the remote branch." }, instructions: "Also prune the remote branch." },
+    "a remote": { pushRemote: "origin" },
+    "a remote, existing pull request": { pushRemote: "upstream", t: { pullRequestUrl: "https://github.com/nytimes/web/pull/12" } },
   },
   custom: {
     instructions: { t: { completionInstructions: "Cherry-pick onto release-2.4." }, instructions: "Cherry-pick onto release-2.4." },
@@ -181,7 +183,7 @@ describe("built-in system prompts", () => {
         test(`complete · ${action} · ${variant} · ${name}`, () => {
           const c = TICKETS[name]!;
           const p = c.p === null ? null : { ...project, ...c.p };
-          const b = c.b ? { ...c.b, pullRequest: extra.pullRequest } : undefined;
+          const b = c.b ? { ...c.b, pullRequest: extra.pullRequest, pushRemote: extra.pushRemote } : undefined;
           const t = ticket({ ...c.t, completionAction: action as "pr" | "cleanup" | "custom", ...extra.t });
           expect(systemPrompt({ kind: "complete", project: p, ticket: t, session, branches: b })).toMatchSnapshot();
           expect(completePrompt(t, extra.instructions, b, p)).toMatchSnapshot();

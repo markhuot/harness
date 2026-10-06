@@ -204,7 +204,7 @@ export const reviewDecision = defineTool<{ decision: "approve" | "request_change
 export const recordPullRequest = defineTool<{ url: string; head: string }>({
   name: "record_pull_request",
   description:
-    "Record the pull request this completion opened or updated, e.g. https://github.com/acme/web/pull/42, and the commit you pushed to it. Only for completion runs that land the work as a pull request: the ticket moves to done only once one is recorded, the board links to it, and the ticket's Changes tab shows that commit's diff from then on.",
+    "Record the pull request this completion opened or updated, e.g. https://github.com/acme/web/pull/42, and the commit you pushed to it. Only for completion runs that land the work as a pull request, or clean-ups that pushed to the ticket's pull request: a pull request completion moves to done only once one is recorded, the board links to it, and the ticket's Changes tab shows that commit's diff from then on.",
   inputSchema: schema(
     {
       url: { type: "string", minLength: 1, description: "The pull request's link, as gh printed it." },

@@ -33,6 +33,8 @@ export interface BranchContext {
   leftover?: { path: string; branch: string | null } | null;
   /** Where a "pr" completion pushes and opens its pull request (null: nowhere gh can reach) */
   pullRequest?: { host: string; remote: string; repo: string } | null;
+  /** Where a "cleanup" completion pushes the ticket's branch (null: the repo has no remote to push to) */
+  pushRemote?: string | null;
 }
 
 /** The completion prompts a complete run of `ticket` uses: the action chosen at approval (default merge). */
@@ -264,6 +266,8 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
             leftoverPath: b.leftover?.path ?? "",
             leftoverBranch: b.leftover?.branch ?? "",
             leftoverIsHarness: !!b.leftover?.branch && b.leftover.branch === harness,
+            remoteName: b.pushRemote ?? "",
+            pullRequestUrl: ticket?.pullRequestUrl ?? "",
           },
           o,
         );
@@ -502,7 +506,7 @@ export function completePrompt(
     case "cleanup":
       return renderPrompt(
         "run.complete_cleanup",
-        { ticket: label, branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase, ownsWorktree: v.ownsWorktree, isHarnessBranch: v.isHarnessBranch, instructions: text },
+        { ticket: label, branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase, ownsWorktree: v.ownsWorktree, isHarnessBranch: v.isHarnessBranch, remoteName: b.pushRemote ?? "", pullRequestUrl: ticket.pullRequestUrl ?? "", instructions: text },
         overrides,
       );
     case "custom":
