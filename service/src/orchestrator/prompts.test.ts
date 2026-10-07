@@ -569,6 +569,9 @@ describe("systemPrompt explore through a sub-agent", () => {
         expect(files).toContain(RULE);
         for (const n of d.names) expect(files).toContain(n);
         expect(files).toContain("only that range");
+        expect(files).toContain("don't search yourself");
+        expect(files).toContain("no `grep` or `rg` in");
+        expect(files).toContain("ask a sub-agent a narrower follow-up question");
       }
     });
     test(`${d.name}: review and complete runs get no explore rule`, () => {
