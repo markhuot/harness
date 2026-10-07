@@ -37,30 +37,4 @@ struct BoardColumnsTests {
         let shown = BoardColumns.visibleColumns(s.boardColumns(c.input.projectId), hideChildren: c.input.hideChildren)
         #expect(BoardColumns.columnCount(s, c.input.projectId, shown: shown, status: c.input.status, searching: c.input.searching) == c.output)
     }
-
-    struct MoveInput: Decodable, Sendable {
-        let t: Ticket
-        let status: TicketStatus
-        let `where`: BoardColumns.Where
-        let cols: Columns
-        let now: Double
-    }
-
-    @Test(arguments: Fixture.cases("mobileBoardColumns", "moveBodyCases", input: MoveInput.self, output: BoardColumns.Move?.self))
-    func moveBody(_ c: Fixture.Case<MoveInput, BoardColumns.Move?>) {
-        let i = c.input
-        #expect(BoardColumns.moveBody(i.t, to: i.status, i.where, cols: i.cols, now: i.now) == c.output)
-    }
-
-    @Test func appliedMoveIsTheOptimisticCopy() throws {
-        let t = Ticket(id: "a", key: "A-1", projectId: "p1", title: "a", spec: "", status: .done, sessionId: "s", driver: "d",
-                       position: 4, completedAt: .value(50), createdAt: 1, updatedAt: 1)
-        let move = try #require(BoardColumns.moveBody(t, to: .planning, .top, cols: Columns(), now: 99))
-        let next = move.applied(to: t)
-        #expect(next.status == .planning)
-        #expect(next.position == 0)
-        #expect(next.completedAt == .null)
-        #expect(move.updateBody.status == .planning)
-        #expect(move.updateBody.position == 0)
-    }
 }

@@ -70,18 +70,15 @@ public enum BoardScreenRules {
     /// One entry in a card's context menu, in menu order.
     public enum CardMenuItem: Equatable, Sendable {
         case discardDraft
-        case move(TicketStatus)
-        case moveTo(BoardColumns.Where)
         case openParent(key: String)
         case copyKey
     }
 
-    /// A card's menu: a draft offers Discard and Copy key; any other card the other columns, top
-    /// and bottom of its own (not Done, which is ordered by completion), its parent, and Copy key.
+    /// A card's menu: a draft offers Discard and Copy key; any other card its parent and Copy key.
+    /// It never moves a card: only agents move tickets between columns.
     public static func cardMenu(_ t: Ticket, parent: Ticket?) -> [CardMenuItem] {
         if t.draft == true { return [.discardDraft, .copyKey] }
-        var out: [CardMenuItem] = TicketStatus.allKnown.filter { $0 != t.status }.map { .move($0) }
-        if t.status != .done { out += [.moveTo(.top), .moveTo(.bottom)] }
+        var out: [CardMenuItem] = []
         if let parent { out.append(.openParent(key: parent.key)) }
         out.append(.copyKey)
         return out
@@ -92,11 +89,6 @@ public enum BoardScreenRules {
     public static func menuTitle(_ t: Ticket) -> String {
         if t.draft == true { return "\(Keys.keyLabel(t)) · Draft" }
         return String("\(Keys.keyLabel(t)) · \(t.title)".prefix(90))
-    }
-
-    /// The statuses VoiceOver's custom actions move a card to (none for a draft).
-    public static func accessibilityMoves(_ t: Ticket) -> [TicketStatus] {
-        t.draft == true ? [] : TicketStatus.allKnown.filter { $0 != t.status }
     }
 
     /// What VoiceOver reads for a card (and what sim-check matches): "KEY title", plus why it

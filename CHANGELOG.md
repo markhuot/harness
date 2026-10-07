@@ -20,6 +20,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone and iPad, touching and holding a card on the board shows a preview of the ticket, open
+  on its Spec tab, above the card's menu. Tap the card to open the ticket.
+- On iPhone and iPad, a card's menu no longer has Move to … or Move to top/bottom, and VoiceOver no
+  longer offers move actions on cards. Agents move tickets between columns as they work.
 - On iPhone and iPad, the text you type in a ticket's message box and in the New session prompt is
   a size larger, and the message box's text uses the system's standard color (black in light mode,
   white in dark mode).

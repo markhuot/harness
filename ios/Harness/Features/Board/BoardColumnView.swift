@@ -101,7 +101,6 @@ struct BoardColumnFrame<Content: View>: View {
 struct BoardColumnView: View {
     let status: TicketStatus
     let ctx: BoardContext
-    let onMove: (Ticket, TicketStatus, BoardColumns.Where) -> Void
     let onDiscard: (Ticket) -> Void
     /// Around the cards: the pager's page, or tighter inside a side-by-side column's frame.
     var inset = EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)
@@ -117,7 +116,7 @@ struct BoardColumnView: View {
         ScrollView {
             LazyVStack(spacing: 10) {
                 ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
-                    BoardTicketCard(ticket: t, showProject: ctx.project == nil, onMove: onMove, onDiscard: onDiscard)
+                    BoardTicketCard(ticket: t, showProject: ctx.project == nil, onDiscard: onDiscard)
                         .onAppear { if i >= cards.count - Self.endThreshold { onEnd() } }
                 }
                 if cards.isEmpty { empty }

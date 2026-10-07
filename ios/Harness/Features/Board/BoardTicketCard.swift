@@ -2,22 +2,23 @@ import HarnessKit
 import SwiftUI
 
 /// A board card with everything the desktop card shows. Touch and hold
-/// opens the context menu (move between columns, reorder, open the parent, copy the key); VoiceOver
-/// gets the moves as custom actions. On iPad at regular width a card also drags out of the window
-/// into a ticket window of its own (TearOff.swift); the board has no drop destination, so a drag
-/// never moves it between columns (that's the menu's Move to …). A draft (a New session saved
-/// before launch) is dashed and dimmed with a Draft badge, opens in the New session editor, offers
-/// Discard instead of the moves, and doesn't drag.
+/// previews the ticket's screen on its Spec tab above the context menu (open the parent, copy the
+/// key). Only agents move cards between columns, so neither the menu, VoiceOver nor a drag does.
+/// On iPad at regular width a card also drags out of the window into a ticket window of its own
+/// (TearOff.swift); the board has no drop destination. A draft (a New session saved before launch)
+/// is dashed and dimmed with a Draft badge, opens in the New session editor, offers Discard with
+/// no preview, and doesn't drag.
 struct BoardTicketCard: View {
     let ticket: Ticket
     let showProject: Bool
-    let onMove: (Ticket, TicketStatus, BoardColumns.Where) -> Void
     let onDiscard: (Ticket) -> Void
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
     @Environment(\.supportsMultipleWindows) private var multipleWindows
+    /// The card's width, which the preview takes as its own.
+    @State private var width: CGFloat = 360
 
     var body: some View {
         let t = ticket
@@ -26,17 +27,13 @@ struct BoardTicketCard: View {
         let waiting = Conductor.autoStartWaitingOn(t, state.dependencyStates(t))
         Button { open() } label: { card(state: state, parent: parent, waiting: waiting) }
             .buttonStyle(BoardCardPressStyle())
-            .contextMenu { menu(parent: parent) }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            .modifier(CardMenu(ticket: t, width: width) { menu(parent: parent) })
             .modifier(CardDrag(ticket: t))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")) + restartLabel(t))
-            .accessibilityHint(t.draft == true ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to move it.")
+            .accessibilityHint(t.draft == true ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to preview it.")
             .accessibilityAddTraits(.isButton)
-            .accessibilityActions {
-                ForEach(BoardScreenRules.accessibilityMoves(t), id: \.self) { s in
-                    Button("Move to \(statusLabel(s))") { onMove(t, s, .bottom) }
-                }
-            }
     }
 
     /// ", restarts on its own at 2:35 PM, …" for a ticket stopped on a usage limit; "" otherwise.
@@ -184,15 +181,6 @@ struct BoardTicketCard: View {
             switch item {
             case .discardDraft:
                 Button("Discard draft", systemImage: "trash", role: .destructive) { onDiscard(t) }
-            case let .move(s):
-                Button("Move to \(statusLabel(s))", systemImage: "arrow.right") {
-                    haptic(.success)
-                    onMove(t, s, .bottom)
-                }
-            case .moveTo(.top):
-                Button("Move to top", systemImage: "arrow.up.to.line") { onMove(t, t.status, .top) }
-            case .moveTo(.bottom):
-                Button("Move to bottom", systemImage: "arrow.down.to.line") { onMove(t, t.status, .bottom) }
             case let .openParent(key):
                 Button("Open \(parent.map { Keys.keyLabel($0) } ?? key)", systemImage: "arrow.turn.left.up") {
                     router.push(.ticket(key: key, tab: nil))
@@ -201,6 +189,38 @@ struct BoardTicketCard: View {
                 Button("Copy key", systemImage: "doc.on.doc") { UIPasteboard.general.string = t.key }
             }
         }
+    }
+}
+
+/// The card's context menu. A launched ticket's lifts its ticket screen, on the Spec tab, as the
+/// preview; a draft's lifts the card itself, as it opens in the New session editor instead.
+private struct CardMenu<Items: View>: ViewModifier {
+    let ticket: Ticket
+    let width: CGFloat
+    @ViewBuilder let items: () -> Items
+
+    func body(content: Content) -> some View {
+        if ticket.draft == true {
+            content.contextMenu { items() }
+        } else {
+            content.contextMenu { items() } preview: { BoardCardPreview(key: ticket.key, width: width) }
+        }
+    }
+}
+
+/// The ticket's screen as the card's preview: its bar, hero and Spec tab in a navigation stack of
+/// its own, about the size of the ticket sheet. Only a look: the ticket opens with a tap.
+private struct BoardCardPreview: View {
+    let key: String
+    let width: CGFloat
+
+    var body: some View {
+        let w = min(width, 500)
+        NavigationStack {
+            TicketDetailScreen(key: key, initialTab: .spec)
+        }
+        .frame(width: w, height: min(w * 1.45, 640))
+        .allowsHitTesting(false)
     }
 }
 

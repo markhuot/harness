@@ -115,10 +115,7 @@ struct BoardScreen: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     ForEach(TicketStatus.allKnown, id: \.self) { status in
-                        BoardColumnView(
-                            status: status, ctx: ctx,
-                            onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
-                            onDiscard: discard)
+                        BoardColumnView(status: status, ctx: ctx, onDiscard: discard)
                             .containerRelativeFrame(.horizontal)
                             .id(status)
                     }
@@ -152,7 +149,6 @@ struct BoardScreen: View {
                         BoardColumnFrame(status: status, count: ctx.count(status), onTap: { reveal(status) }) {
                             BoardColumnView(
                                 status: status, ctx: ctx,
-                                onMove: { t, s, w in move(t, BoardColumns.moveBody(t, to: s, w, cols: ctx.board), to: s) },
                                 onDiscard: discard,
                                 inset: EdgeInsets(top: 6, leading: 8, bottom: 10, trailing: 8))
                         }
@@ -245,20 +241,9 @@ struct BoardScreen: View {
         }
     }
 
-    // MARK: Moves
+    // MARK: Drafts
 
     private var api: HarnessClient? { store.api }
-
-    /// Optimistic; the service's event confirms it. A failed update refetches the board.
-    private func move(_ t: Ticket, _ m: BoardColumns.Move?, to status: TicketStatus) {
-        guard let m, let api else { return }
-        store.dispatch(.event(.ticketUpserted(ticket: m.applied(to: t))))
-        let message = t.status != status ? "\(Keys.keyLabel(t)) → \(statusLabel(status))" : nil
-        let body = m.updateBody
-        Task {
-            if await actions.run(message, { try await api.updateTicket(t.key, body) }) == nil { await store.refresh() }
-        }
-    }
 
     private func discard(_ t: Ticket) {
         guard let api else { return }

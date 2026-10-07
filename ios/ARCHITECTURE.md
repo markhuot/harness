@@ -434,8 +434,10 @@ Split View or a small Stage Manager window gets the phone's:
   on screen comes from `onScrollVisibilityChange` (all of them when they fit) and drives Done's
   autofill (`shouldAutofillDone`) and the jump to search results (`columnWithResults(_:visible:)`).
 
-Neither layout drags cards between columns, as on the Mac: a card moves from its menu (Move to a
-column, top or bottom) or its VoiceOver actions.
+Neither layout moves cards between columns: only agents move tickets, so a card has no drop
+target, no Move to … in its menu and no VoiceOver move actions. Touch and hold lifts the ticket's
+screen, on the Spec tab in a navigation stack of its own, as the context menu's preview (a
+draft's lifts the card itself); a tap opens the ticket.
 
 simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
 only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and

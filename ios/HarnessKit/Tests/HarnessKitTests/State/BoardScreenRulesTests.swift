@@ -81,23 +81,15 @@ struct BoardScreenRulesTests {
 
     // MARK: card menu, labels, title
 
-    @Test func draftMenuDiscardsInsteadOfMoving() {
+    @Test func draftMenuOffersDiscard() {
         let d = Self.t("a", draft: true)
         #expect(BoardScreenRules.cardMenu(d, parent: nil) == [.discardDraft, .copyKey])
-        #expect(BoardScreenRules.accessibilityMoves(d).isEmpty)
     }
 
-    @Test func menuOffersOtherColumnsReorderAndParent() {
+    @Test func menuOpensTheParentWhenThereIsOne() {
         let parent = Self.t("p", .inProgress)
-        let menu = BoardScreenRules.cardMenu(Self.t("a", .review, parentId: "p"), parent: parent)
-        #expect(menu == [.move(.planning), .move(.inProgress), .move(.blocked), .move(.done), .moveTo(.top), .moveTo(.bottom), .openParent(key: "K-p"), .copyKey])
-    }
-
-    @Test func doneCardsCantBeReordered() {
-        let menu = BoardScreenRules.cardMenu(Self.t("a", .done), parent: nil)
-        #expect(!menu.contains(.moveTo(.top)) && !menu.contains(.moveTo(.bottom)))
-        #expect(!menu.contains(.move(.done)))
-        #expect(BoardScreenRules.accessibilityMoves(Self.t("a", .done)) == [.planning, .inProgress, .blocked, .review])
+        #expect(BoardScreenRules.cardMenu(Self.t("a", .review, parentId: "p"), parent: parent) == [.openParent(key: "K-p"), .copyKey])
+        #expect(BoardScreenRules.cardMenu(Self.t("a", .review), parent: nil) == [.copyKey])
     }
 
     @Test func menuTitleNamesTheCardAndCutsAt90() {

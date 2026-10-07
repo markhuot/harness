@@ -2251,14 +2251,20 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
     }),
     chain(18, async (udid) => {
-      await check("board context menu moves a card to Done", async () => {
+      await check("touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu", async () => {
         await goto(udid, BOARD);
         await tapWhere(udid, (l) => l.startsWith("Review,"));
         await until("card on screen", async () => ((await findElement(udid, (l) => l.startsWith(`${s.browse.key} `)))?.frame.x ?? 999) < 100, 3000).catch(() => {});
         await tapWhere(udid, (l) => l.startsWith(`${s.browse.key} `), { longPress: 1.2 });
-        await tapWhere(udid, "Move to Done");
-        const t = await settle(s.browse.key, (x) => x.status === "done", 15000);
-        return `${t.key} → ${t.status}`;
+        const l = await until("the menu", async () => ((x) => (x.includes("Copy key") ? x : null))(await labels(udid)), 5000);
+        await Bun.sleep(800);
+        await shot(udid, "board-card-preview-light");
+        const moves = l.filter((x) => x.startsWith("Move to"));
+        if (moves.length) throw new Error(`the menu still moves cards: ${moves.join(", ")}`);
+        if (!l.some((x) => x === "Spec" || x.startsWith("Spec,"))) throw new Error(`no Spec tab in the preview; on screen: ${l.slice(0, 30).join(" | ")}`);
+        await tapWhere(udid, "Copy key");
+        await until("the menu gone", async () => !(await labels(udid)).includes("Copy key"), 5000);
+        return `${s.browse.key}: Spec preview, no moves`;
       });
       await check("Approve menu → Approve and take no action marks a review ticket done without a run", async () => {
         await goto(udid, `harness://ticket/${k(s.quick)}`, (l) => l.includes(APPROVE_MORE));
@@ -2325,7 +2331,7 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
   }
   // The checks change tickets the screens show, so they start once every screen is saved.
   if (hasAxe && !only && !ipad) {
-    await s.browsed.catch(() => {}); // Move to Done moves it out of Review
+    await s.browsed.catch(() => {}); // the card preview check holds its card in Review
     const chains = interactionChains(s).sort((a, b) => b.seconds - a.seconds); // longest first deals best
     const byDevice = lanes(chains, udids.length, (c) => c.seconds);
     await Promise.all(udids.map((u) => appearance(u, "light"))); // their shots are named -light
