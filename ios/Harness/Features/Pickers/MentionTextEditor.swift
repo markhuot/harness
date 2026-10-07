@@ -226,8 +226,7 @@ private struct MentionField: View, Equatable {
 
     var body: some View {
         TextField("", text: text, selection: selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
-            .font(.scaled(size: 16))
-            .foregroundStyle(c.text)
+            .font(.scaled(size: 17))
             .lineLimit(1...maxLines)
             .frame(minHeight: minHeight, alignment: .topLeading)
             .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))

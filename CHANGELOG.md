@@ -17,6 +17,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone and iPad, the text you type in a ticket's message box and in the New session prompt is
+  a size larger, and the message box's text uses the system's standard color (black in light mode,
+  white in dark mode).
 - On iPhone and iPad, the ticket's Browser tab now shows the same header as the other tabs: the
   title on one line with a chevron that expands it to the status, badges and actions.
 - Board cards no longer show a PR tag on finished tickets, on the Mac or on iPhone and iPad. The
