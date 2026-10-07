@@ -27,6 +27,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, the text you type in a ticket's message box and in the New session prompt is
   a size larger, and the message box's text uses the system's standard color (black in light mode,
   white in dark mode).
+- On iPhone, tickets and New session open in a sheet that slides up over the board. Tapping a
+  conductor's child ticket, a dependency or the parent opens it inside the same sheet, and Back
+  returns. Drag the sheet to the bottom of the screen to tuck it away under the board, like a
+  minimized draft in Mail: a bar with the ticket's key (or "New session") stays there, even when
+  you switch to Inbox or Settings, and tapping it brings the sheet back where you left it. Swipe
+  the bar down to close it. Drafts are kept either way.
 - On iPhone and iPad, the ticket's Browser tab now shows the same header as the other tabs: the
   title on one line with a chevron that expands it to the status, badges and actions.
 - Board cards no longer show a PR tag on finished tickets, on the Mac or on iPhone and iPad. The

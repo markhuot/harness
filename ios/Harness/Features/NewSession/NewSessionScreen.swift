@@ -336,7 +336,7 @@ private struct NewSessionEditorView: View {
 
     /// Close this sheet, unless a link has already replaced it with another.
     private func dismiss() {
-        if router.sheet == .newSession(projectId: projectId, key: reopen) { router.sheet = nil }
+        router.close(.newSession(projectId: projectId, key: reopen))
     }
 }
 

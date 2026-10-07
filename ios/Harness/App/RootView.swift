@@ -139,8 +139,10 @@ private struct SceneChrome: ViewModifier {
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
 /// section's sidebar button, switches between them; the board has no header, and its own bottom
-/// bar holds that button, the search field (with the filter inside it) and New session. At regular width (iPad) it's DesktopShell, where a ticket opens
-/// in a window of its own (WindowDirectory.openTicket) instead of on the section's stack.
+/// bar holds that button, the search field (with the filter inside it) and New session. There a
+/// ticket or New session opens in the ticket sheet over the sections (TicketSheetLayer), which can
+/// dock under them. At regular width (iPad) it's DesktopShell, where a ticket opens in a window of
+/// its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -151,17 +153,23 @@ struct MainTabs: View {
             if sizeClass == .regular {
                 DesktopShell()
             } else {
-                // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
-                SectionStack().hiddenShortcuts {
-                    Button("Toggle Sidebar") {
-                        if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                ZStack {
+                    // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
+                    SectionStack().hiddenShortcuts {
+                        Button("Toggle Sidebar") {
+                            if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                        }
+                        .keyboardShortcut("s", modifiers: [.control, .command])
                     }
-                    .keyboardShortcut("s", modifiers: [.control, .command])
+                    TicketSheetLayer()
                 }
             }
         }
         .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
             router.setOpensTicketsInWindows(windows)
+        }
+        .onChange(of: sizeClass == .regular, initial: true) { _, regular in
+            router.setUsesTicketSheets(!regular)
         }
     }
 }
@@ -295,7 +303,8 @@ struct TabStack<Root: View>: View {
     var body: some View {
         NavigationStack(path: Binding(get: { router.path(tab) }, set: { router.setPath(tab, $0) })) {
             root
-                .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
+                .dockClearance()
+                .navigationDestination(for: Route.self) { RouteScreen(route: $0).dockClearance() }
         }
     }
 }
