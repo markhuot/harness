@@ -74,6 +74,9 @@ struct TicketSheetHost: View {
                     .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
             }
         }
+        // The sheet runs to the screen's bottom edge without keeping the home indicator's inset, so
+        // the composer measures its concentric gap from the edge itself.
+        .environment(\.concentricBottomGap, 0)
         // New session that became its ticket starts over as the ticket's screen.
         .id(sheet.root)
     }

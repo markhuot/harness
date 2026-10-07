@@ -991,6 +991,13 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await until("the children", async () => onConductor(await labels(udid)), 8000);
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is showing under the presented sheet");
     await shot(udid, "sheet-presented-light");
+    // The composer's bar is as far from the screen's bottom as from its side, as on a pushed ticket:
+    // a sheet doesn't keep the home indicator's inset, so the window's figure would sit it too low.
+    const attach = await findElement(udid, (l) => l === "Attach");
+    if (!attach) throw new Error("no composer in the sheet");
+    const gap = H - (attach.frame.y + attach.frame.height);
+    if (Math.abs(gap - attach.frame.x) > 3)
+      throw new Error(`the composer sits ${Math.round(gap)}pt above the bottom but ${Math.round(attach.frame.x)}pt from the side`);
     return `${key} in the sheet`;
   });
   await check("a conductor's child pushes inside the sheet and the back swipe returns", async () => {

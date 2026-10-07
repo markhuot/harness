@@ -62,10 +62,11 @@ public enum ConcentricBar {
 
     /// The padding that makes a bar `height` tall concentric with the screen's corners, or nil
     /// when it can't be (no screen measured yet, landscape, or square corners): the caller keeps
-    /// its own.
-    public static func padding(_ screen: Screen?, barHeight: CGFloat) -> Padding? {
+    /// its own. `bottomGap` is how far above the screen's bottom edge the bar's slot ends: the home
+    /// indicator's inset in a window, none in a full-height sheet, which doesn't keep it clear.
+    public static func padding(_ screen: Screen?, barHeight: CGFloat, bottomGap: CGFloat? = nil) -> Padding? {
         guard let screen, screen.portrait, let radius = displayCornerRadius(screen) else { return nil }
         let margin = max(radius - barHeight / 2, minimumMargin)
-        return Padding(horizontal: margin, bottom: margin - screen.homeIndicator)
+        return Padding(horizontal: margin, bottom: margin - (bottomGap ?? screen.homeIndicator))
     }
 }

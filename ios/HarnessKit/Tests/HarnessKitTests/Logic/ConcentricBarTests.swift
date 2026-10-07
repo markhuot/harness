@@ -43,6 +43,13 @@ struct ConcentricBarTests {
         #expect(ConcentricBar.padding(.init(width: 932, height: 430, homeIndicator: 21), barHeight: 50) == nil)
     }
 
+    @Test("in a full-height sheet, whose slot runs to the screen's edge, the bar keeps the whole gap itself")
+    func sheetSlot() {
+        let screen = ConcentricBar.Screen(width: 402, height: 874, homeIndicator: 34)
+        #expect(ConcentricBar.padding(screen, barHeight: 44, bottomGap: 0) == .init(horizontal: 40, bottom: 40))
+        #expect(ConcentricBar.padding(screen, barHeight: 44) == .init(horizontal: 40, bottom: 6))
+    }
+
     @Test("a bar taller than the corner's diameter keeps a minimum gap rather than touching the edge")
     func minimumMargin() {
         let p = ConcentricBar.padding(.init(width: 375, height: 812, homeIndicator: 34), barHeight: 80)

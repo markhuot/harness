@@ -17,6 +17,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   key (or "New session"). The board's bottom bar widens to line up with it. Tap it or drag it up
   to bring the ticket back. Opening Projects now closes the ticket sheet, and so does an alert from
   the screen behind a docked sheet. Drafts are saved either way.
+  The message bar at the bottom of a ticket sits as far from the bottom edge as from the sides, as
+  it does outside the sheet.
 
 ### Fixed
 

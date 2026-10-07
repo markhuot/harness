@@ -5,6 +5,9 @@ extension EnvironmentValues {
     /// The phone's screen for bottom bars to sit concentric with its corners (ConcentricBar), or nil
     /// on an iPad or before it's measured.
     @Entry var concentricScreen: ConcentricBar.Screen?
+    /// How far above the screen's bottom edge a bottom bar's slot ends, where that isn't the home
+    /// indicator's inset: 0 in a full-height sheet (TicketSheetHost), which doesn't keep it clear.
+    @Entry var concentricBottomGap: CGFloat?
 }
 
 /// Measures the window for `\.concentricScreen`: its size, side insets and the home indicator's
@@ -40,9 +43,10 @@ private struct ConcentricBottomPadding: ViewModifier {
     let bottom: CGFloat
     let sides: CGFloat?
     @Environment(\.concentricScreen) private var screen
+    @Environment(\.concentricBottomGap) private var bottomGap
 
     func body(content: Content) -> some View {
-        let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight))
+        let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight, bottomGap: bottomGap))
             ?? ConcentricBar.Padding(horizontal: horizontal, bottom: bottom)
         content
             .padding(.horizontal, raised ? p.horizontal : sides ?? p.horizontal)
