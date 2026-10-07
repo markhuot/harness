@@ -9,7 +9,10 @@
 // also survives a restart), and watching or using it reloads the URL. Only closing a tab, or
 // deleting its session, removes it.
 
+import type { FrameSpec } from "./frames";
 import type { WaitCondition, WaitResult } from "./wait";
+
+export type { FrameSpec };
 import type { AddBrowserExtensionBody, BrowserExtension, BrowserExtensionActionResult, BrowserExtensionList, BrowserDevice, BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
@@ -123,12 +126,43 @@ export interface TabOption {
   tab?: number;
 }
 
+/** Which frame a call acts in: the tab's top document unless `frame` names an iframe (frames.ts). */
+export interface FrameOption {
+  frame?: FrameSpec;
+}
+
+/**
+ * The element an action takes: a CSS selector (its first match, in `frame` or the top document),
+ * or a ref from snapshot(), which already knows its frame. A bare string is a top-document selector.
+ */
+export type ElementTarget = string | { selector: string; frame?: FrameSpec } | { ref: string };
+
 /** What browser_screenshot captures: the viewport by default. */
 export interface ScreenshotOptions {
   /** The whole scrollable page, not just the viewport. */
   fullPage?: boolean;
-  /** Only the first element matching this CSS selector. */
+  /** Only the first element matching this CSS selector (in `frame`, with a frame). */
   selector?: string;
+  /** Only the element with this snapshot ref. */
+  ref?: string;
+  /** Without selector or ref: the iframe's whole box. */
+  frame?: FrameSpec;
+}
+
+/** What browser_keys sends to whatever has focus: text, then named keys. */
+export interface KeysInput {
+  text?: string;
+  /** Chords like "Tab", "Shift+Tab", "Meta+a" (keys.ts parseKeyChord). */
+  keys?: string[];
+  /** Type text one key press at a time (keydown, keypress, keyup per character), not as one insert. */
+  perKey?: boolean;
+}
+
+/** Which options browser_select picks: exactly one of these is given. */
+export interface SelectChoice {
+  values?: string[];
+  labels?: string[];
+  indexes?: number[];
 }
 
 /** The tallest full-page or element screenshot, in CSS px; Chrome can't paint much past this. */
@@ -152,16 +186,28 @@ export interface BrowserService {
    * Page content. With a selector, returns content of all matches (joined by blank lines).
    * format "text" = innerText, "html" = outerHTML. Throws if nothing matches the selector.
    */
-  content(sessionId: string, opts?: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number }): Promise<string>;
-  /** Click the first match. Reports a target that was disabled or busy (it is clicked anyway). */
-  click(sessionId: string, selector: string, opts?: TabOption): Promise<ClickReport>;
-  type(sessionId: string, selector: string, text: string, opts?: TabOption & { submit?: boolean }): Promise<void>;
+  content(sessionId: string, opts?: TabOption & FrameOption & { selector?: string; format?: "text" | "html"; maxChars?: number }): Promise<string>;
+  /** Click the element (a selector's first match). Reports a target that was disabled or busy (it is clicked anyway). */
+  click(sessionId: string, target: ElementTarget, opts?: TabOption): Promise<ClickReport>;
+  /** Focus the element and replace its content with `text`. */
+  type(sessionId: string, target: ElementTarget, text: string, opts?: TabOption & { submit?: boolean }): Promise<void>;
+  /** Send text and key chords to whatever has focus, in whichever frame holds it. */
+  keys(sessionId: string, input: KeysInput, opts?: TabOption): Promise<void>;
+  /** Pick options of a native <select> (firing input and change); returns the picked options' labels. */
+  select(sessionId: string, target: ElementTarget, choice: SelectChoice, opts?: TabOption): Promise<string[]>;
   /**
-   * Evaluate a JS expression in the page; returns its JSON-serialized result. Elements come back as
+   * Set files (absolute paths, already checked) on a file input, or on the file chooser clicking the
+   * element opens. Returns how they got there.
+   */
+  upload(sessionId: string, target: ElementTarget, files: string[], opts?: TabOption): Promise<"input" | "chooser">;
+  /** The accessibility tree of the page (or `frame`), iframes nested, with a ref on each element. */
+  snapshot(sessionId: string, opts?: TabOption & FrameOption & { maxNodes?: number }): Promise<string>;
+  /**
+   * Evaluate a JS expression in the page (or `frame`); returns its JSON-serialized result. Elements come back as
    * a short description ("p#x"), Maps as objects, cycles as "[Circular]". Throws, naming the new
    * URL, when the page navigates while the expression runs.
    */
-  evaluate(sessionId: string, expression: string, opts?: TabOption): Promise<string>;
+  evaluate(sessionId: string, expression: string, opts?: TabOption & FrameOption): Promise<string>;
   /**
    * Wait until `condition` holds in the tab (BrowserManager polls it; a navigation in the middle is
    * fine) or its timeout passes. Never throws for a timeout: the result says what the page was doing.

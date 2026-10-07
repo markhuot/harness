@@ -71,6 +71,16 @@ export function stubBrowser(): BrowserService & { closed: string[]; suspendedTab
       return {};
     },
     async type() {},
+    async keys() {},
+    async select() {
+      return [];
+    },
+    async upload() {
+      return "input" as const;
+    },
+    async snapshot() {
+      return "";
+    },
     async evaluate() {
       return "null";
     },

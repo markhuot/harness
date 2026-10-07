@@ -21,7 +21,9 @@ import { ExtensionHost } from "./extension-host.ts";
 import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
 import { ChromeProcess, findChrome } from "./chrome.ts";
-import { MOD_CTRL, MOD_META, macEditingCommands, virtualKeyCode } from "./keys.ts";
+import { FrameError, TabFrames, frameChain, frameLabel, type ElementHandle, type Scope } from "./frames.ts";
+import { MOD_CTRL, MOD_META, charPress, macEditingCommands, parseKeyChord, virtualKeyCode, type KeyPress } from "./keys.ts";
+import { SNAPSHOT_DEFAULT_MAX_NODES, axNodes, renderAxTree } from "./snapshot.ts";
 import { IDLE_IGNORE_AFTER_MS, IDLE_QUIET_MS, describeCondition, seconds, timeoutMs, urlMatcher, type WaitCondition, type WaitResult } from "./wait.ts";
 import type {
   BrowserConsoleEntry,
@@ -34,6 +36,10 @@ import type {
   BrowserTabInfo,
   BrowserTabStore,
   BrowserTabSummary,
+  ElementTarget,
+  FrameOption,
+  KeysInput,
+  SelectChoice,
   StoredBrowserTab,
   ScreenshotOptions,
   TabOption,
@@ -116,6 +122,8 @@ interface Tab {
   targetId: string;
   session: CdpSession;
   frameId: string;
+  /** Its page's iframes (out-of-process ones too) and browser_snapshot's refs. */
+  frames: TabFrames;
   url: string;
   title: string;
   loading: boolean;
@@ -433,130 +441,276 @@ export class BrowserManager implements BrowserService {
     return this.currentState(tab);
   }
 
-  async content(sessionId: string, opts: TabOption & { selector?: string; format?: "text" | "html"; maxChars?: number } = {}): Promise<string> {
+  async content(sessionId: string, opts: TabOption & FrameOption & { selector?: string; format?: "text" | "html"; maxChars?: number } = {}): Promise<string> {
     const tab = await this.agentTab(sessionId, opts.tab);
+    const scope = await tab.frames.resolve(opts.frame);
     const format = opts.format ?? "text";
     const selector = opts.selector ?? null;
-    const result = (await this.evalValue(
-      tab,
+    const result = (await tab.frames.evalIn(
+      scope,
       `(() => {
         const sel = ${JSON.stringify(selector)};
         const html = ${JSON.stringify(format === "html")};
         const read = (el) => html ? el.outerHTML : (typeof el.innerText === "string" ? el.innerText : (el.textContent || ""));
-        if (sel === null) {
-          return { count: 1, parts: [html ? document.documentElement.outerHTML : read(document.body || document.documentElement)] };
-        }
-        const els = Array.from(document.querySelectorAll(sel));
-        return { count: els.length, parts: els.map(read) };
+        const els = sel === null ? null : Array.from(document.querySelectorAll(sel));
+        const parts = els === null ? [html ? document.documentElement.outerHTML : read(document.body || document.documentElement)] : els.map(read);
+        ${IFRAME_LIST}
+        return { count: els === null ? 1 : els.length, parts, frames: iframes(els === null ? [document] : els) };
       })()`,
-    )) as { count: number; parts: string[] };
-    if (selector !== null && result.count === 0) throw new Error(`No elements match selector: ${selector}`);
-    return truncate(result.parts.join("\n\n"), opts.maxChars);
+    )) as { count: number; parts: string[]; frames: IframeSummary[] };
+    const where = opts.frame !== undefined ? ` in frame ${frameLabel(opts.frame)}` : "";
+    if (selector !== null && result.count === 0) throw new Error(`No elements match selector: ${selector}${where}`);
+    return truncate(result.parts.join("\n\n"), opts.maxChars) + iframeNote(result.frames, opts.frame);
   }
 
-  async click(sessionId: string, selector: string, opts: TabOption = {}): Promise<ClickReport> {
+  async click(sessionId: string, target: ElementTarget, opts: TabOption = {}): Promise<ClickReport> {
     const tab = await this.agentTab(sessionId, opts.tab);
+    const el = await this.element(tab, target);
     const report: ClickReport = {};
-    await this.settle(tab, async () => {
-      const box = (await this.evalValue(
-        tab,
-        `(() => {
-          const el = document.querySelector(${JSON.stringify(selector)});
-          if (!el) return { found: false };
-          el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-          const disabled = el.matches(":disabled") || el.closest('[aria-disabled="true"]') !== null;
-          const busy = el.closest('[aria-busy="true"]') !== null;
-          const r = el.getBoundingClientRect();
-          if (r.width === 0 || r.height === 0) return { found: true, hittable: false, disabled, busy };
-          const x = r.left + r.width / 2, y = r.top + r.height / 2;
-          const hit = document.elementFromPoint(x, y);
-          return { found: true, x, y, hittable: !!hit && (hit === el || el.contains(hit)), disabled, busy };
-        })()`,
-      )) as { found: boolean; hittable?: boolean; x?: number; y?: number; disabled?: boolean; busy?: boolean };
-      if (!box.found) throw new Error(`No element matches selector: ${selector}`);
-      if (box.disabled) report.disabled = true;
-      if (box.busy) report.busy = true;
-      if (box.hittable && box.x !== undefined && box.y !== undefined) {
-        const { x, y } = box;
-        if (tab.device === "mobile") {
-          // A tap: the page gets touch events, then the click a phone makes of them.
-          await this.touch(tab, "touchStart", x, y);
-          await this.touch(tab, "touchEnd", x, y);
-          return;
-        }
-        await tab.session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
-        await tab.session.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
-        await tab.session.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
-      } else {
-        // Hidden or covered: fall back to a synthetic DOM click.
-        await this.evalValue(tab, `document.querySelector(${JSON.stringify(selector)}).click()`);
-      }
-    });
+    try {
+      await this.settle(tab, () => this.clickElement(tab, el, report));
+    } finally {
+      tab.frames.release(el);
+    }
     return report;
   }
 
-  async type(sessionId: string, selector: string, text: string, opts: TabOption & { submit?: boolean } = {}): Promise<void> {
+  /**
+   * A real click (a tap on a "mobile" tab) at the element's centre, wherever its frame is on the
+   * page; a synthetic el.click() when it has no size or something covers it.
+   */
+  private async clickElement(tab: Tab, el: ElementHandle, report: ClickReport): Promise<void> {
+    const box = (await tab.frames.callOn(
+      el,
+      `function () {
+        this.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+        const disabled = this.matches(":disabled") || this.closest('[aria-disabled="true"]') !== null;
+        const busy = this.closest('[aria-busy="true"]') !== null;
+        const r = this.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return { hittable: false, disabled, busy };
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return { x, y, hittable: !!hit && (hit === this || this.contains(hit)), disabled, busy };
+      }`,
+    )) as { hittable: boolean; x?: number; y?: number; disabled?: boolean; busy?: boolean };
+    if (box.disabled) report.disabled = true;
+    if (box.busy) report.busy = true;
+    const at = box.hittable && box.x !== undefined && box.y !== undefined ? await tab.frames.toPage(el.scope.frameId, { x: box.x, y: box.y }) : null;
+    if (at && !at.covered) {
+      const { x, y } = at;
+      if (tab.device === "mobile") {
+        // A tap: the page gets touch events, then the click a phone makes of them.
+        await this.touch(tab, "touchStart", x, y);
+        await this.touch(tab, "touchEnd", x, y);
+        await tab.frames.flushInput();
+        return;
+      }
+      await tab.session.send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "none", buttons: 0 });
+      await tab.session.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", buttons: 1, clickCount: 1 });
+      await tab.session.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", buttons: 0, clickCount: 1 });
+      await tab.frames.flushInput();
+      return;
+    }
+    // Hidden or covered: fall back to a synthetic DOM click.
+    await tab.frames.callOn(el, "function () { this.click(); }");
+  }
+
+  async type(sessionId: string, target: ElementTarget, text: string, opts: TabOption & { submit?: boolean } = {}): Promise<void> {
     const tab = await this.agentTab(sessionId, opts.tab);
-    const r = (await this.evalValue(
-      tab,
-      `(() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return { found: false };
-        el.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
-        el.focus();
-        // Replace existing content: select it so insertText overwrites.
-        if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-          try { el.select(); } catch {}
-        } else if (el.isContentEditable) {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          const s = getSelection();
-          s.removeAllRanges();
-          s.addRange(range);
-        }
-        const active = document.activeElement;
-        return { found: true, focused: active === el || el.contains(active) };
-      })()`,
-    )) as { found: boolean; focused?: boolean };
-    if (!r.found) throw new Error(`No element matches selector: ${selector}`);
-    if (!r.focused) throw new Error(`Element is not focusable: ${selector}`);
+    const el = await this.element(tab, target);
+    try {
+      // Text goes to the frame with focus: an iframe's element needs its frame focused first.
+      if (el.scope.frameId !== tab.frameId) await tab.frames.focusFrame(el.scope.frameId);
+      const r = (await tab.frames.callOn(
+        el,
+        `function () {
+          this.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+          this.focus();
+          // Replace existing content: select it so insertText overwrites.
+          if (this instanceof HTMLInputElement || this instanceof HTMLTextAreaElement) {
+            try { this.select(); } catch {}
+          } else if (this.isContentEditable) {
+            const range = document.createRange();
+            range.selectNodeContents(this);
+            const s = getSelection();
+            s.removeAllRanges();
+            s.addRange(range);
+          }
+          const active = document.activeElement;
+          return { focused: active === this || this.contains(active) };
+        }`,
+      )) as { focused: boolean };
+      if (!r.focused) throw new Error(`Element is not focusable: ${targetLabel(target)}`);
+    } finally {
+      tab.frames.release(el);
+    }
     if (text) {
       await tab.session.send("Input.insertText", { text });
     } else {
       await this.pressKey(tab, "Backspace", "Backspace");
     }
+    await tab.frames.flushInput();
     if (opts.submit) {
       await this.settle(tab, () => this.pressKey(tab, "Enter", "Enter", "\r"));
     }
   }
 
-  async evaluate(sessionId: string, expression: string, opts: TabOption = {}): Promise<string> {
+  async keys(sessionId: string, input: KeysInput, opts: TabOption = {}): Promise<void> {
+    // Every chord is checked before anything is sent.
+    const chords = (input.keys ?? []).map(parseKeyChord);
+    if (!input.text && !chords.length) throw new Error("Pass text or keys.");
     const tab = await this.agentTab(sessionId, opts.tab);
+    await this.settle(tab, async () => {
+      if (input.text) {
+        if (input.perKey) for (const ch of input.text) await this.press(tab, charPress(ch));
+        else await tab.session.send("Input.insertText", { text: input.text });
+      }
+      for (const chord of chords) await this.press(tab, chord);
+      await tab.frames.flushInput();
+    });
+  }
+
+  async select(sessionId: string, target: ElementTarget, choice: SelectChoice, opts: TabOption = {}): Promise<string[]> {
+    const given = [choice.values, choice.labels, choice.indexes].filter((c) => c !== undefined);
+    if (given.length !== 1 || !given[0]!.length) throw new Error("Pass one of value, label or index.");
+    const tab = await this.agentTab(sessionId, opts.tab);
+    const el = await this.element(tab, target);
+    const label = targetLabel(target);
+    try {
+      const r = (await tab.frames.callOn(el, SELECT_OPTIONS, [choice.values ?? null, choice.labels ?? null, choice.indexes ?? null])) as SelectResult;
+      switch (r.error) {
+        case undefined:
+          return r.selected ?? [];
+        case "notSelect":
+          throw new Error(`${label} is a <${r.tag}>, not a <select>. For a custom dropdown, click it and then its option (browser_snapshot shows the options' refs).`);
+        case "selectDisabled":
+          throw new Error(`${label} is disabled.`);
+        case "single":
+          throw new Error(`${label} takes one option (it isn't multiple).`);
+        case "disabled":
+          throw new Error(`The option${r.labels!.length === 1 ? "" : "s"} ${r.labels!.map((l) => JSON.stringify(l)).join(", ")} ${r.labels!.length === 1 ? "is" : "are"} disabled.`);
+        default: {
+          const options = r.options!.map((o) => `  ${o.i}: ${JSON.stringify(o.label)} (value ${JSON.stringify(o.value)})${o.disabled ? " disabled" : ""}`);
+          throw new Error(
+            `No option of ${label} matches ${r.missing!.map((m) => JSON.stringify(m)).join(", ")}. Its options (index: label, value):\n${options.join("\n")}${r.more ? `\n  …and ${r.more} more` : ""}`,
+          );
+        }
+      }
+    } finally {
+      tab.frames.release(el);
+    }
+  }
+
+  async upload(sessionId: string, target: ElementTarget, files: string[], opts: TabOption = {}): Promise<"input" | "chooser"> {
+    if (!files.length) throw new Error("Pass at least one file.");
+    const tab = await this.agentTab(sessionId, opts.tab);
+    const el = await this.element(tab, target);
+    const label = targetLabel(target);
+    try {
+      const info = (await tab.frames.callOn(
+        el,
+        `function () { return { file: this.localName === "input" && String(this.type).toLowerCase() === "file", multiple: !!this.multiple, disabled: !!this.disabled }; }`,
+      )) as { file: boolean; multiple: boolean; disabled: boolean };
+      if (info.file) {
+        if (info.disabled) throw new Error(`${label} is disabled.`);
+        if (files.length > 1 && !info.multiple) throw new Error(`${label} takes one file (it isn't multiple).`);
+        await el.scope.session.send("DOM.setFileInputFiles", { files, objectId: el.objectId });
+        return "input";
+      }
+      // A button (or label) that opens a file chooser: click it and answer the chooser.
+      const sessions = el.scope.session.id === tab.session.id ? [tab.session] : [tab.session, el.scope.session];
+      let opened!: (got: { session: CdpSession; mode: string; backendNodeId?: number }) => void;
+      const chooser = new Promise<{ session: CdpSession; mode: string; backendNodeId?: number }>((r) => (opened = r));
+      const offs = sessions.map((s) => s.on("Page.fileChooserOpened", (p) => opened({ session: s, mode: p.mode, backendNodeId: p.backendNodeId })));
+      try {
+        await Promise.all(sessions.map((s) => s.send("Page.setInterceptFileChooserDialog", { enabled: true })));
+        await this.settle(tab, () => this.clickElement(tab, el, {}));
+        const got = await Promise.race([chooser, Bun.sleep(3_000).then(() => null)]);
+        if (!got || got.backendNodeId === undefined) throw new Error(`${label} isn't an <input type=file>, and clicking it didn't open a file chooser.`);
+        if (files.length > 1 && got.mode !== "selectMultiple") throw new Error(`The file chooser ${label} opens takes one file.`);
+        await got.session.send("DOM.setFileInputFiles", { files, backendNodeId: got.backendNodeId });
+        return "chooser";
+      } finally {
+        for (const off of offs) off();
+        await Promise.all(sessions.map((s) => s.send("Page.setInterceptFileChooserDialog", { enabled: false }).catch(() => {})));
+      }
+    } finally {
+      tab.frames.release(el);
+    }
+  }
+
+  async snapshot(sessionId: string, opts: TabOption & FrameOption & { maxNodes?: number } = {}): Promise<string> {
+    const tab = await this.agentTab(sessionId, opts.tab);
+    const scope = await tab.frames.resolve(opts.frame);
+    const budget = { left: opts.maxNodes ?? SNAPSHOT_DEFAULT_MAX_NODES, skipped: 0 };
+    const lines = await this.frameSnapshot(tab, scope, 0, budget, 0);
+    if (budget.skipped) lines.push(`(${budget.skipped} more nodes not shown: pass a larger max_nodes, or frame to snapshot one iframe.)`);
+    return lines.length ? lines.join("\n") : "(the page has no accessible content)";
+  }
+
+  /** One frame's accessibility tree as lines, each iframe's own frame nested under it. */
+  private async frameSnapshot(tab: Tab, scope: Scope, depth: number, budget: { left: number; skipped: number }, nesting: number): Promise<string[]> {
+    const main = scope.frameId === tab.frameId;
+    const res = await scope.session.send("Accessibility.getFullAXTree", main ? {} : { frameId: scope.frameId });
+    return renderAxTree(
+      axNodes(res),
+      {
+        ref: (backendNodeId) => tab.frames.refFor(scope.frameId, backendNodeId),
+        child: async (backendNodeId, d) => {
+          const pad = "  ".repeat(d);
+          if (nesting >= 8) return [`${pad}- (frames nested too deeply to show)`];
+          try {
+            const { node } = await scope.session.send("DOM.describeNode", { backendNodeId });
+            const inner = typeof node?.frameId === "string" ? tab.frames.scopeOf(node.frameId) : null;
+            if (!inner) return [`${pad}- (its document hasn't loaded)`];
+            return await this.frameSnapshot(tab, inner, d, budget, nesting + 1);
+          } catch (e) {
+            return [`${pad}- (couldn't read this frame: ${(e as Error).message})`];
+          }
+        },
+      },
+      { depth, budget },
+    );
+  }
+
+  /** The element a call names, held until the caller releases it. Throws when nothing matches. */
+  private async element(tab: Tab, target: ElementTarget): Promise<ElementHandle> {
+    if (typeof target !== "string" && "ref" in target) return tab.frames.byRef(target.ref);
+    const { selector, frame } = typeof target === "string" ? { selector: target, frame: undefined } : target;
+    const scope = await tab.frames.resolve(frame);
+    const objectId = await tab.frames.query(scope, selector);
+    if (!objectId) throw new Error(`No element matches selector: ${selector}${frame !== undefined ? ` in frame ${frameLabel(frame)}` : ""}`);
+    return { scope, objectId };
+  }
+
+  async evaluate(sessionId: string, expression: string, opts: TabOption & FrameOption = {}): Promise<string> {
+    const tab = await this.agentTab(sessionId, opts.tab);
+    const scope = await tab.frames.resolve(opts.frame);
     let res: CdpResult;
     try {
       // "deep" serializes the value in the same call that produced it, so a page that navigates
       // right after the expression settles can't leave us holding a dead object id.
-      res = await tab.session.send("Runtime.evaluate", {
+      res = await scope.session.send("Runtime.evaluate", {
         expression,
         awaitPromise: true,
         userGesture: true,
         serializationOptions: { serialization: "deep", maxDepth: 32 },
+        ...(scope.contextId !== undefined ? { contextId: scope.contextId } : {}),
       });
     } catch (e) {
       if (e instanceof CdpError && NAVIGATED.test(e.message)) {
         await this.untilLoaded(tab);
-        throw new Error(
-          `The page navigated to ${tab.url} while the expression ran, so its result was lost. browser_run runs steps that span a reload (click, wait, read) from outside the page.`,
-        );
+        const what = opts.frame !== undefined ? `The frame ${frameLabel(opts.frame)} navigated (the page is at ${tab.url})` : `The page navigated to ${tab.url}`;
+        throw new Error(`${what} while the expression ran, so its result was lost. browser_run runs steps that span a reload (click, wait, read) from outside the page.`);
       }
       throw e;
     }
     if (res.exceptionDetails) throw new Error(`Evaluation failed: ${exceptionMessage(res.exceptionDetails)}`);
     if (res.result?.deepSerializedValue) {
-      if (res.result.objectId) tab.session.send("Runtime.releaseObject", { objectId: res.result.objectId }).catch(() => {});
+      if (res.result.objectId) scope.session.send("Runtime.releaseObject", { objectId: res.result.objectId }).catch(() => {});
       return serializeDeep(res.result);
     }
-    return this.serializeRemote(tab, res.result);
+    return this.serializeRemote(scope.session, res.result);
   }
 
   async waitFor(sessionId: string, condition: WaitCondition, opts: TabOption = {}): Promise<WaitResult> {
@@ -573,19 +727,31 @@ export class BrowserManager implements BrowserService {
   async screenshot(sessionId: string, opts: TabOption & ScreenshotOptions = {}): Promise<string> {
     const tab = await this.agentTab(sessionId, opts.tab);
     let clip: { x: number; y: number; width: number; height: number } | undefined;
-    if (opts.selector) {
-      const box = (await this.evalValue(
-        tab,
-        `(() => {
-          const el = document.querySelector(${JSON.stringify(opts.selector)});
-          if (!el) return { found: false };
-          const r = el.getBoundingClientRect();
-          return { found: true, x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
-        })()`,
-      )) as { found: boolean; x?: number; y?: number; width?: number; height?: number };
-      if (!box.found) throw new Error(`No element matches selector: ${opts.selector}`);
-      if (!box.width || !box.height) throw new Error(`The element has no size to capture: ${opts.selector}`);
-      clip = { x: box.x!, y: box.y!, width: box.width, height: box.height };
+    if (opts.selector || opts.ref || opts.frame !== undefined) {
+      // An element, in a frame or not; a frame alone is its <iframe> element in the parent.
+      const target: ElementTarget = opts.ref
+        ? { ref: opts.ref }
+        : opts.selector
+          ? { selector: opts.selector, frame: opts.frame }
+          : (() => {
+              const chain = frameChain(opts.frame);
+              return { selector: chain.at(-1)!, ...(chain.length > 1 ? { frame: chain.slice(0, -1) } : {}) };
+            })();
+      const el = await this.element(tab, target);
+      try {
+        const box = (await tab.frames.callOn(el, "function () { const r = this.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: r.height }; }")) as {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
+        if (!box.width || !box.height) throw new Error(`The element has no size to capture: ${targetLabel(target)}`);
+        const at = await tab.frames.toPage(el.scope.frameId, box);
+        const scroll = (await this.evalValue(tab, "[window.scrollX, window.scrollY]")) as [number, number];
+        clip = { x: at.x + scroll[0], y: at.y + scroll[1], width: box.width, height: box.height };
+      } finally {
+        tab.frames.release(el);
+      }
     } else if (opts.fullPage) {
       const metrics = await tab.session.send("Page.getLayoutMetrics");
       const size = (metrics.cssContentSize ?? metrics.contentSize) as { width: number; height: number };
@@ -1369,6 +1535,7 @@ export class BrowserManager implements BrowserService {
       targetId,
       session,
       frameId: targetId,
+      frames: new TabFrames(cdp, session, () => tab.frameId),
       url: initial?.url ?? "about:blank",
       title: initial?.title ?? "",
       loading: false,
@@ -1392,6 +1559,9 @@ export class BrowserManager implements BrowserService {
       popup,
     };
     this.attachListeners(tab);
+    // Before Runtime.enable, which reports every frame's context.
+    tab.frames.start();
+    tab.offs.push(() => tab.frames.dispose());
     // A popup grows to fit its content after it loads.
     if (popup) tab.offs.push(session.on("Page.frameResized", () => void this.applySize(tab).catch(() => {})));
     try {
@@ -1407,10 +1577,13 @@ export class BrowserManager implements BrowserService {
         session.send("Page.addScriptToEvaluateOnNewDocument", { source: TITLE_WATCH_SCRIPT }),
         // What browser_tabs reports for the tab: its requests (console messages come with Runtime).
         session.send("Network.enable"),
+        // Cross-origin iframes run in their own process: attach each one (frames.ts).
+        tab.frames.autoAttach(session),
         this.applySize(tab),
       ]);
       const { frameTree } = await session.send("Page.getFrameTree");
       tab.frameId = frameTree.frame.id;
+      tab.frames.learnTree(frameTree, session);
       if (!initial) tab.url = frameTree.frame.url || tab.url; // a popup may already be on its page
     } catch (e) {
       this.dropTabs([tab], "forget");
@@ -1880,8 +2053,10 @@ export class BrowserManager implements BrowserService {
     const start = Date.now();
     const deadline = start + timeoutMs(c);
     const matchUrl = c.url !== undefined ? urlMatcher(c.url) : null;
-    const dom = c.selector !== undefined || c.text !== undefined;
-    const expression = dom ? waitCheckExpression(c) : "";
+    const inPage = c.selector !== undefined || c.text !== undefined;
+    // A frame alone waits for the iframe to have a document; with selector or text they're checked in it.
+    const dom = inPage || c.frame !== undefined;
+    const expression = inPage ? waitCheckExpression(c) : "";
     // What the page complained about while we waited, for a timeout to report.
     const complaints: string[] = [];
     const off = this.watch(tab.entry.sessionId, (e) => {
@@ -1905,17 +2080,28 @@ export class BrowserManager implements BrowserService {
           if (quietSince === null || now - quietSince < IDLE_QUIET_MS) met = false;
         }
         if (dom) {
+          let frameReady = false;
           try {
-            const res = await tab.session.send("Runtime.evaluate", { expression, returnByValue: true }, 5_000);
-            check = (res.result?.value as WaitCheck | undefined) ?? null;
-            checkError = res.exceptionDetails ? exceptionMessage(res.exceptionDetails) : "";
+            const scope = await tab.frames.resolve(c.frame);
+            frameReady = true;
+            if (inPage) {
+              const res = await scope.session.send(
+                "Runtime.evaluate",
+                { expression, returnByValue: true, ...(scope.contextId !== undefined ? { contextId: scope.contextId } : {}) },
+                5_000,
+              );
+              check = (res.result?.value as WaitCheck | undefined) ?? null;
+              checkError = res.exceptionDetails ? exceptionMessage(res.exceptionDetails) : "";
+            }
           } catch (e) {
-            // The document went away under the check (a navigation): look again next tick.
+            // A frame that will never do (not an iframe, a bad selector) ends the wait now.
+            if (e instanceof FrameError && !e.notReady) return finish(false, `Can't wait for ${describeCondition(c)}: ${e.message}`);
+            // The document (or the iframe) went away under the check, or isn't there yet: look again next tick.
             check = null;
             checkError = (e as Error).message;
           }
           if (check?.error) return finish(false, `Can't wait for ${JSON.stringify(c.selector)}: it isn't a valid CSS selector (${check.error}).`);
-          if (!check?.met) met = false;
+          if (inPage ? !check?.met : !frameReady) met = false;
         }
         const elapsed = Date.now() - start;
         if (met) return finish(true, `${describeCondition(c)} after ${seconds(elapsed)}; now at ${tab.url}`);
@@ -1927,9 +2113,10 @@ export class BrowserManager implements BrowserService {
             `Timed out after ${seconds(elapsed)} waiting for ${describeCondition(c)}.`,
             `Now at ${tab.url}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
           ];
-          if (dom && check) {
+          if (inPage && check) {
             lines.push(`Last check: ${check.count} element${check.count === 1 ? "" : "s"} matched (${check.visible} visible, ${check.enabled} enabled).`);
-          } else if (dom) lines.push(`The last check couldn't read the page${checkError ? `: ${checkError}` : ""}.`);
+          } else if (dom && checkError) lines.push(`The last check couldn't read the page: ${checkError}`);
+          else if (inPage) lines.push("The last check couldn't read the page.");
           if (c.url !== undefined && matchUrl && !matchUrl(tab.url)) lines.push(`The URL doesn't match ${c.url}.`);
           if (pending.length) {
             lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${r.url} (${seconds(Date.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
@@ -1993,6 +2180,20 @@ export class BrowserManager implements BrowserService {
     return tab.session.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y, id: 0 }] });
   }
 
+  /** One key press (browser_keys): down with its modifiers and text, then up. */
+  private async press(tab: Tab, k: KeyPress): Promise<void> {
+    const vk = virtualKeyCode(k.key, k.code);
+    const commands = macEditingCommands(k.code, k.modifiers);
+    const base = { key: k.key, code: k.code, modifiers: k.modifiers, windowsVirtualKeyCode: vk };
+    await tab.session.send("Input.dispatchKeyEvent", {
+      ...base,
+      type: k.text ? "keyDown" : "rawKeyDown",
+      ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}),
+      ...(commands ? { commands } : {}),
+    });
+    await tab.session.send("Input.dispatchKeyEvent", { ...base, type: "keyUp" });
+  }
+
   private async pressKey(tab: Tab, key: string, code: string, text?: string): Promise<void> {
     const vk = virtualKeyCode(key, code);
     await tab.session.send("Input.dispatchKeyEvent", {
@@ -2019,7 +2220,7 @@ export class BrowserManager implements BrowserService {
   }
 
   /** Turn a RemoteObject into a JSON string without re-running the user's expression. */
-  private async serializeRemote(tab: Tab, obj: CdpResult): Promise<string> {
+  private async serializeRemote(session: CdpSession, obj: CdpResult): Promise<string> {
     if (!obj) return "undefined";
     if (obj.unserializableValue !== undefined) return String(obj.unserializableValue);
     if (obj.type === "undefined") return "undefined";
@@ -2027,7 +2228,7 @@ export class BrowserManager implements BrowserService {
     try {
       if (obj.subtype === "node") return JSON.stringify(obj.description ?? "Node");
       if (obj.type === "function") return JSON.stringify(obj.description ?? "function");
-      const res = await tab.session.send("Runtime.callFunctionOn", {
+      const res = await session.send("Runtime.callFunctionOn", {
         objectId: obj.objectId,
         functionDeclaration: "function () { return this; }",
         returnByValue: true,
@@ -2039,7 +2240,7 @@ export class BrowserManager implements BrowserService {
       if (e instanceof CdpError) return JSON.stringify(obj.description ?? obj.className ?? "Object");
       throw e;
     } finally {
-      tab.session.send("Runtime.releaseObject", { objectId: obj.objectId }).catch(() => {});
+      session.send("Runtime.releaseObject", { objectId: obj.objectId }).catch(() => {});
     }
   }
 }
@@ -2084,6 +2285,104 @@ function waitCheckExpression(c: WaitCondition): string {
     return { met, count: els.length, visible: vis.length, enabled: en.length, busy: document.querySelectorAll('[aria-busy="true"]').length };
   })()`;
 }
+
+/** An element target in messages: its selector (and frame), or its ref. */
+function targetLabel(target: ElementTarget): string {
+  if (typeof target === "string") return target;
+  if ("ref" in target) return `ref ${target.ref}`;
+  return `${target.selector}${target.frame !== undefined ? ` in frame ${frameLabel(target.frame)}` : ""}`;
+}
+
+/** An iframe browser_content lists, so the agent knows what to pass as frame. */
+interface IframeSummary {
+  /** A selector for it (#id, [name], [title] or [src^=…]), and how many elements it matches. */
+  selector: string;
+  matches: number;
+  src: string;
+  title: string;
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
+/** In-page: `iframes(roots)` lists the iframes in (or among) the given elements. */
+const IFRAME_LIST = `const iframes = (roots) => {
+  const seen = new Set();
+  const out = [];
+  const attr = (tag, name, v) => tag + "[" + name + "=" + JSON.stringify(v) + "]";
+  for (const root of roots) {
+    const own = root.matches && root.matches("iframe, frame") ? [root] : [];
+    for (const f of [...own, ...root.querySelectorAll("iframe, frame")]) {
+      if (seen.has(f) || out.length >= 20) continue;
+      seen.add(f);
+      const tag = f.localName;
+      const src = f.getAttribute("src") || "";
+      const selector = f.id ? "#" + CSS.escape(f.id)
+        : f.name ? attr(tag, "name", f.name)
+        : f.title ? attr(tag, "title", f.title)
+        : src ? tag + "[src^=" + JSON.stringify(src.split(/[?#]/)[0].slice(0, 120)) + "]"
+        : tag;
+      let matches = 0;
+      try { matches = document.querySelectorAll(selector).length; } catch {}
+      const r = f.getBoundingClientRect();
+      const visible = r.width > 0 && r.height > 0 && (typeof f.checkVisibility !== "function" || f.checkVisibility({ visibilityProperty: true }));
+      out.push({ selector, matches, src: src || (f.hasAttribute("srcdoc") ? "(srcdoc)" : "about:blank"), title: f.title || "", width: Math.round(r.width), height: Math.round(r.height), visible });
+    }
+  }
+  return out;
+};`;
+
+/** browser_content's list of the iframes in what it read, or "" without any. */
+function iframeNote(frames: IframeSummary[], frame: FrameOption["frame"]): string {
+  if (!frames.length) return "";
+  const outer = frame === undefined ? [] : frameChain(frame);
+  const lines = frames.map((f) => {
+    const pass = outer.length ? JSON.stringify([...outer, f.selector]) : JSON.stringify(f.selector);
+    const size = f.visible ? `${f.width}×${f.height}` : "hidden";
+    return `  frame ${pass}${f.matches > 1 ? ` (matches ${f.matches} iframes; the first is used)` : ""} — ${f.src}, ${size}${f.title ? `, ${JSON.stringify(f.title)}` : ""}`;
+  });
+  return `\n\n[iframes here; their content isn't above. Pass one as frame to read or act inside it, or use browser_snapshot:\n${lines.join("\n")}]`;
+}
+
+/** What SELECT_OPTIONS answers. */
+interface SelectResult {
+  selected?: string[];
+  error?: "notSelect" | "selectDisabled" | "single" | "disabled" | "missing";
+  tag?: string;
+  labels?: string[];
+  missing?: unknown[];
+  options?: { i: number; value: string; label: string; disabled: boolean }[];
+  more?: number;
+}
+
+/** On a <select>: pick the options matching values, labels or indexes (one is given) and fire input and change. */
+const SELECT_OPTIONS = `function (values, labels, indexes) {
+  if (this.localName !== "select") return { error: "notSelect", tag: this.localName };
+  const opts = Array.from(this.options);
+  const norm = (s) => String(s).replace(/\\s+/g, " ").trim();
+  const labelOf = (o) => norm(o.label || o.text);
+  const picked = [];
+  const missing = [];
+  for (const w of values || labels || indexes) {
+    const o = values ? opts.find((o) => o.value === String(w))
+      : labels ? (opts.find((o) => labelOf(o) === norm(w)) || opts.find((o) => labelOf(o).toLowerCase() === norm(w).toLowerCase()))
+      : opts[w];
+    if (o) { if (!picked.includes(o)) picked.push(o); } else missing.push(w);
+  }
+  if (missing.length) {
+    const list = opts.slice(0, 50).map((o, i) => ({ i, value: o.value, label: labelOf(o), disabled: o.disabled }));
+    return { error: "missing", missing, options: list, more: opts.length - list.length };
+  }
+  if (this.disabled) return { error: "selectDisabled" };
+  if (picked.length > 1 && !this.multiple) return { error: "single" };
+  const off = picked.filter((o) => o.disabled || (o.parentElement && o.parentElement.localName === "optgroup" && o.parentElement.disabled));
+  if (off.length) return { error: "disabled", labels: off.map(labelOf) };
+  this.focus();
+  for (const o of opts) o.selected = picked.includes(o);
+  this.dispatchEvent(new Event("input", { bubbles: true }));
+  this.dispatchEvent(new Event("change", { bubbles: true }));
+  return { selected: picked.map(labelOf) };
+}`;
 
 /** Requests that keep a page from being idle: still loading, and not open so long they're a long poll or a stream (`all`: those too). */
 function inFlight(tab: Tab, now: number, all = false): (BrowserRequest & { at: number })[] {

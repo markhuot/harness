@@ -3,6 +3,8 @@
 // implementation (BrowserManager.waitFor), and one wording for the agent (the tool descriptions
 // and the Browser prompt section both use WAIT_CONDITION_DOC).
 
+import { frameChain, frameLabel } from "./frames";
+
 /** What a wait waits for. Every field given must hold at once. */
 export interface WaitCondition {
   /** CSS selector the condition is about (with `state`, default "visible"). */
@@ -16,6 +18,8 @@ export interface WaitCondition {
   idle?: boolean;
   /** Seconds before giving up (default WAIT_DEFAULT_TIMEOUT_S, at most WAIT_MAX_TIMEOUT_S). */
   timeout?: number;
+  /** The iframe selector and text are checked in (frames.ts); alone, its document has loaded. */
+  frame?: string | string[];
 }
 
 export type WaitState = "visible" | "hidden" | "gone" | "enabled";
@@ -30,9 +34,10 @@ export const IDLE_IGNORE_AFTER_MS = 5_000;
 
 /** How the agent is told what a wait condition is (tool descriptions and the Browser prompt section). */
 export const WAIT_CONDITION_DOC =
-  `{ selector?, state?: "visible" | "hidden" | "gone" | "enabled", text?, url?, idle?, timeout? }; every field you give must hold at once. ` +
+  `{ selector?, state?: "visible" | "hidden" | "gone" | "enabled", text?, frame?, url?, idle?, timeout? }; every field you give must hold at once. ` +
   `selector with state: an element matching it is visible (the default state), none is visible (hidden), none is in the page at all (gone), or one is visible and clickable (enabled: not disabled, not aria-disabled, not inside [aria-busy=true]). ` +
   `text: that visible text is on the page (in selector's elements, with selector). ` +
+  `frame: check selector and text inside that iframe (a CSS selector for the <iframe>, or an array of them for nested frames); alone, wait until the iframe has loaded. ` +
   `url: the URL contains it, or matches it when written /like-this/. ` +
   `idle: true waits until the page has stopped loading and no request has been in flight for ${IDLE_QUIET_MS} ms (requests open over ${IDLE_IGNORE_AFTER_MS / 1000} s, like long polls, don't count). ` +
   `timeout: seconds before giving up, ${WAIT_DEFAULT_TIMEOUT_S} by default; raise it (up to ${WAIT_MAX_TIMEOUT_S}) when you know a step is slow. ` +
@@ -48,6 +53,10 @@ export const WAIT_CONDITION_PROPERTIES = {
       "With selector: \"visible\" (default) an element matching it is visible; \"hidden\" none is visible; \"gone\" none is in the page; \"enabled\" one is visible and clickable (not disabled, not aria-disabled, not inside [aria-busy=true]). With text, the elements containing that text.",
   },
   text: { type: "string", minLength: 1, description: "Visible text that must be on the page (in selector's elements, with selector)." },
+  frame: {
+    anyOf: [{ type: "string", minLength: 1 }, { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 }],
+    description: "Check selector and text inside this iframe: a CSS selector for the <iframe> element, or an array of them for nested frames (outermost first). Alone: wait until the iframe has loaded.",
+  },
   url: { type: "string", minLength: 1, description: "The URL contains this, or matches it when written as /regex/flags." },
   idle: { type: "boolean", description: `true: the page has stopped loading and no request has been in flight for ${IDLE_QUIET_MS} ms.` },
   timeout: {
@@ -86,8 +95,9 @@ export function checkCondition(input: unknown): { ok: true; condition: WaitCondi
       throw new Error(`timeout is in seconds, more than 0 and at most ${WAIT_MAX_TIMEOUT_S}. For longer flows, use browser_run.`);
     }
     if (url !== undefined) urlMatcher(url); // a bad /regex/ fails now, not on every poll
-    if (selector === undefined && text === undefined && url === undefined && c.idle !== true) {
-      throw new Error("Say what to wait for: selector, text, url or idle: true.");
+    const frame = c.frame === undefined ? undefined : frameChain(c.frame);
+    if (selector === undefined && text === undefined && url === undefined && frame === undefined && c.idle !== true) {
+      throw new Error("Say what to wait for: selector, text, frame, url or idle: true.");
     }
     return {
       ok: true,
@@ -95,6 +105,7 @@ export function checkCondition(input: unknown): { ok: true; condition: WaitCondi
         ...(selector !== undefined ? { selector } : {}),
         ...(state !== undefined ? { state: state as WaitState } : {}),
         ...(text !== undefined ? { text } : {}),
+        ...(frame !== undefined ? { frame: frame.length === 1 ? frame[0]! : frame } : {}),
         ...(url !== undefined ? { url } : {}),
         ...(c.idle === true ? { idle: true } : {}),
         ...(timeout !== undefined ? { timeout: timeout as number } : {}),
@@ -123,8 +134,8 @@ export function describeCondition(c: WaitCondition): string {
   const parts: string[] = [];
   if (c.selector !== undefined || c.text !== undefined) {
     const what = [c.selector !== undefined ? JSON.stringify(c.selector) : "", c.text !== undefined ? `text ${JSON.stringify(c.text)}` : ""].filter(Boolean).join(" with ");
-    parts.push(`${what} ${c.state ?? "visible"}`);
-  }
+    parts.push(`${what} ${c.state ?? "visible"}${c.frame !== undefined ? ` in frame ${frameLabel(c.frame)}` : ""}`);
+  } else if (c.frame !== undefined) parts.push(`frame ${frameLabel(c.frame)} loaded`);
   if (c.url !== undefined) parts.push(`URL ${c.url.startsWith("/") && c.url.length > 1 ? "matches" : "contains"} ${c.url}`);
   if (c.idle) parts.push("network idle");
   return parts.join(", ");
