@@ -60,7 +60,7 @@ const FRAME = {
   frame: {
     anyOf: [{ type: "string", minLength: 1 }, { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 }],
     description:
-      "Act inside an iframe: a CSS selector for the <iframe> element, e.g. \"iframe[title='Payment']\", or an array of them for nested frames, outermost first. Cross-origin iframes work too. browser_content lists a page's iframes with a selector for each. Omitted: the page itself.",
+      "Act inside an iframe: a CSS selector for the <iframe> element, e.g. \"iframe[title='Comments']\", or an array of them for nested frames, outermost first. Cross-origin iframes work too. browser_content lists a page's iframes with a selector for each. Omitted: the page itself.",
   },
 } as const;
 
