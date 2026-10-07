@@ -97,9 +97,13 @@ private struct SceneChrome: ViewModifier {
     func body(content: Content) -> some View {
         let palette = Palette(app.resolvedTheme(systemDark: scheme == .dark))
         content
-            .sheet(item: sheetBinding) { sheet in
-                SheetHost(sheet: sheet)
-                    .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
+            .sheet(item: rootSheetBinding) { modal in
+                switch modal {
+                case .ticket: TicketSheetHost()
+                case let .route(sheet):
+                    SheetHost(sheet: sheet)
+                        .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
+                }
             }
             .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
             .environment(\.palette, palette)
@@ -130,10 +134,35 @@ private struct SceneChrome: ViewModifier {
         }, set: { router.sheet = $0 })
     }
 
-    /// The cover is presented by whichever level is on top: the sheet when one is up, else the root.
-    private func coverBinding(whenSheet: Bool) -> Binding<CoverRoute?> {
-        Binding(get: { (router.sheet != nil) == whenSheet ? router.cover : nil }, set: { router.cover = $0 })
+    /// What the root presents: the iPhone's ticket sheet while there is one, presented or docked
+    /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. Swiping
+    /// the ticket sheet away dismisses it.
+    private var rootSheetBinding: Binding<RootSheet?> {
+        Binding(get: {
+            if let t = router.ticketSheet ?? router.dock { return .ticket(t.id) }
+            return sheetBinding.wrappedValue.map(RootSheet.route)
+        }, set: { new in
+            guard new == nil else { return }
+            if router.ticketSheetState != .gone { router.dismissSheet() } else { router.sheet = nil }
+        })
     }
+
+    /// The cover is presented by whichever level is on top: the sheet when one is up, else the root.
+    /// TicketSheetHost presents it while there's a ticket sheet.
+    private func coverBinding(whenSheet: Bool) -> Binding<CoverRoute?> {
+        Binding(get: {
+            if router.ticketSheetState != .gone { return nil }
+            return (router.sheet != nil) == whenSheet ? router.cover : nil
+        }, set: { router.cover = $0 })
+    }
+}
+
+/// The root's one sheet: the ticket sheet (by its stable id) or a SheetRoute.
+private enum RootSheet: Hashable, Identifiable {
+    case ticket(Int)
+    case route(SheetRoute)
+
+    var id: Self { self }
 }
 
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
@@ -162,6 +191,10 @@ struct MainTabs: View {
         }
         .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
             router.setOpensTicketsInWindows(windows)
+        }
+        // Tickets and New session open in a sheet that docks (TicketSheetHost) at compact width.
+        .onChange(of: sizeClass == .regular, initial: true) { _, regular in
+            router.setUsesTicketSheets(!regular)
         }
     }
 }
@@ -295,7 +328,8 @@ struct TabStack<Root: View>: View {
     var body: some View {
         NavigationStack(path: Binding(get: { router.path(tab) }, set: { router.setPath(tab, $0) })) {
             root
-                .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
+                .dockClearance()
+                .navigationDestination(for: Route.self) { RouteScreen(route: $0).dockClearance() }
         }
     }
 }

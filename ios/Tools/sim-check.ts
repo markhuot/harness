@@ -59,6 +59,12 @@
 //      attachment, an image smaller than the screen opens centred, swiping pages, Close and
 //      swipe-down close it; attachments-*.png
 //
+//   --sheets: the iPhone's ticket sheet on its own (the walk-through runs the same checks): a board
+//      card opens its ticket in a sheet, a conductor's child pushes inside it and the back swipe
+//      returns, dragging it to the bottom docks it under the board as a bar titled by its key, a
+//      tap on the bar restores it where it was, swiping the bar down sends it away, and New session
+//      opens in the sheet too and docks as "New session"; sheet-*.png
+//
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
 //      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
@@ -72,7 +78,7 @@
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--ipad]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--ipad]
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -100,8 +106,9 @@ const keyboardOnly = flag("keyboard");
 const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 const draftsOnly = flag("drafts");
-const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly);
-if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
+const sheetsOnly = flag("sheets");
+const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly);
+if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions, --drafts, --attachments or --sheets");
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 checkDisk();
@@ -901,6 +908,155 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   moved(udid);
   await Bun.sleep(400); // the result list's cards finish drawing
   await shootBoth(udid, "paging-search");
+}
+
+/** --sheets: a conductor with two children, not started, on a project of its own. */
+async function seedSheets() {
+  mkdirSync(join(scratch, "sheets"), { recursive: true });
+  const project = await api<Project>("POST", "/projects", { path: join(scratch, "sheets"), name: "sheets", key: "SHEET", defaultDriver: "dummy" });
+  const create = (spec: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, spec, driver: "dummy", start: false, ...extra });
+  const conductor = await create("Sheet train: dock the ticket sheet", { kind: "conductor" });
+  for (const title of ["Dock the sheet under the board", "Swipe the sheet away"]) await create(title, { parentId: conductor.id });
+  return { project, conductor };
+}
+
+/** The iPhone's docked ticket sheet's bar, labelled "<key>, docked" (or "New session, docked"). */
+const isDock = (l: string) => l.endsWith(", docked");
+
+/**
+ * Drags the presented ticket sheet by its nav bar to just above the bottom, slowly, so it settles
+ * docked. Returns the dock's label.
+ */
+async function dockSheet(udid: string): Promise<string> {
+  const { width, height } = (await tree(udid))[0]!.frame;
+  const x = String(Math.round(width / 2));
+  await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "1.2", "--udid", udid);
+  return until("the dock", async () => (await labels(udid)).find(isDock), 6000);
+}
+
+/** Swipes a docked ticket sheet away, if one is up, so a shot of a tab doesn't carry it. */
+async function undock(udid: string) {
+  const dock = await findElement(udid, isDock);
+  if (!dock) return;
+  const x = String(Math.round(dock.frame.x + dock.frame.width / 2));
+  const y = Math.round(dock.frame.y + dock.frame.height / 2);
+  await axe("swipe", "--start-x", x, "--start-y", String(y), "--end-x", x, "--end-y", String(y + 160), "--duration", "0.1", "--udid", udid);
+  await until("the dock gone", async () => !(await labels(udid)).some(isDock), 4000);
+}
+
+/**
+ * The iPhone's ticket sheet (TicketSheetHost): a board card (`column`, the card's column chip) or
+ * else a link opens it, a conductor's child pushes in it and the back swipe returns, it docks
+ * under the board when dragged to the bottom, the bar restores it as it was, a swipe on the bar
+ * sends it away, and New session docks as "New session".
+ */
+async function sheetChecks(udid: string, p: { project: Project; conductor: Ticket }, column?: string) {
+  const key = p.conductor.key;
+  const [kid, sibling] = (await api<TicketDetail>("GET", `/tickets/${key}`)).children;
+  if (!kid || !sibling) throw new Error(`${key} has no children`);
+  const { width: W, height: H } = (await tree(udid))[0]!.frame;
+  const has = (l: string[], k: string) => l.some((x) => x.includes(k));
+  const card = (l: string) => l.startsWith(`${key} `);
+  /** The sheet's ticket screen, with the conductor's children listed. */
+  const onConductor = (l: string[]) => has(l, kid.key) && has(l, sibling.key);
+  /** The child's screen: its parent crumb, and none of the conductor's list. */
+  const onChild = (l: string[]) => l.includes(`Part of ${key}`) && !has(l, sibling.key);
+  const dock = () => dockSheet(udid);
+  const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
+
+  await check(`${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board`, async () => {
+    await goto(udid, BOARD);
+    await undock(udid);
+    if (column) {
+      await until("card on screen", async () => {
+        await tapWhere(udid, (l) => l.startsWith(`${column},`));
+        return ((await until("card", () => findElement(udid, card), 1500).catch(() => null))?.frame.x ?? 999) < 100;
+      }, 15000);
+      await tapWhere(udid, card);
+      moved(udid);
+      await until("the ticket sheet", async () => (await labels(udid)).some((l) => l.startsWith("Tickets")), 8000).catch(async (e) => {
+        await say("after the card tap");
+        throw e;
+      });
+      await tapWhere(udid, (l) => l.startsWith("Tickets"));
+    } else {
+      await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`);
+    }
+    await until("the children", async () => onConductor(await labels(udid)), 8000);
+    if ((await labels(udid)).some(isDock)) throw new Error("a dock is showing under the presented sheet");
+    await shot(udid, "sheet-presented-light");
+    return `${key} in the sheet`;
+  });
+  await check("a conductor's child pushes inside the sheet and the back swipe returns", async () => {
+    await tapWhere(udid, (l) => l.includes(kid.key));
+    await until("the child", async () => onChild(await labels(udid)), 8000).catch(async (e) => {
+      await say("after the child tap");
+      throw e;
+    });
+    await shot(udid, "sheet-child-light");
+    // The first page's rightward swipe goes to the back swipe (PagerYieldsToBackSwipe).
+    await Bun.sleep(800); // back only goes once the pager rests on the first page
+    const y = String(Math.round(H * 0.7));
+    await axe("swipe", "--start-x", String(Math.round(W * 0.1)), "--start-y", y, "--end-x", String(Math.round(W * 0.9)), "--end-y", y, "--duration", "0.3", "--udid", udid);
+    await until("back on the conductor", async () => onConductor(await labels(udid)), 8000).catch(async (e) => {
+      await say("after the back swipe");
+      throw e;
+    });
+    return `${kid.key} → back to ${key}`;
+  });
+  await check("dragging the sheet to the bottom docks it under the board, titled by the ticket on top", async () => {
+    // Pushed again, so restoring has a path to bring back.
+    await tapWhere(udid, (l) => l.includes(kid.key));
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    const label = await dock().catch(async (e) => {
+      await say("after the drag");
+      throw e;
+    });
+    if (label !== `${kid.key}, docked`) throw new Error(`the dock reads "${label}"`);
+    const l = await labels(udid);
+    if (!onBoard(l)) throw new Error("the board isn't showing over the dock");
+    // The dock sits below the board's bottom bar, not over it.
+    const bar = await findElement(udid, isDock);
+    const newSession = await findElement(udid, (x) => x === "New session");
+    if (bar && newSession && newSession.frame.y + newSession.frame.height > bar.frame.y)
+      throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(bar.frame.y)})`);
+    await shootBoth(udid, "sheet-docked");
+    return label;
+  });
+  await check("the dock survives a tab change, and a tap restores the sheet where it was", async () => {
+    await goto(udid, "harness://settings");
+    if (!(await labels(udid)).some(isDock)) throw new Error("no dock on Settings");
+    await goto(udid, BOARD);
+    await tapWhere(udid, isDock);
+    moved(udid);
+    await until("the child again", async () => {
+      const l = await labels(udid);
+      return onChild(l) && !l.some(isDock);
+    }, 8000);
+    return `${kid.key} restored`;
+  });
+  await check("swiping the docked sheet down sends it away", async () => {
+    await dock();
+    await undock(udid);
+    const l = await labels(udid);
+    if (has(l, kid.key)) throw new Error(`${kid.key} still on screen`);
+    lastUrl.set(udid, BOARD);
+    return "gone";
+  });
+  await check("New session opens in the sheet and docks as New session", async () => {
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some(isOptions));
+    await shot(udid, "sheet-new-session-light");
+    const label = await dock();
+    if (label !== "New session, docked") throw new Error(`the dock reads "${label}"`);
+    await shot(udid, "sheet-new-session-docked-light");
+    await tapWhere(udid, isDock);
+    await until("New session again", async () => (await labels(udid)).some(isOptions), 8000);
+    moved(udid);
+    await dock();
+    await undock(udid);
+    lastUrl.set(udid, BOARD);
+    return label;
+  });
 }
 
 /** --stick: one ticket whose spec, transcript and Activity are all taller than the screen. */
@@ -1988,6 +2144,8 @@ async function shootScreens(udid: string, list: Screen[], browsed: Promise<unkno
     await timed(`screen: ${s.name}`, async () => {
       const shown = await timed(`  goto: ${s.name}`, () => goto(udid, s.url, s.ready));
       if (s.wait) await Bun.sleep(s.wait);
+      // A ticket opened by an earlier screen is docked under the tabs: away with it, for a clean shot.
+      if (!/^harness:\/\/(ticket|new)\b/.test(s.url) && lastTree.get(udid)?.includes(", docked")) await undock(udid).catch(() => {});
       if (s.prepare) await s.prepare(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
       const [, alive] = await Promise.all([timed(`  shoot: ${s.name}`, () => shootBoth(udid, s.name, s.redrawn && (() => s.redrawn!(udid)))), shown ? true : running(udid)]);
       if (s.after) await s.after(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
@@ -2009,6 +2167,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const chain = (seconds: number, run: (udid: string) => Promise<void>) => ({ seconds, run });
   return [
+    // The iPhone's ticket sheet: pushes, the back swipe, docking, restoring and swiping it away.
+    chain(40, (udid) => sheetChecks(udid, s)),
     chain(4, async (udid) => {
       await check("a spec with wide tables leaves the replies after it on screen", async () => {
         const last = (l: string) => l.startsWith("Run finished (review)");
@@ -2073,8 +2233,9 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await shot(udid, "reply-list-light");
         return widths.join(", ");
       });
-      await check("tapping a board card pushes its ticket and Back returns to the board", async () => {
+      await check("tapping a board card opens its ticket in a sheet, and swiping it away returns to the board", async () => {
         await goto(udid, BOARD);
+        await undock(udid);
         // The card is in the tree before its column scrolls in (x≈416, off the right edge).
         await until("card on screen", async () => {
           await tapWhere(udid, (l) => l.startsWith("Review,"));
@@ -2086,8 +2247,9 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
           throw new Error((await running(udid)) ? (e as Error).message : "the app crashed opening the ticket");
         });
         await shot(udid, "card-tap-detail-light");
-        // The glass back button isn't in AXe's tree; it sits at the header's leading edge.
-        await tapHeader(udid, (l) => l === "Back" || l === "Board", { x: 32, y: 89 });
+        // Down to the dock, then off the screen.
+        await dockSheet(udid);
+        await undock(udid);
         await until("back on the board", async () => ((l) => l.some(card) && !l.includes(APPROVE_MERGE))(await labels(udid)), 8000);
         lastUrl.set(udid, BOARD);
         await shot(udid, "card-tap-back-light");
@@ -2329,7 +2491,7 @@ try {
   );
   // The walk-through pairs as soon as its tickets exist, while their runs settle; the modes once seeded.
   const paired = walkThrough ? devices.then((udids) => ticketsUp.then(() => pairAll(udids)).then(() => udids)) : devices;
-  const [udids, seeded, paged, sticky, typing, mentioned, media, drafting] = await Promise.all([
+  const [udids, seeded, paged, sticky, typing, mentioned, media, drafting, sheeted] = await Promise.all([
     paired,
     walkThrough ? timed("seed", seed) : null,
     pagingOnly ? timed("seed paging", seedPaging) : null,
@@ -2338,6 +2500,7 @@ try {
     mentionsOnly ? timed("seed mentions", seedMentions) : null,
     attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
     draftsOnly ? timed("seed drafts", () => seedTicket("DRFT", "Warm up")) : null,
+    sheetsOnly ? timed("seed sheets", seedSheets) : null,
   ]);
   if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
   if (paged) console.log(`simulator ${udids[0]}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
@@ -2351,6 +2514,7 @@ try {
   if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
   if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
   if (drafting) await timed("mode: drafts", () => draftChecks(udid, drafting));
+  if (sheeted) await timed("mode: sheets", () => sheetChecks(udid, sheeted, "Planning"));
   if (seeded && !(await walk(udids, seeded))) failed = true;
   if (results.some((r) => !r[1])) failed = true;
   // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.
