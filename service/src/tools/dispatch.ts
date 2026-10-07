@@ -4,7 +4,7 @@
 // is fixed for the whole run, so the prompt cache holds.
 
 import type { JsonSchema, ToolContext, ToolDefinition, ToolResult } from "./types";
-import { errorResult, textResult, ToolInputError, validateInput } from "./util";
+import { coerceToSchema, errorResult, textResult, ToolInputError, validateInput, type PropSchema } from "./util";
 
 /** Harness tools advertised directly (when the run kind has them). Native tools are always direct. */
 export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
@@ -165,7 +165,10 @@ export function advertisedDescription(t: ToolDefinition): string | undefined {
  * A tool's stub: its real name with a minimal description and schema. The client can't check
  * input against a loose schema, so every call is validated here against the real one (nested
  * objects included); a failure returns the tool's full description and schema, so the agent can
- * fix the call in one step.
+ * fix the call in one step. Before validating, string-encoded scalars and arrays (`"true"`,
+ * `"3"`, `'["a"]'`) are coerced to the schema's declared type, since a client that can't see
+ * property types (HARNESS-329, HARNESS-333) has no basis to send real booleans, numbers or
+ * arrays and sends their string form instead.
  */
 export function stubTool(tool: ToolDefinition, variant: Exclude<ToolStubVariant, "full">): ToolDefinition {
   const stripped = stripSchemaDescriptions(tool.inputSchema) as JsonSchema;
@@ -184,6 +187,9 @@ export function stubTool(tool: ToolDefinition, variant: Exclude<ToolStubVariant,
         } catch {
           return schemaError(tool, `Invalid input for ${tool.name}: expected an object, got a string that isn't JSON.`);
         }
+      }
+      if (typeof input === "object" && input !== null && !Array.isArray(input)) {
+        input = coerceToSchema(input, tool.inputSchema as PropSchema);
       }
       try {
         validateInput(tool.name, tool.inputSchema, input, true);

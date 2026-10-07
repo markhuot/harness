@@ -209,6 +209,15 @@ describe("advertisedTools", () => {
     expect((nested.content[0] as { text: string }).text).toContain('"wait_for.timeout" must be a number');
   });
 
+  test("a stub coerces string-encoded booleans, numbers and arrays before validating (HARNESS-329, HARNESS-333)", async () => {
+    const stub = view("work", builtin, "bare").find((t) => t.name === "create_ticket")!;
+    const ok = await stub.execute({ title: "t", spec: "s", start: "true", depends_on: '["ABC-1","ABC-2"]' }, fakeContext());
+    expect(ok.isError).not.toBe(true);
+    const bad = await stub.execute({ title: "t", spec: "s", start: "soon" }, fakeContext());
+    expect(bad.isError).toBe(true);
+    expect((bad.content[0] as { text: string }).text).toContain('"start" must be a boolean');
+  });
+
   test("a stubbed gated tool still asks a human", async () => {
     const ops = fakeOps({
       checkPermission: async () => ({ behavior: "deny", message: "no" }),

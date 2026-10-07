@@ -13,7 +13,7 @@ export function errorResult(text: string): ToolResult {
 
 export class ToolInputError extends Error {}
 
-type PropSchema = {
+export type PropSchema = {
   type?: string;
   enum?: unknown[];
   items?: PropSchema;
@@ -89,6 +89,58 @@ function checkObject(toolName: string, obj: Record<string, unknown>, schema: Pro
     const v = obj[key];
     if (v === undefined || v === null) continue;
     checkProp(toolName, `${prefix}${key}`, v, propSchema, deep);
+  }
+}
+
+/**
+ * A deferred stub advertises `{ type: "object" }` with no property types, so a client that types
+ * arguments from the advertised schema (HARNESS-329: Claude Code) has no basis to send `true` as
+ * a boolean, `3` as a number, or `["a","b"]` as an array: it sends the string `"true"`, `"3"`, or
+ * `'["a","b"]'`, and strict validation against the real schema then rejects it. This coerces those
+ * string encodings back to the declared type before validation, for every property (object
+ * properties too; `required` is unaffected since it's about presence, not shape). A string that
+ * doesn't parse as the declared type is left alone, so validation still reports it clearly.
+ */
+export function coerceToSchema(input: unknown, schema: PropSchema): unknown {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
+  const properties = schema.properties ?? {};
+  const obj = input as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...obj };
+  for (const [key, propSchema] of Object.entries(properties)) {
+    if (key in out && out[key] !== undefined && out[key] !== null) out[key] = coerceValue(out[key], propSchema);
+  }
+  return out;
+}
+
+function coerceValue(value: unknown, schema: PropSchema): unknown {
+  if (schema.type === "object" && schema.properties) return coerceToSchema(value, schema);
+  if (typeof value !== "string") {
+    if (Array.isArray(value) && schema.type === "array" && schema.items) return value.map((v) => coerceValue(v, schema.items!));
+    return value;
+  }
+  switch (schema.type) {
+    case "boolean":
+      return value === "true" ? true : value === "false" ? false : value;
+    case "integer": {
+      const n = Number(value);
+      return value.trim() !== "" && Number.isInteger(n) ? n : value;
+    }
+    case "number": {
+      const n = Number(value);
+      return value.trim() !== "" && Number.isFinite(n) ? n : value;
+    }
+    case "array": {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        return value;
+      }
+      if (!Array.isArray(parsed)) return value;
+      return schema.items ? parsed.map((v) => coerceValue(v, schema.items!)) : parsed;
+    }
+    default:
+      return value;
   }
 }
 
