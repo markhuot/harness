@@ -1,3 +1,7 @@
+/* The category descriptions wrap rather than cut off. */
+.notif-switches .settings-row-sub {
+  white-space: normal;
+}
 .notif-subhead {
   margin-top: 20px;
 }
