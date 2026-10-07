@@ -79,6 +79,7 @@ struct BrowserTabView: View {
             tabStrip
             toolbar
             if sizeRowOpen, let size = model.state?.size { sizeRow(size) }
+            if !showsTabStrip, let title = shownTitle { status(title) }
             stage
         }
         .background(BrowserKeyField(focused: $typing, onText: model.typed, onKey: model.press)
@@ -251,8 +252,10 @@ struct BrowserTabView: View {
     /// The open tabs, even a lone one (so it can be torn off), scrolling sideways when they don't
     /// fit, with + (New tab) pinned at the right end; the shown one is highlighted and kept in view.
     /// Not in a pinned window, nor with a service that has no tabs.
+    private var showsTabStrip: Bool { pinnedTab == nil && BrowserTabSelection.supportsTabs(model.state) }
+
     @ViewBuilder private var tabStrip: some View {
-        if pinnedTab == nil, BrowserTabSelection.supportsTabs(model.state) {
+        if showsTabStrip {
             HStack(spacing: 0) {
                 tabChips
                 BrowserBarButton(icon: "plus", label: "New tab") {
@@ -292,6 +295,22 @@ struct BrowserTabView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// The page's title, when it says more than the address bar does. Only shown without a tab
+    /// strip (a pinned window, a service without tabs), since a tab already names its page.
+    private var shownTitle: String? {
+        guard let title = model.state?.title, !title.isEmpty, title != model.state?.url else { return nil }
+        return title
+    }
+
+    private func status(_ title: String) -> some View {
+        HStack(spacing: 6) {
+            Text(title).font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
     }
 
     // MARK: Stage

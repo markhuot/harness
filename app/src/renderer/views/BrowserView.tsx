@@ -673,6 +673,9 @@ export function BrowserView({
 
   const empty = !hasFrame && !state;
   const pinned = pinnedTab !== undefined;
+  // The tab names the page; with no strip (a service without tabs) the bar does, unless the pinned pane's header already does.
+  const tabStrip = !pinned && !!tabs && tabs.length > 0;
+  const barTitle = !tabStrip && !pinned ? state?.title : undefined;
   /** The shown tab, when it's torn off into a pane or window of its own (it shows there, not here). */
   const tornShown = !pinned && tear && typeof state?.tabId === "number" ? tear.torn.get(`browser:${state.tabId}`) : undefined;
   const chipDrag = (tab: BrowserTab): TabDrag => ({ kind: "tab", ticketKey: tear!.ticketKey, tab: "browser", browserTab: tab.id });
@@ -702,7 +705,7 @@ export function BrowserView({
 
   return (
     <div className="browser">
-      {!pinned && tabs && tabs.length > 0 && (
+      {tabStrip && (
         <div className="browser-tab-strip">
           <div className="browser-tabs" role="tablist" aria-label="Browser tabs" ref={tabsRef}>
             {tabs.map((tab, i) => {
@@ -778,6 +781,7 @@ export function BrowserView({
               }
             }}
           />
+          {barTitle && <span className="browser-title truncate">{barTitle}</span>}
         </div>
         {size && (
           <button
