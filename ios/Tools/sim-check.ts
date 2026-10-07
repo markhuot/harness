@@ -65,7 +65,8 @@
 //      card opens its ticket in a sheet, a conductor's child pushes inside it and the back swipe
 //      returns, dragging it to the bottom docks it under the board as a bar titled by its key, a
 //      tap on the bar restores it where it was, a section's alert still comes up, Projects closes
-//      it, the bar's ✕ and a swipe down on it send it away, and New session opens in the sheet too and docks as
+//      it, the bar's ✕ and a swipe down on it send it away, a flick down from full size sends it
+//      away without docking, and New session opens in the sheet too and docks as
 //      "New session"; sheet-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
@@ -1150,6 +1151,27 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     if (has(l, kid.key)) throw new Error(`${kid.key} still on screen`);
     lastUrl.set(udid, BOARD);
     return "gone";
+  });
+  await check("a flick down from full size sends the sheet away rather than docking it", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    await Bun.sleep(600); // the sheet finishes coming up
+    // The simulator takes each of AXe's touch points slowly whatever --duration says, so a flick
+    // is long strides (--delta, in pixels) rather than a short duration: dockSheet's drag lets go
+    // near 230pt/s and docks, this one past SheetFlick.speed (1000pt/s), near 1100pt/s.
+    const x = String(Math.round(W / 2));
+    await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
+    await until("the sheet gone", async () => {
+      const l = await labels(udid);
+      return !has(l, kid.key) && onBoard(l);
+    }, 6000).catch(async (e) => {
+      await say("after the flick");
+      throw e;
+    });
+    await Bun.sleep(800);
+    if ((await labels(udid)).some(isDock)) throw new Error("the flick docked the sheet");
+    lastUrl.set(udid, BOARD);
+    return "gone, no dock";
   });
   await check("New session opens in the sheet and docks as New session", async () => {
     await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some(isOptions));

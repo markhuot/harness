@@ -19,6 +19,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone, a quick swipe down on an open ticket or New session sends it away. A slower drag that
+  lets go near the bottom still docks it, as before.
 - A ticket's browser shows the page title only on its tab. The gray copy of it above the page is
   gone.
 

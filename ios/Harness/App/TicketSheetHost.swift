@@ -7,7 +7,7 @@ import SwiftUI
 /// docks, like Mail's minimized draft: the stack stays mounted (drafts, scroll, path) but hidden,
 /// and the small sheet shows the ticket's key (TicketDock) under the board, which stays usable
 /// (`presentationBackgroundInteraction`). Tapping it, or dragging it up, brings it back; swiping it
-/// down sends it away. The system does the drags, the inset and the corners, so the content's own
+/// down sends it away, and so does a flick down from `.large` (SheetFlick). The system does the drags, the inset and the corners, so the content's own
 /// gestures (the pager, the back swipe, the Browser tab, the transcript) keep theirs; the board's
 /// bottom bar takes the docked sheet's side inset (DockedSheetInset) so the two line up.
 ///
@@ -23,6 +23,8 @@ struct TicketSheetHost: View {
     /// Whether it was docked when last up, for the detent while it animates away.
     @State private var lastDocked = false
     @Environment(DockedSheetInset.self) private var dockInset
+    /// How the last drag on the sheet let go, for a flick that should send it away.
+    @State private var flick = SheetFlick()
 
     var body: some View {
         let current = router.ticketSheet ?? router.dock
@@ -54,6 +56,7 @@ struct TicketSheetHost: View {
                 if let f { dockInset.sides = f.minX; dockInset.top = f.minY }
             }
         }
+        .background { SheetFlickTracker(flick: flick) }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
         .onChange(of: router.ticketSheetState, initial: true) { _, s in if s != .gone { lastDocked = s == .docked } }
         .presentationDetents([TicketDock.detent, .large], selection: detent)
@@ -93,6 +96,11 @@ struct TicketSheetHost: View {
 
     /// Gone, the sheet keeps the detent it had, so the dock's ✕ sends it away from the dock
     /// rather than growing it to `.large` on the way out.
+    ///
+    /// The system only ever settles a drag from `.large` on the dock, however hard it was flung, so
+    /// a drag that let go moving down fast (SheetFlick) sends the sheet away instead. It's decided a
+    /// turn later, once the drag's end has been seen whichever recognizer UIKit told first; one that
+    /// slowed or lingered near the bottom stays docked.
     private var detent: Binding<PresentationDetent> {
         Binding(get: {
                     switch router.ticketSheetState {
@@ -101,7 +109,16 @@ struct TicketSheetHost: View {
                     case .presented: .large
                     }
                 },
-                set: { $0 == TicketDock.detent ? router.dockSheet() : router.restoreDock() })
+                set: { new in
+                    guard new == TicketDock.detent else { return router.restoreDock() }
+                    let fromLarge = router.ticketSheetState == .presented
+                    router.dockSheet()
+                    guard fromLarge else { return }
+                    let settled = Date()
+                    DispatchQueue.main.async {
+                        if flick.flung(at: settled), router.ticketSheetState == .docked { router.dismissSheet() }
+                    }
+                })
     }
 
     /// The cover is presented by whichever level is on top: a sheet over this one, else this.
@@ -117,6 +134,89 @@ struct TicketSheetHost: View {
 @Observable final class DockedSheetInset {
     var sides: CGFloat?
     var top: CGFloat?
+}
+
+/// How the last drag on the ticket sheet let go. SwiftUI's detent selection says where a drag
+/// settled but not how fast it was moving, so SheetFlickTracker reads that from a pan of its own.
+final class SheetFlick {
+    /// Downward speed at release (pt/s) past which a drag from `.large` sends the sheet away. A
+    /// deliberate swipe lets go well above it; one that slows toward the bottom lets go well below.
+    static let speed: CGFloat = 1000
+    /// How far apart letting go and the sheet settling may be and still be the same drag.
+    static let window: TimeInterval = 0.3
+
+    var velocity: CGFloat = 0
+    var releasedAt: Date?
+
+    /// Whether the drag that settled the sheet at `settled` let go moving down past `speed`.
+    func flung(at settled: Date) -> Bool {
+        guard let releasedAt, abs(settled.timeIntervalSince(releasedAt)) < Self.window else { return false }
+        return velocity > Self.speed
+    }
+}
+
+/// Watches drags on the ticket sheet alongside the system's own, without taking any touches: a pan
+/// on the sheet's container view (which holds the grabber too) that recognizes with everything.
+/// Touches that pass through to the board behind never reach it.
+private struct SheetFlickTracker: UIViewRepresentable {
+    let flick: SheetFlick
+
+    func makeUIView(context: Context) -> Probe { Probe(flick: flick) }
+    func updateUIView(_ view: Probe, context: Context) {}
+
+    final class Probe: UIView, UIGestureRecognizerDelegate {
+        let flick: SheetFlick
+        private lazy var pan: UIPanGestureRecognizer = {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(panned))
+            pan.cancelsTouchesInView = false
+            pan.delaysTouchesBegan = false
+            pan.delaysTouchesEnded = false
+            pan.delegate = self
+            return pan
+        }()
+
+        init(flick: SheetFlick) {
+            self.flick = flick
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            pan.view?.removeGestureRecognizer(pan)
+            guard window != nil, let container = presentedController?.presentationController?.containerView else { return }
+            container.addGestureRecognizer(pan)
+        }
+
+        /// The view controller the sheet presents: the outermost one above this view.
+        private var presentedController: UIViewController? {
+            var responder: UIResponder? = self
+            var found: UIViewController?
+            while let r = responder {
+                if let vc = r as? UIViewController {
+                    found = vc
+                    if vc.parent == nil { break }
+                }
+                responder = r.next
+            }
+            return found?.presentingViewController == nil ? nil : found
+        }
+
+        @objc private func panned(_ pan: UIPanGestureRecognizer) {
+            switch pan.state {
+            case .began: flick.releasedAt = nil
+            case .ended:
+                flick.velocity = pan.velocity(in: pan.view).y
+                flick.releasedAt = Date()
+            case .cancelled, .failed: flick.releasedAt = nil
+            default: break
+            }
+        }
+
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
 }
 
 /// Keeps a section's screen clear of the docked ticket sheet. It goes inside the section's
