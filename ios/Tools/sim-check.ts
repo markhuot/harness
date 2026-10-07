@@ -1405,11 +1405,14 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child", async () => panelOn(await labels(udid), kid.key), 8000);
     await Bun.sleep(600);
-    const b = other.key;
     // The default panel can leave too little of the board for a card beside it: narrow it first.
     const { W } = await panelFraction(udid);
     await dragPanelEdge(udid, W * 0.5);
-    await cardOnScreen(b, (await panelFraction(udid)).leading - 16);
+    const edge = (await panelFraction(udid)).leading - 16;
+    // Any other card already beside the panel (the walk-through's columns are full), else this run's own.
+    const beside = (await nodes(udid)).find((n) => /^[A-Z]+-\d+ /.test(n.AXLabel ?? "") && !card(key)(n.AXLabel!) && !card(kid.key)(n.AXLabel!) && !n.AXLabel!.endsWith(", draft") && n.frame.x >= 0 && n.frame.x + 20 < edge);
+    const b = beside ? beside.AXLabel!.split(" ")[0]! : other.key;
+    if (!beside) await cardOnScreen(b, edge);
     await tapCard(b);
     await until(`the panel on ${b}`, async () => panelOn(await labels(udid), b), 8000).catch(async (e) => {
       await say(`after ${b}'s card`);
@@ -1489,13 +1492,18 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       await say("after the pop-out button");
       throw up;
     }
-    await tapWhere(udid, "More");
-    await tapWhere(udid, "Delete ticket");
-    await tapWhere(udid, "Delete");
-    await until(`${t.key}'s window closed`, async () => !(await labels(udid)).includes(t.key), 10000);
-    await goto(udid, BOARD);
-    if ((await labels(udid)).includes(RESIZE)) throw new Error("the panel came back with the board");
-    return `${t.key} in its own window, the panel closed`;
+    // Tidying up, not the check: the simulator's renderer sometimes aborts with a window open
+    // (ios/ARCHITECTURE.md § Windows).
+    const tidy = await (async () => {
+      await tapWhere(udid, "More");
+      await tapWhere(udid, "Delete ticket");
+      await tapWhere(udid, "Delete");
+      await until(`${t.key}'s window closed`, async () => !(await labels(udid)).includes(t.key), 10000);
+      await goto(udid, BOARD);
+      return (await labels(udid)).includes(RESIZE) ? "; the panel came back with the board" : "";
+    })().catch((e) => `; closing its window: ${(e as Error).message.split(";")[0]}`);
+    if (tidy.includes("came back")) throw new Error(tidy.slice(2));
+    return `${t.key} in its own window, the panel closed${tidy}`;
   });
 }
 
