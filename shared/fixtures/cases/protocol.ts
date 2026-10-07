@@ -638,12 +638,18 @@ const settings: P.Settings = {
   listen: { mode: "tailscale" },
   browserIdleTabMinutes: 5,
   prompts: { "system.intro": "You are {{agentName}}.", "run.review": null },
+  notifications: {
+    enabled: true,
+    categories: { status: true, review: true, notes: false, spec: true, other: false },
+    apnsKeyDir: "/Users/mark/.appstoreconnect/private_keys",
+    apnsTeamId: "47P4ZSALX4",
+  },
 };
 
 export const Settings: P.Settings[] = [
   settings,
   { defaultDriver: "claude-code", maxConcurrentRuns: 2, permissionMode: "read_only", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKey: null },
-  { ...settings, watcherDriver: null, classifier: "anthropic-api", browserIdleTabMinutes: 0 },
+  { ...settings, watcherDriver: null, classifier: "anthropic-api", browserIdleTabMinutes: 0, notifications: { enabled: false, categories: { status: true, review: true, notes: true, spec: true, other: true }, apnsKeyDir: null, apnsTeamId: "47P4ZSALX4" } },
 ];
 
 const { anthropicApiKey: _key, claudeOauthToken: _token, copilotGithubToken: _ghToken, ...settingsWithoutKey } = settings;
@@ -655,8 +661,8 @@ export const PublicSettings: P.PublicSettings[] = [
   { ...publicSettings, watcherDriver: null, claudeOauthTokenSet: false, copilotGithubTokenSet: false },
 ];
 
-/** PATCH /settings bodies (`Partial<Settings>`). */
-export const SettingsPatch: Partial<P.Settings>[] = [
+/** PATCH /settings bodies (`SettingsPatch`). */
+export const SettingsPatch: P.SettingsPatch[] = [
   { anthropicApiKey: null },
   { anthropicApiKey: "sk-ant-new" },
   { claudeOauthToken: null },
@@ -667,6 +673,9 @@ export const SettingsPatch: Partial<P.Settings>[] = [
   { defaultModels: { "claude-code": null }, reviewModels: { "anthropic-api": "claude-opus-4-1" }, watcherModels: { "claude-code": null } },
   { watcherDriver: null, maxConcurrentRuns: 8, permissionMode: "ask", classifier: "anthropic-api", browserIdleTabMinutes: 30 },
   { watcherDriver: "claude-code", defaultDriver: "anthropic-api", baseBranch: "trunk", listen: { mode: "custom", host: "100.64.0.1" } },
+  // The service merges a partial notifications block (and its categories) over the stored one.
+  { notifications: { categories: { notes: false } } },
+  { notifications: { enabled: false, apnsKeyDir: null } },
   {},
 ];
 
@@ -907,6 +916,7 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "watcher.upserted", watcher: Watcher[0]! },
   { kind: "watcher.deleted", id: "wat_2" },
   { kind: "settings.updated", settings: publicSettings },
+  { kind: "devices.changed" },
   { kind: "browser.frame", sessionId: "ses_31", data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1280, height: 800 },
   { kind: "browser.frame", sessionId: "ses_31", tabId: 3, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768 },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]! },
@@ -949,6 +959,8 @@ export const ClientMessage: P.ClientMessage[] = [
   { type: "browser.subscribe", sessionId: "ses_31", tabId: 2, viewerId: "v:spec-2" },
   { type: "browser.unsubscribe", sessionId: "ses_31", viewerId: "v:spec-2" },
   { type: "browser.input", sessionId: "ses_31", input: { type: "back" }, viewerId: "v:spec-2" },
+  { type: "presence", deviceId: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", platform: "ios", visible: true, tickets: ["NYTIMES-12", "NYTIMES-31"] },
+  { type: "presence", deviceId: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", platform: "mac", visible: false, tickets: [] },
   { type: "ping" },
 ];
 
@@ -1160,13 +1172,14 @@ export const discriminators: Record<string, string[]> = {
     "watcher.upserted": true,
     "watcher.deleted": true,
     "settings.updated": true,
+    "devices.changed": true,
     "browser.frame": true,
     "browser.state": true,
     "service.status": true,
   }),
   TranscriptContent: all<P.TranscriptContent["type"]>({ text: true, thinking: true, tool_call: true, tool_result: true, status: true, error: true }),
   ToolResultContent: all<P.ToolResultContent["type"]>({ text: true, image: true }),
-  ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, ping: true }),
+  ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, presence: true, ping: true }),
   ServerMessage: all<P.ServerMessage["type"]>({ welcome: true, event: true, pong: true, error: true }),
   BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, device: true, size: true, responsive: true, newTab: true, closeTab: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),

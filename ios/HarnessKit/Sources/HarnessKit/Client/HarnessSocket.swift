@@ -88,6 +88,8 @@ public actor HarnessSocket {
     /// One entry per viewer (session + viewer id, nil for a socket-wide viewer) with the tab it's on
     /// (nil: the lowest open one), ordered so re-subscribes go out in the order they were made.
     private var browserSubs: [BrowserSubscription] = []
+    /// The last presence set (normalized), sent again after each reconnect.
+    private var presence: Presence?
 
     public init(url: String, factory: @escaping WebSocketFactory = URLSessionWebSocketConnection.factory, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
         self.url = url
@@ -119,6 +121,8 @@ public actor HarnessSocket {
                 for sub in browserSubs {
                     try await conn.send(Self.encode(.browserSubscribe(sessionId: sub.sessionId, tabId: sub.tabId, viewerId: sub.viewerId)))
                 }
+                // The service keeps presence per socket and forgot it when the last one closed.
+                if let presence { try await conn.send(Self.encode(.presence(presence))) }
                 backoff.reset()
                 setConnected(true)
                 while true { handle(try await conn.receive()) }
@@ -184,6 +188,19 @@ public actor HarnessSocket {
             browserSubs[i].tabId = tabId
         }
     }
+
+    /// Tell the service what this socket shows, so it holds back notifications for those tickets.
+    /// Remembered across reconnects; an unchanged presence (tickets compared as a set) isn't sent
+    /// again. The port of `setPresence` in shared/src/client.ts.
+    public func setPresence(_ presence: Presence) async {
+        let next = presence.normalized
+        guard next != self.presence else { return }
+        self.presence = next
+        await send(.presence(next))
+    }
+
+    /// The remembered presence (for tests).
+    var currentPresence: Presence? { presence }
 
     /// Every remembered subscription, in subscription order (for tests).
     var browserSubscriptions: [BrowserSubscription] { browserSubs }

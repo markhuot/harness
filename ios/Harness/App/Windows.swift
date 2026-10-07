@@ -108,6 +108,19 @@ final class WindowDirectory {
         }
     }
 
+    /// A tapped notification's link: opens in the last active main window (on iPad at regular
+    /// width a ticket link opens the ticket's own window from there). On a cold launch from the
+    /// tap no main window has come up yet, so the first one to come up applies it; unlike
+    /// `openInMain`, that waits for the window the launch is already bringing up.
+    func openFromNotification(_ link: DeepLink) {
+        mains.removeAll { !$0.isOpen }
+        if let router = mains.last?.router {
+            router.open(link)
+        } else {
+            pending = link
+        }
+    }
+
     /// A ticket window is showing `key` (again, after its ticket changed).
     func ticketWindow(_ router: Router, scene: UIWindowScene?, key: String) {
         tickets = tickets.filter { $0.value.router != nil && $0.value.router !== router }
@@ -243,6 +256,8 @@ struct TicketWindowRoot: View {
                 TicketWindowContent()
                     .environment(router)
                     .sceneChrome(router)
+                    // Its ticket counts as on screen while the window is in the foreground.
+                    .reportsPresence(router)
                     .onChange(of: router.root) { _, root in
                         guard var v = TicketWindowValue(route: root) else { return }
                         // A pinned window keeps its tab; only its ticket can change (a rename).

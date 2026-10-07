@@ -10,6 +10,8 @@ import { VERSION } from "../config";
 import { createWsHandlers, type WsData } from "./ws";
 import { MAX_UPLOAD_BYTES } from "../attachment-lists";
 import type { PluginHost } from "../plugins/host";
+import type { NotificationService } from "../notifications/dispatcher";
+import type { PresenceRegistry } from "../notifications/presence";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
 import { TICKET_STATUSES, type ServiceStatus, type TicketStatus } from "@harness/shared";
@@ -40,6 +42,9 @@ export interface HttpServerOptions {
   restart?: () => void;
   /** True once the service is shutting down: /health answers 503 so nobody connects to it. */
   stopping?: () => boolean;
+  /** Where sockets' presence goes (what each client shows), for the notification dispatcher. */
+  presence?: PresenceRegistry;
+  notifications?: NotificationService;
 }
 
 export interface HttpHandler {
@@ -173,6 +178,8 @@ export interface RouteExtras {
   /** Called after the token rotates (closes sockets authenticated with the old one). */
   onRotate?: () => void;
   restart?: () => void;
+  /** Enables /devices and /notifications (DESIGN.md "Notifications"). */
+  notifications?: NotificationService;
 }
 
 /** `?status=planning,review` → validated statuses; absent/empty → undefined (no filter). */
@@ -193,7 +200,7 @@ function fileSearch(url: URL): { ignored: boolean; kind?: "file" | "dir" } {
 }
 
 export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: RouteExtras = {}): Route[] {
-  const { plugins, network, tokens } = extras;
+  const { plugins, network, tokens, notifications } = extras;
   const routes: Route[] = [];
   const add = (method: string, path: string, handler: Handler) => routes.push({ method, ...compile(path), handler });
 
@@ -326,6 +333,17 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.updateSettings(b);
   });
 
+  // Notifications (DESIGN.md "Notifications")
+  const notifier = () => {
+    if (!notifications) throw new HarnessError(404, "Notifications aren't available");
+    return notifications;
+  };
+  add("GET", "/notifications", () => notifier().status());
+  add("POST", "/notifications/test", () => notifier().sendTest());
+  add("GET", "/devices", () => notifier().devices());
+  add("POST", "/devices", async ({ body }) => notifier().registerDevice(await body()));
+  add("DELETE", "/devices/:id", ({ params }) => notifier().removeDevice(params.id!));
+
   // Network, pairing, token (DESIGN.md "Network")
   add("GET", "/network", async () => {
     if (!network) throw new HarnessError(404, "Network status isn't available");
@@ -444,13 +462,14 @@ function fromLoopback(req: Request, server: Server<WsData>): boolean {
 
 /** One fetch/websocket pair shared by every listener (loopback, Tailscale, custom, 0.0.0.0). */
 export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
-  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser });
+  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser, presence: opts.presence });
   const routes = buildRoutes(opts.orchestrator, opts.browser, {
     plugins: opts.plugins,
     network: opts.network,
     tokens: opts.tokens,
     onRotate: () => ws.closeAll(),
     restart: opts.restart,
+    notifications: opts.notifications,
   });
 
   return {

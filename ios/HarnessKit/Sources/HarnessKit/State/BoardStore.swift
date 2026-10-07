@@ -37,6 +37,14 @@ public protocol BrowserChannel: AnyObject, Sendable {
 
 extension HarnessSocket: BrowserChannel {}
 
+/// The socket's `presence` side (HarnessSocket), as a seam for tests: remembers what this device
+/// shows and sends it now (when open) and after every reconnect.
+public protocol PresenceChannel: AnyObject, Sendable {
+    func setPresence(_ presence: Presence) async
+}
+
+extension HarnessSocket: PresenceChannel {}
+
 @MainActor
 @Observable
 public final class BoardStore {
@@ -94,6 +102,8 @@ public final class BoardStore {
     /// Each ticket's message draft (DESIGN.md "Message drafts"), by ticket id: one per ticket for
     /// the store's life, so leaving a ticket keeps what's typed.
     @ObservationIgnored private var messageDrafts: [String: MessageDraftSync] = [:]
+    /// What this device shows (`setPresence`), handed to every socket the store opens.
+    @ObservationIgnored private var presence: Presence?
 
     /// - Parameters:
     ///   - boardProject: the board's filter at launch (prefs.boardProject: a project id or a group's scope)
@@ -185,14 +195,18 @@ public final class BoardStore {
         let (ops, opsIn) = AsyncStream<BrowserOp>.makeStream()
         outbox = opsIn
         let channel = socket as? any BrowserChannel
+        let presenceChannel = socket as? any PresenceChannel
+        // A rebuilt socket (foregrounding) starts without presence: hand it the last one, which it
+        // sends once it's open.
+        if let presence { opsIn.yield(.presence(presence)) }
         socketTasks = [
             Task {
                 for await op in ops {
-                    guard let channel else { continue }
                     switch op {
-                    case let .send(msg): await channel.send(msg)
-                    case let .subscribe(id, tabId, viewerId): await channel.subscribeBrowser(id, tabId: tabId, viewerId: viewerId)
-                    case let .unsubscribe(id, viewerId): await channel.unsubscribeBrowser(id, viewerId: viewerId)
+                    case let .send(msg): await channel?.send(msg)
+                    case let .subscribe(id, tabId, viewerId): await channel?.subscribeBrowser(id, tabId: tabId, viewerId: viewerId)
+                    case let .unsubscribe(id, viewerId): await channel?.unsubscribeBrowser(id, viewerId: viewerId)
+                    case let .presence(p): await presenceChannel?.setPresence(p)
                     }
                 }
             },
@@ -279,7 +293,22 @@ public final class BoardStore {
         case send(ClientMessage)
         case subscribe(String, tabId: Int?, viewerId: String?)
         case unsubscribe(String, viewerId: String?)
+        case presence(Presence)
     }
+
+    /// Tell the service what this device shows (DESIGN.md "Notifications"), so it holds back
+    /// notifications for those tickets while `visible`. Sent in order with the browser messages,
+    /// remembered by the socket across its reconnects, and handed to the socket a foregrounding
+    /// rebuilds. An unchanged presence isn't sent again.
+    public func setPresence(_ presence: Presence) {
+        let next = presence.normalized
+        guard next != self.presence else { return }
+        self.presence = next
+        outbox?.yield(.presence(next))
+    }
+
+    /// The last presence set (normalized).
+    public var currentPresence: Presence? { presence }
 
     /// Stream a session's browser frames and state (browser.frame / browser.state reach `onEvent`
     /// listeners) on the current socket, on tab `tabId` (nil: the lowest open one); again with

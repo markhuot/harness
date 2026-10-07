@@ -473,6 +473,9 @@ async function install(udid: string) {
   await sh(["xcrun", "simctl", "uninstall", udid, `${BUNDLE}.dev`], { allowFail: true });
   await sh(["xcrun", "simctl", "keychain", udid, "reset"], { allowFail: true });
   await simctl("install", udid, appPath);
+  // The app asks for notification permission at launch, and that alert would cover the pair
+  // link's screens. A launch argument can't reach a launch by openurl, so it's a default.
+  await simctl("spawn", udid, "defaults", "write", BUNDLE, "HarnessSkipNotificationPrompt", "-bool", "YES");
   await appearance(udid, "light");
 }
 /** Cold-launches the app on the pair link and waits for the board with a ticket on it. */

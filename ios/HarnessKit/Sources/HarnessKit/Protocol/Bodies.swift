@@ -416,6 +416,8 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var browserIdleTabMinutes: Int?
     /// Prompt id (`PromptId.rawValue`) → template; nil (null) or "" resets one to the built-in.
     public var prompts: [String: String?]?
+    /// Merged over the stored notifications block (categories per category).
+    public var notifications: NotificationSettingsPatch?
 
     public init(
         defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
@@ -423,7 +425,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
-        prompts: [String: String?]? = nil
+        prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil
     ) {
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -440,6 +442,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
         self.prompts = prompts
+        self.notifications = notifications
     }
 }
 

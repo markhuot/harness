@@ -49,13 +49,18 @@ public struct Settings: Codable, Sendable, Equatable {
     /// have are refused with a 400. Optional so clients tolerate an older service without it.
     /// Keyed by `PromptId.rawValue`.
     public var prompts: [String: String?]?
+    /// System notifications for card activity (DESIGN.md "Notifications"): the master switch, one
+    /// switch per category, and where the APNs keys are. The service always sends it; optional so
+    /// clients tolerate an older service without it.
+    public var notifications: NotificationSettings?
 
     public init(
         defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
-        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil
+        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
+        notifications: NotificationSettings? = nil
     ) {
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -72,6 +77,7 @@ public struct Settings: Codable, Sendable, Equatable {
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
         self.prompts = prompts
+        self.notifications = notifications
     }
 }
 
@@ -98,6 +104,8 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var browserIdleTabMinutes: Int?
     /// Keyed by `PromptId.rawValue`.
     public var prompts: [String: String?]?
+    /// nil from services older than notifications (Settings hides its Notifications switches then).
+    public var notifications: NotificationSettings?
     /// Whether an API key for the anthropic-api driver is stored
     public var anthropicApiKeySet: Bool
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before
@@ -111,6 +119,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
+        notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil
     ) {
         self.defaultDriver = defaultDriver
@@ -125,6 +134,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
         self.prompts = prompts
+        self.notifications = notifications
         self.anthropicApiKeySet = anthropicApiKeySet
         self.claudeOauthTokenSet = claudeOauthTokenSet
         self.copilotGithubTokenSet = copilotGithubTokenSet

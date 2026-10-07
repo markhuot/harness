@@ -85,6 +85,15 @@ if [[ $TESTFLIGHT -eq 1 ]]; then
   echo "    public link: ${TESTFLIGHT_URL:-none yet, created on distribute}"
 fi
 
+# The Mac app gets push from the Developer ID provisioning profile sign-mac.ts embeds (kept outside
+# the repo: MAC_PROVISIONING_PROFILE, default ~/.appstoreconnect/profiles/Harness_Mac_Push.provisionprofile).
+# Check it grants push for this app to the signing certificate before spending time on builds.
+if [[ $SKIP_MAC -eq 0 ]]; then
+  echo "==> Checking the Mac provisioning profile"
+  PROFILE=$(bun "$ROOT/app/scripts/profile.ts" check) || exit 1
+  echo "    $PROFILE"
+fi
+
 # Install/.vercel is gitignored, so a fresh checkout or worktree isn't linked; unlinked, `vercel
 # deploy` tries to create a new project. Link the existing one now, before spending time on builds.
 if [[ $PUBLISH -eq 1 && ! -f Install/.vercel/project.json ]]; then
@@ -170,6 +179,8 @@ if [[ $SKIP_MAC -eq 0 ]]; then
   check_no_token "$CHECK"
   # The download has to carry its own service (no bun or checkout on the Mac that runs it).
   MAC_CONTENTS="$CHECK/Harness.app/Contents"
+  # Without it macOS refuses to launch an app that holds the push entitlement.
+  [[ -f "$MAC_CONTENTS/embedded.provisionprofile" ]] || { echo "error: the Mac app has no embedded provisioning profile" >&2; exit 1; }
   [[ -x "$MAC_CONTENTS/MacOS/harness-service" && -f "$MAC_CONTENTS/Resources/plugins/git/plugin.json" ]] \
     || { echo "error: the Mac app doesn't contain the compiled service and its plugins" >&2; exit 1; }
   grep -q '"executable": "harness-service"' "$MAC_CONTENTS/Resources/app.asar" \

@@ -320,6 +320,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         }
       },
@@ -417,6 +429,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         }
       },
@@ -533,6 +557,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         }
       },

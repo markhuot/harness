@@ -17,6 +17,9 @@ import { join } from "node:path";
 import { PluginHost, type PluginDir } from "./plugins/host";
 import { CodeWatch } from "./code-watch";
 import { BUILTIN_PLUGINS_DIR } from "./runtime";
+import { PresenceRegistry } from "./notifications/presence";
+import { NotificationService } from "./notifications/dispatcher";
+import { ApnsClient, Http2Transport, type ApnsTransport } from "./notifications/apns";
 
 export interface CreateHarnessOptions {
   home: string;
@@ -53,6 +56,8 @@ export interface CreateHarnessOptions {
    * with codeWatch, restarting onto new code once idle.
    */
   restart?: () => void;
+  /** How pushes reach APNs (tests inject a fake); defaults to HTTP/2 to Apple. */
+  apnsTransport?: ApnsTransport;
 }
 
 export interface Harness {
@@ -67,6 +72,7 @@ export interface Harness {
   network: NetworkManager;
   plugins: PluginHost;
   codeWatch: CodeWatch | null;
+  notifications: NotificationService;
   stop(): Promise<void>;
 }
 
@@ -106,6 +112,17 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     log: opts.log,
   });
   orchestrator.start();
+
+  const presence = new PresenceRegistry();
+  const notifications = new NotificationService({
+    store,
+    bus,
+    settings: () => settings().notifications,
+    presence,
+    apns: new ApnsClient({ transport: opts.apnsTransport ?? new Http2Transport() }),
+    log: opts.log,
+  });
+  notifications.start();
 
   const plugins = new PluginHost({
     dirs: opts.pluginDirs ?? [
@@ -158,10 +175,13 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     release: opts.release,
     restart: opts.restart,
     stopping: () => stopped,
+    presence,
+    notifications,
   });
   try {
     await network.boot();
   } catch (err) {
+    notifications.stop();
     await orchestrator.stop();
     await plugins.stop();
     if (ownsBrowser) await browser.shutdown().catch(() => {});
@@ -185,10 +205,12 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     network,
     plugins,
     codeWatch,
+    notifications,
     async stop() {
       if (stopped) return;
       stopped = true;
       codeWatch?.stop();
+      notifications.stop();
       await orchestrator.stop();
       await plugins.stop();
       network.stop();

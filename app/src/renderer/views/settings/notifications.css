@@ -1,0 +1,26 @@
+/* The category descriptions wrap rather than cut off. */
+.notif-switches .settings-row-sub {
+  white-space: normal;
+}
+.notif-subhead {
+  margin-top: 20px;
+}
+.notif-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--green);
+  font-family: var(--mono);
+}
+.notif-missing {
+  color: var(--amber);
+}
+.notif-failed {
+  color: var(--red);
+}
+.notif-error {
+  padding: 0 14px 10px;
+}
+.notif-test-result {
+  font-size: 12px;
+}

@@ -13,7 +13,8 @@
 //
 //   --checkout   keep build.ts's harness.json instead: the app runs the service from this
 //                checkout with bun, so a merge into it restarts the service onto the new code
-//                (`bun run install-app` does this; see README "Quick start")
+//                (`bun run install-app` does this, then signs it with sign-mac.ts --local; see
+//                README "Quick start")
 //
 // The desktop widgets ship too: ios/project.yml's HarnessMacWidgets extension, built with
 // xcodebuild into Contents/PlugIns/HarnessMacWidgets.appex (ad-hoc signed with its sandbox
@@ -27,8 +28,7 @@ import { compileService } from "../../service/scripts/compile";
 import { BUNDLED_PLIST, buildBundledPlist } from "../../service/src/cli";
 import { SERVICE_EXECUTABLE } from "../../service/src/runtime";
 import { WIDGET_RELOAD_HELPER } from "../src/main/widgets";
-
-const APP_BUNDLE_ID = "com.markhuot.harness.app";
+import { APP_BUNDLE_ID } from "./bundle-id";
 
 const appDir = resolve(import.meta.dir, "..");
 const repoRoot = resolve(appDir, "..");
@@ -89,7 +89,7 @@ function buildWidgets(): { appex: string; helper: string } {
   mkdirSync(out, { recursive: true });
   const appex = join(out, "HarnessMacWidgets.appex");
   cpSync(join(dd, "Build", "Products", "Release", "HarnessMacWidgets.appex"), appex, { recursive: true, verbatimSymlinks: true });
-  // Ad-hoc, so an unsigned `install-app` build runs it; sign-mac.ts re-signs it with Developer ID.
+  // Ad-hoc, so a packaged app runs it before signing; sign-mac.ts re-signs it with Developer ID.
   const entitlements = join(ios, "Widgets", "macOS", "HarnessMacWidgets.entitlements");
   run(["codesign", "--force", "--sign", "-", "--options", "runtime", "--entitlements", entitlements, appex], "codesign HarnessMacWidgets.appex");
   const helper = join(out, WIDGET_RELOAD_HELPER);

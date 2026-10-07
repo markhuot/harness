@@ -140,7 +140,7 @@ describe("daemon under Harness.app's bundled plist (SMAppService)", () => {
     const port = probe.port!;
     probe.stop(true);
     const plist = join(home, "bundled.plist");
-    writeFileSync(plist, buildBundledPlist({ appBundleId: "com.markhuot.harness.app", executable: "harness-service" }));
+    writeFileSync(plist, buildBundledPlist({ appBundleId: "com.markhuot.harness", executable: "harness-service" }));
     // launchd gives the job only what the plist names, plus a bare PATH.
     const plistEnv = Bun.which("plutil")
       ? JSON.parse(new TextDecoder().decode(Bun.spawnSync(["plutil", "-convert", "json", "-o", "-", plist]).stdout)).EnvironmentVariables

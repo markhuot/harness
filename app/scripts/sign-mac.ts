@@ -1,28 +1,57 @@
 // Sign the packaged app (out/Harness-darwin-<arch>/Harness.app) for distribution outside the App
-// Store: Developer ID Application identity, hardened runtime, the entitlements V8 needs. Then
-// notarize and staple when asked to, and finally zip it with ditto for download.
+// Store: Developer ID Application identity, hardened runtime, the entitlements V8 and push need,
+// and the provisioning profile that grants push embedded at Contents/embedded.provisionprofile.
+// Then notarize and staple when asked to, and finally zip it with ditto for download.
 //
 //   bun run package && bun scripts/sign-mac.ts [--zip out/Harness-mac.zip]
+//   bun scripts/sign-mac.ts --local   sign only: no notarization, no zip (`bun run install-app`;
+//                                     a locally built app isn't quarantined, so Gatekeeper never
+//                                     asks for notarization)
 // Env: MAC_SIGN_IDENTITY (default: the "Developer ID Application: Mark Huot (47P4ZSALX4)" cert by
-// SHA-1, since this keychain holds two certificates with that name). Notarizing: NOTARY_PROFILE
+// SHA-1, since this keychain holds two certificates with that name). MAC_PROVISIONING_PROFILE
+// (default ~/.appstoreconnect/profiles/Harness_Mac_Push.provisionprofile, outside the repo since
+// the repo is public; profile.ts checks it before anything is signed). Notarizing: NOTARY_PROFILE
 // names a notarytool keychain profile (`xcrun notarytool store-credentials`), or
 // NOTARIZE_WITH_ASC_KEY=1 uses the App Store Connect API key (ASC_KEY_ID, ASC_ISSUER_ID, and the
 // .p8 at ASC_KEY_PATH, default ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8). The key needs
 // no keychain access, which a background process may not get. Neither set: no notarization.
 import { signAsync } from "@electron/osx-sign";
-import { existsSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { DEFAULT_IDENTITY, RESTRICTED, TEAM_ID, checkProfile, decodeProfile, entitlementsFor, identitySha1, profilePath, readPlist } from "./profile";
 
 const appDir = resolve(import.meta.dir, "..");
 const app = join(appDir, "out", `Harness-darwin-${process.arch}`, "Harness.app");
+const local = process.argv.includes("--local");
 const zipArg = process.argv.indexOf("--zip");
 const zip = resolve(appDir, zipArg > 0 ? process.argv[zipArg + 1]! : "out/Harness-mac.zip");
-const identity = process.env.MAC_SIGN_IDENTITY ?? "F59032923631CF42FCFFD1CE71D17205FD554A92";
+const identity = process.env.MAC_SIGN_IDENTITY || DEFAULT_IDENTITY;
 const entitlements = join(appDir, "resources", "entitlements.mac.plist");
+// Everything nested in the app (helpers, the bundled service, frameworks) gets V8's entitlements
+// only: the push ones are restricted, and macOS kills a helper that claims them without a profile.
+const helperEntitlements = join(appDir, "resources", "entitlements.mac.helper.plist");
 // The desktop widget extension (package.ts) is sandboxed, with entitlements of its own.
 const widgetEntitlements = resolve(appDir, "..", "ios", "Widgets", "macOS", "HarnessMacWidgets.entitlements");
 if (!existsSync(app)) throw new Error(`${app} is missing; run \`bun run package\` first.`);
+
+// The profile has to grant push for this app's id to the certificate about to sign it, or macOS
+// refuses to launch the app. Check that first, so a bad profile stops here and not at launch.
+const profile = profilePath();
+const bundleId = readPlist(join(app, "Contents", "Info.plist")).CFBundleIdentifier;
+if (typeof bundleId !== "string") throw new Error(`${app} has no CFBundleIdentifier`);
+const findIdentity = /^[0-9a-fA-F]{40}$/.test(identity) ? "" : (await run(["security", "find-identity", "-v", "-p", "codesigning"], true));
+const checked = checkProfile(decodeProfile(profile), {
+  appIdentifier: `${TEAM_ID}.${bundleId}`,
+  certificateSha1: identitySha1(identity, findIdentity),
+  entitlements: readPlist(entitlements),
+  path: profile,
+});
+console.log(`provisioning profile: "${checked.name}" (${checked.uuid}), ${checked.appIdentifier}, aps-environment ${checked.apsEnvironment}, expires ${checked.expires.toISOString().slice(0, 10)}`);
+// Copied in here rather than by osx-sign, which keeps an embedded profile that's already there.
+const embedded = join(app, "Contents", "embedded.provisionprofile");
+rmSync(embedded, { force: true });
+copyFileSync(profile, embedded);
 
 async function run(cmd: string[], quiet = false) {
   const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
@@ -37,14 +66,27 @@ await signAsync({
   app,
   identity,
   platform: "darwin",
-  optionsForFile: (file) => ({ hardenedRuntime: true, entitlements: /\.appex(\/|$)/.test(file) ? widgetEntitlements : entitlements }),
+  // Embedded above; osx-sign would otherwise look for a *.provisionprofile in the working directory.
+  preEmbedProvisioningProfile: false,
+  optionsForFile: (file) => ({ hardenedRuntime: true, entitlements: entitlementsFor(file, app, { app: entitlements, widget: widgetEntitlements, helper: helperEntitlements }) }),
 });
+// A helper that kept a restricted entitlement would be killed at launch; check every one.
+for (const helper of readdirSync(join(app, "Contents", "Frameworks")).filter((f) => f.endsWith(".app"))) {
+  const signed = await run(["codesign", "-d", "--entitlements", "-", "--xml", join(app, "Contents", "Frameworks", helper)], true);
+  if (RESTRICTED.some((k) => signed.includes(k))) throw new Error(`${helper} was signed with a restricted entitlement, so macOS would kill it:\n${signed}`);
+}
 await run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
 const info = await run(["codesign", "-dv", "--verbose=2", app], true);
 const authority = info.match(/Authority=(Developer ID Application[^\n]*)/)?.[1];
 const runtime = /flags=.*runtime/.test(info);
 if (!authority || !runtime) throw new Error(`unexpected signature:\n${info}`);
-console.log(`signed: ${authority}, hardened runtime`);
+const signedEntitlements = await run(["codesign", "-d", "--entitlements", "-", "--xml", app], true);
+if (!signedEntitlements.includes("com.apple.developer.aps-environment")) throw new Error(`the signature carries no aps-environment entitlement:\n${signedEntitlements}`);
+console.log(`signed: ${authority}, hardened runtime, push (${checked.apsEnvironment})`);
+if (local) {
+  console.log(JSON.stringify({ app, notarized: false, authority }));
+  process.exit(0);
+}
 
 function notaryAuth(env = process.env): string[] | null {
   if (env.NOTARY_PROFILE) return ["--keychain-profile", env.NOTARY_PROFILE];

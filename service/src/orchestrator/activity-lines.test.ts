@@ -155,7 +155,8 @@ describe("every column change is in Activity", () => {
     await h.orch.completeTicket(t.key, { skipAgent: true });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
-    expect(moves(h, t.key)).toEqual(["moved planning→in_progress", "submitted in_progress→review", "moved review→done"]);
+    // "Approve and take no action" is the human's approval, and that entry records the move to done.
+    expect(moves(h, t.key)).toEqual(["moved planning→in_progress", "submitted in_progress→review", "approved review→done"]);
     const started = h.orch.activity(t.key).find((e) => e.kind === "moved")!;
     expect(started).toMatchObject({ author: "system", body: "Work started" });
   });

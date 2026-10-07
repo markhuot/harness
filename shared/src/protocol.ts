@@ -1,6 +1,8 @@
 // Shared wire protocol between the harness service and its clients (desktop app, future iOS app).
 // Everything here is plain JSON-serializable data. Timestamps are epoch milliseconds.
 
+import type { NotificationSettings, NotificationSettingsPatch, Presence } from "./notifications";
+
 export const DEFAULT_PORT = 7717;
 
 // ---------------------------------------------------------------------------
@@ -602,7 +604,8 @@ export const MAX_PROMPT_ATTACHMENTS = 20;
  * - unblocked: the agent picked a blocked ticket back up; meta.note when it gave one
  * - review_approved / changes_requested: an agent or conductor review decision; meta.round,
  *   meta.commit (the HEAD it reviewed), meta.by
- * - approved: a human (or conductor) approved the ticket
+ * - approved: a human (or conductor) approved the ticket; author "system" when it skips its human
+ *   review and lands on its own
  * - message, answer: legacy. Older services logged a human's message from the Spec or Activity
  *   tab and the agent's reply; messages now go to the transcript only, and these are never written
  * - reopened: a done ticket went back to work; the notes
@@ -863,7 +866,16 @@ export interface Settings {
    * have are refused with a 400. Optional so clients tolerate an older service without it.
    */
   prompts?: Partial<Record<PromptId, string | null>>;
+  /**
+   * System notifications for card activity (DESIGN.md "Notifications"): the master switch, one
+   * switch per category, and where the APNs keys are. PATCH merges `categories` per category.
+   * The service always sends it; optional so clients tolerate an older service without it.
+   */
+  notifications?: NotificationSettings;
 }
+
+/** PATCH /settings: any settings; `notifications` may be partial. */
+export type SettingsPatch = Partial<Omit<Settings, "notifications">> & { notifications?: NotificationSettingsPatch };
 
 // ---------------------------------------------------------------------------
 // Prompts (DESIGN.md "Prompt overrides")
@@ -1030,6 +1042,8 @@ export type HarnessEvent =
   | { kind: "watcher.upserted"; watcher: Watcher }
   | { kind: "watcher.deleted"; id: string }
   | { kind: "settings.updated"; settings: PublicSettings }
+  /** A push device registered, changed or was removed: refetch GET /notifications */
+  | { kind: "devices.changed" }
   /** `tabId`: the tab the frame is from (services before browser tabs omit it) */
   /** `viewerId`: the viewer the frame/state is for, echoed from its `browser.subscribe` (absent when it sent none). */
   | { kind: "browser.frame"; sessionId: string; tabId?: number; data: string; width: number; height: number; viewerId?: string }
@@ -1300,6 +1314,8 @@ export type ClientMessage =
   | { type: "browser.unsubscribe"; sessionId: string; viewerId?: string }
   /** `tabId`: the tab the input is for (omitted: the tab this viewer watches). */
   | { type: "browser.input"; sessionId: string; tabId?: number; input: BrowserInput; viewerId?: string }
+  /** What this socket shows (Presence); replaces its earlier presence. Notifications for tickets a visible presence lists are suppressed. */
+  | ({ type: "presence" } & Presence)
   | { type: "ping" };
 
 export type BrowserInput =

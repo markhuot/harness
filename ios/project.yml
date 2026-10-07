@@ -35,11 +35,13 @@ targets:
       # The home screen widgets (ios/Widgets, ARCHITECTURE.md § Widgets), embedded in PlugIns.
       - target: HarnessWidgets
     # The App Group the app shares with its widgets (WidgetShared): the active server and the last
-    # snapshot.
+    # snapshot. Push Notifications (DESIGN.md "Notifications"): development here, which the
+    # app-store-connect export (ExportOptions-testflight.plist) re-signs as production.
     entitlements:
       path: Harness/Harness.entitlements
       properties:
         com.apple.security.application-groups: [group.com.markhuot.harness]
+        aps-environment: development
     # The syntax highlighter's JavaScriptCore bundle (Shiki, from Tools/highlighter/highlight.ts) is
     # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
     # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
@@ -171,8 +173,10 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO
-        # Inside the Electron app's bundle id (APP_BUNDLE_ID in app/scripts/package.ts).
-        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.app.widgets
+        # Inside the Electron app's bundle id (APP_BUNDLE_ID in app/scripts/package.ts), which is
+        # the iPhone/iPad app's id too, so this matches the iOS widgets' id. The targets stay
+        # separate: their entitlements differ, and sign-mac.ts signs this one, not Xcode.
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.widgets
         ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES
 schemes:

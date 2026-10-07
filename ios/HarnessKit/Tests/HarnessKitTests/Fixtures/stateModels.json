@@ -2805,6 +2805,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
@@ -2997,6 +3009,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": false,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": true,
+              "spec": true,
+              "other": true
+            },
+            "apnsKeyDir": null,
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
@@ -3101,6 +3125,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": true,
@@ -3294,6 +3330,18 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
+          },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": false,
           "copilotGithubTokenSet": false
@@ -3388,6 +3436,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
@@ -3548,6 +3608,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": false,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": true,
+              "spec": true,
+              "other": true
+            },
+            "apnsKeyDir": null,
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
@@ -3636,6 +3708,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": true,
@@ -3797,6 +3881,18 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
+          },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": false,
           "copilotGithubTokenSet": false
@@ -3902,6 +3998,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
@@ -4088,6 +4196,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": false,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": true,
+              "spec": true,
+              "other": true
+            },
+            "apnsKeyDir": null,
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
@@ -4189,6 +4309,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": true,
@@ -4376,6 +4508,18 @@
             "system.intro": "You are {{agentName}}.",
             "run.review": null
           },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
+          },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": false,
           "copilotGithubTokenSet": false
@@ -4456,6 +4600,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           }
         },
         "ticket": {
