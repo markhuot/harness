@@ -2256,12 +2256,18 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await tapWhere(udid, (l) => l.startsWith("Review,"));
         await until("card on screen", async () => ((await findElement(udid, (l) => l.startsWith(`${s.browse.key} `)))?.frame.x ?? 999) < 100, 3000).catch(() => {});
         await tapWhere(udid, (l) => l.startsWith(`${s.browse.key} `), { longPress: 1.2 });
-        const l = await until("the menu", async () => ((x) => (x.includes("Copy key") ? x : null))(await labels(udid)), 5000);
+        const l = await until("the menu", async () => ((x) => (x.includes("Copy key") ? x : null))(await labels(udid)), 5000).catch(async (e) => {
+          await shot(udid, "board-card-preview-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
         await Bun.sleep(800);
         await shot(udid, "board-card-preview-light");
         const moves = l.filter((x) => x.startsWith("Move to"));
         if (moves.length) throw new Error(`the menu still moves cards: ${moves.join(", ")}`);
-        if (!l.some((x) => x === "Spec" || x.startsWith("Spec,"))) throw new Error(`no Spec tab in the preview; on screen: ${l.slice(0, 30).join(" | ")}`);
+        // AXe sees the lifted preview as one "Preview" element, not the ticket screen inside it (the
+        // screenshot shows that); a plain menu has none. A crash in the preview drops to SpringBoard,
+        // whose Preview app has the label too, but no Copy key.
+        if (!l.includes("Preview")) throw new Error(`no preview over the menu; on screen: ${l.slice(0, 30).join(" | ")}`);
         await tapWhere(udid, "Copy key");
         await until("the menu gone", async () => !(await labels(udid)).includes("Copy key"), 5000);
         return `${s.browse.key}: Spec preview, no moves`;
