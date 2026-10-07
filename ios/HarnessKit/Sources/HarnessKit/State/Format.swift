@@ -188,11 +188,6 @@ public enum Format {
         return ApprovalInput(primary: primary, description: description, rest: o.isEmpty ? nil : o)
     }
 
-    /// Toast after answering an approval.
-    public static func approvalToast(_ decision: ApprovalDecision, tool: String, ticketKey: String) -> String {
-        decision == .deny ? "Denied \(tool)" : decision == .allowTool ? "\(tool) allowed on \(ticketKey)" : "Allowed \(tool) once"
-    }
-
     public static func permissionVerb(decision: PermissionDecision, source: PermissionSource) -> String {
         decision == .allow ? (source == .classifier ? "Auto-approved" : "Allowed") : decision == .ask ? "Asked you" : "Denied"
     }

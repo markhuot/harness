@@ -30,7 +30,6 @@ private struct ProjectSettingsForm: View {
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
 
@@ -121,7 +120,7 @@ private struct ProjectSettingsForm: View {
                         ) { v in
                             switch SettingsRules.projectBaseBranchCommit(v) {
                             case .none: break
-                            case let .invalid(error): toasts.show("Not a valid branch name: \(error)", kind: .error)
+                            case .invalid: haptic(.error)
                             case let .save(name): save(UpdateProjectBody(baseBranch: Patch(name)))
                             }
                         }
@@ -176,7 +175,7 @@ private struct ProjectSettingsForm: View {
         .confirmation($confirm)
         .alert("Change the project folder?", isPresented: Binding(get: { pendingPath != nil }, set: { if !$0 { pendingPath = nil } }), presenting: pendingPath) { p in
             Button("Cancel", role: .cancel) { path = project.path }
-            Button("Change") { save(UpdateProjectBody(path: p), ok: "Project folder updated") }
+            Button("Change") { save(UpdateProjectBody(path: p)) }
         } message: { p in
             Text("Agents start new runs in \(p).")
         }
@@ -195,10 +194,10 @@ private struct ProjectSettingsForm: View {
         }
     }
 
-    private func save(_ body: UpdateProjectBody, ok: String? = nil) {
+    private func save(_ body: UpdateProjectBody) {
         guard let api = store.api else { return }
         let id = project.id
-        actions.perform(ok) { _ = try await api.updateProject(id, body) }
+        actions.perform { _ = try await api.updateProject(id, body) }
     }
 
     /// On return or blur: confirm a changed folder (Cancel puts the old one back); an empty or
@@ -230,7 +229,7 @@ private struct ProjectSettingsForm: View {
         confirm = Confirmation(title: copy.title, message: copy.message, action: "Remove") {
             guard let api = store.api else { return }
             Task {
-                if await actions.run("Project removed", { try await api.deleteProject(id) }) != nil {
+                if await actions.run({ try await api.deleteProject(id) }) != nil {
                     if app.prefs.boardProject == id { app.setPref(\.boardProject, nil) }
                     pop(router, projectId: id)
                 }
@@ -295,7 +294,7 @@ private struct ProjectSettingsKeyRow: View {
         busy = true
         let id = project.id
         Task {
-            await actions.run(SettingsRules.renameToast(preview)) { try await api.updateProject(id, UpdateProjectBody(key: preview.key)) }
+            await actions.run { try await api.updateProject(id, UpdateProjectBody(key: preview.key)) }
             busy = false
         }
     }

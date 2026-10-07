@@ -15,11 +15,6 @@ public enum LinkRouting {
         case noRoot
     }
 
-    /// The toast when a file link names no root.
-    public static let noRootMessage = "That file link doesn't say which ticket or project it's in"
-    /// The toast when the system can't open a link.
-    public static let openFailedMessage = "Couldn't open that link"
-
     public static func target(_ url: String, context: FileLinkContext) -> Target {
         // `/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^harness:/i.test(url) ? null : parseFileLink(url)`
         if hasScheme(url) && !hasHarnessScheme(url) { return .external(url) }

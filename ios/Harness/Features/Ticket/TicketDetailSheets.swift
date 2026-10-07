@@ -41,7 +41,6 @@ struct TicketDetailSheetFrame<Primary: View, Content: View>: View {
         }
         .background(c.bg)
         .presentationDetents([.large])
-        .toastOverlay()
     }
 }
 
@@ -108,9 +107,9 @@ struct TicketDetailNotesSheet: View {
         let text = notes
         Task {
             let ok: Ticket? = if reopen {
-                await actions.run("Re-opened") { try await store.connectedAPI().reopenTicket(key, ReopenBody(notes: text)) }
+                await actions.run { try await store.connectedAPI().reopenTicket(key, ReopenBody(notes: text)) }
             } else {
-                await actions.run("Changes requested") { try await store.connectedAPI().humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }
+                await actions.run { try await store.connectedAPI().humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }
             }
             if ok != nil { dismiss() }
         }
@@ -151,7 +150,7 @@ struct TicketDetailApproveCustomSheet: View {
               case let .review(body) = Approve.approveRequest(.action(.custom), instructions: instructions) else { return }
         let key = ticket.key
         Task {
-            if await actions.run("Approved", { try await api.humanReview(key, body) }) != nil {
+            if await actions.run({ try await api.humanReview(key, body) }) != nil {
                 haptic(.success)
                 dismiss()
             }

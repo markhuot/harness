@@ -77,7 +77,7 @@ public final class MessageDraftSync {
     public let origin: String
     /// The ticket's current key (a project rename changes it)
     @ObservationIgnored public var key: String
-    /// A save failed (the composer toasts it)
+    /// A save failed (the composer plays the error haptic)
     @ObservationIgnored public var onError: ((any Error) -> Void)?
 
     @ObservationIgnored private let save: @MainActor (String, MessageDraftBody) async throws -> Ticket

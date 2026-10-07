@@ -17,12 +17,6 @@ struct ToolInput: Decodable, Sendable {
     let input: JSONValue?
 }
 
-struct ApprovalToastInput: Decodable, Sendable {
-    let decision: ApprovalDecision
-    let tool: String
-    let ticketKey: String
-}
-
 struct PermissionVerbInput: Decodable, Sendable {
     let decision: PermissionDecision
     let source: PermissionSource
@@ -156,11 +150,6 @@ struct FormatTests {
     @Test(arguments: Fixture.cases("stateFormat", "describeApprovalInputCases", input: ToolInput.self, output: Format.ApprovalInput.self))
     func describeApprovalInput(_ c: Fixture.Case<ToolInput, Format.ApprovalInput>) {
         #expect(Format.describeApprovalInput(c.input.toolName, input: c.input.input) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("stateFormat", "approvalToastCases", input: ApprovalToastInput.self, output: String.self))
-    func approvalToast(_ c: Fixture.Case<ApprovalToastInput, String>) {
-        #expect(Format.approvalToast(c.input.decision, tool: c.input.tool, ticketKey: c.input.ticketKey) == c.output)
     }
 
     @Test(arguments: Fixture.cases("stateFormat", "permissionVerbCases", input: PermissionVerbInput.self, output: String.self))

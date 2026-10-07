@@ -119,7 +119,6 @@ struct SettingsSafariView: UIViewControllerRepresentable {
 /// A URL the Safari sheet can show (http and https only); anything else opens in the system.
 struct SettingsWebPage: Identifiable {
     let url: URL
-    let message: String?
     var id: String { url.absoluteString }
 
     static func canShow(_ url: URL) -> Bool { ["http", "https"].contains(url.scheme?.lowercased() ?? "") }

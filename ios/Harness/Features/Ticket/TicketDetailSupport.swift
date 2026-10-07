@@ -156,8 +156,8 @@ struct HeroRoom: ViewModifier {
 }
 
 extension BoardStore {
-    /// `api`, or the "No connection" error a user action should surface (Actions.run/perform toast
-    /// it) instead of silently doing nothing when the store has no HarnessClient.
+    /// `api`, or the "No connection" error a user action should surface (Actions.run/perform play
+    /// the error haptic) instead of silently doing nothing when the store has no HarnessClient.
     func connectedAPI() throws -> HarnessClient {
         guard let api else { throw HarnessAPIError(status: 0, message: "No connection", data: nil) }
         return api
@@ -210,14 +210,13 @@ final class TicketDetailRelay {
     /// Annotated images join the next message, their notes on the attachment itself (a file already
     /// waiting there is edited in place), never sent on their own; the field takes focus so the
     /// human can say why.
-    func sink(outgoing: MessageAttachments, uploader: PromptAttachmentUploader, toasts: ToastCenter) -> AnnotationSink {
+    func sink(outgoing: MessageAttachments, uploader: PromptAttachmentUploader) -> AnnotationSink {
         if let cachedSink, cachedSink.holder == ObjectIdentifier(outgoing) { return cachedSink.sink }
         let sink = AnnotationSink(current: { a in
             outgoing.list.first { $0.id == a.id }?.annotation
         }, add: { [weak self] added in
             guard outgoing.annotate(added.attachment, annotation: added.annotation) else {
                 haptic(.warning)
-                toasts.show(PromptAttachments.limitMessage(skipped: 1, holder: .message), kind: .error)
                 return
             }
             if let data = added.uploaded { Task { await uploader.keepUploaded(data, for: added.attachment) } }

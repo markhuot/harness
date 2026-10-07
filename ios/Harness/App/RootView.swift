@@ -74,7 +74,7 @@ struct RootView: View {
 
 extension View {
     /// A window's chrome, for `router`'s window: its sheet and cover, harness:// links from outside,
-    /// the palette, tint, toasts and color scheme, and the bar titles' color (BarAppearance).
+    /// the palette, tint and color scheme, and the bar titles' color (BarAppearance).
     func sceneChrome(_ router: Router) -> some View { modifier(SceneChrome(router: router)) }
 }
 
@@ -106,7 +106,6 @@ private struct SceneChrome: ViewModifier {
             // Tabs, browser tabs, the composer and cards tear off into windows (TearOff.swift).
             .environment(\.canTearOff, multipleWindows && sizeClass == .regular)
             .tint(palette.accent)
-            .toastOverlay()
             .background(palette.bg.ignoresSafeArea())
             // Alerts, action sheets, sheets and the keyboard follow Settings → Appearance.
             .preferredColorScheme(app.prefs.theme == .system ? nil : app.prefs.theme == .dark ? .dark : .light)

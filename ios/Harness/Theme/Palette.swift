@@ -97,7 +97,7 @@ struct Palette: Sendable {
     static let dark = Palette(Themes.resolve(ThemeChoice(appearance: .dark, lightTheme: Themes.defaultLightTheme, darkTheme: Themes.defaultDarkTheme), systemDark: true))
 }
 
-/// Badge, callout and toast tones.
+/// Badge and callout tones.
 enum Tone: String, CaseIterable, Sendable {
     case neutral, accent, green, red, amber, violet
 }

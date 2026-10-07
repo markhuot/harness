@@ -50,7 +50,6 @@ struct SheetHost: View {
         }
         .presentationDetents(isProjects ? [.fraction(0.6), .large] : [.large])
         .presentationDragIndicator(isProjects ? .visible : .automatic)
-        .toastOverlay()
     }
 
     private var isProjects: Bool {

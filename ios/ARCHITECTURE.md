@@ -17,10 +17,10 @@ narrow Split View window) it's the phone layout.
 ios/
   project.yml            XcodeGen spec (source of truth for the app target and Info.plist)
   Harness/               the app target: SwiftUI only (views, navigation, SwiftUI bridges)
-    HarnessApp.swift     @main App: creates AppModel, ToastCenter, Actions; main and ticket WindowGroups, each window with its own Router (§ Windows)
+    HarnessApp.swift     @main App: creates AppModel, Actions; main and ticket WindowGroups, each window with its own Router (§ Windows)
     App/                 RootView + MainTabs (the sections; DesktopShell at regular width), Destinations (Route → screen), KeychainStorage, Actions
     Features/<Area>/     one file per feature slot (§ Feature slots), plus Connect/Pair/Scan
-    UI/                  the kit: badges, buttons, callouts, toasts, haptics, icons, banners
+    UI/                  the kit: badges, buttons, callouts, haptics, icons, banners
     Resources/           Assets.xcassets (AppIcon, LaunchBackground, SplashIcon)
     Theme/               Palette (theme tokens as Colors), Color(css:) and other bridges
   HarnessKit/            Swift package: everything that doesn't draw
@@ -311,18 +311,19 @@ feature needs something new here, add to it without changing what's there.
   the 1.x item. Every configuration (Debug included) uses the 1.x app's bundle id,
   `com.markhuot.harness`, and so its access group. `MemoryStorage` stands in for tests. `load()` runs in `HarnessApp.init`, before the first frame.
 - **Environment.** Views read `@Environment(AppModel.self)`, `@Environment(Router.self)`,
-  `@Environment(BoardStore.self)` (inside the tabs and RequireStore only), `@Environment(ToastCenter.self)`,
+  `@Environment(BoardStore.self)` (inside the tabs and RequireStore only),
   `@Environment(Actions.self)` and `@Environment(\.palette)`.
 - **Theme.** `Palette` is the resolved theme's tokens as SwiftUI Colors (`c.bgElev`, `c.status(s)`,
   `c.tone(.red)`, `c[token]` for shadow tokens), resolved by `Themes.resolve` from prefs and the
   system appearance. RootView sets `preferredColorScheme` from Settings → Appearance (alerts,
   sheets and the keyboard follow it), `tint` = accent and the window background = `bg`. Use
   palette colors, never `Color.primary`/system grays, for anything the desktop themes.
-- **Actions**: `actions.perform("Started") { try await store.client… }` plays the
-  error haptic and toasts `Connection.describeError` on failure, and toasts the message on success.
+- **Actions**: `actions.perform { try await store.client… }` plays the error haptic on failure.
   `await actions.run { … }` returns the value (nil after a failure).
-- **Toasts.** `ToastCenter.show(message, kind: .error | .info)`: at most 3 at the top, errors 6 s,
-  info 2.6 s, tap to dismiss, selectable text. Sheets draw their own overlay too.
+- **No toasts.** The app posts no toasts or banners over the screen: they covered the back and
+  close buttons. A success shows in the screen itself (the board and ticket update over the
+  socket). A failure, or an input the app can't take, plays the error haptic (warning for a limit).
+  Anything the person has to read, like a driver login's device code, goes in an alert or inline.
 - **Browser channel.** `store.subscribeBrowser(id)` / `unsubscribeBrowser(id)` /
   `sendBrowserInput(id, input)` go out on the current socket in call order (one outbox per socket,
   so a mouse down never overtakes its move). browser.frame/browser.state reach `store.onEvent`
@@ -450,10 +451,10 @@ screens that don't tap.
 The iPad runs several windows (`UIApplicationSupportsMultipleScenes` in project.yml; iPhone keeps
 one). HarnessApp has two WindowGroups: the main window (`MainWindow` → RootView) and the ticket
 window (`TicketWindowRoot`, App/Windows.swift), keyed by `TicketWindowValue` (HarnessKit/Shell).
-`AppModel`, its `BoardStore`, `ToastCenter` and `Actions` are app-wide and shared by every
+`AppModel`, its `BoardStore` and `Actions` are app-wide and shared by every
 window. Each window has its own `Router`, so its stack and sheets never move another window's, and
 `sceneChrome(router)` (RootView.swift) gives each one its sheets, harness:// handling, palette,
-tint, toasts and bar colors. HarnessApp forwards the app's scene phase (active while any window
+tint and bar colors. HarnessApp forwards the app's scene phase (active while any window
 is) to the store, never a single window's.
 
 - **Opening a ticket.** At regular width with `supportsMultipleWindows`, MainTabs turns on the main
@@ -722,7 +723,7 @@ What screens that show agent text use (HARNESS-136):
   `.fileLinkScope(projectId:)` or `.fileLinkScope(FileViewer.triageLinkContext(…))`; MarkdownView's `linkContext` argument wins when it names a root. Where a link
   goes is `LinkRouting.target` (HarnessKit, tested): other schemes open in the system, harness://
   links that aren't files go through the Router, file links push `.file`, and a file link with no
-  root toasts. `ContentLinkOpener` is the same opener for links outside markdown.
+  root plays the error haptic. `ContentLinkOpener` is the same opener for links outside markdown.
 - **CodeBlockView** takes a fence tag or a Shiki id; long-press → Copy copies the whole block.
 - **MarkdownView** presents `AttachmentViewer` for `attachment:` images (a clear fullScreenCover that fades in).
   `AttachmentMedia` caches images and video posters for the inline images and the viewer. The pager is
@@ -769,7 +770,7 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
 
 - **Decisions live in HarnessKit's `SettingsRules`** (tested): listen labels and the localhost
   confirm, what a committed max-runs or base-branch field saves, driver status and login labels,
-  watcher row lines, the identifier draft, rename toast and Remove project copy.
+  watcher row lines, the identifier draft and Remove project copy.
 - **Rows.** `SettingsRow(label:hint:)` puts the hint under the label and the control, so a long
   hint never squeezes a picker to "…" (TicketSettingsRow keeps the hint beside the label, which
   only suits short hints). `SettingsButtonRow` is a tappable row; `SettingsSectionHeader` is a
@@ -873,7 +874,7 @@ native-pattern difference, not a missing feature.
 | Storage keys `harness.servers`, `harness.prefs`, `harness.token.<id>` (after first unlock) | lib/storage, lib/servers, lib/prefs | App/KeychainStorage, Shell/AppModel, Logic/Prefs | done (one-way migration of the RN app's items) |
 | Sections Board / Inbox / Settings, switched from the Projects sidebar (no tab bar) | app/(tabs)/_layout | App/RootView | done (differs: RN has a tab bar) |
 | Theme: color scheme, accent tint, bg, nav title colors | state/app, app/_layout | App/RootView, App/BarAppearance, Theme/Palette | done |
-| Actions + toasts (3 max, 6 s / 2.6 s) + haptics + pick/confirm | state/store useAction, ui/Toasts, ui/haptics, ui/pick | App/Actions, UI/Toasts, UI/Haptics, UI/Confirm | done (menus are native `Menu`s; differs) |
+| Actions + toasts (3 max, 6 s / 2.6 s) + haptics + pick/confirm | state/store useAction, ui/Toasts, ui/haptics, ui/pick | App/Actions, UI/Haptics, UI/Confirm | done (menus are native `Menu`s; no toasts, failures play the error haptic; differs) |
 | UI kit: badges, buttons, cards, callouts, empty states, conductor rollups, parent crumb, related rows | ui/kit, ui/Conductor, ui/RelatedTickets | UI/* | done |
 | Connect: Scan, saved Macs, manual entry, Keychain footer, "Token rejected", pairing sheet | screens/Connect, app/connect, app/pair | Features/Connect/ConnectScreen | done |
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |

@@ -194,12 +194,6 @@ public enum SettingsRules {
         return out
     }
 
-    /// "Renamed to WEB · 3 tickets renumbered" after a key change.
-    public static func renameToast(_ preview: ProjectKey.KeyPreview) -> String {
-        let n = preview.renames.count
-        return "Renamed to \(preview.key)\(n > 0 ? " · \(n) ticket\(n == 1 ? "" : "s") renumbered" : "")"
-    }
-
     /// How many tickets removing the project deletes: the open ones loaded on the board, plus the
     /// service's done total (done tickets page in), or the loaded done ones until that arrives.
     public static func projectTicketCount(_ projectId: String, tickets: some Collection<Ticket>, doneTotal: Int?) -> Int {

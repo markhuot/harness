@@ -40,11 +40,17 @@ private struct DriverSettingsForm: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.openURL) private var openURL
     @Environment(\.palette) private var c
 
     @State private var page: SettingsWebPage?
+    /// The login's instructions (Copilot's device code, say), read before its page opens.
+    @State private var loginPrompt: LoginPrompt?
+
+    private struct LoginPrompt {
+        let message: String
+        let url: URL?
+    }
 
     var body: some View {
         let d = driver
@@ -100,25 +106,40 @@ private struct DriverSettingsForm: View {
         .sheet(item: $page) { p in
             SettingsSafariView(url: p.url)
                 .ignoresSafeArea()
-                .onDisappear { if let m = p.message, !m.isEmpty { toasts.show(m, kind: .info) } }
+        }
+        .alert(d.name, isPresented: Binding(get: { loginPrompt != nil }, set: { if !$0 { loginPrompt = nil } }), presenting: loginPrompt) { p in
+            if let url = p.url {
+                Button("Cancel", role: .cancel) {}
+                Button("Open") { open(url) }
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        } message: { p in
+            Text(p.message)
         }
     }
 
-    /// POST /drivers/:id/login, then its page in Safari (or the system, for another scheme); the
-    /// message toasts once the page closes.
+    /// POST /drivers/:id/login, then its page in Safari (or the system, for another scheme). A
+    /// login with instructions shows them first, with Open to go on to the page.
     private func login() {
         guard let api = store.api else { return }
         let id = driver.id
         Task {
-            guard let res = await actions.run(nil, { try await api.loginDriver(id) }) else { return }
-            if let s = res.url, let url = URL(string: s) {
-                if SettingsWebPage.canShow(url) {
-                    page = SettingsWebPage(url: url, message: res.message)
-                    return
-                }
-                openURL(url)
+            guard let res = await actions.run({ try await api.loginDriver(id) }) else { return }
+            let url = res.url.flatMap { URL(string: $0) }
+            if !res.message.isEmpty {
+                loginPrompt = LoginPrompt(message: res.message, url: url)
+            } else if let url {
+                open(url)
             }
-            if !res.message.isEmpty { toasts.show(res.message, kind: .info) }
+        }
+    }
+
+    private func open(_ url: URL) {
+        if SettingsWebPage.canShow(url) {
+            page = SettingsWebPage(url: url)
+        } else {
+            openURL(url)
         }
     }
 }
@@ -181,7 +202,7 @@ private struct DriverAnthropicKeySection: View {
     private func saveKey() {
         guard let key = SettingsRules.apiKeyToSave(apiKey), let api = store.api else { return }
         Task {
-            if await actions.run("API key saved", { try await api.updateSettings(SettingsPatch(anthropicApiKey: .value(key))) }) != nil {
+            if await actions.run({ try await api.updateSettings(SettingsPatch(anthropicApiKey: .value(key))) }) != nil {
                 apiKey = ""
                 replacing = false
                 reloadModels()
@@ -192,7 +213,7 @@ private struct DriverAnthropicKeySection: View {
     private func clearKey() {
         guard let api = store.api else { return }
         Task {
-            if await actions.run("API key cleared", { try await api.updateSettings(SettingsPatch(anthropicApiKey: .null)) }) != nil {
+            if await actions.run({ try await api.updateSettings(SettingsPatch(anthropicApiKey: .null)) }) != nil {
                 reloadModels()
             }
         }
@@ -271,13 +292,13 @@ private struct DriverTokenSection: View {
     /// GET /drivers again, so the status above reflects the new token.
     private func reloadDrivers() async {
         let client = store.client
-        if let drivers = await actions.run(nil, { try await client.listDrivers() }) { store.dispatch(.drivers(drivers)) }
+        if let drivers = await actions.run({ try await client.listDrivers() }) { store.dispatch(.drivers(drivers)) }
     }
 
     private func saveToken() {
         guard let saved = SettingsRules.apiKeyToSave(value), let api = store.api else { return }
         Task {
-            if await actions.run("Token saved", { try await api.updateSettings(token.patch(.value(saved))) }) != nil {
+            if await actions.run({ try await api.updateSettings(token.patch(.value(saved))) }) != nil {
                 value = ""
                 replacing = false
                 await reloadDrivers()
@@ -288,7 +309,7 @@ private struct DriverTokenSection: View {
     private func clearToken() {
         guard let api = store.api else { return }
         Task {
-            if await actions.run("Token cleared", { try await api.updateSettings(token.patch(.null)) }) != nil {
+            if await actions.run({ try await api.updateSettings(token.patch(.null)) }) != nil {
                 await reloadDrivers()
             }
         }

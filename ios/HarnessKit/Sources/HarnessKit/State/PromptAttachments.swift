@@ -145,16 +145,6 @@ public enum PromptAttachments {
         Swift.max(0, Swift.min(incoming, max - current - pending))
     }
 
-    /// What a limit toast says takes the attachments: a New session's prompt, or a message.
-    public enum Holder: Sendable {
-        case session, message
-    }
-
-    /// The toast when the limit left files out.
-    public static func limitMessage(skipped: Int, max: Int = maxPromptAttachments, holder: Holder = .session) -> String {
-        "A \(holder == .session ? "session" : "message") takes up to \(max) attachments: \(skipped) \(skipped == 1 ? "file was" : "files were") left out."
-    }
-
     // MARK: Helpers
 
     /// `/\.([^./]+)$/.exec(s)?.[1]`: what follows the last dot, when it's non-empty and has no slash.

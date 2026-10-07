@@ -134,7 +134,7 @@ struct TicketDetailHero: View {
         let waiting = Conductor.autoStartWaitingOn(ticket, store.state.dependencyStates(ticket))
         if ticket.status == .planning && waiting.isEmpty {
             HButton("Start work", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: .success) {
-                perform(nil) { try await $0.startTicket($1) }
+                perform { try await $0.startTicket($1) }
             }
         }
         if !waiting.isEmpty {
@@ -156,7 +156,7 @@ struct TicketDetailHero: View {
                 let approveTitle = Completion.approveLabel(opts) ?? "Approve"
                 HButton(approveTitle, icon: "check", variant: .primary, small: true, fullWidth: false, haptic: .success,
                         accessibilityLabel: TicketDetailLogic.approveButtonLabel(approveTitle, managedReason: managedReason)) {
-                    send(Approve.primaryApproveRequest(opts, ticket: ticket), toast: "Approved")
+                    send(Approve.primaryApproveRequest(opts, ticket: ticket))
                 }
                 .disabled(managed)
                 approveMenu(opts, label: label).disabled(managed)
@@ -167,7 +167,7 @@ struct TicketDetailHero: View {
         }
         if ticket.status == .review {
             HButton(TicketDetailLogic.agentReviewButton(ticket.agentReview), icon: "refresh", variant: .ghost, small: true, fullWidth: false) {
-                perform("Agent review queued") { try await $0.rerunAgentReview($1) }
+                perform { try await $0.rerunAgentReview($1) }
             }
             .disabled(ticket.busy)
         }
@@ -176,7 +176,7 @@ struct TicketDetailHero: View {
         }
         if ticket.busy {
             HButton("Cancel run", icon: "stop", variant: .danger, small: true, fullWidth: false, haptic: .warning) {
-                perform("Run cancelled") { try await $0.cancelTicket($1) }
+                perform { try await $0.cancelTicket($1) }
             }
         }
     }
@@ -187,13 +187,13 @@ struct TicketDetailHero: View {
         return Menu {
             Section {
                 ForEach(Array(choices.dropLast().enumerated()), id: \.offset) { _, choice in
-                    Button(choice.label ?? "") { approve(choice.value, label: label) }
+                    Button(choice.label ?? "") { approve(choice.value) }
                 }
             } header: {
                 Text("Approve \(label)")
             }
             if let last = choices.last {
-                Section { Button(last.label ?? "") { approve(last.value, label: label) } }
+                Section { Button(last.label ?? "") { approve(last.value) } }
             }
         } label: {
             Icon("chevronDown", size: 13, weight: .semibold)
@@ -204,26 +204,26 @@ struct TicketDetailHero: View {
         .accessibilityLabel("More ways to approve")
     }
 
-    private func approve(_ choice: Approve.Choice, label: String) {
+    private func approve(_ choice: Approve.Choice) {
         if choice == .action(.custom) {
             approvingCustom = true
             return
         }
         haptic(.success)
-        send(Approve.approveRequest(choice), toast: Approve.approveToast(choice, key: label))
+        send(Approve.approveRequest(choice))
     }
 
-    private func send(_ request: Approve.Request, toast: String) {
+    private func send(_ request: Approve.Request) {
         switch request {
-        case let .review(body): perform(toast) { try await $0.humanReview($1, body) }
-        case let .complete(body): perform(toast) { try await $0.completeTicket($1, body) }
+        case let .review(body): perform { try await $0.humanReview($1, body) }
+        case let .complete(body): perform { try await $0.completeTicket($1, body) }
         }
     }
 
     /// `act(() => client.…(key))` with the ticket's key.
-    private func perform<T: Sendable>(_ toast: String?, _ fn: @escaping @MainActor (HarnessClient, String) async throws -> T) {
+    private func perform<T: Sendable>(_ fn: @escaping @MainActor (HarnessClient, String) async throws -> T) {
         guard let api else { return }
         let key = ticket.key
-        actions.perform(toast) { _ = try await fn(api, key) }
+        actions.perform { _ = try await fn(api, key) }
     }
 }

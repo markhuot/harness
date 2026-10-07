@@ -148,15 +148,6 @@ public enum TicketDetailLogic {
         return "Linked to remote ID \(t.key)"
     }
 
-    /// The toast after a settings patch: linking or unlinking a remote ID says so.
-    public static func patchToast(_ patch: UpdateTicketBody) -> String? {
-        switch patch.externalRef {
-        case .null: "Remote ID unlinked"
-        case let .value(ref): "Linked to \(ref.key)"
-        case .absent: nil
-        }
-    }
-
     /// The Remote ID screen's line: "One ticket is linked to it." / "3 tickets are linked to it."
     public static func remoteIdCount(_ n: Int) -> String {
         n == 1 ? "One ticket is linked to it." : "\(n) tickets are linked to it."

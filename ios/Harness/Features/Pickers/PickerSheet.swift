@@ -33,7 +33,6 @@ struct PickerSheet<Content: View, Trailing: View>: View {
         }
         .background(c.bg)
         .presentationDetents([.large])
-        .toastOverlay()
         .onAppear { if autofocus { focused = true } }
     }
 

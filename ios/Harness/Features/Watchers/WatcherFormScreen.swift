@@ -142,9 +142,9 @@ struct WatcherFormScreen: View {
         Task {
             let ok: Watcher?
             if let existing {
-                ok = await actions.run("Watcher saved") { try await api.updateWatcher(existing.id, body) }
+                ok = await actions.run { try await api.updateWatcher(existing.id, body) }
             } else {
-                ok = await actions.run("Watcher created") { try await api.createWatcher(name: name, command: command, body) }
+                ok = await actions.run { try await api.createWatcher(name: name, command: command, body) }
             }
             busy = false
             if ok != nil { router.sheet = nil }

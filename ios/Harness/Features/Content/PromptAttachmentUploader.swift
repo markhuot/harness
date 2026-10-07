@@ -10,21 +10,17 @@ import UniformTypeIdentifiers
 protocol PromptAttachmentTarget: AnyObject, Sendable {
     /// How many are attached now
     var attachmentCount: Int { get }
-    /// What the limit toast says takes them
-    var attachmentHolder: PromptAttachments.Holder { get }
     /// Attach `added` (deduped and capped); returns how many the limit left out.
     func attach(_ added: [Attachment]) -> Int
 }
 
 extension NewSessionEditor: PromptAttachmentTarget {
     var attachmentCount: Int { local?.promptAttachments?.count ?? 0 }
-    var attachmentHolder: PromptAttachments.Holder { .session }
     func attach(_ added: [Attachment]) -> Int { addAttachments(added) }
 }
 
 extension MessageAttachments: PromptAttachmentTarget {
     var attachmentCount: Int { count }
-    var attachmentHolder: PromptAttachments.Holder { .message }
     func attach(_ added: [Attachment]) -> Int { add(added) }
 }
 
@@ -45,14 +41,8 @@ final class PromptAttachmentUploader {
 
     enum UploadError: LocalizedError {
         case unreadable
-        case notConnected
 
-        var errorDescription: String? {
-            switch self {
-            case .unreadable: "Couldn't read the file."
-            case .notConnected: "Not connected to the Mac."
-            }
-        }
+        var errorDescription: String? { "Couldn't read the file." }
     }
 
     private(set) var pending: [PromptAttachmentPending] = []
@@ -92,13 +82,12 @@ final class PromptAttachmentUploader {
         if written { localFiles[id] = file }
     }
 
-    /// Upload `sources` in order and attach each as it lands. Toasts a failure per file, and once
-    /// when the 20-attachment limit left some out (those aren't uploaded at all).
-    func upload(_ sources: [Source], client: HarnessClient?, target: any PromptAttachmentTarget, toasts: ToastCenter) async {
+    /// Upload `sources` in order and attach each as it lands. A failed file plays the error haptic,
+    /// and the 20-attachment limit leaving some out (those aren't uploaded at all) the warning one.
+    func upload(_ sources: [Source], client: HarnessClient?, target: any PromptAttachmentTarget) async {
         guard !sources.isEmpty else { return }
         guard let client else {
             haptic(.error)
-            toasts.show(UploadError.notConnected.localizedDescription, kind: .error)
             return
         }
         let room = PromptAttachments.room(current: target.attachmentCount, pending: pending.count, incoming: sources.count)
@@ -125,23 +114,19 @@ final class PromptAttachmentUploader {
                 skipped += target.attach([a])
             } catch {
                 haptic(.error)
-                toasts.show("Couldn't attach \(source.name): \(localizedErrorMessage(error))", kind: .error)
             }
         }
-        if skipped > 0 {
-            haptic(.warning)
-            toasts.show(PromptAttachments.limitMessage(skipped: skipped, holder: target.attachmentHolder), kind: .error)
-        }
+        if skipped > 0 { haptic(.warning) }
     }
 
-    /// Attach what's on the pasteboard (an image or a file), or say there's nothing to paste.
-    func paste(client: HarnessClient?, target: any PromptAttachmentTarget, toasts: ToastCenter) {
+    /// Attach what's on the pasteboard (an image or a file); with nothing to paste, the warning haptic.
+    func paste(client: HarnessClient?, target: any PromptAttachmentTarget) {
         let sources = Self.sources(UIPasteboard.general.itemProviders, pasted: true)
         if sources.isEmpty {
-            toasts.show("Nothing to paste: copy an image or a file first.", kind: .info)
+            haptic(.warning)
             return
         }
-        Task { await upload(sources, client: client, target: target, toasts: toasts) }
+        Task { await upload(sources, client: client, target: target) }
     }
 
     // MARK: Sources
@@ -228,12 +213,11 @@ struct PromptAttachmentMenuItems: View {
     let target: any PromptAttachmentTarget
 
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
 
     var body: some View {
         Button("Photos", systemImage: "photo.on.rectangle") { uploader.pickingPhotos = true }
         Button("Files", systemImage: "folder") { uploader.importing = true }
-        Button("Paste", systemImage: "doc.on.clipboard") { uploader.paste(client: store.api, target: target, toasts: toasts) }
+        Button("Paste", systemImage: "doc.on.clipboard") { uploader.paste(client: store.api, target: target) }
     }
 }
 
@@ -243,7 +227,6 @@ struct PromptAttachmentPickers: ViewModifier {
     @Bindable var uploader: PromptAttachmentUploader
 
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
     @State private var photos: [PhotosPickerItem] = []
 
     func body(content: Content) -> some View {
@@ -258,7 +241,7 @@ struct PromptAttachmentPickers: ViewModifier {
             .fileImporter(isPresented: $uploader.importing, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
                 switch result {
                 case let .success(urls): upload(PromptAttachmentUploader.sources(urls))
-                case let .failure(error): toasts.show("Couldn't open the file: \(localizedErrorMessage(error))", kind: .error)
+                case .failure: haptic(.error)
                 }
             }
     }
@@ -266,9 +249,8 @@ struct PromptAttachmentPickers: ViewModifier {
     private func upload(_ sources: [PromptAttachmentUploader.Source]) {
         guard let target, !sources.isEmpty else { return }
         let client = store.api
-        let toasts = toasts
         let uploader = uploader
-        Task { await uploader.upload(sources, client: client, target: target, toasts: toasts) }
+        Task { await uploader.upload(sources, client: client, target: target) }
     }
 }
 
@@ -280,7 +262,6 @@ struct PromptAttachmentDrop: ViewModifier {
     let uploader: PromptAttachmentUploader
 
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var targeted = false
 
@@ -291,7 +272,7 @@ struct PromptAttachmentDrop: ViewModifier {
                 let sources = PromptAttachmentUploader.sources(providers, pasted: false)
                 guard !sources.isEmpty else { return false }
                 let client = store.api
-                Task { await uploader.upload(sources, client: client, target: target, toasts: toasts) }
+                Task { await uploader.upload(sources, client: client, target: target) }
                 return true
             }
             .overlay {

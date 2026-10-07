@@ -247,7 +247,7 @@ struct BoardScreen: View {
 
     private func discard(_ t: Ticket) {
         guard let api else { return }
-        actions.perform("Draft discarded") { _ = try await api.deleteTicket(t.key) }
+        actions.perform { _ = try await api.deleteTicket(t.key) }
     }
 
     // MARK: onChange keys

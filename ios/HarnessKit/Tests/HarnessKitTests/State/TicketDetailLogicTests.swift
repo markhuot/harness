@@ -101,14 +101,11 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.runDetail(Self.run("r", createdAt: 0, prompt: "")) == "")
     }
 
-    @Test("related heading and patch toasts")
+    @Test("related heading and counts")
     func details() {
         let jira = ExternalRef(source: "jira", key: "JIRA-62", url: nil)
         #expect(TicketDetailLogic.relatedHeading(Self.ticket(.review, externalRef: jira)) == "Also linked to JIRA-62")
         #expect(TicketDetailLogic.relatedHeading(Self.ticket(.review)) == "Linked to remote ID GREET-1")
-        #expect(TicketDetailLogic.patchToast(UpdateTicketBody(externalRef: .null)) == "Remote ID unlinked")
-        #expect(TicketDetailLogic.patchToast(UpdateTicketBody(externalRef: .value(ExternalRefInput(key: "JIRA-9")))) == "Linked to JIRA-9")
-        #expect(TicketDetailLogic.patchToast(UpdateTicketBody(title: "x")) == nil)
         #expect(TicketDetailLogic.waitingOnYou(1) == "1 ticket waiting on you")
         #expect(TicketDetailLogic.waitingOnYou(2) == "2 tickets waiting on you")
         #expect(TicketDetailLogic.remoteIdCount(1) == "One ticket is linked to it.")

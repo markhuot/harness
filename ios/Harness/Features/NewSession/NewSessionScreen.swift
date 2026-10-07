@@ -29,7 +29,6 @@ private struct NewSessionEditorView: View {
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
-    @Environment(ToastCenter.self) private var toasts
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
 
@@ -245,16 +244,12 @@ private struct NewSessionEditorView: View {
         if editor == nil {
             guard let client = store.api else { return }
             let store = store
-            let toasts = toasts
             editor = NewSessionEditor(
                 reopen: reopen,
                 api: HarnessDraftAPI(client: client),
                 state: { store.state },
                 onSaved: { store.dispatch(.tickets([$0])) },
-                onError: { e in
-                    haptic(.error)
-                    toasts.show("Couldn't save the draft: \(localizedErrorMessage(e))", kind: .error)
-                }
+                onError: { _ in haptic(.error) }
             )
         }
         guard let editor else { return }
@@ -268,7 +263,6 @@ private struct NewSessionEditorView: View {
         switch editor.storeChanged(store.state) {
         case .none: break
         case .discarded:
-            toasts.show("This draft was discarded on another device.", kind: .info)
             dismiss()
         case let .launched(key):
             showTicket(key, tab: nil)
@@ -278,7 +272,7 @@ private struct NewSessionEditorView: View {
     private func submit(start: Bool) {
         guard let editor, canSubmit(editor.view(store.state)) else { return }
         Task {
-            guard let t = await actions.run(nil, { try await editor.submit(start: start) }) else { return }
+            guard let t = await actions.run({ try await editor.submit(start: start) }) else { return }
             haptic(.success)
             store.dispatch(.tickets([t]))
             app.setPref(\.lastProject, t.projectId)

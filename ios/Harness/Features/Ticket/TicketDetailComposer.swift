@@ -30,7 +30,6 @@ struct TicketDetailComposer: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var sending = false
     @State private var focused = false
@@ -82,10 +81,7 @@ struct TicketDetailComposer: View {
         .animation(.snappy, value: focused)
         // Another device's edit (or its send) shows here, unless this one is being typed in.
         .onChange(of: ticket.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
-        .onAppear {
-            let toasts = toasts
-            draft.onError = { e in toasts.show("Couldn't save the message draft: \(localizedErrorMessage(e))", kind: .error) }
-        }
+        .onAppear { draft.onError = { _ in haptic(.error) } }
         // Leaving the ticket with the field focused sends no blur: the draft isn't being typed in anymore.
         .onDisappear { draft.focus(false, stored: ticket.messageDraft.optional) }
     }
@@ -194,7 +190,7 @@ struct TicketDetailComposer: View {
         Task {
             // No draft save may land after the message: the service clears the draft when it goes.
             await draft.beforeSend()
-            // No client: connectedAPI throws, so it toasts rather than dropping the message without a word.
+            // No client: connectedAPI throws, so it plays the error haptic rather than dropping the message silently.
             let ok = await actions.run { try await store.connectedAPI().sendMessage(key, text: body, attachments: attachments) }
             sending = false
             if let ok {
