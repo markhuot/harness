@@ -24,7 +24,7 @@ struct TicketSheetLayer: View {
     @State private var dockDrag: CGFloat = 0
 
     /// The top of the sheet that drags it: the grabber and the navigation bar.
-    private static let header: CGFloat = 76
+    private static let header: CGFloat = 64
     private static let corner: CGFloat = 38
 
     var body: some View {
@@ -54,7 +54,8 @@ struct TicketSheetLayer: View {
                         .highPriorityGesture(dockGesture)
                         .padding(.horizontal, 12)
                         .padding(.bottom, TicketDock.bottomGap)
-                        .ignoresSafeArea(.container, edges: .bottom)
+                        // At the screen's bottom, behind a keyboard rather than riding on it.
+                        .ignoresSafeArea(edges: .bottom)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -68,20 +69,17 @@ struct TicketSheetLayer: View {
     }
 
     private func panel(_ sheet: TicketSheet, travel: CGFloat) -> some View {
-        VStack(spacing: 0) {
+        // The grabber sits over the navigation bar's top, as on a system sheet.
+        stack(sheet).overlay(alignment: .top) {
             Capsule()
                 .fill(c.text3.opacity(0.45))
                 .frame(width: 36, height: 5)
-                .padding(.top, 6)
-                .padding(.bottom, 3)
-                .frame(maxWidth: .infinity)
-                .contentShape(.rect)
+                .padding(.top, 5)
                 .accessibilityElement()
                 .accessibilityLabel("Sheet grabber")
                 .accessibilityHint("Double-tap to dock")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { dock() }
-            stack(sheet)
         }
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: Self.corner, topTrailingRadius: Self.corner))
         .background {
@@ -187,17 +185,21 @@ struct TicketSheetLayer: View {
 
 /// Keeps a section's screen clear of the docked ticket sheet. It goes inside the section's
 /// NavigationStack, on each screen: a safe-area inset outside the stack doesn't reach the board's
-/// own bottom bar.
+/// own bottom bar. Not while a keyboard is up: the dock is behind it.
 private struct DockClearance: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.concentricScreen) private var screen
+    @State private var keyboard = false
 
     func body(content: Content) -> some View {
-        content.safeAreaInset(edge: .bottom, spacing: 0) {
-            if router.dock != nil {
-                Color.clear.frame(height: TicketDock.clearance(homeIndicator: screen?.homeIndicator ?? 0))
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if router.dock != nil && !keyboard {
+                    Color.clear.frame(height: TicketDock.clearance(homeIndicator: screen?.homeIndicator ?? 0))
+                }
             }
-        }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboard = false }
     }
 }
 
