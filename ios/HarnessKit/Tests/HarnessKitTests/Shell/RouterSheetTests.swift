@@ -343,9 +343,14 @@ struct RouterSheetTests {
         #expect(r.path(.board) == [t("A-2")])
         #expect(r.removeTicket { $0 == "A-2" })
         #expect(r.path(.board).isEmpty)
+        // Kept but not drawn while wide, so the sections don't keep clear of it.
+        #expect(r.dock != nil && !r.showsDock)
         // The dock is still there for the next narrow spell.
         r.setUsesTicketSheets(true)
         #expect(r.dock?.title == "A-1")
+        #expect(r.showsDock)
+        r.restoreDock()
+        #expect(!r.showsDock)
     }
 
     @Test func withTheFlagOffTicketsPushAsBefore() {

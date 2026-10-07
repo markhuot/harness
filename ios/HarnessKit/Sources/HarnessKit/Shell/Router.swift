@@ -256,6 +256,10 @@ public final class Router {
     /// The docked ticket sheet, for the dock bar (`id`, `title`); nil when none is docked.
     public var dock: TicketSheet? { ticketSheetDocked ? ticketSheetStorage : nil }
 
+    /// The dock bar is on screen, for the sections to keep clear of it: docked, and not waiting
+    /// out a spell without ticket sheets (regular width), when the dock is kept but not drawn.
+    public var showsDock: Bool { usesTicketSheets && dock != nil }
+
     public var ticketSheetState: TicketSheetState {
         ticketSheetStorage == nil ? .gone : ticketSheetDocked ? .docked : .presented
     }

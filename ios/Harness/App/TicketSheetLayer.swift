@@ -194,7 +194,7 @@ private struct DockClearance: ViewModifier {
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if router.dock != nil && !keyboard {
+                if router.showsDock && !keyboard {
                     Color.clear.frame(height: TicketDock.clearance(homeIndicator: screen?.homeIndicator ?? 0))
                 }
             }
