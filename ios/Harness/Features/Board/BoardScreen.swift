@@ -304,14 +304,8 @@ struct BoardContext {
         project = id.flatMap { state.projects[$0] }
         search = state.search
         board = state.boardColumns(id)
-        if search != nil {
-            let results = Paging.searchColumns(state, id)
-            shown = results.columns
-            pending = results.pending
-        } else {
-            shown = BoardColumns.visibleColumns(board, hideChildren: prefs.hideChildren)
-            pending = false
-        }
+        // The same columns presence reports (BoardColumns.shownKeys).
+        (shown, pending) = BoardColumns.shownColumns(state, filter: id, board: board, hideChildren: prefs.hideChildren)
         let b = board
         total = TicketStatus.allKnown.reduce(0) { n, s in n + (s == .done ? Paging.doneCount(state, id, loaded: b.done.count) : b[s].count) }
         paging = state.donePaging[Paging.scopeOf(id)]

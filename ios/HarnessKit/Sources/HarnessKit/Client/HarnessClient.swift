@@ -412,6 +412,27 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/prompts")
     }
 
+    // MARK: Notifications (DESIGN.md "Notifications")
+
+    /// APNs key status for each environment and the registered devices.
+    public func notificationStatus() async throws -> NotificationStatus {
+        try await request("GET", "/notifications")
+    }
+
+    /// Send a test notification to every registered device.
+    public func sendTestNotification() async throws -> TestNotificationResult {
+        try await request("POST", "/notifications/test")
+    }
+
+    /// Register this device's APNs token, or update it.
+    public func registerDevice(_ body: RegisterDeviceBody) async throws -> Device {
+        try await request("POST", "/devices", body: body)
+    }
+
+    public func removeDevice(_ id: String) async throws -> OkResponse {
+        try await request("DELETE", "/devices/\(URIComponent.encode(id))")
+    }
+
     // MARK: Network & pairing
 
     /// Listen mode, bound addresses and Tailscale status.

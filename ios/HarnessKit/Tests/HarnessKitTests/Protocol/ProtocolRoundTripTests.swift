@@ -268,7 +268,7 @@ struct ProtocolRoundTripTests {
             #expect(Set(seen) == Set(expected), "\(name): samples decode to \(Set(seen).sorted()), TS declares \(expected.sorted())")
         }
         #expect(fixture["HarnessEvent"] == HarnessEvent.knownKinds)
-        #expect(HarnessEvent.knownKinds.count == 18)
+        #expect(HarnessEvent.knownKinds.count == 19)
     }
 
     // MARK: Forward compatibility

@@ -4,7 +4,7 @@ import Foundation
 // Events (service → client over WebSocket)
 // ---------------------------------------------------------------------------
 
-/// A change the service broadcasts, discriminated by `kind` (18 kinds). An unknown `kind`
+/// A change the service broadcasts, discriminated by `kind` (19 kinds). An unknown `kind`
 /// decodes to `.unknown(kind:raw:)` and re-encodes `raw` unchanged.
 public enum HarnessEvent: Codable, Sendable, Equatable {
     case projectUpserted(project: Project)
@@ -25,6 +25,8 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     case watcherUpserted(watcher: Watcher)
     case watcherDeleted(id: String)
     case settingsUpdated(settings: PublicSettings)
+    /// A push device registered, changed or was removed: refetch GET /notifications
+    case devicesChanged
     /// `tabId`: the tab the frame is from (services before browser tabs omit it). `viewerId`: the
     /// viewer the frame/state is for, echoed from its `browser.subscribe` (nil when it sent none,
     /// or from services before viewers).
@@ -38,8 +40,8 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     public static let knownKinds = [
         "project.upserted", "project.deleted", "ticket.upserted", "ticket.deleted", "session.upserted",
         "session.deleted", "run.upserted", "transcript.appended", "subagent.upserted", "transcript.delta",
-        "activity.added", "spec.revised", "watcher.upserted", "watcher.deleted", "settings.updated", "browser.frame",
-        "browser.state", "service.status",
+        "activity.added", "spec.revised", "watcher.upserted", "watcher.deleted", "settings.updated", "devices.changed",
+        "browser.frame", "browser.state", "service.status",
     ]
 
     /// The wire discriminator.
@@ -60,6 +62,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case .watcherUpserted: "watcher.upserted"
         case .watcherDeleted: "watcher.deleted"
         case .settingsUpdated: "settings.updated"
+        case .devicesChanged: "devices.changed"
         case .browserFrame: "browser.frame"
         case .browserState: "browser.state"
         case .serviceStatus: "service.status"
@@ -94,6 +97,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case "watcher.upserted": self = .watcherUpserted(watcher: try field("watcher"))
         case "watcher.deleted": self = .watcherDeleted(id: try field("id"))
         case "settings.updated": self = .settingsUpdated(settings: try field("settings"))
+        case "devices.changed": self = .devicesChanged
         case "browser.frame":
             self = .browserFrame(
                 sessionId: try field("sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"), data: try field("data"),
@@ -146,7 +150,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
             try c.encode(state, forKey: "state")
             try c.encodeIfPresent(viewerId, forKey: "viewerId")
         case let .serviceStatus(status): try c.encode(status, forKey: "status")
-        case .unknown: break
+        case .devicesChanged, .unknown: break
         }
     }
 }
@@ -166,6 +170,9 @@ public enum ClientMessage: Codable, Sendable, Equatable {
     case browserUnsubscribe(sessionId: String, viewerId: String? = nil)
     /// `tabId`: the tab the input is for (nil: the tab this viewer watches).
     case browserInput(sessionId: String, tabId: Int? = nil, input: BrowserInput, viewerId: String? = nil)
+    /// What this socket shows; replaces its earlier presence. Notifications for tickets a visible
+    /// presence lists are suppressed.
+    case presence(Presence)
     case ping
     case unknown(type: String, raw: JSONValue)
 
@@ -175,6 +182,7 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         case .browserSubscribe: "browser.subscribe"
         case .browserUnsubscribe: "browser.unsubscribe"
         case .browserInput: "browser.input"
+        case .presence: "presence"
         case .ping: "ping"
         case let .unknown(type, _): type
         }
@@ -196,6 +204,7 @@ public enum ClientMessage: Codable, Sendable, Equatable {
             self = .browserInput(
                 sessionId: try c.decode(String.self, forKey: "sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"),
                 input: try c.decode(BrowserInput.self, forKey: "input"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
+        case "presence": self = .presence(try Presence(from: decoder))
         case "ping": self = .ping
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
@@ -203,6 +212,12 @@ public enum ClientMessage: Codable, Sendable, Equatable {
 
     public func encode(to encoder: any Encoder) throws {
         if case let .unknown(_, raw) = self { return try raw.encode(to: encoder) }
+        if case let .presence(presence) = self {
+            try presence.encode(to: encoder)
+            var c = encoder.container(keyedBy: AnyCodingKey.self)
+            try c.encode(type, forKey: "type")
+            return
+        }
         var c = encoder.container(keyedBy: AnyCodingKey.self)
         try c.encode(type, forKey: "type")
         switch self {
@@ -219,7 +234,7 @@ public enum ClientMessage: Codable, Sendable, Equatable {
             try c.encodeIfPresent(tabId, forKey: "tabId")
             try c.encode(input, forKey: "input")
             try c.encodeIfPresent(viewerId, forKey: "viewerId")
-        case .ping, .unknown: break
+        case .presence, .ping, .unknown: break
         }
     }
 }

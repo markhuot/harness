@@ -17,6 +17,8 @@ public protocol SecureStorage: Sendable {
 public enum StorageKeys {
     public static let servers = "harness.servers"
     public static let prefs = "harness.prefs"
+    /// This install's id for push registration and presence (a UUID made on first use).
+    public static let deviceId = "harness.deviceId"
     public static func token(_ serverId: String) -> String { "harness.token.\(serverId)" }
 }
 
@@ -82,6 +84,11 @@ public final class AppModel {
     @ObservationIgnored private let now: () -> Double
     @ObservationIgnored private let makeId: () -> String
     @ObservationIgnored private var storeKey: String?
+    /// Called as a saved server is forgotten, with its token still in hand, before the token is
+    /// deleted (push unregistration).
+    @ObservationIgnored public var willForget: (@MainActor (ActiveServer) -> Void)?
+    /// What this device shows (`setPresence`), handed to each store as it's made.
+    @ObservationIgnored public private(set) var presence: Presence?
 
     public init(
         storage: any SecureStorage,
@@ -193,6 +200,9 @@ public final class AppModel {
 
     /// Delete a server and its token; the next saved one (if any) becomes active.
     public func forget(_ id: String) {
+        if let s = servers.first(where: { $0.id == id }), let token = (try? storage.get(StorageKeys.token(id))) ?? nil, !token.isEmpty {
+            willForget?(ActiveServer(server: s, token: token))
+        }
         let removed = Servers.removeServer(servers, id: id, activeId: prefs.activeServer ?? active?.id)
         try? storage.delete(StorageKeys.token(id))
         try? storage.set(StorageKeys.servers, Self.encodeServers(removed.list))
@@ -217,6 +227,24 @@ public final class AppModel {
         try? storage.set(StorageKeys.servers, Self.encodeServers(servers))
     }
 
+    /// Every saved server whose token is in storage, in list order: the Macs to register for
+    /// pushes with.
+    public func savedConnections() -> [ActiveServer] {
+        servers.compactMap { s in
+            guard let token = (try? storage.get(StorageKeys.token(s.id))) ?? nil, !token.isEmpty else { return nil }
+            return ActiveServer(server: s, token: token)
+        }
+    }
+
+    /// This install's stable id (POST /devices `id`, presence `deviceId`): a UUID made on first
+    /// use and kept in storage. A failed save still returns the new id (it's made again next launch).
+    public func deviceId() -> String {
+        if let id = (try? storage.get(StorageKeys.deviceId)) ?? nil, !id.isEmpty { return id }
+        let id = UUID().uuidString
+        try? storage.set(StorageKeys.deviceId, id)
+        return id
+    }
+
     static func encodeServers(_ list: [SavedServer]) -> String {
         (try? JSONEncoder().encode(list)).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }
@@ -236,7 +264,15 @@ public final class AppModel {
         guard let active, let makeStore else { return }
         let next = makeStore(active, prefs)
         store = next
+        if let presence { next.setPresence(presence) }
         next.start()
+    }
+
+    /// What this device shows (DESIGN.md "Notifications"), for the active server's socket; a store
+    /// made later (another server, a re-pair) gets it too.
+    public func setPresence(_ presence: Presence) {
+        self.presence = presence
+        store?.setPresence(presence)
     }
 
     /// Forward scene phases to the store (iOS drops the socket in the background).
