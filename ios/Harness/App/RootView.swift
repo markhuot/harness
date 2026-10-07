@@ -137,10 +137,8 @@ private struct SceneChrome: ViewModifier {
         }, set: { router.sheet = $0 })
     }
 
-    /// The iPhone's ticket sheet, presented or docked, while ticket sheets are on.
-    private var ticketSheet: TicketSheet? {
-        router.usesTicketSheets ? router.ticketSheet ?? router.dock : nil
-    }
+    /// The ticket sheet, presented or docked.
+    private var ticketSheet: TicketSheet? { router.ticketSheet ?? router.dock }
 
     /// What the root presents: the iPhone's ticket sheet while there is one, presented or docked
     /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. Swiping
@@ -178,12 +176,11 @@ private enum RootSheet: Hashable, Identifiable {
 /// section's sidebar button, switches between them; the board has no header, and its own bottom
 /// bar holds that button, the search field (with the filter inside it) and New session. There a
 /// ticket or New session opens in a system sheet over the sections (TicketSheetHost), which can
-/// dock under them. At regular width (iPad) it's DesktopShell, where a ticket opens in a window of
-/// its own (WindowDirectory.openTicket) instead of on the section's stack.
+/// dock under them. At regular width (iPad) it's DesktopShell, where a ticket opens in the same
+/// ticket sheet.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.supportsMultipleWindows) private var multipleWindows
 
     var body: some View {
         Group {
@@ -198,12 +195,6 @@ struct MainTabs: View {
                     .keyboardShortcut("s", modifiers: [.control, .command])
                 }
             }
-        }
-        .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
-            router.setOpensTicketsInWindows(windows)
-        }
-        .onChange(of: sizeClass == .regular, initial: true) { _, regular in
-            router.setUsesTicketSheets(!regular)
         }
     }
 }

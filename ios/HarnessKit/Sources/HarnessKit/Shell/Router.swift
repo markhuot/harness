@@ -6,19 +6,21 @@ import Observation
 /// and deep links go through `open`.
 ///
 /// A router has one of two scopes:
-/// - `.main`, the window with the sections. With `opensTicketsInWindows` (iPad at regular width) a
-///   ticket route doesn't push: it goes to `onOpenTicket`, which opens (or brings forward) that
-///   ticket's own window.
+/// - `.main`, the window with the sections. Tickets and New session open in its ticket sheet (below)
+///   at every width; `popOutSheet()` hands the sheet's ticket to `onOpenTicket`, which opens (or
+///   brings forward) that ticket's own window.
 /// - `.ticket`, a ticket window's: `root` is the ticket it shows, pushes land on its stack
 ///   (`path(.board)`), and section links go to `onSectionLink` (a main window).
 ///
 /// Link semantics (ios/Tools/sim-check.ts relies on them): a tab link pops
-/// everything above the tabs, modals included; a ticket (or any pushed) link pushes a fresh screen,
-/// so opening the same ticket twice stacks two. Sheets replace each other; the scanner covers
+/// everything above the tabs, modals included (a presented ticket sheet docks); a pushed link
+/// pushes a fresh screen, a ticket's on the ticket sheet (where the ticket already on top doesn't
+/// stack a copy). Sheets replace each other; the scanner covers
 /// whatever is up.
 ///
-/// Ticket sheets (main scope with `usesTicketSheets`, the iPhone at compact width): tickets and New
-/// session open in a `TicketSheet` over the tabs instead of on a tab's stack. `ticketSheetState` is
+/// Ticket sheets (main scope, compact and regular width alike): tickets and New session open in a
+/// `TicketSheet` over the sections (iPhone) or beside them (iPad, `sheetIsBesideBoard`) instead of
+/// on a section's stack. A size-class change keeps it as it is. `ticketSheetState` is
 /// `.presented`, `.docked` or `.gone`.
 /// - Presented (`ticketSheet`): every push lands on the sheet's own `path`, so a conductor's child
 ///   opens in the same sheet and Back returns to the conductor. Pushing the ticket already on top
@@ -30,10 +32,10 @@ import Observation
 ///   link docks a presented sheet instead of closing it, and changing tabs keeps the dock.
 ///   Opening another ticket or New session replaces the dock (drafts are saved, so nothing is
 ///   lost); opening the docked ticket, or the same New session, restores it.
-/// - Gone: `dismissSheet()`, from either state.
+/// - Gone: `dismissSheet()`, from either state, or `popOutSheet()` into a window.
 /// There is one ticket sheet at most, presented or docked. Projects closes it; other `sheet`s
-/// (pickers…) and `cover` work as before and come up over it. Without `usesTicketSheets`, tickets push on the stack
-/// and New session is a `sheet`.
+/// (pickers…) and `cover` work as before and come up over it. A ticket window has no ticket sheet:
+/// tickets push on its stack.
 @MainActor
 @Observable
 public final class Router {
@@ -46,17 +48,19 @@ public final class Router {
     public var sheet: SheetRoute?
     public var cover: CoverRoute?
 
-    /// Main scope: tickets and New session open in a `TicketSheet`. The shell sets it.
-    public private(set) var usesTicketSheets = false
     /// The ticket sheet, presented or docked; nil when gone.
     private var ticketSheetStorage: TicketSheet?
     private var ticketSheetDocked = false
     @ObservationIgnored private var nextTicketSheetID = 0
 
-    /// Main scope: ticket routes go to `onOpenTicket` instead of pushing. The shell sets it.
-    public private(set) var opensTicketsInWindows = false
-    /// Main scope, with `opensTicketsInWindows`: opens a ticket route in a window of its own.
-    @ObservationIgnored public var onOpenTicket: ((Route) -> Void)?
+    /// Main scope: the presented ticket sheet sits beside the board (the iPad's side panel at
+    /// regular width) rather than covering it (the iPhone's sheet), so the board still counts as on
+    /// screen (`PresenceRules`). The view layer sets it from the width; it changes nothing else.
+    public var sheetIsBesideBoard = false
+
+    /// Main scope: opens a ticket route in a window of its own (`popOutSheet()`). Nil where the
+    /// device has no windows to open. Observed, so `canPopOutSheet` follows it.
+    public var onOpenTicket: ((Route) -> Void)?
 
     /// Ticket scope: the ticket it shows under its stack.
     public private(set) var root: Route?
@@ -90,15 +94,14 @@ public final class Router {
             paths[tab] = []
             return themes
         case let .push(route):
-            // A ticket that opens in its own window leaves this one as it is.
-            if !opensInWindow(route) { dismissModals() }
+            dismissModals()
             push(route)
         case let .sheet(s):
             cover = nil
-            if usesTicketSheets, case let .newSession(projectId, key) = s {
+            if case let .newSession(projectId, key) = s {
                 sheet = nil
                 presentTicketSheet(.newSession(projectId: projectId, key: key))
-            } else if usesTicketSheets, s == .projects {
+            } else if s == .projects {
                 // Two system sheets would fight over the bottom of the screen: Projects closes the
                 // ticket sheet (New session drafts are saved).
                 dismissSheet()
@@ -137,12 +140,10 @@ public final class Router {
         return true
     }
 
-    /// Push on the selected tab's stack, or (`opensTicketsInWindows`) open a ticket in its window,
-    /// or (`usesTicketSheets`) push on the presented ticket sheet, or open a ticket in one.
+    /// Main scope: push on the presented ticket sheet, or open a ticket in one, else push on the
+    /// selected tab's stack. Ticket scope: push on its stack.
     public func push(_ route: Route) {
-        if opensInWindow(route) {
-            onOpenTicket?(route)
-        } else if usesTicketSheets, var s = ticketSheet {
+        if scope == .main, var s = ticketSheet {
             if case let .ticket(key, tab) = route, case .newSession = s.root {
                 presentTicketSheet(.ticket(key: key, tab: tab))
             } else if case let .ticket(key, tab) = route, s.showsOnTop(key) {
@@ -152,7 +153,7 @@ public final class Router {
                 s.path.append(route)
                 ticketSheetStorage = s
             }
-        } else if usesTicketSheets, case let .ticket(key, tab) = route {
+        } else if scope == .main, case let .ticket(key, tab) = route {
             presentTicketSheet(.ticket(key: key, tab: tab))
         } else {
             paths[selectedTab, default: []].append(route)
@@ -169,13 +170,11 @@ public final class Router {
 
     public func present(_ cover: CoverRoute) { open(.cover(cover)) }
 
-    /// A sheet that became a ticket (New session, launched): closes `sheet` unless a link already
-    /// replaced it, then opens the ticket. The close matters on iPad, where the ticket opens in a
-    /// window of its own and `open(.push)` leaves this window's sheet up.
-    /// With `usesTicketSheets`, New session's ticket sheet becomes the ticket's in place (docked or
-    /// not), unless something else replaced it.
+    /// A sheet that became a ticket (New session, launched): New session's ticket sheet becomes the
+    /// ticket's in place (docked or not), unless something else replaced it. Otherwise closes
+    /// `sheet` unless a link already replaced it, then opens the ticket.
     public func replace(_ sheet: SheetRoute, with route: Route) {
-        if usesTicketSheets, case let .newSession(projectId, key) = sheet, case let .ticket(k, tab) = route,
+        if case let .newSession(projectId, key) = sheet, case let .ticket(k, tab) = route,
            var s = ticketSheetStorage, s.root == .newSession(projectId: projectId, key: key) {
             s.root = .ticket(key: k, tab: tab)
             s.path = []
@@ -206,17 +205,6 @@ public final class Router {
 
     // MARK: Ticket windows
 
-    private func opensInWindow(_ route: Route) -> Bool {
-        guard scope == .main, opensTicketsInWindows, onOpenTicket != nil, case .ticket = route else { return false }
-        return true
-    }
-
-    /// Main scope: turns opening tickets in their own windows on or off (the width changed).
-    public func setOpensTicketsInWindows(_ on: Bool) {
-        guard scope == .main else { return }
-        opensTicketsInWindows = on
-    }
-
     /// Ticket scope: shows `route` (another tab, or another ticket) at the root, its stack cleared.
     /// A link to a ticket whose window is already open lands here.
     public func show(_ route: Route) {
@@ -228,42 +216,14 @@ public final class Router {
 
     // MARK: Ticket sheets
 
-    /// Main scope: turns ticket sheets on or off (the width changed). Turning them off moves a
-    /// presented sheet's screens onto the selected stack (New session back to `sheet`) and keeps a
-    /// dock for when they're back. Turning them on moves New session, or else the selected stack
-    /// from its first ticket up, into a presented sheet.
-    public func setUsesTicketSheets(_ on: Bool) {
-        guard scope == .main, on != usesTicketSheets else { return }
-        usesTicketSheets = on
-        if !on {
-            guard let s = ticketSheet else { return }
-            ticketSheetStorage = nil
-            switch s.root {
-            case let .ticket(key, tab): paths[selectedTab, default: []] += [.ticket(key: key, tab: tab)] + s.path
-            case let .newSession(projectId, key): sheet = .newSession(projectId: projectId, key: key)
-            }
-        } else if case let .newSession(projectId, key)? = sheet {
-            sheet = nil
-            presentTicketSheet(.newSession(projectId: projectId, key: key))
-        } else {
-            let path = path(selectedTab)
-            guard let i = path.firstIndex(where: { if case .ticket = $0 { true } else { false } }),
-                  case let .ticket(key, tab) = path[i] else { return }
-            paths[selectedTab] = Array(path[..<i])
-            presentTicketSheet(.ticket(key: key, tab: tab))
-            ticketSheetStorage?.path = Array(path[(i + 1)...])
-        }
-    }
-
     /// The presented ticket sheet; nil when it's docked or gone.
     public var ticketSheet: TicketSheet? { ticketSheetDocked ? nil : ticketSheetStorage }
 
     /// The docked ticket sheet, for the dock bar (`id`, `title`); nil when none is docked.
     public var dock: TicketSheet? { ticketSheetDocked ? ticketSheetStorage : nil }
 
-    /// The dock bar is on screen, for the sections to keep clear of it: docked, and not waiting
-    /// out a spell without ticket sheets (regular width), when the dock is kept but not drawn.
-    public var showsDock: Bool { usesTicketSheets && dock != nil }
+    /// The dock bar is on screen, for the sections to keep clear of it.
+    public var showsDock: Bool { dock != nil }
 
     public var ticketSheetState: TicketSheetState {
         ticketSheetStorage == nil ? .gone : ticketSheetDocked ? .docked : .presented
@@ -287,6 +247,20 @@ public final class Router {
     public func dismissSheet() {
         ticketSheetStorage = nil
         ticketSheetDocked = false
+    }
+
+    /// `popOutSheet()` would do something: there's a window opener and a ticket sheet, presented or
+    /// docked, with a ticket in it. For the UI to hide its pop-out button otherwise.
+    public var canPopOutSheet: Bool { onOpenTicket != nil && ticketSheetStorage?.topTicket != nil }
+
+    /// Presented or docked → the ticket on top in a window of its own, the sheet gone. The ticket on
+    /// top is the last ticket screen on the sheet's path (with its tab), so a file or other screen
+    /// pushed above it pops out as its ticket; with no ticket pushed, the sheet's root ticket. New
+    /// session with no ticket pushed, or no `onOpenTicket`, does nothing and keeps the sheet.
+    public func popOutSheet() {
+        guard let open = onOpenTicket, let route = ticketSheetStorage?.topTicket else { return }
+        dismissSheet()
+        open(route)
     }
 
     /// Presents `root`: restores the dock when it shows the same ticket (or New session), else
@@ -313,10 +287,9 @@ public final class Router {
 
     /// Swaps the ticket screen for `key` (the last in the ticket sheet, else its root, else the last
     /// on the selected stack, else the root of a ticket scope) for `newKey`'s. Pushes `newKey` when
-    /// no screen shows `key`. Without `usesTicketSheets` the dock waiting out a wide spell isn't on
-    /// screen, so it's left alone.
+    /// no screen shows `key`.
     public func replaceTicket(_ key: String, with newKey: String) {
-        if usesTicketSheets, var s = ticketSheetStorage {
+        if var s = ticketSheetStorage {
             if let i = Self.lastTicket(in: s.path, where: { $0 == key }) {
                 s.path[i] = .ticket(key: newKey, tab: nil)
                 ticketSheetStorage = s
@@ -345,7 +318,7 @@ public final class Router {
     /// window is asked to close. False when none matched.
     @discardableResult
     public func removeTicket(where matches: (String) -> Bool) -> Bool {
-        if usesTicketSheets, var s = ticketSheetStorage {
+        if var s = ticketSheetStorage {
             if let i = Self.lastTicket(in: s.path, where: matches) {
                 s.path.remove(at: i)
                 ticketSheetStorage = s
@@ -373,7 +346,7 @@ public final class Router {
     }
 }
 
-/// The iPhone's ticket sheet (`Router.ticketSheet`, `Router.dock`): a ticket with the screens
+/// The main window's ticket sheet (`Router.ticketSheet`, `Router.dock`): a ticket with the screens
 /// pushed above it, or New session.
 public struct TicketSheet: Hashable, Sendable, Identifiable {
     public enum Root: Hashable, Sendable {
@@ -390,10 +363,15 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
     /// The ticket on top: the last one pushed, else the root's. Nil for New session with none
     /// pushed.
     public var topTicketKey: String? {
-        for route in path.reversed() {
-            if case let .ticket(key, _) = route { return key }
-        }
-        if case let .ticket(key, _) = root { return key }
+        if case let .ticket(key, _)? = topTicket { return key }
+        return nil
+    }
+
+    /// The ticket on top as a route, with the tab it shows: the last ticket pushed, else the
+    /// root's. Nil for New session with none pushed.
+    public var topTicket: Route? {
+        if let route = path.last(where: { if case .ticket = $0 { true } else { false } }) { return route }
+        if case let .ticket(key, tab) = root { return .ticket(key: key, tab: tab) }
         return nil
     }
 

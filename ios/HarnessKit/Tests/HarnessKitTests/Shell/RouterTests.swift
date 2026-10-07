@@ -27,22 +27,23 @@ struct RouterTests {
         #expect(r.path(.inbox).isEmpty)
     }
 
-    @Test func aPushStacksOnTheSelectedTabEvenForTheSameTicket() {
+    @Test func aPushStacksOnTheSelectedTabAndATicketOpensTheSheet() {
         let r = Router()
         r.open(.tab(.settings))
         r.open(.push(.prompts))
+        r.open(.push(.prompts))
         r.open(.push(.ticket(key: "A-1", tab: .details)))
-        r.open(.push(.ticket(key: "A-1", tab: .details)))
-        #expect(r.path(.settings) == [.prompts, .ticket(key: "A-1", tab: .details), .ticket(key: "A-1", tab: .details)])
+        #expect(r.path(.settings) == [.prompts, .prompts])
+        #expect(r.ticketSheet?.root == .ticket(key: "A-1", tab: .details))
         #expect(r.path(.board).isEmpty)
     }
 
     @Test func aPushDismissesModals() {
         let r = Router()
-        r.open(.sheet(.projects))
+        r.open(.sheet(.watcher(id: nil)))
         r.open(.push(.ticket(key: "A-1", tab: nil)))
         #expect(r.sheet == nil)
-        #expect(r.path(.board) == [.ticket(key: "A-1", tab: nil)])
+        #expect(r.ticketSheet?.root == .ticket(key: "A-1", tab: nil))
     }
 
     @Test func aSheetReplacesTheSheetAndClosesTheScanner() {
