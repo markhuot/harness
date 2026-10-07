@@ -305,8 +305,10 @@ export class TabFrames {
   /**
    * A point in a frame's viewport as a point in the tab's viewport, adding each <iframe>'s content
    * box offset on the way up. `covered`: at some level something else is on top of the iframe there.
+   * `reveal`: scroll each parent so the point is on screen there (scrolling inside a cross-origin
+   * iframe doesn't scroll the page around it), innermost first, so the point a click goes to is real.
    */
-  async toPage(frameId: string, point: { x: number; y: number }): Promise<{ x: number; y: number; covered: boolean }> {
+  async toPage(frameId: string, point: { x: number; y: number }, reveal = false): Promise<{ x: number; y: number; covered: boolean }> {
     let { x, y } = point;
     let covered = false;
     let id = frameId;
@@ -315,7 +317,7 @@ export class TabFrames {
       const owner = await this.owner(id);
       if (!owner) break;
       try {
-        const r = (await this.callOn(owner, OFFSET_IN_PARENT, [x, y])) as { x: number; y: number; hit: boolean };
+        const r = (await this.callOn(owner, OFFSET_IN_PARENT, [x, y, reveal])) as { x: number; y: number; hit: boolean };
         ({ x, y } = r);
         if (!r.hit) covered = true;
       } finally {
@@ -339,6 +341,13 @@ export class TabFrames {
     }
     const frame = "new Promise((r) => requestAnimationFrame(() => r(true)))";
     await Promise.all([...others.values()].map((s) => Promise.race([this.evalIn(s, frame).catch(() => {}), Bun.sleep(500)])));
+  }
+
+  /** Two animation frames in the top document and in `scope`'s renderer: what changed has been painted. */
+  async painted(scope: Scope): Promise<void> {
+    const twice = "new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))";
+    const scopes = scope.session.id === this.root.id ? [this.top()] : [this.top(), scope];
+    await Promise.all(scopes.map((s) => Promise.race([this.evalIn(s, twice).catch(() => {}), Bun.sleep(500)])));
   }
 
   /**
@@ -402,13 +411,27 @@ export class TabFrames {
 
 /**
  * Runs on an <iframe> element in its parent: (x, y) in the iframe's viewport as a point in the
- * parent's, and whether the iframe is what's at that point there.
+ * parent's, and whether the iframe is what's at that point there. With `reveal`, a point off the
+ * parent's screen is scrolled onto it first: the iframe into view, then the window to centre the point.
  */
-const OFFSET_IN_PARENT = `function (x, y) {
-  const r = this.getBoundingClientRect();
-  const cs = getComputedStyle(this);
-  const px = r.left + this.clientLeft + (parseFloat(cs.paddingLeft) || 0) + x;
-  const py = r.top + this.clientTop + (parseFloat(cs.paddingTop) || 0) + y;
-  const hit = document.elementFromPoint(px, py);
-  return { x: px, y: py, hit: hit === this };
+const OFFSET_IN_PARENT = `function (x, y, reveal) {
+  const at = () => {
+    const r = this.getBoundingClientRect();
+    const cs = getComputedStyle(this);
+    return [r.left + this.clientLeft + (parseFloat(cs.paddingLeft) || 0) + x, r.top + this.clientTop + (parseFloat(cs.paddingTop) || 0) + y];
+  };
+  const off = ([px, py]) => px < 0 || py < 0 || px >= innerWidth || py >= innerHeight;
+  let p = at();
+  if (reveal && off(p)) {
+    this.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+    p = at();
+    if (off(p)) {
+      const dx = p[0] < 0 || p[0] >= innerWidth ? p[0] - innerWidth / 2 : 0;
+      const dy = p[1] < 0 || p[1] >= innerHeight ? p[1] - innerHeight / 2 : 0;
+      scrollBy({ left: dx, top: dy, behavior: "instant" });
+      p = at();
+    }
+  }
+  const hit = document.elementFromPoint(p[0], p[1]);
+  return { x: p[0], y: p[1], hit: hit === this };
 }`;

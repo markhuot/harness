@@ -495,9 +495,13 @@ export class BrowserManager implements BrowserService {
     )) as { hittable: boolean; x?: number; y?: number; disabled?: boolean; busy?: boolean };
     if (box.disabled) report.disabled = true;
     if (box.busy) report.busy = true;
-    const at = box.hittable && box.x !== undefined && box.y !== undefined ? await tab.frames.toPage(el.scope.frameId, { x: box.x, y: box.y }) : null;
+    const at = box.hittable && box.x !== undefined && box.y !== undefined ? await tab.frames.toPage(el.scope.frameId, { x: box.x, y: box.y }, true) : null;
     if (at && !at.covered) {
       const { x, y } = at;
+      // Chrome routes a click into an out-of-process iframe by hit-test data its compositor sends
+      // with each frame; right after a scroll (or a new iframe) it's a frame behind, and the click
+      // would land on the <iframe> element in the page. Let both renderers paint first.
+      if (el.scope.frameId !== tab.frameId) await tab.frames.painted(el.scope);
       if (tab.device === "mobile") {
         // A tap: the page gets touch events, then the click a phone makes of them.
         await this.touch(tab, "touchStart", x, y);
