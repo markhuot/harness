@@ -1457,6 +1457,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     // height is a frame or padding around the text view, which a tap or drag doesn't reach.
     const tall = Math.round(start.frame.height);
     if (tall < 120) throw new Error(`the text view is ${tall}pt tall with one line in it: it doesn't fill its row`);
+    await shot(udid, "keyboard-new-session-row-idle");
     const y = Math.round(start.frame.y + start.frame.height - 10);
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width / 2)), "-y", String(y), "--udid", udid);
     await until("keyboard up", keyboardTop, 5000).catch(() => {
