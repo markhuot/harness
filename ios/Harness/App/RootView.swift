@@ -97,13 +97,9 @@ private struct SceneChrome: ViewModifier {
     func body(content: Content) -> some View {
         let palette = Palette(app.resolvedTheme(systemDark: scheme == .dark))
         content
-            .sheet(item: rootSheetBinding) { modal in
-                switch modal {
-                case .ticket: TicketSheetHost()
-                case let .route(sheet):
-                    SheetHost(sheet: sheet)
-                        .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
-                }
+            .sheet(item: sheetBinding) { sheet in
+                SheetHost(sheet: sheet)
+                    .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
             }
             .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
             .environment(\.palette, palette)
@@ -134,42 +130,17 @@ private struct SceneChrome: ViewModifier {
         }, set: { router.sheet = $0 })
     }
 
-    /// What the root presents: the iPhone's ticket sheet while there is one, presented or docked
-    /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. Swiping
-    /// the ticket sheet away dismisses it.
-    private var rootSheetBinding: Binding<RootSheet?> {
-        Binding(get: {
-            if let t = router.ticketSheet ?? router.dock { return .ticket(t.id) }
-            return sheetBinding.wrappedValue.map(RootSheet.route)
-        }, set: { new in
-            guard new == nil else { return }
-            if router.ticketSheetState != .gone { router.dismissSheet() } else { router.sheet = nil }
-        })
-    }
-
     /// The cover is presented by whichever level is on top: the sheet when one is up, else the root.
-    /// TicketSheetHost presents it while there's a ticket sheet.
     private func coverBinding(whenSheet: Bool) -> Binding<CoverRoute?> {
-        Binding(get: {
-            if router.ticketSheetState != .gone { return nil }
-            return (router.sheet != nil) == whenSheet ? router.cover : nil
-        }, set: { router.cover = $0 })
+        Binding(get: { (router.sheet != nil) == whenSheet ? router.cover : nil }, set: { router.cover = $0 })
     }
-}
-
-/// The root's one sheet: the ticket sheet (by its stable id) or a SheetRoute.
-private enum RootSheet: Hashable, Identifiable {
-    case ticket(Int)
-    case route(SheetRoute)
-
-    var id: Self { self }
 }
 
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
 /// section's sidebar button, switches between them; the board has no header, and its own bottom
 /// bar holds that button, the search field (with the filter inside it) and New session. There a
-/// ticket or New session opens in the ticket sheet over the sections (TicketSheetHost), which can
+/// ticket or New session opens in the ticket sheet over the sections (TicketSheetLayer), which can
 /// dock under them. At regular width (iPad) it's DesktopShell, where a ticket opens in a window of
 /// its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
@@ -182,19 +153,21 @@ struct MainTabs: View {
             if sizeClass == .regular {
                 DesktopShell()
             } else {
-                // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
-                SectionStack().hiddenShortcuts {
-                    Button("Toggle Sidebar") {
-                        if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                ZStack {
+                    // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
+                    SectionStack().hiddenShortcuts {
+                        Button("Toggle Sidebar") {
+                            if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                        }
+                        .keyboardShortcut("s", modifiers: [.control, .command])
                     }
-                    .keyboardShortcut("s", modifiers: [.control, .command])
+                    TicketSheetLayer()
                 }
             }
         }
         .onChange(of: sizeClass == .regular && multipleWindows, initial: true) { _, windows in
             router.setOpensTicketsInWindows(windows)
         }
-        // Tickets and New session open in a sheet that docks (TicketSheetHost) at compact width.
         .onChange(of: sizeClass == .regular, initial: true) { _, regular in
             router.setUsesTicketSheets(!regular)
         }
