@@ -12,13 +12,23 @@ struct ActiveTicketsView: View {
 
     @Environment(\.widgetFamily) private var family
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     var body: some View {
-        let theme = WidgetTheme(host: entry.load.host, dark: scheme == .dark)
         content
             .environment(\.widgetTheme, theme)
             .containerBackground(for: .widget) { theme.color(\.bg) }
             .widgetURL(WidgetFeed.boardURL)
+    }
+
+    private var theme: WidgetTheme {
+        var theme = WidgetTheme(host: entry.load.host, dark: scheme == .dark)
+        #if os(macOS)
+        // An unfocused desktop draws widgets as glass (vibrant or accented, not full color) and
+        // flattens every fill into a translucent white slab. iOS keeps its fills in every mode.
+        theme.glass = renderingMode != .fullColor
+        #endif
+        return theme
     }
 
     @ViewBuilder private var content: some View {
@@ -54,6 +64,9 @@ struct ActiveTicketsView: View {
 /// for the widget's light or dark appearance.
 struct WidgetTheme {
     let tokens: ThemeTokens
+    /// The Mac's glass rendering: no fills behind cards, chips, pills or notes, only their outlines
+    /// where an edge still helps group things.
+    var glass = false
 
     init(host: WidgetHost?, dark: Bool) {
         let appearance: ThemeAppearance = dark ? .dark : .light
@@ -152,7 +165,7 @@ struct StatusChip: View {
         .foregroundStyle(tint)
         .padding(.horizontal, 6)
         .frame(height: 18)
-        .background(tint.opacity(0.14), in: .capsule)
+        .background(theme.glass ? .clear : tint.opacity(0.14), in: .capsule)
         .widgetAccentable()
         .fixedSize()
     }
@@ -172,7 +185,10 @@ struct ProjectPill: View {
                 .foregroundStyle(colors.fg)
                 .padding(.horizontal, 3)
                 .frame(minWidth: 24, minHeight: 16)
-                .background(colors.bg, in: .rect(cornerRadius: 4))
+                .background(theme.glass ? .clear : colors.bg, in: .rect(cornerRadius: 4))
+                .overlay {
+                    if theme.glass { RoundedRectangle(cornerRadius: 4).strokeBorder(colors.fg.opacity(0.5), lineWidth: 0.5) }
+                }
                 .fixedSize()
         }
     }
@@ -218,10 +234,11 @@ struct TicketNote: View {
             Text(text).font(.system(size: 12)).lineLimit(lines)
         }
         .foregroundStyle(fg)
-        .padding(.vertical, 5)
-        .padding(.horizontal, 7)
+        // On glass the note is a plain line under the title, so it loses the inset its fill needed.
+        .padding(.vertical, theme.glass ? 0 : 5)
+        .padding(.horizontal, theme.glass ? 0 : 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(bg, in: .rect(cornerRadius: 7))
+        .background(theme.glass ? .clear : bg, in: .rect(cornerRadius: 7))
     }
 }
 
@@ -367,8 +384,11 @@ struct BoardCard: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(theme.color(\.bgElev), in: .rect(cornerRadius: 10))
-        .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(theme.color(\.border), lineWidth: 0.5) }
+        .background(theme.glass ? .clear : theme.color(\.bgElev), in: .rect(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(theme.glass ? theme.color(\.text).opacity(0.25) : theme.color(\.border), lineWidth: 0.5)
+        }
     }
 }
 

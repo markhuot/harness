@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The Mac desktop widget no longer draws pale slabs behind its cards, status chips, project pills and
+  notes when the desktop isn't focused. In that see-through glass look the cards keep a thin outline
+  and the rest sits straight on the glass. The iPhone and iPad widgets are unchanged.
+
 ## [app-20261007.1337](https://github.com/markhuot/harness/releases/tag/app-20261007.1337) - 2026-10-07
 
 ### Added
