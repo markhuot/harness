@@ -71,14 +71,18 @@ final class PushCenter {
             Task { await registrar.unregister(server) }
         }
         Task {
-            if !skipsPrompt {
-                _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
-            }
-            await refreshAuthorization()
-            // A token comes whatever the permission; without it nothing shows, but asking later in
-            // Settings shouldn't need a relaunch to register.
+            if skipsPrompt { await refreshAuthorization() } else { await requestAuthorization() }
+            // A token comes whatever the permission; without it nothing shows, but allowing it
+            // later in Settings shouldn't need a relaunch to register.
             UIApplication.shared.registerForRemoteNotifications()
         }
+    }
+
+    /// The system's permission prompt (alerts, sounds, badges); after the first answer it
+    /// doesn't ask again and this just reads the answer.
+    func requestAuthorization() async {
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+        await refreshAuthorization()
     }
 
     func didRegister(token: Data) {

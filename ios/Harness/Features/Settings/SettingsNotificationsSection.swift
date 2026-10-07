@@ -2,8 +2,8 @@ import HarnessKit
 import SwiftUI
 import UserNotifications
 
-/// Notifications: whether iOS lets the app show them (with a way to the system's settings when it
-/// doesn't), and the service's switches for what it sends: all of it, and each kind of activity.
+/// Notifications: whether iOS lets the app show them (the system's prompt when it never asked, a way
+/// to the system's settings when they're off), and the service's switches for what it sends: all of it, and each kind of activity.
 /// The switches edit the Mac's setting, so they apply to every device it notifies; a service too
 /// old to send `notifications` has no switches.
 struct SettingsNotificationsSection: View {
@@ -19,7 +19,13 @@ struct SettingsNotificationsSection: View {
     var body: some View {
         Section {
             SettingsRow(label: "On this \(deviceName)", hint: permissionHint) {
-                if needsSystemSettings {
+                if push.authorization == .notDetermined {
+                    // Never asked (the launch prompt was skipped): the system's own prompt. Its
+                    // Settings page has no Notifications switch until the app has asked once.
+                    Button("Allow…") { Task { await push.requestAuthorization() } }
+                        .font(.scaled(size: 15))
+                        .foregroundStyle(c.accent)
+                } else if push.authorization == .denied {
                     Button("Open Settings") {
                         if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
                     }
@@ -49,10 +55,6 @@ struct SettingsNotificationsSection: View {
             }
         }
         .task { await push.refreshAuthorization() }
-    }
-
-    private var needsSystemSettings: Bool {
-        push.authorization == .denied || push.authorization == .notDetermined
     }
 
     private var permissionLabel: String {
