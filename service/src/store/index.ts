@@ -11,6 +11,7 @@ import { SubagentRepo } from "./subagents";
 import { WatcherRepo } from "./watchers";
 import { CounterRepo, SeenRepo, SettingsRepo } from "./misc";
 import { BrowserTabRepo } from "./browser-tabs";
+import { DeviceRepo } from "./devices";
 
 export class Store {
   readonly projects: ProjectRepo;
@@ -27,6 +28,7 @@ export class Store {
   readonly settings: SettingsRepo;
   readonly counters: CounterRepo;
   readonly browserTabs: BrowserTabRepo;
+  readonly devices: DeviceRepo;
 
   constructor(readonly db: Database) {
     this.projects = new ProjectRepo(db);
@@ -43,6 +45,7 @@ export class Store {
     this.settings = new SettingsRepo(db);
     this.counters = new CounterRepo(db);
     this.browserTabs = new BrowserTabRepo(db);
+    this.devices = new DeviceRepo(db);
   }
 
   transaction<T>(fn: () => T): T {
@@ -50,6 +53,6 @@ export class Store {
   }
 }
 
-export { ProjectRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo };
+export { ProjectRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo };
 export { normalizeProjectKey } from "./projects";
 export { SpecConflictError } from "./spec";

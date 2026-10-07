@@ -683,6 +683,21 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE subagents ADD COLUMN model TEXT;
   `,
+  // 36: devices: the Macs, iPhones and iPads registered for push notifications (DESIGN.md
+  //     "Notifications"). id is the client's per-install UUID; apns_token is its hex APNs token.
+  `
+  CREATE TABLE devices (
+    id TEXT PRIMARY KEY,
+    platform TEXT NOT NULL,
+    name TEXT NOT NULL,
+    apns_token TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    environment TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX devices_token ON devices(apns_token);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

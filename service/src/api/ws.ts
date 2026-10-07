@@ -4,6 +4,9 @@
 // A socket can hold several browser viewers of one session (two torn-off browser tabs in one
 // window), each named by the client's `viewerId`. The manager's subscriber id is
 // `<socket id>:<viewerId>`, or the bare socket id for a viewer without one (older clients).
+//
+// A socket's `presence` (what it shows) is kept in the PresenceRegistry until it closes, so the
+// notification dispatcher can hold back notifications for tickets on screen.
 
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { randomUUID } from "node:crypto";
@@ -11,6 +14,7 @@ import type { ClientMessage, HarnessEvent, ServerMessage } from "@harness/shared
 import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
+import { parsePresence, type PresenceRegistry } from "../notifications/presence";
 
 export interface WsData {
   id: string;
@@ -35,8 +39,8 @@ function send(ws: ServerWebSocket<WsData>, msg: ServerMessage) {
   } catch {}
 }
 
-export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService }) {
-  const { bus, browser } = opts;
+export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService; presence?: PresenceRegistry }) {
+  const { bus, browser, presence } = opts;
   const sockets = new Set<ServerWebSocket<WsData>>();
 
   const unsubscribe = (ws: ServerWebSocket<WsData>, sessionId: string, viewerId: string) => {
@@ -70,6 +74,12 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
           return;
         case "ping":
           return send(ws, { type: "pong" });
+        case "presence": {
+          const p = parsePresence(msg);
+          if (!p) return send(ws, { type: "error", message: "presence needs deviceId, platform (mac or ios), visible and tickets" });
+          presence?.set(ws.data.id, p);
+          return;
+        }
         case "browser.subscribe": {
           const sid = msg.sessionId;
           if (typeof sid !== "string") return;
@@ -118,6 +128,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService 
     },
     close(ws) {
       sockets.delete(ws);
+      presence?.drop(ws.data.id);
       ws.data.off?.();
       ws.data.off = null;
       for (const [sid, viewers] of [...ws.data.subs]) for (const v of [...viewers]) unsubscribe(ws, sid, v);
