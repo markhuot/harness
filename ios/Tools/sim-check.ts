@@ -1090,7 +1090,14 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   await check("the dock's close button sends it away without opening it", async () => {
     await dock();
     await tapWhere(udid, `Close ${kid.key}`);
-    await until("the dock gone", async () => !(await labels(udid)).some(isDock), 4000);
+    // Watched on the way out too: the sheet mustn't grow to the ticket before it goes.
+    let opened = false;
+    await until("the dock gone", async () => {
+      const l = await labels(udid);
+      opened ||= onChild(l);
+      return !l.some(isDock);
+    }, 4000);
+    if (opened) throw new Error(`${kid.key} opened on the way out`);
     await until("the board", async () => onBoard(await labels(udid)), 4000).catch(async (e) => {
       await say("after the close button");
       throw e;

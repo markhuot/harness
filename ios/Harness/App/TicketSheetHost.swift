@@ -20,6 +20,8 @@ struct TicketSheetHost: View {
     @Environment(\.palette) private var c
     /// The sheet as it was last up, so its content stays while it animates away.
     @State private var last: TicketSheet?
+    /// Whether it was docked when last up, for the detent while it animates away.
+    @State private var lastDocked = false
     @Environment(DockedSheetInset.self) private var dockInset
 
     var body: some View {
@@ -53,6 +55,7 @@ struct TicketSheetHost: View {
             }
         }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
+        .onChange(of: router.ticketSheetState, initial: true) { _, s in if s != .gone { lastDocked = s == .docked } }
         .presentationDetents([TicketDock.detent, .large], selection: detent)
         .presentationBackgroundInteraction(.enabled(upThrough: TicketDock.detent))
         .presentationDragIndicator(.visible)
@@ -88,8 +91,16 @@ struct TicketSheetHost: View {
         }
     }
 
+    /// Gone, the sheet keeps the detent it had, so the dock's ✕ sends it away from the dock
+    /// rather than growing it to `.large` on the way out.
     private var detent: Binding<PresentationDetent> {
-        Binding(get: { router.dock != nil ? TicketDock.detent : .large },
+        Binding(get: {
+                    switch router.ticketSheetState {
+                    case .gone: lastDocked ? TicketDock.detent : .large
+                    case .docked: TicketDock.detent
+                    case .presented: .large
+                    }
+                },
                 set: { $0 == TicketDock.detent ? router.dockSheet() : router.restoreDock() })
     }
 
