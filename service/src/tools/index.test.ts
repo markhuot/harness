@@ -4,7 +4,25 @@ import { fakeContext, fakeOps } from "./fakes";
 import { advertisedDescription, advertisedTools, CORE_TOOL_NAMES, DEFAULT_TOOL_STUB_VARIANT, rankTools, stripSchemaDescriptions, type ToolStubVariant, toolStubVariant, toolsForRun } from "./index";
 import type { ToolDefinition } from "./types";
 
-const BROWSER = ["browser_open", "browser_tabs", "browser_resize", "browser_close_tab", "browser_content", "browser_click", "browser_type", "browser_eval", "browser_screenshot", "browser_wait", "browser_run", "browser_run_status", "browser_run_stop"];
+const BROWSER = [
+  "browser_open",
+  "browser_tabs",
+  "browser_resize",
+  "browser_close_tab",
+  "browser_content",
+  "browser_snapshot",
+  "browser_click",
+  "browser_type",
+  "browser_keys",
+  "browser_select",
+  "browser_upload",
+  "browser_eval",
+  "browser_screenshot",
+  "browser_wait",
+  "browser_run",
+  "browser_run_status",
+  "browser_run_stop",
+];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
 const NATIVE_READ = ["read_file", "list_files", "bash"];
 const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];

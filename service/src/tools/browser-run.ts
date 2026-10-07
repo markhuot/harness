@@ -15,7 +15,7 @@ import type { ChildMessage, ParentMessage } from "../browser/script-child";
 import type { BrowserPageEvent } from "../browser/types";
 import { seconds } from "../browser/wait";
 import { COMPILED } from "../runtime";
-import { browserClick, browserContent, browserEval, browserOpen, browserResize, browserScreenshot, browserType, browserWait } from "./browser";
+import { browserClick, browserContent, browserEval, browserKeys, browserOpen, browserResize, browserScreenshot, browserSelect, browserSnapshot, browserType, browserUpload, browserWait } from "./browser";
 import type { ToolContext, ToolResult } from "./types";
 import { defineTool, errorResult, schema } from "./util";
 
@@ -250,6 +250,15 @@ const str = (v: unknown, what: string) => {
   return v;
 };
 
+/** An element argument as tool input: "selector", { ref }, or { selector, frame }; opts.frame applies to a selector. */
+function target(v: unknown, o: Opts, what: string): Opts {
+  if (typeof v === "string" && v) return { selector: v, frame: o.frame };
+  const t = opt(v);
+  if (typeof t.ref === "string" && t.ref) return { ref: t.ref };
+  if (typeof t.selector === "string" && t.selector) return { selector: t.selector, frame: t.frame ?? o.frame };
+  throw new Error(`${what} must be a CSS selector, { ref } from snapshot(), or { selector, frame }.`);
+}
+
 /**
  * Run one page call from the script through the browser tools. Returns the call's value; a tool
  * error (a wait that timed out, a selector that matched nothing) throws with the tool's text.
@@ -265,30 +274,48 @@ async function runStep(job: Job, method: string, args: unknown[]): Promise<unkno
   switch (method) {
     case "click": {
       const o = opt(args[1]);
-      return textOf(await exec(browserClick, { selector: str(args[0], "click's selector"), wait_for: o.wait_for })).join("\n");
+      return textOf(await exec(browserClick, { ...target(args[0], o, "click's element"), wait_for: o.wait_for })).join("\n");
     }
     case "type": {
       const o = opt(args[2]);
       if (typeof args[1] !== "string") throw new Error("type's text must be a string.");
-      return textOf(await exec(browserType, { selector: str(args[0], "type's selector"), text: args[1], submit: o.submit, wait_for: o.wait_for })).join("\n");
+      return textOf(await exec(browserType, { ...target(args[0], o, "type's element"), text: args[1], submit: o.submit, wait_for: o.wait_for })).join("\n");
+    }
+    case "keys": {
+      const o = opt(args[0]);
+      return textOf(await exec(browserKeys, { text: o.text, keys: o.keys, per_key: o.per_key, wait_for: o.wait_for })).join("\n");
+    }
+    case "select": {
+      const o = opt(args[1]);
+      return textOf(await exec(browserSelect, { ...target(args[0], o, "select's element"), value: o.value, label: o.label, index: o.index, wait_for: o.wait_for })).join("\n");
+    }
+    case "upload": {
+      const o = opt(args[2]);
+      const paths = typeof args[1] === "string" ? [args[1]] : args[1];
+      return textOf(await exec(browserUpload, { ...target(args[0], o, "upload's element"), paths, wait_for: o.wait_for })).join("\n");
+    }
+    case "snapshot": {
+      const o = opt(args[0]);
+      const parts = textOf(await exec(browserSnapshot, { frame: o.frame, max_nodes: o.max_nodes, wait_for: o.wait_for }));
+      return parts[parts.length - 1] ?? "";
     }
     case "wait":
       return textOf(await exec(browserWait, opt(args[0]))).join("\n");
     case "evaluate": {
       const o = opt(args[1]);
-      const parts = textOf(await exec(browserEval, { expression: str(args[0], "evaluate's expression"), wait_for: o.wait_for }));
+      const parts = textOf(await exec(browserEval, { expression: str(args[0], "evaluate's expression"), frame: o.frame, wait_for: o.wait_for }));
       return parseEval(parts[parts.length - 1] ?? "undefined");
     }
     case "content": {
       const o = opt(args[1]);
-      const parts = textOf(await exec(browserContent, { selector: args[0] ?? undefined, format: o.format, max_chars: o.max_chars, wait_for: o.wait_for }));
+      const parts = textOf(await exec(browserContent, { selector: args[0] ?? undefined, format: o.format, max_chars: o.max_chars, frame: o.frame, wait_for: o.wait_for }));
       return parts[parts.length - 1] ?? "";
     }
     case "screenshot": {
       const o = opt(args[1]);
       const scope = await ctx.ops.fileOutputScope(ctx);
       const path = typeof args[0] === "string" && args[0] ? args[0] : join(scope.scratchDir, "browser-run", `job-${job.id}-${job.nextStep()}.png`);
-      await exec(browserScreenshot, { save_to: path, full_page: o.full_page, selector: o.selector, wait_for: o.wait_for });
+      await exec(browserScreenshot, { save_to: path, full_page: o.full_page, selector: o.selector, ref: o.ref, frame: o.frame, wait_for: o.wait_for });
       return resolve(scope.readOnly ? scope.scratchDir : ctx.cwd, path);
     }
     case "open": {
@@ -494,7 +521,7 @@ function report(job: Job): ToolResult {
 
 /** The script's functions, for browser_run's description and the Browser prompt section. */
 export const SCRIPT_API =
-  "click(selector, { wait_for }), type(selector, text, { submit, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, wait_for }) (runs in the page and returns the value), content(selector?, { format, max_chars, wait_for }), screenshot(path?, { full_page, selector, wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms)";
+  "click(element, { frame, wait_for }), type(element, text, { submit, frame, wait_for }), keys({ text, keys, per_key, wait_for }), select(element, { value | label | index, frame, wait_for }), upload(element, paths, { frame, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, frame, wait_for }) (runs in the page, or the frame, and returns the value), content(selector?, { format, max_chars, frame, wait_for }), snapshot({ frame, max_nodes, wait_for }) (the accessibility tree with refs, as text), screenshot(path?, { full_page, selector, ref, frame, wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms). An element is a CSS selector (inside frame, when given), or { ref: \"e12\" } from snapshot()";
 
 const WAIT_PARAM = {
   type: "number",

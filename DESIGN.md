@@ -858,12 +858,16 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `browser_tabs` | ″ | `{ tab? }` → one line per tab: number, title, URL, mode and size, and its failed-request and console-error counts; with `tab`, that tab in full (state, size, scroll, requests failed-first, console). A suspended tab isn't reopened |
 | `browser_resize` | ″ | `{ device?, width?, height?, tab?, wait_for? }` (at least one): `device` resets to its preset size and reloads; `width`/`height` keep the mode. Any tab of the session ("your own tabs" is prompt guidance only); ends a viewer's Responsive |
 | `browser_close_tab` | ″ | `{ tab }` |
-| `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars?, tab?, wait_for? }` |
-| `browser_click` | ″ | `{ selector, tab?, wait_for? }` → says so when the target was disabled or inside `[aria-busy]` |
-| `browser_type` | ″ | `{ selector, text, submit?, tab?, wait_for? }` |
-| `browser_eval` | ″ | `{ expression, tab?, wait_for? }` → JSON from Chrome's deep serialization (elements as `tag#id.class`, cycles as `"[Circular]"`); a navigation mid-expression is an error naming the new URL |
-| `browser_screenshot` | ″ | `{ save_to?, full_page?, selector?, tab?, wait_for? }` → image of the viewport; `full_page` captures the whole scrollable page (up to 16384 CSS px tall) and `selector` just the first matching element, both without resizing the tab; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
-| `browser_wait` | ″ | `{ selector?, state?, text?, url?, idle?, timeout?, tab? }`: the `wait_for` wait without an action. See "Browser waits and scripts" |
+| `browser_content` | ″ | `{ selector?, format?: "text"\|"html", max_chars?, frame?, tab?, wait_for? }` → ends with the iframes in what it read, each with the `frame` to pass for it. See "Browser frames and refs" |
+| `browser_snapshot` | ″ | `{ frame?, max_nodes?, tab?, wait_for? }` → the accessibility tree as text, iframes nested, a ref on each element. See "Browser frames and refs" |
+| `browser_click` | ″ | `{ selector?, ref?, frame?, tab?, wait_for? }` (selector or ref) → says so when the target was disabled or inside `[aria-busy]` |
+| `browser_type` | ″ | `{ selector?, ref?, frame?, text, submit?, tab?, wait_for? }` |
+| `browser_keys` | ″ | `{ text?, keys?, per_key?, tab?, wait_for? }` (text or keys) → sent to whatever has focus, in whichever frame holds it; `keys` are chords like `"Shift+Tab"` |
+| `browser_select` | ″ | `{ selector?, ref?, frame?, value?, label?, index?, tab?, wait_for? }` (one of value, label, index; each one or a list) → picks options of a native `<select>` and fires `input` and `change`; no match lists the options |
+| `browser_upload` | ″ | `{ selector?, ref?, frame?, paths, tab?, wait_for? }` → sets files on a file input, or on the file chooser clicking the element opens; paths must be under the working directory or the scratch folder |
+| `browser_eval` | ″ | `{ expression, frame?, tab?, wait_for? }` → JSON from Chrome's deep serialization (elements as `tag#id.class`, cycles as `"[Circular]"`); a navigation mid-expression is an error naming the new URL |
+| `browser_screenshot` | ″ | `{ save_to?, full_page?, selector?, ref?, frame?, tab?, wait_for? }` → image of the viewport; `full_page` captures the whole scrollable page (up to 16384 CSS px tall), `selector` or `ref` just one element and `frame` alone an iframe's box, both without resizing the tab; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
+| `browser_wait` | ″ | `{ selector?, state?, text?, frame?, url?, idle?, timeout?, tab? }`: the `wait_for` wait without an action. See "Browser waits and scripts" |
 | `browser_run` | ″ | `{ script, tab?, timeout?, wait? }` → starts a script job, returns its number and log after `wait` s. See "Browser waits and scripts" |
 | `browser_run_status` | ″ | `{ job, wait? }` → the job's state and its new log lines; a failure adds the script line, step, URL and a screenshot |
 | `browser_run_stop` | ″ | `{ job }` |
@@ -1759,7 +1763,8 @@ lists what was added and whether each is on.
 Agents wait for a page instead of sleeping, and run multi-step flows as scripts (HARNESS-278).
 
 - **One wait.** `WaitCondition` (`browser/wait.ts`) is `{ selector?, state?: visible | hidden |
-  gone | enabled, text?, url?, idle?, timeout? }`, every field given holding at once, and
+  gone | enabled, text?, frame?, url?, idle?, timeout? }`, every field given holding at once
+  (`frame`: selector and text are checked in that iframe; alone, the iframe has a document), and
   `BrowserManager.waitFor` is its only implementation. It polls every 100 ms with a fresh
   `Runtime.evaluate` (never one long in-page promise), so a navigation costs a tick, not the wait.
   `enabled` is visible and not `:disabled`, `aria-disabled` or inside `[aria-busy=true]`; `idle`
@@ -1767,9 +1772,11 @@ Agents wait for a page instead of sleeping, and run multi-step flows as scripts 
   and requests open over 5 s. The timeout is 15 s by default, at most 120 s. A timeout returns
   (never throws) a report: the URL, loading, `aria-busy` count, the last check's counts, requests
   in flight and console errors seen while waiting. A selector that doesn't parse fails at once.
-- **Where it runs.** `browser_open`, `browser_click`, `browser_type` and `browser_resize` take
-  `wait_for` and wait after acting; `browser_screenshot`, `browser_content` and `browser_eval` wait
-  before reading. `browser_wait` is the wait alone. `wait_for` is checked before the tool acts. A
+- **Where it runs.** `browser_open`, `browser_click`, `browser_type`, `browser_keys`,
+  `browser_select`, `browser_upload` and `browser_resize` take `wait_for` and wait after acting;
+  `browser_screenshot`, `browser_content`, `browser_snapshot` and `browser_eval` wait before
+  reading. A frame that isn't there yet (no iframe matches, or it has no document) is "not yet";
+  one that can never do (it isn't an iframe) fails at once. `browser_wait` is the wait alone. `wait_for` is checked before the tool acts. A
   timed-out wait makes the result an error that still carries what the tool did or read (a
   screenshot is taken anyway). The wording of the condition (`WAIT_CONDITION_DOC`) is shared by
   the tool descriptions and the Browser prompt section, and a prompt test checks the section names
@@ -1781,8 +1788,8 @@ Agents wait for a page instead of sleeping, and run multi-step flows as scripts 
   `export default await (async () => {…})()` on its first line so its line numbers hold, to the
   run's scratch folder and starts it in its own process: `bun browser/script-child.ts <file>`
   in a checkout, `harness-service browser-script <file>` in Harness.app. The child has no CDP: its
-  globals (`click`, `type`, `wait`, `evaluate`, `content`, `screenshot`, `open`, `resize`, `url`,
-  `log`, `sleep`) send calls over Bun IPC, and the service runs each through the browser tool of
+  globals (`click`, `type`, `keys`, `select`, `upload`, `wait`, `evaluate`, `content`,
+  `snapshot`, `screenshot`, `open`, `resize`, `url`, `log`, `sleep`) send calls over Bun IPC, and the service runs each through the browser tool of
   the same name with the job's tab, so waits and errors behave exactly as for the agent. A failed
   call rejects in the script with the tool's text and a stack made at the call site.
 - **Jobs.** One running job per tab. A job's log (at most 2,000 lines kept) holds its start,
@@ -1796,6 +1803,47 @@ Agents wait for a page instead of sleeping, and run multi-step flows as scripts 
   `finally`). The log is mirrored to the transcript as status lines, batched each second, up to
   300 lines a job (`HarnessOps.statusLine`). There is no MCP progress: the model doesn't see
   `notifications/progress`, and polling works on every driver.
+
+### Browser frames and refs
+
+Agents act inside iframes, embedded checkouts like Stripe Elements included, and can address
+elements by an accessibility ref instead of a selector (HARNESS-363).
+
+- **Frames.** `TabFrames` (`browser/frames.ts`) follows each tab's frames. Same-process iframes
+  report their main-world execution contexts on the tab's session. Cross-origin iframes run out of
+  process: `Target.setAutoAttach { flatten, filter: iframe }` on the tab's session (and on each
+  child, for nested ones) attaches each one as a child session, which gets `Runtime.enable`,
+  `Page.enable` and its own frame tree. A frame is then "a session plus its default context",
+  whichever process holds it; `Page.frameDetached` with reason `swap` keeps the frame, since its
+  new session reports it.
+- **The `frame` param.** A CSS selector for the `<iframe>`, or an array of them, outermost first.
+  Each level runs `document.querySelector` in the current scope, and `DOM.describeNode` on the
+  match gives the child's frame id. Errors name the level: no iframe matches, it matches a `<div>`,
+  or the iframe has no document yet. `browser_content` ends with the iframes in what it read,
+  each with a selector (`#id`, `[name]`, `[title]` or `[src^=…]`) and the full `frame` to pass.
+- **Acting in a frame.** Element tools hold the element as a remote object in its frame and call
+  functions on it. Clicks are still real mouse events on the tab's session: the element's centre is
+  mapped to page coordinates by adding each `<iframe>`'s content-box offset on the way up
+  (`DOM.getFrameOwner`), and a level where something covers the iframe falls back to `el.click()`.
+  Text goes to the focused frame, so typing into an iframe's field first focuses each `<iframe>`
+  element from the top down. Chrome acknowledges input once it has routed it, before another
+  renderer runs its handlers, so after input the tab waits for an animation frame in each
+  out-of-process iframe's renderer (`flushInput`), and a read right afterwards sees the result.
+- **Refs.** `browser_snapshot` renders `Accessibility.getFullAXTree` per frame (`browser/snapshot.ts`):
+  ignored and unnamed structural nodes are flattened, text that repeats its parent's name or value
+  is dropped, and an iframe node nests its frame's tree (found with `DOM.describeNode`), up to 8
+  levels and `max_nodes` lines (default 1500). Each element's ref (`e12`) names a frame and a
+  `backendNodeId`; a node keeps its ref across snapshots. Refs are dropped when their frame
+  navigates or detaches, and a ref that no longer resolves (`DOM.resolveNode`) is "stale: take a
+  new snapshot".
+- **Keys, select, upload.** `browser_keys` sends `Input.insertText` (or, with `per_key`, keydown,
+  char and keyup per character) and key chords (`keys.ts` `parseKeyChord`: modifiers joined with
+  `+`, named keys, single characters) on the tab's session, which Chrome routes to the focused
+  frame. `browser_select` sets `<option>.selected` and fires `input` and `change`; a value, label
+  or index that matches nothing lists the options. `browser_upload` resolves paths under the
+  working directory or the scratch folder (symlinks resolved), then uses `DOM.setFileInputFiles`
+  on a file input, or for anything else intercepts the file chooser clicking it opens
+  (`Page.setInterceptFileChooserDialog`, `Page.fileChooserOpened`).
 
 ### Activity
 

@@ -197,6 +197,10 @@ export function fakeBrowser(overrides: BrowserImpl = {}): BrowserService & { cal
     content: async () => "Example page text",
     click: async () => ({}),
     type: async () => {},
+    keys: async () => {},
+    select: async () => ["Second"],
+    upload: async () => "input" as const,
+    snapshot: async () => '- document "Example"\n  - button "Go" [ref=e1]',
     evaluate: async () => "42",
     waitFor: async () => ({ met: true, elapsedMs: 120, url: current?.url ?? "about:blank", summary: `met after 0.1s; now at ${current?.url ?? "about:blank"}` }),
     // Synchronous, like the real one: it returns the unsubscribe.

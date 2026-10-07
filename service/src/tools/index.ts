@@ -3,7 +3,22 @@
 import type { RunKind, Ticket } from "@harness/shared";
 import type { Driver } from "../drivers/types";
 import { getTicket, listInbox, listProjects, listTickets, searchTickets } from "./board";
-import { browserClick, browserCloseTab, browserContent, browserEval, browserOpen, browserResize, browserScreenshot, browserTabs, browserType, browserWait } from "./browser";
+import {
+  browserClick,
+  browserCloseTab,
+  browserContent,
+  browserEval,
+  browserKeys,
+  browserOpen,
+  browserResize,
+  browserScreenshot,
+  browserSelect,
+  browserSnapshot,
+  browserTabs,
+  browserType,
+  browserUpload,
+  browserWait,
+} from "./browser";
 import { browserRun, browserRunStatus, browserRunStop } from "./browser-run";
 import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
 import { configReadTools, configWriteTools } from "./config";
@@ -33,8 +48,12 @@ export const browserTools: ToolDefinition[] = [
   browserResize,
   browserCloseTab,
   browserContent,
+  browserSnapshot,
   browserClick,
   browserType,
+  browserKeys,
+  browserSelect,
+  browserUpload,
   browserEval,
   browserScreenshot,
   browserWait,

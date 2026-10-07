@@ -85,6 +85,88 @@ export function virtualKeyCode(key: string, code: string): number {
   return 0;
 }
 
+/** A key browser_keys sends: its DOM key and code, the modifiers held, and the text it types. */
+export interface KeyPress {
+  key: string;
+  code: string;
+  modifiers: number;
+  /** What it types (absent for Tab, arrows, shortcuts…). */
+  text?: string;
+}
+
+const MODIFIER_NAMES: Record<string, number> = {
+  shift: MOD_SHIFT,
+  control: MOD_CTRL,
+  ctrl: MOD_CTRL,
+  alt: MOD_ALT,
+  option: MOD_ALT,
+  meta: MOD_META,
+  cmd: MOD_META,
+  command: MOD_META,
+};
+
+/** Named keys browser_keys knows, by their DOM `key` (case-insensitive); each one's `code` is the same name. */
+const KEY_NAMES = [
+  "Enter",
+  "Tab",
+  "Escape",
+  "Backspace",
+  "Delete",
+  "Insert",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`),
+];
+const KEY_ALIASES: Record<string, string> = { esc: "Escape", return: "Enter", del: "Delete", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
+
+/** The DOM `code` a single character's key has on a US keyboard, or "" for one without its own key. */
+export function charCode(ch: string): string {
+  if (/^[a-z]$/i.test(ch)) return `Key${ch.toUpperCase()}`;
+  if (/^[0-9]$/.test(ch)) return `Digit${ch}`;
+  if (ch === " ") return "Space";
+  return "";
+}
+
+/** One character typed as a key press (browser_keys per_key): Shift for capitals, Enter for a newline. */
+export function charPress(ch: string): KeyPress {
+  if (ch === "\n" || ch === "\r") return { key: "Enter", code: "Enter", modifiers: 0, text: "\r" };
+  if (ch === "\t") return { key: "Tab", code: "Tab", modifiers: 0 };
+  return { key: ch, code: charCode(ch), modifiers: /^[A-Z]$/.test(ch) ? MOD_SHIFT : 0, text: ch };
+}
+
+/**
+ * A key chord as written for browser_keys: "Tab", "Shift+Tab", "Meta+a", "Control+Shift+ArrowLeft",
+ * "Space", "a". Throws, naming the keys it knows, for anything else.
+ */
+export function parseKeyChord(spec: string): KeyPress {
+  const parts = spec.split("+");
+  // "+" itself, or a chord ending in it ("Shift++").
+  if (spec.endsWith("++") || spec === "+") parts.splice(parts.length - 2, 2, "+");
+  let modifiers = 0;
+  for (const m of parts.slice(0, -1)) {
+    const bit = MODIFIER_NAMES[m.trim().toLowerCase()];
+    if (!bit) throw new Error(`Unknown modifier "${m}" in "${spec}": use Shift, Control, Alt or Meta.`);
+    modifiers |= bit;
+  }
+  const raw = parts[parts.length - 1]!;
+  const name = raw.length === 1 ? raw : raw.trim();
+  const shortcut = (modifiers & (MOD_CTRL | MOD_META)) !== 0;
+  if (name.length === 1) {
+    const ch = modifiers & MOD_SHIFT && /^[a-z]$/.test(name) ? name.toUpperCase() : name;
+    return { key: ch, code: charCode(name), modifiers, ...(shortcut ? {} : { text: ch }) };
+  }
+  if (name.toLowerCase() === "space") return { key: " ", code: "Space", modifiers, ...(shortcut ? {} : { text: " " }) };
+  const known = KEY_NAMES.find((k) => k.toLowerCase() === name.toLowerCase()) ?? KEY_ALIASES[name.toLowerCase()];
+  if (!known) throw new Error(`Unknown key "${name}" in "${spec}". Keys: a single character, Space, ${KEY_NAMES.slice(0, 14).join(", ")}, F1–F12.`);
+  return { key: known, code: known, modifiers, ...(known === "Enter" && !shortcut ? { text: "\r" } : {}) };
+}
+
 const MAC_COMMANDS: Record<string, string> = {
   KeyA: "selectAll",
   KeyC: "copy",
