@@ -510,6 +510,11 @@ draft ticket (it has no agent yet) answers 409. Its uploads count as referenced,
 sweep keeps them, and they go when the ticket is deleted. Agents never see it: the board tools pick
 their own fields.
 
+A board card shows a pencil while `hasMessageDraft` holds (text that isn't blank, or files). It sits
+in the card's top-right icons, which keep a fixed order: activity (spinner or clock), the pencil,
+then the agent and human review marks, so the marks stay at the right edge when a run starts or
+stops.
+
 `POST /tickets/:key/messages` from an app clears the draft once the message is delivered (a failed
 send keeps it). An agent's `message_ticket` goes through the same delivery but leaves the human's
 draft alone.

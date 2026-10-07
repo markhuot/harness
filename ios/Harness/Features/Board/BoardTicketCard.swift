@@ -31,7 +31,7 @@ struct BoardTicketCard: View {
             .modifier(CardMenu(ticket: t, width: width) { menu(parent: parent) })
             .modifier(CardDrag(ticket: t))
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")) + restartLabel(t))
+            .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")) + restartLabel(t) + (MessageDrafts.has(t.messageDraft.optional) ? ", a message is drafted" : ""))
             .accessibilityHint(t.draft == true ? "Opens the draft. Touch and hold to discard it." : "Opens the ticket. Touch and hold to preview it.")
             .accessibilityAddTraits(.isButton)
     }
@@ -81,16 +81,23 @@ struct BoardTicketCard: View {
                 }
                 Spacer(minLength: 0)
                 if draft { Badge("Draft", icon: "edit") }
+                // Activity, then the message draft, then the reviews: the review marks sit at the
+                // trailing edge, so the spinner coming and going (or a draft being typed) never
+                // moves them.
+                if Conductor.isWorking(state.tickets, t) {
+                    Spinner().controlSize(.small)
+                } else if !waiting.isEmpty || Conductor.restartsAt(t) != nil {
+                    Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
+                }
+                if MessageDrafts.has(t.messageDraft.optional) {
+                    Icon("edit", size: 13, weight: .semibold)
+                        .foregroundStyle(c.text2)
+                }
                 if t.status == .review {
                     HStack(spacing: 3) {
                         ReviewMark(who: .agent, state: t.agentReview)
                         ReviewMark(who: .human, state: t.humanReview)
                     }
-                }
-                if Conductor.isWorking(state.tickets, t) {
-                    Spinner().controlSize(.small)
-                } else if !waiting.isEmpty || Conductor.restartsAt(t) != nil {
-                    Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
                 }
             }
             .frame(minHeight: 21)

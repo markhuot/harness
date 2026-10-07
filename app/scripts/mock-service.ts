@@ -538,6 +538,8 @@ interface SeedTicket {
   permissionMode?: Ticket["permissionMode"];
   externalRef?: Ticket["externalRef"];
   autoStart?: boolean;
+  /** A message the human started writing to the agent (Ticket.messageDraft) */
+  messageDraft?: string;
   /** Activity entries: [author, body, kind (default: note from an agent, system from the system, message from a human)] */
   activity?: [ActivityAuthor, string, ActivityKind?][];
   ageMin: number;
@@ -582,6 +584,7 @@ function seedTicket(s: SeedTicket): Ticket {
     busy: s.busy ?? false,
     pendingApproval: s.pendingApproval ?? null,
     allowedTools: s.allowedTools ?? [],
+    messageDraft: s.messageDraft ? { text: s.messageDraft, attachments: [], origin: null, updatedAt: createdAt + 60_000 } : null,
     model: s.model ?? null,
     position: tickets.size,
     completedAt: s.status === "done" ? createdAt + 60_000 : null,
@@ -768,6 +771,7 @@ function seed() {
     driver: "claude-code",
     agentReview: "approved",
     humanReview: "pending",
+    messageDraft: "Can we keep the hero image eager? It's above the fold on",
     ageMin: 600,
     activity: [
       ["agent", "Added `loading=\"lazy\"` to `SectionImage` and explicit dimensions.\n\n```tsx\n<img loading=\"lazy\" width={w} height={h} src={src} />\n```\n\nLighthouse CLS dropped from 0.14 to 0.02."],

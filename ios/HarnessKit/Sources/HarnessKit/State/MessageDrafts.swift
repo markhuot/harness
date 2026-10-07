@@ -30,6 +30,13 @@ public enum MessageDrafts {
         d.map { MessageDraftValue(text: $0.text, attachments: $0.attachments) } ?? .empty
     }
 
+    /// `hasMessageDraft`: the ticket has a message waiting to go (its board card shows a pencil):
+    /// text that isn't blank, or files.
+    public static func has(_ d: MessageDraft?) -> Bool {
+        guard let d else { return false }
+        return !d.text.allSatisfy { $0.isWhitespace } || !d.attachments.isEmpty
+    }
+
     /// `sameMessageDraft`
     public static func same(_ a: MessageDraftValue, _ b: MessageDraftValue) -> Bool {
         a.text.unicodeScalars.elementsEqual(b.text.unicodeScalars) && PromptAttachments.same(a.attachments, b.attachments)

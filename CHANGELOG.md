@@ -9,6 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- A card on the board shows a pencil when you've started writing a message to its agent and
+  haven't sent it yet, on the Mac and on iPhone and iPad.
+
+### Changed
+
+- The icons at the top right of a board card keep a fixed order: the working spinner (or clock),
+  then the pencil, then the agent and human review marks. The review marks stay put at the right
+  edge when an agent starts or stops working.
+
 ## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
 
 ### Added
