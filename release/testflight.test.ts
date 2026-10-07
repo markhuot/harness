@@ -109,6 +109,14 @@ test("distribute adds the build to the group, submits it for review and returns 
   expect(calls.find((x) => x.key === "POST /betaBuildLocalizations")!.body.data.attributes).toEqual({ whatsNew: "New stuff", locale: "en-US" });
 });
 
+test("distribute strips the dingbats and emoji What to Test refuses, keeping arrows and dashes", async () => {
+  const { c, calls } = fakeAsc(distributeRoutes(201));
+  await distribute(c, "202609301424", "- A close button (✕) replaces the arrow 🚀.\n- Settings → Notifications — on ✔️", quiet);
+  expect(calls.find((x) => x.key === "POST /betaBuildLocalizations")!.body.data.attributes.whatsNew).toBe(
+    "- A close button replaces the arrow .\n- Settings → Notifications — on ",
+  );
+});
+
 test("distribute tolerates a build that is already in review (409) but not other failures", async () => {
   const again = await distribute(fakeAsc(distributeRoutes(409)).c, "202609301424", "", quiet);
   expect(again.review).toStartWith("not resubmitted");

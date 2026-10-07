@@ -135,6 +135,18 @@ export async function isUploaded(c: Client, buildNumber: string): Promise<boolea
   return Boolean(data?.[0]);
 }
 
+/**
+ * What to Test refuses dingbats and emoji ("✕" fails as INVALID_TEXT) though it takes arrows and
+ * typographic punctuation, so drop them, along with a parenthetical that held nothing else.
+ */
+export function whatsNewText(notes: string): string {
+  return notes
+    .replace(/[✀-➿︎️‍]|\p{Extended_Pictographic}/gu, "")
+    .replace(/ ?\(\s*\)/g, "")
+    .replace(/ {2,}/g, " ")
+    .slice(0, 4000);
+}
+
 /** Add the build to the group and submit it for Beta App Review; resubmitting an already submitted build is fine. */
 export async function distribute(c: Client, buildNumber: string, whatsNew: string, opts?: Parameters<typeof waitForBuild>[3]) {
   const app = await findApp(c);
@@ -143,7 +155,7 @@ export async function distribute(c: Client, buildNumber: string, whatsNew: strin
   if (whatsNew) {
     const { data: locs } = await c.get(`/builds/${build.id}/betaBuildLocalizations`);
     const en = (locs as Resource[]).find((l) => l.attributes.locale === "en-US");
-    const attributes = { whatsNew: whatsNew.slice(0, 4000) };
+    const attributes = { whatsNew: whatsNewText(whatsNew) };
     if (en) await c.patch(`/betaBuildLocalizations/${en.id}`, { data: { type: "betaBuildLocalizations", id: en.id, attributes } });
     else await c.post("/betaBuildLocalizations", {
       data: { type: "betaBuildLocalizations", attributes: { ...attributes, locale: "en-US" }, relationships: { build: { data: { type: "builds", id: build.id } } } },
