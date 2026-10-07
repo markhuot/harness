@@ -33,6 +33,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, New session's prompt fills its whole box, so tapping anywhere in it brings up
   the keyboard, and a tap or drag below the text places the cursor as in any text field. Taps in the
   lower part of the box, below the text, used to do nothing.
+- On iPhone, New session scrolls along as you type a long prompt, so the line you're typing stays
+  above the keyboard. Before, the prompt kept growing behind the keyboard and new lines were hidden.
 
 ## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
 

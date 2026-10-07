@@ -382,7 +382,8 @@ feature needs something new here, add to it without changing what's there.
   in a tab root's `.safeAreaInset(edge: .top)`), `Icon("name")` (every shared icon name maps to an
   SF Symbol, Icons.symbols in HarnessKit, checked by a test), `haptic(.success)`,
   `.confirmation($item)` / `.choiceSheet($item)`, `DraftField` (commits on
-  return or blur). Also `FlowLayout` (wrapping rows, leading or trailing),
+  return or blur), `.keyboardOverlapPadding()` (a form in the iPhone's ticket sheet, whose safe
+  area doesn't include the keyboard, pads its bottom by the keyboard's overlap). Also `FlowLayout` (wrapping rows, leading or trailing),
   `.primaryToolbarItem(c)` (prominent only when the theme's onAccent is
   white), `PickerLatest`, `String.nilIfEmpty` and `deviceName`. Settings-style screens are plain `Form` + `LabeledContent`.
 
