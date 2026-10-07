@@ -832,6 +832,23 @@
       "viewerId": "v:spec-2"
     },
     {
+      "type": "presence",
+      "deviceId": "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90",
+      "platform": "ios",
+      "visible": true,
+      "tickets": [
+        "NYTIMES-12",
+        "NYTIMES-31"
+      ]
+    },
+    {
+      "type": "presence",
+      "deviceId": "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90",
+      "platform": "mac",
+      "visible": false,
+      "tickets": []
+    },
+    {
       "type": "ping"
     }
   ],
@@ -1463,10 +1480,25 @@
           "system.intro": "You are {{agentName}}.",
           "run.review": null
         },
+        "notifications": {
+          "enabled": true,
+          "categories": {
+            "status": true,
+            "review": true,
+            "notes": false,
+            "spec": true,
+            "other": false
+          },
+          "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+          "apnsTeamId": "47P4ZSALX4"
+        },
         "anthropicApiKeySet": true,
         "claudeOauthTokenSet": true,
         "copilotGithubTokenSet": true
       }
+    },
+    {
+      "kind": "devices.changed"
     },
     {
       "kind": "browser.frame",
@@ -2323,6 +2355,18 @@
         "system.intro": "You are {{agentName}}.",
         "run.review": null
       },
+      "notifications": {
+        "enabled": true,
+        "categories": {
+          "status": true,
+          "review": true,
+          "notes": false,
+          "spec": true,
+          "other": false
+        },
+        "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+        "apnsTeamId": "47P4ZSALX4"
+      },
       "anthropicApiKeySet": true,
       "claudeOauthTokenSet": true,
       "copilotGithubTokenSet": true
@@ -2361,6 +2405,18 @@
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
+      },
+      "notifications": {
+        "enabled": true,
+        "categories": {
+          "status": true,
+          "review": true,
+          "notes": false,
+          "spec": true,
+          "other": false
+        },
+        "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+        "apnsTeamId": "47P4ZSALX4"
       },
       "anthropicApiKeySet": true,
       "claudeOauthTokenSet": false,
@@ -2764,6 +2820,18 @@
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
+      },
+      "notifications": {
+        "enabled": true,
+        "categories": {
+          "status": true,
+          "review": true,
+          "notes": false,
+          "spec": true,
+          "other": false
+        },
+        "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+        "apnsTeamId": "47P4ZSALX4"
       }
     },
     {
@@ -2803,6 +2871,18 @@
       "prompts": {
         "system.intro": "You are {{agentName}}.",
         "run.review": null
+      },
+      "notifications": {
+        "enabled": false,
+        "categories": {
+          "status": true,
+          "review": true,
+          "notes": true,
+          "spec": true,
+          "other": true
+        },
+        "apnsKeyDir": null,
+        "apnsTeamId": "47P4ZSALX4"
       }
     }
   ],
@@ -2856,6 +2936,19 @@
       "listen": {
         "mode": "custom",
         "host": "100.64.0.1"
+      }
+    },
+    {
+      "notifications": {
+        "categories": {
+          "notes": false
+        }
+      }
+    },
+    {
+      "notifications": {
+        "enabled": false,
+        "apnsKeyDir": null
       }
     },
     {}
@@ -4566,6 +4659,7 @@
       "watcher.upserted",
       "watcher.deleted",
       "settings.updated",
+      "devices.changed",
       "browser.frame",
       "browser.state",
       "service.status"
@@ -4587,6 +4681,7 @@
       "browser.subscribe",
       "browser.unsubscribe",
       "browser.input",
+      "presence",
       "ping"
     ],
     "ServerMessage": [
@@ -5096,6 +5191,18 @@
           "prompts": {
             "system.intro": "You are {{agentName}}.",
             "run.review": null
+          },
+          "notifications": {
+            "enabled": true,
+            "categories": {
+              "status": true,
+              "review": true,
+              "notes": false,
+              "spec": true,
+              "other": false
+            },
+            "apnsKeyDir": "/Users/mark/.appstoreconnect/private_keys",
+            "apnsTeamId": "47P4ZSALX4"
           },
           "anthropicApiKeySet": true,
           "claudeOauthTokenSet": true,

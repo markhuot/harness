@@ -29,7 +29,7 @@ import type {
   PublicSettings,
   ServerMessage,
   Session,
-  Settings,
+  SettingsPatch,
   ActivityEntry,
   SpecConflict,
   SpecDiff,
@@ -56,6 +56,7 @@ import type {
   NetworkStatus,
   PairingInfo,
 } from "./protocol";
+import type { Device, NotificationStatus, Presence, RegisterDeviceBody, TestNotificationResult } from "./notifications";
 import type { FileMatch } from "./mentions";
 import type { CommandMatch } from "./commands";
 
@@ -366,12 +367,29 @@ export class HarnessClient {
   getSettings() {
     return this.request<PublicSettings>("GET", "/settings");
   }
-  updateSettings(body: Partial<Settings>) {
+  updateSettings(body: SettingsPatch) {
     return this.request<PublicSettings>("PATCH", "/settings", body);
   }
   /** Every overridable prompt with its built-in text and the user's override; change them with updateSettings({ prompts }). */
   listPrompts() {
     return this.request<PromptEntry[]>("GET", "/prompts");
+  }
+
+  // Notifications (DESIGN.md "Notifications")
+  /** APNs key status for each environment and the registered devices. */
+  notificationStatus() {
+    return this.request<NotificationStatus>("GET", "/notifications");
+  }
+  /** Send a test notification to every registered device. */
+  sendTestNotification() {
+    return this.request<TestNotificationResult>("POST", "/notifications/test");
+  }
+  /** Register this device's APNs token, or update it. */
+  registerDevice(body: RegisterDeviceBody) {
+    return this.request<Device>("POST", "/devices", body);
+  }
+  removeDevice(id: string) {
+    return this.request<{ ok: true }>("DELETE", `/devices/${encodeURIComponent(id)}`);
   }
 
   // Network & pairing
@@ -479,6 +497,8 @@ export class HarnessSocket {
   private retry = 250;
   /** One entry per viewer: `subKey(sessionId, viewerId)` → its session, viewer and tab. */
   private browserSubs = new Map<string, { sessionId: string; viewerId: string | undefined; tabId: number | undefined }>();
+  /** The last presence set, sent again after each reconnect. */
+  private presence: Presence | null = null;
 
   constructor(
     private url: string,
@@ -494,6 +514,7 @@ export class HarnessSocket {
       this.retry = 250;
       this.send({ type: "hello", client: "harness-client" });
       for (const sub of this.browserSubs.values()) this.send(browserSubscribe(sub.sessionId, sub.tabId, sub.viewerId));
+      if (this.presence) this.send({ type: "presence", ...this.presence });
       this.handlers.onStatus?.(true);
     };
     ws.onmessage = (m) => {
@@ -534,6 +555,17 @@ export class HarnessSocket {
   unsubscribeBrowser(sessionId: string, viewerId?: string) {
     this.browserSubs.delete(subKey(sessionId, viewerId));
     this.send(viewerId ? { type: "browser.unsubscribe", sessionId, viewerId } : { type: "browser.unsubscribe", sessionId });
+  }
+
+  /**
+   * Tell the service what this socket shows (Presence), so it holds back notifications for those
+   * tickets. Remembered across reconnects; an unchanged presence isn't sent again.
+   */
+  setPresence(presence: Presence) {
+    const next = { ...presence, tickets: [...new Set(presence.tickets)].sort() };
+    if (this.presence && JSON.stringify(this.presence) === JSON.stringify(next)) return;
+    this.presence = next;
+    this.send({ type: "presence", ...next });
   }
 
   close() {

@@ -1,5 +1,5 @@
-import type { ListenSetting, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import type { ListenSetting, NotificationSettings, PromptId, PublicSettings, Settings } from "@harness/shared";
+import { DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   baseBranch: DEFAULT_BASE_BRANCH,
   browserIdleTabMinutes: DEFAULT_BROWSER_IDLE_TAB_MINUTES,
   prompts: unsetPrompts(),
+  notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
 
 /**
@@ -191,12 +192,51 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
       case "prompts":
         out.prompts = validatePrompts(value, current?.prompts);
         break;
+      case "notifications":
+        out.notifications = validateNotifications(value, current?.notifications);
+        break;
       case "anthropicApiKeySet":
       case "claudeOauthTokenSet":
       case "copilotGithubTokenSet":
         break; // echoed back from PublicSettings; ignore
       default:
         throw badRequest(`Unknown setting: ${key}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * A partial { enabled, categories, apnsKeyDir, apnsTeamId } merged over `current` (categories per
+ * category), so a client can flip one switch without sending the rest.
+ */
+export function validateNotifications(value: unknown, current: NotificationSettings = DEFAULT_NOTIFICATION_SETTINGS): NotificationSettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest("notifications must be an object");
+  const out: NotificationSettings = { ...DEFAULT_NOTIFICATION_SETTINGS, ...current, categories: { ...DEFAULT_NOTIFICATION_SETTINGS.categories, ...current.categories } };
+  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+    switch (key) {
+      case "enabled":
+        if (typeof v !== "boolean") throw badRequest("notifications.enabled must be true or false");
+        out.enabled = v;
+        break;
+      case "categories":
+        if (!v || typeof v !== "object" || Array.isArray(v)) throw badRequest("notifications.categories must be an object of category → true or false");
+        for (const [cat, on] of Object.entries(v as Record<string, unknown>)) {
+          if (!(NOTIFICATION_CATEGORIES as readonly string[]).includes(cat)) throw badRequest(`Unknown notification category: ${cat} (one of ${NOTIFICATION_CATEGORIES.join(", ")})`);
+          if (typeof on !== "boolean") throw badRequest(`notifications.categories.${cat} must be true or false`);
+          out.categories[cat as keyof NotificationSettings["categories"]] = on;
+        }
+        break;
+      case "apnsKeyDir":
+        if (v !== null && typeof v !== "string") throw badRequest("notifications.apnsKeyDir must be a folder path or null");
+        out.apnsKeyDir = (v as string | null)?.trim() || null;
+        break;
+      case "apnsTeamId":
+        if (typeof v !== "string" || !/^[A-Z0-9]{10}$/.test(v.trim())) throw badRequest("notifications.apnsTeamId must be a 10-character Apple team id");
+        out.apnsTeamId = v.trim();
+        break;
+      default:
+        throw badRequest(`Unknown notifications setting: ${key}`);
     }
   }
   return out;
