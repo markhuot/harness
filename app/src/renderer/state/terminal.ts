@@ -4,17 +4,24 @@
 // content and its placement live with the other pane operations in panes.ts. Tested in
 // terminal.test.ts.
 
-import type { Project } from "@harness/shared";
+import type { Project, Ticket } from "@harness/shared";
 import { ALL_SCOPE, type ResolvedTheme } from "@harness/shared/state";
 import { over, toHex, type ThemeTokens } from "@harness/shared/themes";
 import type { TerminalExit, TerminalSession } from "../../main/types";
 import { paneScopeOf, type Route } from "./route";
 
 /**
- * The folder a terminal in `scope` starts in: the project's folder, or home (`~`) on All projects,
- * a group's board, or for a project that isn't loaded.
+ * The folder a terminal in `scope` starts in. With a ticket focused: the folder its agent works in
+ * (its worktree or the project checkout), else its project's folder before it has started.
+ * Otherwise the project's folder, or home (`~`) on All projects, a group's board, or for a project
+ * that isn't loaded.
  */
-export function terminalCwd(scope: string, projects: Readonly<Record<string, Pick<Project, "path">>>): string {
+export function terminalCwd(
+  scope: string,
+  projects: Readonly<Record<string, Pick<Project, "path">>>,
+  ticket: Pick<Ticket, "workdir" | "projectId"> | null = null,
+): string {
+  if (ticket) return ticket.workdir || projects[ticket.projectId]?.path || "~";
   if (scope === ALL_SCOPE) return "~";
   return projects[scope]?.path || "~";
 }
