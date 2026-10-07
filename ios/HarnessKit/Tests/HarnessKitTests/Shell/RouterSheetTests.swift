@@ -307,6 +307,23 @@ struct RouterSheetTests {
         #expect(r.ticketSheetState == .gone)
     }
 
+    @Test func aDockWaitingOutAWideSpellDoesntSwallowTheVisibleStacksChanges() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.dockSheet()
+        r.setUsesTicketSheets(false)
+        // At regular width the same ticket is opened on the stack, over the hidden dock.
+        r.push(t("A-1"))
+        #expect(r.path(.board) == [t("A-1")])
+        r.replaceTicket("A-1", with: "A-2")
+        #expect(r.path(.board) == [t("A-2")])
+        #expect(r.removeTicket { $0 == "A-2" })
+        #expect(r.path(.board).isEmpty)
+        // The dock is still there for the next narrow spell.
+        r.setUsesTicketSheets(true)
+        #expect(r.dock?.title == "A-1")
+    }
+
     @Test func withTheFlagOffTicketsPushAsBefore() {
         let r = Router()
         r.push(t("A-1"))

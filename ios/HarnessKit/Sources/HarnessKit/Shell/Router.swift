@@ -302,9 +302,10 @@ public final class Router {
 
     /// Swaps the ticket screen for `key` (the last in the ticket sheet, else its root, else the last
     /// on the selected stack, else the root of a ticket scope) for `newKey`'s. Pushes `newKey` when
-    /// no screen shows `key`.
+    /// no screen shows `key`. Without `usesTicketSheets` the dock waiting out a wide spell isn't on
+    /// screen, so it's left alone.
     public func replaceTicket(_ key: String, with newKey: String) {
-        if var s = ticketSheetStorage {
+        if usesTicketSheets, var s = ticketSheetStorage {
             if let i = Self.lastTicket(in: s.path, where: { $0 == key }) {
                 s.path[i] = .ticket(key: newKey, tab: nil)
                 ticketSheetStorage = s
@@ -333,7 +334,7 @@ public final class Router {
     /// window is asked to close. False when none matched.
     @discardableResult
     public func removeTicket(where matches: (String) -> Bool) -> Bool {
-        if var s = ticketSheetStorage {
+        if usesTicketSheets, var s = ticketSheetStorage {
             if let i = Self.lastTicket(in: s.path, where: matches) {
                 s.path.remove(at: i)
                 ticketSheetStorage = s
