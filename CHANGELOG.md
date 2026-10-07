@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261007.1923](https://github.com/markhuot/harness/releases/tag/app-20261007.1923) - 2026-10-07
+
 ### Changed
 
 - On iPhone, a docked ticket or New session has a close button (✕) in place of the up arrow, so you
