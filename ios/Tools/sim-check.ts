@@ -37,7 +37,8 @@
 //      sideways swipe moves between the tabs, and a right swipe on the Spec still goes back
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
-//      prompt editor keeps its cursor above it as the text grows; keyboard-*.png. A headless simulator
+//      prompt editor and New session's prompt (which grows with no cap) keep the cursor above it as
+//      the text grows; keyboard-*.png. A headless simulator
 //      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
 //      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
@@ -1240,6 +1241,36 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await axe("tap", "-x", "32", "-y", "89", "--udid", udid);
     moved(udid);
     return `grew to ${Math.round(field.frame.height)}pt; its end is ${gap}pt above the keyboard`;
+  });
+
+  // New session's prompt grows a line at a time with no cap (the form scrolls instead of the
+  // field), and the form keeps the line being typed above the keyboard.
+  await check("New session's prompt grows with every line typed", async () => {
+    const isField = (l: string) => l === "Spec";
+    const lines = 18;
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.includes("Spec"));
+    const start = await until("prompt field", () => findElement(udid, isField), 5000);
+    await axe("tap", "-x", String(Math.round(start.frame.x + 40)), "-y", String(Math.round(start.frame.y + 20)), "--udid", udid);
+    const top = await until("keyboard up", keyboardTop, 8000);
+    await typeOnKeys(Array.from({ length: lines }, () => "a").join("\n"));
+    await Bun.sleep(900);
+    await shot(udid, "keyboard-new-session");
+    const field = await findElement(udid, isField);
+    if (!field) throw new Error("the prompt field is gone from the screen");
+    // 16pt text runs about 19pt a line (a little slack for the header covering its top). AXe reports only the field's part in sight (above the
+    // keyboard, below the header), so it falls short of this when the field stops growing (it
+    // scrolls inside itself) or when the form doesn't scroll up to follow the cursor.
+    const tall = Math.round(field.frame.height);
+    if (tall < lines * 16) throw new Error(`${tall}pt of the field is in sight with ${lines} lines in it: it stopped growing, or the form didn't scroll to follow the cursor`);
+    const gap = Math.round(top - bottomOf(field));
+    if (gap < 0) throw new Error(`the field's last line ends ${-gap}pt behind the keyboard (field ends at ${Math.round(bottomOf(field))}, keyboard at ${Math.round(top)})`);
+    if (gap > 120) throw new Error(`the field ends ${gap}pt above the keyboard: the form didn't follow the cursor down`);
+    // Typing saved a draft: discard it.
+    await tapHeaderCancel(udid);
+    await until("cancel alert", async () => (await labels(udid)).includes("Discard draft"), 5000);
+    await tapWhere(udid, "Discard draft");
+    moved(udid);
+    return `grew to ${tall}pt over ${lines} lines; its end is ${gap}pt above the keyboard`;
   });
 }
 

@@ -27,8 +27,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On the Mac, the New session pane's Task | Conductor switch is a single Tab stop: use the arrow
   keys to pick Task or Conductor. Shift+Tab from the prompt now goes to the project picker first,
   then to Task | Conductor; both stay where they were on screen.
+- On iPhone and iPad, New session's "Orchestrates child tickets." note shows right under the
+  Task | Conductor switch instead of below the prompt, and the project name sits next to its key
+  badge instead of far off to the right.
+- On iPhone and iPad, New session's prompt grows with every line you type instead of stopping at
+  12 lines and scrolling inside itself. The sheet scrolls along with it, so the line you're typing
+  stays above the keyboard.
 
 ### Fixed
+
+- On iPhone and iPad, New session's project menu keeps scrolling while the board updates in the
+  background, so every project in a long list can be reached.
 
 - On the Mac, changing the project of a New session or draft from the keyboard keeps the focus on
   the project picker, instead of reloading the pane and moving the focus to its title.

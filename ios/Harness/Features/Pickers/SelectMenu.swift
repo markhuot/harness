@@ -26,6 +26,9 @@ struct SelectTrigger: View {
     var problem = false
     var mono = false
     var chevron = true
+    /// Where the value sits in the trigger's frame: trailing for a row's value, leading when
+    /// the select follows something on its left (the new session's project badge).
+    var alignment: Alignment = .trailing
 
     @Environment(\.palette) private var c
 
@@ -45,7 +48,7 @@ struct SelectTrigger: View {
                 Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .medium)).foregroundStyle(tint)
             }
         }
-        .frame(maxWidth: 280, alignment: .trailing)
+        .frame(maxWidth: 280, alignment: alignment)
         .opacity(disabled ? 0.6 : 1)
         .contentShape(Rectangle())
     }
@@ -65,6 +68,7 @@ struct SelectMenu<Value: Hashable & Sendable>: View {
     var loading = false
     var problem: String?
     var accessibilityName: String?
+    var alignment: Alignment = .trailing
     let onChange: (Value) -> Void
 
     var body: some View {
@@ -97,7 +101,7 @@ struct SelectMenu<Value: Hashable & Sendable>: View {
                 }
             }
         } label: {
-            SelectTrigger(text: text, disabled: disabled, loading: loading, problem: problem != nil)
+            SelectTrigger(text: text, disabled: disabled, loading: loading, problem: problem != nil, alignment: alignment)
         }
         .disabled(disabled)
         .accessibilityLabel(accessibilityName.map { "\($0), \(text)" } ?? text)
