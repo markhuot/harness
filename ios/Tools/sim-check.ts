@@ -1441,6 +1441,27 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     moved(udid);
     return `grew to ${tall}pt over ${lines} lines; its end is ${gap}pt above the keyboard`;
   });
+
+  // The whole white row is New session's prompt: a tap near its bottom, well below the one line
+  // of text, focuses the field. A reopened draft doesn't autofocus, so the keyboard is down until then.
+  await check("a tap at the bottom of New session's prompt row focuses it", async () => {
+    const isField = (l: string) => l === "Spec";
+    const draft = await api<Ticket>("POST", "/tickets", { projectId: p.project.id, spec: "One line", draft: true, skipAgentReview: true });
+    await goto(udid, `harness://new?key=${encodeURIComponent(draft.key)}`, (l) => l.includes("Spec"));
+    const start = await until("prompt field", () => findElement(udid, isField), 5000);
+    await Bun.sleep(600);
+    if (await keyboardTop()) throw new Error("the keyboard came up before the tap");
+    // The field is at least 150pt tall; its row ends 11pt below that.
+    const y = Math.round(start.frame.y + 150);
+    await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width / 2)), "-y", String(y), "--udid", udid);
+    await until("keyboard up", keyboardTop, 5000).catch(() => {
+      throw new Error(`a tap at y=${y} (the field's top is ${Math.round(start.frame.y)}) left the keyboard down`);
+    });
+    await shot(udid, "keyboard-new-session-row");
+    await tapHeaderCancel(udid);
+    moved(udid);
+    return `tapped ${y - Math.round(start.frame.y)}pt below the field's top`;
+  });
 }
 
 /** --mentions: a project with a few files, and a ticket in review to message; and a claude-code project for /commands. */

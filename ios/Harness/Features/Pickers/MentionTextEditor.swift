@@ -251,6 +251,13 @@ private struct MentionField: View, Equatable {
                     RoundedRectangle(cornerRadius: 12).fill(c.bgElev)
                     RoundedRectangle(cornerRadius: 12).strokeBorder(c.border)
                 }
+                // The text view is only as tall as its lines; a tap on the rest of the field (its
+                // min height, its padding) focuses it too. Under the text, so taps on the lines
+                // still place the caret.
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { focused.wrappedValue = true }
+                    .accessibilityHidden(true)
             }
             .focused(focused)
             .accessibilityLabel(fieldLabel ?? placeholder)
