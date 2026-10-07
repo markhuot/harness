@@ -55,7 +55,7 @@ struct TicketDetailComposer: View {
                 MentionTextEditor(text: Binding(get: { draft.text }, set: { draft.setText($0) }),
                                   placeholder: TicketDetailLogic.composerPlaceholder(ticket),
                                   ticketKey: ticket.key,
-                                  minHeight: 0,
+                                  minLines: 1,
                                   maxLines: 6,
                                   suggestionsEdge: .top,
                                   suggestionsMaxHeight: 200,

@@ -622,7 +622,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
 | BranchPicker | Pickers/BranchPicker.swift | Pickers | `BranchPicker(projectId:, value:, defaultLabel:, newLabel:, title:, disabled:, onChange: (String?, BranchInfo?) -> Void)` |
 | ProjectColorPicker | Pickers/ProjectColorPicker.swift | Projects | `ProjectColorPicker(value: String?, onChange:)` |
-| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minHeight:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:, fieldLabel:, placeholderColor:, onFocusChange:, fieldBox:)` (all after `text` optional) |
+| MentionTextEditor | Pickers/MentionTextEditor.swift | Transcript / New session | `MentionTextEditor(text: Binding<String>, placeholder:, projectId:, ticketKey:, minLines:, commandDriver:, commands:, maxLines:, suggestionsEdge:, suggestionsMaxHeight:, boxed:, search:, searchCommands:, fieldLabel:, placeholderColor:, onFocusChange:, fieldBox:)` (all after `text` optional) |
 | TicketSettingsForm | Pickers/TicketSettingsForm.swift | Ticket detail | `TicketSettingsForm(ticket: Ticket, branches: TicketBranches? = nil, onPatch: (UpdateTicketBody) -> Void)` |
 
 Done in the shell (not slots): ConnectScreen, PairScreen and ScanScreen (Features/Connect). The

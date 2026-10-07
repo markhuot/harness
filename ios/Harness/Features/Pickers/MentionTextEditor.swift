@@ -25,7 +25,9 @@ struct MentionTextEditor: View {
     var placeholder = ""
     var projectId: String?
     var ticketKey: String?
-    var minHeight: CGFloat = 80
+    /// The field is at least this many lines tall before it grows. The text view itself takes the
+    /// height (not a frame around it), so a tap or a drag anywhere in it places the caret.
+    var minLines = 4
     /// The driver whose commands a project lookup lists (New session: the driver it will run with)
     var commandDriver: String?
     /// Complete leading /commands too
@@ -108,7 +110,7 @@ struct MentionTextEditor: View {
             revision: revision,
             placeholder: placeholder,
             placeholderColor: placeholderColor,
-            minHeight: minHeight,
+            minLines: minLines,
             maxLines: maxLines,
             boxed: boxed,
             fieldBox: fieldBox,
@@ -214,7 +216,7 @@ private struct MentionField: View, Equatable {
     let revision: Int
     let placeholder: String
     let placeholderColor: Color?
-    let minHeight: CGFloat
+    let minLines: Int
     let maxLines: Int?
     let boxed: Bool
     let fieldBox: MentionFieldBox?
@@ -226,16 +228,16 @@ private struct MentionField: View, Equatable {
 
     nonisolated static func == (a: MentionField, b: MentionField) -> Bool {
         a.revision == b.revision && a.shown.unicodeScalars.elementsEqual(b.shown.unicodeScalars) && a.placeholder == b.placeholder && a.placeholderColor == b.placeholderColor
-            && a.minHeight == b.minHeight && a.maxLines == b.maxLines && a.boxed == b.boxed && a.fieldBox == b.fieldBox
+            && a.minLines == b.minLines && a.maxLines == b.maxLines && a.boxed == b.boxed && a.fieldBox == b.fieldBox
             && a.fieldLabel == b.fieldLabel && a.autofocus == b.autofocus && a.focusRequest == b.focusRequest
     }
 
     var body: some View {
         TextField("", text: text, selection: selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
             .font(.scaled(size: 17))
-            // On a vertical field the limit is how far it grows before scrolling; nil, no limit.
-            .lineLimit(maxLines)
-            .frame(minHeight: minHeight, alignment: .topLeading)
+            // On a vertical field the range is how tall it starts and how far it grows before
+            // scrolling (no upper bound: no limit).
+            .lineLimit(minLines...(maxLines.map { max($0, minLines) } ?? .max))
             .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))
             .background {
                 if let box = fieldBox {
@@ -251,13 +253,6 @@ private struct MentionField: View, Equatable {
                     RoundedRectangle(cornerRadius: 12).fill(c.bgElev)
                     RoundedRectangle(cornerRadius: 12).strokeBorder(c.border)
                 }
-                // The text view is only as tall as its lines; a tap on the rest of the field (its
-                // min height, its padding) focuses it too. Under the text, so taps on the lines
-                // still place the caret.
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { focused.wrappedValue = true }
-                    .accessibilityHidden(true)
             }
             .focused(focused)
             .accessibilityLabel(fieldLabel ?? placeholder)

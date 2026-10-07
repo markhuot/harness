@@ -1442,8 +1442,10 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     return `grew to ${tall}pt over ${lines} lines; its end is ${gap}pt above the keyboard`;
   });
 
-  // The whole white row is New session's prompt: a tap near its bottom, well below the one line
-  // of text, focuses the field. A reopened draft doesn't autofocus, so the keyboard is down until then.
+  // New session's prompt is several lines tall before anything is typed, and the text view itself
+  // takes that height (its min lines), so a tap near its bottom, well below the one line of text,
+  // lands in the text view and focuses it natively. A reopened draft doesn't autofocus, so the
+  // keyboard is down until then.
   await check("a tap at the bottom of New session's prompt row focuses it", async () => {
     const isField = (l: string) => l === "Spec";
     const draft = await api<Ticket>("POST", "/tickets", { projectId: p.project.id, spec: "One line", draft: true, skipAgentReview: true });
@@ -1451,8 +1453,11 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     const start = await until("prompt field", () => findElement(udid, isField), 5000);
     await Bun.sleep(600);
     if (await keyboardTop()) throw new Error("the keyboard came up before the tap");
-    // The field is at least 150pt tall; its row ends 11pt below that.
-    const y = Math.round(start.frame.y + 150);
+    // AXe reports the text view's own frame: one line of text in it, so a short frame means the
+    // height is a frame or padding around the text view, which a tap or drag doesn't reach.
+    const tall = Math.round(start.frame.height);
+    if (tall < 120) throw new Error(`the text view is ${tall}pt tall with one line in it: it doesn't fill its row`);
+    const y = Math.round(start.frame.y + start.frame.height - 10);
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width / 2)), "-y", String(y), "--udid", udid);
     await until("keyboard up", keyboardTop, 5000).catch(() => {
       throw new Error(`a tap at y=${y} (the field's top is ${Math.round(start.frame.y)}) left the keyboard down`);
