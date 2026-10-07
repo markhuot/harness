@@ -114,11 +114,6 @@ public enum Approve {
         primaryApproveRequest(opts, completionAction: ticket.completionAction.optional, completionInstructions: ticket.completionInstructions.optional)
     }
 
-    /// Toast after an approval.
-    public static func approveToast(_ choice: Choice, key: String) -> String {
-        choice == .none ? "\(key) approved and marked done" : "Approved"
-    }
-
     /// Short names for a completion action, in the project's "When approved" select.
     public static let completionActionNames: [CompletionAction: String] = [
         .merge: "Merge",

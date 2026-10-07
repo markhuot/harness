@@ -203,7 +203,6 @@ struct TicketDetailDetailsTab: View {
                 let t = try await store.connectedAPI().updateTicket(key, body)
                 store.dispatch(.event(.ticketUpserted(ticket: t)))
                 self.draft = SpecDraft(t)
-                actions.toasts.show("Saved", kind: .info)
             } catch {
                 if let c = HarnessAPIError.specConflict(error) {
                     conflict = c
@@ -218,7 +217,7 @@ struct TicketDetailDetailsTab: View {
         let key = ticket.key
         let relinks: Bool = if case .absent = body.externalRef { false } else { true }
         Task {
-            let ok = await actions.run(TicketDetailLogic.patchToast(body)) { try await store.connectedAPI().updateTicket(key, body) }
+            let ok = await actions.run { try await store.connectedAPI().updateTicket(key, body) }
             // A new remote ID has other tickets on it (some may not be loaded): fetch the list again.
             if ok != nil, relinks { _ = try? await store.loadDetail(key) }
         }

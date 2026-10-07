@@ -35,7 +35,6 @@ private struct PromptDetailView: View {
     let catalog: PromptCatalog
 
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
 
     /// nil: showing the built-in read-only; a string: the text being edited.
@@ -214,7 +213,7 @@ private struct PromptDetailView: View {
         serverError = nil
     }
 
-    private func save(_ value: String?, message: String) {
+    private func save(_ value: String?) {
         guard let api = store.api else { return }
         let patch = Prompts.promptSavePatch(entry, draft: value)
         saving = true
@@ -223,7 +222,6 @@ private struct PromptDetailView: View {
             do {
                 _ = try await api.updateSettings(patch)
                 if (patch.prompts?[entry.id.rawValue] ?? nil) == nil { setAppDraft(nil) }
-                toasts.show(message, kind: .info)
                 await catalog.load()
             } catch {
                 // Keep the text: the service's 400 says what to fix.
@@ -236,8 +234,7 @@ private struct PromptDetailView: View {
 
     private func submit() {
         guard let draft, Prompts.promptDraftDirty(entry, draft: draft), Prompts.promptDraftError(entry, draft: draft) == nil, !saving else { return }
-        let resets = (Prompts.promptSavePatch(entry, draft: draft).prompts?[entry.id.rawValue] ?? nil) == nil
-        save(draft, message: resets ? "Prompt reset to built-in" : "Prompt saved")
+        save(draft)
     }
 
     private func cancel() {
@@ -249,7 +246,7 @@ private struct PromptDetailView: View {
 
     private func reset() {
         confirm = Confirmation(title: "Reset “\(entry.label)” to the built-in prompt?", message: "Your text is discarded, and the prompt follows app updates again.", action: "Reset") {
-            save(nil, message: "Prompt reset to built-in")
+            save(nil)
         }
     }
 

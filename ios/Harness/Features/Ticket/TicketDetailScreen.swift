@@ -126,7 +126,6 @@ private struct TicketDetailBody: View {
     let onTab: (TicketTab) -> Void
 
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var height: CGFloat = 800
     /// Bumped to focus the composer's field (an annotated image just joined the message).
@@ -180,7 +179,7 @@ private struct TicketDetailBody: View {
                 .modifier(HeroSlide(hero: hero))
                 pager(shown, tornOff: tornOff)
                     .environment(\.ticketDetailOpenTab, relay.tabOpener)
-                    .environment(\.annotationSink, relay.sink(outgoing: outgoing, uploader: uploader, toasts: toasts))
+                    .environment(\.annotationSink, relay.sink(outgoing: outgoing, uploader: uploader))
                     .environment(\.openAnnotator, relay.annotatorOpener)
                     .environment(\.specAttachments, specAttachments)
                     .modifier(PagerSlide(hero: hero))
@@ -528,7 +527,7 @@ private struct TicketDetailHeader: ViewModifier {
             if ticket.busy {
                 Button("Cancel run", systemImage: "stop.circle", role: .destructive) {
                     guard let api else { return }
-                    actions.perform("Run cancelled") { _ = try await api.cancelTicket(key) }
+                    actions.perform { _ = try await api.cancelTicket(key) }
                 }
             }
             if let url = ticket.pullRequestUrl.optional.flatMap(URL.init(string:)) {
@@ -538,14 +537,14 @@ private struct TicketDetailHeader: ViewModifier {
             if TicketDetailLogic.offersMarkDone(ticket) {
                 Button("Mark done", systemImage: "checkmark.circle") {
                     guard let api else { return }
-                    actions.perform("\(label) marked done") { _ = try await api.completeTicket(key, CompleteBody(skipAgent: true)) }
+                    actions.perform { _ = try await api.completeTicket(key, CompleteBody(skipAgent: true)) }
                 }
             }
             Button("Delete ticket", systemImage: "trash", role: .destructive) {
                 confirm = Confirmation(title: "Delete \(label)?", message: "Its transcript, spec history and activity are removed too.", action: "Delete") {
                     guard let api else { return }
                     Task {
-                        if await actions.run("\(label) deleted", { try await api.deleteTicket(key) }) != nil { pop(key) }
+                        if await actions.run({ try await api.deleteTicket(key) }) != nil { pop(key) }
                     }
                 }
             }

@@ -9,6 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Removed
+
+- On iPhone and iPad, toasts no longer slide in at the top of the screen, so they can't cover the
+  back and close buttons anymore. Your change shows on the screen itself, and when something
+  fails, iPhone gives an error buzz.
+
+### Changed
+
+- On iPhone and iPad, logging in to a driver that needs a code (GitHub Copilot) shows the code in
+  an alert before the login page opens, so you have it when the page asks for it.
+
 ## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
 
 ### Added

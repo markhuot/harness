@@ -205,7 +205,6 @@ private struct CardMenu<Items: View>: ViewModifier {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var palette
 
     func body(content: Content) -> some View {
@@ -218,7 +217,6 @@ private struct CardMenu<Items: View>: ViewModifier {
                     .environment(store)
                     .environment(router)
                     .environment(actions)
-                    .environment(toasts)
                     .environment(\.palette, palette)
             }
         }

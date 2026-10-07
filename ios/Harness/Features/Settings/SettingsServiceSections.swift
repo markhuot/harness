@@ -67,7 +67,6 @@ struct SettingsGeneralSection: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
 
     var body: some View {
@@ -92,7 +91,7 @@ struct SettingsGeneralSection: View {
                 DraftField(value: settings.baseBranch ?? Branches.defaultBaseBranch, prompt: Branches.defaultBaseBranch, mono: true) { v in
                     switch SettingsRules.settingsBaseBranchCommit(v, current: settings.baseBranch) {
                     case .none: break
-                    case let .invalid(error): toasts.show("Not a valid branch name: \(error)", kind: .error)
+                    case .invalid: haptic(.error)
                     case let .save(name): save(SettingsPatch(baseBranch: name))
                     }
                 }
@@ -104,9 +103,9 @@ struct SettingsGeneralSection: View {
         }
     }
 
-    private func save(_ patch: SettingsPatch, ok: String? = nil) {
+    private func save(_ patch: SettingsPatch) {
         guard let api = store.api else { return }
-        actions.perform(ok) { _ = try await api.updateSettings(patch) }
+        actions.perform { _ = try await api.updateSettings(patch) }
     }
 }
 

@@ -186,15 +186,6 @@ struct SettingsRulesTests {
         #expect(SettingsRules.identifierDraft(String(repeating: "A", count: 19) + "😀") == String(repeating: "A", count: 19))
     }
 
-    @Test func renameToastCountsRenumberedTickets() {
-        func preview(_ n: Int) -> ProjectKey.KeyPreview {
-            ProjectKey.KeyPreview(key: "WEB", error: nil, changed: true, renames: (0..<n).map { .init(from: "A-\($0)", to: "WEB-\($0)") }, kept: [], next: [], message: "")
-        }
-        #expect(SettingsRules.renameToast(preview(0)) == "Renamed to WEB")
-        #expect(SettingsRules.renameToast(preview(1)) == "Renamed to WEB · 1 ticket renumbered")
-        #expect(SettingsRules.renameToast(preview(3)) == "Renamed to WEB · 3 tickets renumbered")
-    }
-
     @Test func ticketCountUsesTheDoneTotalOnceKnown() {
         let tickets = [Self.ticket("1", .planning), Self.ticket("2", .done), Self.ticket("3", .review), Self.ticket("4", .planning, project: "p2")]
         #expect(SettingsRules.projectTicketCount("p1", tickets: tickets, doneTotal: nil) == 3)

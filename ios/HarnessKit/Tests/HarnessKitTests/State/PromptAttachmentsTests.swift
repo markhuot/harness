@@ -153,15 +153,6 @@ struct PromptAttachmentUploadRulesTests {
         #expect(PromptAttachments.room(current: 20, pending: 0, incoming: 1) == 0)
         #expect(PromptAttachments.room(current: 19, pending: 3, incoming: 1) == 0)
     }
-
-    @Test func limitMessageCountsFiles() {
-        #expect(PromptAttachments.limitMessage(skipped: 1) == "A session takes up to 20 attachments: 1 file was left out.")
-        #expect(PromptAttachments.limitMessage(skipped: 3, max: 5) == "A session takes up to 5 attachments: 3 files were left out.")
-    }
-
-    @Test func limitMessageNamesAMessage() {
-        #expect(PromptAttachments.limitMessage(skipped: 2, holder: .message) == "A message takes up to 20 attachments: 2 files were left out.")
-    }
 }
 
 

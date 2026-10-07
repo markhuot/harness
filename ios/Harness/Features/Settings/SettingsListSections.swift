@@ -86,11 +86,11 @@ struct SettingsWatchersSection: View {
     private func openMenu(_ w: Watcher) {
         guard let api = store.api else { return }
         model.menu = ChoiceSheet(title: w.name, choices: [
-            Choice(label: "Run now") { actions.perform("Watcher started") { _ = try await api.runWatcher(w.id) } },
+            Choice(label: "Run now") { actions.perform { _ = try await api.runWatcher(w.id) } },
             Choice(label: "Edit…") { router.present(.watcher(id: w.id)) },
             Choice(label: "Delete", destructive: true) {
                 model.confirm = Confirmation(title: "Delete watcher “\(w.name)”?", message: "", action: "Delete") {
-                    actions.perform("Watcher deleted") { _ = try await api.deleteWatcher(w.id) }
+                    actions.perform { _ = try await api.deleteWatcher(w.id) }
                 }
             },
         ])

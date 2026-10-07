@@ -41,7 +41,6 @@ private struct FileViewerContent: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var loader: FileViewerLoader?
     @State private var tab = FileViewerTab.file
@@ -119,11 +118,11 @@ private struct FileViewerContent: View {
         Menu {
             Button("Copy path", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = shownPath
-                toasts.show("Path copied", kind: .info)
+                haptic(.success)
             }
             Button("Copy link", systemImage: "link") {
                 UIPasteboard.general.string = FileViewerRules.link(path: shownPath, root: root, range: range)
-                toasts.show("Link copied", kind: .info)
+                haptic(.success)
             }
             if case let .ticket(key) = root {
                 Button("Open \(key)", systemImage: "arrow.right.circle") { router.push(.ticket(key: key, tab: nil)) }

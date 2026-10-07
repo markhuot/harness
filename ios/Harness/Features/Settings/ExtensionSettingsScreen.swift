@@ -7,7 +7,6 @@ import SwiftUI
 /// service. A Web Store install lands when Chrome next starts, which Restart browser does on demand.
 struct ExtensionSettingsScreen: View {
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
 
     @State private var list: BrowserExtensionList?
@@ -169,9 +168,8 @@ struct ExtensionSettingsScreen: View {
         addError = nil
         Task {
             do {
-                let ext = try await api.addBrowserExtension(body)
+                _ = try await api.addBrowserExtension(body)
                 if case .webstore = body { draft = "" }
-                toasts.show(ext.status == .pending ? "\(ext.name) installs when the browser restarts." : "Added \(ext.name).", kind: .info)
             } catch {
                 addError = localizedErrorMessage(error)
             }
@@ -180,7 +178,7 @@ struct ExtensionSettingsScreen: View {
         }
     }
 
-    /// Run a change to one extension, showing its row busy and any error as a toast.
+    /// Run a change to one extension, showing its row busy; a failure plays the error haptic.
     private func change(_ ext: BrowserExtension, _ fn: @escaping @MainActor (HarnessClient) async throws -> Void) {
         guard let api = store.api else { return }
         busy.insert(ext.id)
@@ -188,7 +186,7 @@ struct ExtensionSettingsScreen: View {
             do {
                 try await fn(api)
             } catch {
-                toasts.show(localizedErrorMessage(error), kind: .error)
+                haptic(.error)
             }
             busy.remove(ext.id)
             await load()
@@ -201,7 +199,7 @@ struct ExtensionSettingsScreen: View {
         do {
             _ = try await api.restartBrowser()
         } catch {
-            toasts.show(localizedErrorMessage(error), kind: .error)
+            haptic(.error)
         }
         restarting = false
         await load()

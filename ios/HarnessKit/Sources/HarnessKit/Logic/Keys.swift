@@ -108,7 +108,7 @@ public enum Keys {
         jsEqual(displayKey(t), t.key) ? nil : t.key
     }
 
-    /// "MH-62 · MH-124" (or just the key): one-line label for toasts, titles and menus.
+    /// "MH-62 · MH-124" (or just the key): one-line label for titles and menus.
     public static func keyLabel(_ t: some TicketKeyed) -> String {
         if let local = secondaryKey(t), !local.isEmpty { return "\(displayKey(t)) · \(local)" }
         return t.key

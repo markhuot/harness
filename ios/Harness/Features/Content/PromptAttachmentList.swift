@@ -247,7 +247,6 @@ struct OpenablePromptAttachmentList: View {
     @Binding var downloading: Bool
 
     @Environment(BoardStore.self) private var store
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.annotationSink) private var sink
     @State private var viewing: AttachmentViewerStart?
     @State private var preview: URL?
@@ -298,7 +297,6 @@ struct OpenablePromptAttachmentList: View {
                 preview = dest
             } catch {
                 haptic(.error)
-                toasts.show("Couldn't open \(name): \(localizedErrorMessage(error))", kind: .error)
             }
         }
     }

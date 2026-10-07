@@ -113,7 +113,7 @@ public enum Connection {
         return .ok(version: version)
     }
 
-    /// A toast-friendly message for a failed request.
+    /// A one-line message for a failed request.
     public static func describeError(_ error: any Error, baseUrl: String? = nil) -> String {
         if let e = error as? HarnessAPIError {
             if e.status == 401 { return unauthorizedMessage }

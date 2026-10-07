@@ -3089,7 +3089,7 @@ the conventions, and ios/README.md the build and test commands.
   link carries its own `?ticket=`/`?project=`. A triage session (the Inbox) has no folder, so its
   outcome and transcript resolve in the project of the ticket it dispatched, as on the desktop.
   When that ticket isn't loaded, they use its key instead. A session that dispatched nothing has
-  no scope, and a relative link from it shows a toast. `FileViewerScreen` loads `FileView` and,
+  no scope, and a relative link from it plays the error haptic. `FileViewerScreen` loads `FileView` and,
   only when `git.repo && git.dirty`, `FileDiff`, and shows File and Diff tabs (the Diff tab counts
   +added/−removed). Lines are fixed-height rows, so the viewer opens straight at the range. A long
   file is highlighted a window at a time around what's on screen, and colored lines stay colored

@@ -61,27 +61,27 @@ enum ContentLinkURL {
 struct ContentLinkOpener {
     let context: FileLinkContext
     let router: Router
-    let toasts: ToastCenter
 
+    /// A link that can't be opened plays the error haptic.
     @MainActor
     func open(_ url: String) {
         switch LinkRouting.target(url, context: context) {
         case let .file(params):
             router.push(.file(params))
         case .noRoot:
-            toasts.show(LinkRouting.noRootMessage, kind: .error)
+            haptic(.error)
         case let .external(raw):
             guard let u = URL(string: raw) ?? URL(string: raw.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? "") else {
-                toasts.show(LinkRouting.openFailedMessage, kind: .error)
+                haptic(.error)
                 return
             }
             // harness:// that isn't a file link is one of the app's own deep links.
             if u.scheme?.lowercased() == "harness" {
-                if !router.open(url: u) { toasts.show(LinkRouting.openFailedMessage, kind: .error) }
+                if !router.open(url: u) { haptic(.error) }
                 return
             }
             UIApplication.shared.open(u) { ok in
-                if !ok { Task { @MainActor in toasts.show(LinkRouting.openFailedMessage, kind: .error) } }
+                if !ok { Task { @MainActor in haptic(.error) } }
             }
         }
     }
@@ -111,11 +111,10 @@ struct ContentLinkHandling: ViewModifier {
 
     @Environment(\.fileLinkContext) private var scope
     @Environment(Router.self) private var router
-    @Environment(ToastCenter.self) private var toasts
 
     func body(content: Content) -> some View {
         let named = override.ticketKey != nil || override.projectId != nil
-        let opener = ContentLinkOpener(context: named ? override : scope, router: router, toasts: toasts)
+        let opener = ContentLinkOpener(context: named ? override : scope, router: router)
         content.environment(\.openURL, opener.action)
     }
 }

@@ -82,7 +82,7 @@ final class SettingsModel {
     func reloadDrivers(_ store: BoardStore, _ actions: Actions) async {
         let client = store.client
         driversLoading = true
-        if let drivers = await actions.run(nil, { try await client.listDrivers() }) { store.dispatch(.drivers(drivers)) }
+        if let drivers = await actions.run({ try await client.listDrivers() }) { store.dispatch(.drivers(drivers)) }
         driversLoading = false
     }
 }
@@ -167,7 +167,7 @@ private struct SettingsConnectionSection: View {
             guard let api = store.api else { return }
             let baseUrl = store.baseUrl
             Task {
-                if let res = await actions.run("Token rotated", { try await api.rotateToken() }) {
+                if let res = await actions.run({ try await api.rotateToken() }) {
                     _ = await app.pair(ServerAddress(baseUrl: baseUrl, token: res.token), skipProbe: true)
                 }
             }
@@ -237,7 +237,7 @@ private struct SettingsNetworkSection: View {
         guard let api = store.api else { return }
         let model = model
         Task {
-            await actions.run("Network updated") { try await api.updateSettings(SettingsPatch(listen: ListenSetting(mode: mode))) }
+            await actions.run { try await api.updateSettings(SettingsPatch(listen: ListenSetting(mode: mode))) }
             try? await Task.sleep(for: .milliseconds(800))
             model.networkReloads += 1
         }

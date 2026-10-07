@@ -4,7 +4,7 @@ import UIKit
 
 // The iPad's windows (ARCHITECTURE.md § App shell, Windows): any number of main windows (RootView,
 // each with its own Router) and ticket windows (TicketWindowRoot, keyed by TicketWindowValue).
-// AppModel, the BoardStore, ToastCenter and Actions are shared by all of them. On iPad at regular
+// AppModel, the BoardStore and Actions are shared by all of them. On iPad at regular
 // width, opening a ticket opens (or brings forward) its window. A pinned ticket window is one
 // torn-off tab (or browser tab, or the composer): the ticket's other windows read which ones are
 // open (WindowDirectory.tornOff) and show Return to this window in their place.

@@ -28,7 +28,6 @@ struct BrowserTabView: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.palette) private var c
     @State private var model: BrowserTabModel
     @Environment(\.openAnnotator) private var openAnnotator
@@ -382,10 +381,9 @@ struct BrowserTabView: View {
         Task {
             defer { capturing = false }
             await model.settleSize()
-            guard let shot = await actions.run(nil, { try await client.browserScreenshot(id, tabId: tab) }) else { return }
+            guard let shot = await actions.run({ try await client.browserScreenshot(id, tabId: tab) }) else { return }
             guard let data = shot.png, let image = UIImage(data: data) else {
                 haptic(.error)
-                toasts.show("Couldn't read the page's screenshot.", kind: .error)
                 return
             }
             // The screenshot as it is, uploaded on Add (closed without notes, it leaves nothing behind).
@@ -402,7 +400,7 @@ struct BrowserTabView: View {
         guard let client else { return }
         loadingExtensions = true
         defer { loadingExtensions = false }
-        guard let list = await actions.run(nil, { try await client.listBrowserExtensions() }) else { return }
+        guard let list = await actions.run({ try await client.listBrowserExtensions() }) else { return }
         extensionChoices = Extensions.runnable(list)
         showingExtensions = true
     }
@@ -413,12 +411,8 @@ struct BrowserTabView: View {
         let id = sessionId
         let tab = model.selection.shown
         Task {
-            guard let res = await actions.run(nil, { try await client.browserExtensionAction(id, id: ext.id, tabId: tab) }) else { return }
-            if let popup = res.tab {
-                model.selectTab(popup)
-            } else {
-                toasts.show("\(ext.name) ran on this page.", kind: .info)
-            }
+            guard let res = await actions.run({ try await client.browserExtensionAction(id, id: ext.id, tabId: tab) }) else { return }
+            if let popup = res.tab { model.selectTab(popup) }
         }
     }
 
@@ -429,7 +423,7 @@ struct BrowserTabView: View {
         editingUrl = false
         let id = sessionId
         let tab = model.selection.shown
-        if let next = await actions.run(nil, { try await client.browserNavigate(id, url: url, tabId: tab) }) { model.apply(next) }
+        if let next = await actions.run({ try await client.browserNavigate(id, url: url, tabId: tab) }) { model.apply(next) }
     }
 }
 

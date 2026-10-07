@@ -372,32 +372,6 @@
       }
     }
   ],
-  "approveToastCases": [
-    {
-      "name": "no action names the ticket",
-      "input": {
-        "choice": "none",
-        "key": "MH-12"
-      },
-      "output": "MH-12 approved and marked done"
-    },
-    {
-      "name": "an action says Approved",
-      "input": {
-        "choice": "merge",
-        "key": "MH-12"
-      },
-      "output": "Approved"
-    },
-    {
-      "name": "custom",
-      "input": {
-        "choice": "custom",
-        "key": "MH-12"
-      },
-      "output": "Approved"
-    }
-  ],
   "completeBodyCases": [
     {
       "name": "choice offered, no instructions",

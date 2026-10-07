@@ -21,11 +21,6 @@ struct ApproveTests {
         let ticket: PrimaryTicket
     }
 
-    struct ToastInput: Decodable, Sendable {
-        let choice: Approve.Choice
-        let key: String
-    }
-
     struct OptionsInput: Decodable, Sendable {
         let actions: [CompletionAction]
     }
@@ -51,11 +46,6 @@ struct ApproveTests {
     func primaryApproveRequest(_ c: Fixture.Case<PrimaryInput, JSONValue>) throws {
         let got = Approve.primaryApproveRequest(c.input.opts, completionAction: c.input.ticket.completionAction, completionInstructions: c.input.ticket.completionInstructions)
         #expect(try Self.json(got) == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("approve", "approveToastCases", input: ToastInput.self, output: String.self))
-    func approveToast(_ c: Fixture.Case<ToastInput, String>) {
-        #expect(Approve.approveToast(c.input.choice, key: c.input.key) == c.output)
     }
 
     @Test(arguments: Fixture.cases("approve", "completionActionOptionsCases", input: OptionsInput.self, output: JSONValue.self))

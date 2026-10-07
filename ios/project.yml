@@ -82,7 +82,7 @@ targets:
           UIImageName: SplashIcon
           UIImageRespectsSafeAreaInsets: true
         # Several windows on iPad: main windows and ticket windows (HarnessApp's two WindowGroups).
-        # Each window has its own Router; AppModel, the store, toasts and Actions are shared
+        # Each window has its own Router; AppModel, the store and Actions are shared
         # (ARCHITECTURE.md § App shell, Windows). iPhone keeps one window regardless.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true

@@ -144,7 +144,6 @@ struct AnnotatorView: View {
         }
         .background(c.bg.ignoresSafeArea())
         .confirmation($confirm)
-        .toastOverlay()
         .interactiveDismissDisabled(changed || adding)
         .task(id: pendingLookups) { await lookUpElements(pendingLookups) }
     }

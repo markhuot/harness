@@ -86,7 +86,7 @@ struct TicketDetailApprovalCard: View {
                     .foregroundStyle(c.text)
                     .lineLimit(3...8)
                     .focused($messageFocused)
-                    .onSubmitShortcut { if busy == nil { answer(.deny, tool: tool) } }
+                    .onSubmitShortcut { if busy == nil { answer(.deny) } }
                     .padding(10)
                     .background(c.bgElev, in: .rect(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(c.border))
@@ -94,17 +94,17 @@ struct TicketDetailApprovalCard: View {
                 HStack(spacing: 8) {
                     HButton("Back", variant: .ghost, fullWidth: false) { denying = false }.disabled(busy != nil)
                     Spacer()
-                    HButton("Deny", icon: "x", variant: .dangerSolid, loading: busy == .deny, fullWidth: false, haptic: nil) { answer(.deny, tool: tool) }
+                    HButton("Deny", icon: "x", variant: .dangerSolid, loading: busy == .deny, fullWidth: false, haptic: nil) { answer(.deny) }
                 }
             } else {
                 VStack(spacing: 8) {
                     HStack(spacing: 8) {
-                        HButton("Allow once", icon: "check", variant: .primary, loading: busy == .allowOnce, haptic: nil) { answer(.allowOnce, tool: tool) }
+                        HButton("Allow once", icon: "check", variant: .primary, loading: busy == .allowOnce, haptic: nil) { answer(.allowOnce) }
                             .disabled(busy != nil && busy != .allowOnce)
                         HButton("Deny…", fullWidth: false) { denying = true }.disabled(busy != nil)
                     }
                     if approval.onceOnly != true {
-                        HButton("Always allow \(tool) on this ticket", icon: "checkCircle", loading: busy == .allowTool, haptic: nil) { answer(.allowTool, tool: tool) }
+                        HButton("Always allow \(tool) on this ticket", icon: "checkCircle", loading: busy == .allowTool, haptic: nil) { answer(.allowTool) }
                             .disabled(busy != nil && busy != .allowTool)
                     }
                 }
@@ -120,13 +120,13 @@ struct TicketDetailApprovalCard: View {
         }
     }
 
-    private func answer(_ decision: ApprovalDecision, tool: String) {
+    private func answer(_ decision: ApprovalDecision) {
         let key = ticket.key
         let text = TicketDetailLogic.trim(message)
         let body = ApprovalBody(decision: decision, message: text.isEmpty ? nil : text)
         busy = decision
         Task {
-            let ok = await actions.run(Format.approvalToast(decision, tool: tool, ticketKey: Keys.keyLabel(ticket))) {
+            let ok = await actions.run {
                 try await store.connectedAPI().answerApproval(key, body)
             }
             if ok != nil { haptic(decision == .deny ? .warning : .success) }
