@@ -39,6 +39,7 @@ import type {
   RelatedTicket,
   RemoteKeyMatches,
   TicketDetail,
+  Subagent,
   TicketStatus,
   TranscriptContent,
   TranscriptEntry,
@@ -85,6 +86,8 @@ const attachmentFiles = new Map<string, { mimeType: string; bytes: () => Uint8Ar
 const attachmentRecords = new Map<string, Attachment>();
 const specMedia = (a: Attachment): Attachment => (attachmentRecords.set(a.id, a), a);
 const transcripts = new Map<string, TranscriptEntry[]>(); // by session id
+/** Sub-agents and background tasks by session id, oldest first (TicketDetail.subagents) */
+const subagents = new Map<string, Subagent[]>();
 const watchers = new Map<string, Watcher>();
 let triageSeq = 0;
 let idSeq = 0;
@@ -1285,6 +1288,7 @@ function ticketDetail(t: Ticket, resolvedFrom: string | null = null): TicketDeta
     relatedTickets: relatedTickets(resolvedFrom ?? t.key, t),
     // Like the service: the media the spec refers to, as attachment records.
     attachments: [...new Set([...t.spec.matchAll(/\(attachment:([^\s)]+)/g)].map((m) => m[1]!))].flatMap((id) => attachmentRecords.get(id) ?? []),
+    subagents: subagents.get(t.sessionId) ?? [],
   };
 }
 
@@ -1887,9 +1891,12 @@ async function route(req: Request, url: URL): Promise<Response> {
     const s = b ? sessions.get(b) : undefined;
     if (!s) throw new HttpError(404, "Session not found");
     if (!c && method === "GET") return ok(s);
+    if (c === "subagents" && method === "GET") return ok(subagents.get(s.id) ?? []);
     if (c === "transcript" && method === "GET") {
       const after = Number(url.searchParams.get("after") ?? 0);
-      return ok((transcripts.get(s.id) ?? []).filter((e) => e.seq > after));
+      // Like the service: ?subagent=<id> is that sub-agent's transcript, else the session's own.
+      const subagent = url.searchParams.get("subagent");
+      return ok((transcripts.get(s.id) ?? []).filter((e) => e.seq > after && (e.subagentId ?? null) === subagent));
     }
   }
 
@@ -2442,6 +2449,63 @@ setInterval(() => {
 
 const LIVE_TICKET = byKey("NYTIMES-1")!;
 const LIVE_RUN = [...runs.values()].find((r) => r.sessionId === LIVE_TICKET.sessionId)!;
+
+// The live ticket's Agents & tasks tab: two sub-agents (one nested, each on its own model) and a
+// background task.
+{
+  const at = now() - 6 * 60_000;
+  const agent = (id: string, over: Partial<Subagent>): Subagent => ({
+    id,
+    sessionId: LIVE_TICKET.sessionId,
+    runId: LIVE_RUN.id,
+    parentId: null,
+    description: "",
+    agentType: "general-purpose",
+    prompt: "",
+    status: "running",
+    result: null,
+    startedAt: at,
+    endedAt: null,
+    updatedAt: at,
+    kind: "agent",
+    ...over,
+  });
+  subagents.set(LIVE_TICKET.sessionId, [
+    agent("toolu_mock_explore", {
+      description: "Find where the article cache is keyed",
+      agentType: "Explore",
+      model: "claude-haiku-4-5-20251001",
+      prompt: "Find every place src/ reads or writes the article cache, with file paths and line numbers.",
+      status: "succeeded",
+      result: "The cache is keyed by slug in src/hooks/useArticle.ts:41 and invalidated in src/store/articles.ts:88.",
+      endedAt: at + 48_000,
+      updatedAt: at + 48_000,
+    }),
+    agent("toolu_mock_review", {
+      description: "Review the cache key change",
+      model: "claude-opus-5-5",
+      prompt: "Review the diff that keys the article cache by id for correctness bugs.",
+      startedAt: at + 120_000,
+      updatedAt: at + 200_000,
+    }),
+    agent("toolu_mock_tests", {
+      parentId: "toolu_mock_review",
+      description: "Check the hooks tests",
+      agentType: "Explore",
+      model: "claude-sonnet-5-5",
+      prompt: "List the tests that exercise useArticle.",
+      startedAt: at + 150_000,
+      updatedAt: at + 150_000,
+    }),
+    agent("toolu_mock_bash", { kind: "bash", agentType: null, description: "Run the test suite", command: "bun test src/hooks", startedAt: at + 90_000, updatedAt: at + 90_000, hasOutput: false }),
+  ]);
+  const list = transcripts.get(LIVE_TICKET.sessionId)!;
+  let seq = Math.max(0, ...list.map((e) => e.seq));
+  const said = (subagentId: string, text: string) =>
+    list.push({ id: newId("te"), sessionId: LIVE_TICKET.sessionId, runId: LIVE_RUN.id, subagentId, seq: ++seq, role: "assistant", content: { type: "text", text }, createdAt: at + seq * 1000 });
+  said("toolu_mock_review", "Reading the diff in src/hooks/useArticle.ts first.");
+  said("toolu_mock_review", "The id key looks right; checking the tests that cover a slug rename next.");
+}
 const LIVE_TEXT =
   "Looking at the failing test in src/hooks/useArticle.test.ts, the assertion expects the renamed article to resolve through its id, but the cache map is still keyed by the old slug. I'll change the key to article.id, invalidate on slug updates, and rerun the suite to confirm nothing else depends on the slug-based lookup.";
 

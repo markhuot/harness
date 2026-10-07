@@ -50,6 +50,26 @@ export function subagentTypeLabel(s: Titled): string | null {
   return s.agentType && s.description.trim() ? s.agentType : null;
 }
 
+/**
+ * A sub-agent's model as a chip: "claude-haiku-4-5-20251001" → "Haiku 4.5", the older
+ * "claude-3-5-sonnet-20241022" → "Sonnet 3.5", an alias "haiku" → "Haiku", a "[1m]" context
+ * suffix → "… 1M". Any other id shows as is; null while unknown.
+ */
+export function subagentModelLabel(model: string | null | undefined): string | null {
+  const id = model?.trim();
+  if (!id) return null;
+  const long = /\[1m\]$/i.test(id) ? " 1M" : "";
+  const base = id.replace(/\[1m\]$/i, "");
+  const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+  const version = (major: string, minor?: string) => (minor ? `${major}.${minor}` : major);
+  let m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(base);
+  if (m) return `${cap(m[1]!)} ${version(m[2]!, m[3])}${long}`;
+  m = /^claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)(?:-\d{8})?$/.exec(base);
+  if (m) return `${cap(m[3]!)} ${version(m[1]!, m[2])}${long}`;
+  if (/^[a-z]+$/.test(base)) return `${cap(base)}${long}`;
+  return id;
+}
+
 /** The transcript link on the tool row that started it. */
 export function subagentOpenLabel(s: Pick<Subagent, "kind">): string {
   return isTask(s) ? "Open output" : "Open transcript";

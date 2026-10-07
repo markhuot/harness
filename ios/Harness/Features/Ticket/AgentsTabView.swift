@@ -74,6 +74,19 @@ struct AgentsTypeBadge: View {
     }
 }
 
+/// The model a sub-agent runs on ("Haiku 4.5"), like the ticket's model badge; nothing until the
+/// driver has said, and never for a task.
+struct AgentsModelBadge: View {
+    let agent: Subagent
+
+    var body: some View {
+        if let label = Subagents.modelLabel(agent) {
+            Badge(label, outline: true, icon: "layers")
+                .accessibilityLabel("Model \(label)")
+        }
+    }
+}
+
 private struct AgentsRow: View {
     let agent: Subagent
     let parent: Subagent?
@@ -86,6 +99,7 @@ private struct AgentsRow: View {
     var body: some View {
         let a = agent
         let type = Subagents.typeLabel(a)
+        let model = Subagents.modelLabel(a)
         let preview = AgentsLogic.preview(a)
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 6) {
@@ -109,9 +123,10 @@ private struct AgentsRow: View {
                     .foregroundStyle(c.text2).lineLimit(2)
                     .multilineTextAlignment(.leading)
                 }
-                if type != nil || parent != nil {
+                if type != nil || model != nil || parent != nil {
                     FlowLayout(spacing: 6) {
                         if let type { AgentsTypeBadge(type: type) }
+                        if model != nil { AgentsModelBadge(agent: a) }
                         if let parent {
                             Text("started by \(Subagents.title(parent))").font(.scaled(size: 12.5)).foregroundStyle(c.text3)
                         }

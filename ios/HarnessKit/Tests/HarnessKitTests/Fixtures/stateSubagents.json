@@ -66,6 +66,92 @@
       "output": "25h 0m"
     }
   ],
+  "modelLabelCases": [
+    {
+      "name": "unknown",
+      "input": {
+        "model": null
+      },
+      "output": null
+    },
+    {
+      "name": "blank",
+      "input": {
+        "model": "  "
+      },
+      "output": null
+    },
+    {
+      "name": "a dated id",
+      "input": {
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "output": "Haiku 4.5"
+    },
+    {
+      "name": "an undated id",
+      "input": {
+        "model": "claude-opus-5-5"
+      },
+      "output": "Opus 5.5"
+    },
+    {
+      "name": "a major version only, dated (the date isn't a minor version)",
+      "input": {
+        "model": "claude-sonnet-4-20250514"
+      },
+      "output": "Sonnet 4"
+    },
+    {
+      "name": "the older version-first form",
+      "input": {
+        "model": "claude-3-5-sonnet-20241022"
+      },
+      "output": "Sonnet 3.5"
+    },
+    {
+      "name": "the older form, major only",
+      "input": {
+        "model": "claude-3-opus-20240229"
+      },
+      "output": "Opus 3"
+    },
+    {
+      "name": "an alias",
+      "input": {
+        "model": "haiku"
+      },
+      "output": "Haiku"
+    },
+    {
+      "name": "a 1M context id",
+      "input": {
+        "model": "claude-opus-4-6[1m]"
+      },
+      "output": "Opus 4.6 1M"
+    },
+    {
+      "name": "a 1M context alias",
+      "input": {
+        "model": "sonnet[1m]"
+      },
+      "output": "Sonnet 1M"
+    },
+    {
+      "name": "another provider's id as is",
+      "input": {
+        "model": "gpt-5.1-codex"
+      },
+      "output": "gpt-5.1-codex"
+    },
+    {
+      "name": "a Bedrock id as is",
+      "input": {
+        "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+      },
+      "output": "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    }
+  ],
   "openLabelCases": [
     {
       "name": "agent",

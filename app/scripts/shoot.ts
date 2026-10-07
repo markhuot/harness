@@ -165,6 +165,8 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "spec-media-lightbox", route: "#/board/all/ticket/HARNESS-2", setup: `setTimeout(() => document.querySelector("[data-testid=md-thumbs] .md-media")?.click(), 300)` },
   { name: "plan", route: "#/board/all/ticket/NYTIMES-2" },
   { name: "transcript", route: "#/board/all/ticket/NYTIMES-1/transcript", delay: 4200 },
+  { name: "agents", route: "#/board/all/ticket/NYTIMES-1/agents" },
+  { name: "agent-view", route: "#/board/all/ticket/NYTIMES-1/agent:toolu_mock_review" },
   { name: "blocked", route: "#/board/all/ticket/NYTIMES-3" },
   { name: "restarts", route: "#/board/all/ticket/HARNESS-21" },
   { name: "done", route: "#/board/all/ticket/NYTIMES-5" },

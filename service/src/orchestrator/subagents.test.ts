@@ -164,6 +164,17 @@ describe("SubagentRepo.upsert", () => {
     expect(r.upsert("s1", "run1", { id: "a", status: "succeeded", result: "late report" })).toMatchObject({ status: "stopped", result: "late report" });
   });
 
+  test("the model: the alias it started with, replaced by the one its replies name, never cleared", () => {
+    const r = repo();
+    expect(r.upsert("s1", "run1", { id: "a", description: "Scan" })!.model).toBeNull();
+    expect(r.upsert("s1", "run1", { id: "a", model: "haiku" })!.model).toBe("haiku");
+    expect(r.upsert("s1", "run1", { id: "a", model: "claude-haiku-4-5-20251001" })!.model).toBe("claude-haiku-4-5-20251001");
+    // A report without one (a status change) keeps it.
+    expect(r.upsert("s1", "run1", { id: "a", status: "succeeded" })!.model).toBe("claude-haiku-4-5-20251001");
+    expect(r.upsert("s1", "run1", { id: "a", model: "claude-haiku-4-5-20251001" })).toBeNull();
+    expect(r.get("s1", "a")!.model).toBe("claude-haiku-4-5-20251001");
+  });
+
   test("stopRunning only touches the run's running sub-agents", () => {
     const r = repo();
     r.upsert("s1", "run1", { id: "a" });

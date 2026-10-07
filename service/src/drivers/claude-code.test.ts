@@ -342,6 +342,21 @@ describe("StreamJsonParser", () => {
       expect(p.handle({ type: "assistant", parent_tool_use_id: "ag", message: { content: [{ type: "text", text: "working" }] } })).toEqual([{ type: "text", text: "working", subagentId: "ag" }]);
     });
 
+    test("a sub-agent's model: the alias its call asked for, then the model its replies name, once per change", () => {
+      const p = new StreamJsonParser();
+      p.handle(init("s-1"));
+      const reply = (model: string, text: string) => ({ type: "assistant", parent_tool_use_id: "ag", message: { model, content: [{ type: "text", text }] } });
+      expect(subagentEvents(p.handle(agentCall("ag", { description: "Scan", prompt: "p", model: "haiku" })))).toEqual([
+        { id: "ag", parentId: null, description: "Scan", agentType: null, model: "haiku", prompt: "p", status: "running" },
+      ]);
+      expect(subagentEvents(p.handle(reply("claude-haiku-4-5-20251001", "one")))).toEqual([{ id: "ag", model: "claude-haiku-4-5-20251001" }]);
+      expect(subagentEvents(p.handle(reply("claude-haiku-4-5-20251001", "two")))).toEqual([]);
+      // The CLI's own messages (an API error) aren't a model.
+      expect(subagentEvents(p.handle(reply("<synthetic>", "API Error")))).toEqual([]);
+      // The session agent's replies don't touch a sub-agent.
+      expect(subagentEvents(p.handle({ type: "assistant", message: { model: "claude-opus-5-5", content: [{ type: "text", text: "main" }] } }))).toEqual([]);
+    });
+
     test("output from a sub-agent the run didn't see start still gets a sub-agent", () => {
       const p = new StreamJsonParser();
       p.handle(init("s-1"));

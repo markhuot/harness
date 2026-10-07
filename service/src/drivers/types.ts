@@ -22,6 +22,8 @@ export interface SubagentReport {
   parentId?: string | null;
   description?: string;
   agentType?: string | null;
+  /** The model it runs on, e.g. "claude-haiku-4-5-20251001" or an alias like "haiku" */
+  model?: string | null;
   prompt?: string;
   status?: SubagentStatus;
   result?: string | null;

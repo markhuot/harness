@@ -127,7 +127,7 @@ It boots `harness-shared` (an iPhone 18 Pro on iOS 27.0, created the first time 
 never downloads a runtime). `--sim <name>` picks another simulator,
 which has to exist already. It starts a throwaway daemon (temp `HARNESS_HOME`, a free
 port, the dummy driver) and seeds the `GREET` project, a git repo with worktrees, with GREET-1 in
-review, GREET-2 in planning, GREET-3 blocked and GREET-4 done. It builds with
+review (with three sub-agents, for its Agents & tasks tab), GREET-2 in planning, GREET-3 blocked and GREET-4 done. It builds with
 `bun ios/Tools/build.ts sim` (skip that with `--no-build`, or install another build with
 `--app <path>`), refusing to build with less than 5 GiB free. Then it takes the simulator's lock
 (printing "waiting for the harness-shared simulator…" while another agent holds it), installs the

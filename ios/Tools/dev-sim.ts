@@ -325,8 +325,8 @@ function client(d: Daemon) {
 export type Seeded = { project: Project; review: Ticket; planning: Ticket; blocked: Ticket; done: Ticket; waiting: Ticket };
 
 /**
- * One git project (GREET, with worktrees) and a ticket in each of review, planning, blocked and
- * done, plus GREET-5: started while GREET-1 was still in review, so it waits in planning to start
+ * One git project (GREET, with worktrees) and a ticket in each of review (with sub-agents), planning,
+ * blocked and done, plus GREET-5: started while GREET-1 was still in review, so it waits in planning to start
  * on its own. Created one at a time so the keys are always GREET-1 … GREET-5.
  */
 async function seed(d: Daemon): Promise<Seeded> {
@@ -344,7 +344,8 @@ async function seed(d: Daemon): Promise<Seeded> {
   const ticket = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
   const settle = (t: Ticket, pred: (t: Ticket) => boolean) => until(`${t.key} settles`, async () => ((x) => (pred(x) ? x : null))(await ticket(t.key)), 60000);
 
-  const review = await create("hello world");
+  // Three dummy sub-agents (the last nested) give GREET-1 an Agents & tasks tab.
+  const review = await create("hello world\n/agents 3");
   const planning = await create("Write a landing page for the install link", { start: false });
   const blocked = await create("Sign the build\n/block Which Apple Developer team should sign the build: Happy Cog or your personal account?");
   const done = await create("Tidy the README", { start: false });

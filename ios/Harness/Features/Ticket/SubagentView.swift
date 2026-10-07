@@ -29,7 +29,13 @@ struct SubagentView: View {
                                 .font(.scaled(size: 12.5).monospacedDigit()).foregroundStyle(c.text3)
                         }
                     }
-                    if let type = Subagents.typeLabel(agent) { AgentsTypeBadge(type: type) }
+                    let type = Subagents.typeLabel(agent)
+                    if type != nil || Subagents.modelLabel(agent) != nil {
+                        HStack(spacing: 6) {
+                            if let type { AgentsTypeBadge(type: type) }
+                            AgentsModelBadge(agent: agent)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 14)

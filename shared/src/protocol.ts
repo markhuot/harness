@@ -475,6 +475,11 @@ export interface Subagent {
   description: string;
   /** The kind of agent, e.g. "general-purpose", "Explore" (null when the driver doesn't say) */
   agentType: string | null;
+  /**
+   * The model it runs on: the id its replies came from (e.g. "claude-haiku-4-5-20251001"), else
+   * the alias it was started with ("haiku"). Null or absent while unknown and for tasks.
+   */
+  model?: string | null;
   /** The instructions it was given */
   prompt: string;
   status: SubagentStatus;

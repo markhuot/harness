@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Subagent, TaskOutput, TicketDetail, TranscriptEntry } from "../index";
 import { initialState, reducer, TASK_OUTPUT_KEEP_CHARS, transcriptKey, type Action, type State } from "./reducer";
-import { isTask, sortSubagents, subagentById, subagentOpenLabel, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTranscript, subagentTypeLabel, taskOutputOf } from "./subagents";
+import { isTask, sortSubagents, subagentById, subagentModelLabel, subagentOpenLabel, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTranscript, subagentTypeLabel, taskOutputOf } from "./subagents";
 import { effectiveTab, isTicketTab, parseSubagentTab, showsAgentsTab, subagentTabRoute, tabStripTab } from "./tabs";
 
 const sub = (id: string, over: Partial<Subagent> = {}): Subagent => ({
@@ -118,6 +118,22 @@ describe("sub-agent labels", () => {
     expect(subagentTitle({ description: "", agentType: null })).toBe("Sub-agent");
     expect(subagentTypeLabel({ description: "", agentType: "Explore" })).toBeNull();
     expect(subagentTypeLabel({ description: "Scan", agentType: "Explore" })).toBe("Explore");
+  });
+
+  test("model chip: Claude ids by family and version, aliases capitalized, anything else as is", () => {
+    expect(subagentModelLabel(null)).toBeNull();
+    expect(subagentModelLabel(" ")).toBeNull();
+    expect(subagentModelLabel("claude-haiku-4-5-20251001")).toBe("Haiku 4.5");
+    expect(subagentModelLabel("claude-opus-5-5")).toBe("Opus 5.5");
+    // An 8-digit date is never read as the minor version.
+    expect(subagentModelLabel("claude-sonnet-4-20250514")).toBe("Sonnet 4");
+    expect(subagentModelLabel("claude-3-5-sonnet-20241022")).toBe("Sonnet 3.5");
+    expect(subagentModelLabel("claude-3-opus-20240229")).toBe("Opus 3");
+    expect(subagentModelLabel("haiku")).toBe("Haiku");
+    expect(subagentModelLabel("claude-opus-4-6[1m]")).toBe("Opus 4.6 1M");
+    expect(subagentModelLabel("sonnet[1m]")).toBe("Sonnet 1M");
+    expect(subagentModelLabel("gpt-5.1-codex")).toBe("gpt-5.1-codex");
+    expect(subagentModelLabel("us.anthropic.claude-sonnet-4-5-20250929-v1:0")).toBe("us.anthropic.claude-sonnet-4-5-20250929-v1:0");
   });
 
   test("duration boundaries", () => {

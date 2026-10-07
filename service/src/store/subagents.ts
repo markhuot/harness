@@ -10,6 +10,7 @@ interface SubagentRow {
   parent_id: string | null;
   description: string;
   agent_type: string | null;
+  model: string | null;
   prompt: string;
   status: string;
   result: string | null;
@@ -31,6 +32,7 @@ const toSubagent = (r: SubagentRow): Subagent => ({
   parentId: r.parent_id,
   description: r.description,
   agentType: r.agent_type,
+  model: r.model,
   prompt: r.prompt,
   status: r.status as SubagentStatus,
   result: r.result,
@@ -80,8 +82,8 @@ export class SubagentRepo {
       const status = patch.status ?? "running";
       this.db
         .query(
-          `INSERT INTO subagents (session_id, id, run_id, parent_id, description, agent_type, prompt, status, result, started_at, ended_at, updated_at, kind, command, output_path)
-           VALUES ($sessionId, $id, $runId, $parentId, $description, $agentType, $prompt, $status, $result, $t, $endedAt, $t, $kind, $command, $outputPath)`,
+          `INSERT INTO subagents (session_id, id, run_id, parent_id, description, agent_type, model, prompt, status, result, started_at, ended_at, updated_at, kind, command, output_path)
+           VALUES ($sessionId, $id, $runId, $parentId, $description, $agentType, $model, $prompt, $status, $result, $t, $endedAt, $t, $kind, $command, $outputPath)`,
         )
         .run({
           sessionId,
@@ -90,6 +92,7 @@ export class SubagentRepo {
           parentId: patch.parentId ?? null,
           description: patch.description ?? "",
           agentType: patch.agentType ?? null,
+          model: patch.model ?? null,
           prompt: patch.prompt ?? "",
           status,
           result: patch.result ?? null,
@@ -108,6 +111,7 @@ export class SubagentRepo {
       parentId: patch.parentId !== undefined && prev.parentId === null ? patch.parentId : prev.parentId,
       description: patch.description || prev.description,
       agentType: patch.agentType ?? prev.agentType,
+      model: patch.model ?? prev.model ?? null,
       prompt: patch.prompt || prev.prompt,
       status,
       result: patch.result !== undefined && patch.result !== null && (!finished || prev.result === null) ? patch.result : prev.result,
@@ -117,12 +121,12 @@ export class SubagentRepo {
     const prevPath = this.outputPath(sessionId, prev.id);
     const outputPath = prevPath ?? patch.outputPath ?? null;
     const same =
-      (["parentId", "description", "agentType", "prompt", "status", "result", "endedAt", "command"] as const).every((k) => next[k] === prev[k]) &&
+      (["parentId", "description", "agentType", "model", "prompt", "status", "result", "endedAt", "command"] as const).every((k) => next[k] === prev[k]) &&
       outputPath === prevPath;
     if (same) return null;
     this.db
       .query(
-        `UPDATE subagents SET parent_id = $parentId, description = $description, agent_type = $agentType, prompt = $prompt,
+        `UPDATE subagents SET parent_id = $parentId, description = $description, agent_type = $agentType, model = $model, prompt = $prompt,
            status = $status, result = $result, ended_at = $endedAt, command = $command, output_path = $outputPath, updated_at = $t
          WHERE session_id = $sessionId AND id = $id`,
       )
@@ -134,6 +138,7 @@ export class SubagentRepo {
         parentId: next.parentId,
         description: next.description,
         agentType: next.agentType,
+        model: next.model ?? null,
         prompt: next.prompt,
         status: next.status,
         result: next.result,

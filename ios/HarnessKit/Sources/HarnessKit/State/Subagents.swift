@@ -54,6 +54,29 @@ public enum Subagents {
 
     public static func typeLabel(_ s: Subagent) -> String? { typeLabel(description: s.description, agentType: s.agentType, kind: s.kind) }
 
+    /// A sub-agent's model as a chip: "claude-haiku-4-5-20251001" → "Haiku 4.5", the older
+    /// "claude-3-5-sonnet-20241022" → "Sonnet 3.5", an alias "haiku" → "Haiku", a "[1m]" context
+    /// suffix → "… 1M". Any other id shows as is; nil while unknown.
+    public static func modelLabel(_ model: String?) -> String? {
+        let id = JSCompat.trim(model ?? "")
+        if id.isEmpty { return nil }
+        let isLong = id.lowercased().hasSuffix("[1m]")
+        let long = isLong ? " 1M" : ""
+        let base = isLong ? String(id.dropLast(4)) : id
+        func cap(_ w: Substring) -> String { w.prefix(1).uppercased() + w.dropFirst() }
+        func version(_ major: Substring, _ minor: Substring?) -> String { minor.map { "\(major).\($0)" } ?? String(major) }
+        if let m = base.wholeMatch(of: /claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?/) {
+            return "\(cap(m.1)) \(version(m.2, m.3))\(long)"
+        }
+        if let m = base.wholeMatch(of: /claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)(?:-\d{8})?/) {
+            return "\(cap(m.3)) \(version(m.1, m.2))\(long)"
+        }
+        if base.wholeMatch(of: /[a-z]+/) != nil { return "\(cap(base[...]))\(long)" }
+        return id
+    }
+
+    public static func modelLabel(_ s: Subagent) -> String? { modelLabel(s.model.optional) }
+
     /// The transcript link on the tool row that started it.
     public static func openLabel(_ kind: SubagentKind?) -> String {
         isTask(kind) ? "Open output" : "Open transcript"
