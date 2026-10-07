@@ -51,6 +51,7 @@ import { fileContentFor, type FileLinkContext } from "./fileOpen";
 import type { HarnessBridge } from "../../main/types";
 import { isServiceStale, serviceCodeOf, type ServiceCode } from "./service";
 import { widgetSignature } from "./widgets";
+import { usePresence } from "./usePresence";
 
 declare global {
   interface Window {
@@ -345,6 +346,9 @@ export function StoreProvider({
   }, [client, refresh]);
 
   useEffect(() => () => socket.close(), [socket]);
+
+  // What this window shows, so the service holds back notifications for it (state/usePresence.ts).
+  usePresence(socket, state, route, boardScope);
 
   // Show whatever we can even before the socket connects (e.g. WS blocked but REST fine).
   useEffect(() => {

@@ -7,6 +7,7 @@ import { keyLabel, type Ticket } from "@harness/shared";
 import { progressLabel, progressSegments, readHideChildren, writeHideChildren, type Progress } from "@harness/shared/state";
 import { STATUS_LABEL, TicketKey } from "./bits";
 import { Icon } from "./Icon";
+import { HIDE_CHILDREN_CHANGED } from "../state/usePresence";
 import "./conductor.css";
 
 export function ProgressBar({ progress, size = "md" }: { progress: Progress; size?: "sm" | "md" }) {
@@ -65,6 +66,8 @@ export function useHideChildren() {
   const toggle = useCallback(() => {
     setHide((h) => {
       writeHideChildren(!h);
+      // Presence lists the cards on screen (state/usePresence.ts).
+      queueMicrotask(() => dispatchEvent(new Event(HIDE_CHILDREN_CHANGED)));
       return !h;
     });
   }, []);
