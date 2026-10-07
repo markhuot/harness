@@ -78,12 +78,13 @@ final class WindowDirectory {
     @ObservationIgnored private var pending: DeepLink?
 
     /// A main window came up or became active (`scene` is nil until the view is in its window).
-    /// Its ticket links open ticket windows from here on.
+    /// Where the device has windows (iPad), its ticket panel's pop-out opens ticket windows from
+    /// here on; the iPhone gets no opener, so `Router.canPopOutSheet` stays false there.
     func mainActive(_ router: Router, scene: UIWindowScene?) {
         let known = mains.first { $0.router === router }?.scene
         mains.removeAll { $0.router == nil || $0.router === router }
         mains.append(Entry(router: router, scene: scene ?? known))
-        if router.onOpenTicket == nil {
+        if router.onOpenTicket == nil && UIApplication.shared.supportsMultipleScenes {
             router.onOpenTicket = { [weak self, weak router] route in
                 guard let self, let v = TicketWindowValue(route: route) else { return }
                 self.openTicket(v, from: self.mains.first { $0.router === router }?.scene)

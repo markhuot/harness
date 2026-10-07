@@ -1,8 +1,9 @@
 import HarnessKit
 import SwiftUI
 
-/// The iPhone's ticket sheet (`Router.ticketSheet` / `Router.dock`): a system sheet with two
-/// detents. At `.large` it's the ticket (or New session) in its own NavigationStack, so a child,
+/// The ticket sheet (`Router.ticketSheet` / `Router.dock`) at compact width (iPhone, and a narrow
+/// iPad window; regular width is TicketPanelHost): a system sheet with two detents. At `.large`
+/// it's TicketSheetContent, the ticket (or New session) in its own NavigationStack, so a child,
 /// dep or parent pushes inside the sheet and Back returns. Dragged down to the dock detent it
 /// docks, like Mail's minimized draft: the stack stays mounted (drafts, scroll, path) but hidden,
 /// and the small sheet shows the ticket's key (TicketDock) under the board, which stays usable
@@ -66,29 +67,11 @@ struct TicketSheetHost: View {
         .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
     }
 
-    /// The store wraps the whole stack: pushed screens take their environment from the stack.
     private func stack(_ sheet: TicketSheet) -> some View {
-        RequireStore {
-            NavigationStack(path: Binding(get: { (router.ticketSheet ?? router.dock)?.path ?? [] },
-                                          set: { router.setTicketSheetPath($0) })) {
-                root(sheet.root)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(c.bg)
-                    .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
-            }
-        }
-        // The sheet runs to the screen's bottom edge without keeping the home indicator's inset, so
-        // the composer measures its concentric gap from the edge itself.
-        .environment(\.concentricBottomGap, 0)
-        // New session that became its ticket starts over as the ticket's screen.
-        .id(sheet.root)
-    }
-
-    @ViewBuilder private func root(_ root: TicketSheet.Root) -> some View {
-        switch root {
-        case let .ticket(key, tab): RouteScreen(route: .ticket(key: key, tab: tab))
-        case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
-        }
+        TicketSheetContent(sheet: sheet)
+            // The sheet runs to the screen's bottom edge without keeping the home indicator's
+            // inset, so the composer measures its concentric gap from the edge itself.
+            .environment(\.concentricBottomGap, 0)
     }
 
     /// Gone, the sheet keeps the detent it had, so the dock's ✕ sends it away from the dock
@@ -110,6 +93,37 @@ struct TicketSheetHost: View {
     }
 }
 
+/// The ticket sheet's content, the same in the iPhone's sheet (TicketSheetHost) and the iPad's
+/// side panel (TicketPanelHost): the ticket (or New session) in its own NavigationStack, bound to
+/// the sheet's path, so a child, dep or parent pushes inside it and Back returns.
+struct TicketSheetContent: View {
+    let sheet: TicketSheet
+    @Environment(Router.self) private var router
+    @Environment(\.palette) private var c
+
+    /// The store wraps the whole stack: pushed screens take their environment from the stack.
+    var body: some View {
+        RequireStore {
+            NavigationStack(path: Binding(get: { (router.ticketSheet ?? router.dock)?.path ?? [] },
+                                          set: { router.setTicketSheetPath($0) })) {
+                root
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(c.bg)
+                    .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
+            }
+        }
+        // New session that became its ticket starts over as the ticket's screen.
+        .id(sheet.root)
+    }
+
+    @ViewBuilder private var root: some View {
+        switch sheet.root {
+        case let .ticket(key, tab): RouteScreen(route: .ticket(key: key, tab: tab))
+        case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
+        }
+    }
+}
+
 /// Where the system floats the docked ticket sheet, as last measured docked: how far from the
 /// screen's sides, and its top edge in the window. The sheet is presented, so this reaches the
 /// sections (DockClearance) and the board's bottom bar through the environment (RootView) rather
@@ -121,17 +135,19 @@ struct TicketSheetHost: View {
 
 /// Keeps a section's screen clear of the docked ticket sheet. It goes inside the section's
 /// NavigationStack, on each screen: a safe-area inset outside the stack doesn't reach the board's
-/// own bottom bar. Not while a keyboard is up: the dock is behind it.
+/// own bottom bar. Not while a keyboard is up: the dock is behind it. Not in the iPad's
+/// DesktopShell either, where the docked panel is a pill floating on the window's edge.
 private struct DockClearance: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.concentricScreen) private var screen
+    @Environment(\.desktopShell) private var desktop
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @State private var keyboard = false
 
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if router.showsDock && !keyboard {
+                if router.showsDock && !desktop && !keyboard {
                     Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top))
                 }
             }

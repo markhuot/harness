@@ -27,13 +27,16 @@ public struct Prefs: Codable, Sendable, Equatable {
     /// iPad (regular width): the desktop sidebar is hidden (nil or false: shown). Newer than the
     /// 1.x app, so its blobs and the shared fixtures don't carry it.
     @Nullable public var sidebarHidden: Bool?
+    /// iPad (regular width): the ticket side panel's width as a fraction of the window, once the
+    /// person has resized it (nil: the default width). Held to `TicketPanelWidth`'s range.
+    @Nullable public var ticketPanelWidth: Double?
     /// Prefs schema version. 2: hideChildren defaults to hidden (older blobs saved false as a side effect).
     public var version: Int
 
     public init(
         theme: ThemePreference, lightTheme: String, darkTheme: String, hideChildren: Bool,
         lastProject: String? = nil, boardProject: String? = nil, activeServer: String? = nil,
-        sidebarHidden: Bool? = nil, version: Int
+        sidebarHidden: Bool? = nil, ticketPanelWidth: Double? = nil, version: Int
     ) {
         self.theme = theme
         self.lightTheme = lightTheme
@@ -43,6 +46,7 @@ public struct Prefs: Codable, Sendable, Equatable {
         self.boardProject = boardProject
         self.activeServer = activeServer
         self.sidebarHidden = sidebarHidden
+        self.ticketPanelWidth = ticketPanelWidth
         self.version = version
     }
 
@@ -65,6 +69,8 @@ public struct Prefs: Codable, Sendable, Equatable {
         p.boardProject = fields["boardProject"]?.stringValue
         p.activeServer = fields["activeServer"]?.stringValue
         p.sidebarHidden = fields["sidebarHidden"]?.boolValue
+        // A number that isn't finite (or isn't a number) is no width at all, rather than the max.
+        p.ticketPanelWidth = fields["ticketPanelWidth"]?.numberValue.flatMap { $0.isFinite ? TicketPanelWidth.clamp($0) : nil }
         // Blobs from before v2 carried hideChildren: false whether or not the user chose it — reset once.
         let storedVersion = fields["version"]?.numberValue ?? 0
         if let hide = fields["hideChildren"]?.boolValue, storedVersion >= 2 { p.hideChildren = hide }

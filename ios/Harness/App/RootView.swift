@@ -137,12 +137,15 @@ private struct SceneChrome: ViewModifier {
         }, set: { router.sheet = $0 })
     }
 
-    /// The ticket sheet, presented or docked.
-    private var ticketSheet: TicketSheet? { router.ticketSheet ?? router.dock }
+    /// The ticket sheet, presented or docked, when the root presents it as a system sheet: at
+    /// compact width. At regular width it's the side panel inside DesktopShell (TicketPanelHost),
+    /// so the root presents `sheet` and the cover as if there were none.
+    private var ticketSheet: TicketSheet? { sizeClass == .regular ? nil : router.ticketSheet ?? router.dock }
 
     /// What the root presents: the iPhone's ticket sheet while there is one, presented or docked
     /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. Swiping
-    /// the ticket sheet away, or UIKit dismissing it, dismisses it.
+    /// the ticket sheet away, or UIKit dismissing it, dismisses it. A window widening to regular
+    /// width takes the system sheet down without a dismissal, so the panel carries on with it.
     private var rootSheetBinding: Binding<RootSheet?> {
         Binding(get: {
             if let t = ticketSheet { return .ticket(t.id) }
@@ -154,7 +157,7 @@ private struct SceneChrome: ViewModifier {
     }
 
     /// The cover is presented by whichever level is on top: the sheet when one is up, else the root.
-    /// TicketSheetHost presents it while there's a ticket sheet.
+    /// TicketSheetHost presents it while there's a compact ticket sheet.
     private func coverBinding(whenSheet: Bool) -> Binding<CoverRoute?> {
         Binding(get: {
             if ticketSheet != nil { return nil }
@@ -176,8 +179,8 @@ private enum RootSheet: Hashable, Identifiable {
 /// section's sidebar button, switches between them; the board has no header, and its own bottom
 /// bar holds that button, the search field (with the filter inside it) and New session. There a
 /// ticket or New session opens in a system sheet over the sections (TicketSheetHost), which can
-/// dock under them. At regular width (iPad) it's DesktopShell, where a ticket opens in the same
-/// ticket sheet.
+/// dock under them. At regular width (iPad) it's DesktopShell, where the same ticket sheet is a
+/// side panel beside the board (TicketPanelHost), so a width change hands it across intact.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -196,6 +199,8 @@ struct MainTabs: View {
                 }
             }
         }
+        // Beside the board at regular width, the board still counts as on screen (presence).
+        .onChange(of: sizeClass, initial: true) { _, size in router.sheetIsBesideBoard = size == .regular }
     }
 }
 
@@ -215,7 +220,8 @@ private struct SectionStack: View {
 /// The iPad's desktop layout: the Projects sidebar as a split view's sidebar column next to the
 /// selected section, hidden and shown by the system toggle and remembered in prefs
 /// (`sidebarHidden`). The sections put search and their actions in the top bar
-/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet.
+/// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet. A ticket or New
+/// session opens in the side panel over the right of it all (TicketPanelHost).
 private struct DesktopShell: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
@@ -232,6 +238,7 @@ private struct DesktopShell: View {
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
         .navigationSplitViewStyle(.balanced)
+        .overlay { TicketPanelHost() }
         // ⌃⌘S, as the desktop toggles its sidebar.
         .hiddenShortcuts {
             Button("Toggle Sidebar") { app.setPref(\.sidebarHidden, app.prefs.sidebarHidden != true) }

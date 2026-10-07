@@ -1,16 +1,14 @@
 import Foundation
 
 /// The iPad ticket side panel's width. The panel starts at `defaultWidth` points and, once the
-/// person drags its edge, keeps their width as a fraction of the window (persisted under
-/// `defaultsKey`), so a rotation or a resized window scales it rather than pinning a point width.
+/// person drags its edge, keeps their width as a fraction of the window (persisted as the
+/// `ticketPanelWidth` pref), so a rotation or a resized window scales it rather than pinning a point width.
 /// Whatever the source, the width is clamped to `minFraction`…`maxFraction` of the window.
 public enum TicketPanelWidth {
     public static let minFraction = 0.25
     public static let maxFraction = 0.80
     /// The width before anyone resizes the panel.
     public static let defaultWidth = 800.0
-    /// The UserDefaults key the app keeps the dragged fraction under.
-    public static let defaultsKey = "ticketPanelWidthFraction"
 
     /// `fraction` held to the allowed range; a non-finite one falls back to the maximum.
     public static func clamp(_ fraction: Double) -> Double {

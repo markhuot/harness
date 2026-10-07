@@ -53,6 +53,19 @@ struct PrefsTests {
         #expect(Prefs.normalize(stored).sidebarHidden == true)
     }
 
+    /// The iPad panel's width: a number is clamped to the panel's range and round-trips; anything
+    /// else (a string, or none) means the default width.
+    @Test func ticketPanelWidth() throws {
+        #expect(Prefs.normalize(.object([:])).ticketPanelWidth == nil)
+        #expect(Prefs.normalize(.object(["ticketPanelWidth": .string("0.5")])).ticketPanelWidth == nil)
+        #expect(Prefs.normalize(.object(["ticketPanelWidth": .number(0.1)])).ticketPanelWidth == TicketPanelWidth.minFraction)
+        #expect(Prefs.normalize(.object(["ticketPanelWidth": .number(0.95)])).ticketPanelWidth == TicketPanelWidth.maxFraction)
+        let half = Prefs.normalize(.object(["ticketPanelWidth": .number(0.5)]))
+        #expect(half.ticketPanelWidth == 0.5)
+        let stored = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(half))
+        #expect(Prefs.normalize(stored).ticketPanelWidth == 0.5)
+    }
+
     @Test func rawBytes() {
         #expect(Prefs.normalize(data: nil) == Prefs.defaults)
         #expect(Prefs.normalize(data: Data("not json".utf8)) == Prefs.defaults)

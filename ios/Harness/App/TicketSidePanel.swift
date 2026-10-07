@@ -4,27 +4,21 @@ import SwiftUI
 /// The iPad's ticket panel (regular width): a full-height panel against the window's trailing
 /// edge, with the board to its left still live (no dimming). Place it over the board so it fills
 /// the window; it lays itself out trailing-aligned at `TicketPanelWidth` of the window's width and
-/// leaves the rest of the area untouched, so taps there reach the board.
+/// leaves the rest of the area untouched, so taps there reach the board. TicketPanelHost is the
+/// app's host.
 ///
-///     ZStack {
-///         board
-///         if let sheet = router.sheet, !docked {
-///             TicketSidePanel(title: sheet.title, canPopOut: true, widthFraction: $panelFraction,
-///                             onDock: …, onPopOut: …, onClose: …) { TicketSheetContent(…) }
-///                 .transition(.ticketPanel)
-///         }
-///     }
-///     .animation(.ticketPanel, value: router.sheet != nil)
-///
-/// `widthFraction` is nil until the person drags the edge (then 800pt, clamped, is used); bind it
-/// to `@AppStorage(TicketPanelWidth.defaultsKey) var panelFraction: Double?` to keep it across
-/// launches. Dragging the leading handle resizes it; flinging the title bar right docks it (it
-/// slides off the edge first, then `onDock` runs); Escape on a hardware keyboard closes it.
+/// `widthFraction` is nil until the person drags the edge (until then 800pt, clamped, is used);
+/// the app binds it to the `ticketPanelWidth` pref to keep it across launches. Dragging the leading
+/// handle resizes it; flinging the title bar right docks it (it slides off the edge first, then
+/// `onDock` runs); Escape on a hardware keyboard closes it. `docked` keeps it mounted (drafts,
+/// scroll, the nav path) but off the trailing edge, inert, while the dock pill stands in for it.
 struct TicketSidePanel<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     /// Whether the pop-out (own window) button shows.
     var canPopOut = true
+    /// Off the edge and inert, for the dock pill.
+    var docked = false
     @Binding var widthFraction: Double?
     let onDock: () -> Void
     let onPopOut: () -> Void
@@ -45,10 +39,16 @@ struct TicketSidePanel<Content: View>: View {
             let width = dragWidth ?? TicketPanelWidth.width(windowWidth: window, stored: widthFraction)
             panel(width: width, window: window)
                 .frame(width: width)
-                .offset(x: flingOffset)
+                .offset(x: docked ? width + Self.shadowReach : flingOffset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
+        // Docked, nothing in it answers a tap, a key command (Escape included) or VoiceOver.
+        .disabled(docked)
+        .allowsHitTesting(!docked)
+        .accessibilityHidden(docked)
         .onAppear { flingOffset = 0 }
+        // A fling has already carried it off the edge; restored, it comes back from its place.
+        .onChange(of: docked) { flingOffset = 0 }
     }
 
     private func panel(width: CGFloat, window: CGFloat) -> some View {
@@ -91,7 +91,7 @@ struct TicketSidePanel<Content: View>: View {
             }
             barButton("xmark", label: "Close \(title)", id: "ticket-panel-close", action: onClose)
                 // Escape on a hardware keyboard closes the panel, focused or not.
-                .keyboardShortcut(.cancelAction)
+                .keyboardShortcut(docked ? nil : .cancelAction)
         }
         .padding(.leading, 20)
         .padding(.trailing, 8)
@@ -267,6 +267,50 @@ struct TicketDockPill: View {
     static let height: CGFloat = 52
     /// How much of the capsule sits past the window's edge: about a third of a short label's pill.
     static let offscreen: CGFloat = 28
+}
+
+/// The ticket sheet (`Router.ticketSheet` / `Router.dock`) at regular width, over DesktopShell:
+/// TicketSidePanel around TicketSheetContent (the iPhone sheet's content), and while docked the
+/// panel stays mounted off the edge with TicketDockPill standing in for it. Pickers, the watcher
+/// form and covers come up from the root (SceneChrome), which presents nothing else here. Pop-out
+/// hands the ticket to its own window (`Router.popOutSheet()`) where the device has windows.
+struct TicketPanelHost: View {
+    @Environment(AppModel.self) private var app
+    @Environment(Router.self) private var router
+    @Environment(\.supportsMultipleWindows) private var multipleWindows
+
+    var body: some View {
+        let sheet = router.ticketSheet ?? router.dock
+        let docked = router.ticketSheetState == .docked
+        ZStack(alignment: .trailing) {
+            Color.clear.allowsHitTesting(false)
+            if let sheet {
+                TicketSidePanel(title: sheet.title, canPopOut: multipleWindows && router.canPopOutSheet,
+                                docked: docked, widthFraction: width,
+                                onDock: { router.dockSheet() }, onPopOut: { router.popOutSheet() },
+                                onClose: { router.dismissSheet() }) {
+                    TicketSheetContent(sheet: sheet)
+                }
+                // Down to the window's bottom edge; the content keeps the home indicator clear.
+                .ignoresSafeArea(.container, edges: .bottom)
+                .transition(.ticketPanel)
+            }
+            if let dock = router.dock {
+                TicketDockPill(label: dock.title, onRestore: { router.restoreDock() }, onClose: { router.dismissSheet() })
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.ticketPanel, value: router.ticketSheetState)
+        .onChange(of: docked) { _, docked in
+            // A docked New session mustn't keep the keyboard up over the board.
+            if docked { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+        }
+    }
+
+    /// The person's width, kept in prefs; nil until they first drag the panel's edge.
+    private var width: Binding<Double?> {
+        Binding(get: { app.prefs.ticketPanelWidth }, set: { app.setPref(\.ticketPanelWidth, $0) })
+    }
 }
 
 #Preview("Side panel") {
