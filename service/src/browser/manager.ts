@@ -2330,7 +2330,9 @@ const IFRAME_LIST = `const iframes = (roots) => {
       try { matches = document.querySelectorAll(selector).length; } catch {}
       const r = f.getBoundingClientRect();
       const visible = r.width > 0 && r.height > 0 && (typeof f.checkVisibility !== "function" || f.checkVisibility({ visibilityProperty: true }));
-      out.push({ selector, matches, src: src || (f.hasAttribute("srcdoc") ? "(srcdoc)" : "about:blank"), title: f.title || "", width: Math.round(r.width), height: Math.round(r.height), visible });
+      // The address without its query or fragment (Stripe's carry hundreds of characters of parameters).
+      const shown = src ? src.split(/[?#]/)[0].slice(0, 120) + (/[?#]/.test(src) || src.length > 120 ? "…" : "") : f.hasAttribute("srcdoc") ? "(srcdoc)" : "about:blank";
+      out.push({ selector, matches, src: shown, title: f.title || "", width: Math.round(r.width), height: Math.round(r.height), visible });
     }
   }
   return out;
