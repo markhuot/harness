@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
+
 ### Added
 
 - A ticket's Agents & tasks tab shows the model each sub-agent ran on (for example "Haiku 4.5"),
@@ -54,6 +56,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On the Mac, changing the project of a New session or draft from the keyboard keeps the focus on
   the project picker, instead of reloading the pane and moving the focus to its title.
+
+- Agents no longer get a validation error the first time they create a ticket with dependencies,
+  start it right away, or pass a similar yes/no, number or list option to a board tool.
 
 ## [app-20261006.1929](https://github.com/markhuot/harness/releases/tag/app-20261006.1929) - 2026-10-06
 
