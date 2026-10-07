@@ -142,7 +142,20 @@ export function checkProfile(
 }
 
 /** Entitlements only a profile can grant, which the app's entitlements file must match exactly. */
-const RESTRICTED = ["com.apple.application-identifier", "com.apple.developer.team-identifier", "com.apple.developer.aps-environment"];
+export const RESTRICTED = ["com.apple.application-identifier", "com.apple.developer.team-identifier", "com.apple.developer.aps-environment"];
+
+/**
+ * Which entitlements file osx-sign uses for one file it signs. Only the app bundle itself, which
+ * the embedded profile covers, gets the push entitlements. The widget extension has its own, and
+ * everything else nested inside (Electron's helper apps, the bundled harness-service, frameworks)
+ * gets the helper file, since macOS kills a helper that claims a restricted entitlement.
+ */
+export function entitlementsFor(file: string, app: string, files: { app: string; widget: string; helper: string }): string {
+  const path = file.replace(/\/+$/, "");
+  if (path === app.replace(/\/+$/, "")) return files.app;
+  if (/\.appex(\/|$)/.test(path)) return files.widget;
+  return files.helper;
+}
 
 export function certificateSha1(der: Uint8Array): string {
   return createHash("sha1").update(der).digest("hex").toUpperCase();

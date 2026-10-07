@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Everything inside Harness.app other than the app itself (the Electron helpers, the bundled
+	     harness-service, frameworks): V8 needs these under the hardened runtime. None of them gets
+	     the push entitlements in entitlements.mac.plist. Those are restricted, and macOS kills a
+	     helper that claims them without a provisioning profile of its own (the GPU process first,
+	     which takes the app down with it). -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+</dict>
+</plist>

@@ -16,10 +16,10 @@
 // .p8 at ASC_KEY_PATH, default ~/.appstoreconnect/private_keys/AuthKey_<key id>.p8). The key needs
 // no keychain access, which a background process may not get. Neither set: no notarization.
 import { signAsync } from "@electron/osx-sign";
-import { copyFileSync, existsSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { DEFAULT_IDENTITY, TEAM_ID, checkProfile, decodeProfile, identitySha1, profilePath, readPlist } from "./profile";
+import { DEFAULT_IDENTITY, RESTRICTED, TEAM_ID, checkProfile, decodeProfile, entitlementsFor, identitySha1, profilePath, readPlist } from "./profile";
 
 const appDir = resolve(import.meta.dir, "..");
 const app = join(appDir, "out", `Harness-darwin-${process.arch}`, "Harness.app");
@@ -28,6 +28,9 @@ const zipArg = process.argv.indexOf("--zip");
 const zip = resolve(appDir, zipArg > 0 ? process.argv[zipArg + 1]! : "out/Harness-mac.zip");
 const identity = process.env.MAC_SIGN_IDENTITY || DEFAULT_IDENTITY;
 const entitlements = join(appDir, "resources", "entitlements.mac.plist");
+// Everything nested in the app (helpers, the bundled service, frameworks) gets V8's entitlements
+// only: the push ones are restricted, and macOS kills a helper that claims them without a profile.
+const helperEntitlements = join(appDir, "resources", "entitlements.mac.helper.plist");
 // The desktop widget extension (package.ts) is sandboxed, with entitlements of its own.
 const widgetEntitlements = resolve(appDir, "..", "ios", "Widgets", "macOS", "HarnessMacWidgets.entitlements");
 if (!existsSync(app)) throw new Error(`${app} is missing; run \`bun run package\` first.`);
@@ -65,8 +68,13 @@ await signAsync({
   platform: "darwin",
   // Embedded above; osx-sign would otherwise look for a *.provisionprofile in the working directory.
   preEmbedProvisioningProfile: false,
-  optionsForFile: (file) => ({ hardenedRuntime: true, entitlements: /\.appex(\/|$)/.test(file) ? widgetEntitlements : entitlements }),
+  optionsForFile: (file) => ({ hardenedRuntime: true, entitlements: entitlementsFor(file, app, { app: entitlements, widget: widgetEntitlements, helper: helperEntitlements }) }),
 });
+// A helper that kept a restricted entitlement would be killed at launch; check every one.
+for (const helper of readdirSync(join(app, "Contents", "Frameworks")).filter((f) => f.endsWith(".app"))) {
+  const signed = await run(["codesign", "-d", "--entitlements", "-", "--xml", join(app, "Contents", "Frameworks", helper)], true);
+  if (RESTRICTED.some((k) => signed.includes(k))) throw new Error(`${helper} was signed with a restricted entitlement, so macOS would kill it:\n${signed}`);
+}
 await run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", app]);
 const info = await run(["codesign", "-dv", "--verbose=2", app], true);
 const authority = info.match(/Authority=(Developer ID Application[^\n]*)/)?.[1];

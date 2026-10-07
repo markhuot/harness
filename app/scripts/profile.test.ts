@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import {
-  DEFAULT_IDENTITY, TEAM_ID, certificateSha1, checkProfile, decodeProfile, identitySha1, parsePlist, profilePath, readPlist,
+  DEFAULT_IDENTITY, RESTRICTED, TEAM_ID, certificateSha1, checkProfile, decodeProfile, entitlementsFor, identitySha1, parsePlist, profilePath, readPlist,
   type PlistDict,
 } from "./profile";
 
@@ -160,6 +160,30 @@ test("decodeProfile refuses a missing profile", () => {
 });
 
 // This Mac's real profile, when it has one: the checks sign-mac.ts runs, end to end.
+describe("entitlementsFor", () => {
+  const app = "/out/Harness-darwin-arm64/Harness.app";
+  const files = { app: "app.plist", widget: "widget.plist", helper: "helper.plist" };
+
+  test("only the app bundle itself gets the push entitlements", () => {
+    expect(entitlementsFor(app, app, files)).toBe("app.plist");
+    expect(entitlementsFor(`${app}/`, app, files)).toBe("app.plist");
+  });
+
+  test("the widget extension keeps its own; helpers, the bundled service and frameworks get the helper file", () => {
+    expect(entitlementsFor(`${app}/Contents/PlugIns/HarnessMacWidgets.appex`, app, files)).toBe("widget.plist");
+    expect(entitlementsFor(`${app}/Contents/PlugIns/HarnessMacWidgets.appex/Contents/MacOS/HarnessMacWidgets`, app, files)).toBe("widget.plist");
+    expect(entitlementsFor(`${app}/Contents/Frameworks/Harness Helper (GPU).app`, app, files)).toBe("helper.plist");
+    expect(entitlementsFor(`${app}/Contents/Frameworks/Electron Framework.framework/Versions/A/Electron Framework`, app, files)).toBe("helper.plist");
+    expect(entitlementsFor(`${app}/Contents/MacOS/harness-service`, app, files)).toBe("helper.plist");
+  });
+
+  test("the helper entitlements file claims nothing restricted (macOS would kill the helper)", () => {
+    const helper = readPlist(join(import.meta.dir, "..", "resources", "entitlements.mac.helper.plist"));
+    for (const key of RESTRICTED) expect(helper[key]).toBeUndefined();
+    expect(helper["com.apple.security.cs.allow-jit"]).toBe(true);
+  });
+});
+
 test.skipIf(!existsSync(profilePath()))("the installed profile passes for the app's entitlements and the default identity", () => {
   const ent = readPlist(join(import.meta.dir, "..", "resources", "entitlements.mac.plist"));
   const ok = checkProfile(decodeProfile(profilePath()), { appIdentifier: APP_ID, certificateSha1: DEFAULT_IDENTITY, entitlements: ent, path: profilePath() });
