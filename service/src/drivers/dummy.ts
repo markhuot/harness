@@ -303,7 +303,7 @@ export class DummyDriver implements Driver {
       const input = { description, subagent_type: "general-purpose", prompt: `Look into sub-task ${n} and report back.` };
       const from = parentId ? { subagentId: parentId } : {};
       yield { type: "tool_call", callId: id, name: "Agent", input, ...from };
-      yield { type: "subagent", subagent: { id, parentId, description, agentType: "general-purpose", prompt: input.prompt, status: "running" } };
+      yield { type: "subagent", subagent: { id, parentId, description, agentType: "general-purpose", model: "claude-haiku-4-5-20251001", prompt: input.prompt, status: "running" } };
       await sleep(delay * 10, req.signal);
       yield { type: "text", text: `Looking into sub-task ${n}.`, subagentId: id };
       const readId = `${id}_read`;

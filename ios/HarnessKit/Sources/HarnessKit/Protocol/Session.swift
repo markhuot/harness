@@ -249,6 +249,9 @@ public struct Subagent: Codable, Sendable, Equatable, Identifiable {
     public var description: String
     /// The kind of agent, e.g. "general-purpose", "Explore" (null when the driver doesn't say)
     @Nullable public var agentType: String?
+    /// The model it runs on: the id its replies came from (e.g. "claude-haiku-4-5-20251001"), else
+    /// the alias it was started with ("haiku"). Null or absent while unknown and for tasks.
+    public var model: Patch<String>
     /// The instructions it was given
     public var prompt: String
     public var status: SubagentStatus
@@ -266,7 +269,7 @@ public struct Subagent: Codable, Sendable, Equatable, Identifiable {
 
     public init(
         id: String, sessionId: String, runId: String? = nil, parentId: String? = nil, description: String,
-        agentType: String? = nil, prompt: String, status: SubagentStatus, result: String? = nil,
+        agentType: String? = nil, model: Patch<String> = .absent, prompt: String, status: SubagentStatus, result: String? = nil,
         startedAt: Timestamp, endedAt: Timestamp? = nil, updatedAt: Timestamp,
         kind: SubagentKind? = nil, command: Patch<String> = .absent, hasOutput: Bool? = nil
     ) {
@@ -276,6 +279,7 @@ public struct Subagent: Codable, Sendable, Equatable, Identifiable {
         self.parentId = parentId
         self.description = description
         self.agentType = agentType
+        self.model = model
         self.prompt = prompt
         self.status = status
         self.result = result

@@ -1394,7 +1394,7 @@ the run's background tasks (see "Background tasks" below).
 **Driver contract** (`service/src/drivers/types.ts`, driver-agnostic). A driver that runs
 sub-agents reports each one with `{ type: "subagent", subagent: SubagentReport }`: an id unique
 within the session (the id of the tool call that started it), and whatever it knows of
-`parentId` (nested agents), `description`, `agentType`, `prompt`, `status` (`running`,
+`parentId` (nested agents), `description`, `agentType`, `model`, `prompt`, `status` (`running`,
 `succeeded`, `failed`, `stopped`) and `result`. The first report creates the sub-agent, running
 unless it says otherwise, and later reports fill in the fields they carry. Once it has finished,
 later reports can add a missing result but never change its status. `text`, `thinking`,
@@ -1416,7 +1416,10 @@ the same session transcript as before.
 
 **claude-code** (verified against claude 2.1.283). An `Agent`/`Task` tool call starts a sub-agent
 (`description`, `subagent_type`, `prompt` from its input; `parentId` is the call's own
-`parent_tool_use_id`). Stream messages with `parent_tool_use_id` set are that sub-agent's output.
+`parent_tool_use_id`; `model` from the call's `model` input, an alias like `haiku`, when it asks
+for one). Stream messages with `parent_tool_use_id` set are that sub-agent's output; the first
+`assistant` message naming a different `message.model` than the one known reports it as the
+sub-agent's `model` (the CLI's `<synthetic>` messages don't count). Migration 35 added the column.
 Its streaming deltas are dropped because the full blocks follow. Agents run in the background by
 default: the tool result only says `Async agent launched…`, and the outcome arrives later as a
 `system` `task_notification` (`tool_use_id`, `status`, `summary`) or `task_updated` (by
@@ -1437,7 +1440,9 @@ The Agents & tasks tab (route id `agents`) exists only once the session has a su
 background task: until then (and on a session without any) the tab is hidden, and `agents` or
 `agent:<id>` fall back to the Spec, while the requested tab is kept so a deep link opens when
 they arrive. It lists sub-agents and tasks in one list, the latest updated first
-(`sortSubagents`: `updatedAt` desc, then `startedAt` desc). A row opens the tab `agent:<id>`: a
+(`sortSubagents`: `updatedAt` desc, then `startedAt` desc). A sub-agent's row and its view's
+header carry a model chip once its model is known (`subagentModelLabel`: "Haiku 4.5" for
+`claude-haiku-4-5-20251001`, the raw id in its tooltip). A row opens the tab `agent:<id>`: a
 sub-agent's transcript, with its task above it and a breadcrumb back through its parents, or a
 task's output view. An unknown id falls back to the list. In every transcript, a tool row that
 started a sub-agent links to its transcript ("Open transcript"), and one that started a task to

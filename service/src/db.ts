@@ -678,6 +678,11 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN pull_request_head TEXT;
   `,
+  // 35: subagents.model: the model a sub-agent runs on (DESIGN.md "Sub-agents"). NULL while
+  //     unknown, for tasks, and for every sub-agent recorded before this.
+  `
+  ALTER TABLE subagents ADD COLUMN model TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

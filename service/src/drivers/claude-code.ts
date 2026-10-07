@@ -454,6 +454,8 @@ export class StreamJsonParser {
   private toolInputs = new Map<string, unknown>();
   /** Sub-agents reported so far (their tool call ids) */
   private subagents = new Set<string>();
+  /** Sub-agent → the model reported for it last */
+  private subagentModels = new Map<string, string>();
   /** CLI task id → the tool call id of the sub-agent it runs */
   private tasks = new Map<string, string>();
   /** Tool call id → the CLI task running it (any task type) */
@@ -619,6 +621,13 @@ export class StreamJsonParser {
         break;
       }
       case "assistant": {
+        // A sub-agent's replies name the model that wrote them; the CLI's own messages (an API
+        // error, an interrupt) say "<synthetic>".
+        const model = str(msg.message?.model);
+        if (subagentId && model && model !== "<synthetic>" && this.subagentModels.get(subagentId) !== model) {
+          this.subagentModels.set(subagentId, model);
+          events.push({ type: "subagent", subagent: { id: subagentId, model } });
+        }
         const content = msg.message?.content;
         if (!Array.isArray(content)) break;
         for (const block of content) {
@@ -636,6 +645,9 @@ export class StreamJsonParser {
             events.push({ type: "tool_call", callId, name, input, ...from });
             if (AGENT_TOOLS.has(name) && !this.subagents.has(callId)) {
               this.subagents.add(callId);
+              // The model the call asked for ("haiku"), until the sub-agent's replies name one.
+              const model = str(input.model) || undefined;
+              if (model) this.subagentModels.set(callId, model);
               events.push({
                 type: "subagent",
                 subagent: {
@@ -643,6 +655,7 @@ export class StreamJsonParser {
                   parentId: subagentId,
                   description: str(input.description) ?? "",
                   agentType: str(input.subagent_type) ?? null,
+                  ...(model ? { model } : {}),
                   prompt: str(input.prompt) ?? "",
                   status: "running",
                 },

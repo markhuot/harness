@@ -1,6 +1,6 @@
 // Sub-agent state and labels (shared/src/state/subagents.ts, the subagents.test.ts cases outside
 // tabs) for HarnessKit's Subagents.swift. See ../board.ts for the scenario format.
-import { sortSubagents, subagentDuration, subagentOpenLabel, subagentTitle, subagentTypeLabel, SUBAGENT_STATUS_LABEL, TASK_KIND_LABEL, TASK_OUTPUT_KEEP_CHARS, TASK_OUTPUT_POLL_MS } from "../../src/state";
+import { sortSubagents, subagentDuration, subagentModelLabel, subagentOpenLabel, subagentTitle, subagentTypeLabel, SUBAGENT_STATUS_LABEL, TASK_KIND_LABEL, TASK_OUTPUT_KEEP_CHARS, TASK_OUTPUT_POLL_MS } from "../../src/state";
 import type { Subagent, TaskOutput } from "../../src/protocol";
 import { cases } from "../case";
 import { detail, entry, ev, scenario, sub, ticket } from "../board";
@@ -96,6 +96,21 @@ export const typeLabelCases = cases(subagentTypeLabel, {
   "no type": { description: "Scan", agentType: null },
   "a Bash task": { description: "Run the tests", agentType: null, kind: "bash" },
   "a Monitor": { description: "", agentType: null, kind: "monitor" },
+});
+
+export const modelLabelCases = cases(({ model }: { model: string | null }) => subagentModelLabel(model), {
+  "unknown": { model: null },
+  "blank": { model: "  " },
+  "a dated id": { model: "claude-haiku-4-5-20251001" },
+  "an undated id": { model: "claude-opus-5-5" },
+  "a major version only, dated (the date isn't a minor version)": { model: "claude-sonnet-4-20250514" },
+  "the older version-first form": { model: "claude-3-5-sonnet-20241022" },
+  "the older form, major only": { model: "claude-3-opus-20240229" },
+  "an alias": { model: "haiku" },
+  "a 1M context id": { model: "claude-opus-4-6[1m]" },
+  "a 1M context alias": { model: "sonnet[1m]" },
+  "another provider's id as is": { model: "gpt-5.1-codex" },
+  "a Bedrock id as is": { model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0" },
 });
 
 export const durationCases = cases(({ startedAt, endedAt, now }: { startedAt: number; endedAt: number | null; now?: number }) => subagentDuration({ startedAt, endedAt }, now ?? 0), {

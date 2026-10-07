@@ -343,6 +343,13 @@ struct SubagentScenarioTests {
         #expect(Subagents.typeLabel(description: c.input.description, agentType: c.input.agentType, kind: c.input.kind) == c.output)
     }
 
+    struct ModelInput: Decodable, Sendable { let model: String? }
+
+    @Test(arguments: Fixture.cases("stateSubagents", "modelLabelCases", input: ModelInput.self, output: String?.self))
+    func modelLabel(_ c: Fixture.Case<ModelInput, String?>) {
+        #expect(Subagents.modelLabel(c.input.model) == c.output)
+    }
+
     struct KindInput: Decodable, Sendable { let kind: SubagentKind? }
 
     @Test(arguments: Fixture.cases("stateSubagents", "openLabelCases", input: KindInput.self, output: String.self))
