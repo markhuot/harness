@@ -60,7 +60,7 @@ const FRAME = {
   frame: {
     anyOf: [{ type: "string", minLength: 1 }, { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 }],
     description:
-      "Act inside an iframe (an embedded checkout like Stripe's card fields, a widget, a 3-D Secure challenge): a CSS selector for the <iframe> element, e.g. \"iframe[name^=__privateStripeFrame]\", or an array of them for nested frames, outermost first. Cross-origin iframes work too. browser_content lists a page's iframes with a selector for each. Omitted: the page itself.",
+      "Act inside an iframe: a CSS selector for the <iframe> element, e.g. \"iframe[title='Payment']\", or an array of them for nested frames, outermost first. Cross-origin iframes work too. browser_content lists a page's iframes with a selector for each. Omitted: the page itself.",
   },
 } as const;
 
@@ -307,7 +307,7 @@ export const browserClick = defineTool<TargetInput & { tab?: number } & WaitInpu
 export const browserType = defineTool<TargetInput & { text: string; submit?: boolean; tab?: number } & WaitInput>({
   name: "browser_type",
   description:
-    "Focus an element (a CSS selector's first match, inside an iframe with frame, or a ref from browser_snapshot) and type text into it, replacing what's there. Use frame for fields inside iframes, such as a Stripe card number. Set submit to press Enter afterwards (e.g. to submit a form). Pass wait_for to wait for the page to react (results shown, the next page loaded) before returning. For keys like Tab or Escape, or a field that only reacts to key presses, use browser_keys.",
+    "Focus an element (a CSS selector's first match, inside an iframe with frame, or a ref from browser_snapshot) and type text into it, replacing what's there. Use frame for fields inside iframes. Set submit to press Enter afterwards (e.g. to submit a form). Pass wait_for to wait for the page to react (results shown, the next page loaded) before returning. For keys like Tab or Escape, or a field that only reacts to key presses, use browser_keys.",
   inputSchema: schema(
     {
       selector: { type: "string", minLength: 1, description: "CSS selector of an input, textarea or contenteditable element." },
