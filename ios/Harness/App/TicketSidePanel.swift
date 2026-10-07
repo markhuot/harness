@@ -289,7 +289,7 @@ struct TicketPanelHost: View {
                                 docked: docked, widthFraction: width,
                                 onDock: { router.dockSheet() }, onPopOut: { router.popOutSheet() },
                                 onClose: { router.dismissSheet() }) {
-                    TicketSheetContent(sheet: sheet)
+                    TicketSheetContent(sheet: sheet).environment(\.inTicketPanel, true)
                 }
                 // Down to the window's bottom edge; the content keeps the home indicator clear.
                 .ignoresSafeArea(.container, edges: .bottom)

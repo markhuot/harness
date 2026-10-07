@@ -9,6 +9,7 @@ struct TriageScreen: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
+    @Environment(\.inTicketSheet) private var inTicketSheet
     @Environment(\.palette) private var c
 
     var body: some View {
@@ -29,7 +30,10 @@ struct TriageScreen: View {
                         }
                         if let dispatched {
                             HButton("Open \(Keys.keyLabel(dispatched))", icon: "chevronRight", small: true, fullWidth: false) {
-                                router.push(.ticket(key: dispatched.key, tab: nil))
+                                // From the Inbox it's a new choice for the ticket sheet; pushed
+                                // inside the sheet, a step within it.
+                                if inTicketSheet { router.push(.ticket(key: dispatched.key, tab: nil)) }
+                                else { router.openTicket(key: dispatched.key, tab: nil) }
                             }
                         }
                     }

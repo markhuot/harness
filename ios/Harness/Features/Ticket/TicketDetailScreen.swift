@@ -490,16 +490,23 @@ private struct TicketDetailHeader: ViewModifier {
     @Environment(\.palette) private var c
     @Environment(\.openURL) private var openURL
     @Environment(\.supportsMultipleWindows) private var multipleWindows
+    @Environment(\.inTicketPanel) private var inTicketPanel
     @State private var confirm: Confirmation?
 
     func body(content: Content) -> some View {
         let label = Keys.keyLabel(ticket)
+        // The iPad panel's title bar already names the ticket on top: no second key under it. The
+        // title stays for the Back button of whatever's pushed above.
+        let titledByPanel = inTicketPanel && (router.ticketSheet ?? router.dock)?.topTicketKey == ticket.key
         content
             .navigationTitle(label)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    if Keys.secondaryKey(ticket) != nil {
+                    if titledByPanel {
+                        // Something in the slot, so the system doesn't draw the title there.
+                        Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+                    } else if Keys.secondaryKey(ticket) != nil {
                         TicketKeyLabel(ticket: ticket, size: 17, color: c.text).fontWeight(.semibold)
                     } else {
                         Text(label).font(.mono(17, weight: .semibold)).foregroundStyle(c.text)

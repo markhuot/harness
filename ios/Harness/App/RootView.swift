@@ -117,7 +117,8 @@ private struct SceneChrome: ViewModifier {
             .background(palette.bg.ignoresSafeArea())
             // Alerts, action sheets, sheets and the keyboard follow Settings → Appearance.
             .preferredColorScheme(app.prefs.theme == .system ? nil : app.prefs.theme == .dark ? .dark : .light)
-            .onOpenURL { url in router.open(url: url, applyThemes: app.applyThemes) }
+            // From another app: a ticket replaces the ticket sheet's rather than stacking on it.
+            .onOpenURL { url in router.open(url: url, fromOutside: true, applyThemes: app.applyThemes) }
             // Navigation titles in the theme's text color (BarAppearance).
             .onChange(of: barColorKey, initial: true) {
                 BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))

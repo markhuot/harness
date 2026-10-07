@@ -421,8 +421,15 @@ detail column, since the split view paints the system background.
 **The ticket sheet at either width.** The main Router opens every ticket and New session in its
 one ticket sheet (`ticketSheet` / `dock`, its own path); only the presentation follows the width.
 `TicketSheetContent` (App/TicketSheetHost.swift) is the body both use: the ticket or New session
-in its own NavigationStack bound to the sheet's path, so children, deps and parents push inside
-it, and opening another ticket replaces it (New session drafts are kept by the Router). At
+in its own NavigationStack bound to the sheet's path. A link inside it (a child, dep or parent, a
+file, a ticket link in markdown) is `router.push` and stacks there with Back. A ticket chosen
+outside it is `router.openTicket` (board cards and their Open parent, the Inbox's triage Open
+when not itself inside the sheet, which reads `\.inTicketSheet`) or `router.openFromOutside`
+(notifications, URLs from other apps, section links from ticket windows): it replaces the
+presented sheet's ticket, root swapped and path cleared, same sheet id, New session drafts kept
+by the Router. Opening the sheet's root ticket with nothing pushed is a no-op (it only switches
+to a tab the link names); a docked sheet restores for its own ticket and is replaced otherwise,
+as with `push`. At
 compact width SceneChrome presents it as the system sheet with the dock detent
 (`TicketSheetHost`), which presents pickers, the watcher form and covers over itself; the board's
 bottom bar and `DockClearance` make room for the docked sheet. At regular width SceneChrome
@@ -432,8 +439,10 @@ cover as usual. The host puts the content in `TicketSidePanel`, which slides in 
 trailing edge over the split view with no dimming, so the board and sidebar to its left stay
 live. It's resizable from its leading edge between 25% and 80% of the window
 (`TicketPanelWidth`: 800pt until the person drags it, then their fraction of the window, kept
-as the `ticketPanelWidth` pref and re-clamped on rotation). Its title bar has dock, pop-out and
-close; a rightward fling on the title bar docks it and Esc closes it. Docked, the panel stays
+as the `ticketPanelWidth` pref and re-clamped on rotation). Its title bar names the ticket on
+top and has dock, pop-out and close; that ticket's screen leaves its key out of the navigation
+bar (`\.inTicketPanel` in TicketDetailHeader), which keeps Back and the titles of screens pushed
+above it. A rightward fling on the title bar docks it and Esc closes it. Docked, the panel stays
 mounted (drafts, scroll and path survive) but off the edge and `disabled`, and `TicketDockPill`
 stands in for it on the trailing edge, Picture in Picture style, with the iPhone dock's
 `ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores it, and

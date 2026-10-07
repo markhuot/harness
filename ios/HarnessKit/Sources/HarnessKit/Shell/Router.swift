@@ -15,15 +15,19 @@ import Observation
 /// Link semantics (ios/Tools/sim-check.ts relies on them): a tab link pops
 /// everything above the tabs, modals included (a presented ticket sheet docks); a pushed link
 /// pushes a fresh screen, a ticket's on the ticket sheet (where the ticket already on top doesn't
-/// stack a copy). Sheets replace each other; the scanner covers
-/// whatever is up.
+/// stack a copy). A ticket opened from outside the sheet (`openTicket`, `openFromOutside`: a board
+/// card, a notification, a link from another app) is a new choice rather than a step inside the
+/// sheet, so it replaces the sheet's ticket instead of stacking on it. Sheets replace each other;
+/// the scanner covers whatever is up.
 ///
 /// Ticket sheets (main scope, compact and regular width alike): tickets and New session open in a
 /// `TicketSheet` over the sections (iPhone) or beside them (iPad, `sheetIsBesideBoard`) instead of
 /// on a section's stack. A size-class change keeps it as it is. `ticketSheetState` is
 /// `.presented`, `.docked` or `.gone`.
 /// - Presented (`ticketSheet`): every push lands on the sheet's own `path`, so a conductor's child
-///   opens in the same sheet and Back returns to the conductor. Pushing the ticket already on top
+///   opens in the same sheet and Back returns to the conductor. A ticket opened from outside
+///   (`openTicket`) becomes the sheet's root instead, its path cleared; the sheet's root ticket
+///   with nothing pushed only switches to the link's tab. Pushing the ticket already on top
 ///   only switches it to the link's tab, if it names one. A ticket link pushes there too; New session (`present(.newSession)`) replaces
 ///   the sheet's content, as does a ticket pushed onto New session. `replace(newSession, with:
 ///   ticket)` turns New session into that ticket's sheet in place.
@@ -132,12 +136,41 @@ public final class Router {
         return nil
     }
 
-    /// `open(DeepLink.parse(url))`; false when the URL isn't one the app routes.
+    /// `open(DeepLink.parse(url))`; false when the URL isn't one the app routes. `fromOutside`: the
+    /// URL came from outside the ticket sheet (another app, a notification), so `openFromOutside`.
     @discardableResult
-    public func open(url: URL, applyThemes: (ThemePicker.ThemePrefsPatch) -> Void = { _ in }) -> Bool {
+    public func open(url: URL, fromOutside: Bool = false, applyThemes: (ThemePicker.ThemePrefsPatch) -> Void = { _ in }) -> Bool {
         guard let link = DeepLink.parse(url) else { return false }
-        if let themes = open(link) { applyThemes(themes) }
+        if let themes = fromOutside ? openFromOutside(link) : open(link) { applyThemes(themes) }
         return true
+    }
+
+    /// `open(_:)` for a link from outside the ticket sheet: a ticket opens as the sheet's ticket
+    /// (`openTicket`) rather than pushing onto a presented sheet. Everything else as `open(_:)`.
+    @discardableResult
+    public func openFromOutside(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
+        guard scope == .main, case let .push(.ticket(key, tab)) = link else { return open(link) }
+        dismissModals()
+        openTicket(key: key, tab: tab)
+        return nil
+    }
+
+    /// Main scope: opens a ticket chosen outside the ticket sheet (a board card, the inbox).
+    /// Presented, the sheet shows it at its root with its path cleared (a New session's draft is
+    /// saved), keeping its id; the sheet's root ticket with nothing pushed only switches to `tab`.
+    /// Docked or gone, as `push`: the docked ticket restores, anything else opens a new sheet.
+    /// Ticket scope: `push`.
+    public func openTicket(key: String, tab: TicketTab?) {
+        guard scope == .main, var s = ticketSheet else { return push(.ticket(key: key, tab: tab)) }
+        if case .ticket(key, let current) = s.root {
+            s.path = []
+            if let tab, tab != current { s.root = .ticket(key: key, tab: tab) }
+            if s != ticketSheetStorage { ticketSheetStorage = s }
+            return
+        }
+        s.root = .ticket(key: key, tab: tab)
+        s.path = []
+        ticketSheetStorage = s
     }
 
     /// Main scope: push on the presented ticket sheet, or open a ticket in one, else push on the

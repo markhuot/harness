@@ -370,6 +370,87 @@ struct RouterSheetTests {
         #expect(n.sheet == nil)
     }
 
+    // MARK: Tickets opened from outside the sheet (the board beside the iPad's panel)
+
+    @Test func aTicketFromOutsideReplacesThePresentedSheetsTicket() {
+        let r = sheeted()
+        r.push(t("C-1"))
+        r.push(t("C-2"))
+        r.push(.file(FileRouteParams(path: "a.ts", ticket: "C-2")))
+        let id = r.ticketSheet!.id
+        r.openTicket(key: "D-1", tab: .activity)
+        #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))
+        #expect(r.ticketSheet?.path == [])
+        #expect(r.ticketSheet?.id == id && r.ticketSheetState == .presented)
+        #expect(r.path(.board).isEmpty)
+        // Inside the sheet, a link still pushes on its stack.
+        r.push(t("D-2"))
+        #expect(r.ticketSheet?.path == [t("D-2")])
+        #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))
+    }
+
+    @Test func aTicketFromOutsideReplacesNewSession() {
+        let r = sheeted()
+        r.present(draft)
+        r.openTicket(key: "D-1", tab: nil)
+        #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
+    }
+
+    @Test func theSheetsOwnTicketFromOutsideOnlyComesBackToIt() {
+        let r = sheeted()
+        r.push(t("C-1", .spec))
+        r.openTicket(key: "C-1", tab: nil)
+        // Nothing pushed: a no-op, the tab it shows kept.
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .spec) && r.ticketSheet?.path == [])
+        // A tab it names switches to it.
+        r.openTicket(key: "C-1", tab: .details)
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .details))
+        // With a child pushed, it pops back to the root.
+        r.push(t("C-2"))
+        r.openTicket(key: "C-1", tab: nil)
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .details) && r.ticketSheet?.path == [])
+    }
+
+    @Test func aTicketFromOutsideTreatsADockAsPushDoes() {
+        // Another ticket: a new sheet in place of the dock.
+        let r = sheeted()
+        r.push(t("C-1"))
+        r.push(t("C-2"))
+        let id = r.ticketSheet!.id
+        r.dockSheet()
+        r.openTicket(key: "D-1", tab: nil)
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
+        #expect(r.ticketSheet?.id != id && r.ticketSheet?.path == [])
+        // The docked ticket on top: restored as it was.
+        r.push(t("D-2"))
+        r.dockSheet()
+        r.openTicket(key: "D-2", tab: nil)
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.path == [t("D-2")])
+    }
+
+    @Test func linksFromOutsideReplaceAndInAppLinksPush() {
+        let r = sheeted()
+        r.push(t("C-1"))
+        r.open(.push(t("C-2")))
+        #expect(r.ticketSheet?.path == [t("C-2")])
+        r.openFromOutside(.push(t("E-1")))
+        #expect(r.ticketSheet?.root == .ticket(key: "E-1", tab: nil) && r.ticketSheet?.path == [])
+        r.open(url: URL(string: "harness://ticket/E-2")!)
+        #expect(r.ticketSheet?.path == [t("E-2")])
+        r.open(url: URL(string: "harness://ticket/E-3")!, fromOutside: true)
+        #expect(r.ticketSheet?.root == .ticket(key: "E-3", tab: nil) && r.ticketSheet?.path == [])
+        // Not a ticket: as `open`.
+        r.openFromOutside(.tab(.inbox))
+        #expect(r.selectedTab == .inbox && r.ticketSheetState == .docked)
+    }
+
+    @Test func aTicketWindowPushesATicketFromOutside() {
+        let w = Router(ticket: t("A-1"))
+        w.openTicket(key: "A-2", tab: nil)
+        w.openFromOutside(.push(t("A-3")))
+        #expect(w.path(.board) == [t("A-2"), t("A-3")] && w.ticketSheetState == .gone)
+    }
+
     @Test func aTicketWindowHasNoTicketSheet() {
         let w = Router(ticket: t("A-1"))
         w.push(t("A-2"))

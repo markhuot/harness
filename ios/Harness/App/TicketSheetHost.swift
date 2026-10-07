@@ -112,6 +112,7 @@ struct TicketSheetContent: View {
                     .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
             }
         }
+        .environment(\.inTicketSheet, true)
         // New session that became its ticket starts over as the ticket's screen.
         .id(sheet.root)
     }
@@ -122,6 +123,15 @@ struct TicketSheetContent: View {
         case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
         }
     }
+}
+
+extension EnvironmentValues {
+    /// Inside the ticket sheet's stack (TicketSheetContent), at either width: a link there is a
+    /// step within the sheet rather than a new choice from outside it (`Router.openTicket`).
+    @Entry var inTicketSheet = false
+    /// Inside the iPad's ticket panel (TicketPanelHost), whose title bar names the ticket on top,
+    /// so that ticket's screen leaves its key out of the navigation bar (TicketDetailHeader).
+    @Entry var inTicketPanel = false
 }
 
 /// Where the system floats the docked ticket sheet, as last measured docked: how far from the
