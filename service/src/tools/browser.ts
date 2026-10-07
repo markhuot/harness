@@ -4,7 +4,9 @@
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserDevice, type BrowserSize, type ToolResultContent } from "@harness/shared";
-import { MAX_SCREENSHOT_HEIGHT, type BrowserTabInfo, type BrowserTabSummary } from "../browser/types";
+import { type FrameError, frameChain, frameLabel } from "../browser/frames";
+import { SNAPSHOT_DEFAULT_MAX_NODES } from "../browser/snapshot";
+import { MAX_SCREENSHOT_HEIGHT, type BrowserTabInfo, type BrowserTabSummary, type ElementTarget, type FrameSpec } from "../browser/types";
 import { WAIT_CONDITION_DOC, WAIT_CONDITION_PROPERTIES, checkCondition, type WaitCondition, type WaitResult } from "../browser/wait";
 import type { ToolContext, ToolResult } from "./types";
 import { defineTool, errorResult, schema } from "./util";
@@ -52,6 +54,55 @@ const SIZE = {
   width: { type: "integer", minimum: BROWSER_MIN_SIDE, maximum: BROWSER_MAX_SIDE, description: "Viewport width in CSS px. Alone, it keeps the tab's mode." },
   height: { type: "integer", minimum: BROWSER_MIN_SIDE, maximum: BROWSER_MAX_SIDE, description: "Viewport height in CSS px. Alone, it keeps the tab's mode." },
 } as const;
+
+/** The frame the element and read tools take: which iframe they act in. */
+const FRAME = {
+  frame: {
+    anyOf: [{ type: "string", minLength: 1 }, { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 }],
+    description:
+      "Act inside an iframe (an embedded checkout like Stripe's card fields, a widget, a 3-D Secure challenge): a CSS selector for the <iframe> element, e.g. \"iframe[name^=__privateStripeFrame]\", or an array of them for nested frames, outermost first. Cross-origin iframes work too. browser_content lists a page's iframes with a selector for each. Omitted: the page itself.",
+  },
+} as const;
+
+/** The ref the element tools take in place of selector. */
+const REF = {
+  ref: {
+    type: "string",
+    minLength: 1,
+    description: "An element's ref from browser_snapshot (e.g. \"e12\"), in place of selector. A ref already knows its frame, so don't pass frame with it.",
+  },
+} as const;
+
+type TargetInput = { selector?: string; ref?: string; frame?: FrameSpec };
+
+/** The element a tool's selector or ref names; an error message when the input doesn't name one. */
+function targetOf({ selector, ref, frame }: TargetInput): { target: ElementTarget; label: string } | { error: string } {
+  if ((selector === undefined) === (ref === undefined)) return { error: "Pass selector or ref (one of them)." };
+  if (ref !== undefined) {
+    if (frame !== undefined) return { error: "A ref already knows its frame: pass ref without frame." };
+    return { target: { ref }, label: `ref ${ref}` };
+  }
+  let chain: string[] | undefined;
+  try {
+    chain = frame === undefined ? undefined : frameChain(frame);
+  } catch (e) {
+    return { error: (e as FrameError).message };
+  }
+  return {
+    target: chain ? { selector: selector!, frame: chain } : selector!,
+    label: `${selector}${chain ? ` in frame ${frameLabel(chain)}` : ""}`,
+  };
+}
+
+/** A frame param checked and normalized; an error message when it's malformed. */
+function frameOf(frame: unknown): { frame?: string[]; error?: string } {
+  if (frame === undefined || frame === null) return {};
+  try {
+    return { frame: frameChain(frame) };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
 
 /**
  * The wait_for every tool that acts on or reads the page takes: one condition (browser/wait.ts),
@@ -193,24 +244,28 @@ export const browserCloseTab = defineTool<{ tab: number }>({
   },
 });
 
-export const browserContent = defineTool<{ selector?: string; format?: "text" | "html"; max_chars?: number; tab?: number } & WaitInput>({
+export const browserContent = defineTool<{ selector?: string; format?: "text" | "html"; max_chars?: number; frame?: FrameSpec; tab?: number } & WaitInput>({
   name: "browser_content",
   description:
-    "Read the current page. format \"text\" (default) returns visible text; \"html\" returns markup. With a CSS selector, returns the content of every matching element. Output is capped at max_chars. Pass wait_for to wait for the page to settle (a spinner gone, a result shown) before reading.",
+    "Read the current page, or with frame an iframe in it. format \"text\" (default) returns visible text; \"html\" returns markup. With a CSS selector, returns the content of every matching element. Output is capped at max_chars. An iframe's content isn't part of its page's: the result ends with the iframes it holds and the frame to pass for each. Pass wait_for to wait for the page to settle (a spinner gone, a result shown) before reading.",
   inputSchema: schema({
     selector: { type: "string", description: "CSS selector to scope the content, e.g. \"main\" or \"#results li\"." },
     format: { type: "string", enum: ["text", "html"], description: "\"text\" (default) or \"html\"." },
     max_chars: { type: "integer", minimum: 1, description: `Maximum characters to return (default ${DEFAULT_MAX_CHARS}).` },
+    ...FRAME,
     ...TAB,
     ...waitForParam("before", "reading it"),
   }),
-  async run({ selector, format, max_chars, tab, wait_for }, ctx) {
+  async run({ selector, format, max_chars, frame: rawFrame, tab, wait_for }, ctx) {
+    const frame = frameOf(rawFrame);
+    if (frame.error) return errorResult(frame.error);
     const wait = parseWaitFor({ wait_for });
     if (wait.error) return errorResult(wait.error);
     const waited = await waitOn(ctx, wait.condition, tab);
     const read = () =>
       ctx.browser.content(ctx.session.id, {
         selector,
+        frame: frame.frame,
         format: format ?? "text",
         maxChars: max_chars ?? DEFAULT_MAX_CHARS,
         tab,
@@ -221,70 +276,207 @@ export const browserContent = defineTool<{ selector?: string; format?: "text" | 
   },
 });
 
-export const browserClick = defineTool<{ selector: string; tab?: number } & WaitInput>({
+export const browserClick = defineTool<TargetInput & { tab?: number } & WaitInput>({
   name: "browser_click",
   description:
-    "Click the first element matching a CSS selector. It returns once a navigation the click starts has loaded, but not for a page that updates by script: pass wait_for to wait for the page to react (e.g. { idle: true }, or { selector: \".spinner\", state: \"gone\" }) before returning, instead of sleeping. A click on something disabled or inside [aria-busy] says so: wait for { selector, state: \"enabled\" } and click again.",
-  inputSchema: schema(
-    { selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." }, ...TAB, ...waitForParam("after", "clicking") },
-    ["selector"],
-  ),
-  async run({ selector, tab, wait_for }, ctx) {
+    "Click an element: the first match of a CSS selector (inside an iframe with frame), or a ref from browser_snapshot. It's a real mouse click (a tap on a mobile tab) where the element is on screen, so it works on elements inside cross-origin iframes too. It returns once a navigation the click starts has loaded, but not for a page that updates by script: pass wait_for to wait for the page to react (e.g. { idle: true }, or { selector: \".spinner\", state: \"gone\" }) before returning, instead of sleeping. A click on something disabled or inside [aria-busy] says so: wait for { selector, state: \"enabled\" } and click again.",
+  inputSchema: schema({
+    selector: { type: "string", minLength: 1, description: "CSS selector of the element to click." },
+    ...REF,
+    ...FRAME,
+    ...TAB,
+    ...waitForParam("after", "clicking"),
+  }),
+  async run({ selector, ref, frame, tab, wait_for }, ctx) {
+    const t = targetOf({ selector, ref, frame });
+    if ("error" in t) return errorResult(t.error);
     const wait = parseWaitFor({ wait_for });
     if (wait.error) return errorResult(wait.error);
-    const report = await ctx.browser.click(ctx.session.id, selector, { tab });
+    const report = await ctx.browser.click(ctx.session.id, t.target, { tab });
     const waited = await waitOn(ctx, wait.condition, tab);
     const state = waited ? null : await ctx.browser.state(ctx.session.id, { tab });
     const url = waited?.url ?? state?.url;
     const why = [report.disabled ? "disabled" : "", report.busy ? "inside an element marked aria-busy" : ""].filter(Boolean).join(" and ");
     const clicked =
-      `Clicked ${selector}${url ? `. Now at ${url}` : "."}` +
+      `Clicked ${t.label}${url ? `. Now at ${url}` : "."}` +
       (why ? `\nIt was ${why}, so the page may have ignored the click: wait for it to be ready (wait_for { selector, state: "enabled" }) and click again.` : "");
     return withWait(text(clicked), waited, "after");
   },
 });
 
-export const browserType = defineTool<{ selector: string; text: string; submit?: boolean; tab?: number } & WaitInput>({
+export const browserType = defineTool<TargetInput & { text: string; submit?: boolean; tab?: number } & WaitInput>({
   name: "browser_type",
   description:
-    "Focus the element matching a CSS selector and type text into it. Set submit to press Enter afterwards (e.g. to submit a form). Pass wait_for to wait for the page to react (results shown, the next page loaded) before returning.",
+    "Focus an element (a CSS selector's first match, inside an iframe with frame, or a ref from browser_snapshot) and type text into it, replacing what's there. Use frame for fields inside iframes, such as a Stripe card number. Set submit to press Enter afterwards (e.g. to submit a form). Pass wait_for to wait for the page to react (results shown, the next page loaded) before returning. For keys like Tab or Escape, or a field that only reacts to key presses, use browser_keys.",
   inputSchema: schema(
     {
       selector: { type: "string", minLength: 1, description: "CSS selector of an input, textarea or contenteditable element." },
+      ...REF,
+      ...FRAME,
       text: { type: "string", description: "Text to type." },
       submit: { type: "boolean", description: "Press Enter after typing." },
       ...TAB,
       ...waitForParam("after", "typing"),
     },
-    ["selector", "text"],
+    ["text"],
   ),
-  async run({ selector, text: typed, submit, tab, wait_for }, ctx) {
+  async run({ selector, ref, frame, text: typed, submit, tab, wait_for }, ctx) {
+    const t = targetOf({ selector, ref, frame });
+    if ("error" in t) return errorResult(t.error);
     const wait = parseWaitFor({ wait_for });
     if (wait.error) return errorResult(wait.error);
-    await ctx.browser.type(ctx.session.id, selector, typed, { submit: submit ?? false, tab });
+    await ctx.browser.type(ctx.session.id, t.target, typed, { submit: submit ?? false, tab });
     const waited = await waitOn(ctx, wait.condition, tab);
-    return withWait(text(submit ? `Typed into ${selector} and pressed Enter.` : `Typed into ${selector}.`), waited, "after");
+    return withWait(text(submit ? `Typed into ${t.label} and pressed Enter.` : `Typed into ${t.label}.`), waited, "after");
   },
 });
 
-export const browserEval = defineTool<{ expression: string; tab?: number } & WaitInput>({
+export const browserKeys = defineTool<{ text?: string; keys?: string[]; per_key?: boolean; tab?: number } & WaitInput>({
+  name: "browser_keys",
+  description:
+    "Send keyboard input to whatever has focus, in whichever frame holds it: text, then keys. Click or type into a field first to focus it. Use it for keyboard navigation (Tab to the next field, Escape to close a dialog, ArrowDown and Enter in a list) and shortcuts; to fill a field, browser_type with selector or ref is simpler. text goes in as one insert, like a paste; per_key types it one key press at a time (keydown, keypress, keyup per character), for fields that format as you type or only listen for key events. Pass wait_for to wait for the page to react before returning.",
+  inputSchema: schema({
+    text: { type: "string", minLength: 1, description: "Text to type into the focused element." },
+    keys: {
+      type: "array",
+      items: { type: "string", minLength: 1 },
+      minItems: 1,
+      description:
+        "Keys to press after the text, in order. Each is a key or a chord: \"Tab\", \"Shift+Tab\", \"Enter\", \"Escape\", \"Backspace\", \"Delete\", \"ArrowDown\", \"Home\", \"PageDown\", \"Space\", \"F5\", a single character, or modifiers joined with + (Shift, Control, Alt, Meta), e.g. \"Meta+a\".",
+    },
+    per_key: { type: "boolean", description: "Type text one key press at a time instead of inserting it at once." },
+    ...TAB,
+    ...waitForParam("after", "typing"),
+  }),
+  async run({ text: typed, keys, per_key, tab, wait_for }, ctx) {
+    if (!typed && !keys?.length) return errorResult("Pass text or keys.");
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    await ctx.browser.keys(ctx.session.id, { text: typed, keys, perKey: per_key ?? false }, { tab });
+    const waited = await waitOn(ctx, wait.condition, tab);
+    const did = [typed ? `Typed ${JSON.stringify(typed)}${per_key ? " key by key" : ""}` : "", keys?.length ? `pressed ${keys.join(", ")}` : ""].filter(Boolean).join(", then ");
+    return withWait(text(`${did[0]!.toUpperCase()}${did.slice(1)}.`), waited, "after");
+  },
+});
+
+/** One value or several, as a list. */
+const list = <T>(v: T | T[] | undefined): T[] | undefined => (v === undefined ? undefined : Array.isArray(v) ? v : [v]);
+
+export const browserSelect = defineTool<TargetInput & { value?: string | string[]; label?: string | string[]; index?: number | number[]; tab?: number } & WaitInput>({
+  name: "browser_select",
+  description:
+    "Pick an option in a native <select> (a CSS selector's first match, inside an iframe with frame, or a ref from browser_snapshot), by value, label (its visible text) or index, and fire input and change as a person choosing it would. Several values pick several options of a multiple select. When nothing matches it lists the options. For a custom dropdown (not a <select>), click it, then click its option.",
+  inputSchema: schema({
+    selector: { type: "string", minLength: 1, description: "CSS selector of the <select>." },
+    ...REF,
+    ...FRAME,
+    value: {
+      anyOf: [{ type: "string" }, { type: "array", items: { type: "string" }, minItems: 1 }],
+      description: "The option's value attribute, or several for a multiple select.",
+    },
+    label: {
+      anyOf: [{ type: "string", minLength: 1 }, { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 }],
+      description: "The option's visible text (exact, else ignoring case), or several.",
+    },
+    index: {
+      anyOf: [{ type: "integer", minimum: 0 }, { type: "array", items: { type: "integer", minimum: 0 }, minItems: 1 }],
+      description: "The option's position, from 0, or several.",
+    },
+    ...TAB,
+    ...waitForParam("after", "choosing"),
+  }),
+  async run({ selector, ref, frame, value, label, index, tab, wait_for }, ctx) {
+    const t = targetOf({ selector, ref, frame });
+    if ("error" in t) return errorResult(t.error);
+    if ([value, label, index].filter((v) => v !== undefined).length !== 1) return errorResult("Pass one of value, label or index.");
+    const indexes = list(index);
+    if (indexes?.some((i) => !Number.isInteger(i) || i < 0)) return errorResult("index is a whole number from 0.");
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    const picked = await ctx.browser.select(ctx.session.id, t.target, { values: list(value)?.map(String), labels: list(label), indexes }, { tab });
+    const waited = await waitOn(ctx, wait.condition, tab);
+    return withWait(text(`Selected ${picked.map((p) => JSON.stringify(p)).join(", ")} in ${t.label}.`), waited, "after");
+  },
+});
+
+export const browserUpload = defineTool<TargetInput & { paths: string[]; tab?: number } & WaitInput>({
+  name: "browser_upload",
+  description:
+    "Set files on a file input (a CSS selector's first match, inside an iframe with frame, or a ref from browser_snapshot), as choosing them in the file dialog would; the page gets its change event. Point it at the <input type=file>, even a hidden one, or at the button that opens the file dialog. Files must be inside your working directory or this run's scratch folder.",
+  inputSchema: schema(
+    {
+      selector: { type: "string", minLength: 1, description: "CSS selector of the file input, or of the button that opens the file dialog." },
+      ...REF,
+      ...FRAME,
+      paths: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        minItems: 1,
+        description: "Files to upload: paths inside your working directory or the scratch folder (relative ones resolve against the working directory). Several only for a multiple input.",
+      },
+      ...TAB,
+      ...waitForParam("after", "uploading"),
+    },
+    ["paths"],
+  ),
+  async run({ selector, ref, frame, paths, tab, wait_for }, ctx) {
+    const t = targetOf({ selector, ref, frame });
+    if ("error" in t) return errorResult(t.error);
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    const scope = await ctx.ops.fileOutputScope(ctx);
+    const files = resolveUploadPaths(paths, { cwd: ctx.cwd, scratchDir: scope.scratchDir });
+    const via = await ctx.browser.upload(ctx.session.id, t.target, files, { tab });
+    const waited = await waitOn(ctx, wait.condition, tab);
+    const names = files.map((f) => basename(f)).join(", ");
+    return withWait(text(`Uploaded ${names} to ${t.label}${via === "chooser" ? " (through the file dialog it opened)" : ""}.`), waited, "after");
+  },
+});
+
+export const browserSnapshot = defineTool<{ frame?: FrameSpec; max_nodes?: number; tab?: number } & WaitInput>({
+  name: "browser_snapshot",
+  description:
+    `The page's accessibility tree as text: one line per element with its role, name, value and state (focused, disabled, checked, expanded…), and a ref like [ref=e12] that browser_click, browser_type, browser_select, browser_upload and browser_screenshot take in place of selector. Iframes, cross-origin ones included, show their own tree nested under them, and their refs work the same, so you don't need a selector or frame for them. Use it to find what to act on when the page's markup is unknown or messy. A ref lasts until its frame navigates or reloads; then take a new snapshot. Shows at most max_nodes nodes (default ${SNAPSHOT_DEFAULT_MAX_NODES}); frame snapshots just one iframe. Pass wait_for to wait for the page before reading it.`,
+  inputSchema: schema({
+    ...FRAME,
+    max_nodes: { type: "integer", minimum: 1, description: `Most nodes to show (default ${SNAPSHOT_DEFAULT_MAX_NODES}).` },
+    ...TAB,
+    ...waitForParam("before", "reading it"),
+  }),
+  async run({ frame: rawFrame, max_nodes, tab, wait_for }, ctx) {
+    const frame = frameOf(rawFrame);
+    if (frame.error) return errorResult(frame.error);
+    const wait = parseWaitFor({ wait_for });
+    if (wait.error) return errorResult(wait.error);
+    const waited = await waitOn(ctx, wait.condition, tab);
+    const read = () => ctx.browser.snapshot(ctx.session.id, { frame: frame.frame, maxNodes: max_nodes, tab });
+    const tree = waited && !waited.met ? await read().catch((e) => `(couldn't read the page: ${(e as Error).message})`) : await read();
+    return withWait(text(tree), waited, "before");
+  },
+});
+
+export const browserEval = defineTool<{ expression: string; frame?: FrameSpec; tab?: number } & WaitInput>({
   name: "browser_eval",
   description:
-    "Evaluate a JavaScript expression in the page and return its JSON-serialized result (objects as JSON, elements as \"tag#id.class\"). Promises are awaited. Pass wait_for to wait for the page before evaluating. The expression runs inside the page, so a navigation or reload ends it: for steps that span a reload (click, wait, click again), or loops, use browser_run, not an in-page loop.",
+    "Evaluate a JavaScript expression in the page (or with frame, in an iframe's document) and return its JSON-serialized result (objects as JSON, elements as \"tag#id.class\"). Promises are awaited. Pass wait_for to wait for the page before evaluating. The expression runs inside the page, so a navigation or reload ends it: for steps that span a reload (click, wait, click again), or loops, use browser_run, not an in-page loop.",
   inputSchema: schema(
     {
       expression: { type: "string", minLength: 1, description: "JavaScript expression, e.g. \"document.querySelectorAll('a').length\"." },
+      ...FRAME,
       ...TAB,
       ...waitForParam("before", "evaluating"),
     },
     ["expression"],
   ),
-  async run({ expression, tab, wait_for }, ctx) {
+  async run({ expression, frame: rawFrame, tab, wait_for }, ctx) {
+    const frame = frameOf(rawFrame);
+    if (frame.error) return errorResult(frame.error);
     const wait = parseWaitFor({ wait_for });
     if (wait.error) return errorResult(wait.error);
     const waited = await waitOn(ctx, wait.condition, tab);
-    if (!waited) return await ctx.browser.evaluate(ctx.session.id, expression, { tab });
-    const value = waited.met ? await ctx.browser.evaluate(ctx.session.id, expression, { tab }) : await ctx.browser.evaluate(ctx.session.id, expression, { tab }).catch((e) => `(couldn't evaluate: ${(e as Error).message})`);
+    const evaluate = () => ctx.browser.evaluate(ctx.session.id, expression, { tab, frame: frame.frame });
+    if (!waited) return await evaluate();
+    const value = waited.met ? await evaluate() : await evaluate().catch((e) => `(couldn't evaluate: ${(e as Error).message})`);
     return withWait(text(value), waited, "before");
   },
 });
@@ -292,7 +484,7 @@ export const browserEval = defineTool<{ expression: string; tab?: number } & Wai
 export const browserWait = defineTool<WaitCondition & { tab?: number }>({
   name: "browser_wait",
   description:
-    `Wait until a condition holds in a tab: the same wait the wait_for param of browser_open, browser_click, browser_type, browser_resize, browser_screenshot, browser_content and browser_eval runs, without an action. Use it for pages that change on their own (a redirect after paying, a status a webhook updates, a script still filling the page) instead of sleeping. The condition: ${WAIT_CONDITION_DOC} Returns what matched and how long it took; a timeout is an error that says what the page was doing (loading, busy, requests in flight, console errors).`,
+    `Wait until a condition holds in a tab: the same wait the wait_for param of browser_open, browser_click, browser_type, browser_keys, browser_select, browser_upload, browser_resize, browser_screenshot, browser_snapshot, browser_content and browser_eval runs, without an action. Use it for pages that change on their own (a redirect after paying, a status a webhook updates, a script still filling the page) instead of sleeping. The condition: ${WAIT_CONDITION_DOC} Returns what matched and how long it took; a timeout is an error that says what the page was doing (loading, busy, requests in flight, console errors).`,
   inputSchema: schema({ ...WAIT_CONDITION_PROPERTIES, ...TAB }),
   async run({ tab, ...condition }, ctx) {
     const checked = checkCondition(condition);
@@ -370,10 +562,29 @@ export function resolveSaveTo(saveTo: string, scope: { cwd: string; scratchDir: 
   return target;
 }
 
-export const browserScreenshot = defineTool<{ save_to?: string; full_page?: boolean; selector?: string; tab?: number } & WaitInput>({
+/**
+ * The files browser_upload may send, as real paths: each one has to exist, be a file, and be under
+ * the run's working directory or its scratch folder (symlinks resolved, so a link can't reach out).
+ * Throws, before anything is sent, naming the first path that isn't allowed.
+ */
+export function resolveUploadPaths(paths: string[], scope: { cwd: string; scratchDir: string }): string[] {
+  const roots = [scope.cwd, scope.scratchDir].filter((r) => existsSync(r)).map((r) => realpathSync(r));
+  return paths.map((p) => {
+    const abs = isAbsolute(p) ? resolve(p) : resolve(scope.cwd, p);
+    if (!existsSync(abs)) throw new Error(`Can't upload ${p}: there's no file there.`);
+    const real = realpathSync(abs);
+    if (!statSync(real).isFile()) throw new Error(`Can't upload ${p}: it isn't a file.`);
+    if (!roots.some((root) => inside(root, real))) {
+      throw new Error(`Can't upload ${p}: files must be inside your working directory ${scope.cwd} or the scratch folder ${scope.scratchDir}.`);
+    }
+    return real;
+  });
+}
+
+export const browserScreenshot = defineTool<{ save_to?: string; full_page?: boolean; selector?: string; ref?: string; frame?: FrameSpec; tab?: number } & WaitInput>({
   name: "browser_screenshot",
   description:
-    `Take a PNG screenshot of the current viewport, or with full_page the whole scrollable page (up to ${MAX_SCREENSHOT_HEIGHT} CSS px tall), or with selector just one element. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec. Pass wait_for so it captures the finished page, not a spinner: it waits before capturing (and still captures on a timeout, showing where the page got stuck).`,
+    `Take a PNG screenshot of the current viewport, or with full_page the whole scrollable page (up to ${MAX_SCREENSHOT_HEIGHT} CSS px tall), or with selector (or a ref from browser_snapshot) just one element; frame alone captures an iframe's whole box, and with selector looks for the element inside it. With save_to, also write the PNG to a file, so you can show it in the spec as ![What it shows](path) with edit_spec or update_spec. Pass wait_for so it captures the finished page, not a spinner: it waits before capturing (and still captures on a timeout, showing where the page got stuck).`,
   inputSchema: schema({
     save_to: {
       type: "string",
@@ -390,18 +601,30 @@ export const browserScreenshot = defineTool<{ save_to?: string; full_page?: bool
       minLength: 1,
       description: "Capture only the first element matching this CSS selector (its whole box, even the parts outside the viewport), e.g. \"#pricing\" or \"form.login\".",
     },
+    ...REF,
+    ...FRAME,
     ...TAB,
     ...waitForParam("before", "capturing"),
   }),
-  async run({ save_to, full_page, selector, tab, wait_for }, ctx) {
-    if (full_page && selector) return errorResult("Pass full_page or selector, not both.");
+  async run({ save_to, full_page, selector, ref, frame: rawFrame, tab, wait_for }, ctx) {
+    if (full_page && (selector || ref || rawFrame !== undefined)) return errorResult("Pass full_page or an element (selector, ref or frame), not both.");
+    if (selector && ref) return errorResult("Pass selector or ref, not both.");
+    if (ref && rawFrame !== undefined) return errorResult("A ref already knows its frame: pass ref without frame.");
+    const frame = frameOf(rawFrame);
+    if (frame.error) return errorResult(frame.error);
     const wait = parseWaitFor({ wait_for });
     if (wait.error) return errorResult(wait.error);
     // Check the path before taking the shot, so a refused save_to costs nothing.
     const scope = save_to ? await ctx.ops.fileOutputScope(ctx) : null;
     const path = save_to && scope ? resolveSaveTo(save_to, { cwd: ctx.cwd, ...scope }) : null;
     const waited = await waitOn(ctx, wait.condition, tab);
-    const data = await ctx.browser.screenshot(ctx.session.id, { tab, ...(full_page ? { fullPage: true } : {}), ...(selector ? { selector } : {}) });
+    const data = await ctx.browser.screenshot(ctx.session.id, {
+      tab,
+      ...(full_page ? { fullPage: true } : {}),
+      ...(selector ? { selector } : {}),
+      ...(ref ? { ref } : {}),
+      ...(frame.frame ? { frame: frame.frame } : {}),
+    });
     const content: ToolResultContent[] = [{ type: "image", data, mimeType: "image/png" }];
     if (path && scope) {
       mkdirSync(dirname(path), { recursive: true });

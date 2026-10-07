@@ -492,8 +492,9 @@ A tool call that instead fails validation (a wrong type, a missing or unknown fi
     description: "Runs with the session browser (planning, work, review, conductor, chat): an index of its tools and the rules for using it.",
     variables: {},
     template: `## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call.`,

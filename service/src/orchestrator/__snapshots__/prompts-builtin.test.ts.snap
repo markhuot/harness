@@ -60,8 +60,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -127,8 +128,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -194,8 +196,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -261,8 +264,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -328,8 +332,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -395,8 +400,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -477,8 +483,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -559,8 +566,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -641,8 +649,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -723,8 +732,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -811,8 +821,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -899,8 +910,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -987,8 +999,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1075,8 +1088,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1163,8 +1177,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1251,8 +1266,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1339,8 +1355,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1427,8 +1444,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1515,8 +1533,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1603,8 +1622,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1684,8 +1704,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1765,8 +1786,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1856,8 +1878,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -1939,8 +1962,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2002,8 +2026,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2065,8 +2090,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2128,8 +2154,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2191,8 +2218,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2254,8 +2282,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2317,8 +2346,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2380,8 +2410,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2443,8 +2474,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2506,8 +2538,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2569,8 +2602,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2632,8 +2666,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2695,8 +2730,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2758,8 +2794,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2821,8 +2858,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2883,8 +2921,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -2945,8 +2984,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -3011,8 +3051,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -3075,8 +3116,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4366,8 +4408,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4451,8 +4494,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4536,8 +4580,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4621,8 +4666,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4712,8 +4758,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4803,8 +4850,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4894,8 +4942,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -4985,8 +5034,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5076,8 +5126,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5167,8 +5218,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5258,8 +5310,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5349,8 +5402,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5440,8 +5494,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5531,8 +5586,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5615,8 +5671,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5699,8 +5756,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5793,8 +5851,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5879,8 +5938,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -5955,8 +6015,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6031,8 +6092,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6107,8 +6169,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6183,8 +6246,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6265,8 +6329,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6347,8 +6412,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6440,8 +6506,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6539,8 +6606,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6621,8 +6689,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6710,8 +6779,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6805,8 +6875,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -6890,8 +6961,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -9961,8 +10033,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10028,8 +10101,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10104,8 +10178,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10171,8 +10246,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10247,8 +10323,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10314,8 +10391,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10390,8 +10468,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10457,8 +10536,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10533,8 +10613,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10600,8 +10681,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10685,8 +10767,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10764,8 +10847,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10834,8 +10918,9 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 \`list_watchers\`, \`get_settings\` and \`list_drivers\` show how the harness is set up.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10907,8 +10992,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -10991,8 +11077,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."
@@ -11069,8 +11156,9 @@ A permission classifier denial (e.g. "denied by the Claude Code auto mode classi
 A tool call that instead fails validation (a wrong type, a missing or unknown field, a bad value) is not a denial: nothing ran. Fix the input and call it again with the same arguments otherwise unchanged, rather than reaching for a different approach that drops what failed to validate. A workaround that leaves out the failed argument can quietly change what you intended to do, not just how: e.g. creating a ticket without its \`depends_on\` because the array didn't validate, instead of fixing the value and creating it with the dependency, leaves a different (and wrong) ticket graph even though the call succeeds. Only move to a different approach once a corrected retry of the same call still fails.
 
 ## Browser
-This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_click\`, \`browser_type\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
+This session has its own Chrome browser, which the human can watch: use it to check web UIs you change and to read documentation. Its tools: \`browser_open\`, \`browser_tabs\`, \`browser_resize\`, \`browser_close_tab\`, \`browser_content\`, \`browser_snapshot\`, \`browser_click\`, \`browser_type\`, \`browser_keys\`, \`browser_select\`, \`browser_upload\`, \`browser_eval\`, \`browser_screenshot\`, \`browser_wait\`, \`browser_run\`, \`browser_run_status\`, \`browser_run_stop\`.
 * Wait for the page with \`wait_for\` (or \`browser_wait\`), never \`sleep\` in a shell.
+* Inside an iframe (an embedded checkout such as Stripe's card fields, a widget), pass \`frame\` with the iframe's selector; \`browser_content\` lists a page's iframes. When the page's markup is unknown, \`browser_snapshot\` gives each element a ref to pass instead of a selector.
 * For steps that span reloads, and for loops, write one \`browser_run\` script, not many calls or a loop in \`browser_eval\` (a navigation ends it).
 * Close each tab with \`browser_close_tab\` when you're done with it.
 * Give each browsing sub-agent its own tab (\`browser_open\` with \`new_tab\`) to pass on every call."

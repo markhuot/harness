@@ -57,8 +57,12 @@ const split = (first: unknown, opts: Opts | undefined): [unknown, Opts] =>
   first !== null && typeof first === "object" && opts === undefined ? [undefined, first as Opts] : [first, opts ?? {}];
 
 const api = {
-  click: (selector: string, opts?: Opts) => call("click", [selector, opts ?? {}]),
-  type: (selector: string, text: string, opts?: Opts) => call("type", [selector, text, opts ?? {}]),
+  click: (element: string | Opts, opts?: Opts) => call("click", [element, opts ?? {}]),
+  type: (element: string | Opts, text: string, opts?: Opts) => call("type", [element, text, opts ?? {}]),
+  keys: (input: Opts) => call("keys", [input ?? {}]),
+  select: (element: string | Opts, opts?: Opts) => call("select", [element, opts ?? {}]),
+  upload: (element: string | Opts, paths: string | string[], opts?: Opts) => call("upload", [element, paths, opts ?? {}]),
+  snapshot: (opts?: Opts) => call("snapshot", [opts ?? {}]),
   wait: (condition: Opts) => call("wait", [condition]),
   evaluate: (exprOrFn: string | ((...a: unknown[]) => unknown), opts?: Opts & { args?: unknown[] }) => {
     const expression = typeof exprOrFn === "function" ? `(${exprOrFn.toString()})(...${JSON.stringify(opts?.args ?? [])})` : String(exprOrFn);
