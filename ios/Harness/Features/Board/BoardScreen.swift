@@ -389,9 +389,10 @@ private struct BoardBottomBar<Filter: View, NewSession: View>: View {
         .padding(.top, 6)
         // Concentric with the phone's corners, like Calendar's bar; over the keyboard while searching.
         // Over a docked ticket sheet, as far from the sides as the system floats it, so they line up,
-        // and as far above it.
+        // and the same gap above it on every phone.
         .concentricBottomPadding(barHeight: fieldHeight, raised: searching, horizontal: 16, bottom: 4,
-                                 gap: router.showsDock ? dockInset?.sides : nil)
+                                 sides: router.showsDock ? dockInset?.sides : nil,
+                                 above: router.showsDock && dockInset?.sides != nil ? TicketDock.barGap : nil)
         .animation(.snappy, value: searching)
         .animation(.snappy, value: router.showsDock)
     }

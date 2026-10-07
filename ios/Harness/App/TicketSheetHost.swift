@@ -144,14 +144,16 @@ struct TicketDock: View {
     /// The sheet's height while docked.
     static let height: CGFloat = 64
     static let detent = PresentationDetent.height(height)
+    /// How far the board's bottom bar sits above the docked sheet, the same on every phone.
+    static let barGap: CGFloat = 11
 
     /// What a section gives up at its bottom while a sheet is docked, so the dock sits under the
     /// board's bottom bar rather than over it: everything below the docked sheet's top edge, less
-    /// the home indicator's inset the section already keeps clear. The bar keeps its own gap above
-    /// that (BoardScreen). Before the dock is measured, the sheet and the float the system gives it.
+    /// the home indicator's inset the section already keeps clear. The bar keeps `barGap` above
+    /// that (BoardScreen). Before the dock is measured, the sheet plus a guess at the float and gap.
     static func clearance(screen: ConcentricBar.Screen?, dockTop: CGFloat?) -> CGFloat {
         let homeIndicator = screen?.homeIndicator ?? 0
-        guard let screen, let dockTop else { return max(0, height + 16 - homeIndicator) }
+        guard let screen, let dockTop else { return max(0, height + 27 - homeIndicator) }
         return max(0, screen.height - dockTop - homeIndicator)
     }
 

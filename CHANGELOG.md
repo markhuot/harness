@@ -16,8 +16,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- On iPhone, the board's bottom bar no longer crowds a docked ticket. It sits as far above the
-  docked sheet as the sheet sits from the sides of the screen.
+- On iPhone, the board's bottom bar keeps the same small gap above a docked ticket on every model.
+  On the larger phones it had nearly touched it.
 
 ## [app-20261007.1751](https://github.com/markhuot/harness/releases/tag/app-20261007.1751) - 2026-10-07
 

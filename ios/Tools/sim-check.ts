@@ -1040,10 +1040,9 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       const right = bar.frame.x + bar.frame.width - (newSession.frame.x + newSession.frame.width);
       if (Math.abs(left) > 2 || Math.abs(right) > 2)
         throw new Error(`the dock (${Math.round(bar.frame.x)}–${Math.round(bar.frame.x + bar.frame.width)}) isn't inset like the bar (${Math.round(projects.frame.x)}–${Math.round(newSession.frame.x + newSession.frame.width)})`);
-      // The bar sits as far above the dock as the dock sits from the screen's sides.
+      // The bar sits TicketDock.barGap (11pt) above the dock, whatever the phone's corner radius.
       const above = bar.frame.y - (newSession.frame.y + newSession.frame.height);
-      if (Math.abs(above - bar.frame.x) > 2)
-        throw new Error(`the bar is ${Math.round(above)}pt above the dock, which is ${Math.round(bar.frame.x)}pt from the sides`);
+      if (Math.abs(above - 11) > 1.5) throw new Error(`the bar is ${Math.round(above)}pt above the dock, not 11pt`);
     }
     await shootBoth(udid, "sheet-docked");
     return label;
