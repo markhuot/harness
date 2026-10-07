@@ -63,7 +63,7 @@ describe("buildPlist", () => {
 
 describe("buildBundledPlist", () => {
   test("runs the bundle's service for any user: BundleProgram, the app's bundle id, and no paths", async () => {
-    const xml = buildBundledPlist({ appBundleId: "com.markhuot.harness.app", executable: "harness-service" });
+    const xml = buildBundledPlist({ appBundleId: "com.markhuot.harness", executable: "harness-service" });
     expect(xml).not.toContain("/Users/");
     expect(xml).not.toMatch(/StandardOutPath|WorkingDirectory|<key>PATH<\/key>/);
     if (!Bun.which("plutil")) return;
@@ -74,7 +74,7 @@ describe("buildBundledPlist", () => {
     expect(j.Label).toBe(LAUNCHD_LABEL);
     expect(j.BundleProgram).toBe("Contents/MacOS/harness-service");
     expect(j.ProgramArguments).toEqual(["harness-service", "daemon"]);
-    expect(j.AssociatedBundleIdentifiers).toEqual(["com.markhuot.harness.app"]);
+    expect(j.AssociatedBundleIdentifiers).toEqual(["com.markhuot.harness"]);
     expect(j.EnvironmentVariables).toEqual({ [BUNDLED_ENV]: "bundle" });
     expect(j.KeepAlive).toBe(true);
     expect(j.ExitTimeOut).toBeGreaterThan(25);

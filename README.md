@@ -21,6 +21,14 @@ open ~/Applications/Harness.app
 it restarts the service onto the new code. `bun run install-app:bundled` installs the
 self-contained app the release ships instead (`bun run package` builds it).
 
+Both sign the app with the Developer ID certificate and embed the provisioning profile that grants
+push notifications (`app/scripts/sign-mac.ts --local`: no notarization, which a locally built app
+doesn't need). The profile stays outside the repo, at
+`~/.appstoreconnect/profiles/Harness_Mac_Push.provisionprofile` (or `MAC_PROVISIONING_PROFILE`): a
+Developer ID profile for `47P4ZSALX4.com.markhuot.harness` with Push Notifications, issued for the
+signing certificate (`MAC_SIGN_IDENTITY`). Signing stops with a reason when it's missing, expired
+or doesn't fit.
+
 The app starts the service itself. By default it runs as the app's child process, so quitting
 the app stops it and its agents. **Settings → Service → Start at login** makes it a launchd agent
 instead: macOS starts the service at login and it keeps running after you quit. The downloaded

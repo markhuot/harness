@@ -41,7 +41,10 @@ tag or `main`.
    ```sh
    perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' /bin/sh -c 'sleep 20
      app=/Applications/Harness.app
-     osascript -e "tell application id \"com.markhuot.harness.app\" to quit"
+     # A running build from before the move to the iPhone app bundle id has the old one: quit both.
+     for id in com.markhuot.harness com.markhuot.harness.app; do
+       osascript -e "tell application id \"$id\" to quit" 2>/dev/null
+     done
      for i in $(seq 1 120); do pgrep -qf "$app/Contents/MacOS/Harness$" || break; sleep 1; done
      for i in $(seq 1 10); do open "$app"; sleep 3; pgrep -qf "$app/Contents/MacOS/Harness$" && break; done' \
      </dev/null >/dev/null 2>&1 &

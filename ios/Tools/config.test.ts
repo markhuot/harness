@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { APP_BUNDLE_ID } from "../../app/scripts/bundle-id";
 
 // ios/project.yml is the source of the app's Info.plist (XcodeGen writes it). These keys broke real
 // setups before.
@@ -90,7 +91,10 @@ test("the widget extensions are WidgetKit extensions with ids inside their apps'
   expect(ext("HarnessWidgets").info.properties.NSExtension.NSExtensionPointIdentifier).toBe("com.apple.widgetkit-extension");
   expect(ext("HarnessMacWidgets").info.properties.NSExtension.NSExtensionPointIdentifier).toBe("com.apple.widgetkit-extension");
   expect(ext("HarnessWidgets").settings.base.PRODUCT_BUNDLE_IDENTIFIER).toStartWith(`${settings.base.PRODUCT_BUNDLE_IDENTIFIER}.`);
-  // The Electron app's id (APP_BUNDLE_ID in app/scripts/package.ts).
-  expect(ext("HarnessMacWidgets").settings.base.PRODUCT_BUNDLE_IDENTIFIER).toStartWith("com.markhuot.harness.app.");
+  // The Mac app shares the iPhone app's id (one App ID, one APNs topic), so the two widget
+  // extensions share theirs too, though they stay separate targets.
+  expect(settings.base.PRODUCT_BUNDLE_IDENTIFIER).toBe(APP_BUNDLE_ID);
+  expect(ext("HarnessMacWidgets").settings.base.PRODUCT_BUNDLE_IDENTIFIER).toBe(`${APP_BUNDLE_ID}.widgets`);
+  expect(ext("HarnessWidgets").settings.base.PRODUCT_BUNDLE_IDENTIFIER).toBe(`${APP_BUNDLE_ID}.widgets`);
   expect(target.dependencies.map((d: { target?: string }) => d.target)).toContain("HarnessWidgets");
 });
