@@ -245,7 +245,7 @@ describe("ticket lifecycle", () => {
     expect(tb.blockedReason).toBe("kaboom");
     // The detail view has no blocked callout; Activity is where the reason shows.
     expect(h.orch.activity(a.key).map((s) => [s.kind, s.author, s.body, s.meta.to])).toEqual([
-      ["moved", "system", "Work started", "in_progress"],
+      ["moved", "human", "Work started", "in_progress"],
       ["failed", "system", "Run failed: disk full", "blocked"],
     ]);
     expect(h.orch.activity(b.key).map((s) => s.body)).toEqual(["Work started", "Run failed: kaboom"]);

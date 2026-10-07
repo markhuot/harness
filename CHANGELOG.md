@@ -24,6 +24,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Creating a ticket that starts right away, or pressing Start, no longer sends you a "Moved to In
+  progress" notification on iPhone, iPad or Mac. Ticket moves you make yourself stay quiet, and
+  Activity shows them as yours. A ticket that an agent starts, or that starts once its
+  dependencies are done, still notifies.
 - On iPhone and iPad, coming back to the app shows what happened while it was in the background.
   An open ticket's transcript now catches up on the agent's replies instead of stopping where it
   was when you left.

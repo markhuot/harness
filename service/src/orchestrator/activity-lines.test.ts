@@ -158,7 +158,8 @@ describe("every column change is in Activity", () => {
     // "Approve and take no action" is the human's approval, and that entry records the move to done.
     expect(moves(h, t.key)).toEqual(["moved planning→in_progress", "submitted in_progress→review", "approved review→done"]);
     const started = h.orch.activity(t.key).find((e) => e.kind === "moved")!;
-    expect(started).toMatchObject({ author: "system", body: "Work started" });
+    // The human pressed Start: theirs, so it never pushes a notification.
+    expect(started).toMatchObject({ author: "human", body: "Work started" });
   });
 
   test("a human's drag is a moved entry by the human; block and unblock carry their own move", async () => {

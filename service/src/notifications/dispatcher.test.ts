@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ACTIVITY_KINDS, type ActivityEntry, type ActivityKind, type ActivityMeta, type HarnessEvent, type NotificationSettings } from "@harness/shared";
 import { makeOrchestrator } from "../testing/fakes";
+import { fakeContext, fakeSession } from "../tools/fakes";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "@harness/shared";
 import type { ApnsKeyFile, ApnsResult, ApnsSend } from "./apns";
 import { NotificationService, isMoveToBlocked, pushPayload, skipReason } from "./dispatcher";
@@ -154,6 +155,78 @@ describe("NotificationService", () => {
     await h.write(t, "changes_requested", "human", "Fix it");
     await h.write(t, "moved", "human", "", { from: "planning", to: "in_progress" });
     expect(h.apns.sent).toEqual([]);
+  });
+
+  describe("who started the work", () => {
+    /** Tickets a "Moved to In progress" push went out for; the started run's own entries notify as usual. */
+    const pushedKeys = (h: ReturnType<typeof setup>) =>
+      h.apns.sent
+        .map((s) => s.n.payload as { aps: { alert: { subtitle: string } }; ticketKey: string })
+        .filter((p) => p.aps.alert.subtitle.endsWith("Moved to In progress"))
+        .map((p) => p.ticketKey);
+    const settle = async (h: ReturnType<typeof setup>) => {
+      await h.orch.idle();
+      await h.svc.idle();
+    };
+    /** A work run on another ticket in the project, the way an agent's board tools see it. */
+    const agentCtx = async (h: ReturnType<typeof setup>) => {
+      const own = await h.ticket("Agent's own ticket");
+      return fakeContext({ runKind: "work", ticket: own, session: fakeSession({ id: own.sessionId, key: own.key, ticketId: own.id }), ops: h.orch.ops });
+    };
+
+    test("a human creating a ticket that starts right away gets no push for it (the UI hasn't shown it yet)", async () => {
+      const h = setup();
+      const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Login", title: "Login" });
+      await settle(h);
+      expect(h.store.activity.listBySession(t.sessionId).find((e) => e.kind === "moved")).toMatchObject({ author: "human", body: "Work started" });
+      expect(pushedKeys(h)).not.toContain(t.key);
+    });
+
+    test("a human submitting a draft, pressing Start, or dragging to in progress gets no push", async () => {
+      const h = setup();
+      const draft = await h.orch.createTicket({ projectId: h.project.id, spec: "Draft", draft: true });
+      await h.orch.submitTicket(draft.key, { start: true });
+      const planned = await h.ticket("Planned");
+      await h.orch.startTicket(planned.key);
+      const dragged = await h.ticket("Dragged");
+      await h.orch.updateTicket(dragged.key, { status: "in_progress" });
+      await settle(h);
+      expect(pushedKeys(h)).not.toContainAnyValues([draft.key, planned.key, dragged.key]);
+    });
+
+    test("an agent starting or moving another ticket still notifies, as the agent", async () => {
+      const h = setup();
+      const ctx = await agentCtx(h);
+      const started = await h.ticket("Started by an agent");
+      const moved = await h.ticket("Moved by an agent");
+      await h.orch.ops.startTicket(ctx, started.key);
+      await h.orch.ops.moveTicket(ctx, moved.key, "in_progress");
+      await settle(h);
+      for (const t of [started, moved]) {
+        expect(h.store.activity.listBySession(t.sessionId).find((e) => e.kind === "moved")).toMatchObject({ author: "agent" });
+      }
+      expect(pushedKeys(h)).toContainValues([started.key, moved.key]);
+    });
+
+    test("an agent creating a ticket that starts right away notifies", async () => {
+      const h = setup();
+      const ctx = await agentCtx(h);
+      const t = await h.orch.ops.createTicket(ctx, { title: "Spun off", spec: "Spun off", start: true });
+      await settle(h);
+      expect(pushedKeys(h)).toContain(t.key);
+    });
+
+    test("the scheduler starting a ticket once its dependency is done notifies", async () => {
+      const h = setup();
+      const dep = await h.ticket("Dependency");
+      const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Waits", title: "Waits", dependsOn: [dep.key] });
+      await settle(h);
+      expect(pushedKeys(h)).not.toContain(t.key);
+      await h.orch.updateTicket(dep.key, { status: "done" });
+      await settle(h);
+      expect(h.store.activity.listBySession(t.sessionId).find((e) => e.kind === "moved")).toMatchObject({ author: "system", body: "Work started" });
+      expect(pushedKeys(h)).toContain(t.key);
+    });
   });
 
   test("turning off the master switch or a category stops matching entries", async () => {

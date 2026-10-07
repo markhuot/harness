@@ -1254,7 +1254,7 @@ export class Orchestrator {
     return file ? { attachment, path: file.path, mimeType: file.mimeType } : null;
   }
 
-  async createTicket(body: CreateTicketBody): Promise<Ticket> {
+  async createTicket(body: CreateTicketBody, by: ActivityAuthor = "human"): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     const project = this.store.projects.get(body.projectId);
     if (!project) throw notFound(`Unknown project: ${body.projectId}`);
@@ -1337,7 +1337,7 @@ export class Orchestrator {
       return this.store.tickets.get(ticket.id)!;
     }
     this.appendStatus(ticket.sessionId, null, "Ticket created");
-    await this.launch(ticket, start, prompt);
+    await this.launch(ticket, start, prompt, by);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -1345,10 +1345,10 @@ export class Orchestrator {
    * A new (or just submitted) ticket's first step: start work when asked to (or autoStart) and its
    * dependencies are done, wait on them otherwise, or plan first.
    */
-  private async launch(ticket: Ticket, start: boolean, prompt: string) {
+  private async launch(ticket: Ticket, start: boolean, prompt: string, by: ActivityAuthor) {
     const depsDone = this.depsDone(ticket);
     if ((start || ticket.autoStart) && depsDone) {
-      await this.begin(ticket, prompt);
+      await this.begin(ticket, prompt, {}, undefined, [], by);
     } else if (start || ticket.autoStart) {
       this.appendStatus(ticket.sessionId, null, this.waitingOnLine(ticket));
     } else {
@@ -1371,7 +1371,7 @@ export class Orchestrator {
     const launched = this.store.tickets.update(ticket.id, { draft: false, autoStart: start && ticket.dependsOn.length > 0 })!;
     this.touchSession(launched.sessionId);
     this.appendStatus(launched.sessionId, null, "Ticket created");
-    await this.launch(launched, start, prompt);
+    await this.launch(launched, start, prompt, "human");
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -1511,20 +1511,20 @@ export class Orchestrator {
     if (body.status !== undefined && body.status !== ticket.status) {
       switch (body.status) {
         case "in_progress":
-          if (ticket.status === "done") await this.reopen(ticket, this.prompts().workStartPrompt(ticket), "Re-opened: moved to in progress");
-          else await this.begin(ticket, this.prompts().workStartPrompt(ticket));
+          if (ticket.status === "done") await this.reopen(ticket, this.prompts().workStartPrompt(ticket), "Re-opened: moved to in progress", [], as.author);
+          else await this.begin(ticket, this.prompts().workStartPrompt(ticket), {}, undefined, [], as.author);
           break;
         case "done":
-          this.transition(ticket, "done", { blockedReason: null }, "Moved to done", undefined, { by: "human", line: "" });
+          this.transition(ticket, "done", { blockedReason: null }, "Moved to done", undefined, { by: as.author, line: "" });
           break;
         case "blocked":
-          this.transition(ticket, "blocked", {}, "Moved to blocked", undefined, { by: "human", line: "" });
+          this.transition(ticket, "blocked", {}, "Moved to blocked", undefined, { by: as.author, line: "" });
           break;
         case "review":
-          this.transition(ticket, "review", {}, "Moved to review", undefined, { by: "human", line: "" });
+          this.transition(ticket, "review", {}, "Moved to review", undefined, { by: as.author, line: "" });
           break;
         case "planning":
-          this.transition(ticket, "planning", { blockedReason: null }, "Moved to planning", undefined, { by: "human", line: "" });
+          this.transition(ticket, "planning", { blockedReason: null }, "Moved to planning", undefined, { by: as.author, line: "" });
           break;
       }
     }
@@ -1608,7 +1608,7 @@ export class Orchestrator {
     this.kickScheduler();
   }
 
-  async startTicket(key: string): Promise<Ticket> {
+  async startTicket(key: string, by: ActivityAuthor = "human"): Promise<Ticket> {
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "started");
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
@@ -1622,7 +1622,7 @@ export class Orchestrator {
       this.appendStatus(queued.sessionId, null, this.waitingOnLine(queued));
       return this.store.tickets.get(ticket.id)!;
     }
-    await this.begin(ticket, this.prompts().workStartPrompt(ticket));
+    await this.begin(ticket, this.prompts().workStartPrompt(ticket), {}, undefined, [], by);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -1841,9 +1841,9 @@ export class Orchestrator {
    * Done → in progress. Both reviews start over, and begin() recreates the worktree when the
    * complete run removed it.
    */
-  private async reopen(ticket: Ticket, prompt: string, note: string, attachments: readonly Attachment[] = []): Promise<Ticket> {
+  private async reopen(ticket: Ticket, prompt: string, note: string, attachments: readonly Attachment[] = [], by: ActivityAuthor = "system"): Promise<Ticket> {
     this.autoRetries.delete(ticket.id);
-    await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note, attachments);
+    await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note, attachments, by);
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -2884,7 +2884,7 @@ ${numberLines(r.body)}`;
           skipHumanReview: input.skipHumanReview,
           externalRef,
           promptAttachments,
-        }),
+        }, "agent"),
       );
     }
     return this.asTool(() =>
@@ -2906,7 +2906,7 @@ ${numberLines(r.body)}`;
         skipHumanReview: input.skipHumanReview,
         externalRef,
         promptAttachments,
-      }),
+      }, "agent"),
     );
   }
 
@@ -3022,14 +3022,20 @@ ${numberLines(r.body)}`;
       const column = this.store.tickets.list({ projectId: target.projectId, statuses: [status], drafts: false }).filter((t) => t.id !== target.id);
       pos = positionForDrop(column, position);
     }
-    return this.asTool(() => this.updateTicket(target.key, { ...(status !== target.status ? { status } : {}), ...(pos !== undefined ? { position: pos } : {}) }));
+    return this.asTool(() =>
+      this.updateTicket(
+        target.key,
+        { ...(status !== target.status ? { status } : {}), ...(pos !== undefined ? { position: pos } : {}) },
+        { author: "agent", runId: ctx.runId, runKind: ctx.runKind },
+      ),
+    );
   }
 
   async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
     const { actor, target } = this.boardTarget(ctx, key, "start_ticket");
     this.noPendingApproval(target);
     this.notLooserThanCaller(actor, target);
-    return this.asTool(() => this.startTicket(target.key));
+    return this.asTool(() => this.startTicket(target.key, "agent"));
   }
 
   async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
@@ -3195,7 +3201,7 @@ ${numberLines(r.body)}`;
       baseBranch: input.baseBranch || null,
       // Only a remote ID links the ticket; otherwise the spec carries the context.
       externalRef: key ? { source: meta.source, key, url, raw: meta.text ?? null } : null,
-    });
+    }, "system");
     // The local key comes first: the Inbox links the first key in the outcome (dispatchedKey).
     this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key}${key ? ` (${key})` : ""} in ${project.key}`, input.title);
     return t;
@@ -3764,7 +3770,7 @@ ${numberLines(r.body)}`;
    * Prepare the workdir, move to in_progress and enqueue the first work/conductor run. A worktree
    * that has gone missing (removed by the complete run of a ticket now re-opened) is recreated.
    */
-  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress", attachments: readonly Attachment[] = []) {
+  private async begin(ticket: Ticket, prompt: string, patch: TicketPatch = {}, note = "Moved to in progress", attachments: readonly Attachment[] = [], by: ActivityAuthor = "system") {
     this.notDraft(ticket, "started");
     if (this.starting.has(ticket.id)) return;
     this.starting.add(ticket.id);
@@ -3785,7 +3791,7 @@ ${numberLines(r.body)}`;
       }
       this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
       const line = fresh.status === "planning" ? "Work started" : note === "Moved to in progress" ? "" : note;
-      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note, undefined, { line });
+      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note, undefined, { by, line });
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt, undefined, { attachments });
     } finally {
       this.starting.delete(ticket.id);
