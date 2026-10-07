@@ -168,8 +168,10 @@ private enum RootSheet: Hashable, Identifiable {
 /// The selected section (Board, Inbox or Settings) in its own NavigationStack. There's no tab bar.
 /// At compact width (iPhone, and iPad Split View when narrow) the Projects sidebar, behind each
 /// section's sidebar button, switches between them; the board has no header, and its own bottom
-/// bar holds that button, the search field (with the filter inside it) and New session. At regular width (iPad) it's DesktopShell, where a ticket opens
-/// in a window of its own (WindowDirectory.openTicket) instead of on the section's stack.
+/// bar holds that button, the search field (with the filter inside it) and New session. There a
+/// ticket or New session opens in the ticket sheet over the sections (TicketSheetHost), which can
+/// dock under them. At regular width (iPad) it's DesktopShell, where a ticket opens in a window of
+/// its own (WindowDirectory.openTicket) instead of on the section's stack.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
