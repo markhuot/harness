@@ -150,7 +150,7 @@ if [[ $SKIP_IOS -eq 0 ]]; then
         if ! "${NATIVE_BUILD[@]}" export --method testflight --archive-path "$ARCHIVE" >/dev/null; then
           # App Store Connect can take minutes to list a fresh upload, so a quick rerun can miss it
           # above; the upload's own refusal of a used build number means it's there.
-          grep -q "previously uploaded version: ‘$BUILD_NUMBER’" "$ROOT/ios/build/export-testflight.log" 2>/dev/null || exit 1
+          grep -q "previously uploaded version: ‘${BUILD_NUMBER}’" "$ROOT/ios/build/export-testflight.log" 2>/dev/null || exit 1
           echo "==> App Store Connect already has build $BUILD_NUMBER (not listed yet); not uploading again"
         fi
         ;;
