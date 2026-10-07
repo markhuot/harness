@@ -176,18 +176,15 @@ private struct NewSessionEditorView: View {
                     text: Binding(get: { editor.local?.spec ?? "" }, set: { editor.setSpec($0) }),
                     placeholder: Format.newSessionPlaceholder(kind),
                     projectId: t.projectId,
-                    minHeight: 150,
+                    minLines: 7,
                     commandDriver: editor.commandDriver(state),
                     // Grows with every line typed; the form scrolls, not the field.
                     maxLines: nil,
                     followsCaret: true,
-                    // The row's top and bottom inset as the field's own padding, so the whole white
-                    // row is the field and a tap anywhere in it focuses it.
+                    boxed: false,
                     fieldLabel: "Spec",
-                    fieldBox: MentionFieldBox(cornerRadius: 0, padding: EdgeInsets(top: 11, leading: 0, bottom: 11, trailing: 0)),
                     autofocus: reopen == nil
                 )
-                .listRowInsets(.vertical, 0)
                 .listRowBackground(c.bgElev)
             }
             NewSessionAttachmentsSection(editor: editor, ticket: t, uploader: uploader)

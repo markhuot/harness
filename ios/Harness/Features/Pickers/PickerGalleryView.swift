@@ -56,7 +56,7 @@ struct PickerGalleryView: View {
                 .id("color")
                 if let project {
                     Section("Mentions · \(project.key)") {
-                        MentionTextEditor(text: $prompt, placeholder: "Prompt", projectId: project.id, minHeight: 90)
+                        MentionTextEditor(text: $prompt, placeholder: "Prompt", projectId: project.id, minLines: 4)
                     }
                     .id("mentions")
                 }
@@ -84,7 +84,7 @@ struct PickerGalleryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 if let ticket {
-                    MentionTextEditor(text: $message, placeholder: "Message the agent…", ticketKey: ticket.key, minHeight: 0, maxLines: 6, suggestionsEdge: .top, suggestionsMaxHeight: 200)
+                    MentionTextEditor(text: $message, placeholder: "Message the agent…", ticketKey: ticket.key, minLines: 1, maxLines: 6, suggestionsEdge: .top, suggestionsMaxHeight: 200)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(c.bg)

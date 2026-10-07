@@ -30,8 +30,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- On iPhone and iPad, tapping anywhere in New session's prompt box brings up the keyboard. Taps in
-  the lower part of the box, below the text, used to do nothing.
+- On iPhone and iPad, New session's prompt fills its whole box, so tapping anywhere in it brings up
+  the keyboard, and a tap or drag below the text places the cursor as in any text field. Taps in the
+  lower part of the box, below the text, used to do nothing.
 
 ## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
 
