@@ -3115,7 +3115,14 @@ the conventions, and ios/README.md the build and test commands.
 - **iPad.** One universal build (device family `1,2`) that allows all four orientations, which
   iPad multitasking (Split View, Stage Manager) needs, so the window can be any size. The screens
   are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
-  and store, a Router per window): at regular width a ticket opens in a window of its own. Any
+  and store, a Router per window). At regular width a ticket (or New session) opens in a panel
+  that slides in from the right, full height, with the board still live to its left: it resizes
+  from its leading edge (25–80% of the window, 800pt until resized, then remembered as a fraction
+  of the window), and its title bar docks it, pops it out or closes it. Docked (the button, or a
+  fling to the right), it waits on the right edge as a small pill like Picture in Picture, keeping
+  its drafts and place; a tap brings it back. Pop-out opens the ticket in a window of its own,
+  as does Open in New Window in a card's or the ticket's menu. Narrow windows keep the phone's
+  bottom sheet and dock. Any
   ticket tab, any single browser tab and the composer tear off into a pinned window of their own:
   dragged out of the window (the drag carries the window's NSUserActivity, so iPadOS opens it) or
   from the thing's context menu (Open in New Window). A pinned window shows only that one tab,

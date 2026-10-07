@@ -418,6 +418,33 @@ on iPhone and iOS takes ⌘, for itself. `harness://projects` at regular width s
 never presents it there). A section that doesn't set its own background gets `bg` from the
 detail column, since the split view paints the system background.
 
+**The ticket sheet at either width.** The main Router opens every ticket and New session in its
+one ticket sheet (`ticketSheet` / `dock`, its own path); only the presentation follows the width.
+`TicketSheetContent` (App/TicketSheetHost.swift) is the body both use: the ticket or New session
+in its own NavigationStack bound to the sheet's path, so children, deps and parents push inside
+it, and opening another ticket replaces it (New session drafts are kept by the Router). At
+compact width SceneChrome presents it as the system sheet with the dock detent
+(`TicketSheetHost`), which presents pickers, the watcher form and covers over itself; the board's
+bottom bar and `DockClearance` make room for the docked sheet. At regular width SceneChrome
+presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell
+overlays `TicketPanelHost` (App/TicketSidePanel.swift), and the root presents `sheet` and the
+cover as usual. The host puts the content in `TicketSidePanel`, which slides in from the
+trailing edge over the split view with no dimming, so the board and sidebar to its left stay
+live. It's resizable from its leading edge between 25% and 80% of the window
+(`TicketPanelWidth`: 800pt until the person drags it, then their fraction of the window, kept
+as the `ticketPanelWidth` pref and re-clamped on rotation). Its title bar has dock, pop-out and
+close; a rightward fling on the title bar docks it and Esc closes it. Docked, the panel stays
+mounted (drafts, scroll and path survive) but off the edge and `disabled`, and `TicketDockPill`
+stands in for it on the trailing edge, Picture in Picture style, with the iPhone dock's
+`ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores it, and
+its context menu closes it. The pill floats over the board without reserving space. The
+composer measures its bottom gap from the screen's edge in the iPhone sheet
+(`\.concentricBottomGap` 0); the panel leaves it unset, so the composer sits on the home
+indicator's inset or the keyboard. MainTabs sets the Router's `sheetIsBesideBoard` from the size
+class, so presence counts the board while the panel is up. A size-class change hands the same
+sheet across (same id, path, state and draft): the system sheet goes away without a dismissal
+and the panel picks it up, or the other way round.
+
 The board inside it has two layouts, also picked by `horizontalSizeClass`, so an iPad in a narrow
 Split View or a small Stage Manager window gets the phone's:
 
@@ -458,9 +485,13 @@ window. Each window has its own `Router`, so its stack and sheets never move ano
 tint and bar colors. HarnessApp forwards the app's scene phase (active while any window
 is) to the store, never a single window's.
 
-- **Opening a ticket.** At regular width with `supportsMultipleWindows`, MainTabs turns on the main
-  Router's `opensTicketsInWindows`: `router.push(.ticket…)` (a card tap, a ticket link, the Inbox's
-  dispatched ticket, New session's launch) then calls `onOpenTicket` instead of pushing.
+- **Opening a ticket window.** A card tap or ticket link opens the ticket side panel (see iPad
+  layout), never a window. A ticket window opens on request: the panel's pop-out button
+  (`router.popOutSheet()`, which hands the sheet's top ticket to `onOpenTicket` and dismisses the
+  sheet), and "Open in New Window" in the card's menu, the ticket's More menu or a tab's menu.
+  `WindowDirectory.mainActive` sets each main Router's `onOpenTicket` only when
+  `UIApplication.shared.supportsMultipleScenes`, so `canPopOutSheet` is false on iPhone; the
+  panel also hides pop-out without `supportsMultipleWindows`.
   `WindowDirectory.openTicket` requests a scene with `UISceneSessionActivationRequest`, an
   NSUserActivity carrying the ticket (`TicketWindowValue.activityType`, listed in
   NSUserActivityTypes; `targetContentIdentifier` = `sceneMatch`, which the ticket WindowGroup's
@@ -472,9 +503,8 @@ is) to the store, never a single window's.
   A closed window's Router and scene can outlive it, but an activation request for its destroyed
   session does nothing, so WindowDirectory only reuses an entry whose scene is still attached and
   whose session is in `UIApplication.openSessions` (`Entry.isOpen`); otherwise it opens a new
-  window. "Open in New Window" (the card's menu, the ticket's More menu, a tab's menu) goes
-  through `WindowDirectory.openTicket` too, so it brings an open window forward rather than
-  opening a second. Compact width (iPhone, narrow Split View) pushes as before.
+  window. Pop-out and every "Open in New Window" go through `WindowDirectory.openTicket`, so
+  they bring an open window forward rather than opening a second.
 - **Pinned windows (tear-off).** `TicketWindowValue` has `pinned` and `browserTab`, and its `tab`
   can be `TicketWindowValue.composer`. A pinned window is one torn-off thing: a ticket tab, one
   browser tab (`browserTab`; the whole Browser tab when nil, chip strip and all), or the composer.

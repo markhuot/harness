@@ -9,6 +9,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPad, the ticket panel has a pop-out button that opens the ticket in its own window.
+
+### Changed
+
+- On iPad, a ticket or New session now opens in a panel that slides in from the right, and the
+  board stays usable beside it. Drag the panel's left edge to resize it, and the app remembers
+  the width. Dock the panel, or flick its title bar to the right, and it waits at the edge of the
+  screen as a small tab, with your place and drafts kept, until you tap it. Narrow iPad windows
+  keep the bottom sheet the iPhone uses.
+
 ### Fixed
 
 - On iPhone, closing a docked ticket or New session with its ✕ slides it away. It no longer grows
