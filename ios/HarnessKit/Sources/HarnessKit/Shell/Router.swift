@@ -22,7 +22,7 @@ import Observation
 /// `.presented`, `.docked` or `.gone`.
 /// - Presented (`ticketSheet`): every push lands on the sheet's own `path`, so a conductor's child
 ///   opens in the same sheet and Back returns to the conductor. Pushing the ticket already on top
-///   does nothing. A ticket link pushes there too; New session (`present(.newSession)`) replaces
+///   only switches it to the link's tab, if it names one. A ticket link pushes there too; New session (`present(.newSession)`) replaces
 ///   the sheet's content, as does a ticket pushed onto New session. `replace(newSession, with:
 ///   ticket)` turns New session into that ticket's sheet in place.
 /// - Docked (`dock`): `dockSheet()` keeps the sheet, path and all, as a bar under the tabs, titled
@@ -140,8 +140,9 @@ public final class Router {
         } else if usesTicketSheets, var s = ticketSheet {
             if case let .ticket(key, tab) = route, case .newSession = s.root {
                 presentTicketSheet(.ticket(key: key, tab: tab))
-            } else if case let .ticket(key, _) = route, s.showsOnTop(key) {
-                return
+            } else if case let .ticket(key, tab) = route, s.showsOnTop(key) {
+                // Already on top: a link to one of its tabs switches to it rather than stacking a copy.
+                if let tab, s.showTab(tab) { ticketSheetStorage = s }
             } else {
                 s.path.append(route)
                 ticketSheetStorage = s
@@ -284,6 +285,7 @@ public final class Router {
     private func presentTicketSheet(_ root: TicketSheet.Root) {
         if var s = ticketSheetStorage {
             if ticketSheetDocked, s.shows(root) {
+                if case let .ticket(key, tab?) = root, s.showsOnTop(key), s.showTab(tab) { ticketSheetStorage = s }
                 ticketSheetDocked = false
                 return
             }
@@ -397,6 +399,19 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         }
         if case .ticket(key, _) = root { return true }
         return false
+    }
+
+    /// Points the screen on top, a ticket's, at `tab`. False when it already shows it (or the top
+    /// isn't a ticket).
+    mutating func showTab(_ tab: TicketTab) -> Bool {
+        if let last = path.last {
+            guard case let .ticket(key, current) = last, current != tab else { return false }
+            path[path.count - 1] = .ticket(key: key, tab: tab)
+            return true
+        }
+        guard case let .ticket(key, current) = root, current != tab else { return false }
+        root = .ticket(key: key, tab: tab)
+        return true
     }
 
     /// Opening `root` would show this sheet's ticket on top (or the same New session).

@@ -1026,7 +1026,17 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   await check("the dock survives a tab change, and a tap restores the sheet where it was", async () => {
     await goto(udid, "harness://settings");
     if (!(await labels(udid)).some(isDock)) throw new Error("no dock on Settings");
+    // The section behind the dock can still put up its own alerts.
+    await tapWhere(udid, "Add project");
+    await until("the Add project alert", async () => (await labels(udid)).some((l) => l.startsWith("The folder's absolute path")), 5000);
+    await tapWhere(udid, "Cancel");
+    await until("the alert gone", async () => !(await labels(udid)).some((l) => l.startsWith("The folder's absolute path")), 5000);
+    // And the Projects sheet comes up over the dock, which is still there once it's gone.
     await goto(udid, BOARD);
+    await tapWhere(udid, "Projects");
+    await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+    await goto(udid, BOARD);
+    if (!(await labels(udid)).some(isDock)) throw new Error("the dock went with the Projects sheet");
     await tapWhere(udid, isDock);
     moved(udid);
     await until("the child again", async () => {

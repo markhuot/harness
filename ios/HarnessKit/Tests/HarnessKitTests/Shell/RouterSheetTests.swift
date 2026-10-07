@@ -63,6 +63,30 @@ struct RouterSheetTests {
         #expect(r.ticketSheet?.path.last == t("C-1"))
     }
 
+    @Test func aLinkToATabOfTheTicketOnTopSwitchesToIt() {
+        let r = sheeted()
+        r.push(t("C-1", .spec))
+        let id = r.ticketSheet!.id
+        r.open(.push(t("C-1", .activity)))
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .activity))
+        #expect(r.ticketSheet?.path == [] && r.ticketSheet?.id == id)
+        // A pushed child takes the tab in place; no tab leaves it as it is.
+        r.push(t("C-2"))
+        r.open(.push(t("C-2", .transcript)))
+        #expect(r.ticketSheet?.path == [t("C-2", .transcript)])
+        r.open(.push(t("C-2")))
+        #expect(r.ticketSheet?.path == [t("C-2", .transcript)])
+        // Docked: the link restores it on that tab.
+        r.dockSheet()
+        r.open(.push(t("C-2", .details)))
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.id == id)
+        #expect(r.ticketSheet?.path == [t("C-2", .details)])
+        // A file on top: the ticket under it isn't on top, so its link pushes it.
+        r.push(.prompts)
+        r.open(.push(t("C-2", .spec)))
+        #expect(r.ticketSheet?.path == [t("C-2", .details), .prompts, t("C-2", .spec)])
+    }
+
     @Test func backAndPopToRootStayInTheSheet() {
         let r = sheeted()
         r.push(t("C-1"))
