@@ -452,6 +452,40 @@ async function appearance(udid: string, look: Look) {
 /** How long the app takes to redraw after the appearance flips (the labels don't change, so it's a wait). */
 const FLIP_MS = 300;
 const shot = (udid: string, name: string) => simctl("io", udid, "screenshot", join(shots, `${name}.png`));
+
+/**
+ * Records the screen (to `<name>.mp4` beside the shots) while fn runs, and returns each frame's
+ * top half shrunk to 16×8 gray: enough to see something flash by between two accessibility reads.
+ */
+async function recordFrames(udid: string, name: string, fn: () => Promise<unknown>): Promise<Uint8Array[]> {
+  const video = join(shots, `${name}.mp4`);
+  const rec = Bun.spawn(["xcrun", "simctl", "io", udid, "recordVideo", "--force", video], { stdout: "ignore", stderr: "pipe" });
+  const reader = rec.stderr.getReader();
+  let said = "";
+  while (!said.includes("Recording started")) {
+    const { value, done } = await reader.read();
+    if (done) throw new Error(`recordVideo ended before it started: ${said.trim()}`);
+    said += new TextDecoder().decode(value);
+  }
+  reader.releaseLock();
+  try {
+    await fn();
+    await Bun.sleep(400);
+  } finally {
+    rec.kill("SIGINT");
+    await rec.exited;
+  }
+  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", video, "-vf", "crop=iw:ih/2:0:0,scale=16:8,format=gray", "-fps_mode", "passthrough", "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const raw = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
+  if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
+  const frames: Uint8Array[] = [];
+  for (let i = 0; i + 128 <= raw.length; i += 128) frames.push(raw.subarray(i, i + 128));
+  if (!frames.length) throw new Error(`no frames in ${video}`);
+  return frames;
+}
+
+/** The mean difference between two recordFrames frames, 0–255. */
+const frameDiff = (a: Uint8Array, b: Uint8Array) => a.reduce((s, v, i) => s + Math.abs(v - b[i]!), 0) / a.length;
 /**
  * Saves the screen as <name>-light.png and <name>-dark.png: the current appearance first, then the
  * other, so the next screen starts where this one ended and each screen costs one flip.
@@ -1089,15 +1123,15 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   });
   await check("the dock's close button sends it away without opening it", async () => {
     await dock();
-    await tapWhere(udid, `Close ${kid.key}`);
-    // Watched on the way out too: the sheet mustn't grow to the ticket before it goes.
-    let opened = false;
-    await until("the dock gone", async () => {
-      const l = await labels(udid);
-      opened ||= onChild(l);
-      return !l.some(isDock);
-    }, 4000);
-    if (opened) throw new Error(`${kid.key} opened on the way out`);
+    // Recorded, since a sheet that grows to full size on its way out is gone before the
+    // accessibility tree can be read: the screen's top half, above the dock, mustn't change. It
+    // holds within 0.1 as the dock slides away; a sheet that grows first moves it by about 6.
+    const frames = await recordFrames(udid, "sheet-dock-close", async () => {
+      await tapWhere(udid, `Close ${kid.key}`);
+      await until("the dock gone", async () => !(await labels(udid)).some(isDock), 4000);
+    });
+    const moved = Math.max(...frames.map((f) => frameDiff(f, frames[0]!)));
+    if (moved > 2) throw new Error(`the sheet grew over the board on its way out (top half changed by ${moved.toFixed(1)})`);
     await until("the board", async () => onBoard(await labels(udid)), 4000).catch(async (e) => {
       await say("after the close button");
       throw e;
@@ -1107,7 +1141,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     // Back up for the next check.
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
-    return "closed";
+    return `closed, the board held still (${frames.length} frames, top half changed by at most ${moved.toFixed(1)})`;
   });
   await check("swiping the docked sheet down sends it away", async () => {
     await dock();

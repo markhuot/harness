@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, closing a docked ticket or New session with its ✕ slides it away. It no longer grows
+  to full size for a moment first.
+
 ## [app-20261007.1923](https://github.com/markhuot/harness/releases/tag/app-20261007.1923) - 2026-10-07
 
 ### Changed
