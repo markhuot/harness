@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261007.1337](https://github.com/markhuot/harness/releases/tag/app-20261007.1337) - 2026-10-07
+
 ### Added
 
 - Harness now sends system notifications when an agent, a conductor or the service adds activity
@@ -27,15 +29,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On the Mac, a new terminal (⌘T, or New terminal in the sidebar's + menu) opens in the focused
   ticket's folder: its worktree, or the project checkout it works in. With no ticket focused it
   opens in the board's project folder, as before.
-
-### Removed
-
-- On iPhone and iPad, toasts no longer slide in at the top of the screen, so they can't cover the
-  back and close buttons anymore. Your change shows on the screen itself, and when something
-  fails, iPhone gives an error buzz.
-
-### Changed
-
 - The Mac app now shares the iPhone and iPad app's bundle ID (com.markhuot.harness), so macOS
   treats it as a new app the first time it opens. Your boards and settings carry over, but macOS
   asks again for notification permission and for its login item and background item approval.
@@ -56,6 +49,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   sheet's own background. A darker strip of the board behind the sheet used to show through there.
 - On iPhone, New session scrolls along as you type a long prompt, so the line you're typing stays
   above the keyboard. Before, the prompt kept growing behind the keyboard and new lines were hidden.
+
+### Removed
+
+- On iPhone and iPad, toasts no longer slide in at the top of the screen, so they can't cover the
+  back and close buttons anymore. Your change shows on the screen itself, and when something
+  fails, iPhone gives an error buzz.
 
 ## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
 
