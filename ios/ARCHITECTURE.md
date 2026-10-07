@@ -539,6 +539,34 @@ The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSim
 AXe's tree go with it. That's the simulator's renderer, not the app. Reboot the device
 (`xcrun simctl shutdown`/`boot` under its lock) and rerun.
 
+## Notifications (push and presence)
+
+The service decides which card activity notifies and sends it through APNs (DESIGN.md
+"Notifications"). The app does no filtering of its own:
+
+- **Registration.** `App/Notifications.swift`: an `AppDelegate`, attached with
+  `UIApplicationDelegateAdaptor`, receives the APNs token. `PushCenter` asks for permission at
+  launch and syncs registrations. `HarnessKit/Shell/PushRegistrar.swift` posts the token to
+  `POST /devices` on every saved Mac, not only the active one, so each Mac's service can push. It
+  retries Macs it couldn't reach and removes the device from a Mac when you forget it
+  (`AppModel.willForget`, while that Mac's token is still stored). The device id is a UUID kept in
+  the Keychain. `Logic/Push.swift` tells sandbox from production by the embedded provisioning
+  profile: TestFlight builds have none.
+- **Display and taps.** The `UNUserNotificationCenterDelegate` shows foreground notifications as
+  they arrived. A tap reads `ticketKey` (falling back to `aps.thread-id`) and opens
+  `harness://ticket/KEY`. On a cold launch, `WindowDirectory.openFromNotification` holds the link
+  until the first main window is up.
+- **Presence.** `.reportsPresence(router)` on main and ticket windows feeds `PresenceTracker`
+  (`Shell/Presence.swift`), and `PresenceRules` turns scene phases, routes and ticket windows into
+  `{ visible, tickets }`.
+  - The board lists `BoardColumns.shownKeys`, the same cards `BoardScreen` shows.
+  - A presented ticket sheet counts as just its ticket, and a docked one adds the board.
+  - On leaving, the app sends `visible: false` in the inactive phase, inside a short background
+    task, so it reaches the Mac before suspension.
+- **sim-check.** The launch prompt would cover the pair link's screens, so `install()` writes the
+  `HarnessSkipNotificationPrompt` default. The `-HarnessSkipNotificationPrompt YES` launch argument
+  does the same.
+
 ## Widgets
 
 The Active tickets widget (small, medium and large, each with a Compact setting) comes from one set
