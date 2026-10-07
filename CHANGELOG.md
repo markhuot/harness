@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261007.1751](https://github.com/markhuot/harness/releases/tag/app-20261007.1751) - 2026-10-07
+
 ### Changed
 
 - On iPhone, tickets and New session open in the standard iOS sheet again. It drags smoothly,
@@ -25,6 +27,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The Mac desktop widget no longer draws pale slabs behind its cards, status chips, project pills and
   notes when the desktop isn't focused. In that see-through glass look the cards keep a thin outline
   and the rest sits straight on the glass. The iPhone and iPad widgets are unchanged.
+- An agent that passes a tool option as text holding a JSON object (a browser page's wait
+  settings, for example) no longer has the call rejected, so it keeps the option instead of
+  retrying without it.
 
 ## [app-20261007.1337](https://github.com/markhuot/harness/releases/tag/app-20261007.1337) - 2026-10-07
 
