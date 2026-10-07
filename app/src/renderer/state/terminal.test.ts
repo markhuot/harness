@@ -17,6 +17,17 @@ describe("terminalCwd", () => {
     expect(terminalCwd("gone", projects)).toBe("~");
     expect(terminalCwd("p2", projects)).toBe("~");
   });
+
+  test("a focused ticket opens in its workdir (worktree or checkout), even on another board", () => {
+    const wt = "/Users/me/.harness/worktrees/A-1";
+    expect(terminalCwd("p1", projects, { workdir: wt, projectId: "p1" })).toBe(wt);
+    expect(terminalCwd(ALL_SCOPE, projects, { workdir: wt, projectId: "p1" })).toBe(wt);
+  });
+
+  test("a focused ticket that hasn't started opens in its own project's folder, else home", () => {
+    expect(terminalCwd(ALL_SCOPE, projects, { workdir: null, projectId: "p1" })).toBe("/Users/me/Sites/harness");
+    expect(terminalCwd("p1", projects, { workdir: null, projectId: "gone" })).toBe("~");
+  });
 });
 
 describe("terminalScope", () => {

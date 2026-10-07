@@ -491,7 +491,12 @@ export function StoreProvider({
       const r = parseRoute(location.hash);
       // scopeRef is the board on screen, or the last one shown while elsewhere.
       const scope = projectId === undefined ? terminalScope(r, scopeRef.current) : scopeOf(projectId);
-      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(terminalCwd(scope, stateRef.current.projects))));
+      // A ticket focused on the board on screen opens the terminal in its folder; asking for a
+      // project by name (the sidebar's "New terminal in …") always gets the project's.
+      const focused = projectId === undefined && r.view === "board" ? focusedTicket(getPanes(scope)) : null;
+      const { projects, tickets } = stateRef.current;
+      const cwd = terminalCwd(scope, projects, focused ? (tickets[focused.ticketKey] ?? null) : null);
+      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(cwd)));
       if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate],

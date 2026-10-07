@@ -14,6 +14,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A card on the board shows a pencil when you've started writing a message to its agent and
   haven't sent it yet, on the Mac and on iPhone and iPad.
 
+### Changed
+
+- On the Mac, a new terminal (⌘T, or New terminal in the sidebar's + menu) opens in the focused
+  ticket's folder: its worktree, or the project checkout it works in. With no ticket focused it
+  opens in the board's project folder, as before.
+
 ### Removed
 
 - On iPhone and iPad, toasts no longer slide in at the top of the screen, so they can't cover the
