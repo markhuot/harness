@@ -171,8 +171,10 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: NO
-        # Inside the Electron app's bundle id (APP_BUNDLE_ID in app/scripts/package.ts).
-        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.app.widgets
+        # Inside the Electron app's bundle id (APP_BUNDLE_ID in app/scripts/package.ts), which is
+        # the iPhone/iPad app's id too, so this matches the iOS widgets' id. The targets stay
+        # separate: their entitlements differ, and sign-mac.ts signs this one, not Xcode.
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.widgets
         ENABLE_HARDENED_RUNTIME: YES
         SKIP_INSTALL: YES
 schemes:
