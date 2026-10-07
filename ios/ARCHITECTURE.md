@@ -478,10 +478,14 @@ screen, on the Spec tab in a navigation stack of its own, as the context menu's 
 draft's lifts the card itself); a tap opens the ticket.
 
 simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
-only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
-`UISupportedInterfaceOrientations~ipad` set to landscape only (never commit that), and rotate the
-screenshots with `sips -r 270`. AXe taps land in the wrong place in that build, so only use it for
-screens that don't tap.
+runs portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
+`UISupportedInterfaceOrientations~ipad` set to `UIInterfaceOrientationLandscapeLeft` only (never
+commit that), then run sim-check with `--no-build` and `SIM_CHECK_LANDSCAPE=1`. The simulator stays
+portrait while the app draws sideways: AXe's tree reads in the app's landscape points, but its
+touches land in the device's portrait ones, so sim-check maps each tap, swipe and touch from
+(x, y) to (portrait width − y, x) and rotates its shots (`sips -r 270`, named `*-landscape.png`).
+The keyboard still draws in portrait across the app, so a check that leaves it up can't tap what
+it covers.
 
 ## Windows
 
@@ -564,15 +568,28 @@ is) to the store, never a single window's.
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.
 
-`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold),
-picks Open in New Window, expects the pinned window (its title "KEY · Transcript"), brings the
-ticket's window back with its link and expects "Transcript is in another window", then presses
-Return to this window and expects the pinned window gone and the transcript back. AXe can't drive
-a drag (its touch events don't move), so drag-to-window is checked by hand.
+`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold) on
+a ticket in the side panel, picks Open in New Window, expects the pinned window (its title
+"KEY · Transcript"), brings the ticket back with its link and expects "Transcript is in another
+window", then presses Return to this window and expects the pinned window gone and the transcript
+back. AXe can't drive a drag (its touch events don't move), so drag-to-window is checked by hand.
 
-`sim-check --ipad`'s `ticket-window` check taps a card, expects its window (AXe also lists the
-board behind a prominent window, so it looks for the ticket's key and tab strip), then sends the
-app home, kills and relaunches it, and expects the window back on the same ticket.
+`sim-check --ipad` then runs the side panel's checks (`panelChecks`), which gate the run like the
+iPhone's; `--ipad --sheets` runs them alone, on the `--sheets` seed. sim-check reads the panel's
+geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
+the panel trailing-aligned at TicketPanelWidth's default with the board still showing. The panel's
+labels name its ticket once: the title bar, not the ticket's navigation bar too (AXe does list a
+navigation bar's key, as in a ticket window). Dragging the handle to either edge stops at 25% and
+80%, then sim-check drags it back to the default, since the width is a pref that outlives the run. A
+child link inside pushes, and a different board card replaces the ticket at the root. AXe's tree
+leaves out the glass Back button, so sim-check taps where it sits: after a push that goes back to
+the parent, and at the root it leaves the panel where it was. The dock button leaves the "KEY,
+docked" pill vertically centred and partly off the trailing edge, and a tap on it restores the
+pushed child, Back and all. The pill's menu Close sends it away, New session opens in the panel
+without a pop-out button, Escape (AXe's HID key 41) closes the panel, and pop-out opens a ticket
+window and closes the panel. Shots are `panel-*.png`. A compact window's bottom sheet isn't covered,
+since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets` checks drive
+the same sheet.
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
 `CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and

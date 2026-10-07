@@ -86,7 +86,8 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
   the work across extra "sim-check 2" … "sim-check N" simulators, created on iOS 27.0 the first
   time. `--ipad` saves the same screens from an iPad simulator ("sim-check iPad 1") to
-  `ios/build/screens-ipad/`, without the tap checks. With `--no-build` and the simulator booted,
+  `ios/build/screens-ipad/`, then checks the ticket side panel by real taps instead of the
+  iPhone's tap checks. With `--no-build` and the simulator booted,
   a run takes a few minutes, and `ios/build/screens/timings.json` shows where the time went.
   `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
 - **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the one simulator everyone shares.

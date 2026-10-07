@@ -70,8 +70,14 @@
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
 //      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
-//      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). The real-tap
-//      checks and the modes above tap at iPhone coordinates, so they don't run here.
+//      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). Then the
+//      side panel's checks: a card opens it trailing-aligned at its default width, its edge resizes
+//      it within 25–80%, a link inside pushes and another card replaces its ticket, the dock pill
+//      sits on the trailing edge and restores it with its path, the pill's menu closes it, New
+//      session and Escape, and pop-out moves its ticket into a window; panel-*.png. The iPhone's
+//      real-tap checks and the modes above tap at iPhone coordinates, so they don't run here.
+//      --ipad --sheets runs only the panel's checks. SIM_CHECK_LANDSCAPE=1 runs them on a
+//      landscape-only build (ios/ARCHITECTURE.md § iPad layout), mapping taps and rotating shots.
 //
 //   It runs on the shared harness-shared simulator under its lock, e.g. `--only=connect`; --udid
 //      still names a specific existing device.
@@ -111,7 +117,7 @@ const attachmentsOnly = flag("attachments");
 const draftsOnly = flag("drafts");
 const sheetsOnly = flag("sheets");
 const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly);
-if (ipad && !walkThrough) throw new Error("--ipad takes the walk-through's screens only, not --paging, --stick, --keyboard, --mentions, --drafts, --attachments or --sheets");
+if (ipad && !walkThrough && !sheetsOnly) throw new Error("--ipad takes the walk-through's screens or --sheets, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 checkDisk();
@@ -185,9 +191,34 @@ function xcodeShim(): string {
 }
 const hasAxe = Bun.spawnSync(["which", "axe"]).exitCode === 0;
 let shim = "";
+/**
+ * SIM_CHECK_LANDSCAPE=1: the app was built landscape-only (ios/ARCHITECTURE.md § iPad layout), so
+ * the simulator stays portrait while the app draws sideways. AXe's tree reads in the app's
+ * landscape points but its touches land in the device's portrait ones: a point (x, y) is
+ * (portrait width − y, x) there. axe() maps every tap, swipe and touch, and shot() rotates.
+ */
+const landscape = !!process.env.SIM_CHECK_LANDSCAPE;
+/** The app's landscape height (the portrait width) on each simulator. */
+const landscapeHeight = new Map<string, number>();
+async function toDevice(a: string[]): Promise<string[]> {
+  const udid = a[a.indexOf("--udid") + 1]!;
+  // The shorter side, whichever way the tree reads while the app is still coming up.
+  if (!landscapeHeight.has(udid)) landscapeHeight.set(udid, ((f) => Math.min(f.width, f.height))((await tree(udid))[0]!.frame));
+  const h = landscapeHeight.get(udid)!;
+  const out = [...a];
+  for (const [xf, yf] of [["-x", "-y"], ["--start-x", "--start-y"], ["--end-x", "--end-y"]] as const) {
+    const xi = a.indexOf(xf);
+    const yi = a.indexOf(yf);
+    if (xi < 0 || yi < 0) continue;
+    out[xi + 1] = String(Math.round(h - Number(a[yi + 1])));
+    out[yi + 1] = a[xi + 1]!;
+  }
+  return out;
+}
 async function axe(...a: string[]) {
   if (!hasAxe) return "";
   shim ||= xcodeShim();
+  if (landscape && ["tap", "swipe", "touch"].includes(a[0]!) && a.includes("--udid")) a = await toDevice(a);
   const t = performance.now();
   const p = Bun.spawn(["axe", ...a], { env: { ...env, DEVELOPER_DIR: shim }, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
@@ -207,6 +238,9 @@ async function tapLabel(udid: string, label: string) {
 }
 interface AXNode {
   AXLabel: string | null;
+  AXValue?: string | null;
+  /** The view's accessibilityIdentifier. */
+  AXUniqueId?: string | null;
   frame: { x: number; y: number; width: number; height: number };
   children?: AXNode[];
 }
@@ -451,7 +485,11 @@ async function appearance(udid: string, look: Look) {
 }
 /** How long the app takes to redraw after the appearance flips (the labels don't change, so it's a wait). */
 const FLIP_MS = 300;
-const shot = (udid: string, name: string) => simctl("io", udid, "screenshot", join(shots, `${name}.png`));
+const shot = async (udid: string, name: string) => {
+  const file = join(shots, `${name}${landscape ? "-landscape" : ""}.png`);
+  await simctl("io", udid, "screenshot", file);
+  if (landscape) await sh(["sips", "-r", "270", file], { quiet: true });
+};
 
 /**
  * Records the screen (to `<name>.mp4` beside the shots) while fn runs, and returns each frame's
@@ -1164,6 +1202,300 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await undock(udid);
     lastUrl.set(udid, BOARD);
     return label;
+  });
+}
+
+/** The iPad's side panel: its resize handle, the leading edge's centre, is up. */
+const RESIZE = "Resize panel";
+/** The panel's width as a fraction of the window: from its handle, which straddles its leading edge. */
+async function panelFraction(udid: string): Promise<{ fraction: number; leading: number; W: number; H: number }> {
+  const all = await nodes(udid);
+  const { width: W, height: H } = all[0]!.frame;
+  const handle = all.find((n) => n.AXLabel === RESIZE);
+  if (!handle) throw new Error("no panel (its resize handle isn't on screen)");
+  const leading = handle.frame.x + handle.frame.width / 2;
+  return { fraction: (W - leading) / W, leading, W, H };
+}
+const pct = (f: number) => `${Math.round(f * 100)}%`;
+/**
+ * Drags the panel's resize handle to `toX`, slowly, and waits for the width to settle. Returns the
+ * fraction it settled at.
+ */
+async function dragPanelEdge(udid: string, toX: number): Promise<number> {
+  const handle = await until("the resize handle", () => findElement(udid, (l) => l === RESIZE), 6000);
+  const x = Math.round(handle.frame.x + handle.frame.width / 2);
+  // Off the handle's vertical centre (its capsule), but well inside its full-height hit area.
+  const y = String(Math.round(handle.frame.y + handle.frame.height * 0.4));
+  await axe("swipe", "--start-x", String(x), "--start-y", y, "--end-x", String(Math.round(toX)), "--end-y", y, "--duration", "1.0", "--udid", udid);
+  await Bun.sleep(700);
+  return (await panelFraction(udid)).fraction;
+}
+
+/**
+ * The iPad's ticket side panel (TicketSidePanel, regular width): a board card opens it against the
+ * trailing edge at TicketPanelWidth's default; its leading handle resizes it within 25–80% of the
+ * window; a link inside pushes, a card from the board replaces its ticket; the dock button stashes
+ * it as a pill on the trailing edge, and the pill restores it with its path or closes it from its
+ * menu; New session opens in it; Escape closes it; and the pop-out button moves its ticket into a
+ * window of its own.
+ */
+async function panelChecks(udid: string, s: { project: Project; conductor: Ticket }) {
+  const key = s.conductor.key;
+  const kid = (await api<TicketDetail>("GET", `/tickets/${key}`)).children[0];
+  if (!kid) throw new Error(`${key} has no children`);
+  // A top-level ticket of its own whose card replaces the panel's ticket, in Planning by the conductor.
+  const other = await api<Ticket>("POST", "/tickets", { projectId: s.project.id, spec: "Replace the panel's ticket", driver: "dummy", start: false });
+  const has = (l: string[], k: string) => l.some((x) => x.includes(k));
+  const card = (k: string) => (l: string) => l.startsWith(`${k} `);
+  const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 60).join(" | ")}`);
+  /** The panel is up on `k`: its close button names the ticket on top. */
+  const panelOn = (l: string[], k: string) => l.includes(RESIZE) && l.includes(`Close ${k}`);
+  /** The panel's navigation stack has something under the screen on top. */
+  /**
+   * Taps where the panel's navigation bar keeps Back: AXe's tree leaves out the glass header items,
+   * so a push shows by where the tap goes. It sits 29pt in from the panel's leading edge, 58pt
+   * below the title bar's buttons.
+   */
+  const tapBack = async () => {
+    const { leading } = await panelFraction(udid);
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
+    if (!close) throw new Error("no close button in the panel");
+    await axe("tap", "-x", String(Math.round(leading + 29)), "-y", String(Math.round(close.frame.y + close.frame.height / 2 + 58)), "--udid", udid);
+    moved(udid);
+  };
+  /** The panel's ticket screen went back to `k`: Back was there. */
+  const backTo = async (k: string) => {
+    await tapBack();
+    await until(`Back to ${k}`, async () => panelOn(await labels(udid), k), 6000).catch(async (e) => {
+      await say("after a tap on Back");
+      throw e;
+    });
+  };
+  const closePanel = async () => {
+    const l = await labels(udid);
+    const close = l.find((x) => x.startsWith("Close ") && l.includes(RESIZE));
+    if (close) await tapWhere(udid, close);
+    const dock = l.find(isDock);
+    if (dock && !close) {
+      await tapWhere(udid, dock, { longPress: 1.2 });
+      await tapWhere(udid, "Close");
+    }
+    await until("no panel", async () => {
+      const x = await labels(udid);
+      return !x.includes(RESIZE) && !x.some(isDock);
+    }, 6000);
+    moved(udid);
+  };
+  /** Taps `k`'s board card where it's on screen left of the panel (or anywhere, with no panel). */
+  const tapCard = async (k: string) => {
+    const panel = await panelFraction(udid).catch(() => null);
+    const edge = panel ? panel.leading - 16 : Infinity;
+    const el = await until(`${k}'s card left of the panel`, async () => {
+      const n = await findElement(udid, card(k));
+      return n && n.frame.x >= 0 && n.frame.x + 20 < edge ? n : null;
+    }, 6000);
+    const x = Math.min(el.frame.x + el.frame.width / 2, (el.frame.x + edge) / 2);
+    await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(el.frame.y + Math.min(30, el.frame.height / 2))), "--udid", udid);
+    moved(udid);
+  };
+  /** Pages the board's columns until `k`'s card is fully on screen (left of `edge`). */
+  const cardOnScreen = async (k: string, edge = Infinity) => {
+    const status = (await ticketOf(k)).status;
+    const column = { planning: "Planning", in_progress: "In progress", blocked: "Blocked", review: "Review", done: "Done" }[status as string] ?? "Planning";
+    await until(`${k}'s card on screen`, async () => {
+      const n = await findElement(udid, card(k));
+      if (n && n.frame.x >= 0 && n.frame.x + 20 < edge) return true;
+      await tapWhere(udid, (l) => l.startsWith(`${column},`)).catch(() => {});
+      await Bun.sleep(600);
+      return false;
+    }, 12000, 0);
+  };
+
+  await check("a board card opens its ticket in the side panel against the trailing edge", async () => {
+    await goto(udid, BOARD);
+    await cardOnScreen(key);
+    await tapCard(key);
+    await until("the panel", async () => panelOn(await labels(udid), key), 8000).catch(async (e) => {
+      await say("after the card tap");
+      throw e;
+    });
+    await Bun.sleep(800); // the slide in
+    const { fraction, leading, W } = await panelFraction(udid);
+    if (fraction < 0.25 - 0.01 || fraction > 0.8 + 0.01) throw new Error(`the panel is ${pct(fraction)} of the window`);
+    // TicketPanelWidth's default, before anyone drags the edge: 800pt, clamped to 25–80%.
+    const expected = Math.min(0.8, Math.max(0.25, 800 / W));
+    if (Math.abs(fraction - expected) > 0.02) throw new Error(`the panel opened at ${pct(fraction)}, not the default ${pct(expected)}`);
+    // Trailing-aligned: its close button sits at the window's right edge.
+    const close = await findElement(udid, (l) => l === `Close ${key}`);
+    if (!close || W - (close.frame.x + close.frame.width) > 16) throw new Error(`the close button ends at ${close ? Math.round(close.frame.x + close.frame.width) : "?"}, not the window's edge (${W})`);
+    // The board stays live to its left.
+    if (!onBoard(await labels(udid))) throw new Error("the board isn't showing beside the panel");
+    await shootBoth(udid, "panel-default");
+    await appearance(udid, "light");
+    return `${key} at ${pct(fraction)} (${Math.round(W - leading)} of ${W} pt)`;
+  });
+  await check("the panel's header names its ticket once", async () => {
+    const { leading } = await panelFraction(udid);
+    const inPanel = (await nodes(udid)).filter((n) => n.frame.x >= leading && n.AXLabel);
+    // The title bar's header ("KEY" or "KEY, <subtitle>"); the ticket's own navigation bar leaves its key out.
+    const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
+    if (named.length !== 1) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
+    return `"${named[0]!.AXLabel}"`;
+  });
+  await check("dragging the panel's edge resizes it, stopping at 25% and 80% of the window", async () => {
+    const { W } = await panelFraction(udid);
+    const narrow = await dragPanelEdge(udid, W - 20);
+    await shot(udid, "panel-min-light");
+    const wide = await dragPanelEdge(udid, 20);
+    await shot(udid, "panel-max-light");
+    if (Math.abs(narrow - 0.25) > 0.015) throw new Error(`dragged to the right edge, the panel stopped at ${pct(narrow)}`);
+    if (Math.abs(wide - 0.8) > 0.015) throw new Error(`dragged to the left edge, the panel stopped at ${pct(wide)}`);
+    // Back to the default (the pref keeps the width across launches).
+    const back = await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
+    return `${pct(narrow)}–${pct(wide)}, back to ${pct(back)}`;
+  });
+  await check("a link inside the panel pushes, with Back to the ticket under it", async () => {
+    await tapWhere(udid, (l) => l.startsWith("Tickets"));
+    await tapWhere(udid, (l) => l.includes(kid.key));
+    await until("the child in the panel", async () => panelOn(await labels(udid), kid.key), 8000).catch(async (e) => {
+      await say("after the child tap");
+      throw e;
+    });
+    await Bun.sleep(600);
+    await shot(udid, "panel-pushed-light");
+    await backTo(key);
+    // Pushed again, for the dock to keep.
+    await tapWhere(udid, (l) => l.includes(kid.key));
+    await until("the child in the panel", async () => panelOn(await labels(udid), kid.key), 8000);
+    return `${key} → ${kid.key}, Back → ${key}`;
+  });
+  await check("docking stashes the panel as a pill on the trailing edge, and the pill restores its path", async () => {
+    await tapWhere(udid, `Dock ${kid.key}`);
+    const pill = await until("the pill", async () => {
+      const n = await findElement(udid, isDock);
+      return n && !(await labels(udid)).includes(RESIZE) ? n : null;
+    }, 6000).catch(async (e) => {
+      await say("after the dock button");
+      throw e;
+    });
+    await Bun.sleep(700);
+    const { width: W, height: H } = (await tree(udid))[0]!.frame;
+    const p = (await findElement(udid, isDock)) ?? pill;
+    if (p.AXLabel !== `${kid.key}, docked`) throw new Error(`the pill reads "${p.AXLabel}"`);
+    const mid = p.frame.y + p.frame.height / 2;
+    if (Math.abs(mid - H / 2) > 40) throw new Error(`the pill's centre is at y=${Math.round(mid)}, not the window's middle (${Math.round(H / 2)})`);
+    if (p.frame.x + p.frame.width <= W + 1) throw new Error(`the pill ends at x=${Math.round(p.frame.x + p.frame.width)}, inside the window (${W})`);
+    if (p.frame.x >= W - 30) throw new Error(`the pill starts at x=${Math.round(p.frame.x)}, barely on screen`);
+    if (!onBoard(await labels(udid))) throw new Error("the board isn't showing with the panel docked");
+    await shootBoth(udid, "panel-docked");
+    await appearance(udid, "light");
+    // Tap its on-screen part.
+    await axe("tap", "-x", String(Math.round((p.frame.x + W) / 2)), "-y", String(Math.round(mid)), "--udid", udid);
+    moved(udid);
+    await until("the panel back on the child", async () => {
+      const l = await labels(udid);
+      return panelOn(l, kid.key) && !l.some(isDock);
+    }, 8000);
+    await Bun.sleep(600);
+    await backTo(key);
+    return `${p.frame.x}+${p.frame.width} of ${W}, y ${Math.round(mid)} of ${H}; restored on ${kid.key}, Back to ${key}`;
+  });
+  await check("a different board card replaces the panel's ticket, at its root", async () => {
+    // Pushed again, so a push that kept the path would show.
+    await tapWhere(udid, (l) => l.includes(kid.key));
+    await until("the child", async () => panelOn(await labels(udid), kid.key), 8000);
+    await Bun.sleep(600);
+    const b = other.key;
+    // The default panel can leave too little of the board for a card beside it: narrow it first.
+    const { W } = await panelFraction(udid);
+    await dragPanelEdge(udid, W * 0.5);
+    await cardOnScreen(b, (await panelFraction(udid)).leading - 16);
+    await tapCard(b);
+    await until(`the panel on ${b}`, async () => panelOn(await labels(udid), b), 8000).catch(async (e) => {
+      await say(`after ${b}'s card`);
+      throw e;
+    });
+    await Bun.sleep(600);
+    await shot(udid, "panel-replaced-light");
+    // At the root there's no Back: a tap where it would be leaves the panel on B.
+    await tapBack();
+    await Bun.sleep(1500);
+    const l = await labels(udid);
+    if (panelOn(l, kid.key) || panelOn(l, key)) throw new Error(`${b} was pushed over ${kid.key}: Back went to ${panelOn(l, key) ? key : kid.key}`);
+    if (!panelOn(l, b)) throw new Error(`the panel left ${b}`);
+    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
+    return `${kid.key} → ${b}, no Back`;
+  });
+  await check("the pill's menu closes the panel without opening it", async () => {
+    const l = await labels(udid);
+    const top = l.find((x) => x.startsWith("Dock "))!.slice("Dock ".length);
+    await tapWhere(udid, `Dock ${top}`);
+    const pill = await until("the pill", () => findElement(udid, isDock), 6000);
+    await Bun.sleep(600);
+    const { width: W } = (await tree(udid))[0]!.frame;
+    const x = String(Math.round((pill.frame.x + W) / 2));
+    const y = String(Math.round(pill.frame.y + pill.frame.height / 2));
+    await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", "1.2", "--udid", udid);
+    await until("the pill's menu", async () => (await labels(udid)).includes("Close"), 5000).catch(async (e) => {
+      await say("after a long press on the pill");
+      throw e;
+    });
+    await shot(udid, "panel-pill-menu-light");
+    await tapWhere(udid, "Close");
+    await until("the pill gone", async () => !(await labels(udid)).some(isDock), 5000);
+    await Bun.sleep(600);
+    if ((await labels(udid)).includes(RESIZE)) throw new Error("the panel opened instead");
+    lastUrl.set(udid, BOARD);
+    return `${top} closed`;
+  });
+  await check("New session opens in the side panel", async () => {
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(s.project.id)}`, (l) => l.some(isOptions));
+    await Bun.sleep(600);
+    const l = await labels(udid);
+    if (!panelOn(l, "New session")) throw new Error("New session isn't in the panel");
+    if (l.includes("Open New session in a new window")) throw new Error("New session offers a pop-out");
+    await shot(udid, "panel-new-session-light");
+    // The landscape-only build draws the keyboard in the device's portrait space, over the title
+    // bar's close button: Escape closes it there.
+    if (landscape) {
+      await axe("key", "41", "--udid", udid);
+      await until("no panel", async () => !(await labels(udid)).includes(RESIZE), 5000);
+      moved(udid);
+    } else await closePanel();
+    return "New session in the panel, no pop-out";
+  });
+  await check("Escape on a hardware keyboard closes the panel", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}`, (l) => panelOn(l, key));
+    await Bun.sleep(600);
+    await axe("key", "41", "--udid", udid); // HID Escape
+    await until("the panel gone", async () => !(await labels(udid)).includes(RESIZE), 5000);
+    moved(udid);
+    return "closed";
+  });
+  await check("the pop-out button moves the panel's ticket into a window of its own", async () => {
+    // A throwaway ticket: closing its window deletes it (More → Delete ticket destroys the scene).
+    const t = await api<Ticket>("POST", "/tickets", { projectId: s.project.id, spec: "Pop me out", driver: "dummy", start: false });
+    await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => panelOn(l, t.key));
+    await Bun.sleep(600);
+    await tapWhere(udid, `Open ${t.key} in a new window`);
+    moved(udid);
+    const up = await until(`${t.key}'s window`, async () => {
+      const l = await labels(udid);
+      return ticketShown(l, t.key) && !l.includes(RESIZE);
+    }, 10000).catch((e) => e as Error);
+    await Bun.sleep(800);
+    await shot(udid, "panel-popped-out-light");
+    if (up instanceof Error) {
+      await say("after the pop-out button");
+      throw up;
+    }
+    await tapWhere(udid, "More");
+    await tapWhere(udid, "Delete ticket");
+    await tapWhere(udid, "Delete");
+    await until(`${t.key}'s window closed`, async () => !(await labels(udid)).includes(t.key), 10000);
+    await goto(udid, BOARD);
+    if ((await labels(udid)).includes(RESIZE)) throw new Error("the panel came back with the board");
+    return `${t.key} in its own window, the panel closed`;
   });
 }
 
@@ -2030,8 +2362,6 @@ async function toggleSidebar(udid: string, show: boolean) {
   await until(`sidebar ${show ? "shown" : "hidden"}`, async () => sidebarShown(await labels(udid)) === show, 8000);
   await Bun.sleep(500);
 }
-/** The ticket --ipad's ticket-window check opened a window for. */
-let windowKey = "";
 /** A ticket screen for `key` is up: its key and its tab strip. */
 const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Spec") && l.includes("Details");
 function screens(s: Seeded): Screen[] {
@@ -2215,60 +2545,8 @@ function screens(s: Seeded): Screen[] {
       },
     },
     { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
-    // iPad: tapping a card opens the ticket in a window of its own (the system's prominent
-    // placement over the board); the window comes back on relaunch, and the next link brings the
-    // main window back.
     ...(ipad
       ? [
-          {
-            name: "ticket-window",
-            url: BOARD,
-            seconds: 12,
-            prepare: async (udid: string) => {
-              // A card fully on screen (the columns scroll sideways).
-              const card = await until("a card on screen", async () => (await nodes(udid)).find((n) => /^[A-Z]+-\d+ /.test(n.AXLabel ?? "") && n.frame.x > 0 && n.frame.x + n.frame.width < 800), 8000);
-              const key = card.AXLabel!.split(" ")[0]!;
-              await axe("tap", "-x", String(Math.round(card.frame.x + card.frame.width / 2)), "-y", String(Math.round(card.frame.y + card.frame.height / 2)), "--udid", udid);
-              windowKey = key;
-              // AXe lists the board behind the prominent window too, so look for the ticket screen.
-              await until(`${key}'s window up`, async () => ticketShown(await labels(udid), key), 10000);
-              moved(udid);
-              await Bun.sleep(1200);
-            },
-            after: async (udid: string) => {
-              // The window comes back on relaunch (the scene saves its ticket): home, kill, launch.
-              await axe("button", "home", "--udid", udid);
-              await Bun.sleep(1500);
-              await simctl("terminate", udid, BUNDLE).catch(() => {});
-              await simctl("launch", udid, BUNDLE);
-              const restored = await until("ticket window restored", async () => {
-                const l = await labels(udid);
-                return ticketShown(l, windowKey);
-              }, 20000).catch((e) => e as Error);
-              await Bun.sleep(800);
-              await shot(udid, "ticket-window-relaunched");
-              if (restored instanceof Error) throw restored;
-              await simctl("openurl", udid, BOARD);
-              await until("main window back", async () => onBoard(await labels(udid)), 10000);
-              // A closed window doesn't stop tickets opening: open a ticket's window, close it
-              // (More → Delete ticket destroys the window's scene, as its close control does), then
-              // the next ticket still gets a window. Throwaway tickets, so other screens keep theirs.
-              const [gone, next] = await Promise.all(["Close this window", "Open after a close"].map((spec) => api<Ticket>("POST", "/tickets", { projectId: s.project.id, spec, driver: "dummy", start: false })));
-              await simctl("openurl", udid, `harness://ticket/${k(gone!)}`);
-              await until(`${gone!.key}'s window up`, async () => ticketShown(await labels(udid), gone!.key), 10000);
-              await tapWhere(udid, "More");
-              await tapWhere(udid, "Delete ticket");
-              await tapWhere(udid, "Delete");
-              await until(`${gone!.key}'s window closed`, async () => !(await labels(udid)).includes(gone!.key), 10000);
-              await simctl("openurl", udid, `harness://ticket/${k(next!)}`);
-              const reopened = await until(`${next!.key}'s window up after a close`, async () => ticketShown(await labels(udid), next!.key), 10000).catch((e) => e as Error);
-              await Bun.sleep(800);
-              await shot(udid, "ticket-window-after-close");
-              if (reopened instanceof Error) throw reopened;
-              await simctl("openurl", udid, BOARD);
-              await until("main window back", async () => onBoard(await labels(udid)), 10000);
-            },
-          } satisfies Screen,
           // A tab torn off into a window of its own (its chip's menu → Open in New Window): the
           // ticket's window shows Return to this window in its place, and pressing it closes the
           // pinned window and shows the tab here again.
@@ -2302,6 +2580,9 @@ function screens(s: Seeded): Screen[] {
               if (closed instanceof Error) throw closed;
               await simctl("openurl", udid, BOARD);
               await until("main window back", async () => onBoard(await labels(udid)), 10000);
+              // The ticket is in the side panel over the board; close it for the screens after.
+              if ((await labels(udid)).includes(`Close ${key}`)) await tapWhere(udid, `Close ${key}`);
+              moved(udid);
             },
           } satisfies Screen,
         ]
@@ -2681,6 +2962,11 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
     await appearance(udids[0]!, "light");
     await shot(udids[0]!, "after-interactions-light");
   }
+  // The iPad's side panel, by real taps at the iPad's own coordinates.
+  if (hasAxe && !only && ipad) {
+    await appearance(udids[0]!, "light");
+    await timed("panel", () => panelChecks(udids[0]!, s));
+  }
   return ok;
 }
 
@@ -2730,7 +3016,7 @@ try {
   if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
   if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
   if (drafting) await timed("mode: drafts", () => draftChecks(udid, drafting));
-  if (sheeted) await timed("mode: sheets", () => sheetChecks(udid, sheeted, "Planning"));
+  if (sheeted) await timed("mode: sheets", () => (ipad ? panelChecks(udid, sheeted) : sheetChecks(udid, sheeted, "Planning")));
   if (seeded && !(await walk(udids, seeded))) failed = true;
   if (results.some((r) => !r[1])) failed = true;
   // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.
