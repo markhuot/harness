@@ -199,11 +199,28 @@ private struct CardMenu<Items: View>: ViewModifier {
     let width: CGFloat
     @ViewBuilder let items: () -> Items
 
+    // The menu's preview is hosted outside the window's view tree and gets none of its environment
+    // objects (a missing one traps), so the card hands them on.
+    @Environment(AppModel.self) private var app
+    @Environment(BoardStore.self) private var store
+    @Environment(Router.self) private var router
+    @Environment(Actions.self) private var actions
+    @Environment(ToastCenter.self) private var toasts
+    @Environment(\.palette) private var palette
+
     func body(content: Content) -> some View {
         if ticket.draft == true {
             content.contextMenu { items() }
         } else {
-            content.contextMenu { items() } preview: { BoardCardPreview(key: ticket.key, width: width) }
+            content.contextMenu { items() } preview: {
+                BoardCardPreview(key: ticket.key, width: width)
+                    .environment(app)
+                    .environment(store)
+                    .environment(router)
+                    .environment(actions)
+                    .environment(toasts)
+                    .environment(\.palette, palette)
+            }
         }
     }
 }
