@@ -95,11 +95,12 @@ function checkObject(toolName: string, obj: Record<string, unknown>, schema: Pro
 /**
  * A deferred stub advertises `{ type: "object" }` with no property types, so a client that types
  * arguments from the advertised schema (HARNESS-329: Claude Code) has no basis to send `true` as
- * a boolean, `3` as a number, or `["a","b"]` as an array: it sends the string `"true"`, `"3"`, or
- * `'["a","b"]'`, and strict validation against the real schema then rejects it. This coerces those
- * string encodings back to the declared type before validation, for every property (object
- * properties too; `required` is unaffected since it's about presence, not shape). A string that
- * doesn't parse as the declared type is left alone, so validation still reports it clearly.
+ * a boolean, `3` as a number, `["a","b"]` as an array, or `{"idle":true}` as a nested object: it
+ * sends the string `"true"`, `"3"`, `'["a","b"]'`, or `'{"idle":true}'`, and strict validation
+ * against the real schema then rejects it. This coerces those string encodings back to the
+ * declared type before validation, for every property (object properties too; `required` is
+ * unaffected since it's about presence, not shape). A string that doesn't parse as the declared
+ * type is left alone, so validation still reports it clearly.
  */
 export function coerceToSchema(input: unknown, schema: PropSchema): unknown {
   if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
@@ -113,7 +114,19 @@ export function coerceToSchema(input: unknown, schema: PropSchema): unknown {
 }
 
 function coerceValue(value: unknown, schema: PropSchema): unknown {
-  if (schema.type === "object" && schema.properties) return coerceToSchema(value, schema);
+  if (schema.type === "object" && schema.properties) {
+    if (typeof value === "string") {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        return value;
+      }
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return value;
+      return coerceToSchema(parsed, schema);
+    }
+    return coerceToSchema(value, schema);
+  }
   if (typeof value !== "string") {
     if (Array.isArray(value) && schema.type === "array" && schema.items) return value.map((v) => coerceValue(v, schema.items!));
     return value;

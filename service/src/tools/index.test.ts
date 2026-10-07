@@ -218,6 +218,16 @@ describe("advertisedTools", () => {
     expect((bad.content[0] as { text: string }).text).toContain('"start" must be a boolean');
   });
 
+  test("a stub coerces a JSON-object string into a nested object before validating (HARNESS-329: RFACOM-8)", async () => {
+    const stub = view("work", builtin, "bare").find((t) => t.name === "browser_open")!;
+    const ok = await stub.execute({ url: "https://x.test", wait_for: '{"idle":true,"timeout":30}' }, fakeContext());
+    expect(ok.isError).not.toBe(true);
+    // A string that doesn't parse as an object is left alone, so validation still reports it clearly.
+    const bad = await stub.execute({ url: "https://x.test", wait_for: "soon" }, fakeContext());
+    expect(bad.isError).toBe(true);
+    expect((bad.content[0] as { text: string }).text).toContain('"wait_for" must be a object');
+  });
+
   test("a stubbed gated tool still asks a human", async () => {
     const ops = fakeOps({
       checkPermission: async () => ({ behavior: "deny", message: "no" }),
