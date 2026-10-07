@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Agents can fill in forms that sit inside an embedded frame, like a Stripe card field or a 3-D
+  Secure check. They can also press keys like Tab and Escape, pick from dropdowns, and upload files
+  from the ticket's folder.
+- Agents can read a page as a list of its buttons, fields and links, and act on each one by name,
+  which helps on pages whose markup is hard to target.
+
 ### Fixed
 
 - On iPhone, closing a docked ticket or New session with its ✕ slides it away. It no longer grows
