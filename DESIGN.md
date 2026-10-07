@@ -2285,6 +2285,86 @@ driver's order. Names with whitespace (MCP prompts) can't be typed as one word a
   ticket's first run) or the message, as typed, with any @-mentioned files appended after it.
   The CLI treats a user message that starts with `/name` as that command.
 
+## Notifications
+
+The service sends a system notification for card activity through Apple Push (APNs), so the Mac
+and the iPhone/iPad get it when the app is hidden or not running, and when the phone is locked or
+away from the Mac. The flow is the same on every platform:
+
+1. The service decides whether an activity entry notifies.
+2. It sends one APNs request per registered device token. APNs has no "every device of this user"
+   for regular alerts.
+3. Apple delivers each request, and each device shows it under its own system settings (Focus,
+   banners, sounds).
+
+Clients do no notification work of their own. They register their APNs token, open the ticket
+when a notification is tapped or clicked, and report what they have on screen.
+
+**The decision** (`service/src/notifications/dispatcher.ts`, `skipReason`) is made once, when
+`activity.added` fires, with no delay or batching, so nothing ever has to be taken back. An entry
+is skipped when any of these is true:
+
+- it has no ticket (a triage session)
+- its author is `human`, which covers everything the human does in any client, the API or the CLI
+- `settings.notifications.enabled` is off, or its kind's category is (`ACTIVITY_CATEGORY` in
+  `shared/src/notifications.ts` maps every `ActivityKind` to one of status, review, notes, spec and
+  other; it's a `Record`, so a new kind fails the typecheck until it's mapped)
+- the ticket has a `parentId` (a conductor's child) and the entry isn't a move to blocked (a
+  `blocked` entry, or a `moved` entry whose `meta.to` is `blocked`). The conductor handles its
+  children, so only a blocked child needs the human.
+- a connected client with `visible: true` presence lists the ticket
+
+Every way a ticket leaves review writes a review decision first: `review_approved` and
+`changes_requested` from the agent reviewer, `approved` and `changes_requested` from a human or a
+conductor (`meta.by`), `approved` by the human for "approve and take no action", and `approved` by
+the system when a ticket that skips its human review lands on its own.
+
+**The payload** carries the alert, grouped per ticket, and the ticket key for the deep link:
+`{ aps: { alert: { title: "KEY · title", subtitle: "Agent · Submitted for review", body }, "thread-id": KEY, sound: "default" }, ticketKey: KEY }`.
+The body is clipped so the payload stays under APNs' 4 KB. Requests carry `apns-push-type: alert`,
+priority 10 and a one-day expiration, so a phone that's off gets the notification once it's back.
+
+**Presence** (`service/src/notifications/presence.ts`). Each WebSocket sends
+`{ type: "presence", deviceId, platform, visible, tickets }` whenever what it shows changes, and
+again after each reconnect (`HarnessSocket.setPresence` remembers it). `tickets` lists every
+ticket key on screen: the cards on the board being shown, plus open ticket panes, sheets and
+windows. The service keeps one presence per socket and drops it when the socket closes. Bun pings
+idle sockets and closes one that stops answering, so a client that vanished without closing (a
+suspended iPhone, a dropped network) holds notifications back for two minutes at most.
+
+- Mac: each window reports on its own socket. `visible` is `document.visibilityState`, which
+  Chromium bases on the window's occlusion state on macOS. A window turns hidden when it's
+  minimized, the app is hidden, or other windows cover it completely.
+- iPhone/iPad: `visible` is a scene in the `active` phase, and the app sends `visible: false` as
+  it goes to the background. A ticket sheet covering the board counts as just that ticket.
+
+**Devices** (`devices` table) hold `{ id, platform, name, apns_token, topic, environment }`.
+`POST /devices` adds or updates one, and the same token under a new id replaces the old row (a
+reinstall). `DELETE /devices/:id` removes one. Every device uses the topic `com.markhuot.harness`,
+since the Mac app shares the iPhone app's bundle ID. Development iPhone builds register as
+`sandbox`; TestFlight builds and the Developer ID Mac app register as `production`. A 410,
+`BadDeviceToken` or `Unregistered` answer deletes the device. `devices.changed` tells clients to
+refetch `GET /notifications`, which reports each environment's key and last result, plus the
+devices. `POST /notifications/test` sends a test to every device, ignoring the switches.
+
+**APNs** (`service/src/notifications/apns.ts`) uses token auth over HTTP/2 (`node:http2`, one
+connection per host), going to `api.push.apple.com` or `api.sandbox.push.apple.com` by the
+device's environment. Each environment has its own key. The service finds keys by their file name
+(`AuthKey_<keyId>_APN_Sandbox.p8` / `AuthKey_<keyId>_APN_Production.p8`) in
+`settings.notifications.apnsKeyDir`, which defaults to `~/.appstoreconnect/private_keys`. The
+App Store Connect API key can't send pushes. The JWT (`ES256`, `kid` = key id, `iss` =
+`apnsTeamId`) is cached per key for 40 minutes, inside Apple's one-hour limit, and re-signed once
+when Apple answers `ExpiredProviderToken`. A device whose environment has no key is skipped, and
+Settings says the key is missing.
+
+**Signing.** Push is a restricted entitlement on macOS. The Mac app carries
+`com.apple.developer.aps-environment` = `production` and an embedded Developer ID provisioning
+profile for `com.markhuot.harness` (`~/.appstoreconnect/profiles/Harness_Mac_Push.provisionprofile`,
+or `MAC_PROVISIONING_PROFILE`). `app/scripts/sign-mac.ts` checks the profile before signing, and
+`bun run install-app` signs with it too, because an ad-hoc signature can't carry the entitlement.
+The iPhone app's `aps-environment` is `development`, and the TestFlight export re-signs it as
+`production`.
+
 ## File viewer
 
 The desktop file pane and the iPhone file viewer read one file where a project or ticket works,

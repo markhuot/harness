@@ -11,6 +11,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Harness now sends system notifications when an agent, a conductor or the service adds activity
+  to a card (notes, spec revisions, moves, submissions, blocks and review decisions). They reach
+  your Mac and your iPhone or iPad even when the app isn't running or the phone is locked, and
+  each device shows them under its own notification settings. You won't get one for something
+  you did yourself, or for a card you already have open on any of your devices. A conductor's
+  child cards stay quiet unless they get blocked. Settings → Notifications turns them off, either
+  all at once or one kind at a time. It also lists the devices that get them and sends a test
+  notification. Clicking or tapping a notification opens its ticket.
 - A card on the board shows a pencil when you've started writing a message to its agent and
   haven't sent it yet, on the Mac and on iPhone and iPad.
 
@@ -22,6 +30,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The Mac app now shares the iPhone and iPad app's bundle ID (com.markhuot.harness), so macOS
+  treats it as a new app the first time it opens. Your boards and settings carry over, but macOS
+  asks again for notification permission and for its login item and background item approval.
+- Activity now records it when you approve a card with no action taken, and when a card that
+  skips its human review lands on its own.
 - On iPhone and iPad, logging in to a driver that needs a code (GitHub Copilot) shows the code in
   an alert before the login page opens, so you have it when the page asks for it.
 - The icons at the top right of a board card keep a fixed order: the working spinner (or clock),
