@@ -432,7 +432,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -514,7 +514,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in bash.
-Change files only with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), never through bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), not by scripting around them in bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -596,7 +596,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -678,7 +678,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -766,7 +766,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -854,7 +854,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in bash.
-Change files only with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), never through bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), not by scripting around them in bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -942,7 +942,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1030,7 +1030,7 @@ The work is on \`feature/x\` and lands on \`develop\`. When the human asks to mo
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1118,7 +1118,7 @@ The work is on \`medl-1\` and lands on \`main\`. When the human asks to move it 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1206,7 +1206,7 @@ The work is on \`medl-1\` and lands on \`main\`. When the human asks to move it 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1294,7 +1294,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1382,7 +1382,7 @@ The work is on \`main\` and lands on \`main\`. When the human asks to move it to
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1470,7 +1470,7 @@ The work is on \`main\` and lands on \`main\`. When the human asks to move it to
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1558,7 +1558,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1639,7 +1639,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1720,7 +1720,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1811,7 +1811,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -1894,7 +1894,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3105,7 +3105,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3167,7 +3167,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in bash.
-Change files only with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), never through bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), not by scripting around them in bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3229,7 +3229,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3291,7 +3291,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3361,7 +3361,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3431,7 +3431,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in bash.
-Change files only with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), never through bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), not by scripting around them in bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3501,7 +3501,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3571,7 +3571,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3643,7 +3643,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3715,7 +3715,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3787,7 +3787,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3854,7 +3854,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3921,7 +3921,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -3991,7 +3991,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -4052,7 +4052,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -4113,7 +4113,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -4186,7 +4186,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -4249,7 +4249,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -5910,7 +5910,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -5986,7 +5986,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in bash.
-Change files only with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), never through bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), not by scripting around them in bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6062,7 +6062,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6138,7 +6138,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6220,7 +6220,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6302,7 +6302,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in bash.
-Change files only with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), never through bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or full rewrite), not by scripting around them in bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6395,7 +6395,7 @@ This ticket conducts child tickets. You are re-invoked with a message whenever o
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6494,7 +6494,7 @@ The work is on \`harness/nyt-3\` and lands on \`main\`. When the human asks to m
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6576,7 +6576,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -6928,7 +6928,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7001,7 +7001,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7079,7 +7079,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7149,7 +7149,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7218,7 +7218,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7296,7 +7296,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7372,7 +7372,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7453,7 +7453,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7526,7 +7526,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7598,7 +7598,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7677,7 +7677,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7753,7 +7753,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7831,7 +7831,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7901,7 +7901,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -7970,7 +7970,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8046,7 +8046,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8125,7 +8125,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8206,7 +8206,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8279,7 +8279,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8351,7 +8351,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8431,7 +8431,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8508,7 +8508,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8587,7 +8587,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8657,7 +8657,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8726,7 +8726,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8803,7 +8803,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8880,7 +8880,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -8959,7 +8959,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9029,7 +9029,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9098,7 +9098,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9173,7 +9173,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9251,7 +9251,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9329,7 +9329,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9403,7 +9403,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9476,7 +9476,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9554,7 +9554,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9629,7 +9629,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9704,7 +9704,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9775,7 +9775,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9845,7 +9845,7 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -9916,7 +9916,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10059,7 +10059,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10202,7 +10202,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10345,7 +10345,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10488,7 +10488,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10637,7 +10637,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10716,7 +10716,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10862,7 +10862,7 @@ When your answer changes the spec (a decision, or a new or changed requirement, 
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -10946,7 +10946,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 You MUST explore the codebase through a sub-agent (the \`task\` tool with the \`explore\` agent type): finding where something lives (code, prompts, docs), surveying unfamiliar code, or learning how something works. Give it one specific question that covers everything you'll need to make the change (where it lives, and where it's registered, tested and documented), and ask for file paths with line numbers and the exact lines quoted.
 Once it answers, don't search yourself: no \`Grep\` and \`Glob\` and no \`grep\` or \`rg\` in Bash to find or confirm things. Read a file only to edit it or check a line the sub-agent pointed to, and then only that range. If the answer leaves a gap, ask a sub-agent a narrower follow-up question instead of filling it yourself.
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:
@@ -11024,7 +11024,7 @@ Keep Status current at milestones with \`edit_spec\`. Reviewer change requests a
 
 ## Files
 Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, \`head\`, \`sed -n\` or \`find\` in Bash.
-Change files only with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), never through Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts that write files, even if other instructions allow shell edits. Keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
+Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewrite), not by scripting around them in Bash: no \`sed -i\`, \`perl -i\`, \`awk\`, heredocs, \`echo >\`, \`tee\`, \`python3 - <<EOF\` or other scripts for a change those tools can make, even if other instructions allow shell edits. When they can't make it efficiently (deleting or moving hundreds of lines, one mechanical change across many files), a shell command or a short script is fine. Otherwise keep Bash for running things: tests, builds, git, package managers, and changes a command owns (a formatter, a codemod, a lockfile update).
 
 ## Working efficiently
 Take fewer, bigger turns:

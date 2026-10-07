@@ -542,8 +542,9 @@ describe("systemPrompt file tools", () => {
       expect(fileToolsMentioned(sys(kind, t), WRITE_TOOLS.builtin)).toEqual(edits ? WRITE_TOOLS.builtin : []);
       expect(fileToolsMentioned(sys(kind, t, { builtinTools: false }), WRITE_TOOLS.native)).toEqual(edits ? WRITE_TOOLS.native : []);
     }
-    expect(sys("work")).toContain("never through Bash");
+    expect(sys("work")).toContain("not by scripting around them in Bash");
     expect(sys("work")).toContain("even if other instructions allow shell edits");
+    expect(sys("work")).toContain("When they can't make it efficiently");
   });
 
   test("triage runs get no Files section", () => {
