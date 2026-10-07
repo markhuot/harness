@@ -6,6 +6,7 @@ import { stampTheme } from "./theme";
 
 const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
+  deviceId: () => ipcRenderer.invoke("harness:deviceId"),
   retryService: () => ipcRenderer.invoke("harness:retryService"),
   onConnection: (cb) => {
     const listener = (_e: IpcRendererEvent, conn: ConnectionResult) => cb(conn);

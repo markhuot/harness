@@ -2,11 +2,13 @@
 // Agents run in the service, which is the app's child unless Settings → Service → Start at login
 // handed it to launchd: then quitting the app leaves them running.
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, screen, shell, type MenuItemConstructorOptions } from "electron";
-import { spawn } from "node:child_process";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, pushNotifications, screen, shell, type MenuItemConstructorOptions } from "electron";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
+import { HarnessClient } from "@harness/shared";
+import { apnsEnvironment, loadDeviceId, PushRegistrar, ticketKeyFromDelivered, ticketKeyFromPush, ticketRoute } from "./push";
 import { routeForLink, WIDGET_RELOAD_HELPER, widgetGroupDir, widgetHost, WidgetReloader, writeWidgetHost } from "./widgets";
 import { nodePtySpawn } from "./pty";
 import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
@@ -67,7 +69,84 @@ function setConnection(next: Promise<ConnectionResult>, announce = false) {
     if (announce) broadcast("harness:connection", conn);
     watchDeferred(conn);
     syncWidgetHost(conn);
+    if (app.isReady()) void pushRegistrar?.sync(conn);
   });
+}
+
+// ---------------------------------------------------------------------------
+// System notifications (push.ts, DESIGN.md "Notifications"). The service pushes card activity
+// through APNs; macOS shows it as the system settings say. The app registers its token, and opens
+// the ticket when a notification is clicked.
+// ---------------------------------------------------------------------------
+
+/** This install's id: presence from every window and the push registration use it. */
+let deviceIdValue: string | null = null;
+const deviceId = () => (deviceIdValue ??= loadDeviceId(join(app.getPath("userData"), "device-id")));
+
+// Only a signed build carries the push entitlement; an unsigned `bun run dev` would only ask for
+// notification permission it can't use (HARNESS_PUSH=1 tries anyway).
+const pushEnabled = process.platform === "darwin" && (app.isPackaged || process.env.HARNESS_PUSH === "1") && !debug.capture;
+let pushRegistrar: PushRegistrar | null = null;
+
+/** The Mac's name as Sharing shows it ("Mark's MacBook Pro"), for Settings → Notifications. */
+const computerName = () =>
+  new Promise<string>((resolve) => {
+    execFile("scutil", ["--get", "ComputerName"], { timeout: 3000 }, (err, out) => resolve(!err && out.trim() ? out.trim() : hostname().replace(/\.local$/, "")));
+  });
+
+/**
+ * Notifications still in Notification Center, by id. Electron only routes a click to a Notification
+ * object it knows, and a push isn't one, so getHistory() wraps each delivered push in one (kept
+ * here, or it's collected and the click is lost) and its click opens the ticket.
+ */
+const delivered = new Map<string, Electron.Notification>();
+async function watchDelivered() {
+  let list: Electron.Notification[];
+  try {
+    list = await Notification.getHistory();
+  } catch (e) {
+    return console.warn("push: couldn't read delivered notifications", e);
+  }
+  const ids = new Set(list.map((n) => n.id));
+  for (const id of delivered.keys()) if (!ids.has(id)) delivered.delete(id);
+  for (const n of list) {
+    if (delivered.has(n.id)) continue;
+    const key = ticketKeyFromDelivered(n);
+    if (!key) continue;
+    n.on("click", () => {
+      delivered.delete(n.id);
+      showMain(ticketRoute(key));
+    });
+    delivered.set(n.id, n);
+  }
+}
+
+function setupPush() {
+  if (!pushEnabled) return;
+  // Creating Electron's notification presenter makes it the UNUserNotificationCenter delegate and
+  // asks for permission to alert. As the delegate it shows banners while the app is frontmost too,
+  // so macOS never holds a push back, and it hands clicks on known notifications to their objects.
+  Notification.isSupported();
+  // A push arrived while the app runs (this is arrival, not a click: a click goes through the
+  // delegate). Pick it up from Notification Center so its click opens the ticket. It may take a
+  // moment to land there, so look again shortly after.
+  pushNotifications.on("received-apns-notification", () => {
+    void watchDelivered();
+    setTimeout(() => void watchDelivered(), 1000);
+    setTimeout(() => void watchDelivered(), 5000);
+  });
+  // A push that arrived without that event (or before launch) is picked up here.
+  app.on("did-resign-active", () => void watchDelivered());
+  setInterval(() => void watchDelivered(), 60_000).unref();
+  void watchDelivered();
+  pushRegistrar = new PushRegistrar({
+    token: () => pushNotifications.registerForAPNSNotifications(),
+    register: (conn, body) => new HarnessClient({ baseUrl: conn.baseUrl, token: conn.token }).registerDevice(body),
+    deviceId: deviceId(),
+    name: computerName,
+    environment: apnsEnvironment(process.env),
+  });
+  void getConnection().then((conn) => pushRegistrar?.sync(conn));
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +558,7 @@ function buildMenu() {
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("harness:getConnection", () => getConnection());
+ipcMain.handle("harness:deviceId", () => deviceId());
 ipcMain.on("harness:widgetsChanged", (_e, signature: unknown) => {
   if (typeof signature === "string") widgetReloader.changed(signature);
 });
@@ -598,6 +678,13 @@ app.on("open-url", (e, url) => {
   else launchRoute = route;
 });
 
+// A click on a notification that launched the app arrives as the launch info (the click's
+// UNNotificationResponse, its push payload under `userInfo`): open at its ticket.
+app.on("ready", (_e, launchInfo) => {
+  const key = ticketKeyFromPush(launchInfo);
+  if (key) launchRoute = ticketRoute(key);
+});
+
 app.whenReady().then(() => {
   // Packaged builds get the icon from the bundle; show it in the Dock during `bun run dev` too.
   if (!app.isPackaged && process.platform === "darwin") {
@@ -607,6 +694,7 @@ app.whenReady().then(() => {
   buildMenu();
   void getConnection(); // start ensuring the service while the window loads
   createWindow(launchRoute);
+  setupPush();
   // Clicking the Dock icon brings the main window back, even with only pop-outs open.
   app.on("activate", () => {
     if (!mainWindow || mainWindow.isDestroyed()) createWindow();

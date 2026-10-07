@@ -136,6 +136,8 @@ export interface PopoutBridge {
 
 export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
+  /** This install's stable id (a UUID kept in userData): the device presence and pushes are for. */
+  deviceId(): Promise<string>;
   retryService(): Promise<ConnectionResult>;
   /** The main process replaced the connection (a deferred service reload settled, or a restart). */
   onConnection(cb: (conn: ConnectionResult) => void): () => void;
