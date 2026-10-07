@@ -359,7 +359,7 @@ struct BoardStoreTests {
         #expect(seen.count == 2)
     }
 
-    @Test func foregroundingRebuildsADisconnectedSocketAndRefreshesAConnectedOne() async {
+    @Test func foregroundingRebuildsTheSocketAndItsFirstConnectBumpsTheEpoch() async {
         let h = Harness()
         h.store.start()
         #expect(h.sockets.count == 1)
@@ -369,13 +369,38 @@ struct BoardStoreTests {
         h.store.sceneBecameActive()
         #expect(h.sockets.count == 2)
         await eventually { h.sockets[0].closed.withLock { $0 } }
-        // The rebuilt socket connects: a snapshot, and (a new socket's first connect) no epoch bump.
+        // The rebuilt socket connects: a snapshot, and views refetch (the epoch).
         h.socket.connect(true)
         await eventually { h.store.state.connected && h.client.count("projects") == 1 }
-        #expect(h.store.epoch == 0)
+        #expect(h.store.epoch == 1)
+        // Still looking connected (a suspended socket nobody noticed drop): rebuilt all the same.
         h.store.sceneDidEnterBackground()
         h.store.sceneBecameActive()
-        #expect(h.sockets.count == 2)
+        #expect(h.sockets.count == 3)
+        await eventually { h.sockets[1].closed.withLock { $0 } }
+        h.socket.connect(true)
+        await eventually { h.store.epoch == 2 && h.client.count("projects") == 2 }
+        // The grace timer was cleared when it opened: the store stays connected.
+        h.clock.advance(by: BoardStore.reopenGraceMs)
+        await settle()
+        #expect(h.store.state.connected)
+    }
+
+    @Test func aRebuiltSocketThatDoesNotOpenInTimeReportsDisconnectedAndStartsPolling() async {
+        let h = Harness()
+        h.store.start()
+        h.socket.connect(true)
+        await eventually { h.store.state.connected && h.client.count("projects") == 1 }
+        h.store.sceneDidEnterBackground()
+        h.store.sceneBecameActive()
+        // The old socket's status no longer counts; the banner keeps "connected" during the grace.
+        h.clock.advance(by: BoardStore.reopenGraceMs - 1)
+        await settle()
+        #expect(h.store.state.connected)
+        h.clock.advance(by: 1)
+        await eventually { !h.store.state.connected }
+        // Disconnected: the snapshot poll takes over.
+        h.clock.advance(by: BoardStore.disconnectedPollMs)
         await eventually { h.client.count("projects") == 2 }
     }
 

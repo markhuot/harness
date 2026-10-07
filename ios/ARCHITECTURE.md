@@ -327,8 +327,10 @@ feature needs something new here, add to it without changing what's there.
 - **Browser channel.** `store.subscribeBrowser(id)` / `unsubscribeBrowser(id)` /
   `sendBrowserInput(id, input)` go out on the current socket in call order (one outbox per socket,
   so a mouse down never overtakes its move). browser.frame/browser.state reach `store.onEvent`
-  listeners. A socket rebuilt on foregrounding has no subscriptions and its first connect doesn't
-  bump `epoch`, so it bumps `socketGeneration`: resubscribe on either (BrowserTabView keys its
+  listeners. Foregrounding always rebuilds the socket (a suspended app hears no events, and a
+  dropped socket can still look open), and its first connect bumps `epoch` like a reconnect, so
+  views refetch what changed meanwhile. A rebuilt socket also has no subscriptions, so it bumps
+  `socketGeneration` the moment it's made: resubscribe on either (BrowserTabView keys its
   `.task(id:)` on session, epoch and generation). The REST calls that aren't on `BoardClient`
   (browserState, browserNavigate, ticketTabs, settings, prompts, watchers) use `store.api`, the
   store's client as a `HarnessClient` (UI/StoreAPI.swift). Never cast `store.client` inline.

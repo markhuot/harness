@@ -59,6 +59,9 @@ public final class BoardStore {
     public static let restFallbackMs: Double = 1500
     /// Snapshot poll while disconnected, so a 401 (rotated token) is noticed (ms).
     public static let disconnectedPollMs: Double = 8000
+    /// How long a socket rebuilt on foregrounding has to open before the store reports it
+    /// disconnected (ms).
+    public static let reopenGraceMs: Double = 3000
     /// Activity backfilled after a snapshot: every non-done ticket plus this many newest done.
     public static let activityBackfillDone = 12
     public static let activityConcurrency = 6
@@ -72,8 +75,7 @@ public final class BoardStore {
     public private(set) var loadError: String?
     public private(set) var related = Related()
     /// Bumped whenever the socket is rebuilt (foregrounding). A rebuilt socket has no browser
-    /// subscriptions and its first connect doesn't bump `epoch`, so the Browser tab resubscribes on
-    /// either.
+    /// subscriptions, so the Browser tab resubscribes on this as well as on `epoch`.
     public private(set) var socketGeneration = 0
     /// The service's /health from the last refresh that got one (nil until then).
     public private(set) var health: Health?
@@ -93,6 +95,8 @@ public final class BoardStore {
     @ObservationIgnored private var outbox: AsyncStream<BrowserOp>.Continuation?
     @ObservationIgnored private var fallbackTimer: TimerHandle?
     @ObservationIgnored private var pollTimer: TimerHandle?
+    /// Marks the store disconnected if a socket rebuilt on foregrounding hasn't opened in time.
+    @ObservationIgnored private var reopenTimer: TimerHandle?
     @ObservationIgnored private var scope: String
     @ObservationIgnored private var watched: [String: Int] = [:]
     @ObservationIgnored private var listeners: [Int: @MainActor (HarnessEvent) -> Void] = [:]
@@ -172,26 +176,31 @@ public final class BoardStore {
         backgrounded = true
     }
 
-    /// Back from the background: the OS dropped the socket (or it's mid-backoff). Rebuild it when
-    /// disconnected, else refetch.
+    /// Back from the background. While suspended the app heard none of the socket's events, and a
+    /// socket the OS dropped may still look open (nothing notices until its next receive fails),
+    /// so always rebuild it. Its first connect counts as a reconnect: a snapshot plus an epoch bump,
+    /// so open views (a transcript, the spec) refetch what changed meanwhile. The banner keeps
+    /// saying connected for a short grace period, so a quick reopen doesn't flash "Reconnecting".
     public func sceneBecameActive() {
         guard backgrounded, !closed else { return }
         backgrounded = false
-        if !state.connected {
-            closeSocket()
-            openSocket()
-        } else {
-            Task { await refresh() }
+        closeSocket()
+        openSocket(resumed: true)
+        guard state.connected else { return }
+        reopenTimer = timers.set(Self.reopenGraceMs) { [weak self] in
+            guard let self else { return }
+            self.reopenTimer = nil
+            self.dispatch(.connected(false))
         }
     }
 
-    private func openSocket() {
+    /// `resumed`: rebuilt on foregrounding, so its first connect bumps the epoch like a reconnect.
+    /// A store's first socket doesn't: nothing has loaded yet.
+    private func openSocket(resumed: Bool = false) {
         let socket = makeSocket()
         self.socket = socket
         socketGeneration += 1
-        // A rebuilt socket starts over (`first` lives with the socket): its first connect doesn't
-        // bump the epoch.
-        var first = true
+        var first = !resumed
         let (ops, opsIn) = AsyncStream<BrowserOp>.makeStream()
         outbox = opsIn
         let channel = socket as? any BrowserChannel
@@ -219,6 +228,7 @@ public final class BoardStore {
             Task { @MainActor [weak self] in
                 for await connected in socket.status {
                     guard let self, !Task.isCancelled else { return }
+                    self.clearReopenTimer()
                     self.dispatch(.connected(connected))
                     if connected {
                         Task { await self.refresh() }
@@ -230,7 +240,13 @@ public final class BoardStore {
         ]
     }
 
+    private func clearReopenTimer() {
+        if let reopenTimer { timers.clear(reopenTimer) }
+        reopenTimer = nil
+    }
+
     private func closeSocket() {
+        clearReopenTimer()
         outbox?.finish()
         outbox = nil
         for t in socketTasks { t.cancel() }
