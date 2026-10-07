@@ -30,7 +30,12 @@ struct MentionTextEditor: View {
     var commandDriver: String?
     /// Complete leading /commands too
     var commands = true
-    var maxLines = 12
+    /// The field grows a line at a time up to this many, then scrolls inside itself (nil: it keeps
+    /// growing, for a field in a form that scrolls)
+    var maxLines: Int? = 12
+    /// Scroll the enclosing form or scroll view so the cursor stays in sight above the keyboard as
+    /// the text grows or the cursor moves (an uncapped `maxLines` field in a form)
+    var followsCaret = false
     var suggestionsEdge: VerticalEdge = .bottom
     var suggestionsMaxHeight: CGFloat = 220
     /// Draw the field in its own rounded box (off when the caller's container already is one)
@@ -78,6 +83,7 @@ struct MentionTextEditor: View {
         }
         .task(id: target?.lookup) { await lookup(target) }
         .onChange(of: selection) { _, sel in
+            if followsCaret, focused, let v = FocusedTextView.current() { PromptTextEditor.followCaret(v) }
             guard let range = Self.range(sel) else { return }
             caret = caret.onSelection(start: PickerLogic.utf16Offset(range.lowerBound, in: value), end: PickerLogic.utf16Offset(range.upperBound, in: value))
         }
@@ -209,7 +215,7 @@ private struct MentionField: View, Equatable {
     let placeholder: String
     let placeholderColor: Color?
     let minHeight: CGFloat
-    let maxLines: Int
+    let maxLines: Int?
     let boxed: Bool
     let fieldBox: MentionFieldBox?
     let fieldLabel: String?
@@ -228,7 +234,8 @@ private struct MentionField: View, Equatable {
         TextField("", text: text, selection: selection, prompt: Text(placeholder).foregroundStyle(placeholderColor ?? c.text3), axis: .vertical)
             .font(.scaled(size: 16))
             .foregroundStyle(c.text)
-            .lineLimit(1...maxLines)
+            // On a vertical field the limit is how far it grows before scrolling; nil, no limit.
+            .lineLimit(maxLines)
             .frame(minHeight: minHeight, alignment: .topLeading)
             .padding(fieldBox?.padding ?? EdgeInsets(top: boxed ? 12 : 0, leading: boxed ? 12 : 0, bottom: boxed ? 12 : 0, trailing: boxed ? 12 : 0))
             .background {

@@ -179,6 +179,9 @@ private struct NewSessionEditorView: View {
                     projectId: t.projectId,
                     minHeight: 150,
                     commandDriver: editor.commandDriver(state),
+                    // Grows with every line typed; the form scrolls, not the field.
+                    maxLines: nil,
+                    followsCaret: true,
                     boxed: false,
                     fieldLabel: "Spec",
                     autofocus: reopen == nil

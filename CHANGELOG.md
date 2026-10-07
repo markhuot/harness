@@ -27,6 +27,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad, New session's "Orchestrates child tickets." note shows right under the
   Task | Conductor switch instead of below the prompt, and the project name sits next to its key
   badge instead of far off to the right.
+- On iPhone and iPad, New session's prompt grows with every line you type instead of stopping at
+  12 lines and scrolling inside itself. The sheet scrolls along with it, so the line you're typing
+  stays above the keyboard.
 
 ### Fixed
 

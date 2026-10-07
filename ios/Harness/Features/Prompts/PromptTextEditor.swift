@@ -133,3 +133,23 @@ struct PromptTextEditor: UIViewRepresentable {
         return nil
     }
 }
+
+/// The text view that has the keyboard, found through the responder chain: a SwiftUI vertical
+/// TextField draws into one but doesn't hand it out, and `followCaret` needs it.
+@MainActor
+enum FocusedTextView {
+    fileprivate static weak var found: UITextView?
+
+    static func current() -> UITextView? {
+        found = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.harnessReportTextView), to: nil, from: nil, for: nil)
+        return found
+    }
+}
+
+extension UIResponder {
+    /// Sent to the first responder by FocusedTextView.
+    @objc fileprivate func harnessReportTextView() {
+        FocusedTextView.found = self as? UITextView
+    }
+}
