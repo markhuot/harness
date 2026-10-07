@@ -12,6 +12,7 @@ import {
   SUBAGENT_STATUS_LABEL,
   subagentById,
   subagentDuration,
+  subagentModelLabel,
   subagentPath,
   subagentsOf,
   subagentTitle,
@@ -25,6 +26,7 @@ import { pollTaskOutput } from "../state/taskOutputPoll";
 import { useStickToBottom } from "../components/stickToBottom";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
+import { ModelBadgeView } from "../components/ModelSelect";
 import { Transcript } from "./Transcript";
 import "./agents.css";
 
@@ -46,6 +48,12 @@ export function SubagentStatusMark({ status }: { status: SubagentStatus }) {
       <Icon name={status === "succeeded" ? "check" : status === "failed" ? "x" : "stop"} size={11} strokeWidth={status === "stopped" ? 2 : 3} />
     </span>
   );
+}
+
+/** The model a sub-agent runs on, once the driver has said (never for tasks). */
+function SubagentModelBadge({ agent }: { agent: Subagent }) {
+  const label = subagentModelLabel(agent.model);
+  return label ? <ModelBadgeView name={label} model={agent.model!} /> : null;
 }
 
 /** Only shown once the session has sub-agents or tasks (effectiveTab falls back to Spec until then). */
@@ -87,6 +95,7 @@ function AgentRow({ agent: a, parent, now, onOpen }: { agent: Subagent; parent: 
           <SubagentStatusMark status={a.status} />
           <span className="child-title">{subagentTitle(a)}</span>
           {type && <span className="badge badge-outline mono">{type}</span>}
+          <SubagentModelBadge agent={a} />
           <span className="agent-time" title={`${SUBAGENT_STATUS_LABEL[a.status]} · started ${new Date(a.startedAt).toLocaleTimeString()}`}>
             {subagentDuration(a, now)}
           </span>
@@ -132,6 +141,7 @@ export function SubagentView({ ticket, subagentId, onBack, onOpen }: { ticket: T
             <SubagentStatusMark status={agent.status} />
             <strong className="truncate">{subagentTitle(agent)}</strong>
             {subagentTypeLabel(agent) && <span className="badge badge-outline mono">{subagentTypeLabel(agent)}</span>}
+            <SubagentModelBadge agent={agent} />
             <span className="grow" />
             <span className="agent-time">
               {SUBAGENT_STATUS_LABEL[agent.status]} · {subagentDuration(agent, now)}

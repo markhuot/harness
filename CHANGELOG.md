@@ -11,6 +11,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A ticket's Agents & tasks tab shows the model each sub-agent ran on (for example "Haiku 4.5"),
+  both in the list and at the top of the sub-agent's transcript, on the Mac and on iPhone and iPad.
+
 - Agents can take a screenshot of a whole page, top to bottom, not just the part that fits in the
   browser window, or of a single element on the page, so screenshots in a ticket's spec can show
   exactly what the change is about.
