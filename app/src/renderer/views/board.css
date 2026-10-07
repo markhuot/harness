@@ -151,6 +151,21 @@
   flex: none;
   color: var(--accent);
 }
+/* The icons at a card's top right, in a fixed order (activity, message draft, reviews). */
+.card-trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.card-trail:empty {
+  display: none;
+}
+.card-message-draft {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-2);
+}
 .card-draft-icon {
   color: var(--accent);
   flex: none;

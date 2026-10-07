@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- A card on the board shows a pencil when you've started writing a message to its agent and
+  haven't sent it yet, on the Mac and on iPhone and iPad.
+
 ### Removed
 
 - On iPhone and iPad, toasts no longer slide in at the top of the screen, so they can't cover the
@@ -19,6 +24,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On iPhone and iPad, logging in to a driver that needs a code (GitHub Copilot) shows the code in
   an alert before the login page opens, so you have it when the page asks for it.
+- The icons at the top right of a board card keep a fixed order: the working spinner (or clock),
+  then the pencil, then the agent and human review marks. The review marks stay put at the right
+  edge when an agent starts or stops working.
 
 ### Fixed
 

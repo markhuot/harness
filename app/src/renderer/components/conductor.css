@@ -111,7 +111,7 @@
   flex-wrap: wrap;
   row-gap: 4px;
 }
-.card-top:has(.card-parent-chip) .card-reviews {
+.card-top:has(.card-parent-chip) .card-trail {
   margin-left: auto;
 }
 

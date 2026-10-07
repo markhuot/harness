@@ -24,6 +24,11 @@ export function messageDraftValue(d: MessageDraft | null | undefined): MessageDr
   return d ? { text: d.text, attachments: d.attachments } : EMPTY_MESSAGE_DRAFT;
 }
 
+/** The ticket has a message waiting to go (its board card shows a pencil): text that isn't blank, or files. */
+export function hasMessageDraft(d: MessageDraft | null | undefined): boolean {
+  return !!d && (d.text.trim() !== "" || d.attachments.length > 0);
+}
+
 export function sameMessageDraft(a: MessageDraftValue, b: MessageDraftValue): boolean {
   return a.text === b.text && sameAttachments(a.attachments, b.attachments);
 }

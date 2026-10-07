@@ -1,11 +1,24 @@
 import { describe, expect, test } from "bun:test";
 import type { Attachment, MessageDraft } from "../protocol";
-import { adoptMessageDraft, EMPTY_MESSAGE_DRAFT, messageDraftBody, newDraftOrigin, type MessageDraftValue } from "./messageDrafts";
+import { adoptMessageDraft, EMPTY_MESSAGE_DRAFT, hasMessageDraft, messageDraftBody, newDraftOrigin, type MessageDraftValue } from "./messageDrafts";
 
 const file: Attachment = { id: "a1", path: "/u/a.png", name: "a.png", source: "upload", kind: "image", mimeType: "image/png" };
 const saved = (text: string, origin: string | null, attachments: Attachment[] = []): MessageDraft => ({ text, attachments, origin, updatedAt: 1 });
 const shown = (text: string, attachments: Attachment[] = []): MessageDraftValue => ({ text, attachments });
 const base = { origin: "me", focused: false, dirty: false };
+
+describe("hasMessageDraft", () => {
+  test("none, or only blank text, isn't a draft", () => {
+    expect(hasMessageDraft(null)).toBe(false);
+    expect(hasMessageDraft(undefined)).toBe(false);
+    expect(hasMessageDraft(saved(" \n\t", "me"))).toBe(false);
+  });
+
+  test("text or files are", () => {
+    expect(hasMessageDraft(saved("hi", "me"))).toBe(true);
+    expect(hasMessageDraft(saved("", "me", [file]))).toBe(true);
+  });
+});
 
 describe("adoptMessageDraft", () => {
   test("another device's draft replaces what an idle composer shows", () => {

@@ -24,6 +24,11 @@ struct MessageDraftsParityTests {
         #expect(MessageDrafts.adopt(saved: i.saved, origin: i.origin, focused: i.focused, dirty: i.dirty, shown: i.shown) == c.output, "\(c.name)")
     }
 
+    @Test(arguments: Fixture.cases("messageDrafts", "hasMessageDraftCases", input: MessageDraft?.self, output: Bool.self))
+    func has(_ c: Fixture.Case<MessageDraft?, Bool>) {
+        #expect(MessageDrafts.has(c.input) == c.output, "\(c.name)")
+    }
+
     @Test(arguments: Fixture.cases("messageDrafts", "messageDraftBodyCases", input: BodyInput.self, output: JSONValue.self))
     func body(_ c: Fixture.Case<BodyInput, JSONValue>) throws {
         try expectJSONMatchesTS(MessageDrafts.body(c.input.value, origin: c.input.origin), c.output)

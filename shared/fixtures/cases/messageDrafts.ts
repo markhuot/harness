@@ -1,6 +1,6 @@
 // Message drafts (shared/src/state/messageDrafts.ts) for HarnessKit's State/MessageDrafts.swift.
 import type { Attachment, MessageDraft } from "../../src/protocol";
-import { adoptMessageDraft, messageDraftBody, type AdoptMessageDraftInput, type MessageDraftValue } from "../../src/state/messageDrafts";
+import { adoptMessageDraft, hasMessageDraft, messageDraftBody, type AdoptMessageDraftInput, type MessageDraftValue } from "../../src/state/messageDrafts";
 import { cases } from "../case";
 
 const shot: Attachment = { id: "a1", path: "/Users/me/.harness/uploads/u1/shot.png", name: "shot.png", source: "upload", kind: "image", mimeType: "image/png" };
@@ -20,6 +20,14 @@ export const adoptMessageDraftCases = cases((i: AdoptMessageDraftInput) => adopt
   "nothing saved and nothing shown": { ...idle, saved: null, shown: shown("") },
   "a change to the files alone is adopted": { ...idle, saved: saved("same", "phone", [shot]), shown: shown("same") },
   "a change to a file's notes is adopted": { ...idle, saved: saved("same", "phone", [noted]), shown: shown("same", [shot]) },
+});
+
+export const hasMessageDraftCases = cases((d: MessageDraft | null) => hasMessageDraft(d), {
+  "no draft": null,
+  "text": saved("half written", "phone"),
+  "blank text": saved(" \n\t", "phone"),
+  "files with no text": saved("", "phone", [shot]),
+  "files with blank text": saved("  ", "phone", [shot]),
 });
 
 export const messageDraftBodyCases = cases(({ value, origin }: { value: MessageDraftValue; origin: string }) => messageDraftBody(value, origin), {

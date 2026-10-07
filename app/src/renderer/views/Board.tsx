@@ -16,6 +16,7 @@ import {
   doneCount,
   hasCustomDriver,
   hasCustomModel,
+  hasMessageDraft,
   hideOnBoard,
   latestActivity,
   NEWS_KINDS,
@@ -370,6 +371,7 @@ const TicketCard = memo(function TicketCard({
   const draft = !!t.draft;
   const discard = () => onDiscard(t);
   const working = isWorking(state.tickets, t);
+  const messageDrafted = hasMessageDraft(t.messageDraft);
   const waitingToStart = autoStartWaitingOn(t, deps);
   const restart = restartsAt(t);
   const restartLabel = restart === null ? "" : restartTitle(new Date(restart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
@@ -386,7 +388,7 @@ const TicketCard = memo(function TicketCard({
       {...dragProps({ kind: "ticket", ticketKey: t.key }, { chip: keyLabel(t), title: t.title }, scope)}
       onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined)}
       role="button"
-      aria-label={`${draft ? "Draft " : ""}${keyLabel(t)} ${t.title || "Untitled"}`}
+      aria-label={`${draft ? "Draft " : ""}${keyLabel(t)} ${t.title || "Untitled"}${messageDrafted ? ", a message is drafted" : ""}`}
       tabIndex={isCursor ? 0 : -1}
       data-pane-autofocus={isCursor || undefined}
       // Enter is board.open (the dispatcher); Space, as on any button, does the same.
@@ -409,23 +411,32 @@ const TicketCard = memo(function TicketCard({
           </span>
         )}
         <div className="grow" />
-        {t.status === "review" && (
-          <span className="card-reviews">
-            <ReviewMark who="agent" state={t.agentReview} />
-            <ReviewMark who="human" state={t.humanReview} />
-          </span>
-        )}
-        {working && <span className="spinner" title={workingTitle(t)} />}
-        {!working && waitingToStart.length > 0 && (
-          <span className="card-autostart" data-testid="card-autostart" title={autoStartTitle(waitingToStart)} aria-label={autoStartTitle(waitingToStart)}>
-            <Icon name="clock" size={12} />
-          </span>
-        )}
-        {!working && restart !== null && (
-          <span className="card-autostart" data-testid="card-restart" title={restartLabel} aria-label={restartLabel}>
-            <Icon name="clock" size={12} />
-          </span>
-        )}
+        {/* Activity, then the message draft, then the reviews: the review marks sit at the right
+            edge, so the spinner coming and going (or a draft being typed) never moves them. */}
+        <span className="card-trail">
+          {working && <span className="spinner" title={workingTitle(t)} />}
+          {!working && waitingToStart.length > 0 && (
+            <span className="card-autostart" data-testid="card-autostart" title={autoStartTitle(waitingToStart)} aria-label={autoStartTitle(waitingToStart)}>
+              <Icon name="clock" size={12} />
+            </span>
+          )}
+          {!working && restart !== null && (
+            <span className="card-autostart" data-testid="card-restart" title={restartLabel} aria-label={restartLabel}>
+              <Icon name="clock" size={12} />
+            </span>
+          )}
+          {messageDrafted && (
+            <span className="card-message-draft" data-testid="card-message-draft" title="A message is drafted" aria-label="A message is drafted">
+              <Icon name="edit" size={12} />
+            </span>
+          )}
+          {t.status === "review" && (
+            <span className="card-reviews">
+              <ReviewMark who="agent" state={t.agentReview} />
+              <ReviewMark who="human" state={t.humanReview} />
+            </span>
+          )}
+        </span>
       </div>
       <div className="card-title">{t.title || "Untitled"}</div>
 

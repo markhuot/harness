@@ -292,6 +292,71 @@
       }
     }
   ],
+  "hasMessageDraftCases": [
+    {
+      "name": "no draft",
+      "input": null,
+      "output": false
+    },
+    {
+      "name": "text",
+      "input": {
+        "text": "half written",
+        "attachments": [],
+        "origin": "phone",
+        "updatedAt": 1759190000000
+      },
+      "output": true
+    },
+    {
+      "name": "blank text",
+      "input": {
+        "text": " \n\t",
+        "attachments": [],
+        "origin": "phone",
+        "updatedAt": 1759190000000
+      },
+      "output": false
+    },
+    {
+      "name": "files with no text",
+      "input": {
+        "text": "",
+        "attachments": [
+          {
+            "id": "a1",
+            "path": "/Users/me/.harness/uploads/u1/shot.png",
+            "name": "shot.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ],
+        "origin": "phone",
+        "updatedAt": 1759190000000
+      },
+      "output": true
+    },
+    {
+      "name": "files with blank text",
+      "input": {
+        "text": "  ",
+        "attachments": [
+          {
+            "id": "a1",
+            "path": "/Users/me/.harness/uploads/u1/shot.png",
+            "name": "shot.png",
+            "source": "upload",
+            "kind": "image",
+            "mimeType": "image/png"
+          }
+        ],
+        "origin": "phone",
+        "updatedAt": 1759190000000
+      },
+      "output": true
+    }
+  ],
   "messageDraftBodyCases": [
     {
       "name": "text only",
