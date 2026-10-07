@@ -24,6 +24,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On iPhone and iPad, tapping anywhere in New session's prompt box brings up the keyboard. Taps in
   the lower part of the box, below the text, used to do nothing.
+- On iPhone, the keyboard's rounded top corners in New session and the ticket sheet show the
+  sheet's own background. A darker strip of the board behind the sheet used to show through there.
 
 ## [app-20261007.1123](https://github.com/markhuot/harness/releases/tag/app-20261007.1123) - 2026-10-07
 

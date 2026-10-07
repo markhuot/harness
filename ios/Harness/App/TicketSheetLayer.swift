@@ -86,7 +86,8 @@ struct TicketSheetLayer: View {
             UnevenRoundedRectangle(topLeadingRadius: Self.corner, topTrailingRadius: Self.corner)
                 .fill(c.bg)
                 .shadow(color: .black.opacity(0.18), radius: 16, y: -2)
-                .ignoresSafeArea(.container, edges: .bottom)
+                // Under the keyboard too, so its rounded corners show the sheet, not the dimmed board.
+                .ignoresSafeArea(edges: .bottom)
         }
         .padding(.top, 6)
         .simultaneousGesture(sheetGesture(travel: travel))
