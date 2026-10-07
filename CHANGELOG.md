@@ -11,6 +11,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, coming back to the app shows what happened while it was in the background.
+  An open ticket's transcript now catches up on the agent's replies instead of stopping where it
+  was when you left.
 - On iPhone, closing a docked ticket or New session with its ✕ slides it away. It no longer grows
   to full size for a moment first.
 
