@@ -3128,13 +3128,14 @@ the conventions, and ios/README.md the build and test commands.
   composer tear off into a pinned window of their own: dragged out of the window (the drag
   carries the window's NSUserActivity, so iPadOS opens it) or from the thing's context menu
   (Open in New Window). A pinned window shows only that one tab, fully working, under the
-  ticket's title line. The ticket's other windows show **Return to this window** in its place, which closes the pinned window; closing it any other way also brings the
-  tab back. Board cards drag out into a full ticket window; the board has no drop target, and
-  nothing on iPhone or iPad moves a card between columns: only agents move tickets. Touch and hold
-  on a card previews the ticket on its Spec tab above the card's menu. Two browser views
-  of one session stream side by side because each is its own viewer (`viewerId`, "Browser
-  tabs"). iPhone and compact width have none of this. `sim-check --ipad` shoots the
-  walk-through's screens on iPad simulators. See ios/ARCHITECTURE.md § Windows.
+  ticket's title line. The ticket's other windows show **Return to this window** in its place,
+  which closes the pinned window; closing it any other way also brings the tab back. Board cards
+  drag out into a full ticket window; the board has no drop target, and nothing on iPhone or iPad
+  moves a card between columns: only agents move tickets. Touch and hold on a card previews the
+  ticket on its Spec tab above the card's menu. Two browser views of one session stream side by
+  side because each is its own viewer (`viewerId`, "Browser tabs"). iPhone and compact width have
+  none of this. `sim-check --ipad` shoots the walk-through's screens on iPad simulators. See
+  ios/ARCHITECTURE.md § Windows.
 - **Connection.** `harness://pair?url=…&token=…` (the desktop QR code) opens the app through its
   URL scheme, or the in-app scanner reads it; the app probes `GET /health`, then an authenticated
   request, before saving. Tokens live in the Keychain, one per saved Mac, readable after first
