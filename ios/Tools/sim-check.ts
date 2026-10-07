@@ -38,7 +38,8 @@
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
 //      prompt editor and New session's prompt (which grows with no cap) keep the cursor above it as
-//      the text grows; keyboard-*.png. A headless simulator
+//      the text grows, and the sheet's background (not the dimmed board) shows behind the keyboard's
+//      rounded corners; keyboard-*.png. A headless simulator
 //      always has a hardware keyboard, so the run turns the device's own keyboard minimization off
 //      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
@@ -1468,6 +1469,45 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     moved(udid);
     return `tapped ${y - Math.round(start.frame.y)}pt below the field's top`;
   });
+
+  // The keyboard's top corners are rounded, so what's behind them shows: the sheet's own background,
+  // not the dimmed board under the sheet (the sheet's fill used to stop at the keyboard's top).
+  await check("the sheet's background runs behind the keyboard's rounded corners", async () => {
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.includes("Spec"));
+    const field = await until("prompt field", () => findElement(udid, (l) => l === "Spec"), 5000);
+    await axe("tap", "-x", String(Math.round(field.frame.x + 40)), "-y", String(Math.round(field.frame.y + 20)), "--udid", udid);
+    await until("keyboard up", keyboardTop, 8000);
+    await Bun.sleep(600);
+    const top = (await keyboardTop())!;
+    await shot(udid, "keyboard-new-session-corner");
+    const file = join(shots, "keyboard-new-session-corner.png");
+    const screen = (await tree(udid))[0]!.frame;
+    const scale = Number(await sh(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width", "-of", "csv=p=0", file])) / screen.width;
+    // From well above the keyboard (the sheet's background, left of the form's rows) to the screen's bottom.
+    const from = Math.round((top - 120) * scale);
+    const height = Math.round(screen.height * scale) - from;
+    // Left of the rows (they start 16pt in) the keyboard's flat top begins where this column first
+    // changes; the screen's edge column is still behind the corner's curve there.
+    const inner = await grayColumn(file, Math.round(12 * scale), from, height);
+    const edge = await grayColumn(file, 1, from, height);
+    const bg = edge[0]!;
+    const keyboardEdge = inner.findIndex((v) => Math.abs(v - bg) > 3);
+    if (keyboardEdge < 0) throw new Error(`no keyboard edge below ${Math.round(top - 120)}pt (keyboard letters at ${Math.round(top)}pt, column ${Math.round(12 * scale)}px)`);
+    const below = Math.round(3 * scale);
+    const behind = edge.subarray(0, keyboardEdge + below).findIndex((v) => Math.abs(v - bg) > 3);
+    if (behind >= 0) throw new Error(`behind the keyboard's corner the screen's edge turns gray ${edge[behind]}, not the sheet's ${bg}, ${Math.round((behind - keyboardEdge) / scale)}pt from the keyboard's top`);
+    await tapHeaderCancel(udid);
+    moved(udid);
+    return `the screen's edge is the sheet's gray ${bg} down to 3pt below the keyboard's top`;
+  });
+}
+
+/** One column of a screenshot as gray levels, `height` pixels from row `y` down. */
+async function grayColumn(file: string, x: number, y: number, height: number) {
+  const p = Bun.spawn(["ffmpeg", "-loglevel", "error", "-i", file, "-vf", `crop=1:${height}:${x}:${y}`, "-f", "rawvideo", "-pix_fmt", "gray", "-"], { stdout: "pipe", stderr: "pipe" });
+  const [out, err, code] = await Promise.all([new Response(p.stdout).arrayBuffer(), new Response(p.stderr).text(), p.exited]);
+  if (code !== 0) throw new Error(`ffmpeg column ${x} of ${file} → ${code}\n${err.slice(-500)}`);
+  return new Uint8Array(out);
 }
 
 /** --mentions: a project with a few files, and a ticket in review to message; and a claude-code project for /commands. */
