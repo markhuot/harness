@@ -8,7 +8,8 @@ import SwiftUI
 /// and the small sheet shows the ticket's key (TicketDock) under the board, which stays usable
 /// (`presentationBackgroundInteraction`). Tapping it, or dragging it up, brings it back; swiping it
 /// down sends it away. The system does the drags, the inset and the corners, so the content's own
-/// gestures (the pager, the back swipe, the Browser tab, the transcript) keep theirs.
+/// gestures (the pager, the back swipe, the Browser tab, the transcript) keep theirs; the board's
+/// bottom bar takes the docked sheet's side inset (DockedSheetInset) so the two line up.
 ///
 /// Pickers, the watcher form and covers come up over it: the root is busy presenting this, so
 /// they're presented from here. Projects closes it instead (`Router.open(.sheet(.projects))`), and
@@ -19,6 +20,7 @@ struct TicketSheetHost: View {
     @Environment(\.palette) private var c
     /// The sheet as it was last up, so its content stays while it animates away.
     @State private var last: TicketSheet?
+    @Environment(DockedSheetInset.self) private var dockInset
 
     var body: some View {
         let current = router.ticketSheet ?? router.dock
@@ -44,6 +46,10 @@ struct TicketSheetHost: View {
             .onChange(of: docked) { _, docked in
                 // A docked New session mustn't keep the keyboard up over the board.
                 if docked { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            }
+            // Where the system floats the docked sheet from the screen's sides, for the board's bar.
+            .onGeometryChange(for: CGFloat?.self) { g in docked ? g.frame(in: .global).minX : nil } action: { x in
+                if let x { dockInset.sides = x }
             }
         }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
@@ -88,6 +94,13 @@ struct TicketSheetHost: View {
     private func coverBinding(whenSheet: Bool) -> Binding<CoverRoute?> {
         Binding(get: { (router.sheet != nil) == whenSheet ? router.cover : nil }, set: { router.cover = $0 })
     }
+}
+
+/// How far the system floats the docked ticket sheet from the screen's sides, as last measured
+/// docked. The sheet is presented, so this reaches the board's bottom bar through the environment
+/// (RootView) rather than a preference; the bar lines up with the dock while `Router.showsDock`.
+@Observable final class DockedSheetInset {
+    var sides: CGFloat?
 }
 
 /// Keeps a section's screen clear of the docked ticket sheet. It goes inside the section's

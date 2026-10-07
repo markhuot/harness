@@ -14,9 +14,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone, tickets and New session open in the standard iOS sheet again. It drags smoothly,
   swipes away easily, and no longer sets off Reachability. Docked at the bottom of the screen, it's
   a small sheet inset from the edges, with corners that follow the phone's, showing the ticket's
-  key (or "New session"). Tap it or drag it up to bring the ticket back. Opening Projects now
-  closes the ticket sheet, and so does an alert from the screen behind a docked sheet. Drafts are
-  saved either way.
+  key (or "New session"). The board's bottom bar widens to line up with it. Tap it or drag it up
+  to bring the ticket back. Opening Projects now closes the ticket sheet, and so does an alert from
+  the screen behind a docked sheet. Drafts are saved either way.
 
 ### Fixed
 

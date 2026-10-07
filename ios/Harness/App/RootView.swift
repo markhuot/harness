@@ -10,6 +10,7 @@ struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(\.scenePhase) private var scenePhase
     @State private var scene: UIWindowScene?
+    @State private var dockInset = DockedSheetInset()
 
     #if DEBUG
     /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly
@@ -22,6 +23,7 @@ struct RootView: View {
         content
             .sceneChrome(router)
             .modifier(ConcentricScreenReader())
+            .environment(dockInset)
             // The board's cards or the open ticket, for the Mac's notifications (Notifications.swift).
             .reportsPresence(router)
             // Links from outside the app land in a main window rather than a ticket window.

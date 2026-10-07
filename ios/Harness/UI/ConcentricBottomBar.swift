@@ -32,19 +32,20 @@ struct ConcentricScreenReader: ViewModifier {
 
 /// A bottom bar's horizontal and bottom padding: concentric with the phone's corners at rest, and
 /// `horizontal`/`bottom` while `raised` (over the keyboard, where there are no corners to follow)
-/// or where the screen has none.
+/// or where the screen has none. At rest, `sides` (when given) replaces the concentric side gap.
 private struct ConcentricBottomPadding: ViewModifier {
     let barHeight: CGFloat
     let raised: Bool
     let horizontal: CGFloat
     let bottom: CGFloat
+    let sides: CGFloat?
     @Environment(\.concentricScreen) private var screen
 
     func body(content: Content) -> some View {
         let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight))
             ?? ConcentricBar.Padding(horizontal: horizontal, bottom: bottom)
         content
-            .padding(.horizontal, p.horizontal)
+            .padding(.horizontal, raised ? p.horizontal : sides ?? p.horizontal)
             .padding(.bottom, p.bottom)
     }
 }
@@ -52,7 +53,7 @@ private struct ConcentricBottomPadding: ViewModifier {
 extension View {
     /// Pads a bottom bar `barHeight` tall (its single row) so its ends are concentric with the
     /// phone's corners; see ConcentricBottomPadding.
-    func concentricBottomPadding(barHeight: CGFloat, raised: Bool, horizontal: CGFloat, bottom: CGFloat) -> some View {
-        modifier(ConcentricBottomPadding(barHeight: barHeight, raised: raised, horizontal: horizontal, bottom: bottom))
+    func concentricBottomPadding(barHeight: CGFloat, raised: Bool, horizontal: CGFloat, bottom: CGFloat, sides: CGFloat? = nil) -> some View {
+        modifier(ConcentricBottomPadding(barHeight: barHeight, raised: raised, horizontal: horizontal, bottom: bottom, sides: sides))
     }
 }

@@ -1026,6 +1026,14 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const newSession = await findElement(udid, (x) => x === "New session");
     if (bar && newSession && newSession.frame.y + newSession.frame.height > bar.frame.y)
       throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(bar.frame.y)})`);
+    // And as far from the screen's sides as that bar: Projects at its left end, New session at its right.
+    const projects = await findElement(udid, (x) => x === "Projects");
+    if (bar && projects && newSession) {
+      const left = bar.frame.x - projects.frame.x;
+      const right = bar.frame.x + bar.frame.width - (newSession.frame.x + newSession.frame.width);
+      if (Math.abs(left) > 2 || Math.abs(right) > 2)
+        throw new Error(`the dock (${Math.round(bar.frame.x)}–${Math.round(bar.frame.x + bar.frame.width)}) isn't inset like the bar (${Math.round(projects.frame.x)}–${Math.round(newSession.frame.x + newSession.frame.width)})`);
+    }
     await shootBoth(udid, "sheet-docked");
     return label;
   });
