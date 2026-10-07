@@ -146,19 +146,15 @@ private struct NewSessionEditorView: View {
 
         return Form {
             Section {
-                HStack(spacing: 8) {
-                    if let project { ProjectKeyBadge(project.key, color: project.color) }
-                    SelectMenu(
-                        value: t.projectId,
-                        options: projects.map { PickerOption(value: $0.id, label: "\($0.name) (\($0.key))") },
-                        placeholder: projects.isEmpty ? "Add a project" : "Choose a project",
-                        title: "Project",
-                        actions: [SelectMenuAction(label: "Add a project…", systemImage: "folder.badge.plus") { startAdding() }],
-                        accessibilityName: "Project"
-                    ) { editor.changeProject($0) }
-                    .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                }
+                ProjectRow(
+                    projectId: t.projectId,
+                    key: project?.key,
+                    color: project?.color,
+                    options: projects.map { PickerOption(value: $0.id, label: "\($0.name) (\($0.key))") },
+                    onChange: { editor.changeProject($0) },
+                    onAdd: { startAdding() }
+                )
+                .equatable()
                 .listRowBackground(c.bgElev)
                 // The segmented control plays the select haptic on a change.
                 Picker("Kind", selection: Binding(get: { kind }, set: { next in
@@ -170,6 +166,11 @@ private struct NewSessionEditorView: View {
                 }
                 .pickerStyle(.segmented)
                 .listRowBackground(c.bgElev)
+            } footer: {
+                // Right under Task | Conductor, which it explains.
+                if kind == .conductor {
+                    Text("Orchestrates child tickets.").font(.scaled(size: 13)).foregroundStyle(c.text3)
+                }
             }
             Section {
                 MentionTextEditor(
@@ -183,10 +184,6 @@ private struct NewSessionEditorView: View {
                     autofocus: reopen == nil
                 )
                 .listRowBackground(c.bgElev)
-            } footer: {
-                if kind == .conductor {
-                    Text("Orchestrates child tickets.").font(.scaled(size: 13)).foregroundStyle(c.text3)
-                }
             }
             NewSessionAttachmentsSection(editor: editor, ticket: t, uploader: uploader)
             Section {
@@ -337,6 +334,44 @@ private struct NewSessionEditorView: View {
     /// Close this sheet, unless a link has already replaced it with another.
     private func dismiss() {
         if router.sheet == .newSession(projectId: projectId, key: reopen) { router.sheet = nil }
+    }
+}
+
+/// The project badge and its select. The sheet's body runs on every store change (a socket event,
+/// a draft save), and an open Menu whose items are rebuilt jumps back and stops scrolling, so this
+/// row compares by value (`.equatable()`) and only redraws when the projects or the pick change.
+/// The badge and the name sit 1em apart, the name left-aligned against it.
+private struct ProjectRow: View, Equatable {
+    let projectId: String
+    let key: String?
+    let color: String?
+    let options: [PickerOption<String>]
+    let onChange: (String) -> Void
+    let onAdd: () -> Void
+
+    /// 1em of the select's 15pt text, scaled with it.
+    @ScaledMetric(relativeTo: .body) private var em: CGFloat = 15
+
+    nonisolated static func == (a: ProjectRow, b: ProjectRow) -> Bool {
+        a.projectId == b.projectId && a.key == b.key && a.color == b.color && a.options == b.options
+    }
+
+    var body: some View {
+        HStack(spacing: em) {
+            if let key { ProjectKeyBadge(key, color: color) }
+            SelectMenu(
+                value: projectId,
+                options: options,
+                placeholder: options.isEmpty ? "Add a project" : "Choose a project",
+                title: "Project",
+                actions: [SelectMenuAction(label: "Add a project…", systemImage: "folder.badge.plus", action: onAdd)],
+                accessibilityName: "Project",
+                alignment: .leading,
+                onChange: onChange
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
     }
 }
 
