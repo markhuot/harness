@@ -47,9 +47,9 @@ struct TicketSheetHost: View {
                 // A docked New session mustn't keep the keyboard up over the board.
                 if docked { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
-            // Where the system floats the docked sheet from the screen's sides, for the board's bar.
-            .onGeometryChange(for: CGFloat?.self) { g in docked ? g.frame(in: .global).minX : nil } action: { x in
-                if let x { dockInset.sides = x }
+            // Where the system floats the docked sheet, for the sections and the board's bar.
+            .onGeometryChange(for: CGRect?.self) { g in docked ? g.frame(in: .global) : nil } action: { f in
+                if let f { dockInset.sides = f.minX; dockInset.top = f.minY }
             }
         }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
@@ -99,11 +99,13 @@ struct TicketSheetHost: View {
     }
 }
 
-/// How far the system floats the docked ticket sheet from the screen's sides, as last measured
-/// docked. The sheet is presented, so this reaches the board's bottom bar through the environment
-/// (RootView) rather than a preference; the bar lines up with the dock while `Router.showsDock`.
+/// Where the system floats the docked ticket sheet, as last measured docked: how far from the
+/// screen's sides, and its top edge in the window. The sheet is presented, so this reaches the
+/// sections (DockClearance) and the board's bottom bar through the environment (RootView) rather
+/// than a preference; the bar lines up with the dock while `Router.showsDock`.
 @Observable final class DockedSheetInset {
     var sides: CGFloat?
+    var top: CGFloat?
 }
 
 /// Keeps a section's screen clear of the docked ticket sheet. It goes inside the section's
@@ -112,13 +114,14 @@ struct TicketSheetHost: View {
 private struct DockClearance: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.concentricScreen) private var screen
+    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @State private var keyboard = false
 
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if router.showsDock && !keyboard {
-                    Color.clear.frame(height: TicketDock.clearance(homeIndicator: screen?.homeIndicator ?? 0))
+                    Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top))
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
@@ -131,7 +134,7 @@ extension View {
 }
 
 /// The docked ticket sheet's content: the ticket on top's key (or "New session"); a tap opens it
-/// again.
+/// again, and the close button at its end sends it away without opening it.
 struct TicketDock: View {
     let sheet: TicketSheet
     let open: () -> Void
@@ -143,10 +146,13 @@ struct TicketDock: View {
     static let detent = PresentationDetent.height(height)
 
     /// What a section gives up at its bottom while a sheet is docked, so the dock sits under the
-    /// board's bottom bar rather than over it: the docked sheet, which floats a little above the
-    /// screen's edge, less the home indicator's inset the section already keeps clear, plus a gap.
-    static func clearance(homeIndicator: CGFloat) -> CGFloat {
-        max(0, height + 27 - homeIndicator)
+    /// board's bottom bar rather than over it: everything below the docked sheet's top edge, less
+    /// the home indicator's inset the section already keeps clear. The bar keeps its own gap above
+    /// that (BoardScreen). Before the dock is measured, the sheet and the float the system gives it.
+    static func clearance(screen: ConcentricBar.Screen?, dockTop: CGFloat?) -> CGFloat {
+        let homeIndicator = screen?.homeIndicator ?? 0
+        guard let screen, let dockTop else { return max(0, height + 16 - homeIndicator) }
+        return max(0, screen.height - dockTop - homeIndicator)
     }
 
     var body: some View {
@@ -159,11 +165,9 @@ struct TicketDock: View {
                     .foregroundStyle(c.text)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Image(systemName: "chevron.up")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(c.text3)
             }
-            .padding(.horizontal, 22)
+            .padding(.leading, 22)
+            .padding(.trailing, 22 + Self.closeSize)
             .padding(.top, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(.rect)
@@ -173,5 +177,23 @@ struct TicketDock: View {
         .accessibilityHint("Double-tap to open")
         .accessibilityIdentifier("ticket-dock")
         .accessibilityAction(named: "Close", close)
+        // Over the open button rather than in it, so the dock still spans the sheet's width.
+        .overlay(alignment: .trailing) {
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(c.text3)
+                    .frame(width: Self.closeSize, height: Self.closeSize)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 12)
+            .padding(.top, 6)
+            .accessibilityLabel("Close \(sheet.title)")
+            .accessibilityIdentifier("ticket-dock-close")
+        }
     }
+
+    /// The close button's tap target.
+    private static let closeSize: CGFloat = 44
 }

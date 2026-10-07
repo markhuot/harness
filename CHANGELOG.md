@@ -9,6 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone, a docked ticket or New session has a close button (✕) in place of the up arrow, so you
+  can send it away without opening it. Tapping anywhere else on it still opens it.
+
+### Fixed
+
+- On iPhone, the board's bottom bar no longer crowds a docked ticket. It sits as far above the
+  docked sheet as the sheet sits from the sides of the screen.
+
 ## [app-20261007.1751](https://github.com/markhuot/harness/releases/tag/app-20261007.1751) - 2026-10-07
 
 ### Changed

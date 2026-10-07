@@ -65,7 +65,7 @@
 //      card opens its ticket in a sheet, a conductor's child pushes inside it and the back swipe
 //      returns, dragging it to the bottom docks it under the board as a bar titled by its key, a
 //      tap on the bar restores it where it was, a section's alert still comes up, Projects closes
-//      it, swiping the bar down sends it away, and New session opens in the sheet too and docks as
+//      it, the bar's ✕ and a swipe down on it send it away, and New session opens in the sheet too and docks as
 //      "New session"; sheet-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
@@ -1040,6 +1040,10 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       const right = bar.frame.x + bar.frame.width - (newSession.frame.x + newSession.frame.width);
       if (Math.abs(left) > 2 || Math.abs(right) > 2)
         throw new Error(`the dock (${Math.round(bar.frame.x)}–${Math.round(bar.frame.x + bar.frame.width)}) isn't inset like the bar (${Math.round(projects.frame.x)}–${Math.round(newSession.frame.x + newSession.frame.width)})`);
+      // The bar sits as far above the dock as the dock sits from the screen's sides.
+      const above = bar.frame.y - (newSession.frame.y + newSession.frame.height);
+      if (Math.abs(above - bar.frame.x) > 2)
+        throw new Error(`the bar is ${Math.round(above)}pt above the dock, which is ${Math.round(bar.frame.x)}pt from the sides`);
     }
     await shootBoth(udid, "sheet-docked");
     return label;
@@ -1079,6 +1083,21 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await goto(udid, BOARD);
     await Bun.sleep(600);
     if ((await labels(udid)).some(isDock)) throw new Error("the dock is still there after Projects");
+    // Back up for the next check.
+    await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    return "closed";
+  });
+  await check("the dock's close button sends it away without opening it", async () => {
+    await dock();
+    await tapWhere(udid, `Close ${kid.key}`);
+    await until("the dock gone", async () => !(await labels(udid)).some(isDock), 4000);
+    await until("the board", async () => onBoard(await labels(udid)), 4000).catch(async (e) => {
+      await say("after the close button");
+      throw e;
+    });
+    if (onChild(await labels(udid))) throw new Error(`${kid.key} opened instead`);
+    await shootBoth(udid, "sheet-dock-closed");
     // Back up for the next check.
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
