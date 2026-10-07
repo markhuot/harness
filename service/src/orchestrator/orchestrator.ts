@@ -1981,6 +1981,8 @@ export class Orchestrator {
       // "Approve and take no action": no completion run. In review it counts as the approval.
       if (ticket.status === "review") {
         this.notCompleting(ticket, "marked done");
+        // It's the human's review decision, so Activity records it as one (and as the move to done).
+        this.addActivity(ticket, "approved", "human", "Approved, no action taken", { by: "human", ...this.moveMeta(ticket, "done") });
         this.transition(ticket, "done", { blockedReason: null, humanReview: "approved" }, "Approved, no action taken", undefined, { by: "human" });
       } else {
         this.transition(ticket, "done", { blockedReason: null }, "Marked done", undefined, { by: "human" });
@@ -3965,6 +3967,8 @@ ${numberLines(r.body)}`;
       return;
     }
     this.appendStatus(t.sessionId, null, "Both reviews approved: completing automatically");
+    // Nobody approves a ticket that skips its human review, so its leaving review is recorded here.
+    if (t.skipHumanReview) this.addActivity(t, "approved", "system", "Human review skipped: completing automatically");
     this.track(this.enqueueComplete(t));
   }
 

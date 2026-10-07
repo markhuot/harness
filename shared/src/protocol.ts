@@ -604,7 +604,8 @@ export const MAX_PROMPT_ATTACHMENTS = 20;
  * - unblocked: the agent picked a blocked ticket back up; meta.note when it gave one
  * - review_approved / changes_requested: an agent or conductor review decision; meta.round,
  *   meta.commit (the HEAD it reviewed), meta.by
- * - approved: a human (or conductor) approved the ticket
+ * - approved: a human (or conductor) approved the ticket; author "system" when it skips its human
+ *   review and lands on its own
  * - message, answer: legacy. Older services logged a human's message from the Spec or Activity
  *   tab and the agent's reply; messages now go to the transcript only, and these are never written
  * - reopened: a done ticket went back to work; the notes
