@@ -31,8 +31,8 @@ import Observation
 ///   Opening another ticket or New session replaces the dock (drafts are saved, so nothing is
 ///   lost); opening the docked ticket, or the same New session, restores it.
 /// - Gone: `dismissSheet()`, from either state.
-/// There is one ticket sheet at most, presented or docked. `sheet` (Projects, pickers…) and `cover`
-/// work as before and can come up over it. Without `usesTicketSheets`, tickets push on the stack
+/// There is one ticket sheet at most, presented or docked. Projects closes it; other `sheet`s
+/// (pickers…) and `cover` work as before and come up over it. Without `usesTicketSheets`, tickets push on the stack
 /// and New session is a `sheet`.
 @MainActor
 @Observable
@@ -98,6 +98,11 @@ public final class Router {
             if usesTicketSheets, case let .newSession(projectId, key) = s {
                 sheet = nil
                 presentTicketSheet(.newSession(projectId: projectId, key: key))
+            } else if usesTicketSheets, s == .projects {
+                // Two system sheets would fight over the bottom of the screen: Projects closes the
+                // ticket sheet (New session drafts are saved).
+                dismissSheet()
+                sheet = s
             } else {
                 sheet = s
             }

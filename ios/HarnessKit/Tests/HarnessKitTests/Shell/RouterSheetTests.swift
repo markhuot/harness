@@ -279,11 +279,32 @@ struct RouterSheetTests {
         #expect(r.sheet == nil && r.ticketSheetState == .presented)
     }
 
-    @Test func otherSheetsAndCoversWorkAsBefore() {
+    @Test func projectsClosesTheTicketSheetPresentedOrDocked() {
         let r = sheeted()
         r.push(t("A-1"))
         r.present(.projects)
         #expect(r.sheet == .projects)
+        #expect(r.ticketSheetState == .gone)
+
+        let d = sheeted()
+        d.push(t("A-1"))
+        d.dockSheet()
+        d.present(.projects)
+        #expect(d.sheet == .projects && d.dock == nil)
+
+        // Without ticket sheets (iPad), Projects leaves the dock kept for when they're back.
+        let w = sheeted()
+        w.push(t("A-1"))
+        w.dockSheet()
+        w.setUsesTicketSheets(false)
+        w.present(.projects)
+        #expect(w.ticketSheetState == .docked)
+    }
+
+    @Test func otherSheetsAndCoversWorkAsBefore() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.present(.watcher(id: nil))
         #expect(r.ticketSheetState == .presented)
         r.present(.scan)
         #expect(r.cover == .scan)
@@ -297,7 +318,7 @@ struct RouterSheetTests {
         let r = sheeted()
         r.push(t("A-1"))
         r.push(t("A-2"))
-        r.present(.projects)
+        r.present(.scan)
         r.open(.tab(.inbox))
         #expect(r.selectedTab == .inbox)
         #expect(r.sheet == nil)

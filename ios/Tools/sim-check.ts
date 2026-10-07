@@ -64,8 +64,9 @@
 //   --sheets: the iPhone's ticket sheet on its own (the walk-through runs the same checks): a board
 //      card opens its ticket in a sheet, a conductor's child pushes inside it and the back swipe
 //      returns, dragging it to the bottom docks it under the board as a bar titled by its key, a
-//      tap on the bar restores it where it was, swiping the bar down sends it away, and New session
-//      opens in the sheet too and docks as "New session"; sheet-*.png
+//      tap on the bar restores it where it was, a section's alert still comes up, Projects closes
+//      it, swiping the bar down sends it away, and New session opens in the sheet too and docks as
+//      "New session"; sheet-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
 //      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
@@ -1031,20 +1032,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   await check("the dock survives a tab change, and a tap restores the sheet where it was", async () => {
     await goto(udid, "harness://settings");
     if (!(await labels(udid)).some(isDock)) throw new Error("no dock on Settings");
-    // The section behind the dock can still put up its own alerts.
-    // (Rotate token asks first; Cancel leaves the token alone.)
-    const asking = (l: string[]) => l.includes("Rotate the token?");
-    await tapWhere(udid, (l) => l.startsWith("Rotate token…"));
-    await until("the Rotate confirmation", async () => asking(await labels(udid)), 5000);
-    await Bun.sleep(400); // the alert finishes coming up
-    await tapWhere(udid, "Cancel");
-    await until("the confirmation gone", async () => !asking(await labels(udid)), 5000);
-    // And the Projects sheet comes up over the dock, which is still there once it's gone.
     await goto(udid, BOARD);
-    await tapWhere(udid, "Projects");
-    await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
-    await goto(udid, BOARD);
-    await until("the dock after the Projects sheet", async () => (await labels(udid)).some(isDock), 5000);
     await tapWhere(udid, isDock);
     moved(udid);
     await until("the child again", async () => {
@@ -1052,6 +1040,34 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       return onChild(l) && !l.some(isDock);
     }, 8000);
     return `${kid.key} restored`;
+  });
+  await check("a section's alert still comes up with the sheet docked", async () => {
+    await dock();
+    await goto(udid, "harness://settings");
+    // Rotate token asks first; Cancel leaves the token alone.
+    const asking = (l: string[]) => l.includes("Rotate the token?");
+    await tapWhere(udid, (l) => l.startsWith("Rotate token…"));
+    await until("the Rotate confirmation", async () => asking(await labels(udid)), 5000);
+    await Bun.sleep(400); // the alert finishes coming up
+    await tapWhere(udid, "Cancel");
+    await until("the confirmation gone", async () => !asking(await labels(udid)), 5000);
+    await Bun.sleep(600);
+    return (await labels(udid)).some(isDock) ? "the dock stayed" : "UIKit dismissed the dock";
+  });
+  await check("opening Projects closes the ticket sheet", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    await dock();
+    await goto(udid, BOARD);
+    await tapWhere(udid, "Projects");
+    await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+    await goto(udid, BOARD);
+    await Bun.sleep(600);
+    if ((await labels(udid)).some(isDock)) throw new Error("the dock is still there after Projects");
+    // Back up for the next check.
+    await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    return "closed";
   });
   await check("swiping the docked sheet down sends it away", async () => {
     await dock();

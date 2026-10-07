@@ -22,6 +22,13 @@ struct NewSessionScreen: View {
     }
 }
 
+/// How many times New session is on screen (appeared less disappeared), for a disappearance to
+/// check a moment later.
+@MainActor
+private final class OnScreen {
+    var count = 0
+}
+
 private struct NewSessionEditorView: View {
     let projectId: String?
     let reopen: String?
@@ -40,6 +47,7 @@ private struct NewSessionEditorView: View {
     @State private var newPath = ""
     @State private var releaseKey: (@MainActor () -> Void)?
     @State private var uploader = PromptAttachmentUploader()
+    @State private var onScreen = OnScreen()
 
     var body: some View {
         let state = store.state
@@ -96,14 +104,22 @@ private struct NewSessionEditorView: View {
                 if needs { optionsOpen = true }
             }
             .onAppear {
+                onScreen.count += 1
                 // Reopening a draft: keep its key resolved while the store may not have it yet.
                 if let reopen, releaseKey == nil { releaseKey = store.watchKey(reopen) }
             }
             .onDisappear {
-                // Swiping the sheet down (or any other way the screen goes) saves the draft.
-                editor?.screenGone()
+                onScreen.count -= 1
                 releaseKey?()
                 releaseKey = nil
+                // Swiping the sheet down (or any other way the screen goes) saves the draft. Not
+                // when it's back a moment later: a system sheet coming up takes its content off
+                // screen and puts it back, and closing the draft then would drop what's typed next.
+                let editor = editor, onScreen = onScreen
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    if onScreen.count <= 0 { editor?.screenGone() }
+                }
             }
     }
 

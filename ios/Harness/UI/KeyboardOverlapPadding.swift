@@ -3,9 +3,9 @@ import UIKit
 
 /// Pads a scrolling form's bottom safe area by however much of it the on-screen keyboard covers,
 /// so it can scroll its last rows (and a growing field's cursor, PromptTextEditor.followCaret) up
-/// above the keyboard. New session's form in the iPhone's ticket sheet (TicketSheetLayer) never
-/// gets the keyboard in its safe area: its scroll view's bottom inset stays at the home indicator's
-/// with the keyboard up, so the form had nowhere to scroll to and the cursor went behind it.
+/// above the keyboard. Where a form never gets the keyboard in its
+/// safe area, its scroll view's bottom inset stays at the home indicator's with the keyboard up, so
+/// the form has nowhere to scroll to and the cursor goes behind it.
 ///
 /// Where SwiftUI does avoid the keyboard, the form already ends above it and this adds nothing.
 /// Once the keyboard is up it scrolls the focused text view's cursor into sight, since the room to
