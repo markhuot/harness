@@ -220,6 +220,8 @@ private struct NewSessionEditorView: View {
         }
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+        // Room to scroll the prompt's cursor above the keyboard as it grows (followsCaret).
+        .keyboardOverlapPadding()
         .modifier(PromptAttachmentDrop(target: editor, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: editor, uploader: uploader))
     }
