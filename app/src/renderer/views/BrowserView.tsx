@@ -778,7 +778,6 @@ export function BrowserView({
               }
             }}
           />
-          {state?.title && <span className="browser-title truncate">{state.title}</span>}
         </div>
         {size && (
           <button

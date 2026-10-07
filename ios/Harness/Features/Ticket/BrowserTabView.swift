@@ -79,7 +79,6 @@ struct BrowserTabView: View {
             tabStrip
             toolbar
             if sizeRowOpen, let size = model.state?.size { sizeRow(size) }
-            if let title = shownTitle { status(title) }
             stage
         }
         .background(BrowserKeyField(focused: $typing, onText: model.typed, onKey: model.press)
@@ -293,21 +292,6 @@ struct BrowserTabView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-    }
-
-    /// The page's title, when it says more than the address bar does.
-    private var shownTitle: String? {
-        guard let title = model.state?.title, !title.isEmpty, title != model.state?.url else { return nil }
-        return title
-    }
-
-    private func status(_ title: String) -> some View {
-        HStack(spacing: 6) {
-            Text(title).font(.scaled(size: 12.5)).foregroundStyle(c.text2).lineLimit(1)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
     }
 
     // MARK: Stage

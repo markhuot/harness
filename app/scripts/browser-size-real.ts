@@ -59,7 +59,7 @@ try {
   await js(`document.querySelector("[data-testid=browser-size-toggle]").click()`);
   await until("size controls", () => a.exists("[data-testid=browser-responsive]"), 5000);
 
-  const title = () => js<string>(`document.querySelector(".browser-title")?.textContent ?? ""`);
+  const title = () => js<string>(`document.querySelector(".browser-tab-select[aria-selected=true] .truncate")?.textContent ?? ""`);
   const titleIs = (want: string | RegExp) =>
     until(`page title ${want}`, async () => (typeof want === "string" ? (await title()) === want : want.test(await title())), 15000).then(
       () => true,

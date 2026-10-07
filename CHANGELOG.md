@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- A ticket's browser shows the page title only on its tab. The gray copy of it above the page is
+  gone.
+
 ### Fixed
 
 - On iPhone, closing a docked ticket or New session with its ✕ slides it away. It no longer grows
