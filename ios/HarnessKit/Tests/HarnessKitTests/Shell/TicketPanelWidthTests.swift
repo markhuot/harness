@@ -61,7 +61,7 @@ struct TicketPanelWidthTests {
     @Test func degenerateInputsDoNotDivideByZero() {
         #expect(TicketPanelWidth.width(windowWidth: 0, stored: nil) == 0)
         #expect(TicketPanelWidth.fraction(forWidth: 300, windowWidth: 0) == 0.80)
-        #expect(TicketPanelWidth.fraction(windowWidth: 1000, stored: .nan) == 0.80)
+        #expect(TicketPanelWidth.fraction(windowWidth: 1366, stored: .nan) == 800.0 / 1366)
         #expect(TicketPanelWidth.clamp(.infinity) == 0.80)
     }
 }
