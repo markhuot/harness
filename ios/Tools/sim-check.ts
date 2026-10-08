@@ -1365,13 +1365,17 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     return `${kid.key} back, on its pushed screen`;
   });
   await check("the expanded sheet's toolbar menu switches without docking", async () => {
-    const button = await until("the toolbar's stack button", () => findElement(udid, switcher), 4000).catch(() => null);
-    if (!button) {
-      await shot(udid, "dock-toolbar-light");
-      throw new Error("no stack button in the expanded sheet's toolbar");
-    }
-    await tapWhere(udid, switcher);
-    await until("the menu", async () => (await labels(udid)).some(row(b.key)), 5000);
+    await Bun.sleep(600); // the sheet finishes coming up
+    await shot(udid, "dock-toolbar-light");
+    // AXe's tree leaves out the glass toolbar items: the stack button sits left of the ticket's
+    // More button, at the navigation bar's height.
+    const button = await findElement(udid, switcher);
+    if (button) await tapWhere(udid, switcher);
+    else await axe("tap", "-x", String(Math.round(W - 102)), "-y", "100", "--udid", udid);
+    await until("the menu", async () => (await labels(udid)).some(row(b.key)), 5000).catch(async (e) => {
+      await say("after a tap on the toolbar's stack button");
+      throw e;
+    });
     await shot(udid, "dock-toolbar-menu-light");
     await tapWhere(udid, row(b.key));
     moved(udid);
@@ -1387,7 +1391,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const y = String(Math.round(bar.frame.y + bar.frame.height / 2));
     const swipe = (from: number, to: number) =>
       axe("swipe", "--start-x", String(Math.round(from)), "--start-y", y, "--end-x", String(Math.round(to)), "--end-y", y, "--duration", "0.25", "--udid", udid);
-    await swipe(W * 0.75, W * 0.2);
+    // Clear of the stack button and ✕ at the bar's end, which would take the touch as a menu press.
+    await swipe(W * 0.6, W * 0.1);
     const second = await until("the next ticket on top", async () => {
       const t = await top();
       return t && t !== first ? t : null;
@@ -1396,7 +1401,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     if ((await count()) !== 2) throw new Error("the swipe changed the count");
-    await swipe(W * 0.25, W * 0.8);
+    await swipe(W * 0.15, W * 0.65);
     await until("the first back on top", async () => (await top()) === first, 5000);
     return `${first.split(",")[0]} → ${second.split(",")[0]} → back`;
   });
