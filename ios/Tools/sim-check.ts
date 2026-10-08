@@ -969,7 +969,9 @@ const isDock = (l: string) => l.endsWith(", docked");
  * docked. Returns the dock's label.
  */
 async function dockSheet(udid: string): Promise<string> {
-  const { width, height } = (await tree(udid))[0]!.frame;
+  // The screen's size from the tallest top-level element: with New session coming up, the first
+  // one can be a zero-height stand-in, which put the drag's end above the screen.
+  const { width, height } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
   const x = String(Math.round(width / 2));
   await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "1.2", "--udid", udid);
   return until("the dock", async () => (await labels(udid)).find(isDock), 6000);
