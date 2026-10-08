@@ -27,7 +27,9 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
     public var group: Patch<String>
     /// null → settings.permissionMode
     public var permissionMode: Patch<PermissionMode>
-    /// Per-driver default models; PATCH merges per driver, null clears one
+    /// Per-phase driver + model; PATCH merges per phase, null clears one (it inherits settings')
+    public var phaseModels: PhaseModelsPatch?
+    /// Legacy: the Work model for defaultDriver. With defaultDriver, sets Planning, Work and Review.
     public var defaultModels: [String: String?]?
     /// A valid branch name; null or "" → inherit settings.baseBranch
     public var baseBranch: Patch<String>
@@ -38,7 +40,7 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
         path: String, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
         useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, group: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
-        defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
+        phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
     ) {
         self.path = path
@@ -52,6 +54,7 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
         self.color = color
         self.group = group
         self.permissionMode = permissionMode
+        self.phaseModels = phaseModels
         self.defaultModels = defaultModels
         self.baseBranch = baseBranch
         self.completionAction = completionAction
@@ -78,7 +81,9 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
     public var group: Patch<String>
     /// null → settings.permissionMode
     public var permissionMode: Patch<PermissionMode>
-    /// Per-driver default models; PATCH merges per driver, null clears one
+    /// Per-phase driver + model; PATCH merges per phase, null clears one (it inherits settings')
+    public var phaseModels: PhaseModelsPatch?
+    /// Legacy: the Work model for defaultDriver. With defaultDriver, sets Planning, Work and Review.
     public var defaultModels: [String: String?]?
     /// A valid branch name; null or "" → inherit settings.baseBranch
     public var baseBranch: Patch<String>
@@ -89,7 +94,7 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
         path: String? = nil, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
         useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, group: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
-        defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
+        phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
     ) {
         self.path = path
@@ -103,6 +108,7 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
         self.color = color
         self.group = group
         self.permissionMode = permissionMode
+        self.phaseModels = phaseModels
         self.defaultModels = defaultModels
         self.baseBranch = baseBranch
         self.completionAction = completionAction
@@ -116,9 +122,12 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     public var spec: String
     public var title: String?
     public var kind: TicketKind?
+    /// Shorthand: Planning, Work and Review on this driver (with `model`). Phases it leaves out inherit.
     public var driver: String?
-    /// Model for this ticket's runs (null / omitted → defaults)
+    /// Model for `driver` (null / omitted → the driver's default)
     public var model: Patch<String>
+    /// The ticket's own per-phase choices (over the driver/model shorthand); the rest inherit
+    public var phaseModels: PhaseModelsPatch?
     /// Permission mode override (null / omitted → project → settings)
     public var permissionMode: Patch<PermissionMode>
     /// Skip planning and start work right away (default true for quick sessions)
@@ -153,7 +162,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
 
     public init(
         projectId: String, spec: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
-        model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent, start: Bool? = nil,
+        model: Patch<String> = .absent, phaseModels: PhaseModelsPatch? = nil, permissionMode: Patch<PermissionMode> = .absent, start: Bool? = nil,
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
         parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
@@ -165,6 +174,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         self.kind = kind
         self.driver = driver
         self.model = model
+        self.phaseModels = phaseModels
         self.permissionMode = permissionMode
         self.start = start
         self.useWorktree = useWorktree
@@ -194,10 +204,12 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var specNote: String?
     /// manual moves from the board
     public var status: TicketStatus?
-    /// Changing the driver clears the model unless `model` is given too
+    /// Legacy shorthand: sets Planning, Work and Review to this driver (with `model`, else its default)
     public var driver: String?
-    /// Applies from the next run (claude-code resumes the conversation with the new --model)
+    /// Legacy shorthand: the model for Planning, Work and Review (on `driver`, else the current Work driver)
     public var model: Patch<String>
+    /// Per-phase choices, merged per phase; null clears one. Applies from the next run.
+    public var phaseModels: PhaseModelsPatch?
     /// Applies from the next tool call / run; null → inherit from the project / settings
     public var permissionMode: Patch<PermissionMode>
     /// Base branch override; null / "" → inherit the project's. Applies from the next run.
@@ -229,7 +241,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
 
     public init(
         title: String? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
-        model: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
+        model: Patch<String> = .absent, phaseModels: PhaseModelsPatch? = nil, permissionMode: Patch<PermissionMode> = .absent,
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
         kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil,
@@ -242,6 +254,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         self.status = status
         self.driver = driver
         self.model = model
+        self.phaseModels = phaseModels
         self.permissionMode = permissionMode
         self.baseBranch = baseBranch
         self.branch = branch
@@ -398,6 +411,8 @@ public struct WatcherBody: Codable, Sendable, Equatable {
 /// PATCH /settings: `Partial<Settings>`. Maps merge per key (a nil value clears that entry);
 /// `anthropicApiKey: .null` / `claudeOauthToken: .null` remove the stored key / token.
 public struct SettingsPatch: Codable, Sendable, Equatable {
+    /// Merged per phase; null clears one (it falls back to the Work driver's default)
+    public var phaseModels: PhaseModelsPatch?
     public var defaultDriver: String?
     public var maxConcurrentRuns: Int?
     public var permissionMode: PermissionMode?
@@ -420,13 +435,14 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var notifications: NotificationSettingsPatch?
 
     public init(
-        defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
+        phaseModels: PhaseModelsPatch? = nil, defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
         classifier: ClassifierBackend? = nil, defaultModels: [String: String?]? = nil,
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
         prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil
     ) {
+        self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
         self.permissionMode = permissionMode

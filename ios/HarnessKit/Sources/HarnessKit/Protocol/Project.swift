@@ -9,10 +9,12 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     public var path: String
     /// Next sequence number handed out for a native ticket key
     public var nextSeq: Int
-    /// Default driver id for new tickets in this project (falls back to settings.defaultDriver)
+    /// The project's driver and model per run phase (tickets inherit a phase they don't set; a phase
+    /// left out here inherits settings'). nil from an older service.
+    public var phaseModels: PhaseModels?
+    /// Legacy: the Work choice's driver (null when Work is inherited from settings)
     @Nullable public var defaultDriver: String?
-    /// Default model per driver id for new runs of this project's tickets (overrides
-    /// settings.defaultModels; a ticket's own model overrides this). Absent → settings default.
+    /// Legacy: the Work choice's model, keyed by its driver ({} when inherited or the driver default)
     public var defaultModels: [String: String]
     /// When the project path is a git repo, give each ticket its own worktree + branch
     public var useWorktrees: Bool
@@ -57,7 +59,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     public var updatedAt: Timestamp
 
     public init(
-        id: String, key: String, name: String, path: String, nextSeq: Int, defaultDriver: String? = nil,
+        id: String, key: String, name: String, path: String, nextSeq: Int, phaseModels: PhaseModels? = nil, defaultDriver: String? = nil,
         defaultModels: [String: String] = [:], useWorktrees: Bool, isGit: Bool? = nil,
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
@@ -69,6 +71,7 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         self.name = name
         self.path = path
         self.nextSeq = nextSeq
+        self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.defaultModels = defaultModels
         self.useWorktrees = useWorktrees

@@ -31,6 +31,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   instead of trying to resume the other driver's session.
 - The `Run started` status line names the driver when a phase runs on a different one than the
   ticket's Work driver.
+- sim-check's ticket-model check and screenshots now drive the per-phase Models sheet (pick a
+  Work model, then Inherit) instead of the old single Model picker.
 
 ## [app-20261008.1757](https://github.com/markhuot/harness/releases/tag/app-20261008.1757) - 2026-10-08
 

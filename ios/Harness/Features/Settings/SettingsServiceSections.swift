@@ -1,11 +1,11 @@
 import HarnessKit
 import SwiftUI
 
-// Settings sections that edit the service: Drivers (with the default model), General,
+// Settings sections that edit the service: Drivers (with the per-phase models), General,
 // Permissions, Triage.
 
 /// Every driver with its status, each opening its own settings (DriverSettingsScreen), and the
-/// app's default model right under them. The screen reloads the list on every reconnect.
+/// app's per-phase models right under them. The screen reloads the list on every reconnect.
 struct SettingsDriversSection: View {
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
@@ -22,17 +22,10 @@ struct SettingsDriversSection: View {
             }
             ForEach(drivers) { d in row(d, isDefault: settings?.defaultDriver == d.id) }
             if let settings {
-                let models = ModelSettings(settings)
-                SettingsRow(label: "Default model", hint: "Used for new sessions unless the project or ticket picks its own.") {
-                    DriverModelPicker(
-                        value: Models.settingsChoice(models),
-                        resolved: Watchers.TriageChoice(driver: settings.defaultDriver, model: nil),
-                        title: "Default model",
-                        defaultLabel: "Driver default"
-                    ) { choice in
+                SettingsRow(label: "Models", hint: "The driver and model each run phase uses unless the project or ticket picks its own.") {
+                    PhaseModelPicker(value: settings.phaseModels, inherited: nil) { patch in
                         guard let api = store.api else { return }
-                        let patch = Models.settingsChoicePatch(choice, models)
-                        actions.perform { _ = try await api.updateSettings(patch) }
+                        actions.perform { _ = try await api.updateSettings(SettingsPatch(phaseModels: patch)) }
                     }
                 }
             }
@@ -41,7 +34,7 @@ struct SettingsDriversSection: View {
                 Task { await model.reloadDrivers(store, actions) }
             }
         } footer: {
-            Text("Open a driver for its sign-in and models. Tickets and projects can pick their own model; the default applies when they don't.")
+            Text("Open a driver for its sign-in. Tickets and projects can pick their own models; the choices below apply when they don't.")
         }
     }
 

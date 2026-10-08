@@ -716,6 +716,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | MarkdownView | Content/MarkdownView.swift | Markdown | `MarkdownView(text:, size: = 15, color: = nil, linkContext: = FileLinkContext())` |
 | CodeBlockView | Content/CodeBlockView.swift | Markdown / File viewer | `CodeBlockView(code:, language: = nil, showLineNumbers: = false, highlightLines: ClosedRange<Int>? = nil)` |
 | DriverModelPicker | Pickers/DriverModelPicker.swift | Pickers | `DriverModelPicker(value:, resolved:, title:, defaultLabel:, onlyDriver:, disabled:, inheritedModel:, onChange:)` (Watchers.TriageChoice) |
+| PhaseModelPicker | Pickers/PhaseModelPicker.swift | Ticket, project and app settings | `PhaseModelPicker(value: PhaseModels?, inherited: PerPhase<PhaseChoice>?, title:, disabled:, onChange: (PhaseModelsPatch) -> Void)` (Models.phaseMatrix) |
 | ModelPicker | Pickers/ModelPicker.swift | Pickers | `ModelPicker(driver:, value:, inherited:, defaultLabel:, plainDefault:, title:, disabled:, onChange: (String?) -> Void)` |
 | PermissionPicker | Pickers/PermissionPicker.swift | Pickers | `PermissionPicker(value: PermissionMode?, inherited:, disabled:, onChange:)` |
 | BranchPicker | Pickers/BranchPicker.swift | Pickers | `BranchPicker(projectId:, value:, defaultLabel:, newLabel:, title:, disabled:, onChange: (String?, BranchInfo?) -> Void)` |
@@ -842,8 +843,9 @@ What the hosting screens (Ticket detail, New session, Settings, Project settings
 - **Selects.** `SelectMenu` is the app's select: a `Menu` of checkmark Toggles (subtitles,
   disabled rows, an actions section headed by the problem line) whose trigger, `SelectTrigger`,
   shows the value in the accent color with a spinner, a warning or the ⌃⌄ glyph. ModelPicker and
-  PermissionPicker are built on it. DriverModelPicker and BranchPicker use the same trigger, but
-  open a `PickerSheet`. That sheet draws its own header (Cancel, the title and an accessory) instead
+  PermissionPicker are built on it. DriverModelPicker, PhaseModelPicker and BranchPicker use the same trigger, but
+  open a `PickerSheet`. PhaseModelPicker's sheet has a radio column per run phase and stays open
+  after a pick. That sheet draws its own header (Cancel, the title and an accessory) instead
   of toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" by label.
 - **Model lists** come from `store.sharedModelCache`, one `ModelListCache` per store
   (PickerClient.swift). `store.pickerClient` is the store's client as a `PickerClient`
@@ -1005,13 +1007,13 @@ native-pattern difference, not a missing feature.
 | Inbox: watcher strip, Retry now, error expand, sessions, Inbox zero | screens/Inbox | Features/Inbox/InboxScreen, HarnessKit InboxLogic | done |
 | Triage item: outcome, Open KEY, transcript, file-link scope | screens/Inbox, app/inbox/[id] | TriageScreen | done |
 | New session: project, kind, prompt (@, /), Options, Start/Plan first, drafts, Cancel choices | screens/NewSession, lib/newSession, lib/draftSync | Features/NewSession/NewSessionScreen, HarnessKit NewSessionEditor/DraftSync | done (Cancel asks with an alert; differs) |
-| Pickers: selects, model, permission, driver+model sheet, branch sheet, project color | ui/selects, ui/DriverModelPicker, ui/BranchPicker, ui/ProjectColor, lib/modelSheet | Features/Pickers/* | done |
+| Pickers: selects, model, permission, driver+model sheet, per-phase model sheet, branch sheet, project color | ui/selects, ui/DriverModelPicker, ui/BranchPicker, ui/ProjectColor, lib/modelSheet | Features/Pickers/* | done |
 | File viewer: header, menu, File/Diff, ranges, windowed colors, errors, pull to refresh | screens/FileViewer, lib/fileViewer | Features/Files/*, HarnessKit FileViewerRules/FileViewerLoader | done |
 | Markdown, code blocks, file links + scope, attachments row and viewer | ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments | Features/Content/* | done (code copies by long-press; differs) |
 | Syntax highlighting | lib/highlight | HarnessHighlight, Highlight/HighlightedText | done |
 | Settings: Macs (Connect, Rename, Forget, Rotate token), network, appearance + themes | screens/Settings, lib/themePicker | Features/Settings/SettingsScreen, SettingsAppearance | done |
-| Settings: drivers (each opens its screen) + default model, general, permissions, triage | screens/Settings (HARNESS-157) | SettingsServiceSections | done |
-| Driver screen: status, Log in, review model, Anthropic API key | screens/DriverSettings, app/driver/[id] | Features/Settings/DriverSettingsScreen | done |
+| Settings: drivers (each opens its screen) + per-phase models, general, permissions, triage | screens/Settings (HARNESS-157) | SettingsServiceSections | done |
+| Driver screen: status, Log in, Anthropic API key | screens/DriverSettings, app/driver/[id] | Features/Settings/DriverSettingsScreen | done |
 | Settings: prompts summary, watchers (menu, enable), projects | screens/Settings | SettingsListSections | done |
 | Project settings: identifier rename preview, color, folder, agents, completion, Remove | screens/ProjectSettings | ProjectSettingsScreen | done |
 | Project groups (HARNESS-269, after the RN app): group boards (`group:<name>` scope, Done paging and search by `group=`, regroup paging reset), the Group picker in project settings, New session defaulting into the group | — (desktop: shared/src/projectGroups.ts, state/groups.ts, state/paging.ts) | Logic/ProjectGroups, State/Paging, Shell/SidebarRow, Features/Pickers/GroupPicker, ProjectSettingsScreen, BoardScreen | done (fixtures: projectGroups, statePaging groupScenarios) |

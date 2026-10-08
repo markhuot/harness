@@ -70,6 +70,12 @@ public enum Drafts {
             if !patch.model.isPresent { next.model = nil }
         }
         if patch.model.isPresent { next.model = Branches.nonEmpty(patch.model.optional) }
+        if let phases = patch.phaseModels {
+            let merged = Phases.mergePhaseModels(t.phaseModels, phases)
+            next.phaseModels = merged
+            if let work = merged.work { next.driver = work.driver }
+            next.model = merged.work?.model
+        }
         if patch.permissionMode.isPresent { next.permissionMode = patch.permissionMode.optional }
         if patch.baseBranch.isPresent { next.baseBranch = Patch(blankToNil(patch.baseBranch.optional)) }
         if patch.branch.isPresent { next.requestedBranch = Patch(blankToNil(patch.branch.optional)) }
@@ -100,6 +106,7 @@ public enum Drafts {
             && (t.promptAttachments ?? []).isEmpty
             && t.kind == .task
             && choiceDriver(t, project, settings) == nil
+            && !Phases.hasPhaseModels(t.phaseModels)
             && t.permissionMode == nil
             && t.useWorktree.optional == nil
             && Branches.nonEmpty(t.requestedBranch.optional) == nil
@@ -120,6 +127,7 @@ public enum Drafts {
             kind: t.kind,
             driver: Branches.nonEmpty(t.driver),
             model: Patch(t.model),
+            phaseModels: Phases.hasPhaseModels(t.phaseModels) ? t.phaseModels.map(PhaseModelsPatch.init) : nil,
             permissionMode: Patch(t.permissionMode),
             start: false,
             useWorktree: project.isGit == false ? .null : Patch(t.useWorktree.optional),
@@ -142,7 +150,13 @@ public enum Drafts {
         if !Branches.jsEqual(next.spec, prev.spec) { p.spec = next.spec }
         if next.kind != prev.kind { p.kind = next.kind }
         if !Branches.jsEqual(next.driver, prev.driver) { p.driver = next.driver }
-        if !optionalEqual(next.model, prev.model) || (p.driver != nil && Branches.nonEmpty(next.model) != nil) { p.model = Patch(next.model) }
+        if let phases = phaseModelsDiff(prev.phaseModels, next.phaseModels) {
+            // The per-phase choices carry the driver and model; the legacy fields only follow them.
+            p.phaseModels = phases
+            p.driver = nil
+        } else if !optionalEqual(next.model, prev.model) || (p.driver != nil && Branches.nonEmpty(next.model) != nil) {
+            p.model = Patch(next.model)
+        }
         if next.permissionMode != prev.permissionMode { p.permissionMode = Patch(next.permissionMode) }
         if next.useWorktree.optional != prev.useWorktree.optional { p.useWorktree = Patch(next.useWorktree.optional) }
         if !optionalEqual(next.requestedBranch.optional, prev.requestedBranch.optional) { p.branch = Patch(next.requestedBranch.optional) }
@@ -154,6 +168,13 @@ public enum Drafts {
             p.promptAttachments = PromptAttachments.inputs(next.promptAttachments ?? [])
         }
         return p == UpdateTicketBody() ? nil : p
+    }
+
+    /// The per-phase patch taking `prev`'s own choices to `next`'s (null clears a phase), or nil when none changed.
+    static func phaseModelsDiff(_ prev: PhaseModels?, _ next: PhaseModels?) -> PhaseModelsPatch? {
+        var out = PhaseModelsPatch()
+        for p in Phase.allCases where !Phases.samePhaseChoice(prev?[p], next?[p]) { out[p] = Patch(next?[p]) }
+        return out.isEmpty ? nil : out
     }
 
     /// Which TicketSettings rows show, and which can change, for a ticket (a draft or not).
@@ -180,8 +201,6 @@ public enum Drafts {
 
         /// Anything can change: the ticket isn't done
         public var editable: Bool
-        /// The driver can't change mid-run: the Model menu offers only this driver's models
-        public var onlyDriver: String?
         /// The ticket works (or will work) in a worktree of its own
         public var worktree: Bool
         /// The Branch row. A draft always shows it on a git project, since picking the project
@@ -190,9 +209,8 @@ public enum Drafts {
         /// The Base branch row: only with a worktree (nothing merges otherwise)
         public var base: Base
 
-        public init(editable: Bool, onlyDriver: String?, worktree: Bool, branch: Branch, base: Base) {
+        public init(editable: Bool, worktree: Bool, branch: Branch, base: Base) {
             self.editable = editable
-            self.onlyDriver = onlyDriver
             self.worktree = worktree
             self.branch = branch
             self.base = base
@@ -206,7 +224,6 @@ public enum Drafts {
         let gitProject = project != nil && project?.isGit != false
         return TicketSettingsRows(
             editable: editable,
-            onlyDriver: t.busy ? t.driver : nil,
             worktree: worktree,
             branch: draft
                 ? .init(show: gitProject, editable: editable, offerCheckout: true)
@@ -325,13 +342,20 @@ public enum Drafts {
     /// e.g. ["Sonnet 5", "Read only", "main · no worktree", "Skip agent review"]. Empty when nothing does.
     public static func newSessionOptionsSummary(_ t: Ticket, project: Project, settings: DraftSettings?, labels: OptionsSummaryLabels = .init()) -> [String] {
         var out: [String] = []
-        if let driver = Branches.nonEmpty(choiceDriver(t, project, settings)) {
-            let model = t.model
-            let text = Branches.nonEmpty(labels.model?(driver, model) ?? nil)
+        func name(_ driver: String, _ model: String?) -> String {
+            Branches.nonEmpty(labels.model?(driver, model) ?? nil)
                 ?? Branches.nonEmpty(model)
                 ?? Branches.nonEmpty(labels.driver?(driver))
                 ?? driver
-            out.append(text)
+        }
+        if let own = t.phaseModels, Phases.hasPhaseModels(own) {
+            // The phases the draft picks itself: Work unlabelled first, then the rest by name.
+            for p in Phase.allCases {
+                guard let c = own[p], p == .work || !Phases.samePhaseChoice(c, own.work) else { continue }
+                out.append(p == .work ? name(c.driver, c.model) : "\(p.label): \(name(c.driver, c.model))")
+            }
+        } else if let driver = Branches.nonEmpty(choiceDriver(t, project, settings)) {
+            out.append(name(driver, t.model))
         }
         if let mode = t.permissionMode, !mode.rawValue.isEmpty { out.append(permissionModeLabel(mode)) }
         if project.isGit != false {

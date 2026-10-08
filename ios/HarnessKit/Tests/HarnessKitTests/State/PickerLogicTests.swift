@@ -51,6 +51,14 @@ struct PickerLogicTests {
         #expect(PickerLogic.choiceDriverIds(drivers, value: .init(driver: nil, model: nil), resolved: .init(driver: nil, model: nil), onlyDriver: "") == ["claude", "dummy"])
     }
 
+    @Test func phaseDriversAreSignedInPlusPickedAndInheritedWithoutRepeats() {
+        let drivers = [Self.driver("claude"), Self.driver("codex", authenticated: false), Self.driver("dummy")]
+        let value = PhaseModels(review: PhaseChoice(driver: "codex", model: nil))
+        let inherited = PerPhase { _ in PhaseChoice(driver: "gone", model: nil) }
+        #expect(PickerLogic.phaseDriverIds(drivers, value: value, inherited: inherited) == ["claude", "dummy", "codex", "gone"])
+        #expect(PickerLogic.phaseDriverIds(drivers, value: nil, inherited: nil) == ["claude", "dummy"])
+    }
+
     @Test func choiceStatusSpinsOnlyWhileAListHasNoDataAndNamesTheFirstFailure() {
         let ok = DriverModels(driverId: "a", models: [], fetchedAt: 0)
         let lists: [String: ModelListState] = [
@@ -158,9 +166,8 @@ struct PickerLogicTests {
         t.busy = true
         t.branch = nil
         t.baseBranch = .absent
-        let editable = Drafts.TicketSettingsRows(editable: true, onlyDriver: nil, worktree: true, branch: .init(show: true, editable: true, offerCheckout: false), base: .init(show: true, editable: true))
+        let editable = Drafts.TicketSettingsRows(editable: true, worktree: true, branch: .init(show: true, editable: true, offerCheckout: false), base: .init(show: true, editable: true))
         var h = PickerLogic.ticketSettingsHints(t, rows: editable)
-        #expect(h.model == "Applies from the next run. The driver can't change while a run is going.")
         #expect(h.branch == "Until work starts")
         #expect(h.base == "Inherited")
 
@@ -170,7 +177,6 @@ struct PickerLogicTests {
         var locked = editable
         locked.branch.editable = false
         h = PickerLogic.ticketSettingsHints(t, rows: locked)
-        #expect(h.model == "Applies from the next run")
         #expect(h.branch == nil)
         #expect(h.base == "Applies from the next run")
         t.branch = nil
