@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, swiping an open ticket away no longer nudges the board behind it, and the sheet no
+  longer stutters as it goes. Dragging the docked ticket up or away leaves the board still too.
+
 ## [app-20261008.0100](https://github.com/markhuot/harness/releases/tag/app-20261008.0100) - 2026-10-08
 
 ### Added
