@@ -310,7 +310,10 @@ chat (Review or Done → In progress) is the one move that keeps the session (`k
 chat is mid-run and already started fresh when the ticket entered Review or Done, so it keeps
 working in its own conversation, which becomes the In progress session; its later
 `submit_for_review` clears it as usual. Review and complete runs (`FRESH_RUN_KINDS`) always start
-fresh (an independent reviewer; a completion needs only its prompt) and never write state back. A
+fresh (an independent reviewer; a completion needs only its prompt) and never write state back.
+Since each phase can run on its own driver, the saved state records the driver that wrote it
+(`sessions.driver_state_driver`, migration 38); a run on a different driver starts fresh instead
+of handing one driver another's conversation. A
 run saves its state only while no clearing move has happened since it started (an in-memory epoch
 per session), so the work run whose own `submit_for_review` moved the ticket can't write its
 conversation back. A `null` state is a fresh start on every driver (claude-code: no `--resume`;
@@ -847,8 +850,8 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `submit_for_review` | work, conductor, chat | `{ note, spec_is_up_to_date, skip_agent_review?, skip_human_review? }`: `spec_is_up_to_date` is advertised as required and must be `true` (anything else is refused with a message saying to update the spec first); `note` covers this round only; Activity shows its first line (see "Activity"). `skip_agent_review` / `skip_human_review` set the ticket's `skipAgentReview` / `skipHumanReview` first (turning one on is refused when the other review would be skipped too; see "Skipping the agent review" and "Skipping the human review") |
 | `review_decision` | review | `{ decision: "approve"\|"request_changes", notes }`: any length; Activity shows the first line, which must state the outcome on its own (see "Activity") |
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
-| `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url?, attachments?: string[] }`. `attachments` sets `promptAttachments` (paths that exist now, relative ones against the run's cwd; see "Prompt attachments"). `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
-| `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
+| `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, phase_models?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url?, attachments?: string[] }`. `attachments` sets `promptAttachments` (paths that exist now, relative ones against the run's cwd; see "Prompt attachments"). `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
+| `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, phase_models?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
@@ -871,10 +874,10 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
 | `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
-| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, color?, group?, base_branch? }` |
+| `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, phase_models?, color?, group?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
-| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
+| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, phase_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
 | `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab?, device?, width?, height?, wait_for? }` → names the tab and its size; `tab` with `new_tab` is refused; the size is set before the page loads. See "Browser tabs" |
 | `browser_tabs` | ″ | `{ tab? }` → one line per tab: number, title, URL, mode and size, and its failed-request and console-error counts; with `tab`, that tab in full (state, size, scroll, requests failed-first, console). A suspended tab isn't reopened |
@@ -1397,14 +1400,34 @@ change invalidates. `GET /drivers` does not include models (listing can spawn th
 - **dummy**: `dummy-fast` (default) and `dummy-slow` (10× the per-word delay, ≥ 50 ms); any other
   model fails the run.
 
-Which model a run uses is resolved when the run starts (`orchestrator/models.ts`), first set wins:
-review runs → `settings.reviewModels[driver]`; `ticket.model`; `project.defaultModels[driver]`;
-`settings.defaultModels[driver]`; else `null` (the driver's own default). It reaches the driver
-as `RunRequest.model` (claude-code `--model`, anthropic-api `model`). Changing a ticket's model
-applies from its next run; claude-code resumes the same conversation with the new `--model`
-(verified against the real CLI). Changing a ticket's driver clears its model. Both settings maps
-and `project.defaultModels` PATCH-merge per driver (`null` clears one). Migration 3 moved the old
-`claudeModel` / `anthropicModel` settings into `defaultModels`.
+**Per-phase choices.** Each run phase (`PHASES`: `plan`, `work`, `review`, `complete`; conductor
+and chat runs use `work`) has its own driver + model choice, `PhaseChoice { driver, model | null }`
+(`null` = the driver's default), held in `phaseModels` on app settings, each project and each
+ticket (`shared/src/phases.ts`). A phase resolves on its own, most specific first: ticket →
+project → settings; a level without a choice for that phase inherits. Settings always resolve
+every phase: an unset phase uses the settings' Work driver with its default model. The run's
+**driver** is resolved when the run is enqueued (the run row stores it); its **model** when the
+run starts (`resolveRunChoice` in `orchestrator/models.ts`), so a settings change applies to the
+next run while a running one keeps what it started with. The model reaches the driver as
+`RunRequest.model` (claude-code `--model`, anthropic-api `model`); claude-code resumes the same
+conversation with a new `--model` (verified against the real CLI). Standalone sessions (no ticket)
+keep their own driver and take the project/settings Work model only when it's on that driver.
+`Run started (kind · model)` names the driver too when it differs from the ticket's Work driver.
+
+Out of the box only **Complete** has a choice: Haiku on the default driver (`haiku` on
+claude-code, `claude-haiku-5-5` on anthropic-api), seeded once by migration 38 with `INSERT OR
+IGNORE`, so a user's later clear sticks. PATCH bodies and tools merge `phaseModels` /
+`phase_models` per phase (`null` clears one); validation checks phase names, known drivers and
+model ids. Migration 38 also turned the old choices into phases: the settings, project and ticket
+driver + model became that level's Plan/Work/Review choice, `settings.reviewModels` the settings'
+Review choice, and a ticket's driver that matched what it would inherit anyway was dropped.
+
+The legacy fields stay on the wire, derived on read: `ticket.driver` (resolved Work driver) and
+`ticket.model` (its own Work model), `project.defaultDriver` / `defaultModels` and
+`settings.defaultDriver` / `defaultModels` / `reviewModels` from the Work (and Review) choices.
+Writing them sets Plan/Work/Review (or Review); a settings `defaultDriver` write also moves the
+Complete Haiku default to the new driver. Watchers fall back to the settings Work driver through
+`settings.defaultDriver`.
 
 Triage runs have no ticket or project, so they resolve through the watcher instead. The driver is
 fixed when the triage session is created: `watcher.driver`, else `settings.watcherDriver`, else

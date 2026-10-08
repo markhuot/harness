@@ -9,6 +9,29 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Pick the driver and model for each run phase (Planning, Work, Review and Complete) in app
+  Settings, project settings and a ticket's settings, on the Mac and on iPhone and iPad. One
+  dropdown lists every driver's models with a radio column per phase, so a ticket can plan on one
+  driver and work on another. A phase you leave alone inherits from the project, then the app.
+  Conductor and chat runs use the Work choice. Changes apply to the next run, even while one is
+  going.
+- Completion runs use Haiku out of the box, which makes landing approved work (merge or PR, then
+  clean up) far cheaper. Change or clear it in Settings.
+- Agents can set per-phase choices with `phase_models` on `create_ticket`, `update_ticket`,
+  `update_settings` and the project tools.
+
+### Changed
+
+- The single default model and each driver's Review model in Settings are replaced by the
+  per-phase dropdown. Your existing choices carry over as the Planning, Work and Review choices,
+  and your review model as the Review choice.
+- A run on a different driver from the one that saved the ticket's conversation starts fresh
+  instead of trying to resume the other driver's session.
+- The `Run started` status line names the driver when a phase runs on a different one than the
+  ticket's Work driver.
+
 ## [app-20261008.1757](https://github.com/markhuot/harness/releases/tag/app-20261008.1757) - 2026-10-08
 
 ### Added
