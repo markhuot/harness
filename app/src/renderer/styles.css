@@ -659,6 +659,11 @@ kbd {
 .spec-doc .md h3,
 .spec-doc .md h4 {
   font-size: 14.5px;
+  /* Sets each section apart from the one above. */
+  margin-top: 2em;
+}
+.spec-doc .md > :first-child {
+  margin-top: 0;
 }
 .spec-doc .md h1 {
   font-size: 16px;

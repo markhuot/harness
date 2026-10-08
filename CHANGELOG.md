@@ -24,8 +24,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - Specs are easier to read on the Mac, iPhone and iPad. The text is a size larger (14 px on the Mac,
-  16 pt on iOS) with a line height of 1.5, and headings and code grow to match. Summaries and the
-  transcript keep their size.
+  16 pt on iOS) with a line height of 1.5, and headings and code grow to match. Each heading after
+  the first has twice its own height of space above it, so sections stand apart. Summaries and the
+  transcript keep their size and spacing.
 
 ### Fixed
 

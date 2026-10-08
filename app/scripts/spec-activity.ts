@@ -125,6 +125,10 @@ try {
     "a fence under a numbered step renders as code inside that step, followed by the step's paragraph",
     await js<boolean>(`(() => { const li = [...document.querySelectorAll('.spec-doc ol > li')].find((e) => e.textContent.startsWith('Wire it up')); return !!li?.querySelector('pre')?.textContent.includes('bun run app') && li.querySelector(':scope > .code-block ~ p')?.textContent === 'Then flip the switch.'; })()`),
   );
+  check(
+    "spec headings get 2em above them, except the first",
+    await js<boolean>(`(() => { const [first, ...rest] = document.querySelectorAll('.spec-doc .md > h2'); const gap = (h) => getComputedStyle(h).marginTop; return gap(first) === '0px' && rest.length > 0 && rest.every((h) => parseFloat(gap(h)) === 2 * parseFloat(getComputedStyle(h).fontSize)); })()`),
+  );
   check("the spec body is 14px with a 1.5 line height", await js<boolean>(`(() => { const s = getComputedStyle(document.querySelector('.spec-doc .md')); return s.fontSize === '14px' && s.lineHeight === '21px'; })()`));
   await until("inline image loaded", () => js<boolean>(`[...document.querySelectorAll('.spec-doc img')].some((i) => i.complete && i.naturalWidth > 0)`), 10000);
   await shot("1-spec");

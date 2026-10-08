@@ -27,6 +27,9 @@ struct MarkdownView: View {
     var size: CGFloat = 15
     /// Line height as a multiple of `size` (the Spec tab reads at 1.5).
     var lineHeight: CGFloat = 1.45
+    /// Space above a heading that follows other blocks, in multiples of the heading's size (the Spec
+    /// tab sets sections apart with 2). 0 leaves the usual gap between blocks.
+    var headingSpace: CGFloat = 0
     var color: Color?
     /// Where relative file links open (the ticket's folder, else the project's).
     var linkContext = FileLinkContext()
@@ -55,11 +58,13 @@ struct MarkdownView: View {
                 let diff = MarkdownCache.shared.diff(previous, text)
                 ForEach(diff.indices, id: \.self) { i in
                     MarkdownDiffBlockView(diff: diff[i], style: style)
+                        .padding(.top, i > 0 ? headingLead(Self.headingLevel(diff[i]), style) : 0)
                 }
             } else {
                 let blocks = MarkdownCache.shared.blocks(text)
                 ForEach(blocks.indices, id: \.self) { i in
                     MarkdownBlockView(block: blocks[i], style: style)
+                        .padding(.top, i > 0 ? headingLead(Self.headingLevel(blocks[i]), style) : 0)
                 }
             }
         }
@@ -107,6 +112,25 @@ struct MarkdownView: View {
         )
     }
 
+    /// The space `headingSpace` adds over the stack's 8 pt and the heading's own 2 pt, so a heading sits
+    /// headingSpace × its size below the block before it.
+    private func headingLead(_ level: Int?, _ style: MarkdownStyle) -> CGFloat {
+        guard let level, headingSpace > 0 else { return 0 }
+        return max(0, (headingSpace * style.headingSize(level)).rounded() - 10)
+    }
+
+    private static func headingLevel(_ block: Markdown.Block) -> Int? {
+        if case let .h(level, _) = block { level } else { nil }
+    }
+
+    private static func headingLevel(_ diff: MarkdownDiff.DiffBlock) -> Int? {
+        switch diff {
+        case let .plain(_, block): headingLevel(block)
+        case let .edit(.h(level, _)): level
+        case .edit: nil
+        }
+    }
+
     /// A ticket key links when the store can resolve it (or it's in a project's key space);
     /// look-alikes such as UTF-8 stay text. Without a store nothing links.
     private var linkable: (String) -> Bool {
@@ -140,6 +164,8 @@ struct MarkdownStyle {
     static let bullets = ["•", "◦", "▪"]
 
     var font: Font { .scaled(size: size) }
+    /// A heading's text size: two points up for levels 1–2, half a point for 3–4.
+    func headingSize(_ level: Int) -> CGFloat { level <= 2 ? size + 2 : size + 0.5 }
     /// A line height of round(size × lineHeight), as extra spacing over the font's own line height.
     var lineSpacing: CGFloat { (size * lineHeight).rounded() - size * 1.2 }
 
@@ -369,7 +395,7 @@ private struct MarkdownBlockView: View {
         case let .p(text):
             MarkdownRichText(text: text, style: style)
         case let .h(level, text):
-            style.paragraph(style.inline(text, size: level <= 2 ? style.size + 2 : style.size + 0.5, bold: true))
+            style.paragraph(style.inline(text, size: style.headingSize(level), bold: true))
                 .padding(.top, 2)
         case let .ul(items):
             MarkdownListView(items: items, ordered: false, start: 1, depth: depth, style: style)
@@ -657,7 +683,7 @@ private struct MarkdownEditBlockView: View {
         case let .p(runs):
             MarkdownDiffRichText(runs: runs, style: style)
         case let .h(level, runs):
-            style.paragraph(style.diffInline(runs, size: level <= 2 ? style.size + 2 : style.size + 0.5, bold: true))
+            style.paragraph(style.diffInline(runs, size: style.headingSize(level), bold: true))
                 .padding(.top, 2)
         case let .quote(runs):
             MarkdownDiffRichText(runs: runs, style: style, color: c.text2)
