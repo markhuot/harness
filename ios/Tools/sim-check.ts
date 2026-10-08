@@ -1432,7 +1432,12 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if (listed.length !== 10) throw new Error(`the menu lists ${listed.length} docked tickets before "2 more": ${listed.join(", ")}`);
     if (l.some(row(kid.key))) throw new Error(`the oldest, ${kid.key}, is listed before "2 more"`);
     await tapWhere(udid, "2 more");
-    await until("the rest", async () => (await labels(udid)).some(row(kid.key)), 5000);
+    await Bun.sleep(600);
+    await shot(udid, "dock-switcher-more-light");
+    await until("the rest", async () => (await labels(udid)).some(row(kid.key)), 5000).catch(async (e) => {
+      await say("after \"2 more\"");
+      throw e;
+    });
     await tapWhere(udid, row(kid.key));
     await until(`${kid.key} on top`, async () => (await top())?.startsWith(`${kid.key}, `), 5000);
     await tapWhere(udid, isDock);
@@ -1519,24 +1524,30 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     for (const t of many.slice(5)) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
     await dockSheet(udid);
     const twenty = await footprint();
-    // The decisive count: ticket screens alive in the app (one TicketDetailHeroCollapse each).
-    const heap = await sh(["heap", pid], { allowFail: true, quiet: true });
-    const screens = heap.split("\n").filter((x) => x.includes("TicketDetailHeroCollapse")).map((x) => Number(x.trim().split(/\s+/)[0]));
-    const mounted = screens.length ? Math.max(...screens) : null;
+    // The decisive count: ticket screens' models alive in the app (a TicketDetailHeroCollapse each).
+    const screens = async () => {
+      const heap = await sh(["heap", pid], { allowFail: true, quiet: true });
+      const counts = heap.split("\n").filter((x) => x.includes("TicketDetailHeroCollapse")).map((x) => Number(x.trim().split(/\s+/)[0]));
+      return counts.length ? Math.max(...counts) : null;
+    };
+    const withTwenty = await screens();
     if ((await count()) !== 20) throw new Error(`${await count()} docked, not 20`);
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
     await goto(udid, BOARD);
     // The same twenty tickets visited, none docked: for scale, what five live screens cost.
     const none = await footprint();
+    const withNone = await screens();
+    // Whatever outlives a closed screen is there with none docked too; the dock adds only its live five.
+    const mounted = withTwenty !== null && withNone !== null ? withTwenty - withNone : null;
     const grew = twenty - five;
     // Five live screens cost about 20 MB over none; fifteen more mounted would be far past this.
     const sizes = `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20 (+${grew.toFixed(1)}), ${none.toFixed(1)} MB with the same tickets closed`;
-    if (mounted !== null && mounted > 5) throw new Error(`${mounted} ticket screens alive with 20 docked, not the 5 live ones (${sizes})`);
+    if (mounted !== null && mounted > 5) throw new Error(`${mounted} more ticket screens alive with 20 docked than with none, not the 5 live ones (${sizes})`);
     // The footprint is noisy (caches from the fifteen screens opened on the way); fifteen more
     // mounted screens would be far past this.
     if (grew > 60) throw new Error(`the app grew ${grew.toFixed(1)} MB from 5 docked to 20 (${sizes})`);
-    return `${mounted ?? "?"} ticket screens alive; ${sizes}`;
+    return `${mounted ?? "?"} more ticket screens alive with 20 docked than none (${withTwenty} vs ${withNone}); ${sizes}`;
   });
 }
 
