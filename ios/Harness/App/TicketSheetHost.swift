@@ -89,7 +89,11 @@ struct TicketSheetHost: View {
                 dockInset.top = f.minY
             }
         }
-        .background { SheetFlickTracker(flick: flick) }
+        .background {
+            SheetFlickTracker(flick: flick, swipes: router.ticketSheetState == .docked && !listing && router.dockedSheets.count > 1) {
+                TicketDock.step(router, $0)
+            }
+        }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
         // Switching tickets mustn't leave the keyboard up for the one now hidden.
         .onChange(of: current?.id) { resignFirstResponder() }
@@ -245,12 +249,41 @@ extension EnvironmentValues {
 /// Touches that pass through to the board behind never reach it.
 private struct SheetFlickTracker: UIViewRepresentable {
     let flick: SheetFlick
+    /// Docked with more than one ticket: a horizontal swipe on the sheet switches tickets.
+    var swipes = false
+    var onSwipe: (Router.DockStep) -> Void = { _ in }
 
     func makeUIView(context: Context) -> Probe { Probe(flick: flick) }
-    func updateUIView(_ view: Probe, context: Context) {}
+    func updateUIView(_ view: Probe, context: Context) {
+        view.onSwipe = onSwipe
+        view.swipesEnabled = swipes
+    }
 
     final class Probe: UIView, UIGestureRecognizerDelegate {
         let flick: SheetFlick
+        var onSwipe: (Router.DockStep) -> Void = { _ in }
+        var swipesEnabled = false {
+            didSet { [left, right].forEach { $0.isEnabled = swipesEnabled } }
+        }
+        /// The dock's swipes, on the sheet's container like the pan: a SwiftUI gesture on the
+        /// cards kept the system sheet's own pan from taking a swipe down.
+        private lazy var left = swipe(.left)
+        private lazy var right = swipe(.right)
+
+        private func swipe(_ direction: UISwipeGestureRecognizer.Direction) -> UISwipeGestureRecognizer {
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(swiped))
+            swipe.direction = direction
+            swipe.cancelsTouchesInView = false
+            swipe.delaysTouchesBegan = false
+            swipe.delaysTouchesEnded = false
+            swipe.delegate = self
+            swipe.isEnabled = swipesEnabled
+            return swipe
+        }
+
+        @objc private func swiped(_ swipe: UISwipeGestureRecognizer) {
+            onSwipe(swipe.direction == .left ? .next : .previous)
+        }
         private lazy var pan: UIPanGestureRecognizer = {
             let pan = UIPanGestureRecognizer(target: self, action: #selector(panned))
             pan.cancelsTouchesInView = false
@@ -270,9 +303,9 @@ private struct SheetFlickTracker: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
-            pan.view?.removeGestureRecognizer(pan)
+            for g in [pan, left, right] { g.view?.removeGestureRecognizer(g) }
             guard window != nil, let container = presentedController?.presentationController?.containerView else { return }
-            container.addGestureRecognizer(pan)
+            for g in [pan, left, right] { container.addGestureRecognizer(g) }
         }
 
         /// The view controller the sheet presents: the outermost one above this view.
@@ -384,10 +417,6 @@ struct TicketDock: View {
         .padding(.horizontal, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(.snappy, value: sheets.map(\.id))
-        // UIKit swipes rather than a SwiftUI drag, which would take vertical drags from the system
-        // sheet too (its swipe down to close).
-        .gesture(DockSwipe(direction: .left) { swipe(.next) })
-        .gesture(DockSwipe(direction: .right) { swipe(.previous) })
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ticket-dock-sheet")
         .accessibilityAction(named: "Next docked ticket") { swipe(.next) }
@@ -399,33 +428,12 @@ struct TicketDock: View {
         router.restoreDock()
     }
 
-    private func swipe(_ step: Router.DockStep) {
+    private func swipe(_ step: Router.DockStep) { TicketDock.step(router, step) }
+
+    /// The next or previous docked ticket on top: a swipe along the dock (SheetFlickTracker) or
+    /// VoiceOver's actions.
+    static func step(_ router: Router, _ step: Router.DockStep) {
         guard router.dockedSheets.count > 1 else { return }
         withAnimation(.snappy) { router.activateAdjacentSheet(step) }
-    }
-}
-
-/// A swipe along the dock bar: only a horizontal swipe recognizes, alongside the system sheet's own
-/// pan, so a drag down still closes the docked ticket.
-private struct DockSwipe: UIGestureRecognizerRepresentable {
-    let direction: UISwipeGestureRecognizer.Direction
-    let action: () -> Void
-
-    func makeUIGestureRecognizer(context: Context) -> UISwipeGestureRecognizer {
-        let swipe = UISwipeGestureRecognizer()
-        swipe.direction = direction
-        swipe.cancelsTouchesInView = false
-        swipe.delegate = context.coordinator
-        return swipe
-    }
-
-    func handleUIGestureRecognizerAction(_ recognizer: UISwipeGestureRecognizer, context: Context) {
-        if recognizer.state == .ended { action() }
-    }
-
-    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
-
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     }
 }

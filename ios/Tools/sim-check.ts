@@ -1048,8 +1048,10 @@ async function dockSheet(udid: string): Promise<string> {
 
 /** Swipes the docked ticket sheet down once: it closes the ticket on top. */
 async function swipeDockDown(udid: string, dock: AXNode) {
+  // From near the card's top: AXe stops a drag at the screen's edge, and from a card's middle
+  // (now that the dock grows with its cards) too little of it is left to throw the sheet away.
   const x = String(Math.round(dock.frame.x + dock.frame.width / 2));
-  const y = Math.round(dock.frame.y + dock.frame.height / 2);
+  const y = Math.round(dock.frame.y + 4);
   await axe("swipe", "--start-x", x, "--start-y", String(y), "--end-x", x, "--end-y", String(y + 160), "--duration", "0.1", "--udid", udid);
 }
 
@@ -1152,8 +1154,14 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const l = await labels(udid);
     if (!onBoard(l)) throw new Error("the board isn't showing over the dock");
     // The dock sits below the board's bottom bar, not over it.
-    // The docked sheet's own frame: its cards' container.
-    const bar = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-sheet") ?? (await findElement(udid, isDock));
+    // The docked sheet's own frame, from its card: the card's open button starts 6pt in from the
+    // sheet's edge and 8pt below its top (TicketDock.topInset), and its ✕ ends 10pt in.
+    const all = await nodes(udid);
+    const cardOpen = all.find((n) => n.AXLabel && isDock(n.AXLabel));
+    const cardClose = all.find((n) => n.AXUniqueId === "ticket-dock-close");
+    const bar = cardOpen && cardClose
+      ? { ...cardOpen, frame: { x: cardOpen.frame.x - 6, y: cardOpen.frame.y - 8, width: cardClose.frame.x + cardClose.frame.width + 10 - (cardOpen.frame.x - 6), height: cardOpen.frame.height } }
+      : null;
     const newSession = await findElement(udid, (x) => x === "New session");
     if (bar && newSession && newSession.frame.y + newSession.frame.height > bar.frame.y)
       throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(bar.frame.y)})`);
