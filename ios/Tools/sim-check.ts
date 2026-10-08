@@ -1154,13 +1154,13 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const l = await labels(udid);
     if (!onBoard(l)) throw new Error("the board isn't showing over the dock");
     // The dock sits below the board's bottom bar, not over it.
-    // The docked sheet's own frame, from its card: the card's open button starts 6pt in from the
-    // sheet's edge and 8pt below its top (TicketDock.topInset), and its ✕ ends 10pt in.
+    // The docked sheet's own frame, from its card: a glass capsule as wide and tall as the docked
+    // sheet, whose open button starts at its leading edge and whose ✕ ends 10pt in.
     const all = await nodes(udid);
     const cardOpen = all.find((n) => n.AXLabel && isDock(n.AXLabel));
     const cardClose = all.find((n) => n.AXUniqueId === "ticket-dock-close");
     const bar = cardOpen && cardClose
-      ? { ...cardOpen, frame: { x: cardOpen.frame.x - 6, y: cardOpen.frame.y - 8, width: cardClose.frame.x + cardClose.frame.width + 10 - (cardOpen.frame.x - 6), height: cardOpen.frame.height } }
+      ? { ...cardOpen, frame: { x: cardOpen.frame.x, y: cardOpen.frame.y, width: cardClose.frame.x + cardClose.frame.width + 10 - cardOpen.frame.x, height: cardOpen.frame.height } }
       : null;
     const newSession = await findElement(udid, (x) => x === "New session");
     if (bar && newSession && newSession.frame.y + newSession.frame.height > bar.frame.y)
@@ -1439,8 +1439,16 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     await shot(udid, "dock-list-light");
-    // Most recent first: the conductor's sheet last.
-    if (!card(kid.key)(listed.at(-1)!)) throw new Error(`the list ends with "${listed.at(-1)}", not ${kid.key}`);
+    // The most recent at the bottom, as in the dock: the conductor's sheet, the oldest, first.
+    if (!card(kid.key)(listed[0]!)) throw new Error(`the list starts with "${listed[0]}", not ${kid.key}`);
+    // It opens scrolled to the bottom: scroll up to the oldest.
+    const { height: Hs } = (await tree(udid))[0]!.frame;
+    for (let i = 0; i < 3; i++) {
+      const n = await findElement(udid, card(kid.key));
+      if (n && n.frame.y > 60 && n.frame.y + n.frame.height < Hs - 20) break;
+      await axe("swipe", "--start-x", String(Math.round(W / 2)), "--start-y", String(Math.round(Hs * 0.35)), "--end-x", String(Math.round(W / 2)), "--end-y", String(Math.round(Hs * 0.8)), "--duration", "0.5", "--udid", udid);
+      await Bun.sleep(600);
+    }
     await tapWhere(udid, card(kid.key));
     moved(udid);
     await until("the child, mounted again at its path", async () => {
@@ -1554,7 +1562,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
 
 /**
  * `k`'s iPad card sits in the bottom-right corner of the area left of `edge`: 16pt in (its ✕ ends
- * 4pt inside it), near the bottom, and about 320pt wide where the board's column (from `left`, the
+ * 10pt inside it), near the bottom, and about 320pt wide where the board's column (from `left`, the
  * sidebar's edge) has room.
  */
 async function cardInCorner(udid: string, k: string, edge: number, H: number, left = 0) {
@@ -1562,7 +1570,7 @@ async function cardInCorner(udid: string, k: string, edge: number, H: number, le
   const open = all.find((n) => n.AXLabel?.startsWith(`${k}, `) && isDock(n.AXLabel));
   const close = all.find((n) => n.AXLabel === `Close ${k}`);
   if (!open || !close) throw new Error(`no card for ${k}`);
-  const right = close.frame.x + close.frame.width + 4;
+  const right = close.frame.x + close.frame.width + 10;
   if (Math.abs(edge - 16 - right) > 4) throw new Error(`${k}'s card ends at x=${Math.round(right)}, not 16pt in from ${Math.round(edge)}`);
   const below = H - (open.frame.y + open.frame.height);
   if (below < 0 || below > 70) throw new Error(`${k}'s card's bottom is ${Math.round(below)}pt above the window's bottom`);
