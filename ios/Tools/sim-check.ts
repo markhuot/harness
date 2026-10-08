@@ -1536,10 +1536,13 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
     await goto(udid, BOARD);
-    const grew = twenty - five;
+    // The same twenty tickets visited, none docked: what's left is the board's data and caches,
+    // not the dock.
+    const none = await footprint();
+    const dock = twenty - none;
     // A mounted ticket screen costs several MB; 15 of them would be far past this.
-    if (grew > 40) throw new Error(`the app grew ${grew.toFixed(1)} MB from 5 docked to 20 (${five.toFixed(1)} → ${twenty.toFixed(1)} MB)`);
-    return `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20 (+${grew.toFixed(1)})`;
+    if (dock > 20) throw new Error(`20 docked cost ${dock.toFixed(1)} MB over none (${five.toFixed(1)} MB with 5, ${twenty.toFixed(1)} with 20, ${none.toFixed(1)} with none)`);
+    return `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20, ${none.toFixed(1)} MB with the same tickets closed`;
   });
 }
 
