@@ -447,17 +447,17 @@ and Start session. While it's on top it hands its `cancel()` to the panel throug
 `TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
 or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
 registered they just dismiss. Docking, pop-out and the pill's Close don't ask, and the draft is
-saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it. Docked, the panel stays
-mounted (drafts, scroll and path survive) but off the edge and `disabled`, and `TicketDockPill`
-stands in for it on the trailing edge, Picture in Picture style, with the iPhone dock's
-`ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores it, and
-its context menu closes it. The pill floats over the board without reserving space. The
-composer measures its bottom gap from the screen's edge in the iPhone sheet
-(`\.concentricBottomGap` 0); the panel leaves it unset, so the composer sits on the home
-indicator's inset or the keyboard. MainTabs sets the Router's `sheetIsBesideBoard` from the size
-class, so presence counts the board while the panel is up. A size-class change hands the same
-sheet across (same id, path, state and draft): the system sheet goes away without a dismissal
-and the panel picks it up, or the other way round.
+saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it.
+Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
+and `TicketDockPill` stands in for it on the trailing edge, Picture in Picture style, with the
+iPhone dock's `ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores
+it, and its context menu closes it. The pill floats over the board without reserving space. The
+composer measures its bottom gap from the screen's edge in the iPhone sheet (`\.concentricBottomGap`
+0); the panel leaves it unset, so the composer sits on the home indicator's inset or the keyboard.
+MainTabs sets the Router's `sheetIsBesideBoard` from the size class, so presence counts the board
+while the panel is up. A size-class change hands the same sheet across (same id, path, state and
+draft): the system sheet goes away without a dismissal and the panel picks it up, or the other way
+round.
 
 The board inside it has two layouts, also picked by `horizontalSizeClass`, so an iPad in a narrow
 Split View or a small Stage Manager window gets the phone's:
