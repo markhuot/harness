@@ -867,7 +867,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `browser_upload` | ″ | `{ selector?, ref?, frame?, paths, tab?, wait_for? }` → sets files on a file input, or on the file chooser clicking the element opens; paths must be under the working directory or the scratch folder |
 | `browser_eval` | ″ | `{ expression, frame?, tab?, wait_for? }` → JSON from Chrome's deep serialization (elements as `tag#id.class`, cycles as `"[Circular]"`); a navigation mid-expression is an error naming the new URL |
 | `browser_screenshot` | ″ | `{ save_to?, full_page?, selector?, ref?, frame?, tab?, wait_for? }` → image of the viewport; `full_page` captures the whole scrollable page (up to 16384 CSS px tall), `selector` or `ref` just one element and `frame` alone an iframe's box, both without resizing the tab; with `save_to` the PNG is also written to a file and the text result names the path. Confined, see "Spec revisions and attachments" |
-| `browser_wait` | ″ | `{ selector?, state?, text?, frame?, url?, idle?, timeout?, tab? }`: the `wait_for` wait without an action. See "Browser waits and scripts" |
+| `browser_wait` | ″ | `{ selector?, state?, text?, count?, value?, attribute?, frame?, url?, idle?, timeout?, tab? }`: the `wait_for` wait without an action. See "Browser waits and scripts" |
 | `browser_run` | ″ | `{ script, tab?, timeout?, wait? }` → starts a script job, returns its number and log after `wait` s. See "Browser waits and scripts" |
 | `browser_run_status` | ″ | `{ job, wait? }` → the job's state and its new log lines; a failure adds the script line, step, URL and a screenshot |
 | `browser_run_stop` | ″ | `{ job }` |
@@ -1763,9 +1763,14 @@ lists what was added and whether each is on.
 Agents wait for a page instead of sleeping, and run multi-step flows as scripts (HARNESS-278).
 
 - **One wait.** `WaitCondition` (`browser/wait.ts`) is `{ selector?, state?: visible | hidden |
-  gone | enabled, text?, frame?, url?, idle?, timeout? }`, every field given holding at once
-  (`frame`: selector and text are checked in that iframe; alone, the iframe has a document), and
-  `BrowserManager.waitFor` is its only implementation. It polls every 100 ms with a fresh
+  gone | enabled, text?, count?, value?, attribute?: { name, value? }, frame?, url?, idle?,
+  timeout? }`, every field given holding at once (`frame`: selector and text are checked in that
+  iframe; alone, the iframe has a document). With a selector, `count` is exactly that many
+  matches (with the text, when given), and `value` and `attribute` hold when any match's `.value`,
+  or attribute, is that. These three don't ask for visibility unless `state` is given, and a
+  timeout reports the last count and the first match's value or attribute. A `ref`, set only by a
+  script's `expect({ ref })`, stands in for selector and frame: each tick looks the element up again
+  (`callOn`), and a stale ref counts as gone. `BrowserManager.waitFor` is its only implementation. It polls every 100 ms with a fresh
   `Runtime.evaluate` (never one long in-page promise), so a navigation costs a tick, not the wait.
   `enabled` is visible and not `:disabled`, `aria-disabled` or inside `[aria-busy=true]`; `idle`
   is no main-frame loading and no request in flight for 500 ms, ignoring WebSockets, EventSource
@@ -1789,9 +1794,24 @@ Agents wait for a page instead of sleeping, and run multi-step flows as scripts 
   run's scratch folder and starts it in its own process: `bun browser/script-child.ts <file>`
   in a checkout, `harness-service browser-script <file>` in Harness.app. The child has no CDP: its
   globals (`click`, `type`, `keys`, `select`, `upload`, `wait`, `evaluate`, `content`,
-  `snapshot`, `screenshot`, `open`, `resize`, `url`, `log`, `sleep`) send calls over Bun IPC, and the service runs each through the browser tool of
+  `snapshot`, `screenshot`, `open`, `resize`, `url`, `log`, `sleep`, and `expect`'s page matchers) send calls over Bun IPC, and the service runs each through the browser tool of
   the same name with the job's tab, so waits and errors behave exactly as for the agent. A failed
   call rejects in the script with the tool's text and a stack made at the call site.
+- **Expectations.** A script is written as do, then expect. `expect` is `bun:test`'s own (Jest's
+  matchers and Expected/Received messages; it imports outside the test runner and in the compiled
+  executable), not a hand-rolled one. Its `expect.extend` adds page matchers named after
+  Playwright's web-first assertions: `toBeVisible`, `toBeHidden`, `toBeEnabled`, `toContainText`,
+  `toHaveCount`, `toHaveValue`, `toHaveAttribute` on an element (a selector, `{ selector, frame }`
+  or `{ ref }`), and `toHaveURL` on the `page` global. Each one is a wait condition (`state`,
+  `text`, `count`, `value`, `attribute`, `url`), sent over IPC as an `expect` call and waited on
+  with `waitFor`, so it adds no polling of its own. Its timeout defaults to 5 s (Playwright's), not
+  the wait's 15. `.not` uses Jest's `isNot` where a wait can express the inverse (visible ↔
+  hidden; `.not.toContainText` is the text `gone`). Elsewhere it fails with the matcher to write
+  instead. The matcher returns `pass: false` with the wait's summary, and Bun makes that error at
+  the `expect()` call, so the stack holds the script line. The log shows a passing expectation as
+  one line (`expect("#cart").toContainText("2 items") ✓`). A failure's message leads with the
+  expectation, and its step is the expectation. A plain `expect(value)` logs nothing until it
+  fails.
 - **Jobs.** One running job per tab. A job's log (at most 2,000 lines kept) holds its start,
   each step and its result, the script's `console.*`/`log()` and raw stdout/stderr, and the tab's
   page events. `browser_run` blocks up to `wait` s (default 20, max 60) or until the job ends;

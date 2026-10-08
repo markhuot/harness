@@ -9,6 +9,22 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Agents can write a browser script as a list of steps, each followed by what the page should show
+  next, like `await click(".add"); await expect(".cart-count").toContainText("1")`. The check waits
+  for the page to catch up. If it never does, the script stops on that line and the agent sees what
+  it expected, what the page showed instead, and a screenshot. The checks use the same `expect`
+  that Jest and Bun tests use, with page checks named after Playwright's.
+- Agents can wait for a page to show an exact number of matching items, a field holding a given
+  value, or an element with a given attribute, from any browser tool. For example, an agent can
+  click Clear and wait until the list is empty.
+
+### Changed
+
+- Every change to Harness now gets a changelog entry, including changes only agents see and
+  internal changes to tests and build scripts.
+
 ### Fixed
 
 - On iPhone, reopening a docked ticket no longer leaves its message bar raised above where it

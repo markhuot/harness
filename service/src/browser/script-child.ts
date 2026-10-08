@@ -2,10 +2,12 @@
 // Chrome: each page call (click, wait, evaluate…) goes to the service over IPC, which runs it
 // through the same browser tools the agent calls, so a reload between steps is just another step.
 // console.* and log() go back over IPC as log lines; the script's default export is its result.
+// expect is bun:test's, with page matchers that wait in the page the same way.
 //
 //   bun service/src/browser/script-child.ts <script.mjs>     (a checkout)
 //   harness-service browser-script <script.mjs>              (Harness.app)
 
+import { expect } from "bun:test";
 import { pathToFileURL } from "node:url";
 import { inspect } from "node:util";
 
@@ -77,7 +79,38 @@ const api = {
   log: (...args: unknown[]) => send({ type: "log", level: "log", text: format(args) }),
   sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
 };
-Object.assign(globalThis, api);
+/** expect(page): the page itself, for toHaveURL. */
+const page = Object.freeze({ toString: () => "page" });
+
+/**
+ * The page matchers on Bun's expect, named after Playwright's web-first assertions. Each sends its
+ * target, arguments and whether it was .not to the service, which waits for the matching condition
+ * (tools/browser-run.ts) and answers with the wait's summary when it never held. Bun makes the
+ * failure's error at the expect() call, so its stack points at the script line.
+ */
+const PAGE_MATCHERS = ["toBeVisible", "toBeHidden", "toBeEnabled", "toContainText", "toHaveCount", "toHaveValue", "toHaveAttribute", "toHaveURL"] as const;
+
+/** An argument as JSON: page as { page: true }, a RegExp as { regexp: "/re/flags" }. */
+const wire = (v: unknown): unknown => (v === page ? { page: true } : v instanceof RegExp ? { regexp: String(v) } : v);
+
+expect.extend(
+  Object.fromEntries(
+    PAGE_MATCHERS.map((name) => [
+      name,
+      async function (this: { isNot: boolean }, received: unknown, ...args: unknown[]) {
+        const isNot = this.isNot;
+        try {
+          await call("expect", [wire(received), name, args.map(wire), isNot]);
+          return { pass: !isNot, message: () => "" };
+        } catch (e) {
+          return { pass: isNot, message: () => (e as Error).message };
+        }
+      },
+    ]),
+  ),
+);
+
+Object.assign(globalThis, api, { expect, page });
 for (const level of ["log", "info", "warn", "error", "debug"] as const) {
   console[level] = (...args: unknown[]) => send({ type: "log", level, text: format(args) });
 }
@@ -101,7 +134,8 @@ try {
   send({
     type: "done",
     ok: false,
-    error: String(err?.message ?? e),
+    // Bun starts a custom matcher's message with blank lines.
+    error: String(err?.message ?? e).replace(/^\n+/, ""),
     ...(typeof err?.stack === "string" ? { stack: err.stack } : {}),
     ...(err instanceof StepError ? { step: err.step } : {}),
   });
