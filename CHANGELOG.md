@@ -9,6 +9,23 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPhone and iPad you can dock as many tickets as you like and switch between them from the
+  dock. On iPhone, the stack button in the dock (or in the open ticket's toolbar) lists them, and a
+  swipe along the dock moves to the next one. Docked tickets are still there after you reopen the
+  app.
+
+### Changed
+
+- Opening a ticket while another is open or docked now adds it to the dock instead of replacing
+  the other one. The dock's ✕, or a swipe down, closes only the ticket on top.
+- Docked tickets show their ref and as much of their title as fits. On iPad they wait as wider
+  pills in the bottom-right corner, stacked with the newest at the bottom, instead of on the right
+  edge.
+- sim-check's `--sheets` run (iPhone and `--ipad`) now checks several docked tickets: switching,
+  closing one at a time, the "+N" overflow and the dock surviving a relaunch.
+
 ## [app-20261008.0736](https://github.com/markhuot/harness/releases/tag/app-20261008.0736) - 2026-10-08
 
 ### Added
