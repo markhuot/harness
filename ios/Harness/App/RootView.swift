@@ -36,6 +36,13 @@ struct RootView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
             }
+            // The docked tickets survive a relaunch, on this device only (UserDefaults rather than
+            // scene storage, which is dropped when the app is swiped away). They come back docked
+            // once there's a server to show them from.
+            .onChange(of: app.store != nil, initial: true) { _, connected in
+                if connected { router.restorePersistedDock(from: UserDefaults.standard) }
+            }
+            .onChange(of: router.dockedSheets) { router.savePersistedDock(to: UserDefaults.standard) }
     }
 
     @ViewBuilder private var content: some View {
@@ -90,6 +97,9 @@ private struct SceneChrome: ViewModifier {
     @State private var targets = ShortcutTargets()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.supportsMultipleWindows) private var multipleWindows
+    /// Bumped when the ticket sheet is swiped away with other tickets still docked, so the root
+    /// presents it again (docked) as a new sheet rather than keeping the one UIKit took down.
+    @State private var ticketSheetGeneration = 0
 
     /// What the bar colors depend on: both appearances' text (BarAppearance).
     private var barColorKey: String {
@@ -144,16 +154,21 @@ private struct SceneChrome: ViewModifier {
     private var ticketSheet: TicketSheet? { sizeClass == .regular ? nil : router.ticketSheet ?? router.dock }
 
     /// What the root presents: the iPhone's ticket sheet while there is one, presented or docked
-    /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. Swiping
-    /// the ticket sheet away, or UIKit dismissing it, dismisses it. A window widening to regular
-    /// width takes the system sheet down without a dismissal, so the panel carries on with it.
+    /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. The ticket
+    /// sheet is one system sheet whichever tickets it holds: adding or switching tickets swaps its
+    /// content without presenting it again. Swiping it away, or UIKit dismissing it, closes the
+    /// top ticket (`dismissSheet()`); with others left, a new sheet comes up docked with the next.
+    /// A window widening to regular width takes the system sheet down without a dismissal, so the
+    /// panel carries on with it.
     private var rootSheetBinding: Binding<RootSheet?> {
         Binding(get: {
-            if let t = ticketSheet { return .ticket(t.id) }
+            if ticketSheet != nil { return .ticket(ticketSheetGeneration) }
             return sheetBinding.wrappedValue.map(RootSheet.route)
         }, set: { new in
             guard new == nil else { return }
-            if ticketSheet != nil { router.dismissSheet() } else { router.sheet = nil }
+            guard ticketSheet != nil else { router.sheet = nil; return }
+            router.dismissSheet()
+            if router.ticketSheetState != .gone { ticketSheetGeneration += 1 }
         })
     }
 
@@ -167,7 +182,7 @@ private struct SceneChrome: ViewModifier {
     }
 }
 
-/// The root's one sheet: the ticket sheet (by its stable id) or a SheetRoute.
+/// The root's one sheet: the ticket sheet (by `ticketSheetGeneration`, not by ticket) or a SheetRoute.
 private enum RootSheet: Hashable, Identifiable {
     case ticket(Int)
     case route(SheetRoute)
@@ -202,6 +217,7 @@ struct MainTabs: View {
         }
         // Beside the board at regular width, the board still counts as on screen (presence).
         .onChange(of: sizeClass, initial: true) { _, size in router.sheetIsBesideBoard = size == .regular }
+        .modifier(DockedTicketsKeeper())
     }
 }
 

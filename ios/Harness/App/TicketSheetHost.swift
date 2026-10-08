@@ -1,14 +1,18 @@
 import HarnessKit
 import SwiftUI
 
-/// The ticket sheet (`Router.ticketSheet` / `Router.dock`) at compact width (iPhone, and a narrow
-/// iPad window; regular width is TicketPanelHost): a system sheet with two detents. At `.large`
-/// it's TicketSheetContent, the ticket (or New session) in its own NavigationStack, so a child,
-/// dep or parent pushes inside the sheet and Back returns. Dragged down to the dock detent it
-/// docks, like Mail's minimized draft: the stack stays mounted (drafts, scroll, path) but hidden,
-/// and the small sheet shows the ticket's key (TicketDock) under the board, which stays usable
+/// The ticket sheets (`Router.dockedSheets`, the top `Router.ticketSheet` / `Router.dock`) at compact
+/// width (iPhone, and a narrow iPad window; regular width is TicketPanelHost): one system sheet with
+/// two detents, whatever the number of tickets. At `.large` it's TicketSheetContent, the top ticket
+/// (or New session) in its own NavigationStack, so a child, dep or parent pushes inside the sheet
+/// and Back returns. Every live sheet (`Router.liveSheets`) keeps its stack mounted behind the top
+/// one, hidden, so switching swaps the content in place (no re-present) and keeps drafts, scroll and
+/// path; a parked one mounts again at its saved path when it comes back. Dragged down to the dock
+/// detent it docks, like Mail's minimized draft: the stacks stay mounted but hidden, and the small
+/// sheet shows the top ticket's ref and title (TicketDock) under the board, which stays usable
 /// (`presentationBackgroundInteraction`). Tapping it, or dragging it up, brings it back; swiping it
-/// down sends it away, and so does a flick down from `.large` (SheetFlick). The system does the drags, the inset and the corners, so the content's own
+/// down closes the top ticket, and so does a flick down from `.large` (SheetFlick); the next one
+/// comes back docked (RootView re-presents the sheet). The system does the drags, the inset and the corners, so the content's own
 /// gestures (the pager, the back swipe, the Browser tab, the transcript) keep theirs; the board's
 /// bottom bar takes the docked sheet's side inset (DockedSheetInset) so the two line up.
 ///
@@ -30,19 +34,27 @@ struct TicketSheetHost: View {
     var body: some View {
         let current = router.ticketSheet ?? router.dock
         let sheet = current ?? last
+        // Gone, the last one stays mounted while the sheet animates away.
+        let mounted = current == nil ? (last.map { [$0] } ?? []) : router.liveSheets
         GeometryReader { geo in
             // By height rather than state, so the bar takes over as the sheet settles at the dock.
             let docked = geo.size.height < TicketDock.height + 60
             ZStack(alignment: .top) {
-                if let sheet {
-                    stack(sheet)
-                        .opacity(docked ? 0 : 1)
-                        .allowsHitTesting(!docked)
-                        .accessibilityHidden(docked)
-                    if docked {
-                        TicketDock(sheet: sheet, open: { router.restoreDock() }, close: { router.dismissSheet() })
-                            .frame(height: geo.size.height)
-                    }
+                ForEach(mounted) { s in
+                    let isTop = s.id == sheet?.id
+                    let shown = isTop && !docked
+                    stack(s)
+                        .opacity(shown ? 1 : 0)
+                        .allowsHitTesting(shown)
+                        .accessibilityHidden(!shown)
+                        // Behind the top: no key commands (New session's Escape) either.
+                        .disabled(!isTop)
+                        .zIndex(isTop ? 1 : 0)
+                }
+                if docked, let sheet {
+                    TicketDock(sheet: sheet, open: { router.restoreDock() }, close: { router.dismissSheet() })
+                        .frame(height: geo.size.height)
+                        .zIndex(2)
                 }
             }
             // Behind the keyboard too, so its rounded corners show the sheet's background, not the
@@ -50,7 +62,7 @@ struct TicketSheetHost: View {
             .background { if !docked { c.bg.ignoresSafeArea() } }
             .onChange(of: docked) { _, docked in
                 // A docked New session mustn't keep the keyboard up over the board.
-                if docked { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+                if docked { resignFirstResponder() }
             }
             // Where the system floats the docked sheet, for the sections and the board's bar. Only
             // where it rests: a sheet under a finger (from `.large`, or the dock dragged up or
@@ -64,6 +76,8 @@ struct TicketSheetHost: View {
         }
         .background { SheetFlickTracker(flick: flick) }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
+        // Switching tickets mustn't leave the keyboard up for the one now hidden.
+        .onChange(of: current?.id) { resignFirstResponder() }
         .onChange(of: router.ticketSheetState, initial: true) { _, s in if s != .gone { lastDocked = s == .docked } }
         .presentationDetents([TicketDock.detent, .large], selection: detent)
         .presentationBackgroundInteraction(.enabled(upThrough: TicketDock.detent))
@@ -122,9 +136,15 @@ struct TicketSheetHost: View {
     }
 }
 
-/// The ticket sheet's content, the same in the iPhone's sheet (TicketSheetHost) and the iPad's
-/// side panel (TicketPanelHost): the ticket (or New session) in its own NavigationStack, bound to
-/// the sheet's path, so a child, dep or parent pushes inside it and Back returns.
+/// Drops the keyboard, wherever it is.
+@MainActor func resignFirstResponder() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+}
+
+/// A ticket sheet's content, the same in the iPhone's sheet (TicketSheetHost) and the iPad's side
+/// panel (TicketPanelHost): the ticket (or New session) in its own NavigationStack, bound to that
+/// sheet's path, so a child, dep or parent pushes inside it and Back returns. Each screen's toolbar
+/// carries the docked tickets' switcher while there's more than one.
 struct TicketSheetContent: View {
     let sheet: TicketSheet
     /// The iPhone's sheet: each screen runs to the screen's bottom edge, keeping no inset there but
@@ -138,17 +158,26 @@ struct TicketSheetContent: View {
     /// The store wraps the whole stack: pushed screens take their environment from the stack.
     var body: some View {
         RequireStore {
-            NavigationStack(path: Binding(get: { (router.ticketSheet ?? router.dock)?.path ?? [] },
-                                          set: { router.setTicketSheetPath($0) })) {
-                bottomEdge(root
+            NavigationStack(path: Binding(get: { router.dockedSheets.first { $0.id == sheet.id }?.path ?? sheet.path },
+                                          set: { router.setTicketSheetPath($0, id: sheet.id) })) {
+                screen(root
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(c.bg))
-                    .navigationDestination(for: Route.self) { bottomEdge(RouteScreen(route: $0)) }
+                    .navigationDestination(for: Route.self) { screen(RouteScreen(route: $0)) }
             }
         }
         .environment(\.inTicketSheet, true)
         // New session that became its ticket starts over as the ticket's screen.
         .id(sheet.root)
+    }
+
+    private func screen(_ screen: some View) -> some View {
+        bottomEdge(screen)
+            .toolbar {
+                if router.dockedSheets.count > 1 {
+                    ToolbarItem(placement: .topBarTrailing) { DockedTicketsButton() }
+                }
+            }
     }
 
     @ViewBuilder private func bottomEdge(_ screen: some View) -> some View {
@@ -179,6 +208,9 @@ extension EnvironmentValues {
 @Observable final class DockedSheetInset {
     var sides: CGFloat?
     var top: CGFloat?
+    /// The iPad: how much of the board's bottom the docked pill stack takes (DockedPillStack); 0
+    /// without one.
+    var pills: CGFloat = 0
 }
 
 /// Watches drags on the ticket sheet alongside the system's own, without taking any touches: a pan
@@ -245,8 +277,9 @@ private struct SheetFlickTracker: UIViewRepresentable {
 
 /// Keeps a section's screen clear of the docked ticket sheet. It goes inside the section's
 /// NavigationStack, on each screen: a safe-area inset outside the stack doesn't reach the board's
-/// own bottom bar. Not while a keyboard is up: the dock is behind it. Not in the iPad's
-/// DesktopShell either, where the docked panel is a pill floating on the window's edge.
+/// own bottom bar. Not while a keyboard is up: the dock is behind it. In the iPad's DesktopShell,
+/// room for the docked tickets' pill stack in the bottom-right corner instead
+/// (`DockedSheetInset.pills`), so the last cards scroll clear of it.
 private struct DockClearance: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.concentricScreen) private var screen
@@ -257,7 +290,9 @@ private struct DockClearance: ViewModifier {
     func body(content: Content) -> some View {
         content
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if router.showsDock && !desktop && !keyboard {
+                if desktop, let pills = dockInset?.pills, pills > 0 {
+                    Color.clear.frame(height: pills)
+                } else if router.showsDock && !desktop && !keyboard {
                     Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top))
                 }
             }
@@ -270,12 +305,17 @@ extension View {
     func dockClearance() -> some View { modifier(DockClearance()) }
 }
 
-/// The docked ticket sheet's content: the ticket on top's key (or "New session"); a tap opens it
-/// again, and the close button at its end sends it away without opening it.
+/// The docked ticket sheet's content: the top ticket's ref and as much of its title as fits (or
+/// New session); a tap opens it again, and the close button at its end closes just that ticket.
+/// With more than one docked, a stack button before the close button lists them all
+/// (DockedTicketsMenu), and a swipe along the bar moves to the next or previous one, like
+/// Safari's tab bar.
 struct TicketDock: View {
     let sheet: TicketSheet
     let open: () -> Void
     let close: () -> Void
+    @Environment(Router.self) private var router
+    @Environment(AppModel.self) private var app
     @Environment(\.palette) private var c
 
     /// The sheet's height while docked.
@@ -294,45 +334,74 @@ struct TicketDock: View {
         return max(0, screen.height - dockTop - homeIndicator)
     }
 
+    /// A drag along the bar that switches tickets: mostly sideways (so the sheet's own vertical
+    /// drag keeps its gestures), far enough or thrown.
+    static func step(translation: CGSize, predicted: CGSize) -> Router.DockStep? {
+        guard abs(translation.width) > abs(translation.height) * 2 else { return nil }
+        let dx = abs(translation.width) >= 40 ? translation.width : abs(predicted.width) >= 120 ? predicted.width : 0
+        if dx == 0 { return nil }
+        return dx < 0 ? .next : .previous
+    }
+
     var body: some View {
+        let many = router.dockedSheets.count > 1
+        let text = DockedTicketText(sheet, state: app.store?.state)
         Button(action: open) {
             HStack(spacing: 10) {
                 Image(systemName: sheet.topTicketKey == nil ? "square.and.pencil" : "rectangle.stack")
                     .foregroundStyle(c.accent)
-                Text(sheet.title)
-                    .font(.headline)
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
+                DockedTicketLabel(sheet: sheet)
+                    .id(sheet.id)
+                    .transition(.push(from: swipedFrom))
             }
             .padding(.leading, 22)
-            .padding(.trailing, 22 + Self.closeSize)
+            .padding(.trailing, 22 + Self.closeSize + (many ? Self.switcherWidth : 0))
             .padding(.top, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(.rect)
+            .clipped()
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(sheet.title), docked")
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 16)
+                .onEnded { value in
+                    guard many, let step = Self.step(translation: value.translation, predicted: value.predictedEndTranslation) else { return }
+                    swipedFrom = step == .next ? .trailing : .leading
+                    withAnimation(.snappy) { router.activateAdjacentSheet(step) }
+                },
+            isEnabled: many
+        )
+        .accessibilityLabel(text.accessibilityLabel)
         .accessibilityHint("Double-tap to open")
         .accessibilityIdentifier("ticket-dock")
+        .accessibilityAction(named: "Next docked ticket") { if many { router.activateAdjacentSheet(.next) } }
+        .accessibilityAction(named: "Previous docked ticket") { if many { router.activateAdjacentSheet(.previous) } }
         .accessibilityAction(named: "Close", close)
         // Over the open button rather than in it, so the dock still spans the sheet's width.
         .overlay(alignment: .trailing) {
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(c.text3)
-                    .frame(width: Self.closeSize, height: Self.closeSize)
-                    .contentShape(.rect)
+            HStack(spacing: 0) {
+                if many { DockedTicketsButton().frame(width: Self.switcherWidth) }
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(c.text3)
+                        .frame(width: Self.closeSize, height: Self.closeSize)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close \(sheet.title)")
+                .accessibilityIdentifier("ticket-dock-close")
             }
-            .buttonStyle(.plain)
             .padding(.trailing, 12)
             .padding(.top, 6)
-            .accessibilityLabel("Close \(sheet.title)")
-            .accessibilityIdentifier("ticket-dock-close")
         }
     }
 
+    /// Where the label slides in from on a swipe.
+    @State private var swipedFrom: Edge = .trailing
+
     /// The close button's tap target.
     private static let closeSize: CGFloat = 44
+    /// The stack button's width, room for a two-digit count.
+    private static let switcherWidth: CGFloat = 58
 }
