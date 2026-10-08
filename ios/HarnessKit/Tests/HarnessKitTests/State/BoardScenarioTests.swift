@@ -372,4 +372,25 @@ struct SubagentScenarioTests {
     func sort(_ c: Fixture.Case<[Subagent], [Subagent]>) {
         #expect(Subagents.sort(c.input).map(\.id) == c.output.map(\.id))
     }
+
+    struct FilterInput: Decodable, Sendable {
+        let list: [Subagent]
+        let filter: Subagents.Filter
+    }
+
+    @Test(arguments: Fixture.cases("stateSubagents", "filterCases", input: FilterInput.self, output: [Subagent].self))
+    func filter(_ c: Fixture.Case<FilterInput, [Subagent]>) {
+        #expect(Subagents.filter(c.input.list, c.input.filter).map(\.id) == c.output.map(\.id))
+    }
+
+    @Test(arguments: Fixture.cases("stateSubagents", "countsCases", input: [Subagent].self, output: Subagents.Counts.self))
+    func counts(_ c: Fixture.Case<[Subagent], Subagents.Counts>) {
+        #expect(Subagents.counts(c.input) == c.output)
+    }
+
+    @Test("the empty note names the kind the filter keeps")
+    func emptyNote() {
+        #expect(AgentsLogic.emptyNote(.init(agents: true)) == "No sub-agents yet")
+        #expect(AgentsLogic.emptyNote(.init(tasks: true)) == "No background tasks yet")
+    }
 }

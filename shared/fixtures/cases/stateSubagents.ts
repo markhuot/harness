@@ -1,6 +1,6 @@
 // Sub-agent state and labels (shared/src/state/subagents.ts, the subagents.test.ts cases outside
 // tabs) for HarnessKit's Subagents.swift. See ../board.ts for the scenario format.
-import { sortSubagents, subagentDuration, subagentModelLabel, subagentOpenLabel, subagentTitle, subagentTypeLabel, SUBAGENT_STATUS_LABEL, TASK_KIND_LABEL, TASK_OUTPUT_KEEP_CHARS, TASK_OUTPUT_POLL_MS } from "../../src/state";
+import { filterSubagents, sortSubagents, subagentCounts, subagentDuration, subagentModelLabel, subagentOpenLabel, subagentTitle, subagentTypeLabel, SUBAGENT_STATUS_LABEL, TASK_KIND_LABEL, TASK_OUTPUT_KEEP_CHARS, TASK_OUTPUT_POLL_MS, type SubagentFilter } from "../../src/state";
 import type { Subagent, TaskOutput } from "../../src/protocol";
 import { cases } from "../case";
 import { detail, entry, ev, scenario, sub, ticket } from "../board";
@@ -136,4 +136,25 @@ export const sortCases = cases(sortSubagents, {
     sub("s2", { status: "succeeded", startedAt: 1, updatedAt: 8 }),
     sub("s3", { startedAt: 7, updatedAt: 8 }),
   ],
+});
+
+const mixed = [
+  sub("a1"),
+  sub("b1", { kind: "bash", command: "make" }),
+  sub("a2", { kind: "agent" }),
+  sub("m1", { kind: "monitor", command: "tail -f log" }),
+];
+
+export const filterCases = cases(({ list, filter }: { list: Subagent[]; filter: SubagentFilter }) => filterSubagents(list, filter), {
+  "agents only": { list: mixed, filter: { agents: true, tasks: false } },
+  "tasks only": { list: mixed, filter: { agents: false, tasks: true } },
+  "both shows everything": { list: mixed, filter: { agents: true, tasks: true } },
+  "neither shows everything": { list: mixed, filter: { agents: false, tasks: false } },
+  "tasks only with none": { list: [sub("a1")], filter: { agents: false, tasks: true } },
+});
+
+export const countsCases = cases(subagentCounts, {
+  "mixed, a row without a kind counts as an agent": mixed,
+  empty: [],
+  "tasks only": [sub("b1", { kind: "bash" }), sub("m1", { kind: "monitor" })],
 });

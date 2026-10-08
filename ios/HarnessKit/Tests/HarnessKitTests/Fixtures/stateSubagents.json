@@ -1,4 +1,123 @@
 {
+  "countsCases": [
+    {
+      "name": "mixed, a row without a kind counts as an agent",
+      "input": [
+        {
+          "id": "a1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10
+        },
+        {
+          "id": "b1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task b1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "bash",
+          "command": "make"
+        },
+        {
+          "id": "a2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "agent"
+        },
+        {
+          "id": "m1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task m1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "monitor",
+          "command": "tail -f log"
+        }
+      ],
+      "output": {
+        "agents": 2,
+        "tasks": 2
+      }
+    },
+    {
+      "name": "empty",
+      "input": [],
+      "output": {
+        "agents": 0,
+        "tasks": 0
+      }
+    },
+    {
+      "name": "tasks only",
+      "input": [
+        {
+          "id": "b1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task b1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "bash"
+        },
+        {
+          "id": "m1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task m1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "monitor"
+        }
+      ],
+      "output": {
+        "agents": 0,
+        "tasks": 2
+      }
+    }
+  ],
   "durationCases": [
     {
       "name": "59s",
@@ -64,6 +183,513 @@
         "endedAt": 90000000
       },
       "output": "25h 0m"
+    }
+  ],
+  "filterCases": [
+    {
+      "name": "agents only",
+      "input": {
+        "list": [
+          {
+            "id": "a1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "b1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task b1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "bash",
+            "command": "make"
+          },
+          {
+            "id": "a2",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a2",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "agent"
+          },
+          {
+            "id": "m1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task m1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "monitor",
+            "command": "tail -f log"
+          }
+        ],
+        "filter": {
+          "agents": true,
+          "tasks": false
+        }
+      },
+      "output": [
+        {
+          "id": "a1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10
+        },
+        {
+          "id": "a2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "agent"
+        }
+      ]
+    },
+    {
+      "name": "tasks only",
+      "input": {
+        "list": [
+          {
+            "id": "a1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "b1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task b1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "bash",
+            "command": "make"
+          },
+          {
+            "id": "a2",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a2",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "agent"
+          },
+          {
+            "id": "m1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task m1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "monitor",
+            "command": "tail -f log"
+          }
+        ],
+        "filter": {
+          "agents": false,
+          "tasks": true
+        }
+      },
+      "output": [
+        {
+          "id": "b1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task b1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "bash",
+          "command": "make"
+        },
+        {
+          "id": "m1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task m1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "monitor",
+          "command": "tail -f log"
+        }
+      ]
+    },
+    {
+      "name": "both shows everything",
+      "input": {
+        "list": [
+          {
+            "id": "a1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "b1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task b1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "bash",
+            "command": "make"
+          },
+          {
+            "id": "a2",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a2",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "agent"
+          },
+          {
+            "id": "m1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task m1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "monitor",
+            "command": "tail -f log"
+          }
+        ],
+        "filter": {
+          "agents": true,
+          "tasks": true
+        }
+      },
+      "output": [
+        {
+          "id": "a1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10
+        },
+        {
+          "id": "b1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task b1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "bash",
+          "command": "make"
+        },
+        {
+          "id": "a2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "agent"
+        },
+        {
+          "id": "m1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task m1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "monitor",
+          "command": "tail -f log"
+        }
+      ]
+    },
+    {
+      "name": "neither shows everything",
+      "input": {
+        "list": [
+          {
+            "id": "a1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10
+          },
+          {
+            "id": "b1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task b1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "bash",
+            "command": "make"
+          },
+          {
+            "id": "a2",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a2",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "agent"
+          },
+          {
+            "id": "m1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task m1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10,
+            "kind": "monitor",
+            "command": "tail -f log"
+          }
+        ],
+        "filter": {
+          "agents": false,
+          "tasks": false
+        }
+      },
+      "output": [
+        {
+          "id": "a1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10
+        },
+        {
+          "id": "b1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task b1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "bash",
+          "command": "make"
+        },
+        {
+          "id": "a2",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task a2",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "agent"
+        },
+        {
+          "id": "m1",
+          "sessionId": "s1",
+          "runId": "r1",
+          "parentId": null,
+          "description": "Task m1",
+          "agentType": "general-purpose",
+          "prompt": "",
+          "status": "running",
+          "result": null,
+          "startedAt": 10,
+          "endedAt": null,
+          "updatedAt": 10,
+          "kind": "monitor",
+          "command": "tail -f log"
+        }
+      ]
+    },
+    {
+      "name": "tasks only with none",
+      "input": {
+        "list": [
+          {
+            "id": "a1",
+            "sessionId": "s1",
+            "runId": "r1",
+            "parentId": null,
+            "description": "Task a1",
+            "agentType": "general-purpose",
+            "prompt": "",
+            "status": "running",
+            "result": null,
+            "startedAt": 10,
+            "endedAt": null,
+            "updatedAt": 10
+          }
+        ],
+        "filter": {
+          "agents": false,
+          "tasks": true
+        }
+      },
+      "output": []
     }
   ],
   "modelLabelCases": [
