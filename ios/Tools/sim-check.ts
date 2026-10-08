@@ -1487,6 +1487,35 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
     return "all closed";
   });
+  await check("past the five live ones, more docked tickets cost about nothing", async () => {
+    // A parked ticket is the Router's root and path plus the board's card: 15 more of them must not
+    // grow the app the way 15 more mounted ticket screens would.
+    const many = await seedDockable(p.project.id, 20);
+    const pid = (await sh(["pgrep", "-f", `${udid}/.*/Harness\\.app/Harness`], { allowFail: true, quiet: true })).trim().split("\n")[0];
+    if (!pid) throw new Error("no Harness process for this simulator");
+    const footprint = async () => {
+      await Bun.sleep(2500); // the last screen settles and parks
+      const out = await sh(["footprint", "-p", pid], { allowFail: true, quiet: true });
+      const m = out.match(/Footprint:\s+([\d.]+)\s+(KB|MB|GB)/);
+      if (!m) throw new Error(`footprint said: ${out.slice(0, 200)}`);
+      return Number(m[1]) * ({ KB: 1 / 1024, MB: 1, GB: 1024 } as Record<string, number>)[m[2]!]!;
+    };
+    for (const t of many.slice(0, 5)) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
+    await dockSheet(udid);
+    const five = await footprint();
+    await tapWhere(udid, isDock);
+    for (const t of many.slice(5)) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
+    await dockSheet(udid);
+    const twenty = await footprint();
+    if ((await count()) !== 20) throw new Error(`${await count()} docked, not 20`);
+    await tapWhere(udid, "Projects");
+    await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+    await goto(udid, BOARD);
+    const grew = twenty - five;
+    // A mounted ticket screen costs several MB; 15 of them would be far past this.
+    if (grew > 40) throw new Error(`the app grew ${grew.toFixed(1)} MB from 5 docked to 20 (${five.toFixed(1)} → ${twenty.toFixed(1)} MB)`);
+    return `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20 (+${grew.toFixed(1)})`;
+  });
 }
 
 /** An iPad pill in the bottom-right corner of the area left of `edge`: 16pt in, near the bottom. */
