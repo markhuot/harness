@@ -1554,9 +1554,10 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
 
 /**
  * `k`'s iPad card sits in the bottom-right corner of the area left of `edge`: 16pt in (its ✕ ends
- * 4pt inside it), near the bottom, and about 320pt wide where there's room.
+ * 4pt inside it), near the bottom, and about 320pt wide where the board's column (from `left`, the
+ * sidebar's edge) has room.
  */
-async function cardInCorner(udid: string, k: string, edge: number, H: number) {
+async function cardInCorner(udid: string, k: string, edge: number, H: number, left = 0) {
   const all = await nodes(udid);
   const open = all.find((n) => n.AXLabel?.startsWith(`${k}, `) && isDock(n.AXLabel));
   const close = all.find((n) => n.AXLabel === `Close ${k}`);
@@ -1566,7 +1567,7 @@ async function cardInCorner(udid: string, k: string, edge: number, H: number) {
   const below = H - (open.frame.y + open.frame.height);
   if (below < 0 || below > 70) throw new Error(`${k}'s card's bottom is ${Math.round(below)}pt above the window's bottom`);
   const width = right - open.frame.x;
-  if (width < Math.min(300, edge - 40)) throw new Error(`${k}'s card is only ${Math.round(width)}pt wide`);
+  if (width < Math.min(300, edge - left - 40)) throw new Error(`${k}'s card is only ${Math.round(width)}pt wide`);
 }
 
 /**
@@ -1622,7 +1623,9 @@ async function cardStackChecks(udid: string, s: { project: Project; conductor: T
     // Newest at the bottom: b under a.
     const [ca, cb] = [cs.find((n) => cardOf(a.key)(n.AXLabel!))!, cs.find((n) => cardOf(b.key)(n.AXLabel!))!];
     if (cb.frame.y <= ca.frame.y) throw new Error(`${b.key}'s card (y=${Math.round(cb.frame.y)}) isn't under ${a.key}'s (y=${Math.round(ca.frame.y)})`);
-    await cardInCorner(udid, b.key, leading, H);
+    // The sidebar's edge: its Settings button keeps 14pt of padding on its right.
+    const s0 = await settings();
+    await cardInCorner(udid, b.key, leading, H, s0.frame.x + s0.frame.width + 14);
     await offSidebar();
     await shootBoth(udid, "panel-cards-open");
     await appearance(udid, "light");
