@@ -146,6 +146,8 @@ struct DockedMoreCard: View {
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(c.text)
+                    .lineLimit(1)
+                    .fixedSize()
                 Spacer(minLength: 8)
                 Image(systemName: "square.stack")
                     .font(.subheadline.weight(.semibold))
