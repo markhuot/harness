@@ -1426,10 +1426,10 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     await shot(udid, "dock-switcher-overflow-light");
-    // The menu scrolls on a phone: sweep it to its top, then to its bottom ("2 more" is last),
+    // The menu scrolls on a phone and opens at its top: sweep it to its bottom ("2 more" is last),
     // gathering every row on the way.
     const l = await labels(udid);
-    for (const dy of [260, 260, 260, -260, -260, -260, -260]) {
+    for (const dy of [-240, -240, -240, -240, -240]) {
       const rows = (await nodes(udid)).filter((n) => n.AXLabel && anyRow(n.AXLabel));
       if (!rows.length) break;
       const mid = rows[Math.floor(rows.length / 2)]!;
@@ -1536,13 +1536,12 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
     await goto(udid, BOARD);
-    // The same twenty tickets visited, none docked: what's left is the board's data and caches,
-    // not the dock.
+    // The same twenty tickets visited, none docked: for scale, what five live screens cost.
     const none = await footprint();
-    const dock = twenty - none;
-    // A mounted ticket screen costs several MB; 15 of them would be far past this.
-    if (dock > 20) throw new Error(`20 docked cost ${dock.toFixed(1)} MB over none (${five.toFixed(1)} MB with 5, ${twenty.toFixed(1)} with 20, ${none.toFixed(1)} with none)`);
-    return `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20, ${none.toFixed(1)} MB with the same tickets closed`;
+    const grew = twenty - five;
+    // Five live screens cost about 20 MB over none; fifteen more mounted would be far past this.
+    if (grew > 20) throw new Error(`the app grew ${grew.toFixed(1)} MB from 5 docked to 20 (${five.toFixed(1)} → ${twenty.toFixed(1)} MB; ${none.toFixed(1)} with none)`);
+    return `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20 (+${grew.toFixed(1)}), ${none.toFixed(1)} MB with the same tickets closed`;
   });
 }
 

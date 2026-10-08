@@ -470,8 +470,9 @@ sheet comes up docked with the next. TicketSheetHost presents pickers, the watch
 over itself; the board's bottom bar and `DockClearance` make room for the docked sheet. Docked, the
 bar (`TicketDock`) shows the top's ref and title (`DockedTicketLabel`: the ref whole, the title
 truncated into the rest), and with more than one docked a stack button with the count
-(`DockedTicketsButton`, "<n> docked tickets") before the ✕; a mostly horizontal drag on the bar
-(`TicketDock.step`) moves to the next or previous one, and VoiceOver has Next and Previous docked
+(`DockedTicketsButton`, "<n> docked tickets") before the ✕; a horizontal swipe on the bar
+(`DockSwipe`, a UIKit swipe recognizer alongside the sheet's own pan, since a SwiftUI drag would take
+the vertical swipe that closes the dock) moves to the next or previous one, and VoiceOver has Next and Previous docked
 ticket actions. The same stack button sits in each sheet screen's toolbar while more than one is
 docked, at either width. At regular width SceneChrome
 presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell

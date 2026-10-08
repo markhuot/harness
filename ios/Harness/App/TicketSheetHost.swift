@@ -334,15 +334,6 @@ struct TicketDock: View {
         return max(0, screen.height - dockTop - homeIndicator)
     }
 
-    /// A drag along the bar that switches tickets: mostly sideways (so the sheet's own vertical
-    /// drag keeps its gestures), far enough or thrown.
-    static func step(translation: CGSize, predicted: CGSize) -> Router.DockStep? {
-        guard abs(translation.width) > abs(translation.height) * 2 else { return nil }
-        let dx = abs(translation.width) >= 40 ? translation.width : abs(predicted.width) >= 120 ? predicted.width : 0
-        if dx == 0 { return nil }
-        return dx < 0 ? .next : .previous
-    }
-
     var body: some View {
         let many = router.dockedSheets.count > 1
         let text = DockedTicketText(sheet, state: app.store?.state)
@@ -362,46 +353,75 @@ struct TicketDock: View {
             .clipped()
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 16)
-                .onEnded { value in
-                    guard many, let step = Self.step(translation: value.translation, predicted: value.predictedEndTranslation) else { return }
-                    swipedFrom = step == .next ? .trailing : .leading
-                    withAnimation(.snappy) { router.activateAdjacentSheet(step) }
-                },
-            isEnabled: many
-        )
+        // UIKit swipes rather than a SwiftUI drag, which would take vertical drags from the system
+        // sheet too (its swipe down to close).
+        .gesture(DockSwipe(direction: .left) { swipe(.next) })
+        .gesture(DockSwipe(direction: .right) { swipe(.previous) })
         .accessibilityLabel(text.accessibilityLabel)
         .accessibilityHint("Double-tap to open")
         .accessibilityIdentifier("ticket-dock")
-        .accessibilityAction(named: "Next docked ticket") { if many { router.activateAdjacentSheet(.next) } }
-        .accessibilityAction(named: "Previous docked ticket") { if many { router.activateAdjacentSheet(.previous) } }
+        .accessibilityAction(named: "Next docked ticket") { swipe(.next) }
+        .accessibilityAction(named: "Previous docked ticket") { swipe(.previous) }
         .accessibilityAction(named: "Close", close)
         // Over the open button rather than in it, so the dock still spans the sheet's width.
-        .overlay(alignment: .trailing) {
-            HStack(spacing: 0) {
-                if many { DockedTicketsButton().frame(width: Self.switcherWidth) }
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(c.text3)
-                        .frame(width: Self.closeSize, height: Self.closeSize)
-                        .contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close \(sheet.title)")
-                .accessibilityIdentifier("ticket-dock-close")
+        .overlay(alignment: .trailing) { endButtons(many: many) }
+    }
+
+    /// The stack button (with more than one docked) and ✕, at the bar's end.
+    private func endButtons(many: Bool) -> some View {
+        HStack(spacing: 0) {
+            if many { DockedTicketsButton().frame(width: Self.switcherWidth) }
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(c.text3)
+                    .frame(width: Self.closeSize, height: Self.closeSize)
+                    .contentShape(.rect)
             }
-            .padding(.trailing, 12)
-            .padding(.top, 6)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close \(sheet.title)")
+            .accessibilityIdentifier("ticket-dock-close")
         }
+        .padding(.trailing, 12)
+        .padding(.top, 6)
     }
 
     /// Where the label slides in from on a swipe.
     @State private var swipedFrom: Edge = .trailing
 
+    private func swipe(_ step: Router.DockStep) {
+        guard router.dockedSheets.count > 1 else { return }
+        swipedFrom = step == .next ? .trailing : .leading
+        withAnimation(.snappy) { router.activateAdjacentSheet(step) }
+    }
+
     /// The close button's tap target.
     private static let closeSize: CGFloat = 44
     /// The stack button's width, room for a two-digit count.
     private static let switcherWidth: CGFloat = 58
+}
+
+/// A swipe along the dock bar: only a horizontal swipe recognizes, alongside the system sheet's own
+/// pan, so a drag down still closes the docked ticket.
+private struct DockSwipe: UIGestureRecognizerRepresentable {
+    let direction: UISwipeGestureRecognizer.Direction
+    let action: () -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UISwipeGestureRecognizer {
+        let swipe = UISwipeGestureRecognizer()
+        swipe.direction = direction
+        swipe.cancelsTouchesInView = false
+        swipe.delegate = context.coordinator
+        return swipe
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UISwipeGestureRecognizer, context: Context) {
+        if recognizer.state == .ended { action() }
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
 }
