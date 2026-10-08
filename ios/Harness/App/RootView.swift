@@ -207,12 +207,15 @@ struct MainTabs: View {
                 DesktopShell()
             } else {
                 // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
-                SectionStack().hiddenShortcuts {
-                    Button("Toggle Sidebar") {
-                        if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                SectionStack()
+                    // The other docked tickets' cards, above the docked sheet (the top one's).
+                    .overlay { DockedCardsAbove() }
+                    .hiddenShortcuts {
+                        Button("Toggle Sidebar") {
+                            if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
+                        }
+                        .keyboardShortcut("s", modifiers: [.control, .command])
                     }
-                    .keyboardShortcut("s", modifiers: [.control, .command])
-                }
             }
         }
         // Beside the board at regular width, the board still counts as on screen (presence).

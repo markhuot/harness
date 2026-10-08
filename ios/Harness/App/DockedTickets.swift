@@ -80,9 +80,11 @@ enum DockedCardMetrics {
 
 /// A docked ticket minimized: its own fully rounded glass capsule, as the single docked sheet was,
 /// with its status dot (the board's colors; a pencil for New session), ref and truncated title, and
-/// an ✕ that takes just it off the dock. A tap anywhere else opens it.
+/// an ✕ that takes just it off the dock. A tap anywhere else opens it. Without `glass` it's the
+/// same card on a glass it sits on: the iPhone's docked sheet, which is the top card.
 struct DockedCard: View {
     let sheet: TicketSheet
+    var glass = true
     let open: () -> Void
     let close: () -> Void
     @Environment(AppModel.self) private var app
@@ -118,8 +120,7 @@ struct DockedCard: View {
             .accessibilityIdentifier("ticket-dock-close")
         }
         .frame(height: DockedCardMetrics.height)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .contentShape(.capsule)
+        .modifier(CapsuleGlass(on: glass))
     }
 
     /// From the ✕'s tap target to the capsule's trailing edge.
@@ -135,6 +136,19 @@ struct DockedCard: View {
             StatusDot(status: status, size: 10).frame(width: 14)
         } else {
             Circle().strokeBorder(c.text3, lineWidth: 1.5).frame(width: 10, height: 10).frame(width: 14)
+        }
+    }
+}
+
+/// A card's own glass capsule, or none when it sits on one.
+private struct CapsuleGlass: ViewModifier {
+    let on: Bool
+
+    func body(content: Content) -> some View {
+        if on {
+            content.glassEffect(.regular.interactive(), in: .capsule).contentShape(.capsule)
+        } else {
+            content.contentShape(.rect)
         }
     }
 }
@@ -182,6 +196,9 @@ struct DockedMoreCard: View {
 /// background of its own: it sits on a DockedBackdrop. A small capsule on top collapses it again.
 struct DockedCardList: View {
     let sheets: [TicketSheet]
+    /// How many are docked in all, for the header (the iPhone lists all but the top, whose card is
+    /// the docked sheet below the list).
+    var total: Int?
     let open: (TicketSheet) -> Void
     let close: (TicketSheet) -> Void
     let collapse: () -> Void
@@ -191,7 +208,7 @@ struct DockedCardList: View {
         ScrollView {
             VStack(alignment: .trailing, spacing: DockedCardMetrics.spacing) {
                 Button(action: collapse) {
-                    Label("\(sheets.count) docked", systemImage: "chevron.down")
+                    Label("\(total ?? sheets.count) docked", systemImage: "chevron.down")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(c.text)
                         .padding(.horizontal, 16)

@@ -9,10 +9,10 @@ import SwiftUI
 /// one, hidden, so switching swaps the content in place (no re-present) and keeps drafts, scroll and
 /// path; a parked one mounts again at its saved path when it comes back. Dragged down to the dock
 /// detent it docks, like Mail's minimized draft: the stacks stay mounted but hidden, and the small
-/// sheet shows the docked tickets as minimized cards (TicketDock), growing to fit them, under the
-/// board, which stays usable (`presentationBackgroundInteraction`). Tapping a card, or dragging the
-/// sheet up, brings a ticket back; "N more…" stands the sheet at `listDetent` as the list of them
-/// all over a blur (`listing`). The sheet's own background is clear throughout. Swiping the sheet down closes the top ticket, and so does a flick down from `.large`
+/// sheet is the top ticket's minimized card (TicketDock) under the board, which stays usable
+/// (`presentationBackgroundInteraction`). The other docked tickets' cards and "N more…" stack above
+/// it in the main window (DockedCardsAbove), as glass capsules like the sheet. Tapping a card, or
+/// dragging the sheet up, brings a ticket back. Swiping the sheet down closes the top ticket, and so does a flick down from `.large`
 /// (SheetFlick); the next one comes back docked (RootView re-presents the sheet). The system does the drags, the inset and the corners, so the content's own
 /// gestures (the pager, the back swipe, the Browser tab, the transcript) keep theirs; the board's
 /// bottom bar takes the docked sheet's side inset (DockedSheetInset) so the two line up.
@@ -31,22 +31,19 @@ struct TicketSheetHost: View {
     @Environment(DockedSheetInset.self) private var dockInset
     /// How the last drag on the sheet let go, for a flick that should send it away.
     @State private var flick = SheetFlick()
-    /// "N more…" expanded the sheet into the list of every docked ticket.
-    @State private var listing = false
 
     var body: some View {
         let current = router.ticketSheet ?? router.dock
         let sheet = current ?? last
         // Gone, the last one stays mounted while the sheet animates away.
         let mounted = current == nil ? (last.map { [$0] } ?? []) : router.liveSheets
-        let dockHeight = TicketDock.height(count: router.dockedSheets.count)
         GeometryReader { geo in
-            // By height rather than state, so the cards take over as the sheet settles at the dock.
-            let docked = geo.size.height < dockHeight + 60
+            // By height rather than state, so the card takes over as the sheet settles at the dock.
+            let docked = geo.size.height < TicketDock.height + 60
             ZStack(alignment: .top) {
                 ForEach(mounted) { s in
                     let isTop = s.id == sheet?.id
-                    let shown = isTop && !docked && !listing
+                    let shown = isTop && !docked
                     stack(s)
                         .opacity(shown ? 1 : 0)
                         .allowsHitTesting(shown)
@@ -55,34 +52,15 @@ struct TicketSheetHost: View {
                         .disabled(!isTop)
                         .zIndex(isTop ? 1 : 0)
                 }
-                if listing && !docked {
-                    // No background: the cards float on a blur rising out of the bottom.
-                    let inset = dockInset.sides ?? 10
-                    ZStack(alignment: .bottom) {
-                        DockedBackdrop(anchor: .bottom, radius: geo.size.height * 1.1)
-                        DockedCardList(sheets: router.dockedSheets,
-                                       open: { s in
-                                           listing = false
-                                           router.activateSheet(id: s.id)
-                                           router.restoreDock()
-                                       },
-                                       close: { router.closeSheet(id: $0.id) },
-                                       collapse: { listing = false })
-                            .padding(.horizontal, inset)
-                            .padding(.bottom, inset)
-                    }
-                    .ignoresSafeArea(edges: .bottom)
-                    .zIndex(2)
-                } else if docked, sheet != nil {
-                    TicketDock(expand: { listing = true })
+                if docked, let sheet {
+                    TicketDock(sheet: sheet)
                         .frame(height: geo.size.height)
                         .zIndex(2)
                 }
             }
-            // The sheet's own background is clear (each docked card is its own glass, and the list
-            // floats on its blur), so a ticket paints it: behind the keyboard too, so its rounded
-            // corners show the sheet's background.
-            .background { if !docked && !listing { c.bg.ignoresSafeArea() } }
+            // Behind the keyboard too, so its rounded corners show the sheet's background, not the
+            // system sheet's. Docked, the sheet keeps the system's glass: it is the top card.
+            .background { if !docked { c.bg.ignoresSafeArea() } }
             .onChange(of: docked) { _, docked in
                 // A docked New session mustn't keep the keyboard up over the board.
                 if docked { resignFirstResponder() }
@@ -98,26 +76,17 @@ struct TicketSheetHost: View {
             }
         }
         .background {
-            SheetFlickTracker(flick: flick, swipes: router.ticketSheetState == .docked && !listing && router.dockedSheets.count > 1) {
+            SheetFlickTracker(flick: flick, swipes: router.ticketSheetState == .docked && router.dockedSheets.count > 1) {
                 TicketDock.step(router, $0)
             }
         }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
         // Switching tickets mustn't leave the keyboard up for the one now hidden.
         .onChange(of: current?.id) { resignFirstResponder() }
-        .onChange(of: router.ticketSheetState, initial: true) { _, s in
-            if s != .gone { lastDocked = s == .docked }
-            // A ticket came up (or they all went): the list has done its job.
-            if s != .docked { listing = false }
-        }
-        // Few enough to show as cards: nothing left to list.
-        .onChange(of: router.dockedSheets.count) { _, n in if n <= DockCards.phoneVisible { listing = false } }
-        .presentationDetents(listing ? [dockDetent, Self.listDetent] : [dockDetent, .large], selection: detent)
-        // Listing too: the board stays as it is behind the list's blur, neither dimmed nor pushed back.
-        .presentationBackgroundInteraction(.enabled(upThrough: listing ? Self.listDetent : dockDetent))
-        .presentationBackground(.clear)
-        // Docked, the cards have no grabber over them; the list collapses from its own capsule.
-        .presentationDragIndicator(router.ticketSheetState == .presented && !listing ? .visible : .hidden)
+        .onChange(of: router.ticketSheetState, initial: true) { _, s in if s != .gone { lastDocked = s == .docked } }
+        .presentationDetents([TicketDock.detent, .large], selection: detent)
+        .presentationBackgroundInteraction(.enabled(upThrough: TicketDock.detent))
+        .presentationDragIndicator(.visible)
         .sheet(item: Binding(get: { router.sheet }, set: { router.sheet = $0 })) { sheet in
             SheetHost(sheet: sheet)
                 .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
@@ -141,29 +110,16 @@ struct TicketSheetHost: View {
     /// whichever recognizer UIKit told first, and a flung sheet goes straight from presented to
     /// gone: never docked for a frame, which would have the board make room for the dock and give
     /// it back mid-swipe. Going away, it keeps the dock detent it settled on.
-    private var dockDetent: PresentationDetent { TicketDock.detent(count: router.dockedSheets.count) }
-    /// The expanded list's height: most of the screen, short of `.large`, which would push the
-    /// board back and dim it.
-    static let listDetent = PresentationDetent.fraction(0.92)
-
-    /// Listing ("N more…"), the sheet stands at `listDetent` over the docked state; let down, it's back
-    /// to the cards, still docked.
     private var detent: Binding<PresentationDetent> {
         Binding(get: {
-                    if listing { return Self.listDetent }
                     switch router.ticketSheetState {
-                    case .gone: return lastDocked ? dockDetent : .large
-                    case .docked: return dockDetent
-                    case .presented: return .large
+                    case .gone: lastDocked ? TicketDock.detent : .large
+                    case .docked: TicketDock.detent
+                    case .presented: .large
                     }
                 },
                 set: { new in
-                    if listing {
-                        if new != Self.listDetent { listing = false }
-                        return
-                    }
-                    // Any detent but `.large` is the dock's (its height follows the cards).
-                    guard new != .large else { return router.restoreDock() }
+                    guard new == TicketDock.detent else { return router.restoreDock() }
                     guard router.ticketSheetState == .presented else { return router.dockSheet() }
                     flick.settled(at: Date()) { outcome in
                         guard router.ticketSheetState == .presented else { return }
@@ -367,7 +323,9 @@ private struct DockClearance: ViewModifier {
                 if desktop, let cards = dockInset?.cards, cards > 0 {
                     Color.clear.frame(height: cards)
                 } else if router.showsDock && !desktop && !keyboard {
-                    Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top))
+                    // The docked sheet, and the cards stacked above it.
+                    Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top)
+                        + DockedCardsAbove.height(count: router.dockedSheets.count))
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
@@ -379,65 +337,113 @@ extension View {
     func dockClearance() -> some View { modifier(DockClearance()) }
 }
 
-/// The docked ticket sheet's content: the docked tickets as minimized cards (DockedCard), each its
-/// own glass capsule like the single docked sheet was, the most recent at the bottom, up to `DockCards.phoneVisible`, then "N more…" on top, which `expand`s the
-/// sheet into the list of them all. A card's tap opens that ticket and its ✕ closes just it. A
-/// swipe along the dock moves to the next or previous one, like Safari's tab bar. The sheet's
-/// height follows the rows (`height(count:)`), and the board's bottom bar rides above it.
+/// The docked ticket sheet's content: the top ticket's minimized card (DockedCard, on the sheet's own
+/// glass), as the single dock always was; the other docked tickets stack above it in the main
+/// window (DockedCardsAbove). A tap opens it, its ✕ closes just it, and a swipe along the dock moves
+/// to the next or previous ticket, like Safari's tab bar (SheetFlickTracker).
 struct TicketDock: View {
-    let expand: () -> Void
+    let sheet: TicketSheet
     @Environment(Router.self) private var router
 
-    /// The docked sheet's height for `count` docked tickets: a card each up to the visible two,
-    /// plus "N more…", with the gaps between them. One card is the single dock's 64pt.
-    static func height(count: Int) -> CGFloat {
-        DockedCardMetrics.stackHeight(rows: max(1, DockCards.rows(count: count, maxVisible: DockCards.phoneVisible)))
-    }
-    static func detent(count: Int) -> PresentationDetent { .height(height(count: count)) }
-    /// How far the board's bottom bar sits above the docked sheet, the same on every phone.
+    /// The sheet's height while docked: one card's.
+    static let height = DockedCardMetrics.height
+    static let detent = PresentationDetent.height(height)
+    /// How far the board's bottom bar sits above the docked cards, the same on every phone.
     static let barGap: CGFloat = 11
 
     /// What a section gives up at its bottom while a sheet is docked, so the dock sits under the
     /// board's bottom bar rather than over it: everything below the docked sheet's top edge, less
     /// the home indicator's inset the section already keeps clear. The bar keeps `barGap` above
-    /// that (BoardScreen). Before the dock is measured, one row plus a guess at the float and gap.
+    /// that (BoardScreen). Before the dock is measured, the sheet plus a guess at the float and gap.
     static func clearance(screen: ConcentricBar.Screen?, dockTop: CGFloat?) -> CGFloat {
         let homeIndicator = screen?.homeIndicator ?? 0
-        guard let screen, let dockTop else { return max(0, height(count: 1) + 27 - homeIndicator) }
+        guard let screen, let dockTop else { return max(0, height + 27 - homeIndicator) }
         return max(0, screen.height - dockTop - homeIndicator)
     }
 
     var body: some View {
-        let sheets = router.dockedSheets
-        let split = DockCards.split(count: sheets.count, maxVisible: DockCards.phoneVisible)
-        let visible = Array(sheets.prefix(split.cards))
-        // Each card its own glass capsule across the sheet's width, the sheet itself clear.
-        VStack(spacing: DockedCardMetrics.spacing) {
-            if split.more > 0 { DockedMoreCard(count: split.more, expand: expand) }
-            // Oldest at the top, the most recent at the bottom, nearest the thumb.
-            ForEach(visible.reversed()) { sheet in
-                DockedCard(sheet: sheet, open: { open(sheet) }, close: { router.closeSheet(id: sheet.id) })
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .animation(.snappy, value: sheets.map(\.id))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("ticket-dock-sheet")
-        .accessibilityAction(named: "Next docked ticket") { swipe(.next) }
-        .accessibilityAction(named: "Previous docked ticket") { swipe(.previous) }
+        DockedCard(sheet: sheet, glass: false, open: { router.restoreDock() }, close: { router.dismissSheet() })
+            .frame(maxHeight: .infinity, alignment: .top)
+            .accessibilityAction(named: "Next docked ticket") { TicketDock.step(router, .next) }
+            .accessibilityAction(named: "Previous docked ticket") { TicketDock.step(router, .previous) }
     }
-
-    private func open(_ sheet: TicketSheet) {
-        router.activateSheet(id: sheet.id)
-        router.restoreDock()
-    }
-
-    private func swipe(_ step: Router.DockStep) { TicketDock.step(router, step) }
 
     /// The next or previous docked ticket on top: a swipe along the dock (SheetFlickTracker) or
     /// VoiceOver's actions.
     static func step(_ router: Router, _ step: Router.DockStep) {
         guard router.dockedSheets.count > 1 else { return }
         withAnimation(.snappy) { router.activateAdjacentSheet(step) }
+    }
+}
+
+/// The iPhone's other docked tickets, above the docked sheet (which is the top one's card): their
+/// cards, glass capsules as wide as the sheet and 8pt above it, the most recent nearest it, up to
+/// `DockCards.phoneVisible` cards in all with the sheet's, then "N more…" on top. "N more…" expands
+/// every one but the top into a scrolling list over the board, on a DockedBackdrop rising out of
+/// the bottom; the sheet's card stays where it is under it. Lives in the main window, laid out from
+/// where the docked sheet floats (DockedSheetInset).
+struct DockedCardsAbove: View {
+    @Environment(Router.self) private var router
+    @Environment(DockedSheetInset.self) private var dockInset
+    @State private var expanded = false
+
+    /// The rows above the sheet for `count` docked tickets, with their gaps: what the sections
+    /// give up on top of the sheet's clearance.
+    static func height(count: Int) -> CGFloat {
+        let above = max(0, DockCards.rows(count: count, maxVisible: DockCards.phoneVisible) - 1)
+        return above > 0 ? CGFloat(above) * (DockedCardMetrics.height + DockedCardMetrics.spacing) : 0
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let origin = geo.frame(in: .global).origin
+            let docked = router.ticketSheetState == .docked && router.dockedSheets.count > 1
+            if docked, let top = dockInset.top, let sides = dockInset.sides {
+                // From the window's bottom to 8pt above the docked sheet's top edge.
+                let bottom = geo.size.height - (top - origin.y) + DockedCardMetrics.spacing
+                let others = Array(router.dockedSheets.dropFirst())
+                ZStack(alignment: .bottom) {
+                    if expanded {
+                        DockedBackdrop(anchor: .bottom, radius: geo.size.height * 1.1)
+                        Color.clear
+                            .contentShape(.rect)
+                            .onTapGesture { expanded = false }
+                            .accessibilityHidden(true)
+                        DockedCardList(sheets: others, total: router.dockedSheets.count, open: open, close: { router.closeSheet(id: $0.id) }, collapse: { expanded = false })
+                            .padding(.top, geo.safeAreaInsets.top)
+                            .padding(.bottom, bottom)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else {
+                        stack(others)
+                            .padding(.bottom, bottom)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, sides - origin.x)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
+            }
+        }
+        .ignoresSafeArea()
+        .animation(.snappy, value: router.dockedSheets.map(\.id))
+        .animation(.snappy, value: expanded)
+        .onChange(of: router.ticketSheetState) { _, s in if s != .docked { expanded = false } }
+        .onChange(of: router.dockedSheets.count) { _, n in if n <= DockCards.phoneVisible { expanded = false } }
+    }
+
+    private func stack(_ others: [TicketSheet]) -> some View {
+        let split = DockCards.split(count: others.count + 1, maxVisible: DockCards.phoneVisible)
+        return VStack(spacing: DockedCardMetrics.spacing) {
+            if split.more > 0 { DockedMoreCard(count: split.more) { expanded = true } }
+            // The rest of the visible cards, oldest at the top; the top ticket is the sheet below.
+            ForEach(others.prefix(max(0, split.cards - 1)).reversed()) { sheet in
+                DockedCard(sheet: sheet, open: { open(sheet) }, close: { router.closeSheet(id: sheet.id) })
+            }
+        }
+    }
+
+    private func open(_ sheet: TicketSheet) {
+        expanded = false
+        router.activateSheet(id: sheet.id)
+        router.restoreDock()
     }
 }
