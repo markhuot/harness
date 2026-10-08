@@ -2,85 +2,94 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// iPad ticket windows: which router a route lands on.
+/// iPad: ticket links open the ticket sheet; windows are opt-in through `popOutSheet()`.
 @MainActor
 @Suite("Router and ticket windows")
 struct RouterWindowTests {
-    /// A main router opening tickets in windows, recording what it opened.
+    /// A main router with a window opener, recording what it opened.
     private func windowed() -> (Router, () -> [Route]) {
         let r = Router()
         var opened: [Route] = []
         r.onOpenTicket = { opened.append($0) }
-        r.setOpensTicketsInWindows(true)
         return (r, { opened })
     }
 
-    @Test func aTicketOpensItsWindowInsteadOfPushing() {
+    private func t(_ key: String, _ tab: TicketTab? = nil) -> Route { .ticket(key: key, tab: tab) }
+
+    @Test func aTicketLinkOpensTheSheetEvenWithAWindowOpener() {
         let (r, opened) = windowed()
-        r.push(.ticket(key: "A-1", tab: .details))
+        r.sheetIsBesideBoard = true
+        r.open(.push(t("A-1", .details)))
+        #expect(opened().isEmpty)
         #expect(r.path(.board).isEmpty)
-        #expect(opened() == [.ticket(key: "A-1", tab: .details)])
+        #expect(r.ticketSheet?.root == .ticket(key: "A-1", tab: .details))
+        // A launched New session becomes the ticket's sheet rather than a window.
+        let draft = SheetRoute.newSession(projectId: nil, key: nil)
+        r.present(draft)
+        r.replace(draft, with: t("A-2", .transcript))
+        #expect(opened().isEmpty)
+        #expect(r.ticketSheet?.root == .ticket(key: "A-2", tab: .transcript))
     }
 
-    @Test func aTicketLinkLeavesTheMainWindowsSheetUp() {
+    @Test func poppingOutHandsTheTopTicketToTheOpenerAndDismissesTheSheet() {
         let (r, opened) = windowed()
-        r.present(.newSession(projectId: nil, key: nil))
-        r.open(.push(.ticket(key: "A-1", tab: nil)))
-        #expect(r.sheet == .newSession(projectId: nil, key: nil))
-        #expect(opened() == [.ticket(key: "A-1", tab: nil)])
-        // Any other pushed link still dismisses it and pushes.
-        r.open(.push(.prompts))
-        #expect(r.sheet == nil)
-        #expect(r.path(.board) == [.prompts])
-        #expect(opened().count == 1)
-    }
+        r.push(t("A-1", .spec))
+        #expect(r.canPopOutSheet)
+        r.popOutSheet()
+        #expect(opened() == [t("A-1", .spec)])
+        #expect(r.ticketSheetState == .gone && !r.canPopOutSheet)
 
-    @Test func aLaunchedNewSessionClosesItsSheetAndOpensTheTicketsWindow() {
-        let (r, opened) = windowed()
-        let sheet = SheetRoute.newSession(projectId: nil, key: nil)
-        r.present(sheet)
-        r.replace(sheet, with: .ticket(key: "A-1", tab: .transcript))
-        #expect(r.sheet == nil)
+        // A child pushed above the root, with a file above it: the child, on its tab.
+        r.push(t("A-1"))
+        r.push(t("A-2", .transcript))
+        r.push(.file(FileRouteParams(path: "a.ts", ticket: "A-2")))
+        r.popOutSheet()
+        #expect(opened().last == t("A-2", .transcript))
+        #expect(r.ticketSheetState == .gone)
+
+        // Docked pops out too.
+        r.push(t("B-1"))
+        r.dockSheet()
+        #expect(r.canPopOutSheet)
+        r.popOutSheet()
+        #expect(opened().last == t("B-1") && r.ticketSheetState == .gone)
         #expect(r.path(.board).isEmpty)
-        #expect(opened() == [.ticket(key: "A-1", tab: .transcript)])
-
-        // A sheet a link already swapped in stays up.
-        r.present(.watcher(id: nil))
-        r.replace(sheet, with: .ticket(key: "A-2", tab: nil))
-        #expect(r.sheet == .watcher(id: nil))
-        #expect(opened().last == .ticket(key: "A-2", tab: nil))
-
-        // Pushing instead (iPhone): the sheet closes and the ticket lands on the stack.
-        let p = Router()
-        p.present(sheet)
-        p.replace(sheet, with: .ticket(key: "A-3", tab: nil))
-        #expect(p.sheet == nil && p.path(.board) == [.ticket(key: "A-3", tab: nil)])
     }
 
-    @Test func withoutWindowModeOrAnOpenerTicketsPushAsBefore() {
+    @Test func withoutAnOpenerPoppingOutKeepsTheSheet() {
         let r = Router()
-        r.onOpenTicket = { _ in Issue.record("opened a window") }
-        r.push(.ticket(key: "A-1", tab: nil))
-        #expect(r.path(.board) == [.ticket(key: "A-1", tab: nil)])
-
-        let bare = Router()
-        bare.setOpensTicketsInWindows(true)
-        bare.push(.ticket(key: "A-1", tab: nil))
-        #expect(bare.path(.board) == [.ticket(key: "A-1", tab: nil)])
-
-        // Narrowing again: back to pushing.
-        let (w, opened) = windowed()
-        w.setOpensTicketsInWindows(false)
-        w.push(.ticket(key: "A-2", tab: nil))
-        #expect(w.path(.board) == [.ticket(key: "A-2", tab: nil)] && opened().isEmpty)
+        r.push(t("A-1"))
+        #expect(!r.canPopOutSheet)
+        r.popOutSheet()
+        #expect(r.ticketSheet?.root == .ticket(key: "A-1", tab: nil))
+        // Nothing to pop out either way.
+        let (e, opened) = windowed()
+        #expect(!e.canPopOutSheet)
+        e.popOutSheet()
+        #expect(opened().isEmpty)
     }
+
+    @Test func aNewSessionSheetPopsOutOnlyOnceATicketIsOnIt() {
+        let (r, opened) = windowed()
+        let draft = SheetRoute.newSession(projectId: "p1", key: nil)
+        r.present(draft)
+        #expect(!r.canPopOutSheet)
+        r.popOutSheet()
+        #expect(opened().isEmpty)
+        #expect(r.ticketSheet?.root == .newSession(projectId: "p1", key: nil))
+        // Launched: now it's the ticket's sheet, and pops out as that ticket.
+        r.replace(draft, with: t("A-3"))
+        #expect(r.canPopOutSheet)
+        r.popOutSheet()
+        #expect(opened() == [t("A-3")] && r.ticketSheetState == .gone)
+    }
+
 
     @Test func aTicketWindowKeepsItsSheetsAndForwardsSectionLinks() {
         let w = Router(ticket: .ticket(key: "A-1", tab: nil))
         var forwarded: [DeepLink] = []
         w.onSectionLink = { forwarded.append($0) }
         w.onOpenTicket = { _ in Issue.record("a ticket window opened another window") }
-        w.setOpensTicketsInWindows(true)
         w.present(.watcher(id: nil))
         #expect(w.sheet == .watcher(id: nil))
         var applied: ThemePicker.ThemePrefsPatch?

@@ -29,31 +29,31 @@ struct PresenceTests {
         #expect(shown(r).isEmpty)
     }
 
-    @Test func aPushedTicketReplacesTheBoard() {
+    @Test func aTicketOnTheStackReplacesTheBoard() {
         let r = Router()
-        r.push(t("A-1"))
+        r.setPath(.board, [t("A-1")])
         #expect(shown(r) == ["A-1"])
         // A file pushed from the ticket: still that ticket's.
-        r.push(.file(FileRouteParams(path: "a.ts", ticket: "A-1")))
+        r.setPath(.board, [t("A-1"), .file(FileRouteParams(path: "a.ts", ticket: "A-1"))])
         #expect(shown(r) == ["A-1"])
-        r.push(t("A-2"))
-        #expect(shown(r) == ["A-2"])
         r.popToRoot()
         #expect(shown(r) == board)
     }
 
     @Test func aPresentedSheetCountsAsJustItsTopTicket() {
         let r = Router()
-        r.setUsesTicketSheets(true)
         r.push(t("A-1"))
+        #expect(shown(r) == ["A-1"])
+        r.push(.file(FileRouteParams(path: "a.ts", ticket: "A-1")))
         #expect(shown(r) == ["A-1"])
         r.push(t("A-2"))
         #expect(shown(r) == ["A-2"])
+        r.dismissSheet()
+        #expect(shown(r) == board)
     }
 
     @Test func aDockedSheetShowsTheBoardAndItsTicket() {
         let r = Router()
-        r.setUsesTicketSheets(true)
         r.push(t("A-1"))
         r.dockSheet()
         #expect(shown(r) == board + ["A-1"])
@@ -63,12 +63,34 @@ struct PresenceTests {
         #expect(shown(r) == board)
     }
 
+    @Test func aSheetBesideTheBoardShowsTheBoardAndItsTopTicket() {
+        let r = Router()
+        r.sheetIsBesideBoard = true
+        r.push(t("A-1"))
+        #expect(shown(r) == board + ["A-1"])
+        r.push(t("A-2"))
+        #expect(shown(r) == board + ["A-2"])
+        // Docked beside it: the same; another section: just the ticket.
+        r.dockSheet()
+        #expect(shown(r) == board + ["A-2"])
+        r.open(.tab(.settings))
+        r.restoreDock()
+        #expect(shown(r) == ["A-2"])
+        // Narrowed: the sheet covers the board again.
+        r.open(.tab(.board))
+        r.restoreDock()
+        r.sheetIsBesideBoard = false
+        #expect(shown(r) == ["A-2"])
+    }
+
     @Test func newSessionInTheSheetShowsNoTicket() {
         let r = Router()
-        r.setUsesTicketSheets(true)
         r.present(.newSession(projectId: nil, key: nil))
         #expect(r.ticketSheetState == .presented)
         #expect(shown(r).isEmpty)
+        // Beside the board: just the board.
+        r.sheetIsBesideBoard = true
+        #expect(shown(r) == board)
     }
 
     @Test func theScannerCoversEverything() {

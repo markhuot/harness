@@ -47,7 +47,9 @@ struct BoardTicketCard: View {
         if ticket.draft == true {
             router.present(.newSession(projectId: nil, key: ticket.key))
         } else {
-            router.push(.ticket(key: ticket.key, tab: nil))
+            // From the board: the ticket sheet's ticket (beside the iPad's board it replaces the
+            // one in the panel rather than stacking on it).
+            router.openTicket(key: ticket.key, tab: nil)
         }
     }
 
@@ -190,7 +192,7 @@ struct BoardTicketCard: View {
                 Button("Discard draft", systemImage: "trash", role: .destructive) { onDiscard(t) }
             case let .openParent(key):
                 Button("Open \(parent.map { Keys.keyLabel($0) } ?? key)", systemImage: "arrow.turn.left.up") {
-                    router.push(.ticket(key: key, tab: nil))
+                    router.openTicket(key: key, tab: nil)
                 }
             case .copyKey:
                 Button("Copy key", systemImage: "doc.on.doc") { UIPasteboard.general.string = t.key }

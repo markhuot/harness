@@ -420,6 +420,47 @@ on iPhone and iOS takes ⌘, for itself. `harness://projects` at regular width s
 never presents it there). A section that doesn't set its own background gets `bg` from the
 detail column, since the split view paints the system background.
 
+**The ticket sheet at either width.** The main Router opens every ticket and New session in its
+one ticket sheet (`ticketSheet` / `dock`, its own path); only the presentation follows the width.
+`TicketSheetContent` (App/TicketSheetHost.swift) is the body both use: the ticket or New session
+in its own NavigationStack bound to the sheet's path. A link inside it (a child, dep or parent, a
+file, a ticket link in markdown) is `router.push` and stacks there with Back. A ticket chosen
+outside it is `router.openTicket` (board cards and their Open parent, the Inbox's triage Open
+when not itself inside the sheet, which reads `\.inTicketSheet`) or `router.openFromOutside`
+(notifications, URLs from other apps, section links from ticket windows): it replaces the
+presented sheet's ticket, root swapped and path cleared, same sheet id, New session drafts kept
+by the Router. Opening the sheet's root ticket with nothing pushed is a no-op (it only switches
+to a tab the link names); a docked sheet restores for its own ticket and is replaced otherwise,
+as with `push`. At
+compact width SceneChrome presents it as the system sheet with the dock detent
+(`TicketSheetHost`), which presents pickers, the watcher form and covers over itself; the board's
+bottom bar and `DockClearance` make room for the docked sheet. At regular width SceneChrome
+presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell
+overlays `TicketPanelHost` (App/TicketSidePanel.swift), and the root presents `sheet` and the
+cover as usual. The host puts the content in `TicketSidePanel`, which slides in from the
+trailing edge over the split view with no dimming, so the board and sidebar to its left stay
+live. It's resizable from its leading edge between 25% and 80% of the window
+(`TicketPanelWidth`: 800pt until the person drags it, then their fraction of the window, kept
+as the `ticketPanelWidth` pref and re-clamped on rotation). Its title bar names the ticket on
+top and has dock, pop-out and close; that ticket's screen leaves its key out of the navigation
+bar (`\.inTicketPanel` in TicketDetailHeader), which keeps Back and the titles of screens pushed
+above it. New session in the panel likewise drops its own title and Cancel ✕, keeping Plan first
+and Start session. While it's on top it hands its `cancel()` to the panel through
+`TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
+or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
+registered they just dismiss. Docking, pop-out and the pill's Close don't ask, and the draft is
+saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it.
+Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
+and `TicketDockPill` stands in for it on the trailing edge, Picture in Picture style, with the
+iPhone dock's `ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores
+it, and its context menu closes it. The pill floats over the board without reserving space. The
+composer measures its bottom gap from the screen's edge in the iPhone sheet (`\.concentricBottomGap`
+0); the panel leaves it unset, so the composer sits on the home indicator's inset or the keyboard.
+MainTabs sets the Router's `sheetIsBesideBoard` from the size class, so presence counts the board
+while the panel is up. A size-class change hands the same sheet across (same id, path, state and
+draft): the system sheet goes away without a dismissal and the panel picks it up, or the other way
+round.
+
 The board inside it has two layouts, also picked by `horizontalSizeClass`, so an iPad in a narrow
 Split View or a small Stage Manager window gets the phone's:
 
@@ -444,10 +485,14 @@ screen, on the Spec tab in a navigation stack of its own, as the context menu's 
 draft's lifts the card itself); a tap opens the ticket.
 
 simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
-only shoots portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
-`UISupportedInterfaceOrientations~ipad` set to landscape only (never commit that), and rotate the
-screenshots with `sips -r 270`. AXe taps land in the wrong place in that build, so only use it for
-screens that don't tap.
+runs portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
+`UISupportedInterfaceOrientations~ipad` set to `UIInterfaceOrientationLandscapeLeft` only (never
+commit that), then run sim-check with `--no-build` and `SIM_CHECK_LANDSCAPE=1`. The simulator stays
+portrait while the app draws sideways: AXe's tree reads in the app's landscape points, but its
+touches land in the device's portrait ones, so sim-check maps each tap, swipe and touch from
+(x, y) to (portrait width − y, x) and rotates its shots (`sips -r 270`, named `*-landscape.png`).
+The keyboard still draws in portrait across the app, so a check that leaves it up can't tap what
+it covers.
 
 ## Windows
 
@@ -460,9 +505,13 @@ window. Each window has its own `Router`, so its stack and sheets never move ano
 tint and bar colors. HarnessApp forwards the app's scene phase (active while any window
 is) to the store, never a single window's.
 
-- **Opening a ticket.** At regular width with `supportsMultipleWindows`, MainTabs turns on the main
-  Router's `opensTicketsInWindows`: `router.push(.ticket…)` (a card tap, a ticket link, the Inbox's
-  dispatched ticket, New session's launch) then calls `onOpenTicket` instead of pushing.
+- **Opening a ticket window.** A card tap or ticket link opens the ticket side panel (see iPad
+  layout), never a window. A ticket window opens on request: the panel's pop-out button
+  (`router.popOutSheet()`, which hands the sheet's top ticket to `onOpenTicket` and dismisses the
+  sheet), and "Open in New Window" in the card's menu, the ticket's More menu or a tab's menu.
+  `WindowDirectory.mainActive` sets each main Router's `onOpenTicket` only when
+  `UIApplication.shared.supportsMultipleScenes`, so `canPopOutSheet` is false on iPhone; the
+  panel also hides pop-out without `supportsMultipleWindows`.
   `WindowDirectory.openTicket` requests a scene with `UISceneSessionActivationRequest`, an
   NSUserActivity carrying the ticket (`TicketWindowValue.activityType`, listed in
   NSUserActivityTypes; `targetContentIdentifier` = `sceneMatch`, which the ticket WindowGroup's
@@ -474,9 +523,8 @@ is) to the store, never a single window's.
   A closed window's Router and scene can outlive it, but an activation request for its destroyed
   session does nothing, so WindowDirectory only reuses an entry whose scene is still attached and
   whose session is in `UIApplication.openSessions` (`Entry.isOpen`); otherwise it opens a new
-  window. "Open in New Window" (the card's menu, the ticket's More menu, a tab's menu) goes
-  through `WindowDirectory.openTicket` too, so it brings an open window forward rather than
-  opening a second. Compact width (iPhone, narrow Split View) pushes as before.
+  window. Pop-out and every "Open in New Window" go through `WindowDirectory.openTicket`, so
+  they bring an open window forward rather than opening a second.
 - **Pinned windows (tear-off).** `TicketWindowValue` has `pinned` and `browserTab`, and its `tab`
   can be `TicketWindowValue.composer`. A pinned window is one torn-off thing: a ticket tab, one
   browser tab (`browserTab`; the whole Browser tab when nil, chip strip and all), or the composer.
@@ -527,15 +575,32 @@ is) to the store, never a single window's.
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.
 
-`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold),
-picks Open in New Window, expects the pinned window (its title "KEY · Transcript"), brings the
-ticket's window back with its link and expects "Transcript is in another window", then presses
-Return to this window and expects the pinned window gone and the transcript back. AXe can't drive
-a drag (its touch events don't move), so drag-to-window is checked by hand.
+`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold) on
+a ticket in the side panel, picks Open in New Window, expects the pinned window (its title
+"KEY · Transcript"), brings the ticket back with its link and expects "Transcript is in another
+window", then presses Return to this window and expects the pinned window gone and the transcript
+back. AXe can't drive a drag (its touch events don't move), so drag-to-window is checked by hand.
 
-`sim-check --ipad`'s `ticket-window` check taps a card, expects its window (AXe also lists the
-board behind a prominent window, so it looks for the ticket's key and tab strip), then sends the
-app home, kills and relaunches it, and expects the window back on the same ticket.
+`sim-check --ipad` then runs the side panel's checks (`panelChecks`), which gate the run like the
+iPhone's; `--ipad --sheets` runs them alone, on the `--sheets` seed. sim-check reads the panel's
+geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
+the panel trailing-aligned at TicketPanelWidth's default with the board still showing and its title
+bar no higher than the sidebar button (both keep the top safe area). The panel's labels name its
+ticket once: the title bar, not the ticket's navigation bar too (AXe does list a navigation bar's
+key, as in a ticket window). Dragging the handle to either edge stops at 25% and 80%, then sim-check
+drags it back to the default, since the width is a pref that outlives the run. A child link inside
+pushes, and a different board card replaces the ticket at the root. AXe's tree leaves out the glass
+Back button, so sim-check taps where it sits: after a push that goes back to the parent, and at the
+root it leaves the panel where it was. The dock button leaves the "KEY, docked" pill vertically
+centred and partly off the trailing edge, and a tap on it restores the pushed child, Back and all.
+The pill's menu Close sends it away, New session opens in the panel with one title and one ✕ and no
+pop-out button (AXe's labels, then the screenshot's ink where its bar would draw a title, then a tap
+where its ✕ would sit, which must leave the panel up), with a draft typed Escape and the panel's ✕
+each bring up Save or Discard (Keep editing, then Discard, which closes the panel and takes the
+draft's card off the board), Escape (AXe's HID key 41) closes the panel, and pop-out opens a ticket
+window and closes the panel. Shots are `panel-*.png`. A compact window's bottom sheet isn't covered,
+since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets` checks drive
+the same sheet.
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
 `CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and

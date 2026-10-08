@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   from the ticket's folder.
 - Agents can read a page as a list of its buttons, fields and links, and act on each one by name,
   which helps on pages whose markup is hard to target.
+- On iPad, the ticket panel has a pop-out button that opens the ticket in its own window.
 
 ### Changed
 
@@ -23,6 +24,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   lets go near the bottom still docks it, as before.
 - A ticket's browser shows the page title only on its tab. The gray copy of it above the page is
   gone.
+- On iPad, a ticket or New session now opens in a panel that slides in from the right, and the
+  board stays usable beside it. Drag the panel's left edge to resize it, and the app remembers
+  the width. Dock the panel, or flick its title bar to the right, and it waits at the edge of the
+  screen as a small tab, with your place and drafts kept, until you tap it. Narrow iPad windows
+  keep the bottom sheet the iPhone uses. A ticket you open from the board or the Inbox takes the
+  panel's place, and a ticket linked from inside the panel opens on top of it with a Back button.
+- On iPhone and iPad, a ticket opened from a notification or from a link in another app replaces
+  the ticket that's open, rather than stacking on top of it behind Back.
 
 ### Fixed
 

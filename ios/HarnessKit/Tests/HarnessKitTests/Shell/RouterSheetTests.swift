@@ -2,15 +2,11 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// iPhone ticket sheets: tickets and New session in a sheet that can dock under the tabs.
+/// Ticket sheets: tickets and New session in a sheet that can dock under the sections.
 @MainActor
 @Suite("Router and ticket sheets")
 struct RouterSheetTests {
-    private func sheeted() -> Router {
-        let r = Router()
-        r.setUsesTicketSheets(true)
-        return r
-    }
+    private func sheeted() -> Router { Router() }
 
     private func t(_ key: String, _ tab: TicketTab? = nil) -> Route { .ticket(key: key, tab: tab) }
     private let draft = SheetRoute.newSession(projectId: "p1", key: nil)
@@ -291,14 +287,6 @@ struct RouterSheetTests {
         d.dockSheet()
         d.present(.projects)
         #expect(d.sheet == .projects && d.dock == nil)
-
-        // Without ticket sheets (iPad), Projects leaves the dock kept for when they're back.
-        let w = sheeted()
-        w.push(t("A-1"))
-        w.dockSheet()
-        w.setUsesTicketSheets(false)
-        w.present(.projects)
-        #expect(w.ticketSheetState == .docked)
     }
 
     @Test func otherSheetsAndCoversWorkAsBefore() {
@@ -352,84 +340,122 @@ struct RouterSheetTests {
         #expect(r.ticketSheetState == .gone)
     }
 
-    @Test func aDockWaitingOutAWideSpellDoesntSwallowTheVisibleStacksChanges() {
+    @Test func aSizeClassChangeKeepsTheSheetItsPathAndState() {
         let r = sheeted()
         r.push(t("A-1"))
-        r.dockSheet()
-        r.setUsesTicketSheets(false)
-        // At regular width the same ticket is opened on the stack, over the hidden dock.
-        r.push(t("A-1"))
-        #expect(r.path(.board) == [t("A-1")])
-        r.replaceTicket("A-1", with: "A-2")
-        #expect(r.path(.board) == [t("A-2")])
-        #expect(r.removeTicket { $0 == "A-2" })
-        #expect(r.path(.board).isEmpty)
-        // Kept but not drawn while wide, so the sections don't keep clear of it.
-        #expect(r.dock != nil && !r.showsDock)
-        // The dock is still there for the next narrow spell.
-        r.setUsesTicketSheets(true)
-        #expect(r.dock?.title == "A-1")
-        #expect(r.showsDock)
-        r.restoreDock()
-        #expect(!r.showsDock)
-    }
-
-    @Test func withTheFlagOffTicketsPushAsBefore() {
-        let r = Router()
-        r.push(t("A-1"))
-        r.present(draft)
-        #expect(r.path(.board) == [t("A-1")])
-        #expect(r.sheet == draft)
-        #expect(r.ticketSheetState == .gone)
-        r.replace(draft, with: t("A-2"))
-        #expect(r.sheet == nil && r.path(.board) == [t("A-1"), t("A-2")])
-
-        // A ticket window ignores the flag.
-        let w = Router(ticket: t("A-1"))
-        w.setUsesTicketSheets(true)
-        #expect(!w.usesTicketSheets)
-        w.push(t("A-2"))
-        #expect(w.path(.board) == [t("A-2")] && w.ticketSheet == nil)
-    }
-
-    @Test func windowsModeStillOpensTicketsInWindows() {
-        let r = Router()
-        var opened: [Route] = []
-        r.onOpenTicket = { opened.append($0) }
-        r.setOpensTicketsInWindows(true)
-        r.setUsesTicketSheets(true)
-        r.push(t("A-1"))
-        #expect(opened == [t("A-1")])
-        #expect(r.ticketSheetState == .gone && r.path(.board).isEmpty)
-    }
-
-    @Test func narrowingAndWideningMovesScreensBetweenTheStackAndTheSheet() {
-        let r = Router()
+        r.push(t("A-2", .spec))
         r.push(.prompts)
-        r.push(t("A-1"))
-        r.push(t("A-2"))
-        r.setUsesTicketSheets(true)
-        #expect(r.path(.board) == [.prompts])
-        #expect(r.ticketSheet?.root == .ticket(key: "A-1", tab: nil))
-        #expect(r.ticketSheet?.path == [t("A-2")])
-        r.setUsesTicketSheets(false)
-        #expect(r.path(.board) == [.prompts, t("A-1"), t("A-2")])
-        #expect(r.ticketSheetState == .gone)
+        let id = r.ticketSheet!.id
+        // Widening (the iPad's panel beside the board) and narrowing again: the same sheet.
+        r.sheetIsBesideBoard = true
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.id == id)
+        #expect(r.ticketSheet?.path == [t("A-2", .spec), .prompts])
+        r.dockSheet()
+        r.sheetIsBesideBoard = false
+        #expect(r.ticketSheetState == .docked && r.dock?.id == id && r.showsDock)
+        #expect(r.dock?.path == [t("A-2", .spec), .prompts])
+        r.sheetIsBesideBoard = true
+        r.restoreDock()
+        #expect(r.ticketSheet?.id == id && r.ticketSheet?.root == .ticket(key: "A-1", tab: nil))
+        // Links while wide still land on it, not on the section's stack.
+        r.push(t("A-3"))
+        #expect(r.ticketSheet?.path.last == t("A-3") && r.path(.board).isEmpty)
 
-        // New session moves between `sheet` and the ticket sheet.
-        let n = Router()
+        // New session (its draft is keyed by the sheet's root) stays the same sheet too.
+        let n = sheeted()
         n.present(draft)
-        n.setUsesTicketSheets(true)
-        #expect(n.sheet == nil && n.ticketSheet?.root == .newSession(projectId: "p1", key: nil))
-        n.setUsesTicketSheets(false)
-        #expect(n.sheet == draft && n.ticketSheetState == .gone)
+        let draftID = n.ticketSheet!.id
+        n.sheetIsBesideBoard = true
+        #expect(n.ticketSheet?.id == draftID && n.ticketSheet?.root == .newSession(projectId: "p1", key: nil))
+        #expect(n.sheet == nil)
+    }
 
-        // A dock waits out the wide spell.
-        let d = sheeted()
-        d.push(t("A-1"))
-        d.dockSheet()
-        d.setUsesTicketSheets(false)
-        d.setUsesTicketSheets(true)
-        #expect(d.dock?.title == "A-1")
+    // MARK: Tickets opened from outside the sheet (the board beside the iPad's panel)
+
+    @Test func aTicketFromOutsideReplacesThePresentedSheetsTicket() {
+        let r = sheeted()
+        r.push(t("C-1"))
+        r.push(t("C-2"))
+        r.push(.file(FileRouteParams(path: "a.ts", ticket: "C-2")))
+        let id = r.ticketSheet!.id
+        r.openTicket(key: "D-1", tab: .activity)
+        #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))
+        #expect(r.ticketSheet?.path == [])
+        #expect(r.ticketSheet?.id == id && r.ticketSheetState == .presented)
+        #expect(r.path(.board).isEmpty)
+        // Inside the sheet, a link still pushes on its stack.
+        r.push(t("D-2"))
+        #expect(r.ticketSheet?.path == [t("D-2")])
+        #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))
+    }
+
+    @Test func aTicketFromOutsideReplacesNewSession() {
+        let r = sheeted()
+        r.present(draft)
+        r.openTicket(key: "D-1", tab: nil)
+        #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
+    }
+
+    @Test func theSheetsOwnTicketFromOutsideOnlyComesBackToIt() {
+        let r = sheeted()
+        r.push(t("C-1", .spec))
+        r.openTicket(key: "C-1", tab: nil)
+        // Nothing pushed: a no-op, the tab it shows kept.
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .spec) && r.ticketSheet?.path == [])
+        // A tab it names switches to it.
+        r.openTicket(key: "C-1", tab: .details)
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .details))
+        // With a child pushed, it pops back to the root.
+        r.push(t("C-2"))
+        r.openTicket(key: "C-1", tab: nil)
+        #expect(r.ticketSheet?.root == .ticket(key: "C-1", tab: .details) && r.ticketSheet?.path == [])
+    }
+
+    @Test func aTicketFromOutsideTreatsADockAsPushDoes() {
+        // Another ticket: a new sheet in place of the dock.
+        let r = sheeted()
+        r.push(t("C-1"))
+        r.push(t("C-2"))
+        let id = r.ticketSheet!.id
+        r.dockSheet()
+        r.openTicket(key: "D-1", tab: nil)
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
+        #expect(r.ticketSheet?.id != id && r.ticketSheet?.path == [])
+        // The docked ticket on top: restored as it was.
+        r.push(t("D-2"))
+        r.dockSheet()
+        r.openTicket(key: "D-2", tab: nil)
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.path == [t("D-2")])
+    }
+
+    @Test func linksFromOutsideReplaceAndInAppLinksPush() {
+        let r = sheeted()
+        r.push(t("C-1"))
+        r.open(.push(t("C-2")))
+        #expect(r.ticketSheet?.path == [t("C-2")])
+        r.openFromOutside(.push(t("E-1")))
+        #expect(r.ticketSheet?.root == .ticket(key: "E-1", tab: nil) && r.ticketSheet?.path == [])
+        r.open(url: URL(string: "harness://ticket/E-2")!)
+        #expect(r.ticketSheet?.path == [t("E-2")])
+        r.open(url: URL(string: "harness://ticket/E-3")!, fromOutside: true)
+        #expect(r.ticketSheet?.root == .ticket(key: "E-3", tab: nil) && r.ticketSheet?.path == [])
+        // Not a ticket: as `open`.
+        r.openFromOutside(.tab(.inbox))
+        #expect(r.selectedTab == .inbox && r.ticketSheetState == .docked)
+    }
+
+    @Test func aTicketWindowPushesATicketFromOutside() {
+        let w = Router(ticket: t("A-1"))
+        w.openTicket(key: "A-2", tab: nil)
+        w.openFromOutside(.push(t("A-3")))
+        #expect(w.path(.board) == [t("A-2"), t("A-3")] && w.ticketSheetState == .gone)
+    }
+
+    @Test func aTicketWindowHasNoTicketSheet() {
+        let w = Router(ticket: t("A-1"))
+        w.push(t("A-2"))
+        w.present(draft)
+        #expect(w.path(.board) == [t("A-2")] && w.ticketSheetState == .gone)
+        #expect(w.sheet == draft)
     }
 }

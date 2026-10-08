@@ -23,10 +23,10 @@ public enum PresenceRules {
     /// filters them) and is only asked for when the board is showing.
     /// - A ticket window shows its ticket: the last one pushed on its stack, else its root.
     /// - A main window under a full-screen cover (the scanner) shows nothing.
-    /// - The iPhone's presented ticket sheet covers the board: just the ticket on top of it.
+    /// - A presented ticket sheet covering the board (the iPhone's): just the ticket on top of it.
     /// - Otherwise the selected section: the last ticket pushed on its stack, else the board's
-    ///   cards when it's the board at its root; plus the docked sheet's ticket, whose bar sits under
-    ///   the board.
+    ///   cards when it's the board at its root; plus the ticket on top of the sheet beside it
+    ///   (`sheetIsBesideBoard`, the iPad's panel) or of the docked sheet, whose bar sits under it.
     @MainActor
     public static func tickets(_ router: Router, board: () -> [String]) -> [String] {
         switch router.scope {
@@ -36,7 +36,7 @@ public enum PresenceRules {
             return []
         case .main:
             if router.cover != nil { return [] }
-            if router.usesTicketSheets, let sheet = router.ticketSheet {
+            if !router.sheetIsBesideBoard, let sheet = router.ticketSheet {
                 return sheet.topTicketKey.map { [$0] } ?? []
             }
             var out: [String] = []
@@ -46,7 +46,7 @@ public enum PresenceRules {
             } else if path.isEmpty, router.selectedTab == .board {
                 out += board()
             }
-            if router.showsDock, let key = router.dock?.topTicketKey { out.append(key) }
+            if let key = (router.ticketSheet ?? router.dock)?.topTicketKey { out.append(key) }
             return out
         }
     }

@@ -78,12 +78,13 @@ final class WindowDirectory {
     @ObservationIgnored private var pending: DeepLink?
 
     /// A main window came up or became active (`scene` is nil until the view is in its window).
-    /// Its ticket links open ticket windows from here on.
+    /// Where the device has windows (iPad), its ticket panel's pop-out opens ticket windows from
+    /// here on; the iPhone gets no opener, so `Router.canPopOutSheet` stays false there.
     func mainActive(_ router: Router, scene: UIWindowScene?) {
         let known = mains.first { $0.router === router }?.scene
         mains.removeAll { $0.router == nil || $0.router === router }
         mains.append(Entry(router: router, scene: scene ?? known))
-        if router.onOpenTicket == nil {
+        if router.onOpenTicket == nil && UIApplication.shared.supportsMultipleScenes {
             router.onOpenTicket = { [weak self, weak router] route in
                 guard let self, let v = TicketWindowValue(route: route) else { return }
                 self.openTicket(v, from: self.mains.first { $0.router === router }?.scene)
@@ -91,16 +92,17 @@ final class WindowDirectory {
         }
         if let link = pending {
             pending = nil
-            router.open(link)
+            router.openFromOutside(link)
         }
     }
 
     /// Opens `link` in the last active main window and brings it forward, or opens a main window
-    /// for it when none is open.
+    /// for it when none is open. It comes from outside that window's ticket sheet, so a ticket
+    /// replaces the sheet's (`Router.openFromOutside`).
     func openInMain(_ link: DeepLink) {
         mains.removeAll { !$0.isOpen }
         if let main = mains.last, let router = main.router, let session = main.scene?.session {
-            router.open(link)
+            router.openFromOutside(link)
             UIApplication.shared.activateSceneSession(for: UISceneSessionActivationRequest(session: session))
         } else {
             pending = link
@@ -108,14 +110,14 @@ final class WindowDirectory {
         }
     }
 
-    /// A tapped notification's link: opens in the last active main window (on iPad at regular
-    /// width a ticket link opens the ticket's own window from there). On a cold launch from the
+    /// A tapped notification's link: opens in the last active main window, a ticket in place of
+    /// the ticket sheet's (`Router.openFromOutside`). On a cold launch from the
     /// tap no main window has come up yet, so the first one to come up applies it; unlike
     /// `openInMain`, that waits for the window the launch is already bringing up.
     func openFromNotification(_ link: DeepLink) {
         mains.removeAll { !$0.isOpen }
         if let router = mains.last?.router {
-            router.open(link)
+            router.openFromOutside(link)
         } else {
             pending = link
         }
