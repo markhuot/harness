@@ -20,6 +20,17 @@ export interface WaitCondition {
   timeout?: number;
   /** The iframe selector and text are checked in (frames.ts); alone, its document has loaded. */
   frame?: string | string[];
+  /** Exactly this many elements match selector (and text). */
+  count?: number;
+  /** A matching element's `.value` is exactly this. */
+  value?: string;
+  /** A matching element has this attribute (with exactly this value, when given). */
+  attribute?: { name: string; value?: string };
+  /**
+   * The snapshot ref of the element the condition is about, in place of selector and frame. Not a
+   * wait_for field: browser_run's expect() sets it for expect({ ref }).
+   */
+  ref?: string;
 }
 
 export type WaitState = "visible" | "hidden" | "gone" | "enabled";
@@ -34,9 +45,10 @@ export const IDLE_IGNORE_AFTER_MS = 5_000;
 
 /** How the agent is told what a wait condition is (tool descriptions and the Browser prompt section). */
 export const WAIT_CONDITION_DOC =
-  `{ selector?, state?: "visible" | "hidden" | "gone" | "enabled", text?, frame?, url?, idle?, timeout? }; every field you give must hold at once. ` +
+  `{ selector?, state?: "visible" | "hidden" | "gone" | "enabled", text?, count?, value?, attribute?: { name, value? }, frame?, url?, idle?, timeout? }; every field you give must hold at once. ` +
   `selector with state: an element matching it is visible (the default state), none is visible (hidden), none is in the page at all (gone), or one is visible and clickable (enabled: not disabled, not aria-disabled, not inside [aria-busy=true]). ` +
   `text: that visible text is on the page (in selector's elements, with selector). ` +
+  `With selector: count, exactly that many elements match (and contain text, when given); value, a matching element's .value is exactly that string; attribute, a matching element has that attribute (with exactly that value, when given). These don't need the element visible unless you also give state. ` +
   `frame: check selector and text inside that iframe (a CSS selector for the <iframe>, or an array of them for nested frames); alone, wait until the iframe has loaded. ` +
   `url: the URL contains it, or matches it when written /like-this/. ` +
   `idle: true waits until the page has stopped loading and no request has been in flight for ${IDLE_QUIET_MS} ms (requests open over ${IDLE_IGNORE_AFTER_MS / 1000} s, like long polls, don't count). ` +
@@ -53,6 +65,18 @@ export const WAIT_CONDITION_PROPERTIES = {
       "With selector: \"visible\" (default) an element matching it is visible; \"hidden\" none is visible; \"gone\" none is in the page; \"enabled\" one is visible and clickable (not disabled, not aria-disabled, not inside [aria-busy=true]). With text, the elements containing that text.",
   },
   text: { type: "string", minLength: 1, description: "Visible text that must be on the page (in selector's elements, with selector)." },
+  count: { type: "integer", minimum: 0, description: "With selector: exactly this many elements match it (and contain text, when given). 0 waits until none do." },
+  value: { type: "string", description: "With selector: a matching element's .value (an input, select or textarea) is exactly this." },
+  attribute: {
+    type: "object",
+    properties: {
+      name: { type: "string", minLength: 1, description: "The attribute's name, e.g. \"aria-expanded\"." },
+      value: { type: "string", description: "Its exact value. Omitted: the attribute is present, with any value." },
+    },
+    required: ["name"],
+    additionalProperties: false,
+    description: "With selector: a matching element has this attribute (with exactly this value, when given).",
+  },
   frame: {
     anyOf: [{ type: "string", minLength: 1 }, { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 }],
     description: "Check selector and text inside this iframe: a CSS selector for the <iframe> element, or an array of them for nested frames (outermost first). Alone: wait until the iframe has loaded.",
@@ -69,9 +93,10 @@ export const WAIT_CONDITION_PROPERTIES = {
 
 /**
  * The checked condition, or an error message for the agent. A condition needs something to wait
- * for: a selector, text, url or idle (a timeout alone would just be a sleep).
+ * for: a selector, text, url or idle (a timeout alone would just be a sleep). `ref` (browser_run's
+ * expect({ ref })) names the element in place of a selector and frame.
  */
-export function checkCondition(input: unknown): { ok: true; condition: WaitCondition } | { ok: false; error: string } {
+export function checkCondition(input: unknown, ref?: string): { ok: true; condition: WaitCondition } | { ok: false; error: string } {
   if (input === null || typeof input !== "object" || Array.isArray(input)) return { ok: false, error: "A wait condition is an object, e.g. { selector: \".done\" }." };
   const c = input as Record<string, unknown>;
   const unknown = Object.keys(c).filter((k) => !(k in WAIT_CONDITION_PROPERTIES));
@@ -88,7 +113,24 @@ export function checkCondition(input: unknown): { ok: true; condition: WaitCondi
     const url = str("url");
     const state = c.state;
     if (state !== undefined && !WAIT_STATES.includes(state as WaitState)) throw new Error(`state must be one of ${WAIT_STATES.join(", ")}.`);
-    if (state !== undefined && selector === undefined && text === undefined) throw new Error("state needs a selector or text to apply to.");
+    const element = selector !== undefined || ref !== undefined;
+    if (ref !== undefined && (selector !== undefined || c.frame !== undefined)) throw new Error("A ref names its element and frame: give it without selector or frame.");
+    if (state !== undefined && !element && text === undefined) throw new Error("state needs a selector or text to apply to.");
+    const count = c.count;
+    if (count !== undefined && (typeof count !== "number" || !Number.isInteger(count) || count < 0)) throw new Error("count must be a whole number, 0 or more.");
+    if (c.value !== undefined && typeof c.value !== "string") throw new Error("value must be a string.");
+    let attribute: { name: string; value?: string } | undefined;
+    if (c.attribute !== undefined) {
+      const a = c.attribute as Record<string, unknown> | null;
+      if (a === null || typeof a !== "object" || Array.isArray(a) || typeof a.name !== "string" || a.name === "") throw new Error("attribute is { name, value? }, with a non-empty name.");
+      const extra = Object.keys(a).filter((k) => k !== "name" && k !== "value");
+      if (extra.length) throw new Error(`attribute is { name, value? }; it has no ${extra.join(", ")}.`);
+      if (a.value !== undefined && typeof a.value !== "string") throw new Error("attribute's value must be a string.");
+      attribute = { name: a.name, ...(a.value !== undefined ? { value: a.value } : {}) };
+    }
+    for (const [k, v] of [["count", count], ["value", c.value], ["attribute", attribute]] as const) {
+      if (v !== undefined && !element) throw new Error(`${k} needs a selector: the elements it counts or reads.`);
+    }
     if (c.idle !== undefined && typeof c.idle !== "boolean") throw new Error("idle must be true or false.");
     const timeout = c.timeout;
     if (timeout !== undefined && (typeof timeout !== "number" || !Number.isFinite(timeout) || timeout <= 0 || timeout > WAIT_MAX_TIMEOUT_S)) {
@@ -96,15 +138,19 @@ export function checkCondition(input: unknown): { ok: true; condition: WaitCondi
     }
     if (url !== undefined) urlMatcher(url); // a bad /regex/ fails now, not on every poll
     const frame = c.frame === undefined ? undefined : frameChain(c.frame);
-    if (selector === undefined && text === undefined && url === undefined && frame === undefined && c.idle !== true) {
+    if (!element && text === undefined && url === undefined && frame === undefined && c.idle !== true) {
       throw new Error("Say what to wait for: selector, text, frame, url or idle: true.");
     }
     return {
       ok: true,
       condition: {
         ...(selector !== undefined ? { selector } : {}),
+        ...(ref !== undefined ? { ref } : {}),
         ...(state !== undefined ? { state: state as WaitState } : {}),
         ...(text !== undefined ? { text } : {}),
+        ...(count !== undefined ? { count: count as number } : {}),
+        ...(c.value !== undefined ? { value: c.value as string } : {}),
+        ...(attribute !== undefined ? { attribute } : {}),
         ...(frame !== undefined ? { frame: frame.length === 1 ? frame[0]! : frame } : {}),
         ...(url !== undefined ? { url } : {}),
         ...(c.idle === true ? { idle: true } : {}),
@@ -132,13 +178,31 @@ export function urlMatcher(url: string): (href: string) => boolean {
 /** The condition in a few words, for results and logs: `"button" gone, network idle`. */
 export function describeCondition(c: WaitCondition): string {
   const parts: string[] = [];
-  if (c.selector !== undefined || c.text !== undefined) {
-    const what = [c.selector !== undefined ? JSON.stringify(c.selector) : "", c.text !== undefined ? `text ${JSON.stringify(c.text)}` : ""].filter(Boolean).join(" with ");
-    parts.push(`${what} ${c.state ?? "visible"}${c.frame !== undefined ? ` in frame ${frameLabel(c.frame)}` : ""}`);
+  if (c.selector !== undefined || c.ref !== undefined || c.text !== undefined) {
+    const el = c.ref !== undefined ? `ref ${c.ref}` : c.selector !== undefined ? JSON.stringify(c.selector) : "";
+    const what = [el, c.text !== undefined ? `text ${JSON.stringify(c.text)}` : ""].filter(Boolean).join(" with ");
+    const tests = [
+      ...(c.count !== undefined ? [`count ${c.count}`] : []),
+      ...(c.value !== undefined ? [`value ${JSON.stringify(c.value)}`] : []),
+      ...(c.attribute !== undefined ? [`attribute ${c.attribute.name}${c.attribute.value !== undefined ? `=${JSON.stringify(c.attribute.value)}` : ""}`] : []),
+    ];
+    const state = effectiveState(c);
+    if (state) tests.unshift(state);
+    parts.push(`${what} ${tests.join(", ")}${c.frame !== undefined ? ` in frame ${frameLabel(c.frame)}` : ""}`);
   } else if (c.frame !== undefined) parts.push(`frame ${frameLabel(c.frame)} loaded`);
   if (c.url !== undefined) parts.push(`URL ${c.url.startsWith("/") && c.url.length > 1 ? "matches" : "contains"} ${c.url}`);
   if (c.idle) parts.push("network idle");
   return parts.join(", ");
+}
+
+/**
+ * The state the elements must be in: the one given, else "visible", except that count, value and
+ * attribute don't need the element visible (a hidden input still has a value), so alone they
+ * apply no state.
+ */
+export function effectiveState(c: WaitCondition): WaitState | undefined {
+  if (c.state !== undefined) return c.state;
+  return c.count !== undefined || c.value !== undefined || c.attribute !== undefined ? undefined : "visible";
 }
 
 /** The condition's timeout in ms. */

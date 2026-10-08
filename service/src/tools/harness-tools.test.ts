@@ -51,7 +51,7 @@ describe("tool catalogue", () => {
     expect(props("browser_upload")).toEqual(["frame", "paths", "ref", "selector", "tab", "wait_for"]);
     expect(props("browser_eval")).toEqual(["expression", "frame", "tab", "wait_for"]);
     expect(props("browser_screenshot")).toEqual(["frame", "full_page", "ref", "save_to", "selector", "tab", "wait_for"]);
-    expect(props("browser_wait")).toEqual(["frame", "idle", "selector", "state", "tab", "text", "timeout", "url"]);
+    expect(props("browser_wait")).toEqual(["attribute", "count", "frame", "idle", "selector", "state", "tab", "text", "timeout", "url", "value"]);
     expect(props("browser_run")).toEqual(["script", "tab", "timeout", "wait"]);
     expect(props("browser_run_status")).toEqual(["job", "wait"]);
     expect(props("browser_run_stop")).toEqual(["job"]);

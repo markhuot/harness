@@ -24,7 +24,7 @@ import { ChromeProcess, findChrome } from "./chrome.ts";
 import { FrameError, TabFrames, frameChain, frameLabel, type ElementHandle, type Scope } from "./frames.ts";
 import { MOD_CTRL, MOD_META, charPress, macEditingCommands, parseKeyChord, virtualKeyCode, type KeyPress } from "./keys.ts";
 import { SNAPSHOT_DEFAULT_MAX_NODES, axNodes, renderAxTree } from "./snapshot.ts";
-import { IDLE_IGNORE_AFTER_MS, IDLE_QUIET_MS, describeCondition, seconds, timeoutMs, urlMatcher, type WaitCondition, type WaitResult } from "./wait.ts";
+import { IDLE_IGNORE_AFTER_MS, IDLE_QUIET_MS, describeCondition, effectiveState, seconds, timeoutMs, urlMatcher, type WaitCondition, type WaitResult } from "./wait.ts";
 import type {
   BrowserConsoleEntry,
   BrowserFrame,
@@ -2057,10 +2057,11 @@ export class BrowserManager implements BrowserService {
     const start = Date.now();
     const deadline = start + timeoutMs(c);
     const matchUrl = c.url !== undefined ? urlMatcher(c.url) : null;
-    const inPage = c.selector !== undefined || c.text !== undefined;
+    const inPage = c.selector !== undefined || c.ref !== undefined || c.text !== undefined;
     // A frame alone waits for the iframe to have a document; with selector or text they're checked in it.
     const dom = inPage || c.frame !== undefined;
-    const expression = inPage ? waitCheckExpression(c) : "";
+    const spec = waitCheckSpec(c);
+    const expression = inPage ? waitCheckExpression(spec) : "";
     // What the page complained about while we waited, for a timeout to report.
     const complaints: string[] = [];
     const off = this.watch(tab.entry.sessionId, (e) => {
@@ -2086,16 +2087,21 @@ export class BrowserManager implements BrowserService {
         if (dom) {
           let frameReady = false;
           try {
-            const scope = await tab.frames.resolve(c.frame);
-            frameReady = true;
-            if (inPage) {
-              const res = await scope.session.send(
-                "Runtime.evaluate",
-                { expression, returnByValue: true, ...(scope.contextId !== undefined ? { contextId: scope.contextId } : {}) },
-                5_000,
-              );
-              check = (res.result?.value as WaitCheck | undefined) ?? null;
-              checkError = res.exceptionDetails ? exceptionMessage(res.exceptionDetails) : "";
+            if (c.ref !== undefined) {
+              ({ check, error: checkError } = await this.refCheck(tab, c.ref, spec));
+              frameReady = true;
+            } else {
+              const scope = await tab.frames.resolve(c.frame);
+              frameReady = true;
+              if (inPage) {
+                const res = await scope.session.send(
+                  "Runtime.evaluate",
+                  { expression, returnByValue: true, ...(scope.contextId !== undefined ? { contextId: scope.contextId } : {}) },
+                  5_000,
+                );
+                check = (res.result?.value as WaitCheck | undefined) ?? null;
+                checkError = res.exceptionDetails ? exceptionMessage(res.exceptionDetails) : "";
+              }
             }
           } catch (e) {
             // A frame that will never do (not an iframe, a bad selector) ends the wait now.
@@ -2118,7 +2124,8 @@ export class BrowserManager implements BrowserService {
             `Now at ${tab.url}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
           ];
           if (inPage && check) {
-            lines.push(`Last check: ${check.count} element${check.count === 1 ? "" : "s"} matched (${check.visible} visible, ${check.enabled} enabled).`);
+            lines.push(lastCheckLine(c, check));
+            if (c.ref !== undefined && checkError) lines.push(checkError);
           } else if (dom && checkError) lines.push(`The last check couldn't read the page: ${checkError}`);
           else if (inPage) lines.push("The last check couldn't read the page.");
           if (c.url !== undefined && matchUrl && !matchUrl(tab.url)) lines.push(`The URL doesn't match ${c.url}.`);
@@ -2132,6 +2139,24 @@ export class BrowserManager implements BrowserService {
       }
     } finally {
       off();
+    }
+  }
+
+  /**
+   * One tick of a wait on a ref: the element is looked up again each time, and once its ref is stale
+   * or dropped (the page moved on) it counts as gone, with the reason as the error.
+   */
+  private async refCheck(tab: Tab, ref: string, spec: WaitCheckSpec): Promise<{ check: WaitCheck; error: string }> {
+    let el: ElementHandle;
+    try {
+      el = await tab.frames.byRef(ref);
+    } catch (e) {
+      return { check: (await this.evalValue(tab, waitCheckExpression(spec, true))) as WaitCheck, error: (e as Error).message };
+    }
+    try {
+      return { check: (await tab.frames.callOn(el, WAIT_CHECK_FN, [spec, true])) as WaitCheck, error: "" };
+    } finally {
+      tab.frames.release(el);
     }
   }
 
@@ -2262,32 +2287,88 @@ interface WaitCheck {
   busy: number;
   /** The selector didn't parse. */
   error?: string;
+  /** The first match's `.value` (null without one). */
+  value?: string | null;
+  /** The first match's attribute the condition names (null when it hasn't one). */
+  attr?: string | null;
 }
 
-/** The in-page half of a wait's selector/text check: does the condition hold, and what's there. */
-function waitCheckExpression(c: WaitCondition): string {
-  return `(() => {
-    const sel = ${JSON.stringify(c.selector ?? null)};
-    const text = ${JSON.stringify(c.text ?? null)};
-    const state = ${JSON.stringify(c.state ?? "visible")};
-    let els;
+/** What the in-page check needs from a condition (waitCheckSpec), as plain JSON. */
+interface WaitCheckSpec {
+  sel: string | null;
+  text: string | null;
+  state: string | null;
+  count: number | null;
+  value: string | null;
+  attr: { name: string; value: string | null } | null;
+}
+
+function waitCheckSpec(c: WaitCondition): WaitCheckSpec {
+  return {
+    sel: c.selector ?? null,
+    text: c.text ?? null,
+    state: effectiveState(c) ?? null,
+    count: c.count ?? null,
+    value: c.value ?? null,
+    attr: c.attribute ? { name: c.attribute.name, value: c.attribute.value ?? null } : null,
+  };
+}
+
+/**
+ * The in-page half of a wait's element check: does the condition hold, and what's there. A function
+ * declaration taking the spec and `own`: false queries spec.sel (the page's body without one), true
+ * checks `this`, the element a ref resolved to (none when called without one: the ref went stale).
+ */
+const WAIT_CHECK_FN = `function (spec, own) {
+  let els;
+  if (own) {
+    els = this && this.nodeType === 1 ? [this] : [];
+  } else {
     try {
-      els = sel === null ? [document.body || document.documentElement] : Array.from(document.querySelectorAll(sel));
+      els = spec.sel === null ? [document.body || document.documentElement] : Array.from(document.querySelectorAll(spec.sel));
     } catch (e) {
       return { error: String((e && e.message) || e) };
     }
-    if (text !== null) els = els.filter((el) => ((typeof el.innerText === "string" ? el.innerText : el.textContent) || "").includes(text));
-    const visible = (el) => {
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 && r.height === 0) return false;
-      return typeof el.checkVisibility === "function" ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : true;
-    };
-    const enabled = (el) => !el.matches(":disabled") && !el.closest('[aria-disabled="true"]') && !el.closest('[aria-busy="true"]');
-    const vis = els.filter(visible);
-    const en = vis.filter(enabled);
-    const met = state === "gone" ? els.length === 0 : state === "hidden" ? vis.length === 0 : state === "enabled" ? en.length > 0 : vis.length > 0;
-    return { met, count: els.length, visible: vis.length, enabled: en.length, busy: document.querySelectorAll('[aria-busy="true"]').length };
-  })()`;
+  }
+  if (spec.text !== null) els = els.filter((el) => ((typeof el.innerText === "string" ? el.innerText : el.textContent) || "").includes(spec.text));
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return false;
+    return typeof el.checkVisibility === "function" ? el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) : true;
+  };
+  const enabled = (el) => !el.matches(":disabled") && !el.closest('[aria-disabled="true"]') && !el.closest('[aria-busy="true"]');
+  const vis = els.filter(visible);
+  const en = vis.filter(enabled);
+  const state = spec.state;
+  let met = state === null ? true : state === "gone" ? els.length === 0 : state === "hidden" ? vis.length === 0 : state === "enabled" ? en.length > 0 : vis.length > 0;
+  if (spec.count !== null && els.length !== spec.count) met = false;
+  if (spec.value !== null && !els.some((el) => typeof el.value === "string" && el.value === spec.value)) met = false;
+  const a = spec.attr;
+  if (a !== null && !els.some((el) => el.hasAttribute(a.name) && (a.value === null || el.getAttribute(a.name) === a.value))) met = false;
+  const first = els[0];
+  return {
+    met,
+    count: els.length,
+    visible: vis.length,
+    enabled: en.length,
+    busy: document.querySelectorAll('[aria-busy="true"]').length,
+    value: first && typeof first.value === "string" ? first.value : null,
+    attr: first && a !== null ? first.getAttribute(a.name) : null,
+  };
+}`;
+
+/** The check as an expression for Runtime.evaluate: for a selector, or (own) for a ref that's gone. */
+const waitCheckExpression = (spec: WaitCheckSpec, own = false) => `(${WAIT_CHECK_FN}).call(null, ${JSON.stringify(spec)}, ${own})`;
+
+/** The timeout report's line on the last check: what matched, and the value or attribute it read. */
+function lastCheckLine(c: WaitCondition, check: WaitCheck): string {
+  const what = c.ref !== undefined ? (check.count ? `ref ${c.ref} was there` : `ref ${c.ref} wasn't there`) : `${check.count} element${check.count === 1 ? "" : "s"} matched`;
+  const parts = [`Last check: ${what}${c.count !== undefined ? `, want ${c.count}` : ""} (${check.visible} visible, ${check.enabled} enabled).`];
+  if (check.count && c.value !== undefined) parts.push(check.value === null ? "The first match has no value." : `The first match's value was ${JSON.stringify(check.value)}.`);
+  if (check.count && c.attribute !== undefined) {
+    parts.push(check.attr === null ? `The first match has no ${c.attribute.name} attribute.` : `The first match's ${c.attribute.name} was ${JSON.stringify(check.attr)}.`);
+  }
+  return parts.join(" ");
 }
 
 /** An element target in messages: its selector (and frame), or its ref. */
