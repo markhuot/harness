@@ -123,3 +123,65 @@
   gap: 5px;
   color: var(--red);
 }
+
+/* The per-phase picker (PhaseModelSelect.tsx): model rows with a radio column per phase. */
+.phase-model-select {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+.phase-model-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.phase-combo-head,
+.phase-combo-row {
+  display: grid;
+  align-items: center;
+  column-gap: 0;
+}
+.phase-combo-head {
+  flex: none;
+  padding: 6px 12px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  user-select: none;
+}
+.phase-combo-col {
+  text-align: center;
+}
+.phase-combo-row {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: default;
+}
+.phase-combo-row.active {
+  background: var(--bg-hover);
+}
+.phase-combo-cell {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+  border-radius: 4px;
+}
+.phase-combo-cell.active {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.phase-radio {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-3);
+  box-sizing: border-box;
+}
+.phase-radio.on {
+  border: 4px solid var(--accent);
+}

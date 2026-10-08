@@ -7,7 +7,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { BranchInfo, ExternalRefInput, Project, Ticket, UpdateTicketBody } from "@harness/shared";
-import { isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
+import { inheritedPhaseModels, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import {
   checkoutBranch,
   depChipTitle,
@@ -17,17 +17,13 @@ import {
   draftBranchValue,
   draftDefaultBranchLabel,
   inheritedBaseLabel,
-  inheritedModel,
   newTicketBranchLabel,
   ticketBranchHint,
-  ticketChoice,
-  ticketChoicePatch,
-  ticketResolvedChoice,
   ticketSettingsRows,
 } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { skipHumanReviewHint, skipReviewHint } from "../state/newSession";
-import { DriverModelSelect } from "./ModelSelect";
+import { PhaseModelSelect } from "./PhaseModelSelect";
 import { PermissionModeSelect } from "./PermissionModeSelect";
 import { BranchSelect } from "./BranchSelect";
 import { StatusDot, Switch, TicketKey } from "./bits";
@@ -110,15 +106,14 @@ export function TicketSettings({
 
   return (
     <dl className="props ticket-settings" data-testid="ticket-settings">
-      <dt>Model</dt>
-      <dd title={draft ? undefined : ticket.busy ? "Applies from the next run. The driver can't change while a run is going." : "Applies from the next run"}>
-        <DriverModelSelect
-          value={ticketChoice(ticket, project, state.settings)}
-          resolved={ticketResolvedChoice(project, state.settings)}
+      <dt>Models</dt>
+      <dd>
+        <PhaseModelSelect
+          value={ticket.phaseModels}
+          inherited={inheritedPhaseModels("ticket", project?.phaseModels, state.settings?.phaseModels)}
           disabled={!editable}
-          onlyDriver={rows.onlyDriver}
-          inheritedModel={(d) => inheritedModel(d, "ticket", project, state.settings)}
-          onChange={(c) => onPatch(ticketChoicePatch(c, project, state.settings))}
+          hint={draft || !editable ? null : undefined}
+          onChange={(phaseModels) => onPatch({ phaseModels })}
         />
       </dd>
       <dt>Permissions</dt>

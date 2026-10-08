@@ -62,7 +62,7 @@ describe("create_ticket", () => {
   test("conductor run: a child that auto-starts, on the conductor's driver and model", async () => {
     const h = await setup();
     const c = await h.make("conduct", { kind: "conductor", status: "in_progress" });
-    h.store.tickets.update(c.id, { model: "fake-model" });
+    h.store.tickets.update(c.id, { phaseModels: { work: { driver: c.driver, model: "fake-model" } } });
     const t = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child", spec: "do a part", autoStart: false });
     expect([t.parentId, t.autoStart, t.driver, t.model]).toEqual([c.id, false, c.driver, "fake-model"]);
     const auto = await h.orch.ops.createTicket(h.ctx("conductor", h.get(c)), { title: "child 2", spec: "do a part" });

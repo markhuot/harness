@@ -11,6 +11,8 @@ import type {
   DriverInfo,
   DriverModels,
   PermissionMode,
+  PhaseModels,
+  PhaseModelsPatch,
   PromptEntry,
   PublicSettings,
   RelatedTicket,
@@ -176,6 +178,8 @@ export interface CreateTicketInput {
   projectKey?: string;
   driver?: string;
   model?: string | null;
+  /** Per-phase driver + model (merged over the driver/model shorthand, which sets Planning, Work and Review) */
+  phaseModels?: PhaseModelsPatch;
   /** false → the project checkout, true → its own worktree; omitted → the project's setting. */
   useWorktree?: boolean;
   /** Branch for its worktree (CreateTicketBody.branch); omitted → harness/<key>. */
@@ -202,6 +206,8 @@ export interface UpdateTicketInput {
   baseRevision?: number;
   driver?: string;
   model?: string | null;
+  /** Per-phase driver + model patch; null clears a phase */
+  phaseModels?: PhaseModelsPatch;
   permissionMode?: PermissionMode | null;
   dependsOn?: string[];
   /** Base branch override; null → inherit the project's. */
@@ -473,6 +479,8 @@ export interface ProjectView {
   path: string;
   defaultDriver: string | null;
   defaultModels: Record<string, string>;
+  /** The project's own per-phase choices; phases it doesn't choose inherit the settings' */
+  phaseModels: PhaseModels;
   useWorktrees: boolean;
   /** New tickets skip their agent review by default */
   skipAgentReview: boolean;

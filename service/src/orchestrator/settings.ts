@@ -1,5 +1,5 @@
-import type { ListenSetting, NotificationSettings, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import type { ListenSetting, NotificationSettings, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings } from "@harness/shared";
+import { applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -9,6 +9,7 @@ function unsetPrompts(): Record<PromptId, string | null> {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  phaseModels: {},
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
   permissionMode: "auto",
@@ -57,24 +58,53 @@ export function toPublicSettings(s: Settings): PublicSettings {
   return { ...rest, anthropicApiKeySet: !!anthropicApiKey, claudeOauthTokenSet: !!claudeOauthToken, copilotGithubTokenSet: !!copilotGithubToken };
 }
 
-/** Merge stored values over defaults, ignoring unknown/invalid stored keys. */
+/** The settings keys that were the app's model choice before per-phase choices (now derived from phaseModels). */
+export const LEGACY_MODEL_KEYS = ["defaultDriver", "defaultModels", "reviewModels"] as const;
+
+/** A validated PATCH /settings: settings, except phaseModels is a per-phase patch (null clears). */
+export type SettingsUpdate = Partial<Omit<Settings, "phaseModels">> & { phaseModels?: PhaseModelsPatch };
+
+/**
+ * Merge stored values over defaults, ignoring unknown/invalid stored keys. Legacy model keys still
+ * in storage (written before migration 38, or straight to the store) apply over phaseModels, and
+ * the legacy fields are then derived from the result.
+ */
 export function resolveSettings(stored: Record<string, unknown>): Settings {
   const out: Settings = { ...DEFAULT_SETTINGS };
-  const { prompts, ...rest } = pick(stored);
-  try {
-    Object.assign(out, validateSettingsPatch(rest));
-  } catch {
-    // one bad stored value shouldn't take the whole service down; validate per key instead
-    for (const [k, v] of Object.entries(rest)) {
-      try {
-        Object.assign(out, validateSettingsPatch({ [k]: v }));
-      } catch {}
+  const { prompts, phaseModels, defaultDriver, defaultModels, reviewModels, ...rest } = pick(stored);
+  const validate = (values: Record<string, unknown>): SettingsUpdate => {
+    try {
+      return validateSettingsPatch(values);
+    } catch {
+      // one bad stored value shouldn't take the whole service down; validate per key instead
+      const ok: SettingsUpdate = {};
+      for (const [k, v] of Object.entries(values)) {
+        try {
+          Object.assign(ok, validateSettingsPatch({ [k]: v }));
+        } catch {}
+      }
+      return ok;
     }
-  }
-  out.defaultModels = mergeModelMap({}, out.defaultModels);
-  out.reviewModels = mergeModelMap({}, out.reviewModels);
+  };
+  const { phaseModels: _pm, ...valid } = validate(rest);
+  Object.assign(out, valid);
+  const legacy = validate(Object.fromEntries(Object.entries({ defaultDriver, defaultModels, reviewModels }).filter(([, v]) => v !== undefined)));
+  out.phaseModels = applyLegacySettings(storedPhaseModels(phaseModels), legacy);
+  Object.assign(out, legacySettingsFields(out.phaseModels));
   out.watcherModels = mergeModelMap({}, out.watcherModels ?? {});
   out.prompts = resolvePrompts(prompts);
+  return out;
+}
+
+/** Stored phaseModels, keeping each phase that still validates. */
+function storedPhaseModels(value: unknown): PhaseModels {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: PhaseModels = {};
+  for (const [phase, choice] of Object.entries(value as Record<string, unknown>)) {
+    try {
+      Object.assign(out, mergePhaseModels({}, validatePhaseModels("phaseModels", { [phase]: choice })));
+    } catch {}
+  }
   return out;
 }
 
@@ -128,11 +158,14 @@ function pick(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** Validate a PATCH /settings body. Unknown keys are rejected. */
-export function validateSettingsPatch(body: unknown, knownDrivers?: string[], current?: Settings): Partial<Settings> {
+export function validateSettingsPatch(body: unknown, knownDrivers?: string[], current?: Settings): SettingsUpdate {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw badRequest("settings body must be an object");
-  const out: Partial<Settings> = {};
+  const out: SettingsUpdate = {};
   for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
     switch (key) {
+      case "phaseModels":
+        out.phaseModels = validatePhaseModels("phaseModels", value, knownDrivers);
+        break;
       case "defaultDriver":
         if (typeof value !== "string" || !value) throw badRequest("defaultDriver must be a non-empty string");
         if (knownDrivers && !knownDrivers.includes(value)) throw badRequest(`Unknown driver: ${value}`);
@@ -287,11 +320,42 @@ export function mergeModelMap(current: Record<string, string | null>, patch: Rec
   return out;
 }
 
-/** Apply a validated PATCH /settings over the current settings (model maps merge per driver). */
-export function applySettingsPatch(current: Settings, patch: Partial<Settings>): Partial<Settings> {
-  const out: Partial<Settings> = { ...patch };
-  if (patch.defaultModels) out.defaultModels = mergeModelMap(current.defaultModels, patch.defaultModels);
-  if (patch.reviewModels) out.reviewModels = mergeModelMap(current.reviewModels, patch.reviewModels);
+/**
+ * { phase: { driver, model } | null }. Phases must be plan / work / review / complete, drivers known
+ * when the list is given (clearing a phase is always fine), and models valid ids (null / "" → the
+ * driver's default).
+ */
+export function validatePhaseModels(field: string, value: unknown, knownDrivers?: string[]): PhaseModelsPatch {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest(`${field} must be an object of phase (${PHASES.join(", ")}) → { driver, model } or null`);
+  const out: PhaseModelsPatch = {};
+  for (const [phase, choice] of Object.entries(value as Record<string, unknown>)) {
+    if (!(PHASES as readonly string[]).includes(phase)) throw badRequest(`Unknown phase in ${field}: ${phase} (one of ${PHASES.join(", ")})`);
+    const p = phase as (typeof PHASES)[number];
+    if (choice === null) {
+      out[p] = null;
+      continue;
+    }
+    if (!choice || typeof choice !== "object" || Array.isArray(choice)) throw badRequest(`${field}.${phase} must be { driver, model } or null`);
+    const { driver, model } = choice as { driver?: unknown; model?: unknown };
+    if (typeof driver !== "string" || !driver.trim()) throw badRequest(`${field}.${phase}.driver must be a driver id`);
+    if (knownDrivers && !knownDrivers.includes(driver.trim())) throw badRequest(`Unknown driver in ${field}.${phase}: ${driver}`);
+    out[p] = { driver: driver.trim(), model: validateModelId(`${field}.${phase}.model`, model) };
+  }
+  return out;
+}
+
+/**
+ * Apply a validated PATCH /settings over the current settings: the values to store. Model maps merge
+ * per driver. The model choice is stored only as phaseModels: legacy fields in the patch apply to it
+ * first, then its own phases; the caller drops the legacy keys from storage (LEGACY_MODEL_KEYS).
+ */
+export function applySettingsPatch(current: Settings, patch: SettingsUpdate): Partial<Settings> {
+  const { phaseModels, defaultDriver, defaultModels, reviewModels, ...rest } = patch;
+  const out: Partial<Settings> = { ...rest };
+  if (phaseModels || defaultDriver !== undefined || defaultModels || reviewModels) {
+    const legacy = applyLegacySettings(current.phaseModels, { defaultDriver, defaultModels, reviewModels });
+    out.phaseModels = mergePhaseModels(legacy, phaseModels ?? {});
+  }
   if (patch.watcherModels) out.watcherModels = mergeModelMap(current.watcherModels ?? {}, patch.watcherModels);
   // Stored compactly: only the ids with an override (a null in the patch removes one).
   if (patch.prompts) {

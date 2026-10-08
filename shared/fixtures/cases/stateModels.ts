@@ -17,8 +17,12 @@ import {
   ticketChoice,
   ticketChoicePatch,
   ticketResolvedChoice,
+  filterPhaseGroups,
+  phaseMatrix,
+  phasePickPatch,
   type ChoiceGroup,
 } from "../../src/state/models";
+import { inheritedPhaseModels } from "../../src/phases";
 import type { TriageChoice } from "../../src/watchers";
 import { cases } from "../case";
 import { Project as projectSamples, PublicSettings as publicSettingsSamples, Settings as settingsSamples } from "./protocol";
@@ -360,3 +364,44 @@ export const entityCases = cases(
     ["nothing", { project: null, settings: null, ticket: { driver: "x", model: null } }],
   ],
 );
+
+// ---------------------------------------------------------------------------
+// The per-phase picker: phaseMatrix / phaseSummary / filterPhaseGroups / phasePickPatch
+// ---------------------------------------------------------------------------
+
+const phaseModelLists: Record<string, P.ModelInfo[]> = {
+  "claude-code": [
+    { id: "opus", name: "Opus 5.5", default: true },
+    { id: "haiku", name: "Haiku 5.5" },
+  ],
+  codex: [{ id: "luna", name: "Luna" }],
+};
+const phaseSettings: P.PhaseModels = { work: { driver: "claude-code", model: "opus" }, complete: { driver: "claude-code", model: "haiku" } };
+type MatrixIn = { value: P.PhaseModels | null; inherited: Record<P.Phase, P.PhaseChoice> | null; query?: string };
+
+export const phaseMatrixCases = cases(
+  ({ value, inherited, query }: MatrixIn) => {
+    const m = phaseMatrix(drivers, phaseModelLists, value, inherited);
+    return { ...m, filtered: query === undefined ? null : filterPhaseGroups(m.groups, query) };
+  },
+  {
+    "app level": { value: phaseSettings, inherited: null },
+    "app level, nothing set": { value: null, inherited: null },
+    "ticket inherits everything": { value: {}, inherited: inheritedPhaseModels("ticket", null, phaseSettings) },
+    "ticket works on another driver": { value: { work: { driver: "codex", model: "luna" } }, inherited: inheritedPhaseModels("ticket", null, phaseSettings) },
+    "an unlisted driver and a custom model are kept": {
+      value: { review: { driver: "gone", model: "x-1" }, plan: { driver: "claude-code", model: "custom-1" } },
+      inherited: inheritedPhaseModels("project", null, phaseSettings),
+    },
+    "type-ahead by model name": { value: null, inherited: null, query: "hai" },
+    "type-ahead by driver": { value: null, inherited: null, query: "codex" },
+    "type-ahead by model id": { value: null, inherited: null, query: "luna" },
+    "type-ahead with no match": { value: null, inherited: null, query: "zzz" },
+  },
+);
+
+export const phasePickPatchCases = cases(({ phase, choice }: { phase: P.Phase; choice: P.PhaseChoice | null }) => phasePickPatch(phase, { choice }), {
+  "a model": { phase: "complete", choice: { driver: "codex", model: "luna" } },
+  "a driver default": { phase: "work", choice: { driver: "claude-code", model: null } },
+  inherit: { phase: "plan", choice: null },
+});

@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// A ticket's settings rows, the same for a launched ticket (the Details
-/// tab) and a draft (New session's Options): Model, Permissions, Skip agent review, Skip human review, Branch (with the
+/// tab) and a draft (New session's Options): Models, Permissions, Skip agent review, Skip human review, Branch (with the
 /// hint under it), Base branch, Remote ID (launched tickets) and Depends on. Which rows show and
 /// which can change come from Drafts.ticketSettingsRows; every change goes out as one
 /// UpdateTicketBody through `onPatch` (a PATCH for a launched ticket, applyTicketPatch on a draft's
@@ -118,8 +118,6 @@ private struct TicketSettingsRows: View {
         let state = store.state
         let project = state.projects[ticket.projectId]
         let settings = state.settings
-        let modelProject = project.map(ModelProject.init)
-        let modelSettings = settings.map(ModelSettings.init)
         let rows = Drafts.ticketSettingsRows(ticket, project: project)
         let hints = PickerLogic.ticketSettingsHints(ticket, rows: rows)
         let draft = ticket.draft == true
@@ -127,14 +125,12 @@ private struct TicketSettingsRows: View {
         let inheritedBase = Branches.resolveBaseBranch(ticket: nil, project: project, settingsBaseBranch: settings?.baseBranch)
         let checkout = branches.checkout(project)
 
-        TicketSettingsRow(label: "Model", hint: hints.model) {
-            DriverModelPicker(
-                value: Models.ticketChoice(ticket, modelProject, modelSettings),
-                resolved: Models.ticketResolvedChoice(modelProject, modelSettings),
-                onlyDriver: rows.onlyDriver,
-                disabled: !rows.editable,
-                inheritedModel: { Models.inheritedModel($0, level: .ticket, project: modelProject, settings: modelSettings) }
-            ) { onPatch(Models.ticketChoicePatch($0, modelProject, modelSettings)) }
+        TicketSettingsRow(label: "Models", hint: draft || !rows.editable ? nil : "Settings apply to the next run.") {
+            PhaseModelPicker(
+                value: ticket.phaseModels,
+                inherited: Phases.inheritedPhaseModels(.ticket, project: project?.phaseModels, settings: settings?.phaseModels),
+                disabled: !rows.editable
+            ) { onPatch(UpdateTicketBody(phaseModels: $0)) }
         }
         TicketSettingsRow(label: "Permissions", hint: hints.permissions) {
             PermissionPicker(

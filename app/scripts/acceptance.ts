@@ -86,11 +86,15 @@ try {
   await js(`(() => { const s = document.querySelector(".draft-pane .project-picker select");
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set.call(s, ${JSON.stringify(project.id)}); s.dispatchEvent(new Event("change", { bubbles: true })); })()`);
   await js(`document.querySelector(".draft-pane [data-testid=draft-options]").click()`);
-  await until("Options", () => exists(".draft-pane [data-testid=ticket-settings] [data-testid=driver-model-select] button"));
-  await js(`document.querySelector(".draft-pane [data-testid=ticket-settings] [data-testid=driver-model-select] button").click()`);
-  const optionFor = `[...document.querySelectorAll(".model-combo-option")].find(o => o.id.includes("-o-" + encodeURIComponent(${JSON.stringify(driver)})))`;
-  await until(`driver option ${driver}`, () => js<boolean>(`!!${optionFor}`));
-  await js(`${optionFor}.click()`);
+  await until("Options", () => exists(".draft-pane [data-testid=ticket-settings] [data-testid=phase-model-select] button"));
+  await js(`document.querySelector(".draft-pane [data-testid=ticket-settings] [data-testid=phase-model-select] button").click()`);
+  // The driver's Default row, in every phase column, so the whole ticket runs on it.
+  const optionFor = (phase: string) => `[...document.querySelectorAll(".phase-combo-row")].find(r => r.dataset.row === ${JSON.stringify(driver)} + "\u0001")?.querySelector("[role=radio][data-phase=${phase}]")`;
+  await until(`driver option ${driver}`, () => js<boolean>(`!!${optionFor("work")}`));
+  for (const phase of ["plan", "work", "review", "complete"]) {
+    await js(`${optionFor(phase)}.click()`);
+    await Bun.sleep(100);
+  }
   await js(`document.querySelector(".draft-pane .draft-prompt").focus()`);
   await cdp("Input.insertText", { text: "hello world" });
   console.log("  composer state:", await js(`JSON.stringify({ value: document.querySelector(".draft-pane .draft-prompt")?.value, options: document.querySelector(".draft-pane [data-testid=draft-options-summary]")?.textContent ?? "" })`));

@@ -24,6 +24,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   iPad five; past that, an "N more…" card opens a scrolling list of them all over a soft blur. On iPhone, a swipe
   along the dock moves to the next one. With a ticket open, long-press its title to switch to
   another docked ticket. Docked tickets are still there after you reopen the app.
+- Pick the driver and model for each run phase (Planning, Work, Review and Complete) in app
+  Settings, project settings and a ticket's settings, on the Mac and on iPhone and iPad. One
+  dropdown lists every driver's models with a radio column per phase, so a ticket can plan on one
+  driver and work on another. A phase you leave alone inherits from the project, then the app.
+  Conductor and chat runs use the Work choice. Changes apply to the next run, even while one is
+  going.
+- Completion runs use Haiku out of the box, which makes landing approved work (merge or PR, then
+  clean up) far cheaper. Change or clear it in Settings.
+- Agents can set per-phase choices with `phase_models` on `create_ticket`, `update_ticket`,
+  `update_settings` and the project tools.
 
 ### Changed
 
@@ -36,6 +46,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - sim-check's `--sheets` run (iPhone and `--ipad`) now checks several docked tickets: the cards,
   switching, closing one at a time, the "N more…" list, the dock surviving a relaunch and the
   app's memory with 5 and 20 docked.
+- The single default model and each driver's Review model in Settings are replaced by the
+  per-phase dropdown. Your existing choices carry over as the Planning, Work and Review choices,
+  and your review model as the Review choice.
+- A run on a different driver from the one that saved the ticket's conversation starts fresh
+  instead of trying to resume the other driver's session.
+- The `Run started` status line names the driver when a phase runs on a different one than the
+  ticket's Work driver.
+- sim-check's ticket-model check and screenshots now drive the per-phase Models sheet (pick a
+  Work model, then Inherit) instead of the old single Model picker.
 
 ## [app-20261008.1757](https://github.com/markhuot/harness/releases/tag/app-20261008.1757) - 2026-10-08
 

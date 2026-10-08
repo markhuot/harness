@@ -15,6 +15,7 @@ struct PickerGalleryView: View {
     @State private var model: String?
     @State private var permission: PermissionMode?
     @State private var choice = Watchers.defaultTriageChoice
+    @State private var phases = PhaseModels()
     @State private var branch: String?
     @State private var color: String? = "blue"
     @State private var prompt = ""
@@ -36,8 +37,10 @@ struct PickerGalleryView: View {
                     TicketSettingsRow(label: "Default model") {
                         DriverModelPicker(value: choice, resolved: .init(driver: "dummy", model: nil), title: "Default model") { choice = $0 }
                     }
-                    TicketSettingsRow(label: "Only dummy") {
-                        DriverModelPicker(value: choice, resolved: .init(driver: "dummy", model: nil), onlyDriver: "dummy") { choice = $0 }
+                    TicketSettingsRow(label: "Per phase") {
+                        PhaseModelPicker(value: phases, inherited: PerPhase { _ in PhaseChoice(driver: "dummy", model: nil) }) {
+                            phases = Phases.mergePhaseModels(phases, $0)
+                        }
                     }
                 }
                 .id("model")

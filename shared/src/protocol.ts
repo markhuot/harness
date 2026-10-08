@@ -18,12 +18,14 @@ export interface Project {
   path: string;
   /** Next sequence number handed out for a native ticket key */
   nextSeq: number;
-  /** Default driver id for new tickets in this project (falls back to settings.defaultDriver) */
-  defaultDriver: string | null;
   /**
-   * Default model per driver id for new runs of this project's tickets (overrides
-   * settings.defaultModels; a ticket's own model overrides this). Absent → settings default.
+   * The project's driver and model per run phase (tickets inherit a phase they don't set; a phase
+   * left out here inherits settings'). Optional so clients tolerate an older service.
    */
+  phaseModels?: PhaseModels;
+  /** Legacy: the Work choice's driver (null when Work is inherited from settings) */
+  defaultDriver: string | null;
+  /** Legacy: the Work choice's model, keyed by its driver ({} when inherited or the driver default) */
   defaultModels: Record<string, string>;
   /** When the project path is a git repo, give each ticket its own worktree + branch */
   useWorktrees: boolean;
@@ -167,7 +169,13 @@ export interface Ticket {
   status: TicketStatus;
   /** The session holding this ticket's transcript */
   sessionId: string;
+  /** Legacy: the driver Work runs on (resolved ticket → project → settings) */
   driver: string;
+  /**
+   * The ticket's own driver and model per run phase; a phase left out inherits the project's, then
+   * settings'. Optional so clients tolerate an older service.
+   */
+  phaseModels?: PhaseModels;
   /** Conductor that owns this ticket, if any */
   parentId: string | null;
   /**
@@ -304,7 +312,7 @@ export interface Ticket {
   allowedTools: string[];
   /** Permission mode override for this ticket (null → project → settings) */
   permissionMode: PermissionMode | null;
-  /** Model for this ticket's runs (driver-specific id). null → project / settings / driver default. */
+  /** Legacy: the ticket's own Work model (null when it inherits Work or uses the driver default) */
   model: string | null;
   /** Sort order within a column */
   position: number;
@@ -412,6 +420,26 @@ export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
 /** chat: a human message to a blocked, review or done ticket, answered by its agent with the work tools (the agent moves the ticket itself). */
 export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat";
+
+/**
+ * The run phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor and chat
+ * runs use the work choice; triage runs follow their watcher.
+ */
+export const PHASES = ["plan", "work", "review", "complete"] as const;
+export type Phase = (typeof PHASES)[number];
+
+/** A phase's driver and model. model null → the driver's own default model. */
+export interface PhaseChoice {
+  driver: string;
+  model: string | null;
+}
+
+/** One level's choices (settings, project or ticket). A missing phase inherits from the next level up. */
+export type PhaseModels = Partial<Record<Phase, PhaseChoice>>;
+
+/** A PATCH of PhaseModels: merged per phase; null clears a phase (it inherits again). */
+export type PhaseModelsPatch = Partial<Record<Phase, PhaseChoice | null>>;
+
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface Run {
@@ -809,6 +837,16 @@ export const DEFAULT_BROWSER_IDLE_TAB_MINUTES = 5;
 export const MAX_BROWSER_IDLE_TAB_MINUTES = 1440;
 
 export interface Settings {
+  /**
+   * The app's driver and model per run phase, the last level tickets and projects inherit from.
+   * A phase left out uses the Work driver with its default model; Work left out uses claude-code.
+   * PATCH merges per phase; null clears one. Optional so clients tolerate an older service.
+   */
+  phaseModels?: PhaseModels;
+  /**
+   * Legacy: the Work choice's driver. Writing it sets Planning, Work and Review to this driver
+   * (with defaultModels' model for it, if the same PATCH sends one).
+   */
   defaultDriver: string;
   maxConcurrentRuns: number;
   /** Default permission mode (projects and tickets may override it). Default "auto". */
@@ -816,11 +854,11 @@ export interface Settings {
   /** Who judges actions in auto mode for drivers without their own permission system */
   classifier: ClassifierBackend;
   /**
-   * Model per driver id used when neither the ticket nor its project picks one.
-   * Missing / null → the driver's own default. PATCH merges per driver; null clears.
+   * Legacy: the Work choice's model, keyed by its driver ({} for the driver's default). Writing the
+   * default driver's entry sets Planning, Work and Review's model.
    */
   defaultModels: Record<string, string | null>;
-  /** Model per driver id for agent review runs. Missing / null → the same model as the work runs. */
+  /** Legacy: the Review choice's model, keyed by its driver. Writing an entry sets Review; null clears it. */
   reviewModels: Record<string, string | null>;
   /**
    * Driver for triage sessions of watchers that don't pick one (null → defaultDriver). Optional so
@@ -882,7 +920,7 @@ export interface Settings {
 }
 
 /** PATCH /settings: any settings; `notifications` may be partial. */
-export type SettingsPatch = Partial<Omit<Settings, "notifications">> & { notifications?: NotificationSettingsPatch };
+export type SettingsPatch = Partial<Omit<Settings, "notifications" | "phaseModels">> & { notifications?: NotificationSettingsPatch; phaseModels?: PhaseModelsPatch };
 
 // ---------------------------------------------------------------------------
 // Prompts (DESIGN.md "Prompt overrides")
@@ -1392,7 +1430,9 @@ export interface CreateProjectBody {
   group?: string | null;
   /** null → settings.permissionMode */
   permissionMode?: PermissionMode | null;
-  /** Per-driver default models; PATCH merges per driver, null clears one */
+  /** Per-phase driver + model; PATCH merges per phase, null clears one (it inherits settings') */
+  phaseModels?: PhaseModelsPatch;
+  /** Legacy: the Work model for defaultDriver. With defaultDriver, sets Planning, Work and Review. */
   defaultModels?: Record<string, string | null>;
   /** A valid branch name; null or "" → inherit settings.baseBranch */
   baseBranch?: string | null;
@@ -1409,9 +1449,12 @@ export interface CreateTicketBody {
   spec: string;
   title?: string;
   kind?: TicketKind;
+  /** Shorthand: Planning, Work and Review on this driver (with `model`). Phases it leaves out inherit. */
   driver?: string;
-  /** Model for this ticket's runs (null / omitted → defaults) */
+  /** Model for `driver` (null / omitted → the driver's default) */
   model?: string | null;
+  /** The ticket's own per-phase choices (over the driver/model shorthand); the rest inherit */
+  phaseModels?: PhaseModelsPatch;
   /** Permission mode override (null / omitted → project → settings) */
   permissionMode?: PermissionMode | null;
   /** Skip planning and start work right away (default true for quick sessions) */
@@ -1466,10 +1509,12 @@ export interface UpdateTicketBody {
   /** A few words on what the edit changed, kept with the revision (default "Edited by hand") */
   specNote?: string;
   status?: TicketStatus; // manual moves from the board
-  /** Changing the driver clears the model unless `model` is given too */
+  /** Legacy shorthand: sets Planning, Work and Review to this driver (with `model`, else its default) */
   driver?: string;
-  /** Applies from the next run (claude-code resumes the conversation with the new --model) */
+  /** Legacy shorthand: the model for Planning, Work and Review (on `driver`, else the current Work driver) */
   model?: string | null;
+  /** Per-phase choices, merged per phase; null clears one. Applies from the next run. */
+  phaseModels?: PhaseModelsPatch;
   /** Applies from the next tool call / run; null → inherit from the project / settings */
   permissionMode?: PermissionMode | null;
   /** Base branch override; null / "" → inherit the project's. Applies from the next run. */

@@ -1,34 +1,56 @@
 import { describe, expect, test } from "bun:test";
-import { resolveRunModel } from "./models";
+import type { PhaseModels } from "@harness/shared";
+import { resolveRunChoice, resolveRunModel } from "./models";
 
-const none = { defaultModels: {}, reviewModels: {} };
+const cc = (model: string | null) => ({ driver: "claude-code", model });
+const api = (model: string | null) => ({ driver: "anthropic-api", model });
 
-describe("resolveRunModel precedence", () => {
-  const ticket = { driver: "claude-code", model: "haiku" };
-  const project = { defaultModels: { "claude-code": "sonnet" } };
-  const settings = { defaultModels: { "claude-code": "opus", "anthropic-api": "claude-x" }, reviewModels: {} };
+describe("resolveRunChoice", () => {
+  const settings: PhaseModels = { work: cc("opus"), complete: cc("haiku") };
 
-  test("ticket beats project beats settings beats driver default", () => {
-    const base = { driver: "claude-code", kind: "work" as const };
-    expect(resolveRunModel({ ...base, ticket, project, settings })).toBe("haiku");
-    expect(resolveRunModel({ ...base, ticket: { ...ticket, model: null }, project, settings })).toBe("sonnet");
-    expect(resolveRunModel({ ...base, ticket: { ...ticket, model: null }, project: { defaultModels: {} }, settings })).toBe("opus");
-    expect(resolveRunModel({ ...base, ticket: null, project: null, settings: none })).toBeNull();
+  test("each phase resolves on its own: ticket → project → settings", () => {
+    const ticket = { phaseModels: { work: cc("sonnet") } };
+    const project = { phaseModels: { plan: cc("fable") } };
+    expect(resolveRunChoice({ kind: "work", ticket, project, settings: { phaseModels: settings } })).toEqual(cc("sonnet"));
+    expect(resolveRunChoice({ kind: "plan", ticket, project, settings: { phaseModels: settings } })).toEqual(cc("fable"));
+    // a ticket that picks Opus for Work still completes on the app's Complete choice
+    expect(resolveRunChoice({ kind: "complete", ticket, project, settings: { phaseModels: settings } })).toEqual(cc("haiku"));
+    // review has no choice anywhere: the app's Work driver with its default model
+    expect(resolveRunChoice({ kind: "review", ticket, project, settings: { phaseModels: settings } })).toEqual(cc(null));
   });
 
-  test("defaults are looked up for the run's driver only", () => {
-    const run = { driver: "anthropic-api", kind: "work" as const, project, settings };
-    // the ticket's model belongs to another driver: ignored
-    expect(resolveRunModel({ ...run, ticket })).toBe("claude-x");
-    // project has no anthropic-api default → settings'
-    expect(resolveRunModel({ ...run, ticket: null })).toBe("claude-x");
-    expect(resolveRunModel({ ...run, driver: "dummy", ticket: null })).toBeNull();
+  test("conductor and chat runs use the Work choice", () => {
+    const ticket = { phaseModels: { work: api("claude-x"), plan: cc("haiku") } };
+    for (const kind of ["conductor", "chat", "work"] as const) {
+      expect(resolveRunChoice({ kind, ticket, project: null, settings: { phaseModels: settings } })).toEqual(api("claude-x"));
+    }
   });
 
-  test("review runs use reviewModels when set, else the same chain as work", () => {
-    const withReview = { ...settings, reviewModels: { "claude-code": "fable" } };
-    expect(resolveRunModel({ driver: "claude-code", kind: "review", ticket, project, settings: withReview })).toBe("fable");
-    expect(resolveRunModel({ driver: "claude-code", kind: "work", ticket, project, settings: withReview })).toBe("haiku");
-    expect(resolveRunModel({ driver: "claude-code", kind: "review", ticket, project, settings })).toBe("haiku");
+  test("phases can run on different drivers", () => {
+    const ticket = { phaseModels: { plan: api("claude-x"), work: cc("opus") } };
+    expect(resolveRunChoice({ kind: "plan", ticket, project: null, settings: { phaseModels: {} } }).driver).toBe("anthropic-api");
+    expect(resolveRunChoice({ kind: "work", ticket, project: null, settings: { phaseModels: {} } }).driver).toBe("claude-code");
+  });
+
+  test("empty settings resolve to claude-code with its default model", () => {
+    expect(resolveRunChoice({ kind: "complete", ticket: null, project: null, settings: { phaseModels: {} } })).toEqual(cc(null));
+  });
+});
+
+describe("resolveRunModel", () => {
+  test("a ticket run takes its phase's model only on the driver it was queued on", () => {
+    const ticket = { phaseModels: { work: api("claude-x") } };
+    const settings = { phaseModels: {} };
+    expect(resolveRunModel({ kind: "work", driver: "anthropic-api", ticket, project: null, settings })).toBe("claude-x");
+    // the choice moved to another driver after the run was queued: the driver's default
+    expect(resolveRunModel({ kind: "work", driver: "claude-code", ticket, project: null, settings })).toBeNull();
+  });
+
+  test("standalone sessions take the project's, then settings', Work model on their own driver", () => {
+    const settings = { phaseModels: { work: cc("opus") } };
+    expect(resolveRunModel({ kind: "work", driver: "claude-code", ticket: null, project: { phaseModels: { work: cc("sonnet") } }, settings })).toBe("sonnet");
+    expect(resolveRunModel({ kind: "work", driver: "claude-code", ticket: null, project: null, settings })).toBe("opus");
+    expect(resolveRunModel({ kind: "work", driver: "dummy", ticket: null, project: null, settings })).toBeNull();
+    expect(resolveRunModel({ kind: "work", driver: "claude-code", ticket: null, project: { phaseModels: { work: api("x") } }, settings })).toBeNull();
   });
 });

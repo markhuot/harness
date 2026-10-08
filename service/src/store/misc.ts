@@ -40,6 +40,11 @@ export class SettingsRepo {
       }
     })();
   }
+
+  delete(keys: readonly string[]) {
+    const q = this.db.query("DELETE FROM settings WHERE key = $key");
+    for (const key of keys) q.run({ key });
+  }
 }
 
 /** Named monotonic counters (e.g. TRIAGE-n). */

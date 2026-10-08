@@ -115,6 +115,15 @@ public enum PickerLogic {
         return out
     }
 
+    /// The drivers whose model lists the per-phase picker loads: the signed-in ones, plus every driver
+    /// a phase picks or inherits, without repeats, in that order.
+    public static func phaseDriverIds(_ drivers: [DriverInfo], value: PhaseModels?, inherited: PerPhase<PhaseChoice>?) -> [String] {
+        let signedIn = drivers.filter { $0.available && $0.authenticated }.map(\.id)
+        let picked = Phase.allCases.compactMap { value?[$0]?.driver } + Phase.allCases.compactMap { inherited?[$0].driver }
+        var seen = Set<String>()
+        return (signedIn + picked).filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     /// The trigger's state over those lists: a spinner while any list has nothing yet, else a warning
     /// naming the first driver whose list failed.
     public static func choiceListsStatus(_ ids: [String], lists: (String) -> ModelListState, name: (String) -> String) -> (loading: Bool, problem: String?) {
@@ -217,8 +226,8 @@ public enum PickerLogic {
     // MARK: TicketSettingsForm
 
     /// The hints beside each row's label. A draft (New session's Options) shows none of them.
+    /// The Models row has none: the picker says "Settings apply to the next run." under itself.
     public struct TicketSettingsHints: Equatable, Sendable {
-        public var model: String?
         public var permissions: String?
         public var branch: String?
         public var base: String?
@@ -227,7 +236,6 @@ public enum PickerLogic {
     public static func ticketSettingsHints(_ t: Ticket, rows: Drafts.TicketSettingsRows) -> TicketSettingsHints {
         if t.draft == true { return TicketSettingsHints() }
         return TicketSettingsHints(
-            model: t.busy ? "Applies from the next run. The driver can't change while a run is going." : "Applies from the next run",
             permissions: "Applies from the next tool call",
             branch: rows.branch.editable ? "Until work starts" : Models.nonEmpty(t.branch) == nil ? "When work starts" : nil,
             base: Models.nonEmpty(t.baseBranch.optional) != nil ? "Applies from the next run" : "Inherited"

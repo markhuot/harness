@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, Attachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
-import { isCompletionAction } from "@harness/shared";
+import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, PhaseModels, Attachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import { isCompletionAction, resolvePhaseChoice } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
@@ -48,6 +48,7 @@ interface TicketRow {
   resume_at?: number | null;
   message_draft?: string | null;
   agent_notes?: string | null;
+  phase_models?: string | null;
   completed_at: number | null;
   busy: number;
   completing: number;
@@ -105,13 +106,15 @@ export interface NewTicket {
   spec: string;
   status: TicketStatus;
   sessionId: string;
+  /** The Work driver it resolves to now, kept in the legacy column (reads derive it again) */
   driver: string;
   parentId: string | null;
   dependsOn: string[];
   autoStart: boolean;
   externalRef: ExternalRef | null;
   workdir: string | null;
-  model?: string | null;
+  /** The ticket's own per-phase choices; the rest inherit */
+  phaseModels?: PhaseModels;
   useWorktree?: boolean | null;
   baseBranch?: string | null;
   requestedBranch?: string | null;
@@ -127,7 +130,6 @@ export interface NewTicket {
 export type TicketPatch = Partial<{
   title: string;
   status: TicketStatus;
-  driver: string;
   autoStart: boolean;
   agentReview: ReviewState;
   humanReview: ReviewState;
@@ -140,7 +142,7 @@ export type TicketPatch = Partial<{
   pendingApproval: PendingApproval | null;
   allowedTools: string[];
   reviewRejections: number;
-  model: string | null;
+  phaseModels: PhaseModels;
   baseBranch: string | null;
   requestedBranch: string | null;
   skipAgentReview: boolean;
@@ -161,7 +163,6 @@ export type TicketPatch = Partial<{
 const COLUMNS: Record<string, string> = {
   title: "title",
   status: "status",
-  driver: "driver",
   autoStart: "auto_start",
   agentReview: "agent_review",
   humanReview: "human_review",
@@ -173,7 +174,7 @@ const COLUMNS: Record<string, string> = {
   pendingApproval: "pending_approval",
   allowedTools: "allowed_tools",
   reviewRejections: "review_rejections",
-  model: "model",
+  phaseModels: "phase_models",
   baseBranch: "base_branch",
   requestedBranch: "requested_branch",
   skipAgentReview: "skip_agent_review",
@@ -191,7 +192,7 @@ const COLUMNS: Record<string, string> = {
   agentNotes: "agent_notes",
 };
 
-const JSON_FIELDS = new Set(["pendingApproval", "allowedTools", "promptAttachments"]);
+const JSON_FIELDS = new Set(["pendingApproval", "allowedTools", "promptAttachments", "phaseModels"]);
 
 /** Narrow a page or search to one project, or to the projects in a group (a group's board). */
 function projectFilter(opts: { projectId?: string; group?: string }, where: string[], params: SqlParams) {
@@ -206,7 +207,33 @@ function projectFilter(opts: { projectId?: string; group?: string }, where: stri
 }
 
 export class TicketRepo {
-  constructor(private db: Database) {}
+  /** settingsPhaseModels: the app's resolved choices, which a ticket's legacy driver may inherit. */
+  constructor(
+    private db: Database,
+    private settingsPhaseModels: () => PhaseModels = () => ({}),
+  ) {}
+
+  /**
+   * The legacy driver + model of each row: the Work driver it resolves to (ticket → project →
+   * settings) and its own Work model. Projects and settings are read once per batch.
+   */
+  private legacyChoices(rows: TicketRow[]): Map<string, { phaseModels: PhaseModels; driver: string; model: string | null }> {
+    const out = new Map<string, { phaseModels: PhaseModels; driver: string; model: string | null }>();
+    if (!rows.length) return out;
+    const projectIds = [...new Set(rows.map((r) => r.project_id))];
+    const projects = new Map(
+      (this.db.query(`SELECT id, phase_models FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).all(...projectIds) as { id: string; phase_models: string | null }[]).map(
+        (p) => [p.id, fromJson<PhaseModels>(p.phase_models, {})],
+      ),
+    );
+    const settings = this.settingsPhaseModels();
+    for (const r of rows) {
+      const phaseModels = fromJson<PhaseModels>(r.phase_models ?? null, {});
+      const work = resolvePhaseChoice("work", { ticket: phaseModels, project: projects.get(r.project_id), settings });
+      out.set(r.id, { phaseModels, driver: work.driver, model: phaseModels.work?.model ?? null });
+    }
+    return out;
+  }
 
   private deps(ids: string[]): Map<string, string[]> {
     const out = new Map<string, string[]>();
@@ -224,6 +251,7 @@ export class TicketRepo {
 
   private map(rows: TicketRow[]): Ticket[] {
     const deps = this.deps(rows.map((r) => r.id));
+    const choices = this.legacyChoices(rows);
     return rows.map((r) => ({
       id: r.id,
       key: r.key,
@@ -235,7 +263,8 @@ export class TicketRepo {
       specBaselineRevision: r.spec_baseline_revision ?? null,
       status: r.status as TicketStatus,
       sessionId: r.session_id,
-      driver: r.driver,
+      driver: choices.get(r.id)!.driver,
+      phaseModels: choices.get(r.id)!.phaseModels,
       parentId: r.parent_id,
       dependsOn: deps.get(r.id) ?? [],
       autoStart: bool(r.auto_start),
@@ -253,7 +282,7 @@ export class TicketRepo {
       childCount: r.child_count ?? 0,
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
-      model: r.model ?? null,
+      model: choices.get(r.id)!.model,
       useWorktree: r.use_worktree === null || r.use_worktree === undefined ? null : bool(r.use_worktree),
       skipAgentReview: bool(r.skip_agent_review ?? 0),
       skipHumanReview: bool(r.skip_human_review ?? 0),
@@ -500,9 +529,9 @@ export class TicketRepo {
     this.db
       .query(
         `INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, parent_id, auto_start,
-           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, use_worktree, base_branch, requested_branch, skip_agent_review, skip_human_review, draft, prompt_attachments, created_at, updated_at)
+           agent_review, human_review, external_ref, external_key, workdir, branch, blocked_reason, position, model, phase_models, use_worktree, base_branch, requested_branch, skip_agent_review, skip_human_review, draft, prompt_attachments, created_at, updated_at)
          VALUES ($id, $key, $projectId, $kind, $title, $spec, $status, $sessionId, $driver, $parentId, $autoStart,
-           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $skipHumanReview, $draft, $promptAttachments, $t, $t)`,
+           'pending', 'pending', $externalRef, $externalKey, $workdir, NULL, NULL, $position, $model, $phaseModels, $useWorktree, $baseBranch, $requestedBranch, $skipAgentReview, $skipHumanReview, $draft, $promptAttachments, $t, $t)`,
       )
       .run({
         id,
@@ -520,7 +549,8 @@ export class TicketRepo {
         externalKey: input.externalRef?.key ? input.externalRef.key.toUpperCase() : null,
         workdir: input.workdir,
         position: this.nextPosition(input.projectId),
-        model: input.model ?? null,
+        model: input.phaseModels?.work?.model ?? null,
+        phaseModels: toJson(input.phaseModels ?? {}),
         useWorktree: input.useWorktree === null || input.useWorktree === undefined ? null : int(input.useWorktree),
         baseBranch: input.baseBranch ?? null,
         requestedBranch: input.requestedBranch ?? null,

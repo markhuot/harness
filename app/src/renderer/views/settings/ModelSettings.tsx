@@ -1,25 +1,22 @@
-// A project's default driver + model (Project settings → Agents). The app's default model and
-// the per-driver review models live in Settings → Drivers (DriverSettings.tsx).
+// A project's per-phase driver + model choices (Project settings → Agents). The app's own choices
+// live in Settings → Drivers (DriverSettings.tsx).
 
-import type { Project } from "@harness/shared";
+import type { PhaseModelsPatch, Project } from "@harness/shared";
+import { inheritedPhaseModels } from "@harness/shared";
 import { useStore } from "../../state/store";
-import { inheritedModel, projectChoice, projectChoicePatch } from "@harness/shared/state";
-import { DriverModelSelect } from "../../components/ModelSelect";
+import { PhaseModelSelect } from "../../components/PhaseModelSelect";
 import { Row } from "../Settings";
 
-export function ProjectModelRow({ project, save }: { project: Project; save: (patch: { defaultDriver: string | null; defaultModels: Record<string, string | null> }) => unknown }) {
+export function ProjectModelRow({ project, save }: { project: Project; save: (patch: { phaseModels: PhaseModelsPatch }) => unknown }) {
   const { state } = useStore();
-  const settings = state.settings;
   return (
-    <Row title="Default model" sub="Used for new sessions in this project. Global default follows the app setting.">
+    <Row title="Models" sub="The driver and model each run phase uses for this project's tickets. Inherit follows the app setting.">
       <span data-testid="project-models">
-        <DriverModelSelect
-          value={projectChoice(project, settings)}
-          resolved={settings ? { driver: settings.defaultDriver, model: inheritedModel(settings.defaultDriver, "project", project, settings) } : { driver: null, model: null }}
-          defaultLabel="Global default"
+        <PhaseModelSelect
+          value={project.phaseModels}
+          inherited={inheritedPhaseModels("project", null, state.settings?.phaseModels)}
           autoWidth
-          inheritedModel={(d) => inheritedModel(d, "project", project, settings)}
-          onChange={(c) => void save(projectChoicePatch(c, project))}
+          onChange={(phaseModels) => void save({ phaseModels })}
         />
       </span>
     </Row>

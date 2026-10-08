@@ -46,8 +46,6 @@ private struct ProjectSettingsForm: View {
         let state = store.state
         let settings = state.settings
         let inherited = settings?.permissionMode ?? .auto
-        let modelProject = ModelProject(project)
-        let modelSettings = settings.map(ModelSettings.init)
         let count = SettingsRules.projectTicketCount(project.id, tickets: state.tickets.values, doneTotal: doneTotal)
         let isGit = project.isGit == true
 
@@ -95,15 +93,11 @@ private struct ProjectSettingsForm: View {
             }
 
             Section("Agents") {
-                SettingsRow(label: "Default model", hint: "Used for new sessions in this project. Global default follows the app setting.") {
-                    DriverModelPicker(
-                        value: Models.projectChoice(modelProject, modelSettings),
-                        resolved: settings.map { Watchers.TriageChoice(driver: $0.defaultDriver, model: Models.inheritedModel($0.defaultDriver, level: .project, project: modelProject, settings: modelSettings)) }
-                            ?? Watchers.defaultTriageChoice,
-                        title: "Default model",
-                        defaultLabel: "Global default",
-                        inheritedModel: { Models.inheritedModel($0, level: .project, project: modelProject, settings: modelSettings) }
-                    ) { save(Models.projectChoicePatch($0, modelProject)) }
+                SettingsRow(label: "Models", hint: "The driver and model each run phase uses for this project's tickets. Inherit follows the app setting.") {
+                    PhaseModelPicker(
+                        value: project.phaseModels,
+                        inherited: Phases.inheritedPhaseModels(.project, project: nil, settings: settings?.phaseModels)
+                    ) { save(UpdateProjectBody(phaseModels: $0)) }
                 }
                 SettingsRow(label: "Permission mode", hint: "\(Permissions.label(for: project.permissionMode ?? inherited)?.description ?? "") Tickets can override it.") {
                     PermissionPicker(value: project.permissionMode, inherited: inherited) { save(UpdateProjectBody(permissionMode: Patch($0))) }

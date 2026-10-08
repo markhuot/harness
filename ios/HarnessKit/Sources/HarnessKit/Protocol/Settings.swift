@@ -4,6 +4,11 @@ import Foundation
 // Foundation's coders keep a nil value as an explicit `null`, so `{ "claude-code": null }` round-trips.
 
 public struct Settings: Codable, Sendable, Equatable {
+    /// The app's driver and model per run phase, the last level tickets and projects inherit from.
+    /// A phase left out uses the Work driver with its default model; Work left out uses claude-code.
+    /// nil from an older service.
+    public var phaseModels: PhaseModels?
+    /// Legacy: the Work choice's driver
     public var defaultDriver: String
     public var maxConcurrentRuns: Int
     /// Default permission mode (projects and tickets may override it). Default "auto".
@@ -55,13 +60,14 @@ public struct Settings: Codable, Sendable, Equatable {
     public var notifications: NotificationSettings?
 
     public init(
-        defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
+        phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil
     ) {
+        self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
         self.permissionMode = permissionMode
@@ -91,6 +97,8 @@ public enum BrowserIdleTabs {
 /// `Omit<Settings, "anthropicApiKey" | "claudeOauthToken" | "copilotGithubToken"> & {
 /// anthropicApiKeySet: boolean; claudeOauthTokenSet?: boolean; copilotGithubTokenSet?: boolean }`: what GET /settings and the settings.updated event send.
 public struct PublicSettings: Codable, Sendable, Equatable {
+    /// Settings.phaseModels; nil from an older service.
+    public var phaseModels: PhaseModels?
     public var defaultDriver: String
     public var maxConcurrentRuns: Int
     public var permissionMode: PermissionMode
@@ -115,13 +123,14 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var copilotGithubTokenSet: Bool?
 
     public init(
-        defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
+        phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil
     ) {
+        self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
         self.permissionMode = permissionMode

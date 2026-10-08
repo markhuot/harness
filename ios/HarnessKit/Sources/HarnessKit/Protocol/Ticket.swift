@@ -23,7 +23,11 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var status: TicketStatus
     /// The session holding this ticket's transcript
     public var sessionId: String
+    /// Legacy: the driver Work runs on (resolved ticket → project → settings)
     public var driver: String
+    /// The ticket's own driver and model per run phase; a phase left out inherits the project's, then
+    /// settings'. nil from an older service.
+    public var phaseModels: PhaseModels?
     /// Conductor that owns this ticket, if any
     @Nullable public var parentId: String?
     /// How many tickets have this one as their parent. Any ticket with children acts as a conductor
@@ -112,7 +116,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var allowedTools: [String]
     /// Permission mode override for this ticket (null → project → settings)
     @Nullable public var permissionMode: PermissionMode?
-    /// Model for this ticket's runs (driver-specific id). null → project / settings / driver default.
+    /// Legacy: the ticket's own Work model (null when it inherits Work or uses the driver default)
     @Nullable public var model: String?
     /// Sort order within a column
     public var position: Double
@@ -126,7 +130,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public init(
         id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, specRevision: Int? = nil,
         specBaselineRevision: Patch<Int> = .absent, agentNotes: Patch<String> = .absent,
-        status: TicketStatus, sessionId: String, driver: String, parentId: String? = nil, childCount: Int? = nil,
+        status: TicketStatus, sessionId: String, driver: String, phaseModels: PhaseModels? = nil, parentId: String? = nil, childCount: Int? = nil,
         dependsOn: [String] = [], autoStart: Bool = false, agentReview: ReviewState = .pending,
         humanReview: ReviewState = .pending, externalRef: ExternalRef? = nil, workdir: String? = nil,
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
@@ -149,6 +153,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.status = status
         self.sessionId = sessionId
         self.driver = driver
+        self.phaseModels = phaseModels
         self.parentId = parentId
         self.childCount = childCount
         self.dependsOn = dependsOn

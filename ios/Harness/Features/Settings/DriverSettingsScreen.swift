@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// One driver's settings, opened from Settings → Drivers: its status
-/// and sign-in, the review model, the Anthropic API key for anthropic-api, and the long-lived
+/// and sign-in, the Anthropic API key for anthropic-api, and the long-lived
 /// Claude token for claude-code.
 struct DriverSettingsScreen: View {
     let driverId: String
@@ -83,20 +83,6 @@ private struct DriverSettingsForm: View {
             }
             if d.id == "github-copilot", let settings, settings.copilotGithubTokenSet != nil {
                 DriverTokenSection(token: .copilot, isSet: settings.hasCopilotGithubToken)
-            }
-            if let settings {
-                Section {
-                    SettingsRow(label: "Review model") {
-                        ModelPicker(driver: d.id, value: settings.reviewModels[d.id] ?? nil, defaultLabel: "Same as work", plainDefault: true, title: "Review model") { m in
-                            guard let api = store.api else { return }
-                            actions.perform { _ = try await api.updateSettings(SettingsPatch(reviewModels: [d.id: m])) }
-                        }
-                    }
-                } header: {
-                    Text("Models")
-                } footer: {
-                    Text("The model agent reviews run on for tickets on this driver. Same as work uses the ticket's own model.")
-                }
             }
         }
         .settingsFormStyle(c)

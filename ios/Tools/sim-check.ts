@@ -2950,7 +2950,7 @@ const isOptions = (l: string) => l === "Options" || l.startsWith("Options, ");
 /** Opens New session's Options (collapsed on open) and waits for its first row. */
 async function openOptions(udid: string) {
   await tapWhere(udid, isOptions);
-  await until("options open", async () => (await labels(udid)).some((l) => l.startsWith("Model, ")), 5000);
+  await until("options open", async () => (await labels(udid)).some((l) => l.startsWith("Models, ")), 5000);
   await Bun.sleep(400);
 }
 /** The sheet's Cancel (xmark) header item; the glass header items may be missing from AXe's tree. */
@@ -3085,20 +3085,20 @@ function screens(s: Seeded): Screen[] {
     // A remote ID that no local key matches opens to the tickets linked to it, not a dead end.
     { name: "ticket-remote-id", url: "harness://ticket/JIRA-62", ready: (l) => l.includes("Remote ID JIRA-62") && l.some((x) => x.startsWith(`JIRA-62 · ${s.linkedStage.key} `)) },
     { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
-    // Details' one Model picker (driver + model) with its sheet open.
+    // Details' per-phase Models picker with its sheet open.
     {
       name: "ticket-details-model",
       url: `harness://ticket/${k(s.quick)}?tab=details`,
       seconds: 7,
-      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Model, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
+      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Models, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
       // The sheet is a Modal, which the next screen's deep link would leave on top.
       after: (udid) => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000)),
     },
     { name: "inbox", url: "harness://inbox" },
     { name: "settings", url: "harness://settings" },
-    // Settings → Drivers: a row per driver that opens its settings, with the Default model picker under them.
-    { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Default model, ")).then(() => Bun.sleep(500)) },
-    // A driver's own settings: status, sign-in and review model; Claude Code adds its long-lived
+    // Settings → Drivers: a row per driver that opens its settings, with the per-phase Models picker under them.
+    { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Models, ")).then(() => Bun.sleep(500)) },
+    // A driver's own settings: status and sign-in; Claude Code adds its long-lived
     // token and Anthropic API its API key.
     { name: "driver-claude-code", url: "harness://driver/claude-code", ready: hasLabel("Claude token") },
     { name: "driver-anthropic-api", url: "harness://driver/anthropic-api", ready: hasLabel("Anthropic API key") },
@@ -3465,26 +3465,30 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
     chain(8, async (udid) => {
       // branchPlan stays in Planning: s.quick is approved into Done by another chain meanwhile, which locks its picker.
       const openModels = async () => {
-        await goto(udid, `harness://ticket/${k(s.branchPlan)}?tab=details`, (l) => l.some((x) => x.startsWith("Model, ")));
-        await tapWhere(udid, (l) => l.startsWith("Model, "));
+        await goto(udid, `harness://ticket/${k(s.branchPlan)}?tab=details`, (l) => l.some((x) => x.startsWith("Models, ")));
+        await tapWhere(udid, (l) => l.startsWith("Models, "));
         await until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000);
       };
-      await check("ticket details: one Model picker sets the driver and model together, and Default clears them", async () => {
+      // The sheet stays open after a pick: Cancel closes it before the next deep link.
+      const closeModels = () => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000));
+      await check("ticket details: the Models picker sets a phase's driver and model, and Inherit clears it", async () => {
         await openModels();
         // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy (Claude
         // Code's models) can leave its rows unrealized and out of AXe's tree.
         await tapWhere(udid, "Search models");
         await axe("type", "slow", "--udid", udid);
-        await tapWhere(udid, (l) => l === "Dummy Slow" || l.endsWith(", Dummy Slow"));
-        const picked = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === "dummy-slow", 8000).catch(async (e) => {
+        await tapWhere(udid, (l) => l.startsWith("Work, ") && l.endsWith("Dummy Slow"));
+        const picked = await settle(s.branchPlan.key, (x) => x.phaseModels?.work?.driver === "dummy" && x.phaseModels.work.model === "dummy-slow", 8000).catch(async (e) => {
           await shot(udid, "model-pick-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
+        await closeModels();
         await openModels();
-        await tapWhere(udid, (l) => l.startsWith("Default"));
-        const cleared = await settle(s.branchPlan.key, (x) => x.driver === "dummy" && x.model === null, 8000);
+        await tapWhere(udid, (l) => l.startsWith("Work, Inherit"));
+        const cleared = await settle(s.branchPlan.key, (x) => !x.phaseModels?.work, 8000);
+        await closeModels();
         moved(udid);
-        return `${picked.driver}/${picked.model} → ${cleared.driver}/${cleared.model ?? "default"}`;
+        return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model} → ${cleared.phaseModels?.work ? "set" : "inherit"}`;
       });
     }),
     chain(18, async (udid) => {

@@ -67,6 +67,8 @@ const withModel = { ...blank(), model: "opus" };
 const full = { ...blank(), model: "opus", permissionMode: "ask" as PermissionMode, baseBranch: "develop", requestedBranch: "feat", useWorktree: true, skipAgentReview: true, skipHumanReview: true, dependsOn: ["WEB-1"] };
 export const applyTicketPatchCases = cases(({ ticket, patch }: PatchInput) => applyTicketPatch(ticket, patch), {
   "a driver change clears the model": { ticket: withModel, patch: { driver: "codex" } },
+  "a phase pick sets that phase, and Work the legacy driver and model": { ticket: withModel, patch: { phaseModels: { work: { driver: "codex", model: "luna" }, complete: { driver: "claude-code", model: "haiku" } } } },
+  "clearing Work clears the legacy model": { ticket: { ...withModel, phaseModels: { work: { driver: "claude-code", model: "opus" } } }, patch: { phaseModels: { work: null } } },
   "a driver change keeps a model that comes with it": { ticket: withModel, patch: { driver: "codex", model: "luna" } },
   "a driver change with a null model": { ticket: withModel, patch: { driver: "codex", model: null } },
   "the same driver keeps the model": { ticket: withModel, patch: { driver: "claude-code" } },
@@ -153,6 +155,8 @@ export const draftPatchCases = cases(({ prev, next }: DiffInput) => draftPatch(p
   "a driver change sends the model along": diff({ driver: "codex" }, { ...prev, model: "luna" }),
   "a driver change without a model sends none": diff({ driver: "codex" }),
   "a cleared model is sent as null": diff({ model: null }, { ...prev, model: "luna" }),
+  "a phase change sends the per-phase patch instead of driver and model": diff({ driver: "codex", model: "luna", phaseModels: { work: { driver: "codex", model: "luna" } } }),
+  "a cleared phase is sent as null": diff({ phaseModels: {} }, { ...prev, phaseModels: { complete: { driver: "claude-code", model: "haiku" } } }),
   "a cleared branch is sent as null": diff({ requestedBranch: null }, { ...prev, requestedBranch: "feat" }),
   "a cleared base is sent as null": diff({ baseBranch: null }, { ...prev, baseBranch: "develop" }),
   "a cleared permission mode is sent as null": diff({ permissionMode: null }, { ...prev, permissionMode: "ask" }),
@@ -184,7 +188,7 @@ export const ticketSettingsRowsCases = cases(({ ticket, project }: RowsInput) =>
   "a launched ticket's branch is editable before its worktree": { ticket: launched(), project: project() },
   "and not after": { ticket: launched({ status: "in_progress", workdir: "/w", branch: "harness/web-4" }), project: project() },
   "done: nothing editable": { ticket: launched({ status: "done" }), project: project() },
-  "busy: the driver is locked": { ticket: launched({ busy: true, driver: "codex" }), project: project() },
+  "busy: still editable": { ticket: launched({ busy: true, driver: "codex" }), project: project() },
   "a done draft": { ticket: { ...blank(), status: "done" }, project: project() },
   "a launched ticket in the project checkout": { ticket: launched({ useWorktree: false }), project: project() },
   "draft flag missing counts as launched": { ticket: (({ draft: _d, ...rest }) => rest)(blank()) as Ticket, project: project() },

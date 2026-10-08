@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, PermissionMode, Project } from "@harness/shared";
-import { isCompletionAction, offeredCompletionActions, projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
+import type { CompletionAction, PermissionMode, PhaseModels, Project } from "@harness/shared";
+import { legacyWork, isCompletionAction, offeredCompletionActions, projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type PullRequestTarget, pullRequestTarget } from "./remotes";
@@ -22,6 +22,7 @@ interface ProjectRow {
   base_branch?: string | null;
   completion_action?: string | null;
   default_models: string;
+  phase_models?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -50,13 +51,16 @@ export function clearPullRequestTargets() {
 const toProject = (r: ProjectRow): Project => {
   const isGit = insideGitCheckout(r.path);
   const pullRequestHost = isGit ? (cachedPullRequestTarget(r.path)?.host ?? null) : null;
+  const phaseModels = fromJson<PhaseModels>(r.phase_models, {});
+  const legacy = legacyWork(phaseModels);
   return {
     id: r.id,
     key: r.key,
     name: r.name,
     path: r.path,
     nextSeq: r.next_seq,
-    defaultDriver: r.default_driver,
+    phaseModels,
+    defaultDriver: legacy.driver,
     useWorktrees: bool(r.use_worktrees),
     isGit,
     skipAgentReview: bool(r.skip_agent_review),
@@ -69,7 +73,7 @@ const toProject = (r: ProjectRow): Project => {
     completionAction: isCompletionAction(r.completion_action) ? r.completion_action : "merge",
     completionActions: offeredCompletionActions({ isGit, pullRequestHost }),
     pullRequestHost,
-    defaultModels: fromJson<Record<string, string>>(r.default_models, {}),
+    defaultModels: legacy.models,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -96,7 +100,6 @@ export interface NewProject {
   path: string;
   name: string;
   key?: string;
-  defaultDriver?: string | null;
   useWorktrees?: boolean;
   skipAgentReview?: boolean;
   skipHumanReview?: boolean;
@@ -104,7 +107,8 @@ export interface NewProject {
   group?: string | null;
   baseBranch?: string | null;
   completionAction?: CompletionAction;
-  defaultModels?: Record<string, string>;
+  /** The project's own per-phase choices (the legacy default_driver / default_models columns follow its Work choice) */
+  phaseModels?: PhaseModels;
 }
 
 export class ProjectRepo {
@@ -146,15 +150,15 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_name, base_branch, completion_action, default_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $group, $baseBranch, $completionAction, $defaultModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_name, base_branch, completion_action, default_models, phase_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $group, $baseBranch, $completionAction, $defaultModels, $phaseModels, $t, $t)`,
         )
         .run({
           id,
           key,
           name: input.name,
           path: input.path,
-          defaultDriver: input.defaultDriver ?? null,
+          defaultDriver: legacyWork(input.phaseModels).driver,
           useWorktrees: int(input.useWorktrees ?? true),
           skipAgentReview: int(input.skipAgentReview ?? false),
           skipHumanReview: int(input.skipHumanReview ?? false),
@@ -162,7 +166,8 @@ export class ProjectRepo {
           group: input.group ?? null,
           baseBranch: input.baseBranch ?? null,
           completionAction: input.completionAction ?? "merge",
-          defaultModels: toJson(input.defaultModels ?? {}),
+          defaultModels: toJson(legacyWork(input.phaseModels).models),
+          phaseModels: toJson(input.phaseModels ?? {}),
           t,
         });
     })();
@@ -173,17 +178,19 @@ export class ProjectRepo {
   update(id: string, patch: Partial<Omit<NewProject, "path" | "key">> & { path?: string }): Project | null {
     const existing = this.get(id);
     if (!existing) return null;
+    const phaseModels = patch.phaseModels ?? existing.phaseModels ?? {};
+    const legacy = legacyWork(phaseModels);
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_name = $group, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels,
+           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_name = $group, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels, phase_models = $phaseModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
         id,
         name: patch.name ?? existing.name,
         path: patch.path ?? existing.path,
-        defaultDriver: patch.defaultDriver !== undefined ? patch.defaultDriver : existing.defaultDriver,
+        defaultDriver: legacy.driver,
         useWorktrees: int(patch.useWorktrees ?? existing.useWorktrees),
         skipAgentReview: int(patch.skipAgentReview ?? !!existing.skipAgentReview),
         skipHumanReview: int(patch.skipHumanReview ?? !!existing.skipHumanReview),
@@ -191,7 +198,8 @@ export class ProjectRepo {
         group: patch.group !== undefined ? patch.group : (existing.group ?? null),
         baseBranch: patch.baseBranch !== undefined ? patch.baseBranch : (existing.baseBranch ?? null),
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
-        defaultModels: toJson(patch.defaultModels ?? existing.defaultModels),
+        defaultModels: toJson(legacy.models),
+        phaseModels: toJson(phaseModels),
         t: now(),
       });
     return this.get(id);

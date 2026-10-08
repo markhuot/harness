@@ -461,3 +461,80 @@ struct ModelListCacheTests {
         #expect(cache.get("claude-code").data?.models.first?.name == "Opus")
     }
 }
+
+struct PhaseMatrixInput: Decodable, Sendable {
+    let value: PhaseModels?
+    let inherited: PerPhase<PhaseChoice>?
+    let query: String?
+}
+
+struct PhasePickPatchInput: Decodable, Sendable {
+    let phase: Phase
+    let choice: PhaseChoice?
+}
+
+/// phaseMatrix plus the type-ahead's groups (`filtered`, null without a query), as the fixture returns them.
+private struct PhaseMatrixOutput: Encodable {
+    let matrix: PhaseMatrix
+    let filtered: [PhaseGroup]?
+
+    func encode(to encoder: any Encoder) throws {
+        try matrix.encode(to: encoder)
+        var c = encoder.container(keyedBy: AnyCodingKey.self)
+        if let filtered { try c.encode(filtered, forKey: "filtered") } else { try c.encodeNil(forKey: "filtered") }
+    }
+}
+
+@Suite("state/models.ts parity: the per-phase picker")
+struct PhaseModelsTests {
+    /// The drivers stateModels.ts builds its matrices from.
+    static let drivers = [
+        ChoiceDriver(id: "claude-code", name: "Claude Code", available: true, authenticated: true),
+        ChoiceDriver(id: "anthropic-api", name: "Anthropic API", available: true, authenticated: true),
+        ChoiceDriver(id: "codex", name: "Codex", available: true, authenticated: false),
+    ]
+    static let models: [String: [ModelInfo]] = [
+        "claude-code": [ModelInfo(id: "opus", name: "Opus 5.5", default: true), ModelInfo(id: "haiku", name: "Haiku 5.5")],
+        "codex": [ModelInfo(id: "luna", name: "Luna")],
+    ]
+
+    @Test(arguments: Fixture.cases("stateModels", "phaseMatrixCases", input: PhaseMatrixInput.self, output: JSONValue.self))
+    func phaseMatrix(_ c: Fixture.Case<PhaseMatrixInput, JSONValue>) throws {
+        let m = Models.phaseMatrix(Self.drivers, models: Self.models, value: c.input.value, inherited: c.input.inherited)
+        let out = PhaseMatrixOutput(matrix: m, filtered: c.input.query.map { Models.filterPhaseGroups(m.groups, $0) })
+        #expect(try modelsJSON(out) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("stateModels", "phasePickPatchCases", input: PhasePickPatchInput.self, output: JSONValue.self))
+    func phasePickPatch(_ c: Fixture.Case<PhasePickPatchInput, JSONValue>) throws {
+        #expect(try modelsJSON(Models.phasePickPatch(c.input.phase, choice: c.input.choice)) == c.output)
+    }
+
+    @Test func inheritedPhaseModelsResolveOneLevelUp() {
+        let settings = PhaseModels(work: PhaseChoice(driver: "claude-code", model: "opus"))
+        let project = PhaseModels(review: PhaseChoice(driver: "codex", model: nil))
+        #expect(Phases.inheritedPhaseModels(.settings, project: project, settings: settings) == nil)
+        let ticket = Phases.inheritedPhaseModels(.ticket, project: project, settings: settings)
+        #expect(ticket?.review == PhaseChoice(driver: "codex", model: nil))
+        #expect(ticket?.plan == PhaseChoice(driver: "claude-code", model: nil))
+        #expect(ticket?.work == PhaseChoice(driver: "claude-code", model: "opus"))
+        // A project inherits settings only.
+        #expect(Phases.inheritedPhaseModels(.project, project: project, settings: settings)?.review == PhaseChoice(driver: "claude-code", model: nil))
+        // Nothing set: claude-code with its default model.
+        #expect(Phases.settingsPhaseChoice(nil, .complete) == PhaseChoice(driver: "claude-code", model: nil))
+    }
+
+    @Test func mergeSetsAndClearsPhases() {
+        let current = PhaseModels(work: PhaseChoice(driver: "claude-code", model: "opus"), complete: PhaseChoice(driver: "claude-code", model: "haiku"))
+        let merged = Phases.mergePhaseModels(current, PhaseModelsPatch(work: .null, review: .value(PhaseChoice(driver: "codex", model: "")), complete: .value(PhaseChoice(driver: "", model: "x"))))
+        #expect(merged == PhaseModels(review: PhaseChoice(driver: "codex", model: nil)))
+        #expect(Phases.samePhaseChoice(PhaseChoice(driver: "a", model: ""), PhaseChoice(driver: "a", model: nil)))
+        #expect(!Phases.samePhaseChoice(PhaseChoice(driver: "a", model: nil), nil))
+        #expect(Phases.samePhaseChoice(nil, nil))
+    }
+
+    @Test func patchEncodesNullToClearAndOmitsTheRest() throws {
+        let body = UpdateTicketBody(phaseModels: PhaseModelsPatch(plan: .null, work: .value(PhaseChoice(driver: "codex", model: nil))))
+        #expect(try modelsJSON(body) == .object(["phaseModels": .object(["plan": .null, "work": .object(["driver": .string("codex"), "model": .null])])]))
+    }
+}

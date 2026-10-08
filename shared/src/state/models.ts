@@ -2,7 +2,8 @@
 // shared by every select on screen) and pure option/label derivations. No React here: each client
 // wraps ModelListCache in its own hook (useSyncExternalStore).
 
-import type { DriverInfo, DriverModels, ModelInfo, Project, PublicSettings } from "../protocol";
+import { PHASES, type DriverInfo, type DriverModels, type ModelInfo, type Phase, type PhaseChoice, type PhaseModels, type PhaseModelsPatch, type Project, type PublicSettings } from "../protocol";
+import { PHASE_LABELS, settingsPhaseChoice } from "../phases";
 import { DEFAULT_TRIAGE_CHOICE, replaceModels, type TriageChoice } from "../watchers";
 import type { HarnessClient } from "../client";
 
@@ -201,6 +202,115 @@ export function settingsChoice(settings: ModelSettings): TriageChoice {
 export function settingsChoicePatch(choice: TriageChoice, settings: ModelSettings): { defaultDriver: string; defaultModels: Record<string, string | null> } {
   const driver = choice.driver ?? settings.defaultDriver;
   return { defaultDriver: driver, defaultModels: replaceModels(settings.defaultModels, { driver, model: choice.model }) };
+}
+
+// ---------------------------------------------------------------------------
+// The per-phase picker (PhaseModelSelect): models as rows, a radio column per phase
+// ---------------------------------------------------------------------------
+
+/** One row of the phase matrix: a driver + model (model null: the driver's default), or Inherit (choice null). */
+export interface PhaseRow {
+  /** "" for Inherit, else encodeChoice(choice) */
+  key: string;
+  choice: PhaseChoice | null;
+  label: string;
+  /** The model id, for type-ahead */
+  model: string | null;
+}
+
+export interface PhaseGroup {
+  driver: string;
+  label: string;
+  rows: PhaseRow[];
+}
+
+export interface PhaseMatrix {
+  /** The Inherit row, naming what each phase inherits; null at app level (nothing above it) */
+  inherit: PhaseRow | null;
+  groups: PhaseGroup[];
+  /** The row key each phase column has selected (exactly one per column) */
+  selected: Record<Phase, string>;
+  /** What each phase runs with at this level (its own choice, else what it inherits) */
+  effective: Record<Phase, PhaseChoice>;
+  /** The closed control's text, e.g. "Opus 5.5 · Complete: Haiku 5.5" */
+  summary: string;
+}
+
+type ModelLists = Record<string, ModelInfo[] | undefined>;
+
+/** A choice's model name: the model's, else the driver's listed default, else "Default". */
+export function phaseChoiceModelName(c: PhaseChoice, models: ModelLists): string {
+  const list = models[c.driver];
+  if (c.model) return modelName(list, c.model);
+  return list?.find((m) => m.default)?.name ?? "Default";
+}
+
+/**
+ * The summary of a full set of phase choices: the Work choice first, then each phase that differs
+ * from it ("Opus 5.5 · Complete: Haiku 5.5"). Driver names show only when the phases use more than
+ * one driver.
+ */
+export function phaseSummary(choices: Record<Phase, PhaseChoice>, models: ModelLists, driverName: (id: string) => string = (id) => id): string {
+  const multi = new Set(PHASES.map((p) => choices[p].driver)).size > 1;
+  const name = (c: PhaseChoice) => (multi ? `${driverName(c.driver)} · ${phaseChoiceModelName(c, models)}` : phaseChoiceModelName(c, models));
+  const work = choices.work;
+  const parts = [name(work)];
+  for (const p of PHASES) {
+    if (p === "work" || name(choices[p]) === parts[0]) continue;
+    parts.push(`${PHASE_LABELS[p]}: ${name(choices[p])}`);
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * The phase matrix for a level's own choices (`value`). `inherited` is what each phase resolves to
+ * one level up (inheritedPhaseModels); null at app level, where every phase always resolves (an
+ * unset phase selects the Work driver's default row) and there's no Inherit row. Installed,
+ * signed-in drivers each get a group (a "Default" row, then their models); a driver or model a
+ * phase picks is kept even when it isn't listed, so no column ever shows nothing selected.
+ */
+export function phaseMatrix(
+  drivers: ChoiceDriver[],
+  models: ModelLists,
+  value: PhaseModels | null | undefined,
+  inherited: Record<Phase, PhaseChoice> | null,
+): PhaseMatrix {
+  const own = value ?? {};
+  const effective = Object.fromEntries(PHASES.map((p) => [p, own[p] ?? inherited?.[p] ?? settingsPhaseChoice(own, p)])) as Record<Phase, PhaseChoice>;
+  const selected = Object.fromEntries(PHASES.map((p) => [p, inherited && !own[p] ? "" : encodeChoice(effective[p])])) as Record<Phase, string>;
+  const picked = PHASES.map((p) => (inherited ? own[p] : effective[p])).filter((c): c is PhaseChoice => !!c);
+  const shown = drivers.filter((d) => (d.available && d.authenticated) || picked.some((c) => c.driver === d.id));
+  for (const c of picked) if (!shown.some((d) => d.id === c.driver)) shown.push({ id: c.driver, name: c.driver, available: false, authenticated: false });
+  const driverName = (id: string) => drivers.find((d) => d.id === id)?.name ?? id;
+
+  const groups: PhaseGroup[] = shown.map((d) => {
+    const list = models[d.id] ?? [];
+    const fallback = list.find((m) => m.default)?.name;
+    const rows: PhaseRow[] = [{ key: encodeChoice({ driver: d.id, model: null }), choice: { driver: d.id, model: null }, label: fallback ? `Default (${fallback})` : "Default", model: null }];
+    for (const m of list) rows.push({ key: encodeChoice({ driver: d.id, model: m.id }), choice: { driver: d.id, model: m.id }, label: m.name, model: m.id });
+    for (const c of picked) {
+      if (c.driver !== d.id || !c.model || rows.some((r) => r.choice?.model === c.model)) continue;
+      rows.push({ key: encodeChoice(c), choice: { driver: c.driver, model: c.model }, label: `${c.model} (custom)`, model: c.model });
+    }
+    return { driver: d.id, label: d.name, rows };
+  });
+
+  const inherit: PhaseRow | null = inherited ? { key: "", choice: null, label: `Inherit (${phaseSummary(inherited, models, driverName)})`, model: null } : null;
+  return { inherit, groups, selected, effective, summary: phaseSummary(effective, models, driverName) };
+}
+
+/** The groups a type-ahead query leaves (every word in the row's label, model id or driver name). */
+export function filterPhaseGroups(groups: PhaseGroup[], query: string): PhaseGroup[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return groups;
+  return groups
+    .map((g) => ({ ...g, rows: g.rows.filter((r) => words.every((w) => `${r.label} ${r.model ?? ""} ${g.label} ${g.driver}`.toLowerCase().includes(w))) }))
+    .filter((g) => g.rows.length > 0);
+}
+
+/** The phaseModels patch for picking `row` in `phase`'s column (Inherit clears the phase). */
+export function phasePickPatch(phase: Phase, row: Pick<PhaseRow, "choice">): PhaseModelsPatch {
+  return { [phase]: row.choice ? { driver: row.choice.driver, model: row.choice.model } : null };
 }
 
 /**

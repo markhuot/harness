@@ -31,8 +31,8 @@ describe("tool catalogue", () => {
 
   test("input property names match DESIGN.md exactly", () => {
     const props = (name: string) => Object.keys(tool(name).inputSchema.properties).sort();
-    expect(props("create_ticket")).toEqual(["attachments", "auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "driver", "model", "project_key", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "spec", "start", "title", "use_worktree"]);
-    expect(props("update_ticket")).toEqual(["base_branch", "base_revision", "branch", "depends_on", "driver", "key", "model", "permission_mode", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "spec", "title"]);
+    expect(props("create_ticket")).toEqual(["attachments", "auto_start", "base_branch", "branch", "child", "conductor", "depends_on", "driver", "model", "phase_models", "project_key", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "spec", "start", "title", "use_worktree"]);
+    expect(props("update_ticket")).toEqual(["base_branch", "base_revision", "branch", "depends_on", "driver", "key", "model", "permission_mode", "phase_models", "remote_id", "remote_url", "skip_agent_review", "skip_human_review", "spec", "title"]);
     expect(props("update_branch")).toEqual(["base_branch", "branch"]);
     expect(props("move_ticket")).toEqual(["key", "position", "status"]);
     expect(props("cancel_ticket")).toEqual(["key"]);

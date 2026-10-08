@@ -50,6 +50,59 @@ public struct ChoiceOptions: Codable, Sendable, Equatable {
     }
 }
 
+/// One row of the phase matrix: a driver + model (model nil: the driver's default), or Inherit (choice nil).
+public struct PhaseRow: Codable, Sendable, Equatable, Hashable, Identifiable {
+    /// "" for Inherit, else `Models.encodeChoice(choice)`
+    public var key: String
+    @Nullable public var choice: PhaseChoice?
+    public var label: String
+    /// The model id, for type-ahead
+    @Nullable public var model: String?
+
+    public var id: String { key }
+
+    public init(key: String, choice: PhaseChoice?, label: String, model: String?) {
+        self.key = key
+        self.choice = choice
+        self.label = label
+        self.model = model
+    }
+}
+
+public struct PhaseGroup: Codable, Sendable, Equatable, Hashable, Identifiable {
+    public var driver: String
+    public var label: String
+    public var rows: [PhaseRow]
+
+    public var id: String { driver }
+
+    public init(driver: String, label: String, rows: [PhaseRow]) {
+        self.driver = driver
+        self.label = label
+        self.rows = rows
+    }
+}
+
+public struct PhaseMatrix: Codable, Sendable, Equatable {
+    /// The Inherit row, naming what each phase inherits; nil at app level (nothing above it)
+    @Nullable public var inherit: PhaseRow?
+    public var groups: [PhaseGroup]
+    /// The row key each phase column has selected (exactly one per column)
+    public var selected: PerPhase<String>
+    /// What each phase runs with at this level (its own choice, else what it inherits)
+    public var effective: PerPhase<PhaseChoice>
+    /// The closed control's text, e.g. "Opus 5.5 · Complete: Haiku 5.5"
+    public var summary: String
+
+    public init(inherit: PhaseRow?, groups: [PhaseGroup], selected: PerPhase<String>, effective: PerPhase<PhaseChoice>, summary: String) {
+        self.inherit = inherit
+        self.groups = groups
+        self.selected = selected
+        self.effective = effective
+        self.summary = summary
+    }
+}
+
 /// The driver fields the combined select reads: `Pick<DriverInfo, "id" | "name" | "available" | "authenticated">`.
 public struct ChoiceDriver: Codable, Sendable, Equatable {
     public var id: String
@@ -329,6 +382,96 @@ public enum Models {
             out.options = options
             return out
         }
+    }
+
+    // MARK: The per-phase picker (PhaseModelSelect): models as rows, a radio column per phase
+
+    /// A PhaseChoice as a row key (`encodeChoice`).
+    public static func encodeChoice(_ c: PhaseChoice) -> String {
+        encodeChoice(TriageChoice(driver: c.driver, model: c.model))
+    }
+
+    /// A choice's model name: the model's, else the driver's listed default, else "Default".
+    public static func phaseChoiceModelName(_ c: PhaseChoice, _ models: [String: [ModelInfo]]) -> String {
+        let list = models[c.driver]
+        if let model = nonEmpty(c.model) { return modelName(list, model) }
+        return list?.first { $0.default == true }?.name ?? "Default"
+    }
+
+    /// The summary of a full set of phase choices: the Work choice first, then each phase that differs
+    /// from it ("Opus 5.5 · Complete: Haiku 5.5"). Driver names show only when the phases use more than
+    /// one driver.
+    public static func phaseSummary(_ choices: PerPhase<PhaseChoice>, _ models: [String: [ModelInfo]], driverName: (String) -> String = { $0 }) -> String {
+        let multi = Set(Phase.allCases.map { choices[$0].driver }).count > 1
+        func name(_ c: PhaseChoice) -> String {
+            multi ? "\(driverName(c.driver)) · \(phaseChoiceModelName(c, models))" : phaseChoiceModelName(c, models)
+        }
+        var parts = [name(choices.work)]
+        for p in Phase.allCases where p != .work {
+            let n = name(choices[p])
+            if n == parts[0] { continue }
+            parts.append("\(p.label): \(n)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// The phase matrix for a level's own choices (`value`). `inherited` is what each phase resolves to
+    /// one level up (`Phases.inheritedPhaseModels`); nil at app level, where every phase always resolves
+    /// (an unset phase selects the Work driver's default row) and there's no Inherit row. Installed,
+    /// signed-in drivers each get a group (a "Default" row, then their models); a driver or model a
+    /// phase picks is kept even when it isn't listed, so no column ever shows nothing selected.
+    public static func phaseMatrix(_ drivers: [ChoiceDriver], models: [String: [ModelInfo]], value: PhaseModels?, inherited: PerPhase<PhaseChoice>?) -> PhaseMatrix {
+        let own = value ?? PhaseModels()
+        let effective = PerPhase { p in own[p] ?? inherited?[p] ?? Phases.settingsPhaseChoice(own, p) }
+        let selected = PerPhase { p in inherited != nil && own[p] == nil ? "" : encodeChoice(effective[p]) }
+        let picked = Phase.allCases.compactMap { p in inherited != nil ? own[p] : effective[p] }
+        var shown = drivers.filter { d in (d.available && d.authenticated) || picked.contains { $0.driver == d.id } }
+        for c in picked where !shown.contains(where: { $0.id == c.driver }) {
+            shown.append(ChoiceDriver(id: c.driver, name: c.driver, available: false, authenticated: false))
+        }
+        func driverName(_ id: String) -> String { drivers.first { $0.id == id }?.name ?? id }
+
+        let groups = shown.map { d -> PhaseGroup in
+            let list = models[d.id] ?? []
+            let fallback = list.first { $0.default == true }?.name
+            let def = PhaseChoice(driver: d.id, model: nil)
+            var rows = [PhaseRow(key: encodeChoice(def), choice: def, label: nonEmpty(fallback).map { "Default (\($0))" } ?? "Default", model: nil)]
+            for m in list {
+                let c = PhaseChoice(driver: d.id, model: m.id)
+                rows.append(PhaseRow(key: encodeChoice(c), choice: c, label: m.name, model: m.id))
+            }
+            for c in picked {
+                guard c.driver == d.id, let model = nonEmpty(c.model), !rows.contains(where: { $0.choice?.model == model }) else { continue }
+                rows.append(PhaseRow(key: encodeChoice(c), choice: PhaseChoice(driver: c.driver, model: model), label: "\(model) (custom)", model: model))
+            }
+            return PhaseGroup(driver: d.id, label: d.name, rows: rows)
+        }
+
+        let inherit = inherited.map { PhaseRow(key: "", choice: nil, label: "Inherit (\(phaseSummary($0, models, driverName: driverName)))", model: nil) }
+        return PhaseMatrix(inherit: inherit, groups: groups, selected: selected, effective: effective, summary: phaseSummary(effective, models, driverName: driverName))
+    }
+
+    /// The groups a type-ahead query leaves (every word in the row's label, model id or driver name).
+    public static func filterPhaseGroups(_ groups: [PhaseGroup], _ query: String) -> [PhaseGroup] {
+        let words = queryWords(query)
+        if words.isEmpty { return groups }
+        return groups.compactMap { g in
+            let rows = g.rows.filter { r in
+                let hay = Array(Branches.jsLowerCase("\(r.label) \(r.model ?? "") \(g.label) \(g.driver)").utf16)
+                return words.allSatisfy { jsIncludes(hay, $0) }
+            }
+            guard !rows.isEmpty else { return nil }
+            var out = g
+            out.rows = rows
+            return out
+        }
+    }
+
+    /// The phaseModels patch for picking `choice` in `phase`'s column (nil, the Inherit row, clears the phase).
+    public static func phasePickPatch(_ phase: Phase, choice: PhaseChoice?) -> PhaseModelsPatch {
+        var out = PhaseModelsPatch()
+        out[phase] = Patch(choice.map { PhaseChoice(driver: $0.driver, model: $0.model) })
+        return out
     }
 
     // MARK: JS string helpers

@@ -27,34 +27,88 @@ function v2Db(settings: Record<string, string>) {
   return db;
 }
 
-describe("settings migration (claudeModel / anthropicModel → defaultModels)", () => {
-  test("both legacy values move into defaultModels and the old keys are removed", () => {
-    const db = v2Db({ claudeModel: '"haiku"', anthropicModel: '"claude-opus-5"', maxConcurrentRuns: "2" });
+describe("settings migration (claudeModel / anthropicModel → defaultModels → phaseModels)", () => {
+  test("the legacy model for the default driver becomes Planning/Work/Review; the old keys are removed", () => {
+    const db = v2Db({ claudeModel: '"sonnet"', anthropicModel: '"claude-opus-5"', maxConcurrentRuns: "2" });
     const store = new Store(db);
     const stored = store.settings.all();
     expect(stored.claudeModel).toBeUndefined();
     expect(stored.anthropicModel).toBeUndefined();
+    expect(stored.defaultModels).toBeUndefined();
     const s = resolveSettings(stored);
-    expect(s.defaultModels).toEqual({ "claude-code": "haiku", "anthropic-api": "claude-opus-5" });
+    const cc = { driver: "claude-code", model: "sonnet" };
+    expect(s.phaseModels).toEqual({ plan: cc, work: cc, review: cc, complete: { driver: "claude-code", model: "haiku" } });
+    expect(s.defaultModels).toEqual({ "claude-code": "sonnet" });
     expect(s.maxConcurrentRuns).toBe(2);
   });
 
   test("a null claudeModel is dropped, not stored as a model", () => {
     const s = resolveSettings(new Store(v2Db({ claudeModel: "null", anthropicModel: '"claude-sonnet-5"' })).settings.all());
-    expect(s.defaultModels).toEqual({ "anthropic-api": "claude-sonnet-5" });
+    expect(s.defaultModels).toEqual({});
+    expect(s.phaseModels!.work).toEqual({ driver: "claude-code", model: null });
   });
 
-  test("no legacy values → no defaultModels row; tickets and projects get the new columns", () => {
+  test("no legacy values → only the built-in Complete choice; tickets and projects get the new columns", () => {
     const db = v2Db({});
-    expect(db.query("SELECT 1 FROM settings WHERE key = 'defaultModels'").get()).toBeNull();
-    expect(resolveSettings(new Store(db).settings.all()).defaultModels).toEqual({});
+    expect(resolveSettings(new Store(db).settings.all()).phaseModels).toEqual({ complete: { driver: "claude-code", model: "haiku" } });
     const cols = (t: string) => (db.query(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
-    expect(cols("tickets")).toContain("model");
-    expect(cols("projects")).toContain("default_models");
+    expect(cols("tickets")).toContain("phase_models");
+    expect(cols("projects")).toContain("phase_models");
+    expect(cols("sessions")).toContain("driver_state_driver");
   });
 });
 
 describe("settings validation", () => {
+  test("migration 38 turns driver + model columns into per-phase choices", () => {
+    const db = new Database(":memory:", { strict: true });
+    db.exec("PRAGMA foreign_keys = OFF");
+    for (let v = 0; v < 37; v++) {
+      db.exec(MIGRATIONS[v]!);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    const set = (k: string, v: unknown) => db.query("INSERT INTO settings (key, value) VALUES ($k, $v)").run({ k, v: JSON.stringify(v) });
+    set("defaultDriver", "anthropic-api");
+    set("defaultModels", { "anthropic-api": "claude-opus-5-5", "claude-code": "sonnet" });
+    set("reviewModels", { "anthropic-api": "claude-fable" });
+    const project = (id: string, driver: string | null, models: Record<string, string>) =>
+      db.query("INSERT INTO projects (id, key, name, path, default_driver, default_models, created_at, updated_at) VALUES ($id, $id, $id, '/tmp', $driver, $models, 0, 0)").run({ id, driver, models: JSON.stringify(models) });
+    project("PLAIN", null, {});
+    project("PINNED", "claude-code", {});
+    const ticket = (id: string, projectId: string, driver: string, model: string | null) =>
+      db
+        .query("INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, model, created_at, updated_at) VALUES ($id, $id, $projectId, 'task', 't', '', 'planning', $id, $driver, $model, 0, 0)")
+        .run({ id, projectId, driver, model });
+    ticket("FOLLOWS", "PLAIN", "anthropic-api", null);
+    ticket("OWN-MODEL", "PLAIN", "anthropic-api", "claude-haiku-5-5");
+    ticket("OTHER-DRIVER", "PINNED", "anthropic-api", null);
+    migrate(db);
+
+    const store = new Store(db);
+    const api = (model: string | null) => ({ driver: "anthropic-api", model });
+    const s = resolveSettings(store.settings.all());
+    expect(s.phaseModels).toEqual({ plan: api("claude-opus-5-5"), work: api("claude-opus-5-5"), review: api("claude-fable"), complete: api("claude-haiku-5-5") });
+    expect([s.defaultDriver, s.defaultModels, s.reviewModels]).toEqual(["anthropic-api", { "anthropic-api": "claude-opus-5-5" }, { "anthropic-api": "claude-fable" }]);
+    expect(store.projects.get("PLAIN")!.phaseModels).toEqual({});
+    expect(store.projects.get("PINNED")!.phaseModels!.work).toEqual({ driver: "claude-code", model: "sonnet" });
+    const t = (id: string) => store.tickets.get(id)!;
+    expect([t("FOLLOWS").phaseModels, t("FOLLOWS").driver]).toEqual([{}, "anthropic-api"]);
+    expect(t("OWN-MODEL").phaseModels).toEqual({ plan: api("claude-haiku-5-5"), work: api("claude-haiku-5-5"), review: api("claude-fable") });
+    expect(t("OTHER-DRIVER").phaseModels!.work).toEqual(api("claude-opus-5-5"));
+    // Complete stays inherited, so every ticket gets the cheap default.
+    for (const id of ["FOLLOWS", "OWN-MODEL", "OTHER-DRIVER"]) expect(t(id).phaseModels!.complete).toBeUndefined();
+  });
+
+  test("the built-in Complete default is seeded once: a cleared one stays cleared", () => {
+    const db = new Database(":memory:", { strict: true });
+    migrate(db);
+    const work = new FakeDriver("claude-code");
+    const h = makeOrchestrator({ driver: work, drivers: [work] });
+    expect(resolveSettings(new Store(db).settings.all()).phaseModels!.complete).toEqual({ driver: "claude-code", model: "haiku" });
+    expect(h.orch.settings().phaseModels!.complete).toEqual({ driver: "claude-code", model: "haiku" });
+    h.orch.updateSettings({ phaseModels: { complete: null } });
+    migrate(h.store.db);
+    expect(h.orch.settings().phaseModels!.complete).toBeUndefined();
+  });
   test("model maps: known drivers only, ids without spaces, empty → null", () => {
     expect(validateSettingsPatch({ defaultModels: { a: " x ", b: "" } }, ["a", "b"])).toEqual({ defaultModels: { a: "x", b: null } });
     expect(() => validateSettingsPatch({ defaultModels: { nope: "x" } }, ["a"])).toThrow(/Unknown driver/);
@@ -76,13 +130,28 @@ describe("settings validation", () => {
     expect(h.orch.settings().browserIdleTabMinutes).toBe(12);
   });
 
-  test("PATCH merges model maps per driver; null clears one", () => {
+  test("legacy defaultModels PATCH sets the Work driver's model; null clears it", () => {
     const h = setup();
     h.orch.updateSettings({ defaultModels: { fake: "m1" } });
-    h.orch.updateSettings({ defaultModels: { other: "o1" } });
-    expect(h.orch.settings().defaultModels).toEqual({ fake: "m1", other: "o1" });
+    h.orch.updateSettings({ defaultModels: { other: "o1" } }); // not the Work driver: no effect
+    expect(h.orch.settings().defaultModels).toEqual({ fake: "m1" });
+    expect(h.orch.settings().phaseModels).toMatchObject({ plan: { driver: "fake", model: "m1" }, work: { driver: "fake", model: "m1" }, review: { driver: "fake", model: "m1" } });
     const pub = h.orch.updateSettings({ defaultModels: { fake: null } });
-    expect(pub.defaultModels).toEqual({ other: "o1" });
+    expect(pub.defaultModels).toEqual({});
+  });
+
+  test("phaseModels PATCH merges per phase; null clears a phase, which stays cleared", () => {
+    const h = setup(); // its settings start on the fake driver for Planning, Work and Review
+    h.orch.updateSettings({ phaseModels: { work: { driver: "fake", model: "w" }, review: null } });
+    h.orch.updateSettings({ phaseModels: { complete: { driver: "other", model: "small" } } });
+    const fake = (model: string | null) => ({ driver: "fake", model });
+    expect(h.orch.settings().phaseModels).toEqual({ plan: fake(null), work: fake("w"), complete: { driver: "other", model: "small" } });
+    h.orch.updateSettings({ phaseModels: { complete: null } });
+    expect(h.orch.settings().phaseModels).toEqual({ plan: fake(null), work: fake("w") });
+    expect(h.store.settings.all().defaultDriver).toBeUndefined(); // legacy keys aren't stored
+    expect(() => h.orch.updateSettings({ phaseModels: { work: { driver: "nope", model: null } } })).toThrow(/Unknown driver/);
+    expect(() => h.orch.updateSettings({ phaseModels: { chat: { driver: "fake", model: null } } })).toThrow(/phase/);
+    expect(() => h.orch.updateSettings({ phaseModels: { work: { driver: "fake", model: "two words" } } })).toThrow(/without spaces/);
   });
 });
 
@@ -141,12 +210,67 @@ describe("model reaches the driver", () => {
     expect((await h.orch.updateTicket(t.key, { driver: "fake" })).model).toBe("m3"); // same driver: kept
   });
 
-  test("review runs use settings.reviewModels when set", async () => {
+  test("review runs use the Review choice; a ticket's legacy model sets its Review too", async () => {
     const h = setup();
     h.orch.updateSettings({ reviewModels: { fake: "reviewer" } });
-    await h.orch.createTicket({ projectId: h.project.id, spec: "x", model: "worker" });
+    await h.orch.createTicket({ projectId: h.project.id, spec: "x", phaseModels: { work: { driver: "fake", model: "worker" } } });
     await h.orch.idle();
     expect(h.driver.calls.map((c) => `${c.kind}:${c.model}`)).toEqual(["work:worker", "review:reviewer"]);
+    await h.orch.createTicket({ projectId: h.project.id, spec: "y", model: "worker" });
+    await h.orch.idle();
+    expect(h.driver.calls.slice(2).map((c) => `${c.kind}:${c.model}`)).toEqual(["work:worker", "review:worker"]);
+  });
+
+  test("each phase resolves on its own across ticket → project → settings, on its own driver", async () => {
+    const h = setup();
+    h.orch.updateSettings({ phaseModels: { review: { driver: "other", model: "rev" }, complete: { driver: "other", model: "small" } } });
+    h.orch.updateProject(h.project.id, { phaseModels: { plan: { driver: "other", model: "planner" } } });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "p", start: false, phaseModels: { work: { driver: "fake", model: "opus" } } });
+    await h.orch.idle();
+    expect(h.other.calls.map((c) => `${c.kind}:${c.model}`)).toEqual(["plan:planner"]);
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    expect(h.driver.calls.map((c) => `${c.kind}:${c.model}`)).toEqual(["work:opus"]);
+    expect(h.other.calls.map((c) => `${c.kind}:${c.model}`)).toEqual(["plan:planner", "review:rev"]);
+    expect(h.orch.ticketDetail(t.key).ticket.driver).toBe("fake");
+    const lines = (kind: string) =>
+      (h.store.db.query("SELECT DISTINCT session_id FROM runs WHERE kind = $kind").all({ kind }) as { session_id: string }[]).flatMap((r) =>
+        h.store.transcript.list(r.session_id).map((e) => (e.content as { text?: string }).text),
+      );
+    expect(lines("plan")).toContain("Run started (plan · other · planner)");
+    expect(lines("work")).toContain("Run started (work · opus)");
+  });
+
+  test("a run on another driver than the saved conversation's starts fresh", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "first" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "zeroth"); // saves a fake-driver conversation
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "same driver");
+    await h.orch.idle();
+    expect(h.driver.calls.find((c) => c.prompt === "same driver")!.state).not.toBeNull();
+    await h.orch.updateTicket(t.key, { phaseModels: { work: { driver: "other", model: null } } });
+    await h.orch.sendMessage(t.key, "switched");
+    await h.orch.idle();
+    const switched = h.other.calls.find((c) => c.prompt === "switched")!;
+    expect(switched.state).toBeNull();
+    expect(h.store.sessions.get(t.sessionId)!.driver).toBe("other");
+  });
+
+  test("a ticket's legacy driver/model write: the inherited driver with no model follows the project", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", driver: "fake", start: false });
+    expect(t.phaseModels).toEqual({});
+    const pinned = await h.orch.updateTicket(t.key, { driver: "other" });
+    expect([pinned.driver, pinned.model]).toEqual(["other", null]);
+    expect(Object.keys(pinned.phaseModels!).sort()).toEqual(["plan", "review", "work"]);
+    h.orch.updateProject(h.project.id, { phaseModels: { work: { driver: "other", model: "pm" } } });
+    // The ticket's driver follows its project once it no longer pins one.
+    const back = await h.orch.updateTicket(t.key, { driver: "fake" });
+    expect(back.phaseModels!.work).toEqual({ driver: "fake", model: null });
+    const cleared = await h.orch.updateTicket(t.key, { phaseModels: { plan: null, work: null, review: null } });
+    expect([cleared.driver, cleared.model, cleared.phaseModels]).toEqual(["other", null, {}]);
   });
 
   test("project defaultModels validate driver ids and merge", () => {
