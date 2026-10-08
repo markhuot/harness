@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261008.2352](https://github.com/markhuot/harness/releases/tag/app-20261008.2352) - 2026-10-08
+
 ### Added
 
 - The Agents & tasks tab on iPhone and iPad has the same filter as the Mac: Agents and Tasks
@@ -21,7 +23,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone and iPad you can dock as many tickets as you like and switch between them. Docked
   tickets wait as small glass cards, each with a status dot (green for done, red for blocked), the ref,
   as much of the title as fits and an ✕. Tap a card to open that ticket. iPhone shows two cards and
-  iPad five; past that, an "N more…" card opens a scrolling list of them all over a soft blur. On iPhone, a swipe
+  iPad five; past that, an "N more…" card opens a scrolling list of them all over a soft blur that spans the screen. The list
+  fades out under its top edge rather than running under the status bar, and a short list sits
+  just above the dock. On iPhone, a swipe
   along the dock moves to the next one. With a ticket open, long-press its title to switch to
   another docked ticket. Docked tickets are still there after you reopen the app.
 - Pick the driver and model for each run phase (Planning, Work, Review and Complete) in app
