@@ -70,7 +70,7 @@
 //      "New session"; sheet-*.png. Then several docked: a second ticket joins the dock (its ref,
 //      title and a count of 2), the stack button's menu, the expanded toolbar's menu and a swipe
 //      along the bar switch (keeping each one's path and composer), twelve list ten and "2 more"
-//      whose oldest opens at its saved path, ✕ and a swipe down close only the top, the dock
+//      (and the oldest, parked, opens at its saved path), ✕ and a swipe down close only the top, the dock
 //      comes back after a relaunch, and Projects closes them all; dock-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
@@ -1297,7 +1297,8 @@ async function seedDockable(projectId: string, n: number): Promise<Ticket[]> {
  * The iPhone's dock with several tickets (TicketDock, DockedTicketsMenu): a second ticket joins the
  * dock rather than replacing it, the bar shows the top's ref and title with a count, the stack
  * button's menu and a swipe along the bar switch between them (each keeping its path and composer),
- * twelve show ten rows and "2 more" whose oldest opens at its saved path, ✕ and a swipe down close
+ * twelve show ten rows and "2 more" (AXe can't scroll a menu, so the oldest, parked, comes back by a
+ * swipe) and it opens at its saved path, ✕ and a swipe down close
  * only the top, the dock comes back after a relaunch, and Projects closes them all.
  */
 async function dockStackChecks(udid: string, p: { project: Project; conductor: Ticket }) {

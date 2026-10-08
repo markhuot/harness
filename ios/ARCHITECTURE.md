@@ -656,8 +656,10 @@ just its ticket; twelve show ten pills and "+2", whose menu opens one of the old
 harness://projects closes them all. Shots are `panel-*.png`. A compact window's bottom sheet isn't
 covered, since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets`
 checks drive the same sheet, and `dockStackChecks` there covers several docked tickets the same
-way (the stack button's menu, the expanded toolbar's, a swipe along the bar, "2 more", ✕ and a
-swipe down closing only the top, a terminate and relaunch keeping the dock; `dock-*.png`).
+way (the stack button's menu, the expanded toolbar's, a swipe along the bar, ten rows and "2 more"
+listed with the oldest, parked, reopening at its pushed screen, ✕ and a swipe down closing only the
+top, a terminate and relaunch keeping the dock, and the app's footprint with none, 5 and 20 docked;
+`dock-*.png`).
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
 `CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and
