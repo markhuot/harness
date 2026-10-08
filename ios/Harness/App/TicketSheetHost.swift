@@ -404,26 +404,27 @@ struct DockedCardsAbove: View {
                 let others = Array(router.dockedSheets.dropFirst())
                 ZStack(alignment: .bottom) {
                     if expanded {
+                        // Across the whole screen, behind the list.
                         DockedBackdrop(anchor: .bottom, radius: geo.size.height * 1.1)
                         Color.clear
                             .contentShape(.rect)
+                            .ignoresSafeArea()
                             .onTapGesture { expanded = false }
                             .accessibilityHidden(true)
                         DockedCardList(sheets: others, total: router.dockedSheets.count, open: open, close: { router.closeSheet(id: $0.id) }, collapse: { expanded = false })
-                            .padding(.top, geo.safeAreaInsets.top)
+                            .padding(.horizontal, sides - origin.x)
                             .padding(.bottom, bottom)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     } else {
                         stack(others)
+                            .padding(.horizontal, sides - origin.x)
                             .padding(.bottom, bottom)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
-                .padding(.horizontal, sides - origin.x)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
             }
         }
-        .ignoresSafeArea()
         .animation(.snappy, value: router.dockedSheets.map(\.id))
         .animation(.snappy, value: expanded)
         .onChange(of: router.ticketSheetState) { _, s in if s != .docked { expanded = false } }

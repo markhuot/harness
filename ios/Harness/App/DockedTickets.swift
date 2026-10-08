@@ -205,6 +205,7 @@ struct DockedCardList: View {
     @Environment(\.palette) private var c
 
     var body: some View {
+        GeometryReader { g in
         ScrollView {
             VStack(alignment: .trailing, spacing: DockedCardMetrics.spacing) {
                 Button(action: collapse) {
@@ -224,12 +225,14 @@ struct DockedCardList: View {
                     DockedCard(sheet: sheet, open: { open(sheet) }, close: { close(sheet) })
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.top, 12)
+            // A short list sits at the bottom, just above the dock; a long one scrolls.
+            .frame(maxWidth: .infinity, minHeight: g.size.height, alignment: .bottomTrailing)
         }
         .defaultScrollAnchor(.bottom)
         .scrollBounceBehavior(.basedOnSize)
         .scrollIndicators(.hidden)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ticket-dock-list")
     }
