@@ -81,6 +81,8 @@ struct DockedTicketsMenu<Label: View>: View {
         } label: {
             label()
         }
+        // As listed, whichever way it opens: the most recent first, "N more" last.
+        .menuOrder(.fixed)
     }
 
     private func row(_ sheet: TicketSheet, state: BoardState?, isTop: Bool) -> some View {

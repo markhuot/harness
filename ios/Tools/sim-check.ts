@@ -1381,8 +1381,12 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     moved(udid);
     await until(`${b.key} in the sheet`, async () => {
       const l = await labels(udid);
-      return ticketShown(l, b.key) && !l.some(isDock);
-    }, 8000);
+      return l.some((x) => x.startsWith(b.title.slice(0, 24))) && !l.some((x) => x.startsWith("Part of ")) && !l.some(isDock);
+    }, 8000).catch(async (e) => {
+      await say("after choosing it from the toolbar's menu");
+      await shot(udid, "dock-toolbar-chosen-light");
+      throw e;
+    });
     return `${kid.key} → ${b.key}, still presented`;
   });
   await check("a swipe along the dock moves to the next ticket and back", async () => {
@@ -1416,15 +1420,30 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await dockSheet(udid);
     await until("a count of 12", async () => (await count()) === 12, 5000);
     await tapWhere(udid, switcher);
-    await until("\"2 more\"", async () => (await labels(udid)).includes("2 more"), 5000).catch(async (e) => {
+    const anyRow = (x: string) => extra.some((t) => row(t.key)(x));
+    await until("the menu", async () => (await labels(udid)).some(anyRow), 5000).catch(async (e) => {
       await say("the menu");
       throw e;
     });
-    const l = await labels(udid);
-    const listed = [kid.key, ...extra.map((t) => t.key)].filter((k) => l.some(row(k)));
     await shot(udid, "dock-switcher-overflow-light");
+    // The menu scrolls on a phone: sweep it to its top, then to its bottom ("2 more" is last),
+    // gathering every row on the way.
+    const l = await labels(udid);
+    for (const dy of [260, 260, 260, -260, -260, -260, -260]) {
+      const rows = (await nodes(udid)).filter((n) => n.AXLabel && anyRow(n.AXLabel));
+      if (!rows.length) break;
+      const mid = rows[Math.floor(rows.length / 2)]!;
+      const x = String(Math.round(mid.frame.x + mid.frame.width / 2));
+      const y = mid.frame.y + mid.frame.height / 2;
+      await axe("swipe", "--start-x", x, "--start-y", String(Math.round(y - dy / 2)), "--end-x", x, "--end-y", String(Math.round(y + dy / 2)), "--duration", "0.4", "--udid", udid);
+      await Bun.sleep(400);
+      l.push(...(await labels(udid)));
+    }
+    const listed = [kid.key, ...extra.map((t) => t.key)].filter((k) => l.some(row(k)));
+    if (!l.includes("2 more")) throw new Error(`no "2 more" in the menu: ${[...new Set(l)].filter((x) => !x.startsWith("SHEET-") || !x.includes(" Docked")).slice(0, 30).join(" | ")}`);
     if (listed.length !== 10) throw new Error(`the menu lists ${listed.length} docked tickets before "2 more": ${listed.join(", ")}`);
     if (l.some(row(kid.key))) throw new Error(`the oldest, ${kid.key}, is listed before "2 more"`);
+    await shot(udid, "dock-switcher-overflow-bottom-light");
     await tapWhere(udid, "2 more");
     await until("the rest", async () => (await labels(udid)).some(row(kid.key)), 5000);
     await tapWhere(udid, row(kid.key));
@@ -1440,7 +1459,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   await check("the dock's ✕ closes only the ticket on top", async () => {
     const before = await dockSheet(udid);
     const n = await count();
-    await tapWhere(udid, `Close ${kid.key}`);
+    await tapWhere(udid, `Close ${before.split(",")[0]}`);
     await until("the next one on top", async () => {
       const t = await top();
       return t && t !== before ? t : null;
@@ -1451,6 +1470,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   await check("a swipe down on the dock closes one and leaves the rest docked", async () => {
     const before = (await top())!;
     const n = await count();
+    await Bun.sleep(600);
     await swipeDockDown(udid, (await findElement(udid, isDock))!);
     const after = await until("the next one docked", async () => {
       const t = await top();
