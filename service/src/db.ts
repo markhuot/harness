@@ -4,6 +4,7 @@ import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
+import { builtinCompleteChoice, FALLBACK_DRIVER } from "@harness/shared";
 import { attachmentPath, describeFile } from "./attachments";
 import { isUploadPath } from "./attachment-lists";
 
@@ -703,6 +704,15 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE tickets ADD COLUMN agent_notes TEXT;
   `,
+  // 38: per-phase driver + model choices (DESIGN.md "Model selection"). tickets.phase_models and
+  //     projects.phase_models hold a level's own choices; settings keep theirs under phaseModels.
+  //     The code converts the old single choices into Planning/Work/Review and seeds Complete.
+  //     sessions.driver_state_driver records which driver saved the conversation (resume guard).
+  `
+  ALTER TABLE tickets ADD COLUMN phase_models TEXT;
+  ALTER TABLE projects ADD COLUMN phase_models TEXT;
+  ALTER TABLE sessions ADD COLUMN driver_state_driver TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */
@@ -717,7 +727,77 @@ export interface MigrationPaths {
  */
 export const MIGRATION_CODE: Record<number, (db: Database, paths: Required<MigrationPaths>) => void> = {
   30: backfillAttachments,
+  38: convertPhaseModels,
 };
+
+/**
+ * Migration 38's code. Each level's old driver + model becomes its Planning, Work and Review
+ * choice, keeping the model runs actually used (a ticket or project without a model of its own ran
+ * on the default models map's entry for its driver) and the review model (reviewModels). A ticket
+ * on the driver it would inherit with no model of its own keeps no choice. Complete stays
+ * inherited everywhere except settings, which get Haiku 5.5 on their driver: seeded here once, so
+ * clearing it later sticks. The old settings keys are removed; the old columns stay, unread.
+ */
+function convertPhaseModels(db: Database) {
+  const parse = <T>(text: string | null | undefined, fallback: T): T => {
+    try {
+      const v = text ? JSON.parse(text) : null;
+      return v && typeof v === "object" ? (v as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const stored = new Map((db.query("SELECT key, value FROM settings").all() as { key: string; value: string }[]).map((r) => [r.key, r.value]));
+  const driverOf = (text: string | undefined) => {
+    try {
+      const v = text ? JSON.parse(text) : null;
+      return typeof v === "string" && v ? v : null;
+    } catch {
+      return null;
+    }
+  };
+  const settingsDriver = driverOf(stored.get("defaultDriver")) ?? FALLBACK_DRIVER;
+  const settingsModels = parse<Record<string, string | null>>(stored.get("defaultModels"), {});
+  const reviewModels = parse<Record<string, string | null>>(stored.get("reviewModels"), {});
+  type Choice = { driver: string; model: string | null };
+  const levelChoices = (choice: Choice) => ({
+    plan: choice,
+    work: choice,
+    review: { driver: choice.driver, model: reviewModels[choice.driver] || choice.model },
+  });
+
+  const settings: Record<string, Choice> = {};
+  if (stored.has("defaultDriver") || stored.has("defaultModels") || stored.has("reviewModels")) {
+    Object.assign(settings, levelChoices({ driver: settingsDriver, model: settingsModels[settingsDriver] || null }));
+  }
+  const complete = builtinCompleteChoice(settingsDriver);
+  if (complete) settings.complete = complete;
+  db.query("INSERT OR IGNORE INTO settings (key, value) VALUES ('phaseModels', $value)").run({ value: JSON.stringify(settings) });
+  db.exec("DELETE FROM settings WHERE key IN ('defaultDriver', 'defaultModels', 'reviewModels')");
+
+  const projects = db.query("SELECT id, default_driver, default_models FROM projects").all() as { id: string; default_driver: string | null; default_models: string | null }[];
+  const setProject = db.query("UPDATE projects SET phase_models = $pm WHERE id = $id");
+  const projectInfo = new Map<string, { driver: string; models: Record<string, string | null> }>();
+  for (const p of projects) {
+    const models = parse<Record<string, string | null>>(p.default_models, {});
+    const driver = p.default_driver || settingsDriver;
+    projectInfo.set(p.id, { driver, models });
+    const model = models[driver] || null;
+    // A project pinned a driver, or a model for the settings' driver: that's its choice.
+    if (!p.default_driver && !model) continue;
+    setProject.run({ id: p.id, pm: JSON.stringify(levelChoices({ driver, model: model ?? (settingsModels[driver] || null) })) });
+  }
+
+  const tickets = db.query("SELECT id, project_id, driver, model FROM tickets").all() as { id: string; project_id: string; driver: string; model: string | null }[];
+  const setTicket = db.query("UPDATE tickets SET phase_models = $pm WHERE id = $id");
+  for (const t of tickets) {
+    const project = projectInfo.get(t.project_id);
+    const inherited = project?.driver ?? settingsDriver;
+    if (t.driver === inherited && !t.model) continue;
+    const model = t.model || project?.models[t.driver] || settingsModels[t.driver] || null;
+    setTicket.run({ id: t.id, pm: JSON.stringify(levelChoices({ driver: t.driver, model })) });
+  }
+}
 
 /** An attachment as rounds before migration 30 stored it in a list. */
 interface OldListAttachment {

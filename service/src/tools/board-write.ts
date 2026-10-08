@@ -3,13 +3,14 @@
 // enforces the guard rails (never the caller's own ticket, no way around a tool approval); a plan
 // run gets update_ticket for its own ticket only. See DESIGN.md "Board changes by agents".
 
-import { PERMISSION_MODES, TICKET_STATUSES, type PermissionMode, type TicketStatus } from "@harness/shared";
-import { defineTool, json, schema, ticketView } from "./util";
+import { PERMISSION_MODES, TICKET_STATUSES, type PermissionMode, type PhaseModelsPatch, type TicketStatus } from "@harness/shared";
+import { defineTool, json, phaseModelsProp, schema, ticketView } from "./util";
 
 const keyProp = { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket." };
 const depsProp = { type: "array", items: { type: "string" }, description: "Keys of tickets that must be done before this one starts." };
-const driverProp = { type: "string", minLength: 1, description: "Driver id, e.g. \"claude-code\". Defaults to the project's (a child: its parent's)." };
-const modelProp = { type: "string", description: "Model id for that driver. An empty string uses the driver's default." };
+const driverProp = { type: "string", minLength: 1, description: "Driver id, e.g. \"claude-code\", for its Planning, Work and Review runs. Defaults to the project's (a child: its parent's)." };
+const modelProp = { type: "string", description: "Model id for that driver, for its Planning, Work and Review runs. An empty string uses the driver's default." };
+const ticketPhaseModelsProp = phaseModelsProp("The ticket's own driver + model per run phase, applied after driver/model; a phase it doesn't choose inherits the project's, then the settings'.");
 
 const baseBranchProp = {
   type: "string",
@@ -58,6 +59,7 @@ export const createTicket = defineTool<{
   child?: boolean;
   driver?: string;
   model?: string;
+  phase_models?: PhaseModelsPatch;
   use_worktree?: boolean;
   base_branch?: string;
   branch?: string;
@@ -85,6 +87,7 @@ export const createTicket = defineTool<{
       },
       driver: driverProp,
       model: modelProp,
+      phase_models: ticketPhaseModelsProp,
       use_worktree: {
         type: "boolean",
         description:
@@ -118,6 +121,7 @@ export const createTicket = defineTool<{
       child: input.child,
       driver: input.driver,
       model: modelInput(input.model),
+      phaseModels: input.phase_models,
       useWorktree: input.use_worktree,
       baseBranch: baseBranchInput(input.base_branch),
       branch: branchInput(input.branch),
@@ -138,6 +142,7 @@ export const updateTicket = defineTool<{
   base_revision?: number;
   driver?: string;
   model?: string;
+  phase_models?: PhaseModelsPatch;
   permission_mode?: PermissionMode | "inherit";
   depends_on?: string[];
   base_branch?: string;
@@ -158,6 +163,7 @@ export const updateTicket = defineTool<{
       base_revision: { type: "integer", minimum: 1, description: "Required with spec: the specRevision get_ticket showed. If the spec changed since, the call fails with the current revision." },
       driver: driverProp,
       model: modelProp,
+      phase_models: ticketPhaseModelsProp,
       permission_mode: { type: "string", enum: [...PERMISSION_MODES, "inherit"], description: "\"inherit\" uses the project's mode." },
       depends_on: depsProp,
       base_branch: baseBranchProp,
@@ -176,6 +182,7 @@ export const updateTicket = defineTool<{
       baseRevision: input.base_revision,
       driver: input.driver,
       model: modelInput(input.model),
+      phaseModels: input.phase_models,
       permissionMode: input.permission_mode === undefined ? undefined : input.permission_mode === "inherit" ? null : input.permission_mode,
       dependsOn: input.depends_on,
       baseBranch: baseBranchInput(input.base_branch),
@@ -185,7 +192,7 @@ export const updateTicket = defineTool<{
       remoteId: remoteInput(input.remote_id),
       remoteUrl: remoteInput(input.remote_url),
     });
-    return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, permissionMode: ticket.permissionMode })}`;
+    return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, phaseModels: ticket.phaseModels ?? {}, permissionMode: ticket.permissionMode })}`;
   },
 });
 

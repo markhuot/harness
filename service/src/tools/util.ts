@@ -246,6 +246,23 @@ export function schema(properties: Record<string, unknown>, required: string[] =
   return required.length ? { type: "object", properties, required } : { type: "object", properties };
 }
 
+/** Per-phase driver + model choices (DESIGN.md "Model selection"), merged per phase. */
+export function phaseModelsProp(description: string) {
+  const choice = {
+    type: "object",
+    properties: {
+      driver: { type: "string", minLength: 1, description: "Driver id (see list_drivers)." },
+      model: { type: "string", description: "Model id for that driver; null or \"\" for the driver's default model." },
+    },
+    required: ["driver"],
+  };
+  return {
+    type: "object",
+    properties: { plan: choice, work: choice, review: choice, complete: choice },
+    description: `${description} Phases: plan (the planning run), work (work, chat and conductor runs), review (the agent reviewer), complete (the run that lands the work). Each is {"driver", "model"}; null clears it so it inherits. Phases you omit keep their choice.`,
+  };
+}
+
 /**
  * HarnessOps.getTicket for a key that no local ticket has but tickets carry as their remote ID.
  * get_ticket turns it into a { ticket: null, requested, relatedTickets } result, not an error.

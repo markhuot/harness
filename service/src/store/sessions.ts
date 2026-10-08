@@ -119,13 +119,24 @@ export class SessionRepo {
     return this.get(id);
   }
 
-  getDriverState(id: string): unknown {
-    const r = this.db.query("SELECT driver_state FROM sessions WHERE id = $id").get({ id }) as { driver_state: string | null } | null;
+  /**
+   * The saved driver conversation, for a run on `driver`. A conversation another driver wrote
+   * can't be resumed, so it reads as none (the run starts fresh). One saved before the writer was
+   * recorded counts as the session's driver's.
+   */
+  getDriverState(id: string, driver?: string): unknown {
+    const r = this.db.query("SELECT driver_state, driver_state_driver, driver FROM sessions WHERE id = $id").get({ id }) as
+      | { driver_state: string | null; driver_state_driver: string | null; driver: string }
+      | null;
+    if (driver !== undefined && r?.driver_state && (r.driver_state_driver ?? r.driver) !== driver) return null;
     return fromJson<unknown>(r?.driver_state, null);
   }
 
-  setDriverState(id: string, state: unknown) {
-    this.db.query("UPDATE sessions SET driver_state = $state, updated_at = $t WHERE id = $id").run({ id, state: toJson(state), t: now() });
+  /** Save (or clear, with null) the driver conversation, recording which driver wrote it. */
+  setDriverState(id: string, state: unknown, driver: string | null = null) {
+    this.db
+      .query("UPDATE sessions SET driver_state = $state, driver_state_driver = $driver, updated_at = $t WHERE id = $id")
+      .run({ id, state: toJson(state), driver: state == null ? null : driver, t: now() });
   }
 
   getMeta<T>(id: string): T | null {

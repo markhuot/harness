@@ -1,4 +1,5 @@
 export * from "./protocol";
+export * from "./phases";
 export * from "./client";
 export * from "./keys";
 export * from "./permissions";

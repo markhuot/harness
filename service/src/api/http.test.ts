@@ -380,8 +380,8 @@ describe("http api", () => {
 
   test("model selection over HTTP: create/patch ticket model, project + settings defaults reach the run", async () => {
     const { client, dir, h, fake } = await boot();
-    const p = await client.createProject({ path: dir, defaultModels: { fake: "proj-model" } });
-    expect(p.defaultModels).toEqual({ fake: "proj-model" });
+    const p = await client.createProject({ path: dir, phaseModels: { work: { driver: "fake", model: "proj-model" } } });
+    expect([p.defaultDriver, p.defaultModels]).toEqual(["fake", { fake: "proj-model" }]);
     const t = await client.createTicket({ projectId: p.id, spec: "x", driver: "fake", model: "ticket-model" });
     expect(t.model).toBe("ticket-model");
     await h.orchestrator.idle();

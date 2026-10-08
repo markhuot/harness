@@ -6,6 +6,7 @@ import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import type {
   Subagent,
+  PhaseModels,
   TaskOutput,
   ApprovalBody,
   CompleteBody,
@@ -81,6 +82,12 @@ import {
   TICKET_STATUSES,
   watcherDriver,
   watcherModel,
+  applyLegacyProject,
+  mergePhaseModels,
+  resolvePhaseChoice,
+  runPhase,
+  ticketLegacyChoice,
+  withLegacyChoice,
 } from "@harness/shared";
 import { SpecConflictError, type Store } from "../store";
 import { canonicalJson, grantKey, type TicketPatch } from "../store/tickets";
@@ -141,15 +148,17 @@ import { attachmentFile as fileOf, ORPHAN_UPLOAD_AGE_MS, registerFile, removeUpl
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import {
   applySettingsPatch,
+  LEGACY_MODEL_KEYS,
   mergeModelMap,
   resolveSettings,
   toPublicSettings,
   validateBranchName,
   validateModelId,
   validateModelMap,
+  validatePhaseModels,
   validateSettingsPatch,
 } from "./settings";
-import { resolveRunModel } from "./models";
+import { resolveRunChoice, resolveRunModel } from "./models";
 import { prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { activityLine } from "../activity";
 import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../spec";
@@ -731,7 +740,11 @@ export class Orchestrator {
   updateSettings(body: unknown): PublicSettings {
     const current = this.settings();
     const patch = validateSettingsPatch(body, [...this.drivers.keys()], current);
-    this.store.settings.set(applySettingsPatch(current, patch));
+    const values = applySettingsPatch(current, patch);
+    this.store.transaction(() => {
+      this.store.settings.set(values);
+      if (values.phaseModels) this.store.settings.delete(LEGACY_MODEL_KEYS);
+    });
     if (patch.anthropicApiKey !== undefined) this.modelCatalog.invalidate("anthropic-api");
     if (patch.claudeOauthToken !== undefined) this.modelCatalog.invalidate("claude-code");
     if (patch.copilotGithubToken !== undefined) this.modelCatalog.invalidate("github-copilot");
@@ -811,17 +824,57 @@ export class Orchestrator {
       path,
       name: body.name?.trim() || basename(path),
       key,
-      defaultDriver: body.defaultDriver ?? null,
       useWorktrees: body.useWorktrees,
       ...projectReviewDefaults(body),
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       group: body.group !== undefined ? this.projectGroup(body.group) : null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
       completionAction: this.validProjectCompletion(path, body.completionAction),
-      defaultModels:
-        body.defaultModels !== undefined ? mergeModelMap({}, validateModelMap("defaultModels", body.defaultModels, [...this.drivers.keys()])) : {},
+      phaseModels: this.projectPhaseModels({}, body),
     };
     return { input, mode: validPermissionMode(body.permissionMode) };
+  }
+
+  /**
+   * A project's choices after a create/PATCH body: legacy defaultDriver / defaultModels first (they
+   * set Planning, Work and Review), then phaseModels merged per phase. Undefined when the body has
+   * neither.
+   */
+  private projectPhaseModels(current: Project["phaseModels"], body: Partial<CreateProjectBody>) {
+    const known = [...this.drivers.keys()];
+    if (body.defaultDriver && !this.drivers.has(body.defaultDriver)) throw badRequest(`Unknown driver: ${body.defaultDriver}`);
+    const phasePatch = body.phaseModels !== undefined ? validatePhaseModels("phaseModels", body.phaseModels, known) : undefined;
+    const models = body.defaultModels !== undefined && body.defaultModels !== null ? validateModelMap("defaultModels", body.defaultModels, known) : undefined;
+    if (body.defaultDriver === undefined && models === undefined && phasePatch === undefined) return undefined;
+    const legacy = body.defaultDriver !== undefined || models ? applyLegacyProject(current, { defaultDriver: body.defaultDriver, defaultModels: models }, this.settings().phaseModels) : { ...current };
+    return mergePhaseModels(legacy, phasePatch ?? {});
+  }
+
+  /**
+   * A ticket's own choices after a create/PATCH body. The legacy driver / model shorthand sets
+   * Planning, Work and Review (a driver change without a model drops the old driver's model, and the
+   * inherited driver with no model follows the project again); phaseModels then merges per phase.
+   */
+  private ticketPhaseModels(
+    current: PhaseModels,
+    body: { driver?: string; model?: string | null; phaseModels?: unknown },
+    project: Project | null,
+    ticket?: Ticket,
+  ): PhaseModels {
+    const known = [...this.drivers.keys()];
+    if (body.driver !== undefined && !this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
+    const model = body.model !== undefined ? validateModelId("model", body.model) : undefined;
+    const phasePatch = body.phaseModels !== undefined ? validatePhaseModels("phaseModels", body.phaseModels, known) : undefined;
+    let out: PhaseModels = { ...current };
+    if (body.driver !== undefined || model !== undefined) {
+      const settings = this.settings().phaseModels;
+      const inherited = resolvePhaseChoice("work", { project: project?.phaseModels, settings });
+      const curWork = resolvePhaseChoice("work", { ticket: current, project: project?.phaseModels, settings });
+      const driver = body.driver ?? ticket?.driver ?? curWork.driver;
+      const keepModel = driver === curWork.driver ? (current.work?.model ?? null) : null;
+      out = ticketLegacyChoice(current, { driver, model: model !== undefined ? model : keepModel }, inherited);
+    }
+    return mergePhaseModels(out, phasePatch ?? {});
   }
 
   /**
@@ -871,9 +924,9 @@ export class Orchestrator {
   updateProject(id: string, body: Partial<CreateProjectBody>): Project {
     const existing = this.store.projects.get(id);
     if (!existing) throw notFound(`Unknown project: ${id}`);
-    const { newKey, permissionMode, rest, path, defaultModels } = this.prepareProjectUpdate(existing, body);
+    const { newKey, permissionMode, rest, path, phaseModels } = this.prepareProjectUpdate(existing, body);
     const renamed = this.store.transaction(() => {
-      this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path, defaultModels });
+      this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path, phaseModels });
       if (permissionMode !== undefined) this.store.projects.setPermissionMode(id, permissionMode);
       return newKey ? this.store.projects.rekey(id, newKey) : null;
     });
@@ -923,7 +976,9 @@ export class Orchestrator {
     const permissionMode = body.permissionMode !== undefined ? validPermissionMode(body.permissionMode) : undefined;
     const {
       key: _key,
-      defaultModels: modelPatch,
+      defaultDriver: _driver,
+      defaultModels: _models,
+      phaseModels: _phases,
       permissionMode: _mode,
       color: rawColor,
       group: rawGroup,
@@ -938,9 +993,8 @@ export class Orchestrator {
     const group = rawGroup !== undefined ? this.projectGroup(rawGroup, existing.id) : undefined;
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
-    const defaultModels =
-      modelPatch !== undefined ? mergeModelMap(existing.defaultModels, validateModelMap("defaultModels", modelPatch, [...this.drivers.keys()])) : undefined;
-    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, group, baseBranch, completionAction }, path, defaultModels };
+    const phaseModels = this.projectPhaseModels(existing.phaseModels, body);
+    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, group, baseBranch, completionAction }, path, phaseModels };
   }
 
   async deleteProject(id: string) {
@@ -1288,9 +1342,9 @@ export class Orchestrator {
     if (!draft && !prompt.trim() && !body.title?.trim()) throw badRequest("spec is required");
     const kind = body.kind ?? "task";
     if (kind !== "task" && kind !== "conductor") throw badRequest(`Invalid kind: ${kind}`);
-    const driver = body.driver ?? project.defaultDriver ?? this.settings().defaultDriver;
+    const phaseModels = this.ticketPhaseModels({}, body, project);
+    const driver = resolvePhaseChoice("work", { ticket: phaseModels, project: project.phaseModels, settings: this.settings().phaseModels }).driver;
     if (!this.drivers.has(driver)) throw badRequest(`Unknown driver: ${driver}`);
-    const model = validateModelId("model", body.model);
     const permissionMode = validPermissionMode(body.permissionMode);
     const useWorktree = validUseWorktree(body.useWorktree);
     const baseBranch = validateBranchName("baseBranch", body.baseBranch);
@@ -1341,7 +1395,7 @@ export class Orchestrator {
         autoStart: autoStart || (start && dependsOn.length > 0),
         externalRef: body.externalRef ?? null,
         workdir: null,
-        model,
+        phaseModels,
         useWorktree,
         baseBranch,
         requestedBranch,
@@ -1466,14 +1520,13 @@ export class Orchestrator {
       if (typeof body.position !== "number" || !Number.isFinite(body.position)) throw badRequest("position must be a number");
       patch.position = body.position;
     }
-    if (body.driver !== undefined) {
-      if (!this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
-      patch.driver = body.driver;
-      this.store.sessions.update(ticket.sessionId, { driver: body.driver });
-      // Model ids are per driver; a model picked for the old driver means nothing to the new one.
-      if (body.driver !== ticket.driver && body.model === undefined) patch.model = null;
+    if (body.driver !== undefined || body.model !== undefined || body.phaseModels !== undefined || moveTo) {
+      const project = projectOf();
+      const phaseModels = this.ticketPhaseModels(ticket.phaseModels ?? {}, body, project ?? null, ticket);
+      if (body.driver !== undefined || body.model !== undefined || body.phaseModels !== undefined) patch.phaseModels = phaseModels;
+      const work = resolvePhaseChoice("work", { ticket: phaseModels, project: project?.phaseModels, settings: this.settings().phaseModels });
+      this.store.sessions.update(ticket.sessionId, { driver: work.driver });
     }
-    if (body.model !== undefined) patch.model = validateModelId("model", body.model);
     if (body.permissionMode !== undefined) patch.permissionMode = validPermissionMode(body.permissionMode);
     if (body.baseBranch !== undefined) patch.baseBranch = validateBranchName("baseBranch", body.baseBranch);
     if (body.branch !== undefined) {
@@ -2941,8 +2994,16 @@ ${numberLines(r.body)}`;
           autoStart: input.autoStart ?? true,
           parentId: own.id,
           start: input.start ?? false,
-          driver: input.driver ?? own.driver,
-          model: input.model !== undefined ? input.model : input.driver ? null : own.model,
+          // The parent's own choices, with the shorthand and phase_models over them.
+          phaseModels: mergePhaseModels(
+            input.driver !== undefined || input.model !== undefined
+              ? withLegacyChoice(own.phaseModels, {
+                  driver: input.driver ?? own.driver,
+                  model: input.model !== undefined ? input.model : input.driver ? null : own.model,
+                })
+              : own.phaseModels,
+            input.phaseModels ?? {},
+          ),
           permissionMode,
           useWorktree: input.useWorktree,
           branch: input.branch,
@@ -2965,6 +3026,7 @@ ${numberLines(r.body)}`;
         start: input.start ?? false,
         driver: input.driver,
         model: input.model,
+        phaseModels: input.phaseModels,
         permissionMode,
         useWorktree: input.useWorktree,
         branch: input.branch,
@@ -3006,6 +3068,7 @@ ${numberLines(r.body)}`;
     }
     if (input.driver !== undefined) body.driver = input.driver;
     if (input.model !== undefined) body.model = input.model;
+    if (input.phaseModels !== undefined) body.phaseModels = input.phaseModels;
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
@@ -3293,6 +3356,7 @@ ${numberLines(r.body)}`;
       path: p.path,
       defaultDriver: p.defaultDriver,
       defaultModels: p.defaultModels,
+      phaseModels: p.phaseModels ?? {},
       useWorktrees: p.useWorktrees,
       skipAgentReview: !!p.skipAgentReview,
       skipHumanReview: !!p.skipHumanReview,
@@ -4214,6 +4278,12 @@ ${numberLines(r.body)}`;
     return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
   }
 
+  /** The driver a run of this kind goes to: its phase's (see resolveRunChoice); a standalone session keeps its own. */
+  private runDriver(kind: RunKind, session: Session, ticket: Ticket | null): string {
+    if (!ticket || kind === "triage") return session.driver;
+    return resolveRunChoice({ kind, ticket, project: this.store.projects.get(ticket.projectId) ?? null, settings: this.settings() }).driver;
+  }
+
   /**
    * skipTranscript: the prompt is already in the transcript (a steered message that fell back to
    * the queue). attachments: files the human attached to the message, sent with the run's prompt.
@@ -4222,7 +4292,7 @@ ${numberLines(r.body)}`;
     const session = this.store.sessions.get(sessionId)!;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (ticket?.draft) throw conflict(`${ticket.key} is a draft: nothing runs on it until it's submitted`);
-    const driver = ticket?.driver ?? session.driver;
+    const driver = this.runDriver(kind, session, ticket);
     const attachments = opts.attachments ?? [];
     const run = this.store.runs.create({ sessionId, kind, driver, prompt, attachments });
     this.bus.emit({ kind: "run.upserted", run });
@@ -4322,7 +4392,9 @@ ${numberLines(r.body)}`;
     active.run = run;
     this.bus.emit({ kind: "run.upserted", run });
     const model = this.runModel(run, session, ticket, project);
-    this.appendStatus(session.id, run.id, `Run started (${run.kind}${model ? ` · ${model}` : ""})`);
+    // Name the driver when this phase runs on another one than the ticket's Work runs.
+    const onOtherDriver = ticket && run.driver !== ticket.driver ? ` · ${run.driver}` : "";
+    this.appendStatus(session.id, run.id, `Run started (${run.kind}${onOtherDriver}${model ? ` · ${model}` : ""})`);
 
     let error: string | null = null;
     // A ticket whose worktree is gone (the complete run removed it, or an agent did) runs from the
@@ -4388,7 +4460,7 @@ ${numberLines(r.body)}`;
           model,
           permissionMode: this.permissionModeFor(ticket, project),
           grants: this.runGrants(run.kind, ticket, project, active),
-          state: FRESH_RUN_KINDS.has(run.kind) ? null : this.store.sessions.getDriverState(session.id),
+          state: FRESH_RUN_KINDS.has(run.kind) ? null : this.store.sessions.getDriverState(session.id, run.driver),
           tools,
           toolContext: ctx,
           mcp: { url: `${this.baseUrl().replace(/\/$/, "")}/mcp/${token}`, headers: {} },
@@ -4518,7 +4590,7 @@ ${numberLines(r.body)}`;
       }
       case "state":
         if (!FRESH_RUN_KINDS.has(run.kind) && active.sessionEpoch === (this.sessionEpochs.get(run.sessionId) ?? 0)) {
-          this.store.sessions.setDriverState(run.sessionId, ev.state);
+          this.store.sessions.setDriverState(run.sessionId, ev.state, run.driver);
         }
         return null;
       case "usage":

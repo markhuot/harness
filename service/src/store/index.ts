@@ -12,6 +12,7 @@ import { WatcherRepo } from "./watchers";
 import { CounterRepo, SeenRepo, SettingsRepo } from "./misc";
 import { BrowserTabRepo } from "./browser-tabs";
 import { DeviceRepo } from "./devices";
+import { resolveSettings } from "../orchestrator/settings";
 
 export class Store {
   readonly projects: ProjectRepo;
@@ -32,7 +33,9 @@ export class Store {
 
   constructor(readonly db: Database) {
     this.projects = new ProjectRepo(db);
-    this.tickets = new TicketRepo(db);
+    this.settings = new SettingsRepo(db);
+    // A ticket's legacy driver follows the settings' choices it inherits.
+    this.tickets = new TicketRepo(db, () => resolveSettings(this.settings.all()).phaseModels ?? {});
     this.sessions = new SessionRepo(db);
     this.runs = new RunRepo(db);
     this.transcript = new TranscriptRepo(db);
@@ -42,7 +45,6 @@ export class Store {
     this.subagents = new SubagentRepo(db);
     this.watchers = new WatcherRepo(db);
     this.seen = new SeenRepo(db);
-    this.settings = new SettingsRepo(db);
     this.counters = new CounterRepo(db);
     this.browserTabs = new BrowserTabRepo(db);
     this.devices = new DeviceRepo(db);

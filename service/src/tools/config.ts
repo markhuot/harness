@@ -4,7 +4,7 @@
 
 import { commandLine, COMPLETION_ACTIONS, PERMISSION_MODES, PROJECT_COLORS, type PublicSettings, type Watcher } from "@harness/shared";
 import type { WatcherFields } from "./types";
-import { defineGatedTool, defineTool, json, schema } from "./util";
+import { defineGatedTool, defineTool, json, phaseModelsProp, schema } from "./util";
 
 // ---------------------------------------------------------------------------
 // Shared schema pieces and descriptions
@@ -187,7 +187,7 @@ function settingsView(settings: PublicSettings): unknown {
 export const getSettings = defineTool<{ include_prompts?: boolean }>({
   name: "get_settings",
   description:
-    "Get the harness settings: default driver, concurrent run limit, default permission mode, classifier, default and review models per driver, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key, the long-lived Claude token and the GitHub Copilot token are never shown; anthropicApiKeySet, claudeOauthTokenSet and copilotGithubTokenSet say whether one is stored.",
+    "Get the harness settings: the driver and model for each run phase (phaseModels: plan, work, review, complete; defaultDriver, defaultModels and reviewModels are the legacy view of them), concurrent run limit, default permission mode, classifier, the driver and models for watchers that don't pick their own, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key, the long-lived Claude token and the GitHub Copilot token are never shown; anthropicApiKeySet, claudeOauthTokenSet and copilotGithubTokenSet say whether one is stored.",
   inputSchema: schema({
     include_prompts: {
       type: "boolean",
@@ -317,7 +317,8 @@ const projectProps = {
       "What approving a ticket does by default: \"merge\" its branch into the base branch, \"pr\" (push and open a GitHub pull request; needs a remote gh is logged into), \"cleanup\" (only remove the worktree and branch, for work that lands by itself, e.g. pushed to an existing pull request), or \"custom\" (the approver's instructions). Default merge.",
   },
   permission_mode: permissionModeProp,
-  default_models: modelMapProp,
+  default_models: { ...modelMapProp, description: "Legacy: driver id → model id for Planning, Work and Review. Prefer phase_models." },
+  phase_models: phaseModelsProp("This project's driver + model per run phase; a phase it doesn't choose inherits the settings'."),
   color: {
     type: "string",
     description: `Key badge color: ${PROJECT_COLORS.map((c) => c.id).join(", ")}, or a custom "#rrggbb". Empty for the theme's accent.`,
@@ -342,6 +343,7 @@ type ProjectToolInput = {
   completion_action?: string;
   permission_mode?: string;
   default_models?: Record<string, string | null>;
+  phase_models?: Record<string, { driver: string; model?: string | null } | null>;
   color?: string;
   group?: string;
   base_branch?: string;
@@ -359,6 +361,7 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.completion_action !== undefined) body.completionAction = i.completion_action;
   if (i.permission_mode !== undefined) body.permissionMode = i.permission_mode === "inherit" ? null : i.permission_mode;
   if (i.default_models !== undefined) body.defaultModels = i.default_models;
+  if (i.phase_models !== undefined) body.phaseModels = i.phase_models;
   if (i.color !== undefined) body.color = i.color || null;
   if (i.group !== undefined) body.group = i.group || null;
   if (i.base_branch !== undefined) body.baseBranch = i.base_branch.trim() || null;
@@ -441,6 +444,7 @@ type SettingsInput = {
   classifier?: string;
   default_models?: Record<string, string | null>;
   review_models?: Record<string, string | null>;
+  phase_models?: Record<string, { driver: string; model?: string | null } | null>;
   watcher_driver?: string | null;
   watcher_models?: Record<string, string | null>;
   listen?: { mode: string; host?: string };
@@ -457,6 +461,7 @@ function settingsPatch(i: SettingsInput): Record<string, unknown> {
     classifier: "classifier",
     defaultModels: "default_models",
     reviewModels: "review_models",
+    phaseModels: "phase_models",
     watcherDriver: "watcher_driver",
     watcherModels: "watcher_models",
     listen: "listen",
@@ -473,7 +478,7 @@ export const updateSettings = defineGatedTool<SettingsInput>({
   description:
     "Change harness-wide settings; fields you omit keep their value. The Anthropic API key can't be set with a tool: ask the human to enter it in Settings. A human must approve the call: you are resumed when they answer; then repeat exactly the same call.",
   inputSchema: schema({
-    default_driver: { type: "string", minLength: 1, description: "Driver for tickets whose project has none (see list_drivers)." },
+    default_driver: { type: "string", minLength: 1, description: "Legacy: sets the Planning, Work and Review driver (with its default_models entry). Prefer phase_models." },
     max_concurrent_runs: { type: "integer", minimum: 1, maximum: 64, description: "How many agent runs may run at once." },
     browser_idle_tab_minutes: {
       type: "integer",
@@ -483,8 +488,9 @@ export const updateSettings = defineGatedTool<SettingsInput>({
     },
     permission_mode: { type: "string", enum: [...PERMISSION_MODES], description: "Default permission mode for tickets whose project and ticket don't set one." },
     classifier: { type: "string", enum: ["claude-cli", "anthropic-api", "off"], description: "Who judges actions in auto mode for drivers without built-in permissions (\"off\" asks a human)." },
-    default_models: modelMapProp,
-    review_models: { ...modelMapProp, description: "Driver id → model id for review runs. Merged per driver; null clears one." },
+    default_models: { ...modelMapProp, description: "Legacy: driver id → model id for Planning, Work and Review on the default driver. Prefer phase_models." },
+    review_models: { ...modelMapProp, description: "Legacy: driver id → model id for review runs. Prefer phase_models." },
+    phase_models: phaseModelsProp("The app's driver + model per run phase, used where a project and ticket don't choose one; a phase with no choice runs on the Work driver's default model."),
     watcher_driver: { type: "string", description: "Driver for triage sessions of watchers that don't pick one (see list_drivers); an empty string follows default_driver." },
     watcher_models: { ...modelMapProp, description: "Driver id → model id for triage sessions of watchers that don't pick one. Merged per driver; null clears one (falls back to default_models)." },
     listen: {
