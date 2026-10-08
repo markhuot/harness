@@ -1723,6 +1723,16 @@ target in its own headless window (so every tab paints and can screencast). Numb
   (`stopChromeIfIdle`, run 5 s after a suspension or close, and on every sweep), Chrome is closed
   gracefully. The next call that needs a page relaunches it, waiting for the old one to finish
   exiting since both use one profile.
+- **Code-sign clones (macOS).** Every Chrome launch copies the app bundle into
+  `…/X/com.google.Chrome.code_sign_clone/code_sign_clone.XXXXXX` and runs from it. Chrome deletes
+  that copy only after a clean exit (`Browser.close`); SIGTERM, SIGKILL and crashes leave it
+  behind. `ChromeProcess` claims its clone when it was the only new one at launch and removes it
+  after an unclean exit. Every launch also sweeps clones that no running Chrome can own: one is
+  kept while it's under 2 minutes old or any Chrome-ish process started up to 2 minutes before it
+  was made. That catches clones whose owner died first (a daemon killed mid-close, an interrupted
+  test run) or that couldn't be claimed because several Chromes launched at once. The sweep goes
+  by start times because lsof can't tell clones apart: each clone's executable is a hard link to
+  the installed one.
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 

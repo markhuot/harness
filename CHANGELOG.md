@@ -17,6 +17,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Leftover copies of Chrome no longer pile up in your Mac's temp folder. Each time Harness starts
+  Chrome for an agent's browser, it now deletes copies left behind by earlier Chromes that were
+  killed or crashed, whether they came from Harness, a test run, or anything else. A copy is kept
+  while any Chrome that could still be using it is running.
 - When a browser script expects text that never shows up, the agent now sees what the elements said
   instead, like `its text was "3 items left"`. Before, it only saw "0 elements matched", which read
   as if the element were missing.
