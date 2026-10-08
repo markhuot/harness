@@ -92,7 +92,6 @@ struct DockedTicketsMenu<Label: View>: View {
             if isTop { SwiftUI.Label(text.ref, systemImage: "checkmark") } else { Text(text.ref) }
             if let title = text.title { Text(title) }
         }
-        .accessibilityLabel(text.accessibilityLabel)
     }
 }
 
@@ -113,8 +112,7 @@ struct DockedTicketsButton: View {
             .frame(minWidth: 44, minHeight: 44)
             .contentShape(.rect)
         }
-        .accessibilityLabel("Docked tickets")
-        .accessibilityValue("\(count)")
+        .accessibilityLabel("\(count) docked tickets")
         .accessibilityIdentifier("ticket-dock-switcher")
     }
 }
@@ -262,7 +260,6 @@ struct DockedPillStack: View {
                     Text(text.ref)
                     if let title = text.title { Text(title) }
                 }
-                .accessibilityLabel(text.accessibilityLabel)
             }
         } label: {
             Text("+\(rest.count)")
