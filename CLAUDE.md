@@ -5,11 +5,12 @@ README.md covers setup and use, and DESIGN.md covers the architecture. `bun run 
 
 ## Changelog
 
-Every change that someone using the Mac or iPhone/iPad app would notice gets an entry under
-`## [Unreleased]` in CHANGELOG.md, in the same commit or merge that makes the change. Group the
-entries as Added, Changed, Fixed, or Removed, and write them for the person using the app (what
-they'll see), not as commit messages. Internal-only changes (tests, sim-check, refactors) don't
-need an entry.
+Every change gets an entry under `## [Unreleased]` in CHANGELOG.md, in the same commit or merge
+that makes the change. That includes changes only agents see (their tools, prompts and
+instructions) and internal ones (tests, sim-check, build and release scripts, refactors). Group the
+entries as Added, Changed, Fixed, or Removed, and write each one for the person using the app: say
+what they or their agents will see or can now do, not what the commit did. For an internal change,
+say in a plain sentence what it changes for the people working on Harness.
 
 ## Simulators
 
