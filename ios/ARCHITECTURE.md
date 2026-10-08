@@ -473,8 +473,9 @@ truncated into the rest), and with more than one docked a stack button with the 
 (`DockedTicketsButton`, "<n> docked tickets") before the ✕; a horizontal swipe on the bar
 (`DockSwipe`, a UIKit swipe recognizer alongside the sheet's own pan, since a SwiftUI drag would take
 the vertical swipe that closes the dock) moves to the next or previous one, and VoiceOver has Next and Previous docked
-ticket actions. The same stack button sits in each sheet screen's toolbar while more than one is
-docked, at either width. At regular width SceneChrome
+ticket actions. The dock bar's menu lists every docked ticket, the top checked. Each sheet screen's
+toolbar has the same stack button while more than one is docked, at either width; its menu
+(`DockedTicketsMenu(othersOnly:)`) lists only the other docked tickets. At regular width SceneChrome
 presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell
 overlays `TicketPanelHost` (App/TicketSidePanel.swift), and the root presents `sheet` and the
 cover as usual. The host puts the content in `TicketSidePanel`, which slides in from the
@@ -494,8 +495,12 @@ Docked, the panel stays mounted (drafts, scroll and path survive) but off the ed
 and every docked ticket waits as a pill in `DockedPillStack`, in the board's bottom-right corner
 inside the safe area, stacking upward with the newest at the bottom. While the panel is open the
 other docked tickets' pills stay there, their trailing edge on the panel's leading edge
-(`TicketSidePanel(onWidth:)` reports it as it resizes). Each pill is about 320pt wide
-(`DockedPillStack.maxWidth`, narrower in a narrow window) with the icon and `DockedTicketLabel`, the
+(`TicketSidePanel(onWidth:)` reports it as it resizes). The stack keeps to the board's column and
+never covers the sidebar: DesktopShell measures where the column starts
+(`DockedSheetInset.contentLeading`), and `DockedPillStack.mode` picks pills when the column left of
+the panel has room for one at least 200pt wide, one "+N" pill holding every docked ticket when it
+has less, and nothing when even that won't fit (a wide panel, whose toolbar menu still lists
+them). Each pill is about 320pt wide (`DockedPillStack.maxWidth`, narrower in a narrow column) with the icon and `DockedTicketLabel`, the
 iPhone dock's `ticket-dock` identifier and "<key>, <title>, docked" label; a tap opens that ticket
 in the panel, and its context menu (and VoiceOver's Close) closes just that one. At most ten show,
 fewer when the height doesn't fit them (`DockedPillStack.split`), then a "+N" pill

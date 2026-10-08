@@ -3192,7 +3192,9 @@ the conventions, and ios/README.md the build and test commands.
   ticket it shows. Docked tickets (the dock button, a fling to the right, or another ticket opened
   over them) wait as a stack of pills in the board's bottom-right corner, newest at the bottom,
   each about 320pt wide with the ticket's ref and as much of its title as fits, keeping their
-  drafts and place; while the panel is open they sit just left of it. A tap opens one, a pill's
+  drafts and place; while the panel is open they sit just left of it, never over the sidebar
+  (where the board's column is too narrow they fold into one "+N" pill, and a panel that leaves
+  no column hides them; its toolbar menu still lists them). A tap opens one, a pill's
   menu closes it, and past ten (or as many as fit the height) a "+N" pill lists the rest. The
   iPhone docks any number of tickets the same way, behind its one bottom sheet: the dock bar shows
   the top one's ref and title, a stack button with the count lists them all (ten, then "N more"),
