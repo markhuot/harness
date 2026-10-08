@@ -25,7 +25,7 @@ const BROWSER = [
 ];
 const NATIVE_FULL = ["bash", "read_file", "write_file", "edit_file", "list_files"];
 const NATIVE_READ = ["read_file", "list_files", "bash"];
-const BOARD = ["list_tickets", "get_ticket", "search_tickets", "list_projects", "list_inbox"];
+const BOARD = ["list_tickets", "get_ticket", "get_ticket_agent", "search_tickets", "list_projects", "list_inbox"];
 const BOARD_WRITE = ["create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket"];
 const CONDUCTOR = ["review_ticket", "complete_ticket"];
 const SPEC = ["read_spec", "edit_spec", "update_spec"];

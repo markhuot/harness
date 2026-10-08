@@ -122,6 +122,11 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
       activity: [{ kind: "note", author: "agent", body: "did it", meta: {}, createdAt: 1 }],
       attachments: [],
     }),
+    getTicketAgent: async (_ctx: ToolContext, key: string, id: string) => ({
+      ticket: key,
+      agent: { id, kind: "agent", description: "Look around", agentType: "Explore", model: null, status: "succeeded", parentId: null, command: null, result: "found it", startedAt: 1, endedAt: 2, prompt: "look" },
+      transcript: [],
+    }),
     searchTickets: async () => ({ hits: [], nextCursor: null, total: 0 }),
     updateTicket: async (_ctx: ToolContext, key: string, patch: Record<string, unknown>) =>
       Object.assign(find(key), Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))),

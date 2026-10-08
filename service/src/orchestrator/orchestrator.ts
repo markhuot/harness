@@ -92,11 +92,14 @@ import type { EventBus } from "../events";
 import { RunInput, type Driver, type DriverEvent, type RunGrants, type RunRequest, type SentMessage } from "../drivers/types";
 import type {
   ApprovalMeta,
+  BoardAgent,
+  BoardAgentDetail,
   BoardListFilter,
   BoardScope,
   BoardRelatedTicket,
   BoardTicket,
   BoardTicketDetail,
+  BoardTranscriptEntry,
   CreateTicketInput,
   HarnessOps,
   InboxItem,
@@ -110,7 +113,7 @@ import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, stopBrowserJobs, toolsForRun } from "../tools/index";
-import { positionForDrop } from "@harness/shared/state";
+import { isTask, positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
@@ -322,6 +325,28 @@ export const MAX_AUTO_RETRIES = 3;
 /** get_ticket include_transcript: at most this many entries, each clipped to this many characters */
 export const BOARD_TRANSCRIPT_MAX = 50;
 export const BOARD_TRANSCRIPT_CHARS = 2000;
+/** get_ticket include_agents: each result clipped to this many characters (a long session has hundreds) */
+export const BOARD_AGENT_LIST_CHARS = 500;
+/** get_ticket_agent: its prompt and result clipped to this many characters, a task's output to its last BOARD_TASK_OUTPUT_CHARS */
+export const BOARD_AGENT_TEXT_CHARS = 8000;
+export const BOARD_TASK_OUTPUT_CHARS = 8000;
+/** get_ticket_agent: transcript entries when the agent doesn't say */
+export const BOARD_AGENT_TRANSCRIPT_DEFAULT = 20;
+
+/** A sub-agent or task as the board tools show it, its result clipped to `chars`. */
+const boardAgent = (s: Subagent, chars: number): BoardAgent => ({
+  id: s.id,
+  kind: s.kind ?? "agent",
+  description: s.description,
+  agentType: s.agentType,
+  model: s.model ?? null,
+  status: s.status,
+  parentId: s.parentId,
+  command: s.command ?? null,
+  result: s.result === null ? null : truncateMiddle(s.result, chars),
+  startedAt: s.startedAt,
+  endedAt: s.endedAt,
+});
 /** search_tickets page size when the agent doesn't pass a limit (the HTTP default of 100 floods context) */
 export const BOARD_SEARCH_LIMIT = 20;
 /** list_inbox default page size */
@@ -2686,7 +2711,7 @@ ${numberLines(r.body)}`;
     return { ...this.relatedView(t), projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
   }
 
-  async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number } = {}): Promise<BoardTicketDetail> {
+  async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number; agents?: boolean } = {}): Promise<BoardTicketDetail> {
     const found = this.agentLookup(key);
     if (!found) {
       const requested = String(key ?? "").trim().toUpperCase();
@@ -2721,15 +2746,37 @@ ${numberLines(r.body)}`;
       promptAttachments: (t.promptAttachments ?? []).map((a) => ({ id: a.id, name: a.name, path: a.path, missing: !fileOf(a), ...(a.annotation ? { notes: compactNotes(a.annotation) } : {}) })),
     };
     const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? 0)));
-    if (n > 0) {
-      detail.transcript = this.store.transcript.tail(t.sessionId, n, ["text", "status", "error"]).map((e) => ({
-        role: e.role,
-        type: e.content.type as "text" | "status" | "error",
-        text: truncateMiddle("text" in e.content ? e.content.text : "", BOARD_TRANSCRIPT_CHARS),
-        createdAt: e.createdAt,
-      }));
-    }
+    if (n > 0) detail.transcript = this.boardTranscript(t.sessionId, n, null);
+    if (opts.agents) detail.agents = this.store.subagents.listBySession(t.sessionId).map((s) => boardAgent(s, BOARD_AGENT_LIST_CHARS));
     return detail;
+  }
+
+  /** The last `n` text/status/error entries of the session agent's transcript (or a sub-agent's), clipped. */
+  private boardTranscript(sessionId: string, n: number, subagentId: string | null): BoardTranscriptEntry[] {
+    return this.store.transcript.tail(sessionId, n, ["text", "status", "error"], subagentId).map((e) => ({
+      role: e.role,
+      type: e.content.type as "text" | "status" | "error",
+      text: truncateMiddle("text" in e.content ? e.content.text : "", BOARD_TRANSCRIPT_CHARS),
+      createdAt: e.createdAt,
+    }));
+  }
+
+  async getTicketAgent_(_ctx: ToolContext, key: string, id: string, opts: { transcript?: number } = {}): Promise<BoardAgentDetail> {
+    const t = this.agentLookup(key)?.ticket;
+    if (!t) throw new Error(`Unknown ticket: ${key}`);
+    const s = this.store.subagents.get(t.sessionId, id);
+    if (!s) throw new Error(`${t.key} has no sub-agent or task ${id}. get_ticket { key: "${t.key}", include_agents: true } lists them.`);
+    const out: BoardAgentDetail = { ticket: t.key, agent: { ...boardAgent(s, BOARD_AGENT_TEXT_CHARS), prompt: truncateMiddle(s.prompt, BOARD_AGENT_TEXT_CHARS) } };
+    if (isTask(s)) {
+      // A task the driver never said where its output goes has none to read.
+      const o = this.store.subagents.outputSource(t.sessionId, id) ? this.taskOutput(t.sessionId, id) : unavailable(undefined, s.status !== "running");
+      const text = o.text.length > BOARD_TASK_OUTPUT_CHARS ? o.text.slice(-BOARD_TASK_OUTPUT_CHARS) : o.text;
+      out.output = { text, truncated: o.start > 0 || text.length < o.text.length, done: o.done, available: o.available };
+    } else {
+      const n = Math.min(BOARD_TRANSCRIPT_MAX, Math.max(0, Math.trunc(opts.transcript ?? BOARD_AGENT_TRANSCRIPT_DEFAULT)));
+      out.transcript = this.boardTranscript(t.sessionId, n, s.id);
+    }
+    return out;
   }
 
   async searchTickets_(_ctx: ToolContext, input: Parameters<HarnessOps["searchTickets"]>[1]) {
@@ -4607,6 +4654,7 @@ ${numberLines(r.body)}`;
       // --- board (read) ---
       listTickets: (c, f) => this.listTickets_(c, f),
       getTicket: (c, k, o) => this.getTicket_(c, k, o),
+      getTicketAgent: (c, k, id, o) => this.getTicketAgent_(c, k, id, o),
       searchTickets: (c, i) => this.searchTickets_(c, i),
       listProjects: (c) => this.listProjects_(c),
       listInbox: (c, f) => this.listInbox_(c, f),

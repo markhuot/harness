@@ -3,14 +3,15 @@
 // transcript tails, search paging), plus the tool layer on top.
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RunKind, Ticket, TicketStatus } from "@harness/shared";
 import { makeOrchestrator } from "../testing/fakes";
 import { fakeContext, fakeSession } from "../tools/fakes";
 import { allTools } from "../tools";
 import type { ToolContext } from "../tools/types";
-import { BOARD_TRANSCRIPT_CHARS, BOARD_TRANSCRIPT_MAX } from "./orchestrator";
+import { dummyTaskOutputDir } from "../task-output";
+import { BOARD_AGENT_LIST_CHARS, BOARD_AGENT_TEXT_CHARS, BOARD_AGENT_TRANSCRIPT_DEFAULT, BOARD_TASK_OUTPUT_CHARS, BOARD_TRANSCRIPT_CHARS, BOARD_TRANSCRIPT_MAX } from "./orchestrator";
 
 async function setup() {
   const h = makeOrchestrator();
@@ -167,6 +168,74 @@ describe("getTicket (board)", () => {
     expect(all.map((e) => e.text)).not.toContain("hmm");
     expect(all.filter((e) => e.text === "first")).toHaveLength(1);
     expect(all.length).toBe(before + 3);
+  });
+
+  test("include_agents lists sub-agents and tasks oldest first, results clipped; only when asked", async () => {
+    const h = await setup();
+    const t = await h.make(h.web.id, "t");
+    h.store.subagents.upsert(t.sessionId, null, { id: "a1", description: "Survey", agentType: "Explore", model: "claude-haiku-4-5", prompt: "look", status: "succeeded", result: "r".repeat(BOARD_AGENT_LIST_CHARS + 300) });
+    await Bun.sleep(2);
+    h.store.subagents.upsert(t.sessionId, null, { id: "a2", parentId: "a1", description: "Nested", prompt: "deeper" });
+    await Bun.sleep(2);
+    h.store.subagents.upsert(t.sessionId, null, { id: "b1", kind: "bash", description: "Build", command: "bun run build" });
+    const ctx = h.ctx("review", t);
+
+    expect((await h.orch.ops.getTicket(ctx, t.key)).agents).toBeUndefined();
+    const agents = (await h.orch.ops.getTicket(ctx, t.key, { agents: true })).agents!;
+    expect(agents.map((a) => [a.id, a.kind, a.status, a.parentId])).toEqual([
+      ["a1", "agent", "succeeded", null],
+      ["a2", "agent", "running", "a1"],
+      ["b1", "bash", "running", null],
+    ]);
+    expect(agents[0]).toMatchObject({ agentType: "Explore", model: "claude-haiku-4-5" });
+    expect(agents[0]!.result!.length).toBeLessThan(BOARD_AGENT_LIST_CHARS + 100);
+    expect(agents[0]!.result).toContain("characters truncated");
+    expect(agents[2]).toMatchObject({ command: "bun run build", result: null });
+  });
+
+  test("getTicketAgent: a sub-agent's own transcript tail, a task's output tail, and unknown ids", async () => {
+    const h = await setup();
+    const t = await h.make(h.web.id, "t");
+    h.store.subagents.upsert(t.sessionId, null, { id: "a1", description: "Survey", prompt: "p".repeat(BOARD_AGENT_TEXT_CHARS + 50) });
+    h.store.transcript.append(t.sessionId, null, "assistant", { type: "text", text: "session says hi" });
+    for (let i = 1; i <= BOARD_AGENT_TRANSCRIPT_DEFAULT + 5; i++) h.store.transcript.append(t.sessionId, null, "assistant", { type: "text", text: `sub ${i}` }, "a1");
+    h.store.transcript.append(t.sessionId, null, "assistant", { type: "tool_call", callId: "c", name: "Read", input: {} }, "a1");
+    const ctx = h.ctx("work", null);
+
+    const agent = await h.orch.ops.getTicketAgent(ctx, t.key, "a1");
+    expect(agent.ticket).toBe(t.key);
+    expect(agent.agent).toMatchObject({ id: "a1", kind: "agent", description: "Survey" });
+    expect(agent.agent.prompt).toContain("characters truncated");
+    expect(agent.output).toBeUndefined();
+    // Its own entries only (never the session's), text only, the default count, the latest last.
+    expect(agent.transcript!.map((e) => e.text)).toHaveLength(BOARD_AGENT_TRANSCRIPT_DEFAULT);
+    expect(agent.transcript!.at(-1)!.text).toBe(`sub ${BOARD_AGENT_TRANSCRIPT_DEFAULT + 5}`);
+    expect(agent.transcript!.map((e) => e.text)).not.toContain("session says hi");
+    expect((await h.orch.ops.getTicketAgent(ctx, t.key, "a1", { transcript: 2 })).transcript!.map((e) => e.text)).toEqual([`sub ${BOARD_AGENT_TRANSCRIPT_DEFAULT + 4}`, `sub ${BOARD_AGENT_TRANSCRIPT_DEFAULT + 5}`]);
+    // The session's own tail still leaves the sub-agent out.
+    expect((await h.orch.ops.getTicket(ctx, t.key, { transcript: 1 })).transcript!.map((e) => e.text)).toEqual(["session says hi"]);
+
+    mkdirSync(dummyTaskOutputDir(), { recursive: true });
+    const file = join(dummyTaskOutputDir(), `board-ops-${process.pid}-${Date.now()}.output`);
+    writeFileSync(file, "head\n" + "x".repeat(BOARD_TASK_OUTPUT_CHARS) + "\nlast line\n");
+    h.store.subagents.upsert(t.sessionId, null, { id: "b1", kind: "bash", description: "Build", command: "bun run build", outputPath: file });
+    h.store.subagents.upsert(t.sessionId, null, { id: "b2", kind: "monitor", description: "Watch" });
+    try {
+      const task = await h.orch.ops.getTicketAgent(ctx, t.key, "b1");
+      expect(task.transcript).toBeUndefined();
+      expect(task.agent).toMatchObject({ kind: "bash", command: "bun run build" });
+      expect(task.output).toMatchObject({ truncated: true, done: false, available: true });
+      expect(task.output!.text.length).toBe(BOARD_TASK_OUTPUT_CHARS);
+      expect(task.output!.text).toEndWith("last line\n");
+      expect(task.output!.text).not.toContain("head");
+      // A task the driver never said where its output goes reads as unavailable, not an error.
+      expect((await h.orch.ops.getTicketAgent(ctx, t.key, "b2")).output).toMatchObject({ text: "", available: false, truncated: false });
+    } finally {
+      rmSync(file, { force: true });
+    }
+
+    await expect(h.orch.ops.getTicketAgent(ctx, t.key, "nope")).rejects.toThrow(`${t.key} has no sub-agent or task nope`);
+    await expect(h.orch.ops.getTicketAgent(ctx, "WEB-99", "a1")).rejects.toThrow("Unknown ticket: WEB-99");
   });
 });
 

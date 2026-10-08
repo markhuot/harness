@@ -67,7 +67,8 @@ describe("tool catalogue", () => {
     expect(props("review_ticket")).toEqual(["action", "decision", "key", "notes"]);
     expect(props("record_pull_request")).toEqual(["head", "url"]);
     expect(props("list_tickets")).toEqual(["limit", "project_key", "scope", "status"]);
-    expect(props("get_ticket")).toEqual(["include_transcript", "key"]);
+    expect(props("get_ticket")).toEqual(["include_agents", "include_transcript", "key"]);
+    expect(props("get_ticket_agent")).toEqual(["id", "include_transcript", "key"]);
     expect(props("search_tickets")).toEqual(["cursor", "limit", "project_key", "query"]);
   });
 });
@@ -371,13 +372,34 @@ describe("board tools → HarnessOps", () => {
     expect(r.description).toBeUndefined();
     expect(r.summaries).toBeUndefined();
     expect(r.transcript).toBeUndefined();
+    expect(r.agents).toBeUndefined();
     await tool("get_ticket").execute({ key: "TEST-2", include_transcript: 5 }, ctx);
+    await tool("get_ticket").execute({ key: "TEST-2", include_agents: true }, ctx);
+    await tool("get_ticket").execute({ key: "TEST-2", include_transcript: 3, include_agents: true }, ctx);
+    await tool("get_ticket").execute({ key: "TEST-2", include_agents: false }, ctx);
     expect(ops.calls.filter((c) => c.method === "getTicket").map((c) => c.args)).toEqual([
       ["TEST-2", undefined],
       ["TEST-2", { transcript: 5 }],
+      ["TEST-2", { agents: true }],
+      ["TEST-2", { transcript: 3, agents: true }],
+      ["TEST-2", undefined],
     ]);
     const tooMany = await tool("get_ticket").execute({ key: "TEST-2", include_transcript: 51 }, ctx);
     expect(tooMany.isError).toBe(true);
+  });
+
+  test("get_ticket_agent passes the key, id and transcript count, and needs both key and id", async () => {
+    const ops = fakeOps();
+    const ctx = fakeContext({ ops });
+    const r = JSON.parse(text(await tool("get_ticket_agent").execute({ key: "TEST-2", id: "a1" }, ctx)));
+    expect(r).toMatchObject({ ticket: "TEST-2", agent: { id: "a1", prompt: "look" } });
+    await tool("get_ticket_agent").execute({ key: "TEST-2", id: "a1", include_transcript: 7 }, ctx);
+    expect(ops.calls.filter((c) => c.method === "getTicketAgent").map((c) => c.args)).toEqual([
+      ["TEST-2", "a1", undefined],
+      ["TEST-2", "a1", { transcript: 7 }],
+    ]);
+    expect((await tool("get_ticket_agent").execute({ key: "TEST-2" }, ctx)).isError).toBe(true);
+    expect((await tool("get_ticket_agent").execute({ key: "TEST-2", id: "a1", include_transcript: 51 }, ctx)).isError).toBe(true);
   });
 
   test("get_ticket reports an alias it resolved through", async () => {

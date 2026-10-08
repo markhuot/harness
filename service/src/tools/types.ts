@@ -16,6 +16,8 @@ import type {
   RelatedTicket,
   RunKind,
   Session,
+  SubagentKind,
+  SubagentStatus,
   Ticket,
   TicketStatus,
   ToolResultContent,
@@ -98,7 +100,39 @@ export interface BoardTicketDetail {
    */
   promptAttachments: { id: string; name: string; path: string; missing: boolean; notes?: string[] }[];
   /** Last N text/status/error entries, oldest first; present only when requested */
-  transcript?: { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number }[];
+  transcript?: BoardTranscriptEntry[];
+  /** The sub-agents and background tasks its sessions started, oldest first; present only when requested */
+  agents?: BoardAgent[];
+}
+
+export type BoardTranscriptEntry = { role: TranscriptRole; type: "text" | "status" | "error"; text: string; createdAt: number };
+
+/** One sub-agent or background task as the board tools show it (a Subagent, its long text clipped). */
+export interface BoardAgent {
+  id: string;
+  kind: SubagentKind;
+  description: string;
+  agentType: string | null;
+  model: string | null;
+  status: SubagentStatus;
+  /** The sub-agent that started it, when nested */
+  parentId: string | null;
+  /** A task's command */
+  command: string | null;
+  /** Its report (an agent) or how it ended (a task), clipped */
+  result: string | null;
+  startedAt: number;
+  endedAt: number | null;
+}
+
+/** get_ticket_agent: one sub-agent with its task and transcript tail, or one task with its output tail. */
+export interface BoardAgentDetail {
+  ticket: string;
+  agent: BoardAgent & { prompt: string };
+  /** An agent's last N text/status/error entries, oldest first */
+  transcript?: BoardTranscriptEntry[];
+  /** A task's output: the last part of it, with truncated true when there's more before it */
+  output?: { text: string; truncated: boolean; done: boolean; available: boolean };
 }
 
 /**
@@ -277,7 +311,9 @@ export interface HarnessOps {
    * Local keys only (current key or alias). A key only remote IDs match throws RemoteIdError
    * (tools/util.ts) carrying BoardRemoteMatches; one nothing matches throws a plain Error.
    */
-  getTicket(ctx: ToolContext, key: string, opts?: { transcript?: number }): Promise<BoardTicketDetail>;
+  getTicket(ctx: ToolContext, key: string, opts?: { transcript?: number; agents?: boolean }): Promise<BoardTicketDetail>;
+  /** One sub-agent or background task of a ticket's session (an id from get_ticket's agents). Throws for an unknown id. */
+  getTicketAgent(ctx: ToolContext, key: string, id: string, opts?: { transcript?: number }): Promise<BoardAgentDetail>;
   /** Full-text search across every status (Orchestrator.searchTickets ranking and cursors). */
   searchTickets(
     ctx: ToolContext,

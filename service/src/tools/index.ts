@@ -2,7 +2,7 @@
 
 import type { RunKind, Ticket } from "@harness/shared";
 import type { Driver } from "../drivers/types";
-import { getTicket, listInbox, listProjects, listTickets, searchTickets } from "./board";
+import { getTicket, getTicketAgent, listInbox, listProjects, listTickets, searchTickets } from "./board";
 import {
   browserClick,
   browserCloseTab,
@@ -62,7 +62,7 @@ export const browserTools: ToolDefinition[] = [
   browserRunStop,
 ];
 /** Read-only board tools: every run kind gets these (DESIGN.md "Tools"). */
-export const boardTools: ToolDefinition[] = [listTickets, getTicket, searchTickets, listProjects, listInbox];
+export const boardTools: ToolDefinition[] = [listTickets, getTicket, getTicketAgent, searchTickets, listProjects, listInbox];
 /** Board tools that change other tickets: work and conductor runs only (DESIGN.md "Board changes by agents"). */
 export const boardWriteTools: ToolDefinition[] = [createTicket, updateTicket, moveTicket, startTicket, messageTicket, cancelTicket, reopenTicket];
 /** Reviewing and completing the caller's own children: work and conductor runs (any ticket may have children). */

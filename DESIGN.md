@@ -830,7 +830,8 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50 }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
+| `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
@@ -995,7 +996,7 @@ client state, not service state.
 
 | Area | In the apps | Agent tool | Left out, and why |
 | --- | --- | --- | --- |
-| Board | search, list, page Done, open a ticket, its spec (and revisions), Activity, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`); `read_spec` (`revision`) for the run's own ticket | other tickets' earlier revisions and spec diffs have no tool |
+| Board | search, list, page Done, open a ticket, its spec (and revisions), Activity, transcript | `search_tickets`, `list_tickets`, `get_ticket` (`include_transcript`, `include_agents`), `get_ticket_agent`; `read_spec` (`revision`) for the run's own ticket | other tickets' earlier revisions and spec diffs have no tool |
 | Board | create a ticket (task or conductor, driver, model, permission mode, start or plan, branch picked from the project's branches, base branch) | `create_ticket` (`branch`, `base_branch`; `remote_id`, `remote_url` link it as the Remote ID field does) | the branch list itself (`GET /projects/:id/branches`) has no tool: agents run `git branch` |
 | Board | edit title, spec, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree), remote ID and its link | `update_ticket` (`remote_id`, `remote_url`; a plan run's on its own ticket) | permission modes only tighten on another ticket |
 | Board | move a ticket's work to another branch after it started | `update_branch` (the ticket's own agent; ask it with a message) | the apps don't re-point a running ticket themselves: the agent has to move its commits |
@@ -1019,7 +1020,7 @@ client state, not service state.
 | Drivers | log in to a driver | none | interactive OAuth in the human's browser |
 | Browser | watch or drive a session's browser tabs, open and close tabs | `browser_*` on the run's own session's tabs | other sessions' tabs are a human's live view |
 | Plugins | Git Changes tab (diff, log, file view) | none | read-only view of the ticket's git history; agents run `git` in their worktree |
-| Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab) | none | a sub-agent reports back to the agent that started it; other agents read that agent's Activity and transcript |
+| Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab, filtered to agents or tasks) | `get_ticket` (`include_agents`), `get_ticket_agent` (a sub-agent's transcript tail, a task's output tail) | the filter is a client view |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
 `service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
@@ -1421,7 +1422,9 @@ ticket's pending approval, because the sub-agent reports the denial to its agent
 **Reading them.** `TicketDetail.subagents` (oldest first), `GET /sessions/:id/subagents`, and
 `GET /sessions/:id/transcript?subagent=<id>` (404 for an unknown id). The plain transcript route
 and the board's `get_ticket` transcript tail leave sub-agent entries out, so older clients see
-the same session transcript as before.
+the same session transcript as before. Agents read another ticket's sub-agents and tasks with
+`get_ticket` { include_agents } and one of them in full (a sub-agent's transcript tail, a task's
+output tail) with `get_ticket_agent`.
 
 **claude-code** (verified against claude 2.1.283). An `Agent`/`Task` tool call starts a sub-agent
 (`description`, `subagent_type`, `prompt` from its input; `parentId` is the call's own
@@ -1449,7 +1452,10 @@ The Agents & tasks tab (route id `agents`) exists only once the session has a su
 background task: until then (and on a session without any) the tab is hidden, and `agents` or
 `agent:<id>` fall back to the Spec, while the requested tab is kept so a deep link opens when
 they arrive. It lists sub-agents and tasks in one list, the latest updated first
-(`sortSubagents`: `updatedAt` desc, then `startedAt` desc). A sub-agent's row and its view's
+(`sortSubagents`: `updatedAt` desc, then `startedAt` desc). The list scrolls under a filter of two
+toggles, Agents and Tasks, each with its count (`filterSubagents`, `subagentCounts`): one pressed
+shows only that kind, both or neither show everything. The Mac app keeps each session's filter
+while it runs, so opening a row and coming back keeps it; the iPhone app has no filter. A sub-agent's row and its view's
 header carry a model chip once its model is known (`subagentModelLabel`: "Haiku 4.5" for
 `claude-haiku-4-5-20251001`, the raw id in its tooltip). A row opens the tab `agent:<id>`: a
 sub-agent's transcript, with its task above it and a breadcrumb back through its parents, or a

@@ -39,21 +39,23 @@ export const listTickets = defineTool<{ scope?: BoardScope; project_key?: string
   },
 });
 
-export const getTicket = defineTool<{ key: string; include_transcript?: number }>({
+export const getTicket = defineTool<{ key: string; include_transcript?: number; include_agents?: boolean }>({
   name: "get_ticket",
   description:
-    "Get one ticket's full detail from any project: its spec (the living document with the goal, plan, status and open questions) with its revision and the approved baseline revision, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), its Activity (notes, submits, blocks, review decisions with their round and reviewed commit, and messages, oldest first), and its attachments (the images and videos its spec shows as attachment:<id>, with each one's stored file path, which you can open with a file tool), and its promptAttachments (files the human attached to its first message, where they are on disk, with missing true once one was moved or deleted, and notes listing the numbered notes the human drew on an image, each with the pixel it marks). Old keys from before a project rename work too. Only local keys find a ticket: a remote ID (the external item's key a ticket is linked to, shown as externalKey) doesn't. relatedTickets lists the other tickets linked to the same remote ID, or to the key you asked for. When no local ticket has the key but tickets carry it as their remote ID, the result is { ticket: null, requested, relatedTickets }: call get_ticket again with one of those local keys. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped).",
+    "Get one ticket's full detail from any project: its spec (the living document with the goal, plan, status and open questions) with its revision and the approved baseline revision, status, review state, blocked reason, parent and child keys, dependencies, driver and model, branches (branch: its worktree's; requestedBranch: the one chosen for it; baseBranch: its override; effectiveBaseBranch: what it merges into on completion), its Activity (notes, submits, blocks, review decisions with their round and reviewed commit, and messages, oldest first), and its attachments (the images and videos its spec shows as attachment:<id>, with each one's stored file path, which you can open with a file tool), and its promptAttachments (files the human attached to its first message, where they are on disk, with missing true once one was moved or deleted, and notes listing the numbered notes the human drew on an image, each with the pixel it marks). Old keys from before a project rename work too. Only local keys find a ticket: a remote ID (the external item's key a ticket is linked to, shown as externalKey) doesn't. relatedTickets lists the other tickets linked to the same remote ID, or to the key you asked for. When no local ticket has the key but tickets carry it as their remote ID, the result is { ticket: null, requested, relatedTickets }: call get_ticket again with one of those local keys. Set include_transcript to N to also see the last N messages and status lines of its agent's transcript (text only, long entries clipped). Set include_agents to also list the sub-agents and background tasks (Bash commands, Monitors) its agent started, oldest first: id, kind (\"agent\", \"bash\" or \"monitor\"), description, agentType, model, status, parentId (the sub-agent that started it), command, a clipped result and when it started and ended. Read one in full with get_ticket_agent.",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
       include_transcript: { type: "integer", minimum: 1, maximum: 50, description: "Also return the last N transcript entries (max 50)." },
+      include_agents: { type: "boolean", description: "Also list its sub-agents and background tasks. Default false." },
     },
     ["key"],
   ),
-  async run({ key, include_transcript }, ctx) {
+  async run({ key, include_transcript, include_agents }, ctx) {
     let d: BoardTicketDetail;
+    const opts = { ...(include_transcript ? { transcript: include_transcript } : {}), ...(include_agents ? { agents: true } : {}) };
     try {
-      d = await ctx.ops.getTicket(ctx, key, include_transcript ? { transcript: include_transcript } : undefined);
+      d = await ctx.ops.getTicket(ctx, key, Object.keys(opts).length ? opts : undefined);
     } catch (err) {
       if (!(err instanceof RemoteIdError)) throw err;
       const m = err.matches;
@@ -78,7 +80,25 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number }
       attachments: d.attachments,
       promptAttachments: d.promptAttachments,
       ...(d.transcript ? { transcript: d.transcript } : {}),
+      ...(d.agents ? { agents: d.agents } : {}),
     });
+  },
+});
+
+export const getTicketAgent = defineTool<{ key: string; id: string; include_transcript?: number }>({
+  name: "get_ticket_agent",
+  description:
+    "Read one sub-agent or background task of a ticket's session in full (ids come from get_ticket with include_agents): its description, type, model, status, the task its agent gave it (prompt) and its result, long text clipped. For a sub-agent, also the last N messages and status lines of its own transcript (include_transcript, default 20, text only). For a background task (a Bash command or Monitor), the last part of its output, with truncated true when there's more before it.",
+  inputSchema: schema(
+    {
+      key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
+      id: { type: "string", minLength: 1, description: "The sub-agent's or task's id, from get_ticket's agents." },
+      include_transcript: { type: "integer", minimum: 1, maximum: 50, description: "A sub-agent's last N transcript entries (max 50). Default 20." },
+    },
+    ["key", "id"],
+  ),
+  async run({ key, id, include_transcript }, ctx) {
+    return json(await ctx.ops.getTicketAgent(ctx, key, id, include_transcript ? { transcript: include_transcript } : undefined));
   },
 });
 

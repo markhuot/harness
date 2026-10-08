@@ -11,12 +11,20 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- The Agents & tasks tab on the Mac has a filter at the top: press Agents to see only sub-agents,
+  Tasks to see only background tasks, and both or neither to see everything. Each toggle shows how
+  many there are, and the filter stays put while you open a row and come back.
+- Agents can now inspect another ticket's sub-agents and background tasks: `get_ticket` lists them
+  with `include_agents`, and the new `get_ticket_agent` tool reads one in full, with a sub-agent's
+  latest transcript or a task's latest output.
 - ⌘-click a card on the board to open its ticket in a new split on the far right of the window,
   running its full height, without replacing the ticket you already have open beside the board. A
   ticket that's already open just gets the focus.
 
 ### Fixed
 
+- On the Mac, a long Agents & tasks list now scrolls. Before, rows past the bottom of the pane were
+  cut off with no way to reach them.
 - Leftover copies of Chrome no longer pile up in your Mac's temp folder. Each time Harness starts
   Chrome for an agent's browser, it now deletes copies left behind by earlier Chromes that were
   killed or crashed, whether they came from Harness, a test run, or anything else. A copy is kept

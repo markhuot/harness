@@ -71,15 +71,18 @@ export class TranscriptRepo {
     ).map(toEntry);
   }
 
-  /** The session agent's last `limit` entries whose content type is in `types`, oldest first. */
-  tail(sessionId: string, limit: number, types: TranscriptContent["type"][]): TranscriptEntry[] {
+  /**
+   * The session agent's last `limit` entries whose content type is in `types`, oldest first; with
+   * `subagentId`, that sub-agent's.
+   */
+  tail(sessionId: string, limit: number, types: TranscriptContent["type"][], subagentId: string | null = null): TranscriptEntry[] {
     if (limit <= 0 || !types.length) return [];
-    const params: Record<string, string | number> = { sessionId, limit };
+    const params: Record<string, string | number | null> = { sessionId, limit, subagentId };
     types.forEach((t, i) => (params[`type${i}`] = t));
     const inTypes = types.map((_, i) => `$type${i}`).join(", ");
     return (
       this.db
-        .query(`SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS NULL AND json_extract(content, '$.type') IN (${inTypes}) ORDER BY seq DESC LIMIT $limit`)
+        .query(`SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS $subagentId AND json_extract(content, '$.type') IN (${inTypes}) ORDER BY seq DESC LIMIT $limit`)
         .all(params) as EntryRow[]
     )
       .reverse()
