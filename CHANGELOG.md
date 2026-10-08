@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- ⌘-click a card on the board to open its ticket in a new split on the far right of the window,
+  running its full height, without replacing the ticket you already have open beside the board. A
+  ticket that's already open just gets the focus.
+
 ### Fixed
 
 - When a browser script expects text that never shows up, the agent now sees what the elements said

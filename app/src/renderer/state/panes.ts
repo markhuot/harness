@@ -561,6 +561,31 @@ export function openTicketInNewSplit(state: PaneState, key: string): PaneState {
 }
 
 /**
+ * ⌘-click on a card: open the ticket in a new pane on the far right of the workspace, running its
+ * full height (the root row's new last child; a root that isn't a row is wrapped in one). The new
+ * pane takes an equal share of the row and the others shrink in proportion, except beside the bare
+ * board, where it takes the 40% a click would. An already-open ticket is focused instead.
+ */
+export function openTicketAtRightEdge(state: PaneState, key: string): PaneState {
+  if (ticketLeafByKey(state.root, key)) return openTicket(state, key);
+  const { root } = state;
+  const taken = allIds(root);
+  const leaf: PaneLeaf = { type: "leaf", id: freshId(taken), content: { kind: "ticket", ticketKey: key, tab: "spec" } };
+  const isRow = root.type === "split" && root.dir === "row";
+  const children = isRow ? root.children : [root];
+  const sizes = isRow ? root.sizes : [1];
+  const share = root.type === "leaf" && root.content.kind === "board" ? 1 - BOARD_SHARE : 1 / (children.length + 1);
+  const next: PaneSplit = {
+    type: "split",
+    id: isRow ? root.id : freshId(taken),
+    dir: "row",
+    children: [...children, leaf],
+    sizes: [...sizes.map((s) => s * (1 - share)), share],
+  };
+  return normalize({ root: next, focusedId: leaf.id, zoomedId: null });
+}
+
+/**
  * A new terminal pane's content: a shell in `cwd` under a fresh, collision-proof session id (two
  * windows can mint the same pane id before either sees the other's write, but never the same UUID).
  */

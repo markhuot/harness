@@ -35,7 +35,7 @@ import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot, TicketKey
 import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
-import { focusedTicket, leaves, openTicket, openTicketInNewSplit, updatePanes, usePanes } from "../state/panes";
+import { focusedTicket, leaves, openTicket, openTicketAtRightEdge, openTicketInNewSplit, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
 import { usePane, usePaneScope } from "../components/paneContext";
 import { keysArea, runCommand, useCommands } from "../components/commands";
@@ -70,7 +70,11 @@ export function BoardPane() {
   const paneId = usePane()?.paneId;
   const panes = usePanes(scope);
   // The click-a-card rule (panes.ts openTicket): reuse the ticket pane beside the board, or split.
-  const openCard = useCallback((key: string) => updatePanes(scope, (s) => openTicket(s, key)), [scope]);
+  // ⌘-click opens it in a new full-height pane on the far right instead (panes.ts openTicketAtRightEdge).
+  const openCard = useCallback(
+    (key: string, atRightEdge = false) => updatePanes(scope, (s) => (atRightEdge ? openTicketAtRightEdge(s, key) : openTicket(s, key))),
+    [scope],
+  );
   const focusedKey = focusedTicket(panes)?.ticketKey ?? null;
   const openKeys = useMemo(() => new Set(leaves(panes.root).flatMap((l) => (l.content.kind === "ticket" ? [l.content.ticketKey] : []))), [panes.root]);
   const selection = (key: string): CardSelection => (key === focusedKey ? "focused" : openKeys.has(key) ? "open" : null);
@@ -353,7 +357,8 @@ const TicketCard = memo(function TicketCard({
   /** The keyboard cursor: the board's one tab stop, and where pane focus lands. */
   isCursor: boolean;
   showProject: boolean;
-  onOpen: (key: string) => void;
+  /** `atRightEdge`: ⌘-click, a new full-height pane on the far right rather than the click-a-card rule. */
+  onOpen: (key: string, atRightEdge?: boolean) => void;
   related: boolean;
   onHoverConductor: (id: string | null) => void;
   /** Discard a draft (its card's delete) */
@@ -383,7 +388,7 @@ const TicketCard = memo(function TicketCard({
       data-parent={parent?.key}
       onMouseEnter={isConductor(t) ? () => onHoverConductor(t.id) : undefined}
       onMouseLeave={isConductor(t) ? () => onHoverConductor(null) : undefined}
-      onClick={() => onOpen(t.key)}
+      onClick={(e) => onOpen(t.key, e.metaKey)}
       // Drag onto a half of the board or an open ticket to open it in a split there, or out of the window to open it in one.
       {...dragProps({ kind: "ticket", ticketKey: t.key }, { chip: keyLabel(t), title: t.title }, scope)}
       onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined)}

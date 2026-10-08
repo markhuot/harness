@@ -36,6 +36,7 @@ import {
   openFile,
   openTerminal,
   openTicket,
+  openTicketAtRightEdge,
   openTicketInNewSplit,
   paneInDirection,
   paneLabel,
@@ -300,8 +301,44 @@ describe("openTicketInNewSplit (⇧⌘↩ on a card)", () => {
   });
 });
 
+describe("openTicketAtRightEdge (⌘-click on a card)", () => {
+  test("with only the board, opens beside it as a click would", () => {
+    const s = valid(openTicketAtRightEdge(defaultPanes(), "A-1"));
+    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.4]");
+    expect(focusedLabel(s)).toBe("A-1");
+  });
+
+  test("appends to the root row instead of replacing the ticket pane beside the board", () => {
+    const s = valid(openTicketAtRightEdge(st(row("r", [B, T("A-1")], [0.6, 0.4]), "B"), "A-2"));
+    expect(shape(s.root)).toBe("row[board 0.4, A-1 0.267, A-2 0.333]");
+    expect(focusedLabel(s)).toBe("A-2");
+  });
+
+  test("goes right of a column on the right, not into it, so it runs the full height", () => {
+    const s = valid(openTicketAtRightEdge(st(row("r", [B, col("c", [T("A-1"), T("A-2")])])), "A-3"));
+    expect(shape(s.root)).toBe(`row[board ${r(1 / 3)}, col[A-1 0.5, A-2 0.5] ${r(1 / 3)}, A-3 ${r(1 / 3)}]`);
+    expect(layoutPanes(s).leaves.find((l) => l.leaf.id === s.focusedId)!.rect).toMatchObject({ y: 0, h: 1 });
+  });
+
+  test("wraps a root column in a row", () => {
+    const s = valid(openTicketAtRightEdge(st(col("c", [B, T("A-1")])), "A-2"));
+    expect(shape(s.root)).toBe("row[col[board 0.5, A-1 0.5] 0.5, A-2 0.5]");
+  });
+
+  test("an already-open ticket is focused, not opened twice", () => {
+    const start = st(row("r", [B, T("A-1"), T("A-2")]), "B");
+    const s = valid(openTicketAtRightEdge(start, "A-1"));
+    expect(shape(s.root)).toBe(shape(start.root));
+    expect(s.focusedId).toBe("A-1");
+  });
+
+  test("ends a zoom so the new pane is visible", () => {
+    expect(openTicketAtRightEdge(st(row("r", [B, T("A-1")]), "A-1", "A-1"), "A-2").zoomedId).toBeNull();
+  });
+});
+
 describe("dropContent", () => {
-  const base = () => st(row("r", [B, T("A-1")], [0.6, 0.4]));
+  const base =() => st(row("r", [B, T("A-1")], [0.6, 0.4]));
 
   test("right/left into a row parent become siblings splitting the target's share", () => {
     expect(shape(valid(dropContent(base(), "A-1", "right", ticketContent("A-2"))).root)).toBe("row[board 0.6, A-1 0.2, A-2 0.2]");
