@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import type { ToolResultContent } from "@harness/shared";
 import type { ChildMessage, ParentMessage } from "../browser/script-child";
 import type { BrowserPageEvent } from "../browser/types";
-import { seconds } from "../browser/wait";
+import { checkCondition, seconds } from "../browser/wait";
 import { COMPILED } from "../runtime";
 import { browserClick, browserContent, browserEval, browserKeys, browserOpen, browserResize, browserScreenshot, browserSelect, browserSnapshot, browserType, browserUpload, browserWait } from "./browser";
 import type { ToolContext, ToolResult } from "./types";
@@ -259,6 +259,97 @@ function target(v: unknown, o: Opts, what: string): Opts {
   throw new Error(`${what} must be a CSS selector, { ref } from snapshot(), or { selector, frame }.`);
 }
 
+/** A page matcher's default timeout in seconds: Playwright's, so a wrong expectation fails fast. */
+export const EXPECT_DEFAULT_TIMEOUT_S = 5;
+
+/** An argument the child sent as JSON, back as the script wrote it: page, /re/flags, or JSON. */
+function shownArg(v: unknown): string {
+  const o = opt(v);
+  if (o.page === true) return "page";
+  if (typeof o.regexp === "string") return o.regexp;
+  const s = JSON.stringify(v) ?? "undefined";
+  return s.length > 100 ? `${s.slice(0, 97)}…` : s;
+}
+
+/** A page expectation for the log: `expect("#cart").not.toBeVisible()`. */
+function expectLabel(args: unknown[]): string {
+  const [received, matcher, margs, isNot] = args;
+  return `expect(${shownArg(received)})${isNot ? ".not" : ""}.${String(matcher)}(${(Array.isArray(margs) ? margs : []).map(shownArg).join(", ")})`;
+}
+
+/** What to write instead of a .not that has no inverse wait. */
+const NO_INVERSE: Record<string, string> = {
+  toBeEnabled: 'expect the disabled state instead: toHaveAttribute("disabled"), or toHaveAttribute("aria-disabled", "true")',
+  toHaveCount: "expect the count you want instead: toHaveCount(n)",
+  toHaveValue: "expect the value you want instead: toHaveValue(value)",
+  toHaveAttribute: "expect the value you want instead: toHaveAttribute(name, value), or toBeEnabled() for a disabled attribute going away",
+  toHaveURL: "expect the URL you want instead: toHaveURL(url)",
+};
+
+/**
+ * A page matcher from the script (browser/script-child.ts) as a wait condition, waited on with
+ * the same engine as wait() and every wait_for. Throws the wait's summary when it never held.
+ */
+async function runExpect(job: Job, args: unknown[]): Promise<void> {
+  const [received, matcher, margs, isNot] = args as [unknown, string, unknown[], boolean];
+  const a = Array.isArray(margs) ? [...margs] : [];
+  // A trailing plain object is the options ({ timeout }); a RegExp arrives as { regexp }.
+  const last = a[a.length - 1];
+  const o = last && typeof last === "object" && !Array.isArray(last) && !("regexp" in last) ? opt(a.pop()) : {};
+  const unknownOpts = Object.keys(o).filter((k) => k !== "timeout");
+  if (unknownOpts.length) throw new Error(`A page matcher's options are { timeout } (seconds); it has no ${unknownOpts.join(", ")}.`);
+  const needs: Record<string, string> = { toContainText: "the text", toHaveCount: "the count", toHaveValue: "the value", toHaveAttribute: "the attribute's name", toHaveURL: "the URL (a substring or a RegExp)" };
+  if (matcher in needs && a[0] === undefined) throw new Error(`${matcher} needs ${needs[matcher]}.`);
+  if (isNot && matcher in NO_INVERSE) throw new Error(`.not.${matcher}() has nothing to wait for; ${NO_INVERSE[matcher]}.`);
+
+  let test: Opts;
+  switch (matcher) {
+    case "toBeVisible":
+      test = { state: isNot ? "hidden" : "visible" };
+      break;
+    case "toBeHidden":
+      test = { state: isNot ? "visible" : "hidden" };
+      break;
+    case "toBeEnabled":
+      test = { state: "enabled" };
+      break;
+    case "toContainText":
+      // Not containing it: no matching element has the text.
+      test = { text: a[0], ...(isNot ? { state: "gone" } : {}) };
+      break;
+    case "toHaveCount":
+      test = { count: a[0] };
+      break;
+    case "toHaveValue":
+      test = { value: a[0] };
+      break;
+    case "toHaveAttribute":
+      test = { attribute: { name: a[0], ...(a[1] !== undefined ? { value: a[1] } : {}) } };
+      break;
+    case "toHaveURL": {
+      const u = opt(a[0]);
+      test = { url: typeof u.regexp === "string" ? u.regexp : a[0] };
+      break;
+    }
+    default:
+      throw new Error(`Unknown page matcher ${matcher}.`);
+  }
+
+  const isPage = opt(received).page === true;
+  if (matcher === "toHaveURL" && !isPage) throw new Error("toHaveURL checks the page: expect(page).toHaveURL(url).");
+  if (matcher !== "toHaveURL" && isPage) throw new Error(`expect(page) only has toHaveURL; give ${matcher} an element: expect("selector"), expect({ ref }) or expect({ selector, frame }).`);
+  let ref: string | undefined;
+  if (!isPage) {
+    const t = target(received, {}, "expect's element");
+    if (typeof t.ref === "string") ref = t.ref;
+    else Object.assign(test, { selector: t.selector }, t.frame !== undefined ? { frame: t.frame } : {});
+  }
+  const checked = checkCondition({ ...test, timeout: o.timeout ?? EXPECT_DEFAULT_TIMEOUT_S }, ref);
+  if (!checked.ok) throw new Error(checked.error);
+  const waited = await job.ctx.browser.waitFor(job.sessionId, checked.condition, job.tab !== undefined ? { tab: job.tab } : {});
+  if (!waited.met) throw new Error(waited.summary);
+}
+
 /**
  * Run one page call from the script through the browser tools. Returns the call's value; a tool
  * error (a wait that timed out, a selector that matched nothing) throws with the tool's text.
@@ -331,6 +422,8 @@ async function runStep(job: Job, method: string, args: unknown[]): Promise<unkno
     }
     case "url":
       return (await ctx.browser.state(job.sessionId, tab !== undefined ? { tab } : {}))?.url ?? "about:blank";
+    case "expect":
+      return runExpect(job, args);
     default:
       throw new Error(`Unknown call ${method}.`);
   }
@@ -406,18 +499,21 @@ async function onMessage(job: Job, m: ChildMessage, file: string): Promise<void>
   if (job.status !== "running") return;
   if (m.type === "log") return job.log("script", m.level === "log" ? m.text : `${m.level}: ${m.text}`);
   if (m.type === "call") {
-    const label = stepLabel(m.method, m.args);
+    const isExpect = m.method === "expect";
+    const label = isExpect ? expectLabel(m.args) : stepLabel(m.method, m.args);
     let reply: ParentMessage;
     try {
       const value = await runStep(job, m.method, m.args);
       // A step that opened the session's first tab pins the job to it.
       if (job.tab === undefined) job.tab = (await job.ctx.browser.state(job.sessionId))?.tabId;
-      job.log("step", `${label} → ${typeof value === "string" ? value : JSON.stringify(value) ?? "undefined"}`);
+      job.log("step", isExpect ? `${label} ✓` : `${label} → ${typeof value === "string" ? value : JSON.stringify(value) ?? "undefined"}`);
       reply = { type: "reply", id: m.id, ok: true, value: value === undefined ? null : value };
     } catch (e) {
-      const error = (e as Error).message;
+      const message = (e as Error).message;
+      // An expectation's error leads with the expectation, as Bun's own matchers' do.
+      const error = isExpect ? `${label}\n${message}` : message;
       job.lastFailedStep = { label, error };
-      job.log("step", `${label} ✗ ${error}`);
+      job.log("step", `${label} ✗ ${message}`);
       reply = { type: "reply", id: m.id, ok: false, error, step: label };
     }
     if (job.status === "running") job.proc?.send(reply);
@@ -521,7 +617,10 @@ function report(job: Job): ToolResult {
 
 /** The script's functions, for browser_run's description and the Browser prompt section. */
 export const SCRIPT_API =
-  "click(element, { frame, wait_for }), type(element, text, { submit, frame, wait_for }), keys({ text, keys, per_key, wait_for }), select(element, { value | label | index, frame, wait_for }), upload(element, paths, { frame, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, frame, wait_for }) (runs in the page, or the frame, and returns the value), content(selector?, { format, max_chars, frame, wait_for }), snapshot({ frame, max_nodes, wait_for }) (the accessibility tree with refs, as text), screenshot(path?, { full_page, selector, ref, frame, wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms). An element is a CSS selector (inside frame, when given), or { ref: \"e12\" } from snapshot()";
+  "click(element, { frame, wait_for }), type(element, text, { submit, frame, wait_for }), keys({ text, keys, per_key, wait_for }), select(element, { value | label | index, frame, wait_for }), upload(element, paths, { frame, wait_for }), wait(condition), evaluate(expressionOrFunction, { args, frame, wait_for }) (runs in the page, or the frame, and returns the value), content(selector?, { format, max_chars, frame, wait_for }), snapshot({ frame, max_nodes, wait_for }) (the accessibility tree with refs, as text), screenshot(path?, { full_page, selector, ref, frame, wait_for }) (returns the saved path), open(url, { wait_for, device, width, height }), resize({ device, width, height }, { wait_for }), url(), log(...) and console.log/info/warn/error, sleep(ms), and expect. " +
+  "expect is Bun's Jest-compatible expect (bun:test): expect(await evaluate(() => cart.length)).toBe(2) takes every Jest matcher. " +
+  `It adds Playwright's web-first assertions, which wait until they hold (await them): expect(element).toBeVisible(), toBeHidden(), toBeEnabled(), toContainText(text), toHaveCount(n), toHaveValue(value), toHaveAttribute(name, value?), and expect(page).toHaveURL(substringOrRegExp). Unlike Playwright's, they take an element, not a locator, and a last { timeout } in seconds (default ${EXPECT_DEFAULT_TIMEOUT_S}); .not works on toBeVisible, toBeHidden and toContainText. ` +
+  "An element is a CSS selector (inside frame, when given), { selector, frame }, or { ref: \"e12\" } from snapshot()";
 
 const WAIT_PARAM = {
   type: "number",
@@ -537,8 +636,9 @@ export const browserRun = defineTool<{ script: string; tab?: number; timeout?: n
   description:
     `Run a JavaScript script that drives a browser tab from outside the page, for flows that span reloads or loop: click, wait, click again, until done. It runs as a job in its own process: this call returns after wait seconds (or sooner when the script ends) with the job number and its log so far, and browser_run_status returns the next lines, so a long script never leaves you waiting blind. ` +
     `The script is async JS (top-level await; return a value to make it the job's result) with these functions: ${SCRIPT_API}. Every page call goes through the same browser tools, wait_for included, and throws when the tool fails (a wait timing out, no element matching). ` +
-    `The log has the script's own console output, every step with its result, and the page's console, uncaught errors, navigations and failed requests. A failure reports the script line, the failing step, the page's URL and a screenshot. ` +
-    `Example: while (await evaluate(() => document.querySelectorAll(".remove").length)) await click(".remove", { wait_for: { idle: true } }); ` +
+    `Write it as do, then expect: the script runs while each expectation holds, and the first that doesn't stops it. ` +
+    `The log has the script's own console output, every step and expectation with its result, and the page's console, uncaught errors, navigations and failed requests. A failure reports the script line, the failing step or expectation (with what the page showed on its last check), the page's URL and a screenshot. ` +
+    `Example: await click(".add"); await expect(".cart-count").toContainText("1"); await click("#checkout"); await expect(page).toHaveURL(/\\/pay/); ` +
     `One job runs per tab at a time; it stops at its timeout, when this run ends, or when its tab closes.`,
   inputSchema: schema(
     {

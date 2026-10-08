@@ -64,6 +64,24 @@ function fixtures(req: Request): Response | Promise<Response> {
     }
     case "/plain":
       return html(`<h1 id="x" class="title big">Plain</h1>`, "Plain");
+    case "/form":
+      // Each button changes the page a moment after the click, so an expectation has to wait for it.
+      return html(
+        `<input id="q"><ul id="list"><li>Item 1</li></ul>
+         <button id="add">Add</button> <button id="clear">Clear</button>
+         <button id="toggle" aria-expanded="false">Toggle</button> <button id="go">Go</button>
+         <a id="link" href="/plain" data-x>Link</a> <p id="hint" style="display:none">Hint</p>
+         <iframe id="f" srcdoc="<p id='inner'>Inside</p>"></iframe>
+         <script>
+           const list = document.getElementById("list");
+           const later = (id, ms, fn) => document.getElementById(id).addEventListener("click", () => setTimeout(fn, ms));
+           later("add", 300, () => { const li = document.createElement("li"); li.textContent = "Item " + (list.children.length + 1); list.append(li); });
+           later("clear", 500, () => list.replaceChildren());
+           later("toggle", 200, () => document.getElementById("toggle").setAttribute("aria-expanded", "true"));
+           later("go", 200, () => { location.href = "/plain?done=1"; });
+         </script>`,
+        "Form",
+      );
     default:
       return new Response("not found", { status: 404 });
   }
@@ -264,6 +282,34 @@ withChrome("waits and browser_run (real Chrome)", () => {
     }, 30_000);
   });
 
+  describe("count, value and attribute", () => {
+    test("browser_click's wait_for waits for a list to empty with count 0", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const r = await browserClick.execute({ selector: "#clear", wait_for: { selector: "#list li", count: 0 } }, ctx);
+      expect(r.isError).toBeUndefined();
+      expect(all(r)).toContain('"#list li" count 0');
+      expect(await browser.evaluate(ctx.session.id, "document.querySelectorAll('#list li').length")).toBe("0");
+    }, 30_000);
+
+    test("a timeout reports the last count, value and attribute it saw", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const count = await browserWait.execute({ selector: "#list li", count: 3, timeout: 0.5 }, ctx);
+      expect(count.isError).toBe(true);
+      expect(all(count)).toContain("Last check: 1 element matched, want 3 (1 visible, 1 enabled).");
+      const value = await browserWait.execute({ selector: "#q", value: "x", timeout: 0.5 }, ctx);
+      expect(all(value)).toContain(`The first match's value was "".`);
+      const attr = await browserWait.execute({ selector: "#toggle", attribute: { name: "aria-expanded", value: "true" }, timeout: 0.5 }, ctx);
+      expect(all(attr)).toContain(`The first match's aria-expanded was "false".`);
+      const missing = await browserWait.execute({ selector: "#toggle", attribute: { name: "aria-pressed" }, timeout: 0.5 }, ctx);
+      expect(all(missing)).toContain("The first match has no aria-pressed attribute.");
+      // A hidden element still has its attribute: these fields don't ask for visibility.
+      expect((await browserWait.execute({ selector: "#hint", attribute: { name: "style" }, timeout: 0.5 }, ctx)).isError).toBeUndefined();
+      expect((await browserWait.execute({ selector: "#hint", state: "visible", attribute: { name: "style" }, timeout: 0.5 }, ctx)).isError).toBe(true);
+    }, 30_000);
+  });
+
   describe("browser_run", () => {
     /** Poll a job to its end; every report's text, in order. */
     async function drain(ctx: ToolContext, first: ToolResult): Promise<{ reports: string[]; last: ToolResult }> {
@@ -390,6 +436,104 @@ await sleep(500);`;
       expect(all(after)).toContain("Stopped: the run ended.");
       await Bun.sleep(100);
       expect(pidAlive(pidOf(ended))).toBe(false);
+    }, 30_000);
+
+    test("do, then expect: every page matcher waits until it holds, and each passes as one log line", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const script = `await expect("#hint").toBeHidden();
+await expect("#hint").not.toBeVisible();
+await expect("#add").toBeEnabled();
+await click("#add");
+await expect("#list li").toHaveCount(2);
+await expect("#list").toContainText("Item 2");
+await expect("#list").not.toContainText("Item 9");
+await type("#q", "hello");
+await expect("#q").toHaveValue("hello");
+await expect("#link").toHaveAttribute("data-x");
+const snap = await snapshot();
+const ref = /Toggle.*ref=(e\\d+)/.exec(snap)[1];
+await click("#toggle");
+await expect({ ref }).toHaveAttribute("aria-expanded", "true");
+await expect({ selector: "#inner", frame: "#f" }).toContainText("Inside");
+expect(await evaluate(() => document.querySelectorAll("#list li").length)).toBe(2);
+await click("#go");
+await expect(page).toHaveURL(/done=1/);
+await expect({ ref }).toBeHidden();
+return "ok";`;
+      const { reports, last } = await drain(ctx, await browserRun.execute({ script, wait: 30 }, ctx));
+      const log = reports.join("\n");
+      expect(all(last)).toContain('Result: "ok"');
+      for (const line of [
+        'expect("#hint").not.toBeVisible() ✓',
+        'expect("#list li").toHaveCount(2) ✓',
+        'expect("#list").not.toContainText("Item 9") ✓',
+        'expect("#q").toHaveValue("hello") ✓',
+        'expect({"ref":"e',
+        'expect({"selector":"#inner","frame":"#f"}).toContainText("Inside") ✓',
+        "expect(page).toHaveURL(/done=1/) ✓",
+      ]) {
+        expect(log).toContain(line);
+      }
+    }, 60_000);
+
+    test("an expectation retries until the page catches up", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/late?ms=1500`);
+      const { last } = await drain(ctx, await browserRun.execute({ script: `await expect(".done").toContainText("All done");\nreturn 1;`, wait: 10 }, ctx));
+      expect(all(last)).toContain("Result: 1");
+    }, 30_000);
+
+    test("a failing page expectation stops the job with the line, the matcher, the last check, the page and a screenshot", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const script = `log("before");\nawait expect("#list li").toHaveCount(5, { timeout: 1 });\nlog("never");`;
+      const { last } = await drain(ctx, await browserRun.execute({ script, wait: 10 }, ctx));
+      expect(last.isError).toBe(true);
+      const text = all(last);
+      expect(text).toContain('Failed: expect("#list li").toHaveCount(5, {"timeout":1})\nTimed out after 1.');
+      expect(text).toContain("Last check: 1 element matched, want 5");
+      expect(text).toContain("Where: script line 2, column");
+      expect(text).toContain('Step: expect("#list li").toHaveCount(5, {"timeout":1})');
+      expect(text).toMatch(/Page: http:\/\/127\.0\.0\.1:\d+\/form/);
+      expect(text).toContain("saved to");
+      expect(last.content.some((c) => c.type === "image")).toBe(true);
+      expect(text).not.toContain("never");
+      // { timeout: 1 } fails in about a second, not the default 5.
+      expect(Number(/failed after (\d+\.\d)s/.exec(text)![1])).toBeLessThan(4);
+    }, 30_000);
+
+    test("a page expectation's failure names the value it last saw", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const { last } = await drain(ctx, await browserRun.execute({ script: `await type("#q", "abc");\nawait expect("#q").toHaveValue("xyz", { timeout: 0.5 });`, wait: 10 }, ctx));
+      expect(all(last)).toContain(`The first match's value was "abc".`);
+      expect(all(last)).toContain("Where: script line 2, column");
+    }, 30_000);
+
+    test("a failing plain expect gives Bun's Expected/Received and the script line", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const script = `log("before");\nexpect(await evaluate(() => document.querySelectorAll("#list li").length)).toBe(3);\nlog("never");`;
+      const { last } = await drain(ctx, await browserRun.execute({ script, wait: 10 }, ctx));
+      expect(last.isError).toBe(true);
+      const text = all(last);
+      expect(text).toContain("Failed: expect(received).toBe(expected)");
+      expect(text).toContain("Expected: 3");
+      expect(text).toContain("Received: 1");
+      expect(text).toContain("Where: script line 2, column");
+      expect(text).not.toContain("never");
+    }, 30_000);
+
+    test(".not with no inverse, and a matcher on the wrong target, say what to write instead", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const not = await drain(ctx, await browserRun.execute({ script: `await expect("#list li").not.toHaveCount(1);`, wait: 10 }, ctx));
+      expect(all(not.last)).toContain("Failed: expect(\"#list li\").not.toHaveCount(1)\n.not.toHaveCount() has nothing to wait for; expect the count you want instead: toHaveCount(n).");
+      const url = await drain(ctx, await browserRun.execute({ script: `await expect("#list").toHaveURL("/form");`, wait: 10 }, ctx));
+      expect(all(url.last)).toContain("toHaveURL checks the page: expect(page).toHaveURL(url).");
+      const missing = await drain(ctx, await browserRun.execute({ script: `await expect("#list").toContainText();`, wait: 10 }, ctx));
+      expect(all(missing.last)).toContain("toContainText needs the text.");
     }, 30_000);
 
     test("another session can't read a job", async () => {
