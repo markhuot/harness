@@ -1312,8 +1312,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   const count = async () => dockCount(await labels(udid));
   const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
   const switcher = (l: string) => /^\d+ docked tickets$/.test(l);
-  /** A row in the switcher's menu for `k` (not the dock bar, not a board card). */
-  const row = (k: string) => (l: string) => (l === k || l.startsWith(`${k},`) || l.startsWith(`${k}\n`)) && !isDock(l);
+  /** A row in the switcher's menu for `k`, "<key> · <title>" (not the dock bar, not a board card). */
+  const row = (k: string) => (l: string) => l === k || l.startsWith(`${k} · `);
   let composerBefore: AXNode["frame"] | null = null;
 
   await check("a second ticket joins the dock, which shows the top's ref and title and a count of 2", async () => {
@@ -1426,24 +1426,11 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     await shot(udid, "dock-switcher-overflow-light");
-    // The menu scrolls on a phone and opens at its top: sweep it to its bottom ("2 more" is last),
-    // gathering every row on the way.
     const l = await labels(udid);
-    for (const dy of [-240, -240, -240, -240, -240]) {
-      const rows = (await nodes(udid)).filter((n) => n.AXLabel && anyRow(n.AXLabel));
-      if (!rows.length) break;
-      const mid = rows[Math.floor(rows.length / 2)]!;
-      const x = String(Math.round(mid.frame.x + mid.frame.width / 2));
-      const y = mid.frame.y + mid.frame.height / 2;
-      await axe("swipe", "--start-x", x, "--start-y", String(Math.round(y - dy / 2)), "--end-x", x, "--end-y", String(Math.round(y + dy / 2)), "--duration", "0.4", "--udid", udid);
-      await Bun.sleep(400);
-      l.push(...(await labels(udid)));
-    }
     const listed = [kid.key, ...extra.map((t) => t.key)].filter((k) => l.some(row(k)));
     if (!l.includes("2 more")) throw new Error(`no "2 more" in the menu: ${[...new Set(l)].filter((x) => !x.startsWith("SHEET-") || !x.includes(" Docked")).slice(0, 30).join(" | ")}`);
     if (listed.length !== 10) throw new Error(`the menu lists ${listed.length} docked tickets before "2 more": ${listed.join(", ")}`);
     if (l.some(row(kid.key))) throw new Error(`the oldest, ${kid.key}, is listed before "2 more"`);
-    await shot(udid, "dock-switcher-overflow-bottom-light");
     await tapWhere(udid, "2 more");
     await until("the rest", async () => (await labels(udid)).some(row(kid.key)), 5000);
     await tapWhere(udid, row(kid.key));
@@ -1532,6 +1519,10 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     for (const t of many.slice(5)) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
     await dockSheet(udid);
     const twenty = await footprint();
+    // The decisive count: ticket screens alive in the app (one TicketDetailHeroCollapse each).
+    const heap = await sh(["heap", pid], { allowFail: true, quiet: true });
+    const screens = heap.split("\n").filter((x) => x.includes("TicketDetailHeroCollapse")).map((x) => Number(x.trim().split(/\s+/)[0]));
+    const mounted = screens.length ? Math.max(...screens) : null;
     if ((await count()) !== 20) throw new Error(`${await count()} docked, not 20`);
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
@@ -1540,8 +1531,12 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const none = await footprint();
     const grew = twenty - five;
     // Five live screens cost about 20 MB over none; fifteen more mounted would be far past this.
-    if (grew > 20) throw new Error(`the app grew ${grew.toFixed(1)} MB from 5 docked to 20 (${five.toFixed(1)} → ${twenty.toFixed(1)} MB; ${none.toFixed(1)} with none)`);
-    return `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20 (+${grew.toFixed(1)}), ${none.toFixed(1)} MB with the same tickets closed`;
+    const sizes = `${five.toFixed(1)} MB with 5 docked, ${twenty.toFixed(1)} MB with 20 (+${grew.toFixed(1)}), ${none.toFixed(1)} MB with the same tickets closed`;
+    if (mounted !== null && mounted > 5) throw new Error(`${mounted} ticket screens alive with 20 docked, not the 5 live ones (${sizes})`);
+    // The footprint is noisy (caches from the fifteen screens opened on the way); fifteen more
+    // mounted screens would be far past this.
+    if (grew > 60) throw new Error(`the app grew ${grew.toFixed(1)} MB from 5 docked to 20 (${sizes})`);
+    return `${mounted ?? "?"} ticket screens alive; ${sizes}`;
   });
 }
 
@@ -1634,11 +1629,11 @@ async function pillStackChecks(udid: string, s: { project: Project; conductor: T
     const hidden = [a, c].filter((t) => !shown.has(t.key));
     if (hidden.length !== 2) throw new Error(`the oldest two aren't the ones behind "+2": ${[...shown].join(", ")}`);
     await tapWhere(udid, more.AXLabel!);
-    await until("the +2 menu", async () => (await labels(udid)).some((l) => l.startsWith(a.key) && !isDock(l)), 5000).catch(async (e) => {
+    await until("the +2 menu", async () => (await labels(udid)).some((l) => l.startsWith(`${a.key} · `)), 5000).catch(async (e) => {
       await say("after +2");
       throw e;
     });
-    await tapWhere(udid, (l) => l.startsWith(a.key) && !isDock(l));
+    await tapWhere(udid, (l) => l.startsWith(`${a.key} · `));
     moved(udid);
     await until(`the panel on ${a.key}`, async () => panelOn(await labels(udid), a.key), 8000);
     return `10 pills and +2; ${a.key} opened from its menu`;

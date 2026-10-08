@@ -24,6 +24,9 @@ struct DockedTicketText: Equatable {
         if title?.isEmpty == true { title = nil }
     }
 
+    /// A menu row's one line: "<ref> · <title>", the system truncating the title.
+    var menuLine: String { [ref, title].compactMap { $0 }.joined(separator: " · ") }
+
     /// VoiceOver's name for it, and sim-check's: "<ref>, <title>, docked".
     var accessibilityLabel: String { [ref, title, "docked"].compactMap { $0 }.joined(separator: ", ") }
 }
@@ -91,8 +94,8 @@ struct DockedTicketsMenu<Label: View>: View {
             router.activateSheet(id: sheet.id)
             then()
         } label: {
-            if isTop { SwiftUI.Label(text.ref, systemImage: "checkmark") } else { Text(text.ref) }
-            if let title = text.title { Text(title) }
+            // One line, not a title and subtitle: eleven rows still fit a phone's menu unscrolled.
+            if isTop { SwiftUI.Label(text.menuLine, systemImage: "checkmark") } else { Text(text.menuLine) }
         }
     }
 }
@@ -259,8 +262,7 @@ struct DockedPillStack: View {
                     router.activateSheet(id: sheet.id)
                     router.restoreDock()
                 } label: {
-                    Text(text.ref)
-                    if let title = text.title { Text(title) }
+                    Text(text.menuLine)
                 }
             }
         } label: {
