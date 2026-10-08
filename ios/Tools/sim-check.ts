@@ -1676,6 +1676,8 @@ async function cardStackChecks(udid: string, s: { project: Project; conductor: T
     await tapWhere(udid, cardOf(a.key));
     moved(udid);
     await until(`the panel on ${a.key}`, async () => panelOn(await labels(udid), a.key), 8000);
+    // The default panel leaves no column for cards: narrow it (back to the default after the next check).
+    await dragPanelEdge(udid, W - 20);
     const left = (await cards()).map((n) => n.AXLabel!.split(",")[0]).sort();
     if (left.join() !== [b.key, c.key].sort().join()) throw new Error(`the cards beside the panel are ${left.join(", ")}`);
     return `${c.key} at the bottom; ${a.key} opened, ${left.join(" and ")} beside it`;
@@ -1686,6 +1688,8 @@ async function cardStackChecks(udid: string, s: { project: Project; conductor: T
     const l = await labels(udid);
     if (!panelOn(l, a.key)) throw new Error(`the panel left ${a.key}`);
     if (!l.some(cardOf(c.key))) throw new Error(`${c.key}'s card went too`);
+    const { W } = await panelFraction(udid);
+    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
     return `${b.key} closed; ${a.key} open, ${c.key} waiting`;
   });
   await check("with 12 docked there are 5 cards and \"7 more…\", which expands into the list of all twelve", async () => {
