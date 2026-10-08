@@ -1629,16 +1629,24 @@ async function cardStackChecks(udid: string, s: { project: Project; conductor: T
     await offSidebar();
     await shootBoth(udid, "panel-cards-open");
     await appearance(udid, "light");
-    // Halfway, the column is too narrow for a card: one "2 docked…" card holds them, still off the sidebar.
-    await dragPanelEdge(udid, W * 0.5);
+    // A column about 190pt wide is too narrow for a card: one "2 docked…" card holds them, still
+    // off the sidebar.
+    const s1 = await settings();
+    await dragPanelEdge(udid, s1.frame.x + s1.frame.width + 14 + 190);
     const collapsed = await until("one \"2 docked…\" card", async () => {
       const all = await offSidebar();
       return all.length === 1 && all[0]!.AXLabel === "2 docked tickets" ? all[0] : null;
     }, 4000).catch(async (e) => {
-      await say("with the panel at 50%");
+      await say("with a 190pt column");
       throw e;
     });
     await shot(udid, "panel-cards-collapsed-light");
+    // Wider still, no column is left: nothing shows, and nothing sits over the sidebar.
+    await dragPanelEdge(udid, W * 0.5);
+    await until("no cards", async () => (await offSidebar()).length === 0, 4000).catch(async (e) => {
+      await say("with the panel at 50%");
+      throw e;
+    });
     // And Settings still takes a tap.
     await tapWhere(udid, "Settings");
     moved(udid);
@@ -1652,7 +1660,7 @@ async function cardStackChecks(udid: string, s: { project: Project; conductor: T
     moved(udid);
     await until(`the panel on ${c.key}`, async () => panelOn(await labels(udid), c.key), 8000);
     await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
-    return `none over the sidebar at 80% (${wide.length} shown); ${a.key} over ${b.key} left of the panel at 25%; "2 docked…" at x=${Math.round(collapsed.frame.x)} at 50%; Settings tapped`;
+    return `none over the sidebar at 80% (${wide.length} shown); ${a.key} over ${b.key} left of the panel at 25%; "2 docked…" at x=${Math.round(collapsed.frame.x)} beside a 190pt column; none at 50%; Settings tapped`;
   });
   await check("docked, every ticket is a card in the bottom-right corner; a tap opens that one", async () => {
     await tapWhere(udid, `Dock ${c.key}`);
