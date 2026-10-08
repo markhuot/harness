@@ -67,14 +67,22 @@ struct DockedTicketLabel: View {
     }
 }
 
-/// A docked ticket minimized: its status dot (the board's colors; a pencil for New session), ref
-/// and truncated title, and an ✕ that takes just it off the dock. A tap anywhere else opens it.
-/// `glass` gives it its own floating capsule (the iPad's corner); without it it's a row on the
-/// surface it sits on (the iPhone's docked sheet, the expanded list).
+/// The size every minimized card shares, on both platforms: the height the single docked sheet
+/// had, and the gap between cards.
+enum DockedCardMetrics {
+    static let height: CGFloat = 64
+    static let spacing: CGFloat = 8
+    /// A stack of `rows` cards, gaps included.
+    static func stackHeight(rows: Int) -> CGFloat {
+        rows > 0 ? CGFloat(rows) * height + CGFloat(rows - 1) * spacing : 0
+    }
+}
+
+/// A docked ticket minimized: its own fully rounded glass capsule, as the single docked sheet was,
+/// with its status dot (the board's colors; a pencil for New session), ref and truncated title, and
+/// an ✕ that takes just it off the dock. A tap anywhere else opens it.
 struct DockedCard: View {
     let sheet: TicketSheet
-    var height: CGFloat = 52
-    var glass = false
     let open: () -> Void
     let close: () -> Void
     @Environment(AppModel.self) private var app
@@ -86,9 +94,9 @@ struct DockedCard: View {
             Button(action: open) {
                 HStack(spacing: 10) {
                     statusIcon(text)
-                    DockedTicketLabel(sheet: sheet, refFont: .subheadline.weight(.semibold), titleFont: .subheadline)
+                    DockedTicketLabel(sheet: sheet)
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 22)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                 .contentShape(.rect)
             }
@@ -99,40 +107,42 @@ struct DockedCard: View {
             .accessibilityAction(named: "Close", close)
             Button(action: close) {
                 Image(systemName: "xmark")
-                    .font(.footnote.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(c.text3)
                     .frame(width: 44, height: 44)
                     .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            .padding(.trailing, 4)
+            .padding(.trailing, DockedCard.closeInset)
             .accessibilityLabel("Close \(sheet.title)")
             .accessibilityIdentifier("ticket-dock-close")
         }
-        .frame(height: height)
-        .modifier(CardSurface(glass: glass))
+        .frame(height: DockedCardMetrics.height)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .contentShape(.capsule)
     }
+
+    /// From the ✕'s tap target to the capsule's trailing edge.
+    static let closeInset: CGFloat = 10
 
     @ViewBuilder private func statusIcon(_ text: DockedTicketText) -> some View {
         if text.isNewSession {
             Image(systemName: "square.and.pencil")
-                .font(.caption.weight(.bold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(c.accent)
-                .frame(width: 12)
+                .frame(width: 14)
         } else if let status = text.status {
-            StatusDot(status: status, size: 9).frame(width: 12)
+            StatusDot(status: status, size: 10).frame(width: 14)
         } else {
-            Circle().strokeBorder(c.text3, lineWidth: 1.5).frame(width: 9, height: 9).frame(width: 12)
+            Circle().strokeBorder(c.text3, lineWidth: 1.5).frame(width: 10, height: 10).frame(width: 14)
         }
     }
 }
 
-/// The card on top of the visible ones when more are docked than show: "N more…" and a stack icon.
-/// It expands the list of them all.
+/// The card on top of the visible ones when more are docked than show, in the same glass capsule:
+/// "N more…" and a stack icon. It expands the list of them all.
 struct DockedMoreCard: View {
     let count: Int
-    var height: CGFloat = 52
-    var glass = false
     /// Its label says how many in all rather than how many more (the iPad's lone card, where no
     /// card fits beside the panel).
     var all = false
@@ -143,7 +153,7 @@ struct DockedMoreCard: View {
         Button(action: expand) {
             HStack(spacing: 10) {
                 Text(all ? "\(count) docked…" : "\(count) more…")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
                     .monospacedDigit()
                     .foregroundStyle(c.text)
                     .lineLimit(1)
@@ -153,25 +163,24 @@ struct DockedMoreCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(c.text2)
             }
-            .padding(.horizontal, 16)
+            .padding(.leading, 22)
+            .padding(.trailing, 22)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(.rect)
+            .contentShape(.capsule)
         }
         .buttonStyle(.plain)
-        .frame(height: height)
-        .modifier(CardSurface(glass: glass))
+        .frame(height: DockedCardMetrics.height)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel(all ? "\(count) docked tickets" : "\(count) more docked tickets")
         .accessibilityHint("Double-tap to list them all")
         .accessibilityIdentifier("ticket-dock-more")
     }
 }
 
-/// Every docked ticket as a card, most recently used first, scrolling past the height it's given:
-/// what "N more…" expands into. A header names the count and collapses it again.
+/// Every docked ticket as its own glass card, the most recent at the bottom like the dock, scrolled
+/// to the bottom and scrolling up past the height it's given: what "N more…" expands into. No
+/// background of its own: it sits on a DockedBackdrop. A small capsule on top collapses it again.
 struct DockedCardList: View {
-    /// The list's natural height for `count` cards: the header, the cards, their dividers.
-    static func height(count: Int, cardHeight: CGFloat = 52) -> CGFloat { 44 + 8 + CGFloat(count) * (cardHeight + 1) }
-
     let sheets: [TicketSheet]
     let open: (TicketSheet) -> Void
     let close: (TicketSheet) -> Void
@@ -179,53 +188,59 @@ struct DockedCardList: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("\(sheets.count) docked")
-                    .font(.headline)
-                    .foregroundStyle(c.text)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer()
+        ScrollView {
+            VStack(alignment: .trailing, spacing: DockedCardMetrics.spacing) {
                 Button(action: collapse) {
-                    Image(systemName: "chevron.down")
+                    Label("\(sheets.count) docked", systemImage: "chevron.down")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(c.text2)
-                        .frame(width: 44, height: 44)
-                        .contentShape(.rect)
+                        .foregroundStyle(c.text)
+                        .padding(.horizontal, 16)
+                        .frame(height: 40)
+                        .contentShape(.capsule)
                 }
                 .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
                 .accessibilityLabel("Collapse docked tickets")
                 .accessibilityIdentifier("ticket-dock-collapse")
-            }
-            .padding(.leading, 16)
-            .padding(.trailing, 4)
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(sheets) { sheet in
-                        DockedCard(sheet: sheet, open: { open(sheet) }, close: { close(sheet) })
-                        Divider().padding(.leading, 16)
-                    }
+                // Oldest at the top, the most recent at the bottom, nearest the thumb.
+                ForEach(sheets.reversed()) { sheet in
+                    DockedCard(sheet: sheet, open: { open(sheet) }, close: { close(sheet) })
                 }
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.top, 12)
         }
+        .defaultScrollAnchor(.bottom)
+        .scrollBounceBehavior(.basedOnSize)
+        .scrollIndicators(.hidden)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ticket-dock-list")
     }
 }
 
-/// A card's own floating surface, or none.
-private struct CardSurface: ViewModifier {
-    let glass: Bool
+/// What sets the expanded list apart from what's behind it, in place of a background: a large
+/// radial progressive blur rising out of `anchor` (the iPhone's bottom, the iPad's bottom-right
+/// corner), blurred and tinted most at the anchor and clear at its far edge.
+struct DockedBackdrop: View {
+    let anchor: UnitPoint
+    let radius: CGFloat
+    @Environment(\.palette) private var c
 
-    func body(content: Content) -> some View {
-        if glass {
-            content
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 16))
-                .shadow(color: .black.opacity(0.18), radius: 10, x: -2, y: 2)
-        } else {
-            content
+    var body: some View {
+        ZStack {
+            // Progressive: the blur's strength follows the mask, strongest at the anchor.
+            Rectangle()
+                .fill(.regularMaterial)
+                .mask(RadialGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.35),
+                                             .init(color: .black.opacity(0.6), location: 0.65), .init(color: .clear, location: 1)],
+                                     center: anchor, startRadius: 0, endRadius: radius))
+            RadialGradient(stops: [.init(color: c.bg.opacity(0.55), location: 0), .init(color: c.bg.opacity(0.25), location: 0.6),
+                                   .init(color: .clear, location: 1)],
+                           center: anchor, startRadius: 0, endRadius: radius)
         }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -333,8 +348,8 @@ struct DockedCardStack: View {
     @Environment(Router.self) private var router
     @State private var expanded = false
 
-    static let cardHeight: CGFloat = 52
-    static let spacing: CGFloat = 8
+    static let cardHeight = DockedCardMetrics.height
+    static let spacing = DockedCardMetrics.spacing
     static let margin: CGFloat = 16
     static let maxWidth: CGFloat = 320
     /// The narrowest card worth showing: the ref and a few words of title.
@@ -370,27 +385,27 @@ struct DockedCardStack: View {
         case .collapsed: rows = count > 0 ? 1 : 0
         case .cards: rows = DockCards.rows(count: count, maxVisible: DockCards.padVisible, fitting: fitting(height: available.height))
         }
-        return CGFloat(rows) * cardHeight + CGFloat(max(0, rows - 1)) * spacing
+        return DockedCardMetrics.stackHeight(rows: rows)
     }
 
     var body: some View {
         let mode = Self.mode(width: available.width)
-        Group {
-            switch mode {
-            case let .cards(width):
-                if expanded { list(width: width) } else { stack(width: width) }
-            case let .collapsed(width):
-                if expanded {
-                    list(width: max(width, min(Self.maxWidth, available.width - Self.margin * 2)))
-                } else {
-                    DockedMoreCard(count: sheets.count, height: Self.cardHeight, glass: true, all: true) { expanded = true }
-                        .frame(width: width)
-                }
-            case .hidden:
-                EmptyView()
+        ZStack(alignment: .bottomTrailing) {
+            if expanded, mode != .hidden {
+                // The board's column behind the list: blurred out of the corner, and a tap there
+                // collapses it.
+                DockedBackdrop(anchor: .bottomTrailing, radius: max(available.width, available.height) * 0.9)
+                    .frame(width: available.width, height: available.height)
+                    .transition(.opacity)
+                Color.clear
+                    .frame(width: available.width, height: available.height)
+                    .contentShape(.rect)
+                    .onTapGesture { expanded = false }
+                    .accessibilityHidden(true)
             }
+            cards(mode)
+                .padding(Self.margin)
         }
-        .padding(Self.margin)
         .animation(.snappy, value: sheets.map(\.id))
         .animation(.snappy, value: expanded)
         // Nothing left to expand: back to the cards.
@@ -398,17 +413,32 @@ struct DockedCardStack: View {
         .onChange(of: sheets.isEmpty) { _, empty in if empty { expanded = false } }
     }
 
+    @ViewBuilder private func cards(_ mode: Mode) -> some View {
+        switch mode {
+        case let .cards(width):
+            if expanded { list(width: width) } else { stack(width: width) }
+        case let .collapsed(width):
+            if expanded {
+                list(width: max(width, min(Self.maxWidth, available.width - Self.margin * 2)))
+            } else {
+                DockedMoreCard(count: sheets.count, all: true) { expanded = true }
+                    .frame(width: width)
+            }
+        case .hidden:
+            EmptyView()
+        }
+    }
+
     private func stack(width: CGFloat) -> some View {
         let split = DockCards.split(count: sheets.count, maxVisible: DockCards.padVisible, fitting: Self.fitting(height: available.height))
         return VStack(alignment: .trailing, spacing: Self.spacing) {
             if split.more > 0 {
-                DockedMoreCard(count: split.more, height: Self.cardHeight, glass: true) { expanded = true }
+                DockedMoreCard(count: split.more) { expanded = true }
                     .frame(width: width)
             }
             // Oldest at the top, newest at the bottom.
             ForEach(sheets.prefix(split.cards).reversed()) { sheet in
-                DockedCard(sheet: sheet, height: Self.cardHeight, glass: true,
-                           open: { open(sheet) }, close: { router.closeSheet(id: sheet.id) })
+                DockedCard(sheet: sheet, open: { open(sheet) }, close: { router.closeSheet(id: sheet.id) })
                     .frame(width: width)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -416,12 +446,10 @@ struct DockedCardStack: View {
     }
 
     private func list(width: CGFloat) -> some View {
-        DockedCardList(sheets: sheets, open: open, close: { router.closeSheet(id: $0.id) }, collapse: { expanded = false })
-            .padding(.vertical, 4)
-            // As tall as its cards, up to the window's height; past that it scrolls.
-            .frame(width: width, height: min(DockedCardList.height(count: sheets.count), available.height - Self.margin * 2))
-            .glassEffect(.regular, in: .rect(cornerRadius: 20))
-            .shadow(color: .black.opacity(0.18), radius: 12, x: -2, y: 2)
+        // As tall as its cards, up to the window's height; past that it scrolls.
+        let natural = 12 + 40 + Self.spacing + DockedCardMetrics.stackHeight(rows: sheets.count)
+        return DockedCardList(sheets: sheets, open: open, close: { router.closeSheet(id: $0.id) }, collapse: { expanded = false })
+            .frame(width: width, height: min(natural, available.height - Self.margin * 2))
             .transition(.scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity))
     }
 
