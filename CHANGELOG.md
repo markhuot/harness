@@ -46,6 +46,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A run that resumes a ticket's conversation (answering a blocked question, a restart, another chat
+  in Review or Done, another planning message) now reads that conversation from the prompt cache
+  instead of paying to write it all again. The ticket's status, the run's instructions, the spec
+  revision, recent Activity and agent notes now arrive at the start of each run's first message
+  instead of in the system prompt, so a resumed agent also sees the current ones rather than those
+  from when its conversation began. Prompt overrides keep their ids; the new Session section
+  (`system.session`) holds the project, ticket and working directory that stay in the system prompt.
 - A code block under a numbered or bulleted step in a spec, a summary or any other markdown now
   shows as code inside that step, on the Mac, iPhone and iPad. Before, the code ran into the step's
   text, and a stray closing fence near the end could turn the rest of the document into one code

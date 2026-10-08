@@ -321,8 +321,8 @@ for the human, so each ticket has agent notes (`tickets.agent_notes`): a markdow
 write for the agents after them, holding technical findings (where things live, gotchas,
 approaches tried and rejected, how to verify, what's half done). `update_notes { notes }` replaces
 the whole document (an empty string clears it); there's no hard limit, but the tool and prompts ask
-for under about 8,000 characters and the result says when it's over. Every ticket run's system
-prompt carries the notes in the "Sessions and agent notes" section (`system.notes`), which also
+for under about 8,000 characters and the result says when it's over. Every ticket run's run context
+(see System prompt and run context) carries the notes in the "Sessions and agent notes" section (`system.notes`), which also
 explains the session rule and where past context lives (`get_ticket` with `include_transcript` and
 `include_agents`, `get_ticket_agent`, the branch's `git log` / `git diff <base>...`). `get_ticket`
 returns `agentNotes`; `list_tickets` and `search_tickets` leave them out. When a run hasn't called
@@ -1216,7 +1216,7 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   `$COPILOT_HOME/session-state`, not per workdir, so a moved workdir still resumes. Harness tools come
   from `--additional-mcp-config` as the `harness` server; the CLI names them `harness-<tool>` and the
   driver reports them under their own names. There's no system-prompt flag, so the run's system
-  prompt goes in front of the prompt inside `<harness_instructions>`. Prompt mode reads no stdin,
+  prompt goes in front of the prompt inside `<harness_instructions>`, then the run context. Prompt mode reads no stdin,
   so the driver doesn't steer, and attached images aren't sent (the prompt lists their paths).
   Permissions: auto → `--allow-all` (tools, paths and URLs; `--allow-all-tools` alone still denies
   commands that touch paths outside the cwd); ask → `--allow-tool write` plus the ticket's grants
@@ -1536,12 +1536,38 @@ starting where the text ends is appended, a repeated one only updates `done`, an
 at most `TASK_OUTPUT_KEEP_CHARS` (512 K characters), dropping the oldest lines past it. The view
 shows the command, the output (following the end until the user scrolls up), and the result.
 
+### System prompt and run context
+
+A run's instructions come in two parts (`prompts.ts`). The system prompt (`systemPrompt`) holds
+only what stays the same for a session's whole life: the role, the session block (`system.session`:
+project, ticket key and kind, working directory), lifecycle, files, turns, file links, the board
+and the capability sections (board changes, config, approvals, browser), plus project
+instructions. The run context (`runContext`) holds what changes from run to run: the ticket's
+context (`system.context`: status, title, branch, dependencies), the run kind's instructions
+(`system.plan`, `system.work`, `system.chat`, …), children, branches, the spec revision and recent
+Activity (`system.spec`) and the agent notes (`system.notes`). The orchestrator passes both on
+`RunRequest` (`systemPrompt`, `runContext`), and each driver puts the run context in front of the
+run's first user message as `<harness_run>…</harness_run>` (`withRunContext`). The board's
+transcript keeps the run prompt without it, and a message steered into a live run doesn't get it.
+
+Why: the system prompt sits ahead of the conversation history, so any change to it makes a
+resumed run rewrite the whole conversation into the prompt cache instead of reading it. Claude
+Code also records a conversation's system prompt on its first request and keeps it on `--resume`
+(since 2.1.265; earlier versions rebuilt it every request), so run-varying text there would leave a
+resumed run reading the instructions of the run that started the session. Runs that share a
+session are plan runs; work and chat runs on a ticket; and conductor and chat runs on a conductor
+ticket. Chat gets its ticket's tool set, so the capability sections use the session's tool kind
+(work or conductor) and stay identical across them. Review and complete runs are always fresh.
+The github-copilot driver has no system-prompt flag and sends both parts in the user message.
+
 ### Prompt overrides
 
 Every agent prompt is a template in `service/src/orchestrator/prompt-templates.ts` under a stable
-id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's system prompt (intro,
-context, lifecycle, the per-run-kind instructions, children, branches, files, spec, file links, board,
-board changes, config, approvals, browser) and `run.*` for the message that starts a run (work
+id (`PROMPT_IDS` in protocol.ts): `system.*` for the sections of a run's instructions (intro,
+session, context, lifecycle, the per-run-kind instructions, children, branches, files, spec, notes,
+file links, board, board changes, config, approvals, browser; context, the per-run-kind
+instructions, children, branches, spec and notes render in the run context, the rest in the system
+prompt) and `run.*` for the message that starts a run (work
 and conductor start, review, the three completions, conductor update, changes requested, reopen,
 triage). `system.complete` and `run.complete` were renamed `system.complete_merge` and
 `run.complete_merge` when the pull request and custom completions arrived (`RENAMED_PROMPT_IDS`):
