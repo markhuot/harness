@@ -214,6 +214,8 @@ export const Ticket: P.Ticket[] = [
   { ...plainTicket, id: "tkt_4", key: "SCRATCH-4", status: "in_progress", useWorktree: false, completionAction: "merge" },
   { ...plainTicket, id: "tkt_5", key: "SCRATCH-5", status: "review", completionAction: "custom" },
   { ...plainTicket, id: "tkt_6", key: "SCRATCH-6", status: "done", completionAction: "cleanup" },
+  { ...plainTicket, id: "tkt_7", key: "SCRATCH-7", agentNotes: "## Where\n- Swift types: `ios/HarnessKit/Sources/HarnessKit/Protocol`\n- Verify: `swift test`" },
+  { ...plainTicket, id: "tkt_8", key: "SCRATCH-8", agentNotes: null },
   // A reply half written on another device (Ticket.messageDraft).
   {
     ...plainTicket,

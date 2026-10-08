@@ -1,6 +1,7 @@
 // Ticket-lifecycle tools used by plan / work / review / complete / conductor / chat runs.
 
 import { ALLOWED_EXTENSIONS, MAX_ATTACHMENT_BYTES } from "../attachments";
+import type { ToolContext } from "./types";
 import { defineTool, schema } from "./util";
 
 /** What the spec tools say about images: the same files the attachments accept. */
@@ -17,6 +18,31 @@ export const postNote = defineTool<{ note: string }>({
   async run({ note }, ctx) {
     await ctx.ops.postNote(ctx, note);
     return "Note added to Activity.";
+  },
+});
+
+/** How long agent notes should stay (update_notes): a guideline the tool reports on, not a limit. */
+export const NOTES_GUIDELINE_CHARS = 8000;
+
+/** Added to block's and submit_for_review's result when the run hasn't written its notes. */
+export const NOTES_REMINDER =
+  "You didn't update your notes this run; call update_notes if the next run needs anything you found (where things live, gotchas, what you tried, how to verify, what's half done).";
+
+const withNotesReminder = (result: string, ctx: ToolContext) =>
+  ctx.ops.wroteNotes(ctx) ? result : `${result}\n\n${NOTES_REMINDER}`;
+
+export const updateNotes = defineTool<{ notes: string }>({
+  name: "update_notes",
+  description: `Replace this ticket's agent notes: a short markdown document you write for the agents who work on this ticket after you. Every later run on the ticket gets them in its prompt (and get_ticket returns them), and most runs start a fresh conversation, so the notes are how what you learned carries over. Put technical context there: where things live (files, functions, commands), gotchas, approaches tried and rejected and why, how to verify, and what's half done. Human-facing state (the plan, decisions, status, verification results) belongs in the spec, not here. Each call replaces the whole document, so rewrite it to stay current rather than appending a log, and drop what no longer applies. Keep it under about ${NOTES_GUIDELINE_CHARS} characters. Write them before you submit for review, block, or end a planning run.`,
+  inputSchema: schema(
+    { notes: { type: "string", description: "The complete notes in markdown, replacing the current ones. An empty string clears them." } },
+    ["notes"],
+  ),
+  async run({ notes }, ctx) {
+    const saved = await ctx.ops.updateNotes(ctx, notes);
+    if (!saved) return "Notes cleared.";
+    const over = saved.length > NOTES_GUIDELINE_CHARS;
+    return `Notes saved (${saved.length} characters).${over ? ` That's over the ${NOTES_GUIDELINE_CHARS}-character guideline: trim what the next run doesn't need (finished steps, history, anything in the spec) and call update_notes again.` : ""}`;
   },
 });
 
@@ -92,7 +118,7 @@ export const block = defineTool<{ question: string }>({
   ),
   async run({ question }, ctx) {
     await ctx.ops.block(ctx, question);
-    return "Ticket moved to blocked; the human will answer in a later message. Stop here.";
+    return withNotesReminder("Ticket moved to blocked; the human will answer in a later message. Stop here.", ctx);
   },
 });
 
@@ -151,7 +177,7 @@ const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip
   ),
   async run({ note, spec_is_up_to_date, skip_agent_review, skip_human_review }, ctx) {
     await ctx.ops.submitForReview(ctx, note, spec_is_up_to_date, { skipAgentReview: skip_agent_review, skipHumanReview: skip_human_review });
-    return "Ticket moved to review. Stop here.";
+    return withNotesReminder("Ticket moved to review. Stop here.", ctx);
   },
 });
 

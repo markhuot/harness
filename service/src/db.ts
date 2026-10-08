@@ -698,6 +698,11 @@ export const MIGRATIONS: string[] = [
   );
   CREATE UNIQUE INDEX devices_token ON devices(apns_token);
   `,
+  // 37: tickets.agent_notes: the ticket's agent notes (update_notes, DESIGN.md "Driver state"), a
+  //     markdown document agents write for the agents after them. NULL until one is written.
+  `
+  ALTER TABLE tickets ADD COLUMN agent_notes TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

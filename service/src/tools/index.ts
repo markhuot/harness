@@ -25,7 +25,7 @@ import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
-import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, reviewDecision, submitForReview, unblock, updateBranch, updateSpec } from "./ticket";
+import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, reviewDecision, submitForReview, unblock, updateBranch, updateNotes, updateSpec } from "./ticket";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
@@ -75,6 +75,7 @@ export const allTools: ToolDefinition[] = [
   readSpec,
   editSpec,
   updateSpec,
+  updateNotes,
   block,
   unblock,
   resumeWork,
@@ -117,15 +118,15 @@ export const allTools: ToolDefinition[] = [
 export const specTools: ToolDefinition[] = [readSpec, editSpec, updateSpec];
 
 const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
-  plan: { harness: [postNote, ...specTools, updateTicket, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
+  plan: { harness: [postNote, ...specTools, updateNotes, updateTicket, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
-    harness: [postNote, ...specTools, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postNote, ...specTools, updateNotes, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "full",
   },
   review: { harness: [postNote, readSpec, editSpec, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postNote, ...specTools, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
-    harness: [postNote, ...specTools, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postNote, ...specTools, updateNotes, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },

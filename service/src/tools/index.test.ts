@@ -50,14 +50,14 @@ const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermission
 describe("toolsForRun", () => {
   const harnessByKind: Record<RunKind, string[]> = {
     // update_ticket edits only the plan run's own ticket (the orchestrator checks).
-    plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    work: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    plan: ["post_note", ...SPEC, "update_notes", "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
+    work: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     review: ["post_note", "read_spec", "edit_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
     complete: ["post_note", ...SPEC, "record_pull_request", ...BOARD, ...CONFIG_READ],
-    conductor: ["post_note", ...SPEC, "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    conductor: ["post_note", ...SPEC, "update_notes", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
     // A chat (a message to a blocked, review or done task ticket) gets the work run's tools.
-    chat: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
+    chat: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   };
   const nativeByKind: Record<RunKind, string[]> = {
     plan: NATIVE_READ,

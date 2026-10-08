@@ -276,6 +276,13 @@ export interface Ticket {
    * a message from an app clears it. Optional so older services and fixtures type-check.
    */
   messageDraft?: MessageDraft | null;
+  /**
+   * The ticket's agent notes (DESIGN.md "Driver state"): a markdown document agents write with
+   * update_notes for the agents after them (where things live, gotchas, what's half done). Every
+   * run on the ticket reads them; the apps show them read-only. null until one is written.
+   * Optional so older services and fixtures type-check.
+   */
+  agentNotes?: string | null;
   /** Why the ticket is blocked (question for the human), when status = blocked */
   blockedReason: string | null;
   /**
@@ -905,6 +912,7 @@ export const PROMPT_IDS = [
   "system.files",
   "system.turns",
   "system.spec",
+  "system.notes",
   "system.file_links",
   "system.board",
   "system.board_changes",

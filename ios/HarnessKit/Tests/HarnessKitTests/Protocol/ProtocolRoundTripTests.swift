@@ -358,3 +358,29 @@ struct ActivityMetaDetailTests {
         #expect(try jsonEqual(Data(#"{"round":1,"commit":null}"#.utf8), JSONEncoder().encode(m)))
     }
 }
+
+@Suite("Ticket agent notes")
+struct TicketAgentNotesTests {
+    let ticket = Ticket(
+        id: "tkt_1", key: "ACME-1", projectId: "prj_1", title: "T", spec: "S", agentNotes: .value("## Where\n- `a.ts`"),
+        status: .inProgress, sessionId: "ses_1", driver: "claude-code", createdAt: 0, updatedAt: 0
+    )
+
+    @Test func decodesTheNotesWhenPresent() throws {
+        let data = try JSONEncoder().encode(ticket)
+        let decoded = try JSONDecoder().decode(Ticket.self, from: data)
+        #expect(decoded.agentNotes.optional == "## Where\n- `a.ts`")
+    }
+
+    /// Older services, and the board's list and search results, don't send the notes.
+    @Test func isNilWhenTheServiceDoesNotSendThem() throws {
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(ticket)) as? [String: Any])
+        #expect(object["agentNotes"] as? String == "## Where\n- `a.ts`")
+        object.removeValue(forKey: "agentNotes")
+        let decoded = try JSONDecoder().decode(Ticket.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(!decoded.agentNotes.isPresent)
+        #expect(decoded.agentNotes.optional == nil)
+        object["agentNotes"] = NSNull()
+        #expect(try JSONDecoder().decode(Ticket.self, from: JSONSerialization.data(withJSONObject: object)).agentNotes.optional == nil)
+    }
+}

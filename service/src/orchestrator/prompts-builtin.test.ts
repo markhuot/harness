@@ -216,6 +216,13 @@ describe("built-in system prompts", () => {
     expect(systemPrompt({ kind: "plan", project, ticket: ticket({ status: "planning" }), session, activity: recent })).toMatchSnapshot();
   });
 
+  const notes = "## Where\n* the toggle lives in `Header.tsx`";
+  for (const kind of ["work", "chat", "plan", "review", "complete"] as const) {
+    test(`${kind} with agent notes`, () => {
+      expect(systemPrompt({ kind, project, ticket: ticket({ agentNotes: notes, ...(kind === "plan" ? { status: "planning" } : {}) }), session })).toMatchSnapshot();
+    });
+  }
+
   test("chat without a ticket", () => {
     expect(systemPrompt({ kind: "chat", project, ticket: null, session: { ...session, cwd: "/tmp/x" } })).toMatchSnapshot();
   });

@@ -16,6 +16,10 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// The revision that was current when the human pressed Start (planning → work): the approved
     /// baseline the agent review diffs against. null until the ticket first starts.
     public var specBaselineRevision: Patch<Int>
+    /// Agent notes (DESIGN.md "Driver state and sessions"): markdown the ticket's agents keep for
+    /// the agents after them with update_notes. Read-only for the human; null when empty, absent
+    /// when the service doesn't send them (older services, the board's list results).
+    public var agentNotes: Patch<String>
     public var status: TicketStatus
     /// The session holding this ticket's transcript
     public var sessionId: String
@@ -121,7 +125,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
 
     public init(
         id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, specRevision: Int? = nil,
-        specBaselineRevision: Patch<Int> = .absent,
+        specBaselineRevision: Patch<Int> = .absent, agentNotes: Patch<String> = .absent,
         status: TicketStatus, sessionId: String, driver: String, parentId: String? = nil, childCount: Int? = nil,
         dependsOn: [String] = [], autoStart: Bool = false, agentReview: ReviewState = .pending,
         humanReview: ReviewState = .pending, externalRef: ExternalRef? = nil, workdir: String? = nil,
@@ -141,6 +145,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.spec = spec
         self.specRevision = specRevision
         self.specBaselineRevision = specBaselineRevision
+        self.agentNotes = agentNotes
         self.status = status
         self.sessionId = sessionId
         self.driver = driver

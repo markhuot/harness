@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
 import { fakeBrowser, fakeContext, fakeOps, fakeTicket } from "./fakes";
 import { allTools } from "./index";
+import { NOTES_GUIDELINE_CHARS, NOTES_REMINDER } from "./ticket";
 import type { ToolResult } from "./types";
 import { RemoteIdError } from "./util";
 
@@ -151,11 +152,40 @@ describe("ticket tools → HarnessOps", () => {
     const b = await tool("block").execute({ question: "Which DB?" }, fakeContext({ ops }));
     const s = await tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: true }, fakeContext({ ops }));
     expect(text(b)).toContain("Stop here");
-    expect(text(s)).toBe("Ticket moved to review. Stop here.");
+    expect(text(s)).toStartWith("Ticket moved to review. Stop here.");
     expect(ops.calls.map((c) => [c.method, c.args[0]])).toEqual([
       ["block", "Which DB?"],
       ["submitForReview", "done"],
     ]);
+  });
+
+  test("block and submit_for_review remind the agent about its notes only when the run didn't write them", async () => {
+    const without = fakeOps();
+    const b = await tool("block").execute({ question: "Which DB?" }, fakeContext({ ops: without }));
+    const s = await tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: true }, fakeContext({ ops: without }));
+    expect(text(b)).toContain(NOTES_REMINDER);
+    expect(text(s)).toBe(`Ticket moved to review. Stop here.\n\n${NOTES_REMINDER}`);
+
+    const wrote = fakeOps({ wroteNotes: () => true });
+    const b2 = await tool("block").execute({ question: "Which DB?" }, fakeContext({ ops: wrote }));
+    const s2 = await tool("submit_for_review").execute({ note: "done", spec_is_up_to_date: true }, fakeContext({ ops: wrote }));
+    expect(text(b2)).not.toContain(NOTES_REMINDER);
+    expect(text(s2)).toBe("Ticket moved to review. Stop here.");
+  });
+
+  test("update_notes replaces the notes, clears them, and flags (without rejecting) notes over the guideline", async () => {
+    const ops = fakeOps();
+    const saved = await tool("update_notes").execute({ notes: "  ## Where\n- service/src/x.ts  " }, fakeContext({ ops }));
+    expect(ops.calls).toEqual([{ method: "updateNotes", args: ["  ## Where\n- service/src/x.ts  "] }]);
+    expect(text(saved)).toBe(`Notes saved (${"## Where\n- service/src/x.ts".length} characters).`);
+
+    expect(text(await tool("update_notes").execute({ notes: "   " }, fakeContext({ ops })))).toBe("Notes cleared.");
+
+    const long = "x".repeat(NOTES_GUIDELINE_CHARS + 1);
+    const over = text(await tool("update_notes").execute({ notes: long }, fakeContext({ ops })));
+    expect(over).toContain(`Notes saved (${long.length} characters)`);
+    expect(over).toContain(String(NOTES_GUIDELINE_CHARS));
+    expect(ops.calls.at(-1)).toEqual({ method: "updateNotes", args: [long] });
   });
 
   test("unblock passes its note along and tells the model to carry on, not stop", async () => {

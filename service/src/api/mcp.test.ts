@@ -109,7 +109,7 @@ describe("tools", () => {
   test("tools/list exposes the core tools in full, tool_search, and every other tool as a stub, with read-only hints for harness tools", async () => {
     const r = await rpc("tools/list");
     const tools = r.result.tools as any[];
-    const core = ["post_note", "read_spec", "edit_spec", "update_spec", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt", "writer"];
+    const core = ["post_note", "read_spec", "edit_spec", "update_spec", "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt", "writer"];
     const stubbed = run.tools.map((t) => t.name).filter((n) => !core.includes(n));
     expect(tools.map((t) => t.name)).toEqual([...core, "tool_search", ...stubbed]);
     const submit = tools.find((t) => t.name === "submit_for_review");
@@ -174,13 +174,13 @@ describe("stubs and tool_search", () => {
   test("tools/list for each run kind: core tools in full, tool_search, every other tool in the run as a stub", async () => {
     const SPEC = ["read_spec", "edit_spec", "update_spec"];
     const core: Record<RunKind, string[]> = {
-      plan: ["post_note", ...SPEC, "permission_prompt"],
-      work: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
+      plan: ["post_note", ...SPEC, "update_notes", "permission_prompt"],
+      work: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
       review: ["post_note", "read_spec", "edit_spec", "review_decision", "permission_prompt"],
       complete: ["post_note", ...SPEC, "record_pull_request", "permission_prompt"],
-      conductor: ["post_note", ...SPEC, "unblock", "resume_work", "submit_for_review", "permission_prompt"],
+      conductor: ["post_note", ...SPEC, "update_notes", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
       triage: ["dispatch_ticket", "decline_work", "permission_prompt"],
-      chat: ["post_note", ...SPEC, "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
+      chat: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
     };
     for (const kind of Object.keys(core) as RunKind[]) {
       const allowed = toolsForRun(kind, claudeCode);

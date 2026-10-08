@@ -80,6 +80,8 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
   };
   const defaults: Required<OpsImpl> = {
     postNote: async () => {},
+    updateNotes: async (_ctx: ToolContext, notes: string) => notes.trim(),
+    wroteNotes: () => false,
     statusLine: async () => {},
     readSpec: async () => "Revision 1\n   1\t",
     editSpec: async () => "Spec updated to revision 2.",
@@ -167,6 +169,11 @@ export function fakeOps(overrides: OpsImpl = {}): HarnessOps & { calls: Recorded
   const ops = {} as HarnessOps & { calls: RecordedCall[]; children: Ticket[] };
   for (const name of Object.keys(defaults) as (keyof HarnessOps)[]) {
     const impl = overrides[name] ?? defaults[name];
+    // A synchronous query, not an action: not recorded.
+    if (name === "wroteNotes") {
+      (ops as any)[name] = impl;
+      continue;
+    }
     (ops as any)[name] = async (ctx: ToolContext, ...args: unknown[]) => {
       calls.push({ method: name, args });
       return impl(ctx, ...args);

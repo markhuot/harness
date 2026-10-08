@@ -2108,3 +2108,54 @@ describe("@-mentioned files", () => {
     expect(() => h.orch.ticketFiles("NOPE-1", "")).toThrow(HarnessError);
   });
 });
+
+describe("agent notes", () => {
+  test("update_notes replaces the ticket's notes without an Activity entry; the next run's prompt and get_ticket carry them, list_tickets leaves them out", async () => {
+    const h = setup();
+    const wrote: boolean[] = [];
+    const seen: { get?: unknown; list?: unknown } = {};
+    h.driver.script = async function* (req) {
+      const ctx = req.toolContext;
+      if (req.kind === "work") {
+        wrote.push(ctx.ops.wroteNotes(ctx));
+        await ctx.ops.updateNotes(ctx, "first draft");
+        await ctx.ops.updateNotes(ctx, "  ## Where\n- src/x.ts {{baseBranch}}  ");
+        wrote.push(ctx.ops.wroteNotes(ctx));
+        await ctx.ops.submitForReview(ctx, "done", true, { skipAgentReview: true });
+      } else if (req.kind === "chat") {
+        wrote.push(ctx.ops.wroteNotes(ctx));
+        seen.get = (await ctx.ops.getTicket(ctx, ctx.ticket!.key)).ticket;
+        seen.list = (await ctx.ops.listTickets(ctx, {})).tickets[0];
+        yield { type: "text", text: "ok" };
+      }
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.agentNotes).toBe("## Where\n- src/x.ts {{baseBranch}}");
+    expect(h.driver.calls[0]!.systemPrompt).toContain("This ticket has no agent notes yet.");
+
+    await h.orch.sendMessage(t.key, "what did you find?");
+    await h.orch.idle();
+    const chat = h.driver.calls.find((c) => c.kind === "chat")!;
+    expect(chat.systemPrompt).toContain("<agent-notes>\n## Where\n- src/x.ts {{baseBranch}}\n</agent-notes>");
+    expect(seen.get).toMatchObject({ key: t.key, agentNotes: "## Where\n- src/x.ts {{baseBranch}}" });
+    expect(seen.list).not.toHaveProperty("agentNotes");
+    // wroteNotes is per run: false before the work run wrote, true after, false again in the chat.
+    expect(wrote).toEqual([false, true, false]);
+    expect(h.orch.activity(t.key).filter((a) => a.body.includes("src/x.ts"))).toEqual([]);
+  });
+
+  test("empty notes clear them", async () => {
+    const h = setup();
+    h.driver.script = async function* (req) {
+      const ctx = req.toolContext;
+      if (req.kind !== "work") return;
+      await ctx.ops.updateNotes(ctx, "something");
+      expect(await ctx.ops.updateNotes(ctx, "   ")).toBe("");
+      await ctx.ops.submitForReview(ctx, "done", true, { skipAgentReview: true });
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.agentNotes).toBeNull();
+  });
+});

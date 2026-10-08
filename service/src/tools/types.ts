@@ -251,6 +251,13 @@ export interface HarnessOps {
   /** A short Activity note on the ticket (post_note). */
   postNote(ctx: ToolContext, note: string): Promise<void>;
   /**
+   * Replace the ticket's agent notes (update_notes); returns what was saved, trimmed ("" clears
+   * them). Plan, work, chat and conductor runs.
+   */
+  updateNotes(ctx: ToolContext, notes: string): Promise<string>;
+  /** Whether this run has called update_notes: block and submit_for_review remind it when not. */
+  wroteNotes(ctx: ToolContext): boolean;
+  /**
    * A status line in the ticket's transcript, for the human following along (a browser_run job's
    * log). Not in Activity, and the agent doesn't see it.
    */

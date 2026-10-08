@@ -43,6 +43,7 @@
       "system.files",
       "system.turns",
       "system.spec",
+      "system.notes",
       "system.file_links",
       "system.board",
       "system.board_changes",

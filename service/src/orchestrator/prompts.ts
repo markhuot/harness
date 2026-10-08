@@ -398,6 +398,29 @@ function specSection(info: PromptInfo, browser: boolean, o: PromptOverrides | nu
   );
 }
 
+/**
+ * The ticket's agent notes (update_notes), for every ticket run; the runs that write them
+ * (tools/index.ts) also learn when the next run starts fresh and where past context lives.
+ */
+function notesSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
+  const { kind, ticket } = info;
+  const canWrite = kind === "plan" || kind === "work" || kind === "conductor" || kind === "chat";
+  const git = !!ticket?.branch;
+  const notes = ticket?.agentNotes?.trim() ?? "";
+  if (!canWrite && !notes) return "";
+  return renderPrompt(
+    "system.notes",
+    {
+      notes,
+      canWrite,
+      plan: kind === "plan",
+      git,
+      baseBranch: git && ticket ? branchesOf(ticket, info.project, info.branches).base : "",
+    },
+    o,
+  );
+}
+
 export function systemPrompt(info: PromptInfo): string {
   const { kind, ticket } = info;
   const o = info.overrides;
@@ -423,6 +446,7 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && filesSection(info, o),
     turnsSection(info, o),
     ticketRun && specSection(info, browser, o),
+    ticketRun && notesSection(info, o),
     // harness://file links (shared/src/fileLinks.ts) open the file pane from any message, note or spec.
     ticketRun && renderPrompt("system.file_links", {}, o),
     // Read-only board tools, given to every run kind (tools/board.ts).

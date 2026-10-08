@@ -244,6 +244,8 @@ interface ActiveRun {
   offeredGrants: number[];
   /** The agent recorded a pull request during this run (record_pull_request) */
   pullRequest?: boolean;
+  /** The agent wrote the ticket's notes during this run (update_notes) */
+  wroteNotes?: boolean;
   /** Human messages sent while the run is going (steering); null when the run can't take them */
   input: RunInput | null;
   /** The run's working directory, for @-mentions in steered messages */
@@ -2413,6 +2415,22 @@ export class Orchestrator {
     this.addActivityLine(t, "note", "agent", note);
   }
 
+  /** update_notes: the notes are for later agents, so no Activity entry (the human reads them on Details). */
+  async updateNotes(ctx: ToolContext, notes: string): Promise<string> {
+    const t = this.ctxTicket(ctx);
+    if (typeof notes !== "string") throw new Error("notes must be text");
+    const text = notes.trim();
+    const updated = this.store.tickets.update(t.id, { agentNotes: text || null })!;
+    this.bus.emit({ kind: "ticket.upserted", ticket: updated });
+    const active = this.ctxActive(ctx);
+    if (active) active.wroteNotes = true;
+    return text;
+  }
+
+  wroteNotes(ctx: ToolContext): boolean {
+    return !!this.ctxActive(ctx)?.wroteNotes;
+  }
+
   async readSpec(ctx: ToolContext, revision?: number): Promise<string> {
     const t = this.ctxTicket(ctx);
     const current = t.specRevision ?? 1;
@@ -2665,8 +2683,10 @@ ${numberLines(r.body)}`;
 
   // --- board (read): every run kind; never changes state ---
 
-  private boardTicket(t: Ticket): BoardTicket {
-    return { ...t, projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
+  /** A ticket as board tools return it; lists leave the agent notes out (get_ticket has them). */
+  private boardTicket(t: Ticket, opts: { notes?: boolean } = {}): BoardTicket {
+    const { agentNotes, ...rest } = t;
+    return { ...rest, ...(opts.notes === false ? {} : { agentNotes: agentNotes ?? null }), projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
   }
 
   private boardProject(key: string): Project {
@@ -2704,7 +2724,7 @@ ${numberLines(r.body)}`;
       .sort((a, b) => col(a.t) - col(b.t) || (a.t.status === "done" ? (b.t.completedAt ?? b.t.updatedAt) - (a.t.completedAt ?? a.t.updatedAt) : 0) || a.i - b.i)
       .map(({ t }) => t);
     const limit = clampLimit(filter.limit, DEFAULT_PAGE_LIMIT);
-    return { tickets: sorted.slice(0, limit).map((t) => this.boardTicket(t)), total: sorted.length, scope };
+    return { tickets: sorted.slice(0, limit).map((t) => this.boardTicket(t, { notes: false })), total: sorted.length, scope };
   }
 
   private boardRelated(t: Ticket): BoardRelatedTicket {
@@ -2790,7 +2810,7 @@ ${numberLines(r.body)}`;
     return {
       hits: page.tickets.map((t) => {
         const latest = this.latestNote(t)?.body;
-        return { ticket: this.boardTicket(t), snippet: searchSnippet([t.title, t.spec, latest], input.query) };
+        return { ticket: this.boardTicket(t, { notes: false }), snippet: searchSnippet([t.title, t.spec, latest], input.query) };
       }),
       nextCursor: page.nextCursor,
       total: page.total,
@@ -4644,6 +4664,8 @@ ${numberLines(r.body)}`;
   private buildOps(): HarnessOps {
     return {
       postNote: (c, n) => this.postNote(c, n),
+      updateNotes: (c, n) => this.updateNotes(c, n),
+      wroteNotes: (c) => this.wroteNotes(c),
       statusLine: async (c, text) => void this.appendStatus(c.session.id, c.runId, text),
       readSpec: (c, r) => this.readSpec(c, r),
       editSpec: (c, i) => this.editSpec(c, i),

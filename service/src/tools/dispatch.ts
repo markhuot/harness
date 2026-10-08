@@ -12,6 +12,7 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "read_spec",
   "edit_spec",
   "update_spec",
+  "update_notes",
   "submit_for_review",
   "block",
   "unblock",

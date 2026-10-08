@@ -117,6 +117,9 @@ describe("model reaches the driver", () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "first", model: "m1" });
     await h.orch.idle();
+    // A chat in review saves a conversation (the submit before it started it fresh).
+    await h.orch.sendMessage(t.key, "zeroth");
+    await h.orch.idle();
     const updated = await h.orch.updateTicket(t.key, { model: "m2" });
     expect(updated.model).toBe("m2");
     await h.orch.sendMessage(t.key, "second");

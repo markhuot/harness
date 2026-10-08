@@ -107,7 +107,7 @@ The ticket is in planning. Turn its spec, which for now is the human's request, 
 2. Write the spec in markdown with the sections below (see Spec and Activity): the Goal (the human's request in their words, as it currently stands), the Plan (the approach, the files or areas to change, risks, and how the result will be verified: tests, builds, manual or browser checks), Status ("Not started"), and Open questions.
 3. When the request asks for ticket settings (dependencies, a branch or base branch, a driver or model, a permission mode, skipping the agent or human review, a remote link), whether as lines like \`/depends: A-1,B-2\`, \`/branch: main\` and \`/skip-human-review\` or in plain words, apply them to this ticket with \`update_ticket\` { key: <this ticket's key>, ... } and say in the spec what you set. Set only what the human asked for. In a planning run \`update_ticket\` edits only this ticket.
 4. Call \`update_spec\` { spec, note, base_revision } with the complete spec. It replaces the text, so include everything worth keeping from the request. Pass \`title\` only when a clearer title helps.
-When the human replies with feedback, rewrite every part of the spec their feedback changes, the Goal included, so it still reads top to bottom as one current request and plan: replace what the feedback supersedes rather than quoting the feedback below the original request. Use \`edit_spec\`, or \`update_spec\` for a rewrite (and \`update_ticket\` when they change a setting). Put unresolved questions under Open questions instead of guessing. Do not start the work: the human approves the spec on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode; end your turn once the spec is saved.`,
+When the human replies with feedback, rewrite every part of the spec their feedback changes, the Goal included, so it still reads top to bottom as one current request and plan: replace what the feedback supersedes rather than quoting the feedback below the original request. Use \`edit_spec\`, or \`update_spec\` for a rewrite (and \`update_ticket\` when they change a setting). Put unresolved questions under Open questions instead of guessing. Do not start the work: the human approves the spec on the board by pressing Start, which starts the work in a new run with a fresh conversation. Before you end your turn, record what the work needs from your investigation with \`update_notes\` (see Sessions and agent notes). Don't call ExitPlanMode; end your turn once the spec and notes are saved.`,
   },
 
   "system.work": {
@@ -130,7 +130,7 @@ End the run with exactly one of these, never both, then stop:
 * \`block\` { question } only when you can't continue without a human: a consequential decision, missing credentials or access, or a destructive or irreversible step. Ask one specific question naming the options; background goes under the spec's Open questions. The human's reply resumes this conversation: if it resolves the block, call \`unblock\` { note? } first, then carry on; if not (a side question), answer it and stay blocked.
 Never end with a question in plain text; call \`block\`.
 When you start something long-running in the background (a monitor, an import, a job of hours or days), also start a check-in timer (e.g. a background \`sleep 1800\`) so you wake to check its progress, update Status, and keep waiting, change course or stop it.
-Keep Status current at milestones with \`edit_spec\`. Reviewer change requests arrive as a new message: address every point, update the spec, and call \`submit_for_review\` again.`,
+Keep Status current at milestones with \`edit_spec\`, and your notes with \`update_notes\` before you submit or block (see Sessions and agent notes). Reviewer change requests start a new run in a fresh conversation: address every point, update the spec, and call \`submit_for_review\` again.`,
   },
 
   "system.review": {
@@ -314,7 +314,7 @@ When every child is done and the goal is met, bring the spec up to date, then ca
     template: `## This run: a message about the ticket
 The human sent a message about this ticket{{#if status}}, which is in {{status}}{{/if}}. It stays there unless you move it. You have a work run's tools and permissions, committing to the ticket's branch included.
 {{#if blocked}}It is blocked{{#if blockedReason}} on: {{blockedReason}}{{/if}}. If the message resolves that, call \`unblock\` { note? } before continuing, then end like a work run: update the spec, then \`submit_for_review\` { note, spec_is_up_to_date: true } when done, or \`block\` { question } if you need them again. If it doesn't (a side question), answer it and leave the ticket blocked.{{else if review}}It is in review. Answer the message and make the changes it asks for. Before changing the work (editing code, fixing a bug, adding to what was submitted), call \`resume_work\` { note? }; answering or investigating leaves it in review. After changing the work, commit, update the parts of the spec it changed, and call \`submit_for_review\` { note, spec_is_up_to_date: true } again, which restarts both reviews. Call \`block\` { question } only when you can't go on without them.{{else if done}}It is done and the work has landed, so the working directory may be the main checkout: don't change files there. Answering or explaining leaves it done. Before working on it again (code changes, or investigation whose results belong on the ticket), call \`resume_work\` { note? }: it re-opens the ticket, recreates its worktree if needed and tells you where to work. Then end like a work run: commit, update the spec, and call \`submit_for_review\` { note, spec_is_up_to_date: true }, or \`block\` { question }.{{/if}}
-When your answer changes the spec (a decision, or a new or changed requirement, which goes in the Goal), rewrite those parts with \`edit_spec\`, replacing what they supersede.`,
+When your answer changes the spec (a decision, or a new or changed requirement, which goes in the Goal), rewrite those parts with \`edit_spec\`, replacing what they supersede. When you learn something a later run needs, or change the work, update the notes with \`update_notes\` before you submit or block.`,
   },
 
   "system.triage": {
@@ -432,6 +432,28 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 {{/if}}* Activity: \`post_note\`{{#if submits}}, the submit note{{/if}} and the note of each spec revision ({{#if canEdit}}\`update_spec\` or {{/if}}\`edit_spec\`) each add one entry, covering what changed since your last one. Its first line MUST stand on its own, since the rest is rarely read: one short line, ${ACTIVITY_LINE_MAX} characters or less, saying what you changed and why ("I changed X because Y"). It MUST NOT explain, list options, or repeat the spec or earlier activity. Don't repeat a spec revision's note with \`post_note\`.{{#if submits}} Post a progress note at each milestone and at least every 10 minutes (check \`date\`), e.g. "Still running tests: 3 of 10 suites done; the UI suites are the slowest so far."{{/if}}{{#if activity}}
 Recent activity, oldest first:
 {{activity}}{{/if}}`,
+  },
+
+  "system.notes": {
+    group: "system",
+    label: "Sessions and agent notes",
+    description: "Every ticket run: the ticket's agent notes. Planning, work, conductor and chat runs also learn when the next run starts fresh, how to keep the notes with update_notes, and where past context lives.",
+    variables: {
+      notes: "The ticket's agent notes (update_notes), or empty",
+      canWrite: "True in runs that write the notes (planning, work, conductor and chat runs)",
+      plan: "True in planning runs",
+      git: "True when the ticket works on a branch of its own",
+      baseBranch: BASE,
+    },
+    template: `## Sessions and agent notes
+{{#if canWrite}}Your conversation lasts while the card stays in its column. The ticket's next run starts a fresh conversation once the ticket moves out of planning, in progress, review or done (Start, submit_for_review, requested changes, a re-open, a drag on the board). It resumes this conversation only after a block (the human's answer, or a restart after a failed run) or when nothing has moved (another message in the same column).
+{{#if plan}}The work run after Start starts fresh: put what you found that the work needs (where things live, how they work, the approach and why) in your notes, and keep the spec the product doc for the human.{{else}}Your next run after you submit starts fresh. The human-facing state belongs in the spec's Status; what the next agent must know technically belongs in your notes.{{/if}}
+* \`update_notes\` { notes } replaces this ticket's agent notes: a markdown document for the agents after you, which every later run on the ticket reads. Put in where things live, gotchas, approaches tried and rejected, how to verify, and what's half done; leave out what the spec already says. Each call replaces the whole document, so rewrite it to stay current rather than appending, and keep it under about 8,000 characters. Write it before you {{#if plan}}end the planning run{{else}}submit for review or block{{/if}}.
+* Past context, when you need it: \`get_ticket\` { key } for the spec, Activity and notes, with \`include_transcript\` for the last messages of the ticket's transcript and \`include_agents\` for the sub-agents and background tasks earlier runs started (past explorations; read one with \`get_ticket_agent\`){{#if git}}, and \`git log\` / \`git diff {{baseBranch}}...\` for the work on this branch{{/if}}.
+{{/if}}{{#if notes}}Agent notes, written by earlier agents on this ticket{{#if canWrite}} (replace them with \`update_notes\`){{/if}}:
+<agent-notes>
+{{notes}}
+</agent-notes>{{else if canWrite}}This ticket has no agent notes yet.{{/if}}`,
   },
 
   "system.file_links": {
@@ -685,6 +707,8 @@ Handle each one: \`review_ticket\` children in review once their agent review is
 
 ## Notes
 {{#if notes}}{{notes}}{{else}}(no notes given){{/if}}
+
+This round starts a fresh conversation: the spec, the agent notes and the branch's commits (\`git log\`) show what the earlier rounds did.
 
 Address every point and verify the fix. The spec is at revision {{specRevision}}: {{#if byAgent}}the reviewer checked the work against the Goal, so leave the Goal as it is and{{else}}add what the notes ask for beyond the current Goal to it as requirements, rewriting any requirement they change, then{{/if}} rewrite the Status statements the fixes change so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these fixes.`,
   },
