@@ -451,15 +451,20 @@ Opening a parked one mounts it fresh at its saved path, and the live sheet used 
 parks.
 
 Docked tickets show as custom minimized cards rather than system menus (App/DockedTickets.swift).
-A `DockedCard` is a status dot (`StatusDot`, the board's colors: green done, red blocked; a pencil
-for New session), the ref whole and the title truncated into the rest (`DockedTicketLabel`), and an
-✕ that closes just that ticket; a tap anywhere else opens it. It's one accessibility element,
+A `DockedCard` is its own fully rounded glass capsule, 64pt tall like the single docked sheet
+(`DockedCardMetrics`, 8pt between cards), with a status dot (`StatusDot`, the board's colors: green
+done, red blocked; a pencil for New session), the ref whole and the title truncated into the rest
+(`DockedTicketLabel`), and an ✕ that closes just that ticket; a tap anywhere else opens it. It's one accessibility element,
 "<ref>, <title>, docked" (`ticket-dock`), with a Close action, and its ✕ is "Close <key>"
 (`ticket-dock-close`). `DockCards.split` (HarnessKit) decides how many cards show: up to
 `phoneVisible` (2) or `padVisible` (5), the most recent at the bottom, then a `DockedMoreCard`
 ("N more…" and a stack icon, `ticket-dock-more`, "<n> more docked tickets") on top counting the
-rest. It expands into `DockedCardList`, every docked ticket as a card, most recent first, scrolling
-past the height it's given, with a header to collapse it. Switching while a ticket is up is a
+rest, in the same glass capsule. It expands into `DockedCardList`: the docked tickets as the same
+glass cards, the most recent at the bottom, scrolled to the bottom and scrolling up past the height
+it's given, under a small glass capsule that collapses it. The list has no background of its own;
+it sits on a `DockedBackdrop`, a radial progressive blur (a material masked by a radial gradient,
+plus a light tint of the palette's background) rising out of the bottom on iPhone and the
+bottom-right corner on iPad. Switching while a ticket is up is a
 long press on its title (`TicketDetailHero`'s `.dockedTicketsMenu`, while `\.inTicketSheet` and more
 than one is docked): a system context menu of the other docked tickets (`DockedTicketsMenuItems`:
 the first `Router.shownDockCount`, 10, then "N more").
@@ -481,15 +486,19 @@ tickets swaps the content in place without presenting it again. Swiping the shee
 dismissing it) calls `dismissSheet()`; with tickets left, the generation goes up and a new system
 sheet comes up docked with the next. TicketSheetHost presents pickers, the watcher form and covers
 over itself; the board's bottom bar and `DockClearance` make room for the docked sheet. Docked, the
-sheet (`TicketDock`) shows the cards stacked, two and then "N more…", and its dock detent's height
-follows the rows (`TicketDock.height(count:)`: 56pt a row plus 8), so the sheet grows and
-`DockClearance`, measured from the docked sheet's top, lifts the board's bottom bar with it. "N
-more…" stands the sheet at `.large` as the `DockedCardList` (`listing`, which the detent binding
-reports as `.large` until it's let down to the cards). A horizontal swipe on the docked sheet moves
-to the next or previous ticket: UIKit swipe recognizers on the sheet's container beside the flick
-pan (`SheetFlickTracker`), enabled only while docked with more than one; a SwiftUI gesture on the
-cards kept the sheet's own pan from taking a swipe down. VoiceOver has Next and Previous docked
-ticket actions on the dock. At regular width SceneChrome
+sheet (`TicketDock`) is the top ticket's card on the system sheet's own glass, 64pt as the single
+dock always was. The other docked tickets stack above it in the main window (`DockedCardsAbove`,
+an overlay on the compact sections): glass capsules as wide as the docked sheet and 8pt above it,
+laid out from where the sheet floats (`DockedSheetInset`), up to two cards in all with the sheet's,
+then "N more…" on top. `DockClearance` adds their rows to the sheet's clearance, so the board's
+bottom bar rides above the whole stack. The cards aren't drawn inside the sheet because the system
+sheet keeps its glass rim and shadow even with `presentationBackground(.clear)`, which drew one
+outline around them all. "N more…" expands every ticket but the top into the `DockedCardList` over
+the board, on the backdrop, the sheet's card staying under it; a tap on the backdrop collapses it.
+A horizontal swipe on the docked sheet moves to the next or previous ticket: UIKit swipe
+recognizers on the sheet's container beside the flick pan (`SheetFlickTracker`), enabled only
+while docked with more than one; a SwiftUI gesture on the card kept the sheet's own pan from taking
+a swipe down. VoiceOver has Next and Previous docked ticket actions on the dock. At regular width SceneChrome
 presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell
 overlays `TicketPanelHost` (App/TicketSidePanel.swift), and the root presents `sheet` and the
 cover as usual. The host puts the content in `TicketSidePanel`, which slides in from the
@@ -506,7 +515,8 @@ or Discard for a typed draft as Cancel does and close an empty one at once; with
 registered they just dismiss. Docking, pop-out and a card's ✕ don't ask, and the draft is
 saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it.
 Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
-and every docked ticket waits as a floating `DockedCard` in `DockedCardStack`, in the board's
+and every docked ticket waits as a glass-capsule `DockedCard` in `DockedCardStack`, the same
+cards as the iPhone's, in the board's
 bottom-right corner inside the safe area, stacking upward with the newest at the bottom. While the
 panel is open the other docked tickets' cards stay there, their trailing edge on the panel's
 leading edge (`TicketSidePanel(onWidth:)` reports it as it resizes). The stack keeps to the board's
@@ -518,7 +528,8 @@ the title's long press still lists them). Each card is about 320pt wide (`Docked
 narrower in a narrow column); a tap opens that ticket in the panel and its ✕ closes just that one.
 At most five show, fewer when the height doesn't fit them (`DockCards.split`'s `fitting`), then
 "N more…", which expands the `DockedCardList` over the corner, as tall as its cards up to the
-window's height. The stack's height goes to `DockedSheetInset.cards`, which `DockClearance` adds at
+window's height, on a `DockedBackdrop` out of the column's bottom-right corner (a tap on it
+collapses the list). The stack's height goes to `DockedSheetInset.cards`, which `DockClearance` adds at
 the bottom of the desktop's sections so their last cards scroll clear of it. Each sheet has its own `TicketPanelCloser`
 (`TicketPanelClosers`), so a hidden New session never takes over the ✕ of the ticket on top. The
 composer measures its bottom gap from the screen's edge in the iPhone sheet (`\.concentricBottomGap`
