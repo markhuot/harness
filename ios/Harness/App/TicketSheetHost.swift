@@ -52,9 +52,14 @@ struct TicketSheetHost: View {
                 // A docked New session mustn't keep the keyboard up over the board.
                 if docked { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
-            // Where the system floats the docked sheet, for the sections and the board's bar.
+            // Where the system floats the docked sheet, for the sections and the board's bar. Only
+            // where it rests: a sheet under a finger (from `.large`, or the dock dragged up or
+            // away) would move the board's bar and clearance with it every frame. Let go, the
+            // system lays it out where it's headed.
             .onGeometryChange(for: CGRect?.self) { g in docked ? g.frame(in: .global) : nil } action: { f in
-                if let f { dockInset.sides = f.minX; dockInset.top = f.minY }
+                guard let f, !flick.isDragging else { return }
+                dockInset.sides = f.minX
+                dockInset.top = f.minY
             }
         }
         .background { SheetFlickTracker(flick: flick) }
@@ -81,9 +86,11 @@ struct TicketSheetHost: View {
     /// rather than growing it to `.large` on the way out.
     ///
     /// The system only ever settles a drag from `.large` on the dock, however hard it was flung, so
-    /// a drag that let go moving down fast (SheetFlick) sends the sheet away instead. It's decided a
-    /// turn later, once the drag's end has been seen whichever recognizer UIKit told first; one that
-    /// slowed or lingered near the bottom stays docked.
+    /// a drag that let go moving down fast (SheetFlick) sends the sheet away instead; one that
+    /// slowed or lingered near the bottom docks. It's decided once the drag's end has been seen,
+    /// whichever recognizer UIKit told first, and a flung sheet goes straight from presented to
+    /// gone: never docked for a frame, which would have the board make room for the dock and give
+    /// it back mid-swipe. Going away, it keeps the dock detent it settled on.
     private var detent: Binding<PresentationDetent> {
         Binding(get: {
                     switch router.ticketSheetState {
@@ -94,13 +101,18 @@ struct TicketSheetHost: View {
                 },
                 set: { new in
                     guard new == TicketDock.detent else { return router.restoreDock() }
-                    let fromLarge = router.ticketSheetState == .presented
-                    router.dockSheet()
-                    guard fromLarge else { return }
-                    let settled = Date()
-                    DispatchQueue.main.async {
-                        if flick.flung(at: settled), router.ticketSheetState == .docked { router.dismissSheet() }
+                    guard router.ticketSheetState == .presented else { return router.dockSheet() }
+                    flick.settled(at: Date()) { outcome in
+                        guard router.ticketSheetState == .presented else { return }
+                        switch outcome {
+                        case .dock: router.dockSheet()
+                        case .dismiss:
+                            lastDocked = true
+                            router.dismissSheet()
+                        }
                     }
+                    // A release that never comes (a recognizer UIKit never told) docks a turn later.
+                    DispatchQueue.main.async { flick.flush() }
                 })
     }
 
@@ -169,25 +181,6 @@ extension EnvironmentValues {
     var top: CGFloat?
 }
 
-/// How the last drag on the ticket sheet let go. SwiftUI's detent selection says where a drag
-/// settled but not how fast it was moving, so SheetFlickTracker reads that from a pan of its own.
-final class SheetFlick {
-    /// Downward speed at release (pt/s) past which a drag from `.large` sends the sheet away. A
-    /// deliberate swipe lets go well above it; one that slows toward the bottom lets go well below.
-    static let speed: CGFloat = 1000
-    /// How far apart letting go and the sheet settling may be and still be the same drag.
-    static let window: TimeInterval = 0.3
-
-    var velocity: CGFloat = 0
-    var releasedAt: Date?
-
-    /// Whether the drag that settled the sheet at `settled` let go moving down past `speed`.
-    func flung(at settled: Date) -> Bool {
-        guard let releasedAt, abs(settled.timeIntervalSince(releasedAt)) < Self.window else { return false }
-        return velocity > Self.speed
-    }
-}
-
 /// Watches drags on the ticket sheet alongside the system's own, without taking any touches: a pan
 /// on the sheet's container view (which holds the grabber too) that recognizes with everything.
 /// Touches that pass through to the board behind never reach it.
@@ -239,11 +232,9 @@ private struct SheetFlickTracker: UIViewRepresentable {
 
         @objc private func panned(_ pan: UIPanGestureRecognizer) {
             switch pan.state {
-            case .began: flick.releasedAt = nil
-            case .ended:
-                flick.velocity = pan.velocity(in: pan.view).y
-                flick.releasedAt = Date()
-            case .cancelled, .failed: flick.releasedAt = nil
+            case .began: flick.began()
+            case .ended: flick.ended(velocity: pan.velocity(in: pan.view).y, at: Date())
+            case .cancelled, .failed: flick.cancelled()
             default: break
             }
         }
