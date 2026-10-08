@@ -9,6 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The Agents & tasks tab on iPhone and iPad has the same filter as the Mac: Agents and Tasks
+  toggles pinned above the list, each with its count. One pressed shows only that kind, and both or
+  neither show everything. The filter stays put while you open a row and come back, and with one
+  kind filtered and none of it present the list says "No sub-agents yet" or "No background tasks
+  yet".
+- sim-check gives the background-task ticket two sub-agents as well and taps through the filter on
+  the simulator, saving `ticket-agents-filter-all` and `ticket-agents-filter-tasks` shots.
+
 ## [app-20261008.1757](https://github.com/markhuot/harness/releases/tag/app-20261008.1757) - 2026-10-08
 
 ### Added
