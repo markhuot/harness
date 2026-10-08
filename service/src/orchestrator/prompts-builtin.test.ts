@@ -13,10 +13,12 @@ import {
   conductorUpdatePrompt,
   reopenPrompt,
   reviewPrompt,
+  runContext,
   systemPrompt,
   triagePrompt,
   workStartPrompt,
 } from "./prompts";
+import { withRunContext } from "../drivers/types";
 
 const project: Project = {
   id: "p1",
@@ -82,6 +84,11 @@ const session: Session = {
   createdAt: 0,
   updatedAt: 0,
 };
+
+/** What a run's agent reads from the harness: its system prompt, then its run context as drivers wrap it. */
+function instructions(info: Parameters<typeof systemPrompt>[0]): string {
+  return `${systemPrompt(info)}\n\n${withRunContext({ prompt: "(the run prompt)", runContext: runContext(info) })}`;
+}
 
 const WT = "/Users/me/.harness/worktrees/NYT-3";
 const owned: BranchContext = { base: "main", baseSource: "settings", ownsWorktree: true, worktreesDir: "/Users/me/.harness/worktrees" };
@@ -158,7 +165,7 @@ describe("built-in system prompts", () => {
           const t = ticket({ ...c.t, kind: kind === "conductor" ? "conductor" : "task" });
           const p = c.p === null ? null : { ...project, ...c.p };
           const parent = name.includes("parent") ? ticket({ id: "pp", key: "NYT-1", title: "Parent  goal" }) : null;
-          expect(systemPrompt({ kind, project: p, ticket: t, session, parent, builtinTools, branches: c.b })).toMatchSnapshot();
+          expect(instructions({ kind, project: p, ticket: t, session, parent, builtinTools, branches: c.b })).toMatchSnapshot();
         });
       }
     }
@@ -168,11 +175,11 @@ describe("built-in system prompts", () => {
     for (const branch of [null, "harness/nyt-3"]) {
       test(`${kind} with children · branch ${branch}`, () => {
         const t = ticket({ kind: kind === "conductor" ? "conductor" : "task", branch, workdir: branch ? WT : null });
-        expect(systemPrompt({ kind, project, ticket: t, session, children: CHILDREN, branches: branch ? owned : undefined })).toMatchSnapshot();
+        expect(instructions({ kind, project, ticket: t, session, children: CHILDREN, branches: branch ? owned : undefined })).toMatchSnapshot();
       });
     }
     test(`${kind} with an empty children list`, () => {
-      expect(systemPrompt({ kind, project, ticket: ticket({ kind: kind === "conductor" ? "conductor" : "task" }), session, children: [] })).toMatchSnapshot();
+      expect(instructions({ kind, project, ticket: ticket({ kind: kind === "conductor" ? "conductor" : "task" }), session, children: [] })).toMatchSnapshot();
     });
   }
 
@@ -185,7 +192,7 @@ describe("built-in system prompts", () => {
           const p = c.p === null ? null : { ...project, ...c.p };
           const b = c.b ? { ...c.b, pullRequest: extra.pullRequest, pushRemote: extra.pushRemote } : undefined;
           const t = ticket({ ...c.t, completionAction: action as "pr" | "cleanup" | "custom", ...extra.t });
-          expect(systemPrompt({ kind: "complete", project: p, ticket: t, session, branches: b })).toMatchSnapshot();
+          expect(instructions({ kind: "complete", project: p, ticket: t, session, branches: b })).toMatchSnapshot();
           expect(completePrompt(t, extra.instructions, b, p)).toMatchSnapshot();
         });
       }
@@ -194,10 +201,10 @@ describe("built-in system prompts", () => {
 
   for (const status of ["planning", "in_progress", "blocked", "review", "done"] as TicketStatus[]) {
     test(`chat about a ${status} ticket`, () => {
-      expect(systemPrompt({ kind: "chat", project, ticket: ticket({ status }), session })).toMatchSnapshot();
+      expect(instructions({ kind: "chat", project, ticket: ticket({ status }), session })).toMatchSnapshot();
     });
     test(`plan · project name equals key · ${status}`, () => {
-      expect(systemPrompt({ kind: "plan", project: { ...project, name: "NYT" }, ticket: ticket({ status }), session })).toMatchSnapshot();
+      expect(instructions({ kind: "plan", project: { ...project, name: "NYT" }, ticket: ticket({ status }), session })).toMatchSnapshot();
     });
   }
 
@@ -207,40 +214,40 @@ describe("built-in system prompts", () => {
     { id: "a2", sessionId: "s1", ticketId: "t1", kind: "message", author: "human", body: "Use the moon", meta: {}, createdAt: 0 },
   ];
   test("work with recent activity", () => {
-    expect(systemPrompt({ kind: "work", project, ticket: ticket(), session, activity: recent })).toMatchSnapshot();
+    expect(instructions({ kind: "work", project, ticket: ticket(), session, activity: recent })).toMatchSnapshot();
   });
   test("chat about a blocked ticket with recent activity", () => {
-    expect(systemPrompt({ kind: "chat", project, ticket: ticket({ status: "blocked" }), session, activity: recent })).toMatchSnapshot();
+    expect(instructions({ kind: "chat", project, ticket: ticket({ status: "blocked" }), session, activity: recent })).toMatchSnapshot();
   });
   test("plan feedback with recent activity", () => {
-    expect(systemPrompt({ kind: "plan", project, ticket: ticket({ status: "planning" }), session, activity: recent })).toMatchSnapshot();
+    expect(instructions({ kind: "plan", project, ticket: ticket({ status: "planning" }), session, activity: recent })).toMatchSnapshot();
   });
 
   const notes = "## Where\n* the toggle lives in `Header.tsx`";
   for (const kind of ["work", "chat", "plan", "review", "complete"] as const) {
     test(`${kind} with agent notes`, () => {
-      expect(systemPrompt({ kind, project, ticket: ticket({ agentNotes: notes, ...(kind === "plan" ? { status: "planning" } : {}) }), session })).toMatchSnapshot();
+      expect(instructions({ kind, project, ticket: ticket({ agentNotes: notes, ...(kind === "plan" ? { status: "planning" } : {}) }), session })).toMatchSnapshot();
     });
   }
 
   test("chat without a ticket", () => {
-    expect(systemPrompt({ kind: "chat", project, ticket: null, session: { ...session, cwd: "/tmp/x" } })).toMatchSnapshot();
+    expect(instructions({ kind: "chat", project, ticket: null, session: { ...session, cwd: "/tmp/x" } })).toMatchSnapshot();
   });
 
   // A driver with a sub-agent tool (claude-code, github-copilot) gets the explore rule in Files.
   test("work with a sub-agent tool", () => {
-    expect(systemPrompt({ kind: "work", project, ticket: ticket(), session, subagentTool: "the `task` tool with the `explore` agent type" })).toMatchSnapshot();
+    expect(instructions({ kind: "work", project, ticket: ticket(), session, subagentTool: "the `task` tool with the `explore` agent type" })).toMatchSnapshot();
   });
 
   test("work without a ticket, project or cwd", () => {
-    expect(systemPrompt({ kind: "work", project: null, ticket: null, session: { ...session, cwd: "" } })).toMatchSnapshot();
+    expect(instructions({ kind: "work", project: null, ticket: null, session: { ...session, cwd: "" } })).toMatchSnapshot();
   });
 
   for (const title of ["", "Jira  WEB-9\nupdate"]) {
     for (const withProject of [true, false]) {
       test(`triage · title ${JSON.stringify(title)} · project ${withProject}`, () => {
         const s: Session = { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null, title };
-        expect(systemPrompt({ kind: "triage", project: withProject ? project : null, ticket: null, session: s })).toMatchSnapshot();
+        expect(instructions({ kind: "triage", project: withProject ? project : null, ticket: null, session: s })).toMatchSnapshot();
       });
     }
   }

@@ -124,7 +124,7 @@ describe("completion after a restart (nothing cached about the repo's branches)"
       const complete = h.driver.calls.find((c) => c.kind === "complete")!;
       expect(complete.prompt).toContain("into the base branch `master`");
       expect(complete.prompt).not.toContain("`main`");
-      expect(complete.systemPrompt).toContain("fetch . harness/repo-1:master");
+      expect(complete.runContext).toContain("fetch . harness/repo-1:master");
       expect(h.get(t).status).toBe("done");
     });
   }
@@ -153,7 +153,7 @@ describe("the ticket's worktree branch", () => {
     expect(cur.branch).toBe("harness/repo-1");
     expect(await h.rev("HEAD", cur.workdir!)).toBe(tip);
     // The work run is told where it merges.
-    expect(h.driver.calls.find((c) => c.kind === "work")!.systemPrompt).toContain("Base branch: develop (the project's base branch)");
+    expect(h.driver.calls.find((c) => c.kind === "work")!.runContext).toContain("Base branch: develop (the project's base branch)");
   });
 
   test("an existing branch is checked out as is; a new name is created from the base branch", async () => {
@@ -245,10 +245,10 @@ describe("update_branch", () => {
     h.orch.humanReview(t.key, { decision: "approve" }); // approving completes
     await h.orch.idle();
     const complete = h.driver.calls.find((c) => c.kind === "complete")!;
-    expect(complete.systemPrompt).toContain("Merge `medl-1223-ai-app` into the base branch `main`");
-    expect(complete.systemPrompt).toContain(`leave the worktree at ${cur.workdir} in place`);
-    expect(complete.systemPrompt).not.toContain("branch -d medl-1223-ai-app");
-    expect(complete.systemPrompt).toContain(`An earlier harness worktree of this ticket is still at ${before.workdir}`);
+    expect(complete.runContext).toContain("Merge `medl-1223-ai-app` into the base branch `main`");
+    expect(complete.runContext).toContain(`leave the worktree at ${cur.workdir} in place`);
+    expect(complete.runContext).not.toContain("branch -d medl-1223-ai-app");
+    expect(complete.runContext).toContain(`An earlier harness worktree of this ticket is still at ${before.workdir}`);
   });
 
   test("once that worktree is gone, starting again puts the leftover harness worktree on the ticket's branch", async () => {

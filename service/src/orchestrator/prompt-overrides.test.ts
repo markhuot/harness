@@ -8,7 +8,7 @@ import { parseTemplate, PROMPT_IDS, templateVariables, type Project, type Sessio
 import { makeOrchestrator } from "../testing/fakes";
 import { HarnessError } from "./errors";
 import { PROMPTS, renderPrompt } from "./prompt-templates";
-import { promptsWith, systemPrompt, workStartPrompt } from "./prompts";
+import { promptsWith, runContext, systemPrompt, workStartPrompt } from "./prompts";
 import { applySettingsPatch, DEFAULT_SETTINGS, resolveSettings, validateSettingsPatch } from "./settings";
 
 describe("prompt registry", () => {
@@ -94,7 +94,7 @@ describe("overrides in the prompt builders", () => {
     expect(custom).toBe(builtin); // invalid: ignored
     const replaced = systemPrompt({ kind: "work", project, ticket, session, overrides: { "system.lifecycle": "## Lifecycle\nShort version." } });
     expect(replaced).not.toContain("Tickets move planning");
-    expect(replaced).toBe(builtin.replace(/## Ticket lifecycle\n[\s\S]*?\n\n(?=## This run: work)/, "## Lifecycle\nShort version.\n\n"));
+    expect(replaced).toBe(builtin.replace(/## Ticket lifecycle\n[\s\S]*?\n\n(?=## )/, "## Lifecycle\nShort version.\n\n"));
   });
 
   test("an override that renders to nothing drops its section", () => {
@@ -104,10 +104,19 @@ describe("overrides in the prompt builders", () => {
     expect(dropped).not.toContain("\n\n\n");
   });
 
+  test("overrides of the sections that change per run render in the run context, under their own ids", () => {
+    const overrides = { "system.work": "## This run: work\nDo {{#if branch}}{{branch}}{{else}}it{{/if}}.", "system.context": "## Context\n{{ticket}} is {{ticketStatus}}." };
+    const context = runContext({ kind: "work", project, ticket, session, overrides });
+    expect(context).toContain('## Context\nNYT-1 "Dark mode" is in_progress.');
+    expect(context).toContain("## This run: work\nDo it.");
+    expect(systemPrompt({ kind: "work", project, ticket, session, overrides })).toBe(systemPrompt({ kind: "work", project, ticket, session }));
+  });
+
   test("promptsWith binds the overrides to every builder", () => {
     const p = promptsWith({ "run.work_start": "Go: {{ticket}} (r{{specRevision}})\n{{spec}}", "system.intro": "Hi." });
     expect(p.workStartPrompt(ticket)).toBe('Go: NYT-1 "Dark mode" (r3)\nAdd it.');
-    expect(p.systemPrompt({ kind: "work", project, ticket, session }).startsWith("Hi.\n\n## Context")).toBe(true);
+    expect(p.systemPrompt({ kind: "work", project, ticket, session }).startsWith("Hi.\n\n## Session")).toBe(true);
+    expect(p.runContext({ kind: "work", project, ticket, session }).startsWith("## Context")).toBe(true);
     // conductor tickets use their own prompt id, still built-in
     expect(p.workStartPrompt({ ...ticket, kind: "conductor" })).toBe(workStartPrompt({ ...ticket, kind: "conductor" }));
   });
@@ -192,8 +201,9 @@ describe("overrides reach runs", () => {
     await h.orch.startTicket(t.key);
     await h.orch.idle();
     const work = h.driver.calls.find((c) => c.kind === "work")!;
-    expect(work.systemPrompt).toContain("## This run: work\nCustom rules for the checkout.");
-    expect(work.systemPrompt).not.toContain("Do the work the ticket describes");
+    expect(work.runContext).toContain("## This run: work\nCustom rules for the checkout.");
+    expect(work.runContext).not.toContain("Do the work the ticket describes");
+    expect(work.systemPrompt).not.toContain("## This run");
     expect(work.systemPrompt).toContain("## Ticket lifecycle"); // untouched sections stay built-in
     expect(work.prompt).toMatch(/^Start PROJ-1 ".*" now\.\n\n## Plan \(revision \d+\)\nShip it$/);
 
@@ -209,7 +219,7 @@ describe("overrides reach runs", () => {
     h.orch.humanReview(t.key, { decision: "request_changes", notes: "again" });
     await h.orch.idle();
     const again = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
-    expect(again.systemPrompt).toContain("Do the ticket's work");
+    expect(again.runContext).toContain("Do the ticket's work");
     expect(h.orch.publicSettings().prompts).toMatchObject({ "system.work": null, "run.work_start": expect.stringContaining("Start") });
   });
 

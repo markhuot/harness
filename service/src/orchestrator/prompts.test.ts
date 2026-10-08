@@ -7,6 +7,7 @@ import {
   conductorUpdatePrompt,
   reopenPrompt,
   reviewPrompt,
+  runContext,
   systemPrompt,
   triagePrompt,
   workStartPrompt,
@@ -129,8 +130,10 @@ const session: Session = {
 
 const worktree = { branch: "harness/nyt-3", workdir: "/Users/me/.harness/worktrees/NYT-3" };
 
+/** Everything a run's agent reads from the harness: the system prompt, then the run context. */
 function sys(kind: RunKind, t: Ticket | null = ticket(), extra: Partial<Parameters<typeof systemPrompt>[0]> = {}) {
-  return systemPrompt({ kind, project, ticket: t, session, ...extra });
+  const info = { kind, project, ticket: t, session, ...extra };
+  return `${systemPrompt(info)}\n\n${runContext(info)}`;
 }
 
 describe("systemPrompt tool references", () => {
@@ -897,3 +900,105 @@ describe("triagePrompt", () => {
   });
 });
 
+
+// A resumed run reads its conversation from the prompt cache only when everything ahead of it,
+// the system prompt included, is byte-identical (DESIGN.md "System prompt and run context").
+// These are the runs that share one session (orchestrator FRESH_RUN_KINDS and the from-column
+// session rule): each sequence must render the same system prompt, with what changed in between
+// carried by the run context instead.
+describe("the system prompt stays the same across the runs of one session", () => {
+  const note = (id: string, kind: ActivityEntry["kind"], body: string): ActivityEntry => ({
+    id,
+    sessionId: "s1",
+    ticketId: "t1",
+    kind,
+    author: kind === "message" ? "human" : "agent",
+    body,
+    meta: {},
+    createdAt: 0,
+  });
+  const child = ticket({ id: "c1", key: "NYT-9", title: "Child", status: "in_progress", parentId: "t1" });
+  type Info = Parameters<typeof systemPrompt>[0];
+  const runs = (infos: Partial<Info>[]) =>
+    infos.map((i) => {
+      const info = { kind: "work" as RunKind, project, ticket: ticket(worktree), session, ...i } as Info;
+      return { system: systemPrompt(info), context: runContext(info) };
+    });
+
+  test("a work run, the chat that answers its block, then a usage-limit work restart", () => {
+    const [work, chat, restart] = runs([
+      { kind: "work", ticket: ticket({ ...worktree, specRevision: 3, specBaselineRevision: 3 }), activity: [note("a1", "moved", "Work started")] },
+      {
+        kind: "chat",
+        ticket: ticket({ ...worktree, status: "blocked", blockedReason: "Which color?", specRevision: 4, specBaselineRevision: 3, agentNotes: "Header lives in src/header.tsx" }),
+        activity: [note("a1", "moved", "Work started"), note("a2", "blocked", "Which color?")],
+        children: [child],
+      },
+      {
+        kind: "work",
+        ticket: ticket({ ...worktree, specRevision: 5, specBaselineRevision: 3, dependsOn: ["NYT-1"], agentNotes: "Use the theme tokens" }),
+        activity: [note("a2", "blocked", "Which color?"), note("a3", "message", "Blue")],
+      },
+    ]);
+    expect(chat!.system).toBe(work!.system);
+    expect(restart!.system).toBe(work!.system);
+    expect(work!.context).toContain("## This run: work");
+    expect(work!.context).toContain("status in_progress");
+    expect(work!.context).toContain("It is at revision 3");
+    expect(chat!.context).toContain("status blocked");
+    expect(chat!.context).toContain("Which color?");
+    expect(chat!.context).toContain("It is at revision 4");
+    expect(chat!.context).toContain("Header lives in src/header.tsx");
+    expect(chat!.context).toContain("NYT-9");
+    expect(chat!.context).not.toContain("## This run: work");
+    expect(restart!.context).toContain("Depends on: NYT-1");
+    expect(restart!.context).toContain("Use the theme tokens");
+    for (const text of ["## This run", "status ", "It is at revision", "Recent activity", "Which color?", "agent notes", "Depends on", "harness/nyt-3"]) {
+      expect(work!.system).not.toContain(text);
+    }
+  });
+
+  test("two chats on a ticket in Review, with a new spec revision and Activity between them", () => {
+    const [first, second] = runs([
+      { kind: "chat", ticket: ticket({ ...worktree, status: "review", specRevision: 6 }), activity: [note("a1", "submitted", "Added the toggle")] },
+      {
+        kind: "chat",
+        ticket: ticket({ ...worktree, status: "review", specRevision: 7, title: "Add dark mode everywhere", externalRef: { source: "jira", key: "NYT-123", url: null, raw: null } }),
+        activity: [note("a1", "submitted", "Added the toggle"), note("a2", "review_approved", "Looks good")],
+      },
+    ]);
+    expect(second!.system).toBe(first!.system);
+    expect(first!.context).toContain("It is at revision 6");
+    expect(second!.context).toContain("It is at revision 7");
+    expect(second!.context).toContain("Looks good");
+    expect(second!.context).toContain("Add dark mode everywhere");
+    expect(second!.context).toContain("Remote ID: NYT-123");
+  });
+
+  test("a chat on a conductor ticket shares the conductor run's system prompt", () => {
+    const conductor = ticket({ ...worktree, kind: "conductor" });
+    const [run, chat] = runs([
+      { kind: "conductor", ticket: conductor, children: [child] },
+      { kind: "chat", ticket: { ...conductor, status: "review" }, children: [child] },
+    ]);
+    expect(chat!.system).toBe(run!.system);
+  });
+
+  test("two planning runs with a spec revision between them", () => {
+    const [first, second] = runs([
+      { kind: "plan", ticket: ticket({ status: "planning", specRevision: 1 }), activity: [] },
+      { kind: "plan", ticket: ticket({ status: "planning", specRevision: 2 }), activity: [note("a1", "spec_revised", "Plan drafted")] },
+    ]);
+    expect(second!.system).toBe(first!.system);
+    expect(first!.context).toContain("## This run: planning");
+    expect(second!.context).toContain("It is at revision 2");
+    expect(second!.context).toContain("Plan drafted");
+  });
+
+  test("the system prompt names the session's ticket, project and working directory, and points at the run context", () => {
+    const { system, context } = runs([{}])[0]!;
+    expect(system).toContain("## Session\nTicket: NYT-3 (task)\nProject: New York Times (NYT), main checkout at /Users/me/Sites/nyt\nWorking directory: /Users/me/.harness/worktrees/NYT-3");
+    expect(system).toContain("<harness_run>");
+    expect(context.startsWith("## Context\nTicket: NYT-3")).toBe(true);
+  });
+});

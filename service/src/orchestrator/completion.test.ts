@@ -121,7 +121,7 @@ describe("what a project offers", () => {
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
     expect(h.get(t).completionAction).toBe("merge");
-    expect(h.completes()[0]!.systemPrompt).toContain("## This run: completion\n");
+    expect(h.completes()[0]!.runContext).toContain("## This run: completion\n");
     expect(h.get(t).status).toBe("done");
   });
 });
@@ -138,8 +138,8 @@ describe("choosing at approval", () => {
     h.driver.release();
     await h.orch.idle();
     const run = h.completes()[0]!;
-    expect(run.systemPrompt).toContain("## This run: completion (pull request)");
-    expect(run.systemPrompt).toContain("gh pr create --repo github.com/acme/web --base main");
+    expect(run.runContext).toContain("## This run: completion (pull request)");
+    expect(run.runContext).toContain("gh pr create --repo github.com/acme/web --base main");
     expect(run.prompt).toContain("Label it design.");
     expect(h.get(t)).toMatchObject({ status: "done", pullRequestUrl: expect.stringContaining("/pull/") });
     expect(h.get(t).pullRequestHead).toBe(await h.git("rev-parse", "harness/web-1"));
@@ -160,8 +160,8 @@ describe("choosing at approval", () => {
     h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "Cherry-pick onto release-2.4" });
     await h.orch.idle();
     const run = h.completes()[0]!;
-    expect(run.systemPrompt).toContain("## This run: completion (the approver's instructions)");
-    expect(run.systemPrompt).not.toContain("fetch . harness/web-1:main");
+    expect(run.runContext).toContain("## This run: completion (the approver's instructions)");
+    expect(run.runContext).not.toContain("fetch . harness/web-1:main");
     expect(run.prompt).toContain("## Instructions from the human\nCherry-pick onto release-2.4");
     expect(h.get(t).status).toBe("done");
   });
@@ -270,7 +270,7 @@ describe("tickets with nothing to land (Ticket.hasChanges)", () => {
     expect(upserts.at(-1)?.hasChanges).toBe(true);
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
-    expect(h.completes()[0]!.systemPrompt).toContain("into the base branch `main`");
+    expect(h.completes()[0]!.runContext).toContain("into the base branch `main`");
     expect(h.get(t).completionAction).toBe("merge");
   });
 
@@ -319,7 +319,7 @@ describe("cleanup completions", () => {
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Fix the PR", branch: "feature/pr-head", baseBranch: "feature/pr-head" });
     await h.orch.idle();
     expect(h.get(t)).toMatchObject({ status: "review", branch: "feature/pr-head" });
-    expect(h.driver.calls.find((c) => c.kind === "work")!.systemPrompt).toContain("which is also its base branch");
+    expect(h.driver.calls.find((c) => c.kind === "work")!.runContext).toContain("which is also its base branch");
     expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "merge" }), 400, /works on its base branch feature\/pr-head/);
     expectStatus(() => h.orch.humanReview(t.key, { decision: "approve", action: "pr" }), 400, /nothing to open a pull request from/);
     cleansUp(h, null);
@@ -327,10 +327,10 @@ describe("cleanup completions", () => {
     await h.orch.idle();
     const run = h.completes()[0]!;
     expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup" });
-    expect(run.systemPrompt).toContain("## This run: completion (clean up)");
+    expect(run.runContext).toContain("## This run: completion (clean up)");
     // On the base branch only remotes count: `--not --remotes feature/pr-head` would hide every commit.
-    expect(run.systemPrompt).toContain("log --oneline feature/pr-head --not --remotes`");
-    expect(run.systemPrompt).toContain("Keep `feature/pr-head`: the harness didn't create it, and it is the base branch.");
+    expect(run.runContext).toContain("log --oneline feature/pr-head --not --remotes`");
+    expect(run.runContext).toContain("Keep `feature/pr-head`: the harness didn't create it, and it is the base branch.");
     expect(await h.git("branch", "--list", "feature/pr-head")).toContain("feature/pr-head");
   });
 
@@ -340,7 +340,7 @@ describe("cleanup completions", () => {
     // The fake complete run removes nothing, as an agent that found unpushed commits would.
     h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
     await h.orch.idle();
-    expect(h.completes()[0]!.systemPrompt).toContain("log --oneline harness/web-1 --not --remotes main`");
+    expect(h.completes()[0]!.runContext).toContain("log --oneline harness/web-1 --not --remotes main`");
     expect(h.get(t).status).toBe("blocked");
     expect(h.get(t).blockedReason).toContain("Cleanup didn't finish: the worktree at");
     expect(h.get(t).blockedReason).toContain("and the branch harness/web-1 still exist");
@@ -392,9 +392,9 @@ describe("cleanup completions", () => {
     const run = h.completes()[0]!;
     expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup", pullRequestUrl: url, pullRequestHead: head });
     expect(recorded).toContain(url);
-    expect(run.systemPrompt).toContain("## This run: completion (clean up)");
-    expect(run.systemPrompt).toContain("push -u origin harness/web-1`");
-    expect(run.systemPrompt).toContain(`record_pull_request\` { url: "${url}", head }`);
+    expect(run.runContext).toContain("## This run: completion (clean up)");
+    expect(run.runContext).toContain("push -u origin harness/web-1`");
+    expect(run.runContext).toContain(`record_pull_request\` { url: "${url}", head }`);
     expect(run.prompt).toContain("Push `harness/web-1` to origin");
   });
 
@@ -409,7 +409,7 @@ describe("cleanup completions", () => {
     h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
     await h.orch.idle();
     const run = h.completes()[0]!;
-    expect(run.systemPrompt).not.toContain("push -u");
+    expect(run.runContext).not.toContain("push -u");
     expect(run.prompt).toContain("there is nothing to merge or push");
     expect(refused).toContain("only for completion runs that open a pull request");
   });
@@ -426,7 +426,7 @@ describe("cleanup completions", () => {
     h.driver.script = async function* () {};
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
-    expect(h.completes()[1]!.systemPrompt).toContain("## This run: completion (clean up)");
+    expect(h.completes()[1]!.runContext).toContain("## This run: completion (clean up)");
   });
 });
 
@@ -477,8 +477,8 @@ describe("children land on their parent's branch", () => {
     const base = await h.orch.refreshBaseBranch(first);
     expect(base).toEqual({ branch: "harness/web-1", source: "parent" });
     const childRun = h.completes().find((c) => c.prompt.includes(first.key))!;
-    expect(childRun.systemPrompt).toContain(`Merge \`${first.branch}\` into the base branch \`harness/web-1\``);
-    expect(childRun.systemPrompt).not.toContain("gh pr create");
+    expect(childRun.runContext).toContain(`Merge \`${first.branch}\` into the base branch \`harness/web-1\``);
+    expect(childRun.runContext).not.toContain("gh pr create");
     expect(h.get(first).completionAction).toBe("merge");
   });
 

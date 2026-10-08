@@ -2132,17 +2132,40 @@ describe("agent notes", () => {
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.agentNotes).toBe("## Where\n- src/x.ts {{baseBranch}}");
-    expect(h.driver.calls[0]!.systemPrompt).toContain("This ticket has no agent notes yet.");
+    expect(h.driver.calls[0]!.runContext).toContain("This ticket has no agent notes yet.");
 
     await h.orch.sendMessage(t.key, "what did you find?");
     await h.orch.idle();
     const chat = h.driver.calls.find((c) => c.kind === "chat")!;
-    expect(chat.systemPrompt).toContain("<agent-notes>\n## Where\n- src/x.ts {{baseBranch}}\n</agent-notes>");
+    expect(chat.runContext).toContain("<agent-notes>\n## Where\n- src/x.ts {{baseBranch}}\n</agent-notes>");
     expect(seen.get).toMatchObject({ key: t.key, agentNotes: "## Where\n- src/x.ts {{baseBranch}}" });
     expect(seen.list).not.toHaveProperty("agentNotes");
     // wroteNotes is per run: false before the work run wrote, true after, false again in the chat.
     expect(wrote).toEqual([false, true, false]);
     expect(h.orch.activity(t.key).filter((a) => a.body.includes("src/x.ts"))).toEqual([]);
+  });
+
+  test("a work run that blocks and the chat that answers it get the same system prompt; what changed is in the run context", async () => {
+    const h = setup();
+    h.driver.script = async function* (req) {
+      const ctx = req.toolContext;
+      if (req.kind === "work") await ctx.ops.block(ctx, "Which color?");
+      else yield { type: "text", text: "ok" };
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
+    await h.orch.sendMessage(t.key, "Blue");
+    await h.orch.idle();
+    const work = h.driver.calls.find((c) => c.kind === "work")!;
+    const chat = h.driver.calls.find((c) => c.kind === "chat")!;
+    expect(chat.systemPrompt).toBe(work.systemPrompt);
+    expect(work.systemPrompt).not.toContain("## This run");
+    expect(work.runContext).toContain("## This run: work");
+    expect(chat.runContext).toContain("status blocked");
+    expect(chat.runContext).toContain("Which color?");
+    // The board keeps the human's words; drivers put the run context in front of them.
+    expect(chat.prompt.startsWith("Blue")).toBe(true);
   });
 
   test("empty notes clear them", async () => {
