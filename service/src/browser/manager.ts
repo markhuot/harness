@@ -2291,6 +2291,10 @@ interface WaitCheck {
   value?: string | null;
   /** The first match's attribute the condition names (null when it hasn't one). */
   attr?: string | null;
+  /** With text and nothing containing it: how many elements the selector (or ref) matched without the text. */
+  without?: number;
+  /** Their text, whitespace collapsed, the first three. */
+  texts?: string[];
 }
 
 /** What the in-page check needs from a condition (waitCheckSpec), as plain JSON. */
@@ -2330,7 +2334,21 @@ const WAIT_CHECK_FN = `function (spec, own) {
       return { error: String((e && e.message) || e) };
     }
   }
-  if (spec.text !== null) els = els.filter((el) => ((typeof el.innerText === "string" ? el.innerText : el.textContent) || "").includes(spec.text));
+  const textOf = (el) => (typeof el.innerText === "string" ? el.innerText : el.textContent) || "";
+  // What the selector's elements say, for the timeout report when the text rules them all out.
+  // Not without a selector: that's the whole page's text.
+  let without = 0, texts = [];
+  if (spec.text !== null) {
+    const before = els;
+    els = els.filter((el) => textOf(el).includes(spec.text));
+    if (!els.length && (own || spec.sel !== null)) {
+      without = before.length;
+      texts = before.slice(0, 3).map((el) => {
+        const t = textOf(el).replace(/\\s+/g, " ").trim();
+        return t.length > 100 ? t.slice(0, 99) + "…" : t;
+      });
+    }
+  }
   const visible = (el) => {
     const r = el.getBoundingClientRect();
     if (r.width === 0 && r.height === 0) return false;
@@ -2354,6 +2372,8 @@ const WAIT_CHECK_FN = `function (spec, own) {
     busy: document.querySelectorAll('[aria-busy="true"]').length,
     value: first && typeof first.value === "string" ? first.value : null,
     attr: first && a !== null ? first.getAttribute(a.name) : null,
+    without,
+    texts,
   };
 }`;
 
@@ -2362,11 +2382,20 @@ const waitCheckExpression = (spec: WaitCheckSpec, own = false) => `(${WAIT_CHECK
 
 /** The timeout report's line on the last check: what matched, and the value or attribute it read. */
 function lastCheckLine(c: WaitCondition, check: WaitCheck): string {
-  const what = c.ref !== undefined ? (check.count ? `ref ${c.ref} was there` : `ref ${c.ref} wasn't there`) : `${check.count} element${check.count === 1 ? "" : "s"} matched`;
+  const what = c.ref !== undefined ? (check.count || check.without ? `ref ${c.ref} was there` : `ref ${c.ref} wasn't there`) : `${check.count} element${check.count === 1 ? "" : "s"} matched`;
   const parts = [`Last check: ${what}${c.count !== undefined ? `, want ${c.count}` : ""} (${check.visible} visible, ${check.enabled} enabled).`];
   if (check.count && c.value !== undefined) parts.push(check.value === null ? "The first match has no value." : `The first match's value was ${JSON.stringify(check.value)}.`);
   if (check.count && c.attribute !== undefined) {
     parts.push(check.attr === null ? `The first match has no ${c.attribute.name} attribute.` : `The first match's ${c.attribute.name} was ${JSON.stringify(check.attr)}.`);
+  }
+  const n = check.without ?? 0;
+  if (c.text !== undefined && !check.count && n && check.texts?.length) {
+    const shown = `${check.texts.map((t) => JSON.stringify(t)).join(", ")}${n > check.texts.length ? ` and ${n - check.texts.length} more` : ""}`;
+    parts.push(
+      c.ref !== undefined
+        ? `Its text was ${shown}.`
+        : `Without the text, ${n} element${n === 1 ? " matches" : "s match"}, and ${n === 1 ? "its text was" : "their text was"} ${shown}.`,
+    );
   }
   return parts.join(" ");
 }

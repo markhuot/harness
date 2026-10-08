@@ -472,6 +472,7 @@ return "ok";`;
         'expect({"ref":"e',
         'expect({"selector":"#inner","frame":"#f"}).toContainText("Inside") ✓',
         "expect(page).toHaveURL(/done=1/) ✓",
+        "expect(2).toBe(2) ✓",
       ]) {
         expect(log).toContain(line);
       }
@@ -523,6 +524,59 @@ return "ok";`;
       expect(text).toContain("Received: 1");
       expect(text).toContain("Where: script line 2, column");
       expect(text).not.toContain("never");
+      // Its own log line, and the failure names it as the step, as a page expectation's does.
+      expect(text).toContain("expect(1).toBe(3) ✗ Expected: 3; Received: 1");
+      expect(text).toContain("Step: expect(1).toBe(3)");
+    }, 30_000);
+
+    test("each value expectation logs one line, through .not, .resolves and Bun's asymmetric matchers", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const script = `const items = await evaluate(() => [...document.querySelectorAll("#list li")].map((li) => li.textContent));
+expect(items).toEqual(["Item 1"]);
+expect(items).not.toContain("Item 9");
+expect(items).toEqual(expect.arrayContaining(["Item 1"]));
+await expect(Promise.resolve(items.length)).resolves.toBe(1);
+await expect(Promise.reject(new Error("nope"))).rejects.toThrow("nope");
+await expect("#list li").toHaveCount(1);
+return "ok";`;
+      const { reports, last } = await drain(ctx, await browserRun.execute({ script, wait: 20 }, ctx));
+      const log = reports.join("\n");
+      expect(all(last)).toContain('Result: "ok"');
+      for (const line of [
+        `expect(["Item 1"]).toEqual(["Item 1"]) ✓`,
+        `expect(["Item 1"]).not.toContain("Item 9") ✓`,
+        `expect(["Item 1"]).toEqual(expect.arrayContaining(…)) ✓`,
+        `expect(Promise).resolves.toBe(1) ✓`,
+        `expect(Promise).rejects.toThrow("nope") ✓`,
+        `expect("#list li").toHaveCount(1) ✓`,
+      ]) {
+        expect(log).toContain(line);
+      }
+      // A page matcher is logged once, by the service, not again by the child.
+      expect(log.split('expect("#list li").toHaveCount(1)').length).toBe(2);
+    }, 30_000);
+
+    test("a text expectation that fails says what the elements said instead", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/form`);
+      const one = await drain(ctx, await browserRun.execute({ script: `await expect("#list").toContainText("Item 9", { timeout: 0.5 });`, wait: 10 }, ctx));
+      expect(all(one.last)).toContain(`Last check: 0 elements matched (0 visible, 0 enabled). Without the text, 1 element matches, and its text was "Item 1".`);
+      const many = await drain(
+        ctx,
+        await browserRun.execute({ script: `for (let i = 0; i < 4; i++) await click("#add");\nawait expect("#list li").toHaveCount(5);\nawait expect("#list li").toContainText("Item 9", { timeout: 0.5 });`, wait: 20 }, ctx),
+      );
+      expect(all(many.last)).toContain(`Without the text, 5 elements match, and their text was "Item 1", "Item 2", "Item 3" and 2 more.`);
+      // A ref that's there but lacks the text is "there", with its text.
+      const ref = await drain(
+        ctx,
+        await browserRun.execute({ script: `const ref = /Toggle.*ref=(e\\d+)/.exec(await snapshot())[1];\nawait expect({ ref }).toContainText("Nope", { timeout: 0.5 });`, wait: 10 }, ctx),
+      );
+      expect(all(ref.last)).toMatch(/Last check: ref e\d+ was there \(0 visible, 0 enabled\)\. Its text was "Toggle"\./);
+      // No selector means the whole page: its text isn't quoted back.
+      const page = await browserWait.execute({ text: "Nowhere on the page", timeout: 0.5 }, ctx);
+      expect(all(page)).toContain("Last check: 0 elements matched");
+      expect(all(page)).not.toContain("Without the text");
     }, 30_000);
 
     test(".not with no inverse, and a matcher on the wrong target, say what to write instead", async () => {

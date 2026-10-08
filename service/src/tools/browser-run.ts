@@ -498,6 +498,7 @@ async function start(job: Job, script: string): Promise<void> {
 async function onMessage(job: Job, m: ChildMessage, file: string): Promise<void> {
   if (job.status !== "running") return;
   if (m.type === "log") return job.log("script", m.level === "log" ? m.text : `${m.level}: ${m.text}`);
+  if (m.type === "step") return job.log("step", m.text);
   if (m.type === "call") {
     const isExpect = m.method === "expect";
     const label = isExpect ? expectLabel(m.args) : stepLabel(m.method, m.args);

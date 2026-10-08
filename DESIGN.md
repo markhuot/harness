@@ -1810,8 +1810,14 @@ Agents wait for a page instead of sleeping, and run multi-step flows as scripts 
   instead. The matcher returns `pass: false` with the wait's summary, and Bun makes that error at
   the `expect()` call, so the stack holds the script line. The log shows a passing expectation as
   one line (`expect("#cart").toContainText("2 items") ✓`). A failure's message leads with the
-  expectation, and its step is the expectation. A plain `expect(value)` logs nothing until it
-  fails.
+  expectation, and its step is the expectation. A value expectation (`expect(value).toEqual(…)`,
+  through `.not`, `.resolves` and `.rejects`) logs its own line the same way: the child wraps
+  `expect` in a Proxy that sends a `step` message with ✓, or ✗ and Bun's Expected/Received, and
+  puts the expectation on the error as the failure's step. Page matchers pass through the Proxy
+  unlogged, since the service logs them. When a text condition (`toContainText`, `wait_for.text`)
+  times out with nothing containing the text, the last check also quotes what the selector's
+  elements (or the ref) said instead, the first three with a count of the rest. A condition with
+  no selector doesn't, since that would be the whole page.
 - **Jobs.** One running job per tab. A job's log (at most 2,000 lines kept) holds its start,
   each step and its result, the script's `console.*`/`log()` and raw stdout/stderr, and the tab's
   page events. `browser_run` blocks up to `wait` s (default 20, max 60) or until the job ends;

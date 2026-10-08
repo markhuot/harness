@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- When a browser script expects text that never shows up, the agent now sees what the elements said
+  instead, like `its text was "3 items left"`. Before, it only saw "0 elements matched", which read
+  as if the element were missing.
+- Checks on plain values in a browser script, like `expect(titles).toEqual([...])`, now get their
+  own ✓ or ✗ line in the script's log, like the page checks do. A failing one is named as the step
+  where the script stopped.
+
 ## [app-20261008.0736](https://github.com/markhuot/harness/releases/tag/app-20261008.0736) - 2026-10-08
 
 ### Added

@@ -15,6 +15,8 @@ import { inspect } from "node:util";
 export type ChildMessage =
   | { type: "call"; id: number; method: string; args: unknown[] }
   | { type: "log"; level: "log" | "info" | "warn" | "error" | "debug"; text: string }
+  /** A value expectation that ran in the script: its line for the log, already marked ✓ or ✗. */
+  | { type: "step"; text: string }
   | { type: "done"; ok: true; value: unknown }
   | { type: "done"; ok: false; error: string; stack?: string; step?: string };
 
@@ -110,7 +112,84 @@ expect.extend(
   ),
 );
 
-Object.assign(globalThis, api, { expect, page });
+/** A value in a step's label, as the script might have written it, long ones shortened. */
+function shown(v: unknown): string {
+  const s = shownFull(v);
+  return s.length > 100 ? `${s.slice(0, 99)}…` : s;
+}
+
+function shownFull(v: unknown): string {
+  if (v === page) return "page";
+  if (v instanceof Promise) return "Promise";
+  // Bun's asymmetric matchers (expect.arrayContaining(…)) inspect as an empty object: name them.
+  const tag = /^\[object Expect(\w+)\]$/.exec(Object.prototype.toString.call(v));
+  if (tag) return `expect.${tag[1]![0]!.toLowerCase()}${tag[1]!.slice(1)}(…)`;
+  const proto = v !== null && typeof v === "object" ? Object.getPrototypeOf(v) : null;
+  if (v === null || ["string", "number", "boolean"].includes(typeof v) || Array.isArray(v) || proto === Object.prototype || proto === null) {
+    try {
+      const json = JSON.stringify(v);
+      if (json !== undefined) return json;
+    } catch {
+      // A cycle: inspect handles it.
+    }
+  }
+  return inspect(v, { depth: 3, breakLength: Infinity }).replace(/\s*\n\s*/g, " ");
+}
+
+/** Bun's message for the log line: its Expected/Received, without the blank lines and matcher header. */
+const failureDetail = (e: unknown) =>
+  String((e as Error)?.message ?? e)
+    .replace(/^\s*expect\(received\)[^\n]*\n/, "")
+    .trim()
+    .replace(/\s*\n\s*/g, "; ");
+
+/**
+ * expect(value).matcher(...) logs its own step line, as a page matcher's does in the service:
+ * `expect(["a","b"]).toEqual(["a","b"]) ✓`, or ✗ with Bun's Expected/Received. A failure also
+ * carries the expectation as its step for the failure report. Page matchers pass through: the
+ * service logs those.
+ */
+function logged(target: object, label: string): object {
+  return new Proxy(target, {
+    get(t, prop) {
+      const v = Reflect.get(t, prop, t);
+      if (typeof prop !== "string") return v;
+      if (prop === "not" || prop === "resolves" || prop === "rejects") return logged(v as object, `${label}.${prop}`);
+      if (typeof v !== "function") return v;
+      // Bun's matchers are callable without Function.prototype (no .apply): Reflect.apply them.
+      if ((PAGE_MATCHERS as readonly string[]).includes(prop)) return (...args: unknown[]) => Reflect.apply(v, t, args);
+      return (...args: unknown[]) => {
+        const step = `${label}.${prop}(${args.map(shown).join(", ")})`;
+        const failed = (e: unknown): never => {
+          send({ type: "step", text: `${step} ✗ ${failureDetail(e)}` });
+          if (e && typeof e === "object") Object.assign(e, { step });
+          throw e;
+        };
+        let r: unknown;
+        try {
+          r = Reflect.apply(v, t, args);
+        } catch (e) {
+          failed(e);
+        }
+        if (r instanceof Promise) {
+          return r.then((x) => {
+            send({ type: "step", text: `${step} ✓` });
+            return x;
+          }, failed);
+        }
+        send({ type: "step", text: `${step} ✓` });
+        return r;
+      };
+    },
+  });
+}
+
+/** Bun's expect, its statics (expect.any, expect.arrayContaining…) untouched, each matcher logged. */
+const loggedExpect = new Proxy(expect, {
+  apply: (t, self, args: unknown[]) => logged(Reflect.apply(t, self, args) as object, `expect(${args.length ? shown(args[0]) : ""})`),
+});
+
+Object.assign(globalThis, api, { expect: loggedExpect, page });
 for (const level of ["log", "info", "warn", "error", "debug"] as const) {
   console[level] = (...args: unknown[]) => send({ type: "log", level, text: format(args) });
 }
@@ -137,7 +216,8 @@ try {
     // Bun starts a custom matcher's message with blank lines.
     error: String(err?.message ?? e).replace(/^\n+/, ""),
     ...(typeof err?.stack === "string" ? { stack: err.stack } : {}),
-    ...(err instanceof StepError ? { step: err.step } : {}),
+    // A page call's step, or a value expectation's (logged()).
+    ...(typeof err?.step === "string" ? { step: err.step } : {}),
   });
 }
 // Let the last message go out before the process ends.
