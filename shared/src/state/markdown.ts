@@ -86,12 +86,34 @@ function indentOf(line: string): number {
   return n;
 }
 
+const FENCE = /^\s*(```|~~~)\s*([\w+-]*)\s*$/;
+
+/**
+ * The fenced code block opening at `lines[start]`, and the index of its closing line (the last line
+ * when it never closes). Each body line loses up to as much leading whitespace as the opening fence
+ * had, so a fence indented under a list item keeps its code's own indentation.
+ */
+function parseFence(lines: string[], start: number, fence: RegExpExecArray): { block: Block; end: number } {
+  const dedent = indentOf(lines[start]!);
+  const body: string[] = [];
+  let i = start + 1;
+  while (i < lines.length && !lines[i]!.trim().startsWith(fence[1]!)) {
+    const line = lines[i++]!;
+    let cut = 0;
+    for (let n = 0; cut < line.length && n < dedent && /\s/.test(line[cut]!); cut++) n += line[cut] === "\t" ? 4 : 1;
+    body.push(line.slice(cut));
+  }
+  return { block: { t: "code", lang: fence[2] ?? "", text: body.join("\n") }, end: Math.min(i, lines.length - 1) };
+}
+
 /**
  * The list whose first item is `lines[start]`, and the index of its last line. An item indented 2+
  * columns past this list's marker starts a list nested under the item before it; one indented
  * less than `outer` (the parent's marker + 2, 0 at the top) belongs to the parent. A sibling of the
  * other kind (bullet vs number) ends the list. A non-item line indented 2+ past the marker (2+ at
- * the top) continues the last item's text; anything else, a blank line included, ends the list.
+ * the top) belongs to the last item: a fenced code block under it, or more of its text (a paragraph
+ * of its own after a code block or a blank line). Blank lines followed by such a line, or by a
+ * nested item, stay in the item; anything else ends the list.
  */
 function parseList(lines: string[], start: number, outer: number): { block: Block; end: number } {
   const first = LIST_ITEM.exec(lines[start]!)!;
@@ -99,22 +121,46 @@ function parseList(lines: string[], start: number, outer: number): { block: Bloc
   const ordered = /\d/.test(first[1]!);
   const items: ListItem[] = [{ text: first[2]!, children: [] }];
   const last = () => items[items.length - 1]!;
+  const inside = outer ? indent + 2 : 2;
+  /** Whether a blank line came before this one, inside the current item. */
+  let gap = false;
   let i = start;
   while (i + 1 < lines.length) {
     const line = lines[i + 1]!;
     const at = indentOf(line);
     const li = LIST_ITEM.exec(line);
-    if (li && at >= indent + 2) {
+    if (!line.trim()) {
+      let next = i + 2;
+      while (next < lines.length && !lines[next]!.trim()) next++;
+      const ahead = lines[next];
+      if (ahead === undefined || indentOf(ahead) < (LIST_ITEM.test(ahead) ? indent + 2 : inside)) break;
+      gap = true;
+      i = next - 1;
+    } else if (li && at >= indent + 2) {
       const sub = parseList(lines, i + 1, indent + 2);
       last().children.push(sub.block);
       i = sub.end;
+      gap = false;
     } else if (li) {
       if (at < outer || /\d/.test(li[1]!) !== ordered) break;
       items.push({ text: li[2]!, children: [] });
       i++;
-    } else if (line.trim() && at >= (outer ? indent + 2 : 2)) {
-      last().text += " " + line.trim();
-      i++;
+      gap = false;
+    } else if (at >= inside) {
+      const fence = FENCE.exec(line);
+      const kids = last().children;
+      const prev = kids[kids.length - 1];
+      if (fence) {
+        const code = parseFence(lines, i + 1, fence);
+        kids.push(code.block);
+        i = code.end;
+      } else {
+        if (prev?.t === "p" && !gap) prev.text += "\n" + line.trim();
+        else if (gap || (prev && prev.t !== "ul" && prev.t !== "ol")) kids.push({ t: "p", text: line.trim() });
+        else last().text += " " + line.trim();
+        i++;
+      }
+      gap = false;
     } else break;
   }
   if (!ordered) return { block: { t: "ul", items }, end: i };
@@ -135,13 +181,12 @@ export function parseBlocks(src: string): Block[] {
   };
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    const fence = /^\s*(```|~~~)\s*([\w+-]*)\s*$/.exec(line);
+    const fence = FENCE.exec(line);
     if (fence) {
       flush();
-      const body: string[] = [];
-      i++;
-      while (i < lines.length && !lines[i]!.trim().startsWith(fence[1]!)) body.push(lines[i++]!);
-      blocks.push({ t: "code", lang: fence[2] ?? "", text: body.join("\n") });
+      const code = parseFence(lines, i, fence);
+      blocks.push(code.block);
+      i = code.end;
       continue;
     }
     if (!line.trim()) {

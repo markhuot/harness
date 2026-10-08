@@ -2334,6 +2334,146 @@
       ]
     },
     {
+      "name": "fence under a list item",
+      "input": "1. Run:\n   ```sh\n   echo a\n     indented\n   ```\n2. Then:\n   ```\n   # comment\n\n   b\n   ```\n   After the code.\n   More after.\n3. Done",
+      "output": [
+        {
+          "t": "text",
+          "text": "1. Run:\n   ``"
+        },
+        {
+          "t": "code",
+          "text": "sh\n   echo a\n     indented\n   "
+        },
+        {
+          "t": "text",
+          "text": "`"
+        },
+        {
+          "t": "code",
+          "text": "\n2. Then:\n   "
+        },
+        {
+          "t": "text",
+          "text": "`"
+        },
+        {
+          "t": "code",
+          "text": "\n   # comment\n\n   b\n   "
+        },
+        {
+          "t": "text",
+          "text": "``\n   After the code.\n   More after.\n3. Done"
+        }
+      ]
+    },
+    {
+      "name": "unclosed fence under a list item",
+      "input": "- a\n  ```\n  code\n\ntail",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  ```\n  code\n\ntail"
+        }
+      ]
+    },
+    {
+      "name": "tab-indented fence under a list item",
+      "input": "- a\n\t```\n\t\tx\n\t```",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n\t``"
+        },
+        {
+          "t": "code",
+          "text": "\n\t\tx\n\t"
+        },
+        {
+          "t": "text",
+          "text": "``"
+        }
+      ]
+    },
+    {
+      "name": "fence under a nested item",
+      "input": "- a\n  - b\n    ```\n    c\n    ```\n  back on a",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n  - b\n    ``"
+        },
+        {
+          "t": "code",
+          "text": "\n    c\n    "
+        },
+        {
+          "t": "text",
+          "text": "``\n  back on a"
+        }
+      ]
+    },
+    {
+      "name": "blank line then item paragraph",
+      "input": "- a\n\n  more of a\n  still a\n\n  third\n- b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n\n  more of a\n  still a\n\n  third\n- b"
+        }
+      ]
+    },
+    {
+      "name": "blank line then nested item",
+      "input": "- a\n\n  - b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n\n  - b"
+        }
+      ]
+    },
+    {
+      "name": "blank line then sibling ends the list",
+      "input": "- a\n\n- b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n\n- b"
+        }
+      ]
+    },
+    {
+      "name": "blank line then outdented text ends the list",
+      "input": "- a\n\n b",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n\n b"
+        }
+      ]
+    },
+    {
+      "name": "trailing blank lines after a list",
+      "input": "- a\n\n\n",
+      "output": [
+        {
+          "t": "text",
+          "text": "- a\n\n\n"
+        }
+      ]
+    },
+    {
+      "name": "nested list then blank and parent paragraph",
+      "input": "1. a\n   - b\n\n   para of a\n2. c",
+      "output": [
+        {
+          "t": "text",
+          "text": "1. a\n   - b\n\n   para of a\n2. c"
+        }
+      ]
+    },
+    {
       "name": "fence closing line with text",
       "input": "```\nx\n``` trailing\ny",
       "output": [
@@ -3373,6 +3513,56 @@
     {
       "name": "fence inside a list",
       "input": "- item\n```\ncode\n```\n- next",
+      "output": []
+    },
+    {
+      "name": "fence under a list item",
+      "input": "1. Run:\n   ```sh\n   echo a\n     indented\n   ```\n2. Then:\n   ```\n   # comment\n\n   b\n   ```\n   After the code.\n   More after.\n3. Done",
+      "output": []
+    },
+    {
+      "name": "unclosed fence under a list item",
+      "input": "- a\n  ```\n  code\n\ntail",
+      "output": []
+    },
+    {
+      "name": "tab-indented fence under a list item",
+      "input": "- a\n\t```\n\t\tx\n\t```",
+      "output": []
+    },
+    {
+      "name": "fence under a nested item",
+      "input": "- a\n  - b\n    ```\n    c\n    ```\n  back on a",
+      "output": []
+    },
+    {
+      "name": "blank line then item paragraph",
+      "input": "- a\n\n  more of a\n  still a\n\n  third\n- b",
+      "output": []
+    },
+    {
+      "name": "blank line then nested item",
+      "input": "- a\n\n  - b",
+      "output": []
+    },
+    {
+      "name": "blank line then sibling ends the list",
+      "input": "- a\n\n- b",
+      "output": []
+    },
+    {
+      "name": "blank line then outdented text ends the list",
+      "input": "- a\n\n b",
+      "output": []
+    },
+    {
+      "name": "trailing blank lines after a list",
+      "input": "- a\n\n\n",
+      "output": []
+    },
+    {
+      "name": "nested list then blank and parent paragraph",
+      "input": "1. a\n   - b\n\n   para of a\n2. c",
       "output": []
     },
     {
@@ -5080,7 +5270,7 @@
         {
           "t": "code",
           "lang": "",
-          "text": "  code"
+          "text": "code"
         }
       ]
     },
@@ -5107,6 +5297,264 @@
           "items": [
             {
               "text": "next",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fence under a list item",
+      "input": "1. Run:\n   ```sh\n   echo a\n     indented\n   ```\n2. Then:\n   ```\n   # comment\n\n   b\n   ```\n   After the code.\n   More after.\n3. Done",
+      "output": [
+        {
+          "t": "ol",
+          "start": 1,
+          "items": [
+            {
+              "text": "Run:",
+              "children": [
+                {
+                  "t": "code",
+                  "lang": "sh",
+                  "text": "echo a\n  indented"
+                }
+              ]
+            },
+            {
+              "text": "Then:",
+              "children": [
+                {
+                  "t": "code",
+                  "lang": "",
+                  "text": "# comment\n\nb"
+                },
+                {
+                  "t": "p",
+                  "text": "After the code.\nMore after."
+                }
+              ]
+            },
+            {
+              "text": "Done",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unclosed fence under a list item",
+      "input": "- a\n  ```\n  code\n\ntail",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "code",
+                  "lang": "",
+                  "text": "code\n\ntail"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "tab-indented fence under a list item",
+      "input": "- a\n\t```\n\t\tx\n\t```",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "code",
+                  "lang": "",
+                  "text": "\tx"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fence under a nested item",
+      "input": "- a\n  - b\n    ```\n    c\n    ```\n  back on a",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a back on a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": [
+                        {
+                          "t": "code",
+                          "lang": "",
+                          "text": "c"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blank line then item paragraph",
+      "input": "- a\n\n  more of a\n  still a\n\n  third\n- b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "p",
+                  "text": "more of a\nstill a"
+                },
+                {
+                  "t": "p",
+                  "text": "third"
+                }
+              ]
+            },
+            {
+              "text": "b",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blank line then nested item",
+      "input": "- a\n\n  - b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blank line then sibling ends the list",
+      "input": "- a\n\n- b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": []
+            }
+          ]
+        },
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "b",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blank line then outdented text ends the list",
+      "input": "- a\n\n b",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": []
+            }
+          ]
+        },
+        {
+          "t": "p",
+          "text": " b"
+        }
+      ]
+    },
+    {
+      "name": "trailing blank lines after a list",
+      "input": "- a\n\n\n",
+      "output": [
+        {
+          "t": "ul",
+          "items": [
+            {
+              "text": "a",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nested list then blank and parent paragraph",
+      "input": "1. a\n   - b\n\n   para of a\n2. c",
+      "output": [
+        {
+          "t": "ol",
+          "start": 1,
+          "items": [
+            {
+              "text": "a",
+              "children": [
+                {
+                  "t": "ul",
+                  "items": [
+                    {
+                      "text": "b",
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "t": "p",
+                  "text": "para of a"
+                }
+              ]
+            },
+            {
+              "text": "c",
               "children": []
             }
           ]
@@ -6239,6 +6687,56 @@
       "name": "fence inside a list",
       "input": "- item\n```\ncode\n```\n- next",
       "output": "• item • next"
+    },
+    {
+      "name": "fence under a list item",
+      "input": "1. Run:\n   ```sh\n   echo a\n     indented\n   ```\n2. Then:\n   ```\n   # comment\n\n   b\n   ```\n   After the code.\n   More after.\n3. Done",
+      "output": "1. Run: 2. Then: After the code. More after. 3. Done"
+    },
+    {
+      "name": "unclosed fence under a list item",
+      "input": "- a\n  ```\n  code\n\ntail",
+      "output": "• a ``` code tail"
+    },
+    {
+      "name": "tab-indented fence under a list item",
+      "input": "- a\n\t```\n\t\tx\n\t```",
+      "output": "• a"
+    },
+    {
+      "name": "fence under a nested item",
+      "input": "- a\n  - b\n    ```\n    c\n    ```\n  back on a",
+      "output": "• a • b back on a"
+    },
+    {
+      "name": "blank line then item paragraph",
+      "input": "- a\n\n  more of a\n  still a\n\n  third\n- b",
+      "output": "• a more of a still a third • b"
+    },
+    {
+      "name": "blank line then nested item",
+      "input": "- a\n\n  - b",
+      "output": "• a • b"
+    },
+    {
+      "name": "blank line then sibling ends the list",
+      "input": "- a\n\n- b",
+      "output": "• a • b"
+    },
+    {
+      "name": "blank line then outdented text ends the list",
+      "input": "- a\n\n b",
+      "output": "• a b"
+    },
+    {
+      "name": "trailing blank lines after a list",
+      "input": "- a\n\n\n",
+      "output": "• a"
+    },
+    {
+      "name": "nested list then blank and parent paragraph",
+      "input": "1. a\n   - b\n\n   para of a\n2. c",
+      "output": "1. a • b para of a 2. c"
     },
     {
       "name": "fence closing line with text",

@@ -37,7 +37,13 @@ Add a dark mode switch to Settings → Appearance.
   - Save the choice with the other settings
 - Theme
   - Follow the system until someone picks a side
-1. Wire it up
+1. Wire it up:
+   \`\`\`sh
+   # The switch reads the saved choice
+
+   bun run app
+   \`\`\`
+   Then flip the switch.
 2. Test it
 
 ## Status
@@ -115,6 +121,11 @@ try {
   check("the bar names no count or author", await js<boolean>(`!/Rev \\d|Agent|You|Harness/.test(document.querySelector('.spec-history').textContent)`));
   check("the bar has no step or Latest buttons", await js<boolean>(`![...document.querySelectorAll('.spec-history button')].some((b) => /Previous|Next|Latest/.test(b.textContent + (b.getAttribute('aria-label') ?? '')))`));
   check("nested list renders nested", await js<boolean>(`!!document.querySelector('.spec-doc li ul li ul li, .spec-doc li ol li ol li, .spec-doc li ul li ol li')`));
+  check(
+    "a fence under a numbered step renders as code inside that step, followed by the step's paragraph",
+    await js<boolean>(`(() => { const li = [...document.querySelectorAll('.spec-doc ol > li')].find((e) => e.textContent.startsWith('Wire it up')); return !!li?.querySelector('pre')?.textContent.includes('bun run app') && li.querySelector(':scope > .code-block ~ p')?.textContent === 'Then flip the switch.'; })()`),
+  );
+  check("the spec body is 14px with a 1.5 line height", await js<boolean>(`(() => { const s = getComputedStyle(document.querySelector('.spec-doc .md')); return s.fontSize === '14px' && s.lineHeight === '21px'; })()`));
   await until("inline image loaded", () => js<boolean>(`[...document.querySelectorAll('.spec-doc img')].some((i) => i.complete && i.naturalWidth > 0)`), 10000);
   await shot("1-spec");
 

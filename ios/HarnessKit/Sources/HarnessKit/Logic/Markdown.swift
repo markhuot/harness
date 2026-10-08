@@ -205,15 +205,10 @@ public enum Markdown {
             let line = lines[i]
             if let fence = Pattern.fence.exec(line) {
                 flush()
-                let marker = Array(fence[1]!.unicodeScalars)
-                var body: [String] = []
-                i += 1
-                while i < lines.count, !Array(JSCompat.trim(lines[i]).unicodeScalars).starts(with: marker) {
-                    body.append(lines[i])
-                    i += 1
-                }
-                blocks.append(.code(lang: fence[2] ?? "", text: body.joined(separator: "\n")))
-                // The TS `continue` skips the closing fence (its `i++`); `defer` does the same.
+                let code = parseFence(lines, start: i, fence: fence)
+                blocks.append(code.block)
+                // `defer` steps past the closing fence, like the TS loop's `i++`.
+                i = code.end
                 continue
             }
             if JSCompat.trim(line).isEmpty {
@@ -295,32 +290,84 @@ public enum Markdown {
         return n
     }
 
+    /// The fenced code block opening at `lines[start]`, and the index of its closing line (the last line
+    /// when it never closes). Each body line loses up to as much leading whitespace as the opening fence
+    /// had, so a fence indented under a list item keeps its code's own indentation.
+    private static func parseFence(_ lines: [String], start: Int, fence: [String?]) -> (block: Block, end: Int) {
+        let dedent = indentOf(lines[start])
+        let marker = Array(fence[1]!.unicodeScalars)
+        var body: [String] = []
+        var i = start + 1
+        while i < lines.count, !Array(JSCompat.trim(lines[i]).unicodeScalars).starts(with: marker) {
+            var scalars = Substring(lines[i]).unicodeScalars[...]
+            var n = 0
+            while n < dedent, let u = scalars.first, JSCompat.isWhitespace(u) {
+                n += u == "\t" ? 4 : 1
+                scalars = scalars.dropFirst()
+            }
+            body.append(String(scalars))
+            i += 1
+        }
+        return (.code(lang: fence[2] ?? "", text: body.joined(separator: "\n")), min(i, lines.count - 1))
+    }
+
     /// The list whose first item is `lines[start]`, and the index of its last line. An item indented 2+
     /// columns past this list's marker starts a list nested under the item before it; one indented
     /// less than `outer` (the parent's marker + 2, 0 at the top) belongs to the parent. A sibling of the
     /// other kind (bullet vs number) ends the list. A non-item line indented 2+ past the marker (2+ at
-    /// the top) continues the last item's text; anything else, a blank line included, ends the list.
+    /// the top) belongs to the last item: a fenced code block under it, or more of its text (a paragraph
+    /// of its own after a code block or a blank line). Blank lines followed by such a line, or by a
+    /// nested item, stay in the item; anything else ends the list.
     private static func parseList(_ lines: [String], start: Int, outer: Int) -> (block: Block, end: Int) {
         let first = Pattern.listItem.exec(lines[start])!
         let indent = indentOf(lines[start])
         let ordered = hasDigit(first[1]!)
         var items = [ListItem(text: first[2]!)]
+        let inside = outer > 0 ? indent + 2 : 2
+        /// Whether a blank line came before this one, inside the current item.
+        var gap = false
         var i = start
         while i + 1 < lines.count {
             let line = lines[i + 1]
             let at = indentOf(line)
             let li = Pattern.listItem.exec(line)
-            if li != nil, at >= indent + 2 {
+            if JSCompat.trim(line).isEmpty {
+                var next = i + 2
+                while next < lines.count, JSCompat.trim(lines[next]).isEmpty { next += 1 }
+                guard next < lines.count,
+                      indentOf(lines[next]) >= (Pattern.listItem.test(lines[next]) ? indent + 2 : inside) else { break }
+                gap = true
+                i = next - 1
+            } else if li != nil, at >= indent + 2 {
                 let sub = parseList(lines, start: i + 1, outer: indent + 2)
                 items[items.count - 1].children.append(sub.block)
                 i = sub.end
+                gap = false
             } else if let li {
                 if at < outer || hasDigit(li[1]!) != ordered { break }
                 items.append(ListItem(text: li[2]!))
                 i += 1
-            } else if !JSCompat.trim(line).isEmpty, at >= (outer > 0 ? indent + 2 : 2) {
-                items[items.count - 1].text += " " + JSCompat.trim(line)
-                i += 1
+                gap = false
+            } else if at >= inside {
+                var kids = items[items.count - 1].children
+                if let fence = Pattern.fence.exec(line) {
+                    let code = parseFence(lines, start: i + 1, fence: fence)
+                    kids.append(code.block)
+                    i = code.end
+                } else {
+                    let text = JSCompat.trim(line)
+                    switch kids.last {
+                    case let .p(prev)? where !gap:
+                        kids[kids.count - 1] = .p(text: prev + "\n" + text)
+                    case .ul?, .ol?, nil:
+                        if gap { kids.append(.p(text: text)) } else { items[items.count - 1].text += " " + text }
+                    default:
+                        kids.append(.p(text: text))
+                    }
+                    i += 1
+                }
+                items[items.count - 1].children = kids
+                gap = false
             } else {
                 break
             }

@@ -9,6 +9,24 @@ test("nested lists render as nested elements with depth classes and the ordered 
   expect(html).toContain('<ol class="md-list depth-0" start="3"><li>a<ul class="md-list depth-1"><li>b<ol class="md-list depth-2" start="1"><li>c</li></ol></li></ul></li><li>d</li></ol>');
 });
 
+test("a fence under a list item renders as code inside the item, and the text after it stays out of the code", () => {
+  const g = globalThis as { window?: unknown };
+  g.window = {}; // FencedCode's useTheme reads window.harness
+  let html: string;
+  try {
+    html = render("1. Run:\n   ```sh\n   # a comment\n\n   echo hi\n   ```\n   Then check.\n2. Next\n\nAfter the list.");
+  } finally {
+    delete g.window;
+  }
+  const first = html.slice(html.indexOf("<li>"), html.indexOf("</li>"));
+  expect(first).toContain("<pre");
+  expect(first).toContain("echo hi");
+  expect(first).toContain("<p>Then check.</p>");
+  expect(html).toContain("<li>Next</li>");
+  expect(html).toContain("<p>After the list.</p>");
+  expect(html.match(/<pre/g)).toHaveLength(1);
+});
+
 test("remote and file images render as links, never as <img>", () => {
   const html = render("![pixel](https://tracker.example/p.gif)\n\n![after](harness://file/shots/after.png)");
   expect(html).not.toContain("<img");
