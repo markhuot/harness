@@ -63,6 +63,21 @@ struct PresenceTests {
         #expect(shown(r) == board)
     }
 
+    @Test func onlyTheTopOfSeveralDockedTicketsIsOnScreen() {
+        let r = Router()
+        r.openTicket(key: "A-1", tab: nil)
+        r.openTicket(key: "A-2", tab: nil)
+        r.openTicket(key: "A-3", tab: nil)
+        #expect(shown(r) == ["A-3"])
+        r.dockSheet()
+        #expect(shown(r) == board + ["A-3"])
+        r.activateAdjacentSheet(.next)
+        #expect(shown(r) == board + ["A-2"])
+        r.sheetIsBesideBoard = true
+        r.restoreDock()
+        #expect(shown(r) == board + ["A-2"])
+    }
+
     @Test func aSheetBesideTheBoardShowsTheBoardAndItsTopTicket() {
         let r = Router()
         r.sheetIsBesideBoard = true

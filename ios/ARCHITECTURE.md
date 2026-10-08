@@ -420,21 +420,85 @@ on iPhone and iOS takes ⌘, for itself. `harness://projects` at regular width s
 never presents it there). A section that doesn't set its own background gets `bg` from the
 detail column, since the split view paints the system background.
 
-**The ticket sheet at either width.** The main Router opens every ticket and New session in its
-one ticket sheet (`ticketSheet` / `dock`, its own path); only the presentation follows the width.
-`TicketSheetContent` (App/TicketSheetHost.swift) is the body both use: the ticket or New session
-in its own NavigationStack bound to the sheet's path. A link inside it (a child, dep or parent, a
-file, a ticket link in markdown) is `router.push` and stacks there with Back. A ticket chosen
-outside it is `router.openTicket` (board cards and their Open parent, the Inbox's triage Open
-when not itself inside the sheet, which reads `\.inTicketSheet`) or `router.openFromOutside`
-(notifications, URLs from other apps, section links from ticket windows): it replaces the
-presented sheet's ticket, root swapped and path cleared, same sheet id, New session drafts kept
-by the Router. Opening the sheet's root ticket with nothing pushed is a no-op (it only switches
-to a tab the link names); a docked sheet restores for its own ticket and is replaced otherwise,
-as with `push`. At
-compact width SceneChrome presents it as the system sheet with the dock detent
-(`TicketSheetHost`), which presents pickers, the watcher form and covers over itself; the board's
-bottom bar and `DockClearance` make room for the docked sheet. At regular width SceneChrome
+**The ticket sheet at either width.** The main Router opens every ticket and New session in a
+ticket sheet (`TicketSheet`: an id, a root and its own path) and keeps every sheet it has opened
+in `dockedSheets`, most recently used first; the first is the one on screen (`ticketSheet` while
+presented, `dock` while docked). Only the presentation follows the width. `TicketSheetContent`
+(App/TicketSheetHost.swift) is the body both use: one sheet's ticket or New session in its own
+NavigationStack bound to that sheet's path by id (`setTicketSheetPath(_:id:)` only takes the
+presented top's). A link inside it (a child, dep or parent, a file, a ticket link in markdown) is
+`router.push` and stacks there with Back. A ticket chosen outside it is `router.openTicket` (board
+cards and their Open parent, the Inbox's triage Open when not itself inside the sheet, which reads
+`\.inTicketSheet`) or `router.openFromOutside` (notifications, URLs from other apps, section links
+from ticket windows), and so is a ticket link while docked or gone: the sheet already showing it on
+top comes forward as it is (switched to a tab the link names), else one with it at the root comes
+forward popped back to it, else a new sheet joins the dock on top. Nothing is ever dropped to make
+room. New session works the same way (the same New session comes forward); a ticket pushed onto a
+presented New session takes its place, and `replace(newSession, with:)` turns New session into its
+ticket in place wherever it sits in the list.
+
+`activateSheet(id:)` makes any sheet the top, presented or docked as the top was;
+`activateAdjacentSheet(.next/.previous)` sends the top to the back or brings the last to the top,
+so repeated swipes walk the whole dock. `dismissSheet()` and `closeSheet(id:)` close one sheet:
+when it was the top, the next becomes the top, docked. `dismissAllSheets()` is Projects.
+`removeTicket` and `replaceTicket` reach into every sheet and touch only the matching ones. Only the
+first `liveSheetCount` (5) are live (`liveSheets`): both hosts mount a `TicketSheetContent` for each
+in a ZStack, the top visible and the rest at opacity 0, without hit testing, accessibility or key
+commands (`disabled`), so switching is instant and keeps scroll, path and drafts. The rest are
+parked: the Router's small root and path, drawn only as a minimized card from the board's own
+`Ticket` (`DockedTicketText`, `BoardState.ticketByKey`), never a `TicketDetail` or a mounted view.
+Opening a parked one mounts it fresh at its saved path, and the live sheet used least recently
+parks.
+
+Docked tickets show as custom minimized cards rather than system menus (App/DockedTickets.swift).
+A `DockedCard` is its own fully rounded glass capsule, 64pt tall like the single docked sheet
+(`DockedCardMetrics`, 8pt between cards), with a status dot (`StatusDot`, the board's colors: green
+done, red blocked; a pencil for New session), the ref whole and the title truncated into the rest
+(`DockedTicketLabel`), and an ✕ that closes just that ticket; a tap anywhere else opens it. It's one accessibility element,
+"<ref>, <title>, docked" (`ticket-dock`), with a Close action, and its ✕ is "Close <key>"
+(`ticket-dock-close`). `DockCards.split` (HarnessKit) decides how many cards show: up to
+`phoneVisible` (2) or `padVisible` (5), the most recent at the bottom, then a `DockedMoreCard`
+("N more…" and a stack icon, `ticket-dock-more`, "<n> more docked tickets") on top counting the
+rest, in the same glass capsule. It expands into `DockedCardList`: the docked tickets as the same
+glass cards, the most recent at the bottom, scrolled to the bottom and scrolling up past the height
+it's given, under a small glass capsule that collapses it. The list has no background of its own;
+it sits on a `DockedBackdrop`, a radial progressive blur (a material masked by a radial gradient,
+plus a light tint of the palette's background) rising out of the bottom on iPhone and the
+bottom-right corner on iPad. Switching while a ticket is up is a
+long press on its title (`TicketDetailHero`'s `.dockedTicketsMenu`, while `\.inTicketSheet` and more
+than one is docked): a system context menu of the other docked tickets (`DockedTicketsMenuItems`:
+the first `Router.shownDockCount`, 10, then "N more").
+`DockedTicketsKeeper` (on MainTabs) holds `BoardStore.watchKey` for every docked key, so a done
+ticket the board hasn't paged in still has its title, and drops the sheets of keys the server
+reports missing (`missingKeys`) through `removeTicket`.
+
+The list survives a relaunch on the device only: RootView saves `persistedDock` (the roots and
+paths as JSON; `Route` and `TicketSheet.Root` are `Codable`) to UserDefaults under
+`harness.dockedTickets` whenever `dockedSheets` changes, and restores it docked
+(`restorePersistedDock`) once there's a store. UserDefaults rather than `@SceneStorage`, which state
+restoration drops when the app is swiped away. A restored entry whose root doesn't decode is
+dropped, and a path keeps its routes up to the first that doesn't, so a build that adds a route
+never fails a launch. Only the top mounts at launch; the rest stay parked until opened.
+
+At compact width SceneChrome presents the sheets as one system sheet with the dock detent
+(`TicketSheetHost`), keyed by `ticketSheetGeneration` rather than by sheet, so adding or switching
+tickets swaps the content in place without presenting it again. Swiping the sheet away (or UIKit
+dismissing it) calls `dismissSheet()`; with tickets left, the generation goes up and a new system
+sheet comes up docked with the next. TicketSheetHost presents pickers, the watcher form and covers
+over itself; the board's bottom bar and `DockClearance` make room for the docked sheet. Docked, the
+sheet (`TicketDock`) is the top ticket's card on the system sheet's own glass, 64pt as the single
+dock always was. The other docked tickets stack above it in the main window (`DockedCardsAbove`,
+an overlay on the compact sections): glass capsules as wide as the docked sheet and 8pt above it,
+laid out from where the sheet floats (`DockedSheetInset`), up to two cards in all with the sheet's,
+then "N more…" on top. `DockClearance` adds their rows to the sheet's clearance, so the board's
+bottom bar rides above the whole stack. The cards aren't drawn inside the sheet because the system
+sheet keeps its glass rim and shadow even with `presentationBackground(.clear)`, which drew one
+outline around them all. "N more…" expands every ticket but the top into the `DockedCardList` over
+the board, on the backdrop, the sheet's card staying under it; a tap on the backdrop collapses it.
+A horizontal swipe on the docked sheet moves to the next or previous ticket: UIKit swipe
+recognizers on the sheet's container beside the flick pan (`SheetFlickTracker`), enabled only
+while docked with more than one; a SwiftUI gesture on the card kept the sheet's own pan from taking
+a swipe down. VoiceOver has Next and Previous docked ticket actions on the dock. At regular width SceneChrome
 presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell
 overlays `TicketPanelHost` (App/TicketSidePanel.swift), and the root presents `sheet` and the
 cover as usual. The host puts the content in `TicketSidePanel`, which slides in from the
@@ -448,12 +512,26 @@ above it. New session in the panel likewise drops its own title and Cancel ✕, 
 and Start session. While it's on top it hands its `cancel()` to the panel through
 `TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
 or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
-registered they just dismiss. Docking, pop-out and the pill's Close don't ask, and the draft is
+registered they just dismiss. Docking, pop-out and a card's ✕ don't ask, and the draft is
 saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it.
 Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
-and `TicketDockPill` stands in for it on the trailing edge, Picture in Picture style, with the
-iPhone dock's `ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores
-it, and its context menu closes it. The pill floats over the board without reserving space. The
+and every docked ticket waits as a glass-capsule `DockedCard` in `DockedCardStack`, the same
+cards as the iPhone's, in the board's
+bottom-right corner inside the safe area, stacking upward with the newest at the bottom. While the
+panel is open the other docked tickets' cards stay there, their trailing edge on the panel's
+leading edge (`TicketSidePanel(onWidth:)` reports it as it resizes). The stack keeps to the board's
+column and never covers the sidebar: DesktopShell measures where the column starts
+(`DockedSheetInset.contentLeading`), and `DockedCardStack.mode` picks cards when the column left of
+the panel has room for one at least 200pt wide, the "N more…" card alone ("<n> docked tickets")
+holding every docked ticket when it has less, and nothing when even that won't fit (a wide panel;
+the title's long press still lists them). Each card is about 320pt wide (`DockedCardStack.maxWidth`,
+narrower in a narrow column); a tap opens that ticket in the panel and its ✕ closes just that one.
+At most five show, fewer when the height doesn't fit them (`DockCards.split`'s `fitting`), then
+"N more…", which expands the `DockedCardList` over the corner, as tall as its cards up to the
+window's height, on a `DockedBackdrop` out of the column's bottom-right corner (a tap on it
+collapses the list). The stack's height goes to `DockedSheetInset.cards`, which `DockClearance` adds at
+the bottom of the desktop's sections so their last cards scroll clear of it. Each sheet has its own `TicketPanelCloser`
+(`TicketPanelClosers`), so a hidden New session never takes over the ✕ of the ticket on top. The
 composer measures its bottom gap from the screen's edge in the iPhone sheet (`\.concentricBottomGap`
 0), whose screens ignore the bottom container safe area (`TicketSheetContent(toBottomEdge:)`): the
 system gives the docked sheet the home indicator's inset and keeps it after the sheet grows back,
@@ -591,18 +669,31 @@ bar no higher than the sidebar button (both keep the top safe area). The panel's
 ticket once: the title bar, not the ticket's navigation bar too (AXe does list a navigation bar's
 key, as in a ticket window). Dragging the handle to either edge stops at 25% and 80%, then sim-check
 drags it back to the default, since the width is a pref that outlives the run. A child link inside
-pushes, and a different board card replaces the ticket at the root. AXe's tree leaves out the glass
+pushes, and a different board card opens its ticket over it, at the root. AXe's tree leaves out the glass
 Back button, so sim-check taps where it sits: after a push that goes back to the parent, and at the
-root it leaves the panel where it was. The dock button leaves the "KEY, docked" pill vertically
-centred and partly off the trailing edge, and a tap on it restores the pushed child, Back and all.
-The pill's menu Close sends it away, New session opens in the panel with one title and one ✕ and no
+root it leaves the panel where it was. The dock button leaves the "KEY, title, docked" card in the
+bottom-right corner, and a tap on it restores the pushed child, Back and all. A card's ✕ closes
+just its ticket (sim-check closes the board card's and the conductor's one at a time), New session opens in the panel with one title and one ✕ and no
 pop-out button (AXe's labels, then the screenshot's ink where its bar would draw a title, then a tap
 where its ✕ would sit, which must leave the panel up), with a draft typed Escape and the panel's ✕
 each bring up Save or Discard (Keep editing, then Discard, which closes the panel and takes the
 draft's card off the board), Escape (AXe's HID key 41) closes the panel, and pop-out opens a ticket
-window and closes the panel. Shots are `panel-*.png`. A compact window's bottom sheet isn't covered,
-since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets` checks drive
-the same sheet.
+window and closes the panel. Then `cardStackChecks` docks a dozen tickets of their own: the ones
+behind an open panel wait as cards just left of it, ref and title in their labels, newest at the
+bottom, and never over the sidebar (none beside the default 80% panel, full cards at 25%, the lone
+"2 docked…" card beside a column about 190pt wide, none at 50%, with Settings still taking a tap); docked, every one is a card in the
+corner and a tap opens that one; a card's ✕ closes just its ticket; twelve show five cards and "7
+more…", which expands into the list of all twelve, one of the oldest opening from it; and
+harness://projects closes them all. Shots are `panel-*.png`. A compact window's bottom sheet isn't
+covered, since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets`
+checks drive the same sheet, and `dockStackChecks` there covers several docked tickets the same
+way (two cards, the newest at the bottom, with the board's bar above the taller dock; a tap on a
+card; the long press on the title, listing only the others; a swipe along the dock; two cards and
+"10 more…" expanding into the list of twelve, the oldest, parked, reopening at its pushed screen; a
+card's ✕ and a swipe down closing only the top; a terminate and relaunch keeping the dock; and the
+app's footprint with none, 5 and 20 docked; `dock-*.png`). AXe stops a drag at the screen's edge,
+so sim-check swipes the dock down from near a card's top, where enough of the drag is left to
+throw the sheet away.
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
 `CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and

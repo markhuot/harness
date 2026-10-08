@@ -11,18 +11,20 @@ import SwiftUI
 /// the app binds it to the `ticketPanelWidth` pref to keep it across launches. Dragging the leading
 /// handle resizes it; flinging the title bar right docks it (it slides off the edge first, then
 /// `onDock` runs); Escape on a hardware keyboard closes it. `docked` keeps it mounted (drafts,
-/// scroll, the nav path) but off the trailing edge, inert, while the dock pill stands in for it.
+/// scroll, the nav path) but off the trailing edge, inert, while the docked cards stand in for it.
 struct TicketSidePanel<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     /// Whether the pop-out (own window) button shows.
     var canPopOut = true
-    /// Off the edge and inert, for the dock pill.
+    /// Off the edge and inert, for the docked cards.
     var docked = false
     @Binding var widthFraction: Double?
     let onDock: () -> Void
     let onPopOut: () -> Void
     let onClose: () -> Void
+    /// The panel's width as it lays out (resizing included), for what sits beside it.
+    var onWidth: (CGFloat) -> Void = { _ in }
     @ViewBuilder let content: () -> Content
 
     @Environment(\.palette) private var c
@@ -39,6 +41,7 @@ struct TicketSidePanel<Content: View>: View {
             let width = dragWidth ?? TicketPanelWidth.width(windowWidth: window, stored: widthFraction)
             panel(width: width, window: window)
                 .frame(width: width)
+                .onChange(of: width, initial: true) { onWidth(width) }
                 .offset(x: docked ? width + Self.shadowReach : flingOffset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
@@ -203,115 +206,101 @@ extension Animation {
     static var ticketPanel: Animation { .snappy }
 }
 
-/// The docked panel, stashed at the window's trailing edge like Picture in Picture: a floating
-/// capsule vertically centred on the edge with about a third of it off screen, a chevron pointing
-/// back in and the ticket's key. Place it as `.overlay(alignment: .trailing)` over the board; it
-/// offsets itself past the edge. Tap it or drag it left to restore the panel; Close is in its
-/// context menu and its accessibility actions.
-struct TicketDockPill: View {
-    /// The ticket's key, or "New session" (`TicketSheet.title`).
-    let label: String
-    let onRestore: () -> Void
-    let onClose: () -> Void
-
-    @Environment(\.palette) private var c
-    /// How far it's been dragged back in (negative, leftward).
-    @State private var dragX: CGFloat = 0
-
-    var body: some View {
-        Button(action: onRestore) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.left")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(c.accent)
-                Text(label)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-            }
-            .padding(.leading, 16)
-            // The hidden part past the edge, so the label sits in what's on screen.
-            .padding(.trailing, 12 + Self.offscreen)
-            .frame(height: Self.height)
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .shadow(color: .black.opacity(0.18), radius: 10, x: -2, y: 2)
-        .contentShape(.contextMenuPreview, .capsule)
-        .contextMenu {
-            Button("Close", systemImage: "xmark", role: .destructive, action: onClose)
-        }
-        .offset(x: Self.offscreen + dragX)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 10)
-                .onChanged { value in dragX = min(0, value.translation.width) }
-                .onEnded { value in
-                    if Self.restores(translation: value.translation.width, predicted: value.predictedEndTranslation.width) {
-                        onRestore()
-                    }
-                    withAnimation(.snappy) { dragX = 0 }
-                }
-        )
-        .accessibilityLabel("\(label), docked")
-        .accessibilityHint("Double-tap to open")
-        .accessibilityIdentifier("ticket-dock")
-        .accessibilityAction(named: "Close", onClose)
-    }
-
-    /// Whether a leftward drag that ended at `translation` pulls the panel back out.
-    static func restores(translation: CGFloat, predicted: CGFloat) -> Bool {
-        translation <= -40 || predicted <= -120
-    }
-
-    static let height: CGFloat = 52
-    /// How much of the capsule sits past the window's edge: about a third of a short label's pill.
-    static let offscreen: CGFloat = 28
-}
-
-/// The ticket sheet (`Router.ticketSheet` / `Router.dock`) at regular width, over DesktopShell:
-/// TicketSidePanel around TicketSheetContent (the iPhone sheet's content), and while docked the
-/// panel stays mounted off the edge with TicketDockPill standing in for it. Pickers, the watcher
-/// form and covers come up from the root (SceneChrome), which presents nothing else here. Pop-out
-/// hands the ticket to its own window (`Router.popOutSheet()`) where the device has windows.
+/// The ticket sheets (`Router.dockedSheets`) at regular width, over DesktopShell: TicketSidePanel
+/// around the top sheet's TicketSheetContent (the iPhone sheet's content), with every live sheet
+/// (`Router.liveSheets`) mounted behind it, hidden, so switching is instant and keeps each one's
+/// place. The other docked tickets wait as a stack of cards in the board's bottom-right corner
+/// (DockedCardStack), left of the panel while it's open and following its resize; while docked the
+/// panel stays mounted off the edge and every ticket is a card. Pickers, the watcher form and
+/// covers come up from the root (SceneChrome), which presents nothing else here. Pop-out hands the
+/// top ticket to its own window (`Router.popOutSheet()`) where the device has windows.
 struct TicketPanelHost: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.supportsMultipleWindows) private var multipleWindows
-    @State private var closer = TicketPanelCloser()
+    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
+    @State private var closers = TicketPanelClosers()
+    @State private var panelWidth: CGFloat = 0
 
     var body: some View {
         let sheet = router.ticketSheet ?? router.dock
         let docked = router.ticketSheetState == .docked
-        ZStack(alignment: .trailing) {
-            Color.clear.allowsHitTesting(false)
-            if let sheet {
-                TicketSidePanel(title: sheet.title, canPopOut: multipleWindows && router.canPopOutSheet,
-                                docked: docked, widthFraction: width,
-                                onDock: { router.dockSheet() }, onPopOut: { router.popOutSheet() },
-                                onClose: { if !closer.close() { router.dismissSheet() } }) {
-                    TicketSheetContent(sheet: sheet).environment(\.inTicketPanel, true).environment(closer)
+        // Docked, every ticket is a card; open, the ones behind the panel's.
+        let waiting = docked ? router.dockedSheets : Array(router.dockedSheets.dropFirst())
+        GeometryReader { geo in
+            let besidePanel = sheet != nil && !docked ? panelWidth : 0
+            // The board's column only: the sidebar (left of `contentLeading`) stays clear.
+            let sidebar = max(0, (dockInset?.contentLeading ?? 0) - geo.frame(in: .global).minX)
+            let board = CGSize(width: max(0, geo.size.width - besidePanel - sidebar), height: geo.size.height)
+            ZStack(alignment: .trailing) {
+                Color.clear.allowsHitTesting(false)
+                if let sheet {
+                    let closer = closers.closer(sheet.id)
+                    TicketSidePanel(title: sheet.title, canPopOut: multipleWindows && router.canPopOutSheet,
+                                    docked: docked, widthFraction: width,
+                                    onDock: { router.dockSheet() }, onPopOut: { router.popOutSheet() },
+                                    onClose: { if !closer.close() { router.dismissSheet() } },
+                                    onWidth: { panelWidth = $0 }) {
+                        ZStack {
+                            ForEach(router.liveSheets) { s in
+                                let isTop = s.id == sheet.id
+                                TicketSheetContent(sheet: s)
+                                    .environment(\.inTicketPanel, true)
+                                    .environment(closers.closer(s.id))
+                                    .opacity(isTop ? 1 : 0)
+                                    .allowsHitTesting(isTop)
+                                    .accessibilityHidden(!isTop)
+                                    .disabled(!isTop)
+                                    .zIndex(isTop ? 1 : 0)
+                            }
+                        }
+                    }
+                    // Down to the window's bottom edge; the content keeps the home indicator clear.
+                    .ignoresSafeArea(.container, edges: .bottom)
+                    .transition(.ticketPanel)
                 }
-                // Down to the window's bottom edge; the content keeps the home indicator clear.
-                .ignoresSafeArea(.container, edges: .bottom)
-                .transition(.ticketPanel)
+                if !waiting.isEmpty {
+                    DockedCardStack(sheets: waiting, available: board)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(.trailing, besidePanel)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
-            if let dock = router.dock {
-                TicketDockPill(label: dock.title, onRestore: { router.restoreDock() }, onClose: { router.dismissSheet() })
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            .onChange(of: DockedCardStack.height(count: waiting.count, available: board), initial: true) { _, h in
+                dockInset?.cards = h > 0 ? h + DockedCardStack.margin * 2 : 0
             }
         }
         .animation(.ticketPanel, value: router.ticketSheetState)
+        .animation(.ticketPanel, value: waiting.map(\.id))
+        .onChange(of: router.dockedSheets.map(\.id)) { _, ids in closers.keep(Set(ids)) }
         .onChange(of: docked) { _, docked in
             // A docked New session mustn't keep the keyboard up over the board.
-            if docked { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            if docked { resignFirstResponder() }
         }
+        .onChange(of: sheet?.id) { resignFirstResponder() }
+        .onDisappear { dockInset?.cards = 0 }
     }
 
     /// The person's width, kept in prefs; nil until they first drag the panel's edge.
     private var width: Binding<Double?> {
         Binding(get: { app.prefs.ticketPanelWidth }, set: { app.setPref(\.ticketPanelWidth, $0) })
     }
+}
+
+/// One TicketPanelCloser per ticket sheet, so a hidden New session never takes over the close
+/// button of the ticket on top.
+@Observable final class TicketPanelClosers {
+    @ObservationIgnored private var byID: [Int: TicketPanelCloser] = [:]
+
+    func closer(_ id: Int) -> TicketPanelCloser {
+        if let closer = byID[id] { return closer }
+        let closer = TicketPanelCloser()
+        byID[id] = closer
+        return closer
+    }
+
+    /// Forgets the closers of sheets that closed.
+    func keep(_ ids: Set<Int>) { byID = byID.filter { ids.contains($0.key) } }
 }
 
 /// How the panel's close button (and Escape) closes what's on screen in it: the screen on top can
@@ -350,13 +339,5 @@ struct TicketPanelHost: View {
                         onDock: {}, onPopOut: {}, onClose: {}) {
             List(0..<30) { Text("Row \($0)") }
         }
-    }
-}
-
-#Preview("Dock pill") {
-    ZStack {
-        Color.gray.opacity(0.2).ignoresSafeArea()
-        TicketDockPill(label: "HARNESS-365", onRestore: {}, onClose: {})
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
     }
 }

@@ -67,15 +67,23 @@
 //      tap on the bar restores it where it was (its composer no higher than before), a section's alert still comes up, Projects closes
 //      it, the bar's ✕ and a swipe down on it send it away, a flick down from full size sends it
 //      away without docking, and New session opens in the sheet too and docks as
-//      "New session"; sheet-*.png
+//      "New session"; sheet-*.png. Then several docked: a second ticket joins the dock as a second
+//      card (ref and title, the newest at the bottom), a tap on a card, a long press on the
+//      ticket's title and a swipe along the dock switch (keeping each one's path and composer),
+//      twelve show two cards and "10 more…", which expands into the list of all twelve (the
+//      oldest, parked, opens at its saved path), a card's ✕ and a swipe down close only the top,
+//      the dock comes back after a relaunch, Projects closes them all, and the app's footprint
+//      with none, 5 and 20 docked; dock-*.png
 //
 //   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
 //      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
 //      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). Then the
 //      side panel's checks: a card opens it trailing-aligned at its default width, its edge resizes
-//      it within 25–80%, a link inside pushes and another card replaces its ticket, the dock pill
-//      sits on the trailing edge and restores it with its path, the pill's menu closes it, New
-//      session and Escape, and pop-out moves its ticket into a window; panel-*.png. The iPhone's
+//      it within 25–80%, a link inside pushes and another card opens over it, docked it's a card in
+//      the bottom-right corner that restores it with its path, a card's ✕ closes just its ticket,
+//      New session and Escape, pop-out moves its ticket into a window, and several docked tickets
+//      wait as cards left of the panel, never over the sidebar (five, then "N more…", which
+//      expands into the list); panel-*.png. The iPhone's
 //      real-tap checks and the modes above tap at iPhone coordinates, so they don't run here.
 //      --ipad --sheets runs only the panel's checks. SIM_CHECK_LANDSCAPE=1 runs them on a
 //      landscape-only build (ios/ARCHITECTURE.md § iPad layout), mapping taps and rotating shots.
@@ -1015,8 +1023,15 @@ async function seedSheets() {
   return { project, conductor };
 }
 
-/** The iPhone's docked ticket sheet's bar, labelled "<key>, docked" (or "New session, docked"). */
+/**
+ * A docked ticket's card (the iPhone's dock, the iPad's corner, the expanded list), labelled "<key>, <title>, docked" (or
+ * "New session, docked").
+ */
 const isDock = (l: string) => l.endsWith(", docked");
+/** How many tickets are docked: the cards on screen plus what their "N more…" card counts. */
+const dockCount = (l: string[]) => l.filter(isDock).length + Number(l.find((x) => /^\d+ more docked tickets$/.test(x))?.split(" ")[0] ?? 0);
+/** The iPhone's top docked ticket: the card at the bottom of the dock (the last one listed). */
+const topDock = (l: string[]) => l.filter(isDock).at(-1);
 
 /**
  * Drags the presented ticket sheet by its nav bar to just above the bottom, slowly, so it settles
@@ -1028,17 +1043,32 @@ async function dockSheet(udid: string): Promise<string> {
   const { width, height } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
   const x = String(Math.round(width / 2));
   await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "1.2", "--udid", udid);
-  return until("the dock", async () => (await labels(udid)).find(isDock), 6000);
+  return until("the dock", async () => topDock(await labels(udid)), 6000);
 }
 
-/** Swipes a docked ticket sheet away, if one is up, so a shot of a tab doesn't carry it. */
-async function undock(udid: string) {
-  const dock = await findElement(udid, isDock);
-  if (!dock) return;
+/** Swipes the docked ticket sheet down once: it closes the ticket on top. */
+async function swipeDockDown(udid: string, dock: AXNode) {
+  // From near the card's top: AXe stops a drag at the screen's edge, and from a card's middle
+  // (now that the dock grows with its cards) too little of it is left to throw the sheet away.
   const x = String(Math.round(dock.frame.x + dock.frame.width / 2));
-  const y = Math.round(dock.frame.y + dock.frame.height / 2);
+  const y = Math.round(dock.frame.y + 4);
   await axe("swipe", "--start-x", x, "--start-y", String(y), "--end-x", x, "--end-y", String(y + 160), "--duration", "0.1", "--udid", udid);
-  await until("the dock gone", async () => !(await labels(udid)).some(isDock), 4000);
+}
+
+/**
+ * Swipes docked ticket sheets away until none is left (each swipe closes the one on top), so a
+ * shot of a tab doesn't carry them.
+ */
+async function undock(udid: string) {
+  for (let i = 0; i < 20; i++) {
+    const dock = await findElement(udid, isDock);
+    if (!dock) return;
+    const before = dockCount(await labels(udid));
+    await swipeDockDown(udid, dock);
+    await until("one fewer docked", async () => dockCount(await labels(udid)) < before, 6000);
+    await Bun.sleep(500);
+  }
+  throw new Error("the dock never emptied");
 }
 
 /**
@@ -1120,11 +1150,18 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       await say("after the drag");
       throw e;
     });
-    if (label !== `${kid.key}, docked`) throw new Error(`the dock reads "${label}"`);
+    if (label !== `${kid.key}, ${kid.title}, docked`) throw new Error(`the dock reads "${label}", not ${kid.key} and its title`);
     const l = await labels(udid);
     if (!onBoard(l)) throw new Error("the board isn't showing over the dock");
     // The dock sits below the board's bottom bar, not over it.
-    const bar = await findElement(udid, isDock);
+    // The docked sheet's own frame, from its card: a glass capsule as wide and tall as the docked
+    // sheet, whose open button starts at its leading edge and whose ✕ ends 10pt in.
+    const all = await nodes(udid);
+    const cardOpen = all.find((n) => n.AXLabel && isDock(n.AXLabel));
+    const cardClose = all.find((n) => n.AXUniqueId === "ticket-dock-close");
+    const bar = cardOpen && cardClose
+      ? { ...cardOpen, frame: { x: cardOpen.frame.x, y: cardOpen.frame.y, width: cardClose.frame.x + cardClose.frame.width + 10 - cardOpen.frame.x, height: cardOpen.frame.height } }
+      : null;
     const newSession = await findElement(udid, (x) => x === "New session");
     if (bar && newSession && newSession.frame.y + newSession.frame.height > bar.frame.y)
       throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(bar.frame.y)})`);
@@ -1259,6 +1296,452 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   });
 }
 
+/** Tickets of their own to dock, each with a title long enough to truncate in the dock. */
+async function seedDockable(projectId: string, n: number): Promise<Ticket[]> {
+  const out: Ticket[] = [];
+  for (let i = 1; i <= n; i++)
+    out.push(await api<Ticket>("POST", "/tickets", { projectId, spec: `Docked ticket ${i}: a title long enough that it has to truncate before the dock's buttons`, driver: "dummy", start: false }));
+  return out;
+}
+
+/**
+ * The iPhone's dock with several tickets (TicketDock, DockedCard): a second ticket joins the dock as
+ * a second card rather than replacing it, the newest at the bottom with its ref and title; tapping a
+ * card opens it (keeping its path and composer); a long press on the ticket's title lists the other
+ * docked tickets; a swipe along the dock walks them; twelve show two cards and "10 more…", which
+ * expands into the list of all twelve, whose oldest (parked) opens at its saved path; a card's ✕
+ * and a swipe down close only the top; the dock comes back after a relaunch; Projects closes them all.
+ */
+async function dockStackChecks(udid: string, p: { project: Project; conductor: Ticket }) {
+  const key = p.conductor.key;
+  const kid = (await api<TicketDetail>("GET", `/tickets/${key}`)).children[0];
+  if (!kid) throw new Error(`${key} has no children`);
+  const extra = await seedDockable(p.project.id, 11);
+  const b = extra[0]!;
+  const { width: W } = (await tree(udid))[0]!.frame;
+  const onChild = (l: string[]) => l.includes(`Part of ${key}`);
+  const top = async () => topDock(await labels(udid));
+  const count = async () => dockCount(await labels(udid));
+  const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
+  /** `k`'s card. */
+  const card = (k: string) => (l: string) => l.startsWith(`${k}, `) && isDock(l);
+  /** A row in the title's menu for `k`, "<key> · <title>". */
+  const row = (k: string) => (l: string) => l.startsWith(`${k} · `);
+  const keyOf = (label: string) => label.split(",")[0]!;
+  let composerBefore: AXNode["frame"] | null = null;
+
+  await check("a second ticket joins the dock as a second card, the newest at the bottom with its ref and title", async () => {
+    await goto(udid, BOARD);
+    await undock(udid);
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`, (l) => l.some((x) => x.includes(kid.key)));
+    await tapWhere(udid, (l) => l.includes(kid.key));
+    moved(udid);
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    composerBefore = (await findElement(udid, (x) => x === "Send"))?.frame ?? null;
+    await dockSheet(udid);
+    await goto(udid, `harness://ticket/${encodeURIComponent(b.key)}`, (l) => ticketShown(l, b.key) && !l.some(isDock));
+    const label = await dockSheet(udid);
+    if (label !== `${b.key}, ${b.title}, docked`) throw new Error(`the bottom card reads "${label}"`);
+    const cards = (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
+    if (cards.length !== 2 || !card(kid.key)(cards[0]!.AXLabel!)) throw new Error(`the cards read ${cards.map((n) => `"${n.AXLabel}"`).join(", ")}`);
+    if (cards[1]!.frame.y <= cards[0]!.frame.y) throw new Error("the newest card isn't at the bottom");
+    // The board's bottom bar rides above the whole stack: the topmost card, or "N more…" over it.
+    const more = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-more");
+    const dockTop = Math.min(cards[0]!.frame.y, more?.frame.y ?? Infinity);
+    const newSession = await findElement(udid, (x) => x === "New session");
+    if (!newSession) throw new Error("no New session button on the board");
+    if (newSession.frame.y + newSession.frame.height > dockTop)
+      throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(dockTop)})`);
+    await shootBoth(udid, "dock-stack");
+    await appearance(udid, "light");
+    return `${keyOf(cards[0]!.AXLabel!)} over ${keyOf(label)}`;
+  });
+  await check("tapping a card opens that ticket, its path and composer kept", async () => {
+    await tapWhere(udid, card(kid.key));
+    moved(udid);
+    await until("the child again", async () => {
+      const l = await labels(udid);
+      return onChild(l) && !l.some(isDock);
+    }, 8000);
+    if (composerBefore) {
+      const before = composerBefore;
+      let y: number | undefined;
+      await until("the composer where it was", async () => {
+        y = (await findElement(udid, (x) => x === "Send"))?.frame.y;
+        return y !== undefined && Math.abs(y - before.y) <= 1;
+      }, 4000).catch(() => {
+        throw new Error(`the composer's Send sits at y ${y === undefined ? "(gone)" : Math.round(y)}, not ${Math.round(before.y)} as before`);
+      });
+    }
+    return `${kid.key} back, on its pushed screen`;
+  });
+  await check("a long press on the ticket's title lists the other docked tickets and switches", async () => {
+    await Bun.sleep(600);
+    await tapWhere(udid, (l) => l.startsWith(kid.title), { longPress: 1.2 });
+    await until("the menu", async () => (await labels(udid)).some(row(b.key)), 5000).catch(async (e) => {
+      await say("after a long press on the title");
+      throw e;
+    });
+    await shot(udid, "dock-title-menu-light");
+    if ((await labels(udid)).some(row(kid.key))) throw new Error(`the menu lists ${kid.key}, the ticket on screen`);
+    await tapWhere(udid, row(b.key));
+    moved(udid);
+    await until(`${b.key} in the sheet`, async () => {
+      const l = await labels(udid);
+      return l.some((x) => x.startsWith(b.title.slice(0, 24))) && !l.some((x) => x.startsWith("Part of ")) && !l.some(isDock);
+    }, 8000).catch(async (e) => {
+      await say("after choosing it from the menu");
+      throw e;
+    });
+    return `${kid.key} → ${b.key}, still presented`;
+  });
+  await check("a swipe along the dock moves to the next ticket and back", async () => {
+    const first = await dockSheet(udid);
+    const bar = (await findElement(udid, (l) => l === first))!;
+    const y = String(Math.round(bar.frame.y + bar.frame.height / 2));
+    const swipe = (from: number, to: number) =>
+      axe("swipe", "--start-x", String(Math.round(from)), "--start-y", y, "--end-x", String(Math.round(to)), "--end-y", y, "--duration", "0.25", "--udid", udid);
+    await swipe(W * 0.6, W * 0.1);
+    const second = await until("the next ticket on top", async () => {
+      const t = await top();
+      return t && t !== first ? t : null;
+    }, 5000).catch(async (e) => {
+      await say("after a swipe left");
+      throw e;
+    });
+    if ((await count()) !== 2) throw new Error("the swipe changed the count");
+    await swipe(W * 0.15, W * 0.65);
+    await until("the first back on top", async () => (await top()) === first, 5000);
+    return `${keyOf(first)} → ${keyOf(second)} → back`;
+  });
+  await check("with 12 docked, two cards and \"10 more…\" expand into the list, whose oldest opens at its saved path", async () => {
+    // b on top, so the conductor's sheet (with the child pushed) is the oldest.
+    if (!(await top())?.startsWith(`${b.key}, `)) {
+      await tapWhere(udid, card(b.key));
+      moved(udid);
+      await dockSheet(udid);
+    }
+    for (const t of extra.slice(1)) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
+    await dockSheet(udid);
+    await until("two cards and 10 more", async () => {
+      const l = await labels(udid);
+      return l.filter(isDock).length === 2 && l.includes("10 more docked tickets");
+    }, 5000).catch(async (e) => {
+      await say("the dock");
+      throw e;
+    });
+    await shot(udid, "dock-more-light");
+    await tapWhere(udid, "10 more docked tickets");
+    const listed = await until("the list of all twelve", async () => {
+      const l = await labels(udid);
+      const all = l.filter(isDock);
+      return all.length === 12 ? all : null;
+    }, 6000).catch(async (e) => {
+      await say("after \"10 more\"");
+      throw e;
+    });
+    await shot(udid, "dock-list-light");
+    // The most recent at the bottom, as in the dock: the conductor's sheet, the oldest, first.
+    if (!card(kid.key)(listed[0]!)) throw new Error(`the list starts with "${listed[0]}", not ${kid.key}`);
+    // It opens scrolled to the bottom: scroll up to the oldest.
+    const { height: Hs } = (await tree(udid))[0]!.frame;
+    for (let i = 0; i < 3; i++) {
+      const n = await findElement(udid, card(kid.key));
+      if (n && n.frame.y > 60 && n.frame.y + n.frame.height < Hs - 20) break;
+      await axe("swipe", "--start-x", String(Math.round(W / 2)), "--start-y", String(Math.round(Hs * 0.35)), "--end-x", String(Math.round(W / 2)), "--end-y", String(Math.round(Hs * 0.8)), "--duration", "0.5", "--udid", udid);
+      await Bun.sleep(600);
+    }
+    await tapWhere(udid, card(kid.key));
+    moved(udid);
+    await until("the child, mounted again at its path", async () => {
+      const x = await labels(udid);
+      return onChild(x) && !x.some(isDock);
+    }, 10000).catch(async (e) => {
+      await say(`after ${kid.key} from the list`);
+      throw e;
+    });
+    return `2 cards and 10 more; the list of 12; ${kid.key} came back on its pushed screen`;
+  });
+  await check("a card's ✕ closes only that ticket", async () => {
+    const before = await dockSheet(udid);
+    const n = await count();
+    await tapWhere(udid, `Close ${keyOf(before)}`);
+    await until("the next one on top", async () => {
+      const t = await top();
+      return t && t !== before ? t : null;
+    }, 6000);
+    if ((await count()) !== n - 1) throw new Error(`${await count()} docked after ✕, not ${n - 1}`);
+    return `${n} → ${n - 1}`;
+  });
+  await check("a swipe down on the dock closes one and leaves the rest docked", async () => {
+    const before = (await top())!;
+    const n = await count();
+    await Bun.sleep(600);
+    await swipeDockDown(udid, (await findElement(udid, (l) => l === before))!);
+    const after = await until("the next one docked", async () => {
+      const t = await top();
+      return t && t !== before ? t : null;
+    }, 8000).catch(async (e) => {
+      await say("after the swipe down");
+      throw e;
+    });
+    await Bun.sleep(600);
+    if ((await count()) !== n - 1) throw new Error(`${await count()} docked after the swipe, not ${n - 1}`);
+    if (!onBoard(await labels(udid))) throw new Error("the board isn't showing over the dock");
+    await shot(udid, "dock-after-swipe-light");
+    return `${keyOf(before)} closed, ${keyOf(after)} on top, ${n - 1} left`;
+  });
+  await check("the dock comes back after the app is quit and relaunched", async () => {
+    const before = (await top())!;
+    const n = await count();
+    await simctl("terminate", udid, BUNDLE);
+    await simctl("launch", udid, BUNDLE);
+    const back = await whenShown(udid, undefined, (l) => onBoard(l) && l.some(isDock), 30000);
+    if (!back) throw new Error("no board with a dock after the relaunch");
+    const after = await until("the same top", async () => {
+      const t = await top();
+      return t === before ? t : null;
+    }, 8000).catch(async (e) => {
+      await say("after the relaunch");
+      throw e;
+    });
+    if ((await count()) !== n) throw new Error(`${await count()} docked after the relaunch, not ${n}`);
+    lastUrl.set(udid, BOARD);
+    await shot(udid, "dock-relaunched-light");
+    return `${keyOf(after)} on top of ${n}`;
+  });
+  await check("Projects closes every docked ticket", async () => {
+    await tapWhere(udid, "Projects");
+    await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+    await goto(udid, BOARD);
+    await Bun.sleep(600);
+    if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
+    return "all closed";
+  });
+  await check("past the five live ones, more docked tickets cost about nothing", async () => {
+    // A parked ticket is the Router's root and path plus the board's card: 15 more of them must not
+    // grow the app the way 15 more mounted ticket screens would.
+    const many = await seedDockable(p.project.id, 20);
+    const pid = (await sh(["pgrep", "-f", `${udid}/.*/Harness\\.app/Harness`], { allowFail: true, quiet: true })).trim().split("\n")[0];
+    if (!pid) throw new Error("no Harness process for this simulator");
+    const footprint = async () => {
+      await Bun.sleep(2500); // the last screen settles and parks
+      const out = await sh(["footprint", "-p", pid], { allowFail: true, quiet: true });
+      const m = out.match(/Footprint:\s+([\d.]+)\s+(KB|MB|GB)/);
+      if (!m) throw new Error(`footprint said: ${out.slice(0, 200)}`);
+      return Number(m[1]) * ({ KB: 1 / 1024, MB: 1, GB: 1024 } as Record<string, number>)[m[2]!]!;
+    };
+    const open = async (ts: Ticket[]) => {
+      for (const t of ts) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
+    };
+    const closeAll = async () => {
+      await goto(udid, BOARD);
+      await tapWhere(udid, "Projects");
+      await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+      await goto(udid, BOARD);
+    };
+    // Every ticket visited once first, so each measurement carries the same board data and caches.
+    await open(many);
+    await closeAll();
+    const none = await footprint();
+    await open(many.slice(0, 5));
+    await dockSheet(udid);
+    const five = await footprint();
+    await tapWhere(udid, isDock);
+    await open(many.slice(5));
+    await dockSheet(udid);
+    const twenty = await footprint();
+    if ((await count()) !== 20) throw new Error(`${await count()} docked, not 20`);
+    await closeAll();
+    const live = five - none;
+    const parked = twenty - five;
+    const sizes = `${none.toFixed(1)} MB with none docked, ${five.toFixed(1)} with 5 (+${live.toFixed(1)}), ${twenty.toFixed(1)} with 20 (+${parked.toFixed(1)} more)`;
+    // Fifteen parked tickets must cost well under what five mounted ones do.
+    if (parked > Math.max(10, live)) throw new Error(`15 parked tickets cost ${parked.toFixed(1)} MB, as much as 5 mounted ones (${sizes})`);
+    return sizes;
+  });
+}
+
+/**
+ * `k`'s iPad card sits in the bottom-right corner of the area left of `edge`: 16pt in (its ✕ ends
+ * 10pt inside it), near the bottom, and about 320pt wide where the board's column (from `left`, the
+ * sidebar's edge) has room.
+ */
+async function cardInCorner(udid: string, k: string, edge: number, H: number, left = 0) {
+  const all = await nodes(udid);
+  const open = all.find((n) => n.AXLabel?.startsWith(`${k}, `) && isDock(n.AXLabel));
+  const close = all.find((n) => n.AXLabel === `Close ${k}`);
+  if (!open || !close) throw new Error(`no card for ${k}`);
+  const right = close.frame.x + close.frame.width + 10;
+  if (Math.abs(edge - 16 - right) > 4) throw new Error(`${k}'s card ends at x=${Math.round(right)}, not 16pt in from ${Math.round(edge)}`);
+  const below = H - (open.frame.y + open.frame.height);
+  if (below < 0 || below > 70) throw new Error(`${k}'s card's bottom is ${Math.round(below)}pt above the window's bottom`);
+  const width = right - open.frame.x;
+  if (width < Math.min(300, edge - left - 40)) throw new Error(`${k}'s card is only ${Math.round(width)}pt wide`);
+}
+
+/**
+ * The iPad's docked tickets as cards (DockedCardStack): opened one after another, the ones behind
+ * the panel wait as cards just left of it, never over the sidebar (one "N docked…" card where the
+ * board's column is narrow, none where there's no column); docked, every one is a card in the
+ * bottom-right corner, newest at the bottom, showing its ref and title; a tap opens that one; its ✕
+ * closes just it; twelve show five cards and "7 more…", which expands into the list of all twelve;
+ * Projects closes them all.
+ */
+async function cardStackChecks(udid: string, s: { project: Project; conductor: Ticket }) {
+  const ts = await seedDockable(s.project.id, 12);
+  const panelOn = (l: string[], k: string) => l.includes(RESIZE) && l.includes(`Close ${k}`);
+  const cards = async () => (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
+  const cardOf = (k: string) => (l: string) => l.startsWith(`${k}, `) && isDock(l);
+  const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 60).join(" | ")}`);
+  const open = (t: Ticket) => goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => panelOn(l, t.key));
+  const [a, b, c] = [ts[0]!, ts[1]!, ts[2]!];
+
+  /** The sidebar's Settings button: the cards must never cover it. */
+  const settings = async () => {
+    const n = (await nodes(udid)).find((x) => x.AXLabel === "Settings" && x.frame.x < 300);
+    if (!n) throw new Error("no Settings button in the sidebar");
+    return n;
+  };
+  /** Every card (and "N more…") sits right of the sidebar, clear of its Settings button. */
+  const offSidebar = async () => {
+    const s = await settings();
+    const right = s.frame.x + s.frame.width;
+    const all = (await nodes(udid)).filter((n) => n.AXLabel && (isDock(n.AXLabel) || /^\d+ (more )?docked tickets$/.test(n.AXLabel)));
+    const over = all.filter((n) => n.frame.x < right);
+    if (over.length) throw new Error(`over the sidebar: ${over.map((n) => `"${n.AXLabel}" at x=${Math.round(n.frame.x)}`).join(", ")}`);
+    return all;
+  };
+
+  await check("the tickets behind the panel wait as cards just left of it, never over the sidebar", async () => {
+    await goto(udid, BOARD);
+    for (const t of [a, b, c]) await open(t);
+    await Bun.sleep(800);
+    // The default panel (80%) leaves no board column beside it: nothing over the sidebar.
+    const wide = await offSidebar();
+    // A narrow panel leaves room for full cards in the board's column.
+    const { W } = await panelFraction(udid);
+    await dragPanelEdge(udid, W - 20);
+    const { leading, H } = await panelFraction(udid);
+    await until("the cards beside the panel", async () => (await cards()).length === 2, 4000).catch(async (e) => {
+      await say("with the panel at 25%");
+      throw e;
+    });
+    const cs = await cards();
+    if (cs.map((n) => n.AXLabel).sort().join("|") !== [a, b].map((t) => `${t.key}, ${t.title}, docked`).sort().join("|"))
+      throw new Error(`the cards read ${cs.map((n) => `"${n.AXLabel}"`).join(", ")}`);
+    // Newest at the bottom: b under a.
+    const [ca, cb] = [cs.find((n) => cardOf(a.key)(n.AXLabel!))!, cs.find((n) => cardOf(b.key)(n.AXLabel!))!];
+    if (cb.frame.y <= ca.frame.y) throw new Error(`${b.key}'s card (y=${Math.round(cb.frame.y)}) isn't under ${a.key}'s (y=${Math.round(ca.frame.y)})`);
+    // The sidebar's edge: its Settings button keeps 14pt of padding on its right.
+    const s0 = await settings();
+    await cardInCorner(udid, b.key, leading, H, s0.frame.x + s0.frame.width + 14);
+    await offSidebar();
+    await shootBoth(udid, "panel-cards-open");
+    await appearance(udid, "light");
+    // A column about 190pt wide is too narrow for a card: one "2 docked…" card holds them, still
+    // off the sidebar.
+    const s1 = await settings();
+    await dragPanelEdge(udid, s1.frame.x + s1.frame.width + 14 + 190);
+    const collapsed = await until("one \"2 docked…\" card", async () => {
+      const all = await offSidebar();
+      return all.length === 1 && all[0]!.AXLabel === "2 docked tickets" ? all[0] : null;
+    }, 4000).catch(async (e) => {
+      await say("with a 190pt column");
+      throw e;
+    });
+    await shot(udid, "panel-cards-collapsed-light");
+    // Wider still, no column is left: nothing shows, and nothing sits over the sidebar.
+    await dragPanelEdge(udid, W * 0.5);
+    await until("no cards", async () => (await offSidebar()).length === 0, 4000).catch(async (e) => {
+      await say("with the panel at 50%");
+      throw e;
+    });
+    // And Settings still takes a tap.
+    await tapWhere(udid, "Settings");
+    moved(udid);
+    await until("Settings", async () => (await labels(udid)).some((l) => l.startsWith("Rotate token")), 6000).catch(async (e) => {
+      await say("after a tap on Settings");
+      throw e;
+    });
+    // Back to the board (the section link docked the panel), the panel on c at its default width.
+    await goto(udid, BOARD);
+    await tapWhere(udid, cardOf(c.key));
+    moved(udid);
+    await until(`the panel on ${c.key}`, async () => panelOn(await labels(udid), c.key), 8000);
+    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
+    return `none over the sidebar at 80% (${wide.length} shown); ${a.key} over ${b.key} left of the panel at 25%; "2 docked…" at x=${Math.round(collapsed.frame.x)} beside a 190pt column; none at 50%; Settings tapped`;
+  });
+  await check("docked, every ticket is a card in the bottom-right corner; a tap opens that one", async () => {
+    await tapWhere(udid, `Dock ${c.key}`);
+    await until("three cards", async () => (await cards()).length === 3 && !(await labels(udid)).includes(RESIZE), 6000);
+    await Bun.sleep(600);
+    const { width: W, height: H } = (await tree(udid))[0]!.frame;
+    const cs = await cards();
+    const bottom = cs.reduce((x, y) => (y.frame.y > x.frame.y ? y : x));
+    if (!cardOf(c.key)(bottom.AXLabel!)) throw new Error(`the bottom card is "${bottom.AXLabel}", not the newest (${c.key})`);
+    await cardInCorner(udid, c.key, W, H);
+    await shootBoth(udid, "panel-cards-docked");
+    await appearance(udid, "light");
+    await tapWhere(udid, cardOf(a.key));
+    moved(udid);
+    await until(`the panel on ${a.key}`, async () => panelOn(await labels(udid), a.key), 8000);
+    // The default panel leaves no column for cards: narrow it (back to the default after the next check).
+    await dragPanelEdge(udid, W - 20);
+    const left = (await cards()).map((n) => n.AXLabel!.split(",")[0]).sort();
+    if (left.join() !== [b.key, c.key].sort().join()) throw new Error(`the cards beside the panel are ${left.join(", ")}`);
+    return `${c.key} at the bottom; ${a.key} opened, ${left.join(" and ")} beside it`;
+  });
+  await check("a card's ✕ closes just that ticket", async () => {
+    await tapWhere(udid, `Close ${b.key}`);
+    await until(`${b.key}'s card gone`, async () => !(await labels(udid)).some(cardOf(b.key)), 5000);
+    const l = await labels(udid);
+    if (!panelOn(l, a.key)) throw new Error(`the panel left ${a.key}`);
+    if (!l.some(cardOf(c.key))) throw new Error(`${c.key}'s card went too`);
+    const { W } = await panelFraction(udid);
+    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
+    return `${b.key} closed; ${a.key} open, ${c.key} waiting`;
+  });
+  await check("with 12 docked there are 5 cards and \"7 more…\", which expands into the list of all twelve", async () => {
+    for (const t of ts.slice(3)) await open(t);
+    // a, c and the nine opened: 11; one more for 12.
+    await open(b);
+    await tapWhere(udid, `Dock ${b.key}`);
+    await until("the cards", async () => !(await labels(udid)).includes(RESIZE) && (await cards()).length > 0, 6000);
+    await Bun.sleep(800);
+    const cs = await cards();
+    const more = await findElement(udid, (l) => /^\d+ more docked tickets$/.test(l));
+    await shootBoth(udid, "panel-cards-overflow");
+    await appearance(udid, "light");
+    if (cs.length !== 5) throw new Error(`${cs.length} cards, not 5`);
+    if (more?.AXLabel !== "7 more docked tickets") throw new Error(`the more card reads "${more?.AXLabel ?? "(none)"}"`);
+    // The more card sits on top of the five.
+    if (cs.some((n) => n.frame.y < more.frame.y)) throw new Error("a card sits above the more card");
+    const shown = new Set(cs.map((n) => n.AXLabel!.split(",")[0]));
+    if (shown.has(a.key) || shown.has(c.key)) throw new Error(`the oldest aren't the ones behind "7 more": ${[...shown].join(", ")}`);
+    await tapWhere(udid, more.AXLabel!);
+    await until("the list of all twelve", async () => (await cards()).length === 12, 5000).catch(async (e) => {
+      await say("after 7 more");
+      throw e;
+    });
+    await shot(udid, "panel-cards-list-light");
+    await offSidebar();
+    await tapWhere(udid, cardOf(a.key));
+    moved(udid);
+    await until(`the panel on ${a.key}`, async () => panelOn(await labels(udid), a.key), 8000);
+    return `5 cards and 7 more; the list of 12; ${a.key} opened from it`;
+  });
+  await check("Projects closes every docked ticket", async () => {
+    await goto(udid, "harness://projects");
+    await goto(udid, BOARD);
+    await until("no panel or cards", async () => {
+      const l = await labels(udid);
+      return !l.includes(RESIZE) && !l.some(isDock);
+    }, 6000);
+    return "all closed";
+  });
+}
+
 /** The iPad's side panel: its resize handle, the leading edge's centre, is up. */
 const RESIZE = "Resize panel";
 /** The panel's width as a fraction of the window: from its handle, which straddles its leading edge. */
@@ -1288,9 +1771,8 @@ async function dragPanelEdge(udid: string, toX: number): Promise<number> {
 /**
  * The iPad's ticket side panel (TicketSidePanel, regular width): a board card opens it against the
  * trailing edge at TicketPanelWidth's default; its leading handle resizes it within 25–80% of the
- * window; a link inside pushes, a card from the board replaces its ticket; the dock button stashes
- * it as a pill on the trailing edge, and the pill restores it with its path or closes it from its
- * menu; New session opens in it; Escape closes it; and the pop-out button moves its ticket into a
+ * window; a link inside pushes, a card from the board opens over it; the dock button stashes it
+ * as a card in the bottom-right corner, which restores it with its path, and a card's ✕ closes it; New session opens in it; Escape closes it; and the pop-out button moves its ticket into a
  * window of its own.
  */
 async function panelChecks(udid: string, s: { project: Project; conductor: Ticket }) {
@@ -1333,10 +1815,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     const close = l.find((x) => x.startsWith("Close ") && l.includes(RESIZE));
     if (close) await tapWhere(udid, close);
     const dock = l.find(isDock);
-    if (dock && !close) {
-      await tapWhere(udid, dock, { longPress: 1.2 });
-      await tapWhere(udid, "Close");
-    }
+    if (dock && !close) await tapWhere(udid, `Close ${dock.split(",")[0]}`);
     await until("no panel", async () => {
       const x = await labels(udid);
       return !x.includes(RESIZE) && !x.some(isDock);
@@ -1435,9 +1914,9 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await until("the child in the panel", async () => panelOn(await labels(udid), kid.key), 8000);
     return `${key} → ${kid.key}, Back → ${key}`;
   });
-  await check("docking stashes the panel as a pill on the trailing edge, and the pill restores its path", async () => {
+  await check("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", async () => {
     await tapWhere(udid, `Dock ${kid.key}`);
-    const pill = await until("the pill", async () => {
+    const pill = await until("the card", async () => {
       const n = await findElement(udid, isDock);
       return n && !(await labels(udid)).includes(RESIZE) ? n : null;
     }, 6000).catch(async (e) => {
@@ -1447,16 +1926,13 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await Bun.sleep(700);
     const { width: W, height: H } = (await tree(udid))[0]!.frame;
     const p = (await findElement(udid, isDock)) ?? pill;
-    if (p.AXLabel !== `${kid.key}, docked`) throw new Error(`the pill reads "${p.AXLabel}"`);
+    if (p.AXLabel !== `${kid.key}, ${kid.title}, docked`) throw new Error(`the card reads "${p.AXLabel}", not ${kid.key} and its title`);
     const mid = p.frame.y + p.frame.height / 2;
-    if (Math.abs(mid - H / 2) > 40) throw new Error(`the pill's centre is at y=${Math.round(mid)}, not the window's middle (${Math.round(H / 2)})`);
-    if (p.frame.x + p.frame.width <= W + 1) throw new Error(`the pill ends at x=${Math.round(p.frame.x + p.frame.width)}, inside the window (${W})`);
-    if (p.frame.x >= W - 30) throw new Error(`the pill starts at x=${Math.round(p.frame.x)}, barely on screen`);
+    await cardInCorner(udid, kid.key, W, H);
     if (!onBoard(await labels(udid))) throw new Error("the board isn't showing with the panel docked");
     await shootBoth(udid, "panel-docked");
     await appearance(udid, "light");
-    // Tap its on-screen part.
-    await axe("tap", "-x", String(Math.round((p.frame.x + W) / 2)), "-y", String(Math.round(mid)), "--udid", udid);
+    await axe("tap", "-x", String(Math.round(p.frame.x + p.frame.width / 2)), "-y", String(Math.round(mid)), "--udid", udid);
     moved(udid);
     await until("the panel back on the child", async () => {
       const l = await labels(udid);
@@ -1466,7 +1942,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await backTo(key);
     return `${p.frame.x}+${p.frame.width} of ${W}, y ${Math.round(mid)} of ${H}; restored on ${kid.key}, Back to ${key}`;
   });
-  await check("a different board card replaces the panel's ticket, at its root", async () => {
+  await check("a different board card opens its ticket over the panel's, at its root", async () => {
     // Pushed again, so a push that kept the path would show.
     await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child", async () => panelOn(await labels(udid), kid.key), 8000);
@@ -1495,27 +1971,34 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
     return `${kid.key} → ${b}, no Back`;
   });
-  await check("the pill's menu closes the panel without opening it", async () => {
+  await check("a card's ✕ closes just its ticket without opening it", async () => {
     const l = await labels(udid);
     const top = l.find((x) => x.startsWith("Dock "))!.slice("Dock ".length);
     await tapWhere(udid, `Dock ${top}`);
-    const pill = await until("the pill", () => findElement(udid, isDock), 6000);
+    await until("the cards", () => findElement(udid, isDock), 6000);
     await Bun.sleep(600);
-    const { width: W } = (await tree(udid))[0]!.frame;
-    const x = String(Math.round((pill.frame.x + W) / 2));
-    const y = String(Math.round(pill.frame.y + pill.frame.height / 2));
-    await axe("touch", "-x", x, "-y", y, "--down", "--up", "--delay", "1.2", "--udid", udid);
-    await until("the pill's menu", async () => (await labels(udid)).includes("Close"), 5000).catch(async (e) => {
-      await say("after a long press on the pill");
-      throw e;
-    });
-    await shot(udid, "panel-pill-menu-light");
-    await tapWhere(udid, "Close");
-    await until("the pill gone", async () => !(await labels(udid)).some(isDock), 5000);
-    await Bun.sleep(600);
-    if ((await labels(udid)).includes(RESIZE)) throw new Error("the panel opened instead");
+    await shot(udid, "panel-cards-two-light");
+    // The card's ticket and the conductor's, which it joined in the dock: each closes on its own.
+    const closed: string[] = [];
+    for (const k of [top, kid.key]) {
+      const mine = (x: string) => x.startsWith(`${k}, `) && isDock(x);
+      await until(`${k}'s card`, () => findElement(udid, mine), 6000).catch(async (e) => {
+        await say("looking for the card");
+        throw e;
+      });
+      const others = (await labels(udid)).filter((x) => isDock(x) && !mine(x));
+      await tapWhere(udid, `Close ${k}`);
+      await until(`${k}'s card gone`, async () => !(await labels(udid)).some(mine), 5000);
+      await Bun.sleep(600);
+      const now = await labels(udid);
+      if (now.includes(RESIZE)) throw new Error("the panel opened instead");
+      const left = others.filter((o) => !now.includes(o));
+      if (left.length) throw new Error(`closing ${k} took ${left.join(", ")} with it`);
+      closed.push(k);
+    }
+    if ((await labels(udid)).some(isDock)) throw new Error("a card is still there");
     lastUrl.set(udid, BOARD);
-    return `${top} closed`;
+    return `${closed.join(", then ")} closed, one at a time`;
   });
   await check("New session opens in the side panel", async () => {
     await goto(udid, `harness://new?projectId=${encodeURIComponent(s.project.id)}`, (l) => l.some(isOptions));
@@ -2786,6 +3269,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
   return [
     // The iPhone's ticket sheet: pushes, the back swipe, docking, restoring and swiping it away.
     chain(40, (udid) => sheetChecks(udid, s)),
+    // Several tickets docked: switching, closing one at a time, the overflow menu, a relaunch.
+    chain(90, (udid) => dockStackChecks(udid, s)),
     chain(4, async (udid) => {
       await check("a spec with wide tables leaves the replies after it on screen", async () => {
         const last = (l: string) => l.startsWith("Run finished (review)");
@@ -3098,6 +3583,7 @@ async function walk(udids: string[], s: Seeded): Promise<boolean> {
   if (hasAxe && !only && ipad) {
     await appearance(udids[0]!, "light");
     await timed("panel", () => panelChecks(udids[0]!, s));
+    await timed("cards", () => cardStackChecks(udids[0]!, s));
   }
   return ok;
 }
@@ -3148,7 +3634,16 @@ try {
   if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
   if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
   if (drafting) await timed("mode: drafts", () => draftChecks(udid, drafting));
-  if (sheeted) await timed("mode: sheets", () => (ipad ? panelChecks(udid, sheeted) : sheetChecks(udid, sheeted, "Planning")));
+  if (sheeted)
+    await timed("mode: sheets", async () => {
+      if (ipad) {
+        await panelChecks(udid, sheeted);
+        await cardStackChecks(udid, sheeted);
+      } else {
+        await sheetChecks(udid, sheeted, "Planning");
+        await dockStackChecks(udid, sheeted);
+      }
+    });
   if (seeded && !(await walk(udids, seeded))) failed = true;
   if (results.some((r) => !r[1])) failed = true;
   // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.

@@ -11,7 +11,7 @@ public enum AppTab: String, Codable, Hashable, Sendable, CaseIterable {
 
 /// A screen pushed onto a tab's NavigationStack. RN pushes these on the root stack above the
 /// tabs; here they're pushed on the selected tab's stack.
-public enum Route: Hashable, Sendable {
+public enum Route: Hashable, Sendable, Codable {
     /// harness://ticket/<key>?tab=…  `tab` is nil when the link has none (TicketDetail picks).
     case ticket(key: String, tab: TicketTab?)
     /// harness://inbox/<sessionId>

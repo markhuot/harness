@@ -3254,12 +3254,24 @@ the conventions, and ios/README.md the build and test commands.
   are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
   and store, a Router per window). At regular width a ticket (or New session) opens in a panel
   that slides in from the right, full height, with the board still live to its left. A ticket
-  opened from outside the panel (a card, the inbox, search, a link) replaces the one in it, and
-  a link inside the panel (a child, a dep, a file) pushes inside it with Back. The panel resizes
-  from its leading edge (25–80% of the window, 800pt until resized, then remembered as a
-  fraction of the window), and its title bar docks it, pops it out or closes it. Docked (the
-  button, or a fling to the right), it waits on the right edge as a small pill like Picture in
-  Picture, keeping its drafts and place; a tap brings it back. Pop-out opens the ticket in a
+  opened from outside the panel (a card, the inbox, search, a link) opens on top of the one in
+  it, which waits docked, and a link inside the panel (a child, a dep, a file) pushes inside it
+  with Back. The panel resizes from its leading edge (25–80% of the window, 800pt until resized,
+  then remembered as a fraction of the window), and its title bar docks, pops out or closes the
+  ticket it shows. Docked tickets (the dock button, a fling to the right, or another ticket opened
+  over them) wait as minimized cards in the board's bottom-right corner, newest at the bottom: each
+  its own fully rounded glass capsule, as the single docked sheet was, about 320pt wide with a
+  status dot (the board's colors), the ticket's ref, as much of its title as fits, and an ✕, keeping their drafts and place; while the panel is open they sit just left of it,
+  never over the sidebar (where the board's column is too narrow they fold into one "N docked…"
+  card, and a panel that leaves no column hides them). A tap opens one and its ✕ closes it. Past
+  five (or as many as fit the height) an "N more…" card on top expands into a scrolling list of
+  them all, with no background of its own: a radial blur rising out of the corner sets it apart. The iPhone docks any number of tickets the same way, behind its one bottom sheet: the
+  docked sheet is the top card, with the next card and "N more…" stacked above it as separate glass
+  capsules, lifting the board's bottom bar; the list rises over a blur out of the bottom; a tap on a card opens it, a swipe along the dock moves between them, and ✕ or a swipe down
+  closes only the top one. With a ticket up, a long press on its title lists the other docked
+  tickets in a menu. Only the five most recently used stay mounted; older ones are kept as a
+  reference and open again at their place. The docked tickets come back after the app is quit or
+  relaunched (kept on the device only). Pop-out opens the ticket in a
   window of its own, as does Open in New Window in a card's or the ticket's menu. Narrow windows
   keep the phone's bottom sheet and dock. Any ticket tab, any single browser tab and the
   composer tear off into a pinned window of their own: dragged out of the window (the drag

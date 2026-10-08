@@ -164,7 +164,7 @@ struct RouterSheetTests {
         #expect(r.path(.board) == [.prompts])
     }
 
-    @Test func openingSomethingElseReplacesTheDock() {
+    @Test func openingSomethingElseAddsToTheDock() {
         let r = sheeted()
         r.push(t("C-1"))
         r.push(t("C-2"))
@@ -176,13 +176,125 @@ struct RouterSheetTests {
         #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
         #expect(r.ticketSheet?.path == [])
         #expect(r.ticketSheet?.id != docked)
+        // The other one waits behind it, path and all.
+        #expect(r.dockedSheets.map(\.id).last == docked)
+        #expect(r.dockedSheets.last?.path == [t("C-2")])
 
-        // New session over a docked ticket replaces it too.
+        // New session over a docked ticket joins them too.
         r.dockSheet()
         r.present(draft)
         #expect(r.dock == nil)
         #expect(r.ticketSheet?.root == .newSession(projectId: "p1", key: nil))
         #expect(r.sheet == nil)
+        #expect(r.dockedSheets.map(\.title) == ["New session", "D-1", "C-2"])
+    }
+
+    @Test func reopeningADockedTicketBringsItForwardWithoutADuplicate() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.push(t("A-2"))
+        let a = r.ticketSheet!.id
+        r.dockSheet()
+        r.openTicket(key: "B-1", tab: nil)
+        r.dockSheet()
+        // A-2 is on top of A's sheet: that sheet comes forward as it is, on the tab asked for.
+        r.openTicket(key: "A-2", tab: .spec)
+        #expect(r.dockedSheets.count == 2)
+        #expect(r.ticketSheet?.id == a && r.ticketSheet?.path == [t("A-2", .spec)])
+        // Its root ticket: it comes forward popped back to the root.
+        r.dockSheet()
+        r.activateSheet(id: r.dockedSheets[1].id)
+        r.push(t("A-1"))
+        #expect(r.dockedSheets.count == 2)
+        #expect(r.ticketSheet?.id == a && r.ticketSheet?.path == [])
+    }
+
+    @Test func switchingKeepsEachSheetsPathAndState() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.push(t("A-2"))
+        r.openTicket(key: "B-1", tab: nil)
+        r.push(.prompts)
+        let (a, b) = (r.dockedSheets[1].id, r.dockedSheets[0].id)
+        r.dockSheet()
+        r.activateSheet(id: a)
+        #expect(r.dock?.id == a && r.dock?.path == [t("A-2")])
+        #expect(r.ticketSheetState == .docked)
+        // Presented, switching keeps it presented; only the top's own stack sets its path.
+        r.restoreDock()
+        r.activateSheet(id: b)
+        #expect(r.ticketSheet?.id == b && r.ticketSheet?.path == [.prompts])
+        r.setTicketSheetPath([], id: a)
+        #expect(r.dockedSheets[1].path == [t("A-2")] && r.ticketSheet?.path == [.prompts])
+        r.setTicketSheetPath([], id: b)
+        #expect(r.ticketSheet?.path == [])
+        // An unknown id, or the top already: nothing changes.
+        r.activateSheet(id: 999)
+        r.activateSheet(id: b)
+        #expect(r.dockedSheets.map(\.id) == [b, a])
+    }
+
+    @Test func swipingWalksTheWholeDockInOrder() {
+        let r = sheeted()
+        for k in ["A-1", "B-1", "C-1"] { r.openTicket(key: k, tab: nil) }
+        r.dockSheet()
+        #expect(r.dockedSheets.map(\.title) == ["C-1", "B-1", "A-1"])
+        r.activateAdjacentSheet(.next)
+        #expect(r.dock?.title == "B-1")
+        r.activateAdjacentSheet(.next)
+        #expect(r.dock?.title == "A-1")
+        r.activateAdjacentSheet(.next)
+        #expect(r.dock?.title == "C-1")
+        r.activateAdjacentSheet(.previous)
+        #expect(r.dock?.title == "A-1" && r.ticketSheetState == .docked)
+        r.activateAdjacentSheet(.next)
+        #expect(r.dockedSheets.map(\.title) == ["C-1", "B-1", "A-1"])
+        // One sheet: nothing to swipe to.
+        let one = sheeted()
+        one.push(t("A-1"))
+        one.activateAdjacentSheet(.next)
+        #expect(one.ticketSheet?.title == "A-1")
+    }
+
+    @Test func liveShownAndOverflowSheetsSplitTheDock() {
+        let r = sheeted()
+        for i in 1...12 { r.openTicket(key: "T-\(i)", tab: nil) }
+        r.dockSheet()
+        #expect(r.dockedSheets.count == 12)
+        #expect(r.liveSheets.map(\.title) == (8...12).reversed().map { "T-\($0)" })
+        #expect(r.shownDockedSheets.map(\.title) == (3...12).reversed().map { "T-\($0)" })
+        #expect(r.overflowDockedSheets.map(\.title) == ["T-2", "T-1"])
+        // Choosing one from the overflow brings it into the shown ten (and live), at its path.
+        let oldest = r.overflowDockedSheets.last!.id
+        r.activateSheet(id: oldest)
+        #expect(r.dock?.id == oldest)
+        #expect(r.shownDockedSheets.first?.id == oldest && r.liveSheets.first?.id == oldest)
+        #expect(r.overflowDockedSheets.map(\.title) == ["T-3", "T-2"])
+        // The least recently used live sheet parked to make room.
+        #expect(!r.liveSheets.contains { $0.title == "T-8" })
+        // Opening a parked ticket again brings back its sheet rather than a new one.
+        r.restoreDock()
+        r.openTicket(key: "T-4", tab: nil)
+        #expect(r.dockedSheets.count == 12 && r.ticketSheet?.title == "T-4")
+    }
+
+    @Test func closingTheTopLeavesTheNextDocked() {
+        let r = sheeted()
+        r.openTicket(key: "A-1", tab: nil)
+        r.openTicket(key: "B-1", tab: nil)
+        r.openTicket(key: "C-1", tab: nil)
+        // Presented: closing it docks the next.
+        r.dismissSheet()
+        #expect(r.ticketSheetState == .docked && r.dock?.title == "B-1")
+        // A sheet behind the top closes without touching the top.
+        r.restoreDock()
+        r.closeSheet(id: r.dockedSheets[1].id)
+        #expect(r.ticketSheetState == .presented && r.dockedSheets.map(\.title) == ["B-1"])
+        // The last one: gone.
+        r.dismissSheet()
+        #expect(r.ticketSheetState == .gone && r.dockedSheets.isEmpty)
+        r.dismissSheet()
+        #expect(r.ticketSheetState == .gone)
     }
 
     @Test func openingTheDockedTicketRestoresIt() {
@@ -195,13 +307,13 @@ struct RouterSheetTests {
         r.open(.push(t("C-2")))
         #expect(r.ticketSheet?.id == id)
         #expect(r.ticketSheet?.path == [t("C-2")])
-        // The root under a pushed child isn't what the dock shows: it opens a fresh sheet.
+        // The root under a pushed child: the same sheet, popped back to it.
         r.dockSheet()
         r.push(t("C-1"))
-        #expect(r.ticketSheet?.id != id)
+        #expect(r.ticketSheet?.id == id)
         #expect(r.ticketSheet?.path == [])
 
-        // The same New session restores; another one replaces it.
+        // The same New session restores; another one joins the dock.
         let n = sheeted()
         n.present(draft)
         n.dockSheet()
@@ -212,22 +324,28 @@ struct RouterSheetTests {
         n.present(.newSession(projectId: "p2", key: nil))
         #expect(n.ticketSheet?.id != draftID)
         #expect(n.ticketSheet?.root == .newSession(projectId: "p2", key: nil))
+        #expect(n.dockedSheets.map(\.id).last == draftID)
     }
 
-    @Test func openingSomethingWhilePresentedReplacesTheContent() {
+    @Test func newSessionWhilePresentedJoinsTheDock() {
         let r = sheeted()
         r.push(t("C-1"))
         r.push(t("C-2"))
         let id = r.ticketSheet!.id
         r.present(draft)
-        #expect(r.ticketSheet?.id == id)
+        let draftID = r.ticketSheet!.id
+        #expect(draftID != id)
         #expect(r.ticketSheet?.root == .newSession(projectId: "p1", key: nil))
-        #expect(r.ticketSheet?.path == [])
+        #expect(r.dockedSheets.last?.path == [t("C-2")])
         // A ticket pushed on New session takes its place rather than stacking on the editor.
         r.push(t("D-1"))
         #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
         #expect(r.ticketSheet?.path == [])
-        #expect(r.ticketSheet?.id == id)
+        #expect(r.ticketSheet?.id == draftID)
+        // Unless another sheet already shows it: that one comes forward, the draft waits.
+        r.present(draft)
+        r.push(t("C-2"))
+        #expect(r.ticketSheet?.id == id && r.dockedSheets.count == 3)
     }
 
     @Test func aLaunchedNewSessionBecomesTheTicketsSheet() {
@@ -278,7 +396,9 @@ struct RouterSheetTests {
     @Test func projectsClosesTheTicketSheetPresentedOrDocked() {
         let r = sheeted()
         r.push(t("A-1"))
+        r.openTicket(key: "A-2", tab: nil)
         r.present(.projects)
+        #expect(r.dockedSheets.isEmpty)
         #expect(r.sheet == .projects)
         #expect(r.ticketSheetState == .gone)
 
@@ -340,6 +460,29 @@ struct RouterSheetTests {
         #expect(r.ticketSheetState == .gone)
     }
 
+    @Test func removingAndReplacingTouchOnlyTheMatchingSheets() {
+        let r = sheeted()
+        r.openTicket(key: "A-1", tab: nil)
+        r.push(t("A-2"))
+        r.openTicket(key: "B-1", tab: nil)
+        r.openTicket(key: "C-1", tab: nil)
+        let (b, c) = (r.dockedSheets[1].id, r.dockedSheets[0].id)
+        r.dockSheet()
+        // A ticket pushed in a sheet behind the top: off that sheet's path only.
+        #expect(r.removeTicket { $0 == "A-2" })
+        #expect(r.dockedSheets.map(\.path) == [[], [], []])
+        // A root behind the top: that sheet goes, the top stays as it was.
+        #expect(r.removeTicket { $0 == "B-1" })
+        #expect(r.dockedSheets.map(\.title) == ["C-1", "A-1"] && r.dock?.id == c)
+        #expect(!r.dockedSheets.contains { $0.id == b })
+        r.replaceTicket("A-1", with: "A-9")
+        #expect(r.dockedSheets.map(\.title) == ["C-1", "A-9"] && r.dock?.id == c)
+        // The top's root, presented: the next is the top, docked.
+        r.restoreDock()
+        #expect(r.removeTicket { $0 == "C-1" })
+        #expect(r.ticketSheetState == .docked && r.dock?.title == "A-9")
+    }
+
     @Test func aSizeClassChangeKeepsTheSheetItsPathAndState() {
         let r = sheeted()
         r.push(t("A-1"))
@@ -372,7 +515,7 @@ struct RouterSheetTests {
 
     // MARK: Tickets opened from outside the sheet (the board beside the iPad's panel)
 
-    @Test func aTicketFromOutsideReplacesThePresentedSheetsTicket() {
+    @Test func aTicketFromOutsideJoinsTheDockOverThePresentedSheet() {
         let r = sheeted()
         r.push(t("C-1"))
         r.push(t("C-2"))
@@ -381,7 +524,8 @@ struct RouterSheetTests {
         r.openTicket(key: "D-1", tab: .activity)
         #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))
         #expect(r.ticketSheet?.path == [])
-        #expect(r.ticketSheet?.id == id && r.ticketSheetState == .presented)
+        #expect(r.ticketSheet?.id != id && r.ticketSheetState == .presented)
+        #expect(r.dockedSheets.last?.id == id && r.dockedSheets.last?.path.count == 2)
         #expect(r.path(.board).isEmpty)
         // Inside the sheet, a link still pushes on its stack.
         r.push(t("D-2"))
@@ -389,11 +533,12 @@ struct RouterSheetTests {
         #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))
     }
 
-    @Test func aTicketFromOutsideReplacesNewSession() {
+    @Test func aTicketFromOutsideJoinsNewSessionInTheDock() {
         let r = sheeted()
         r.present(draft)
         r.openTicket(key: "D-1", tab: nil)
         #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: nil))
+        #expect(r.dockedSheets.last?.root == .newSession(projectId: "p1", key: nil))
     }
 
     @Test func theSheetsOwnTicketFromOutsideOnlyComesBackToIt() {
