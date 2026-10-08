@@ -84,8 +84,6 @@ private struct AgentsFilterBar: View {
         .padding(.horizontal, 14)
         .padding(.top, 12)
         .padding(.bottom, 2)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Show agents, tasks or both")
     }
 }
 

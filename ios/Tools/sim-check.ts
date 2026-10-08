@@ -3095,7 +3095,10 @@ async function agentsFilterChecks(udid: string, s: Seeded) {
   await check("Agents & tasks: the filter's toggles carry each kind's count, and neither pressed shows everything", async () => {
     await goto(udid, url, (l) => l.some(isTaskRow));
     const l = await labels(udid);
-    if (!l.includes("Agents, 2") || !l.includes("Tasks, 1")) throw new Error(`toggles: ${l.filter((x) => chip("Agents")(x) || chip("Tasks")(x)).join(" | ")}`);
+    if (!l.includes("Agents, 2") || !l.includes("Tasks, 1")) {
+      await shot(udid, "ticket-agents-filter-failed");
+      throw new Error(`toggles: ${l.filter((x) => chip("Agents")(x) || chip("Tasks")(x)).join(" | ")}; on screen: ${l.join(" | ")}`);
+    }
     await until("all three rows", shows(2, 1), 8000);
     await shot(udid, "ticket-agents-filter-all");
     return "Agents, 2 · Tasks, 1; 3 rows";
