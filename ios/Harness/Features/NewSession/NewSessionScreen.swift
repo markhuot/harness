@@ -38,6 +38,8 @@ private struct NewSessionEditorView: View {
     @Environment(Router.self) private var router
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
+    /// In the iPad's ticket panel, whose title bar names and closes it.
+    @Environment(\.inTicketPanel) private var inTicketPanel
 
     @State private var editor: NewSessionEditor?
     @State private var branches = TicketBranches()
@@ -58,9 +60,19 @@ private struct NewSessionEditorView: View {
             .navigationTitle(reopen != nil ? "Draft" : "New session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", systemImage: "xmark") { cancel() }
-                        .keyboardShortcut(.cancelAction)
+                // The iPad panel's title bar already names New session and closes it (Escape too),
+                // so its own bar keeps only Plan first and Start session. Closing the panel saves
+                // the draft, as the screen going away always does.
+                if inTicketPanel {
+                    ToolbarItem(placement: .principal) {
+                        // Something in the slot, so the system doesn't draw the title there.
+                        Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
+                    }
+                } else {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel", systemImage: "xmark") { cancel() }
+                            .keyboardShortcut(.cancelAction)
+                    }
                 }
                 // Plan first and Start session each get their own glass; Start is the prominent one.
                 // ⌘↩ starts and ⇧⌘↩ plans first, as on the desktop.
