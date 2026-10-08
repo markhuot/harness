@@ -225,13 +225,24 @@ struct DockedCardList: View {
                     DockedCard(sheet: sheet, open: { open(sheet) }, close: { close(sheet) })
                 }
             }
-            .padding(.top, 12)
+            // Below the top edge's fade.
+            .padding(.top, 20)
             // A short list sits at the bottom, just above the dock; a long one scrolls.
             .frame(maxWidth: .infinity, minHeight: g.size.height, alignment: .bottomTrailing)
         }
         .defaultScrollAnchor(.bottom)
         .scrollBounceBehavior(.basedOnSize)
         .scrollIndicators(.hidden)
+        // Cards scrolling up fade out at the list's top edge rather than run under the status bar;
+        // the mask reaches past the other edges so the glass keeps its rim and shadow there.
+        .mask {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 20)
+                Rectangle()
+            }
+            .padding(.horizontal, -24)
+            .padding(.bottom, -24)
+        }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ticket-dock-list")
@@ -467,7 +478,7 @@ struct DockedCardStack: View {
 
     private func list(width: CGFloat) -> some View {
         // As tall as its cards, up to the window's height; past that it scrolls.
-        let natural = 12 + 40 + Self.spacing + DockedCardMetrics.stackHeight(rows: sheets.count)
+        let natural = 20 + 40 + Self.spacing + DockedCardMetrics.stackHeight(rows: sheets.count)
         return DockedCardList(sheets: sheets, open: open, close: { router.closeSheet(id: $0.id) }, collapse: { expanded = false })
             .frame(width: width, height: min(natural, available.height - Self.margin * 2))
             .transition(.scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity))
