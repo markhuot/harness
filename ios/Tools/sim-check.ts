@@ -522,6 +522,22 @@ async function recordFrames(udid: string, name: string, fn: () => Promise<unknow
   return frames;
 }
 
+/**
+ * How many pixels in `r` (points, on a screen `W` points wide) stand out from the region's median
+ * by more than 64 levels of gray: text or an icon on a plain bar.
+ */
+async function inkIn(udid: string, r: { x: number; y: number; width: number; height: number }, W: number): Promise<number> {
+  const file = join(shots, ".ink.png");
+  await simctl("io", udid, "screenshot", file);
+  const crop = `scale=${W}:-1,crop=${Math.round(r.width)}:${Math.round(r.height)}:${Math.round(r.x)}:${Math.round(r.y)},format=gray`;
+  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", file, "-vf", crop, "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const px = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
+  if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
+  rmSync(file, { force: true });
+  const median = [...px].sort((a, b) => a - b)[px.length >> 1]!;
+  return px.filter((v) => Math.abs(v - median) > 64).length;
+}
+
 /** The mean difference between two recordFrames frames, 0–255. */
 const frameDiff = (a: Uint8Array, b: Uint8Array) => a.reduce((s, v, i) => s + Math.abs(v - b[i]!), 0) / a.length;
 /**
@@ -1245,22 +1261,25 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
   if (!kid) throw new Error(`${key} has no children`);
   // A top-level ticket of its own whose card replaces the panel's ticket, in Planning by the conductor.
   const other = await api<Ticket>("POST", "/tickets", { projectId: s.project.id, spec: "Replace the panel's ticket", driver: "dummy", start: false });
-  const has = (l: string[], k: string) => l.some((x) => x.includes(k));
   const card = (k: string) => (l: string) => l.startsWith(`${k} `);
   const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 60).join(" | ")}`);
   /** The panel is up on `k`: its close button names the ticket on top. */
   const panelOn = (l: string[], k: string) => l.includes(RESIZE) && l.includes(`Close ${k}`);
-  /** The panel's navigation stack has something under the screen on top. */
+  /** Where the panel's navigation bar keeps Back (or a screen's own ✕), in points. */
+  const backPoint = async () => {
+    const { leading } = await panelFraction(udid);
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
+    if (!close) throw new Error("no close button in the panel");
+    return { x: leading + 29, y: close.frame.y + close.frame.height / 2 + 58 };
+  };
   /**
    * Taps where the panel's navigation bar keeps Back: AXe's tree leaves out the glass header items,
    * so a push shows by where the tap goes. It sits 29pt in from the panel's leading edge, 58pt
    * below the title bar's buttons.
    */
   const tapBack = async () => {
-    const { leading } = await panelFraction(udid);
-    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
-    if (!close) throw new Error("no close button in the panel");
-    await axe("tap", "-x", String(Math.round(leading + 29)), "-y", String(Math.round(close.frame.y + close.frame.height / 2 + 58)), "--udid", udid);
+    const { x, y } = await backPoint();
+    await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--udid", udid);
     moved(udid);
   };
   /** The panel's ticket screen went back to `k`: Back was there. */
@@ -1330,6 +1349,9 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     if (!close || W - (close.frame.x + close.frame.width) > 16) throw new Error(`the close button ends at ${close ? Math.round(close.frame.x + close.frame.width) : "?"}, not the window's edge (${W})`);
     // The board stays live to its left.
     if (!onBoard(await labels(udid))) throw new Error("the board isn't showing beside the panel");
+    // Below the status bar: no higher than the split view's own top bar, which keeps the safe area.
+    const toggle = await findElement(udid, (l) => l === "Hide Sidebar" || l === "Show Sidebar");
+    if (toggle && close.frame.y < toggle.frame.y - 4) throw new Error(`the title bar's buttons start at y=${Math.round(close.frame.y)}, above the sidebar button (y=${Math.round(toggle.frame.y)})`);
     await shootBoth(udid, "panel-default");
     await appearance(udid, "light");
     return `${key} at ${pct(fraction)} (${Math.round(W - leading)} of ${W} pt)`;
@@ -1355,7 +1377,13 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     return `${pct(narrow)}–${pct(wide)}, back to ${pct(back)}`;
   });
   await check("a link inside the panel pushes, with Back to the ticket under it", async () => {
-    await tapWhere(udid, (l) => l.startsWith("Tickets"));
+    // The Tickets tab, until its list shows the child (a tap during the slide in can miss).
+    await until("the conductor's children", async () => {
+      if ((await labels(udid)).some((l) => l.includes(kid.key))) return true;
+      await tapWhere(udid, (l) => l.startsWith("Tickets")).catch(() => {});
+      await Bun.sleep(1200);
+      return false;
+    }, 15000, 0);
     await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child in the panel", async () => panelOn(await labels(udid), kid.key), 8000).catch(async (e) => {
       await say("after the child tap");
@@ -1458,6 +1486,25 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     if (!panelOn(l, "New session")) throw new Error("New session isn't in the panel");
     if (l.includes("Open New session in a new window")) throw new Error("New session offers a pop-out");
     await shot(udid, "panel-new-session-light");
+    // One header: the panel's title bar names it and closes it, so New session's own bar has
+    // neither its title nor its ✕ (Cancel). AXe may leave glass header items out, so also look.
+    const { leading, W } = await panelFraction(udid);
+    const inPanel = (await nodes(udid)).filter((n) => n.frame.x >= leading && n.AXLabel);
+    const titles = inPanel.filter((n) => n.AXLabel === "New session").length;
+    const closes = inPanel.filter((n) => n.AXLabel === "Cancel" || n.AXLabel!.startsWith("Close ")).length;
+    if (titles > 1) throw new Error(`${titles} "New session" titles in the panel`);
+    if (closes > 1) throw new Error(`${closes} close buttons in the panel`);
+    const bar = await backPoint();
+    if (!landscape) {
+      // The middle of New session's bar, where the system draws its title: blank.
+      const centre = leading + (W - leading) / 2;
+      const ink = await inkIn(udid, { x: centre - 70, y: bar.y - 12, width: 140, height: 24 }, W);
+      if (ink > 20) throw new Error(`a title in New session's bar under the panel's (${ink} pixels of ink)`);
+    }
+    // Where its ✕ would sit: a tap there leaves the panel up (an empty New session's Cancel closes at once).
+    await tapBack();
+    await Bun.sleep(1500);
+    if (!panelOn(await labels(udid), "New session")) throw new Error("a second ✕ in New session's bar closed the panel");
     // The landscape-only build draws the keyboard in the device's portrait space, over the title
     // bar's close button: Escape closes it there.
     if (landscape) {
@@ -1465,7 +1512,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       await until("no panel", async () => !(await labels(udid)).includes(RESIZE), 5000);
       moved(udid);
     } else await closePanel();
-    return "New session in the panel, no pop-out";
+    return `New session in the panel, one title and one ✕${landscape ? " (the title by AXe only)" : ""}, no pop-out`;
   });
   await check("Escape on a hardware keyboard closes the panel", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}`, (l) => panelOn(l, key));
