@@ -71,7 +71,7 @@ struct TicketSheetHost: View {
     }
 
     private func stack(_ sheet: TicketSheet) -> some View {
-        TicketSheetContent(sheet: sheet)
+        TicketSheetContent(sheet: sheet, toBottomEdge: true)
             // The sheet runs to the screen's bottom edge without keeping the home indicator's
             // inset, so the composer measures its concentric gap from the edge itself.
             .environment(\.concentricBottomGap, 0)
@@ -115,6 +115,11 @@ struct TicketSheetHost: View {
 /// the sheet's path, so a child, dep or parent pushes inside it and Back returns.
 struct TicketSheetContent: View {
     let sheet: TicketSheet
+    /// The iPhone's sheet: each screen runs to the screen's bottom edge, keeping no inset there but
+    /// the keyboard's. Docked, the system gives the small floating sheet the home indicator's inset
+    /// and keeps it once the sheet is back at `.large`, which would lift the composer by that much;
+    /// it has to be ignored inside the stack, since the stack's screens take their safe area from it.
+    var toBottomEdge = false
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
 
@@ -123,15 +128,19 @@ struct TicketSheetContent: View {
         RequireStore {
             NavigationStack(path: Binding(get: { (router.ticketSheet ?? router.dock)?.path ?? [] },
                                           set: { router.setTicketSheetPath($0) })) {
-                root
+                bottomEdge(root
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(c.bg)
-                    .navigationDestination(for: Route.self) { RouteScreen(route: $0) }
+                    .background(c.bg))
+                    .navigationDestination(for: Route.self) { bottomEdge(RouteScreen(route: $0)) }
             }
         }
         .environment(\.inTicketSheet, true)
         // New session that became its ticket starts over as the ticket's screen.
         .id(sheet.root)
+    }
+
+    @ViewBuilder private func bottomEdge(_ screen: some View) -> some View {
+        if toBottomEdge { screen.ignoresSafeArea(.container, edges: .bottom) } else { screen }
     }
 
     @ViewBuilder private var root: some View {

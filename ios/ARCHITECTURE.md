@@ -455,7 +455,9 @@ and `TicketDockPill` stands in for it on the trailing edge, Picture in Picture s
 iPhone dock's `ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores
 it, and its context menu closes it. The pill floats over the board without reserving space. The
 composer measures its bottom gap from the screen's edge in the iPhone sheet (`\.concentricBottomGap`
-0); the panel leaves it unset, so the composer sits on the home indicator's inset or the keyboard.
+0), whose screens ignore the bottom container safe area (`TicketSheetContent(toBottomEdge:)`): the
+system gives the docked sheet the home indicator's inset and keeps it after the sheet grows back,
+which would lift the composer by that much. The panel leaves both unset, so the composer sits on the home indicator's inset or the keyboard.
 MainTabs sets the Router's `sheetIsBesideBoard` from the size class, so presence counts the board
 while the panel is up. A size-class change hands the same sheet across (same id, path, state and
 draft): the system sheet goes away without a dismissal and the panel picks it up, or the other way

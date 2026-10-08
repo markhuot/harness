@@ -64,7 +64,7 @@
 //   --sheets: the iPhone's ticket sheet on its own (the walk-through runs the same checks): a board
 //      card opens its ticket in a sheet, a conductor's child pushes inside it and the back swipe
 //      returns, dragging it to the bottom docks it under the board as a bar titled by its key, a
-//      tap on the bar restores it where it was, a section's alert still comes up, Projects closes
+//      tap on the bar restores it where it was (its composer no higher than before), a section's alert still comes up, Projects closes
 //      it, the bar's ✕ and a swipe down on it send it away, a flick down from full size sends it
 //      away without docking, and New session opens in the sheet too and docks as
 //      "New session"; sheet-*.png
@@ -1108,10 +1108,14 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     });
     return `${kid.key} → back to ${key}`;
   });
+  // Where the child's composer sat before docking: restored, it sits there again, not lifted by
+  // the inset the system gave the docked sheet.
+  let composerBefore: AXNode["frame"] | null = null;
   await check("dragging the sheet to the bottom docks it under the board, titled by the ticket on top", async () => {
     // Pushed again, so restoring has a path to bring back.
     await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child", async () => onChild(await labels(udid)), 8000);
+    composerBefore = (await findElement(udid, (x) => x === "Send"))?.frame ?? null;
     const label = await dock().catch(async (e) => {
       await say("after the drag");
       throw e;
@@ -1148,6 +1152,16 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       const l = await labels(udid);
       return onChild(l) && !l.some(isDock);
     }, 8000);
+    if (composerBefore) {
+      const before = composerBefore;
+      let y: number | undefined;
+      await until("the composer where it was", async () => {
+        y = (await findElement(udid, (x) => x === "Send"))?.frame.y;
+        return y !== undefined && Math.abs(y - before.y) <= 1;
+      }, 4000).catch(() => {
+        throw new Error(`the composer's Send sits at y ${y === undefined ? "(gone)" : Math.round(y)}, not ${Math.round(before.y)} as before docking`);
+      });
+    }
     return `${kid.key} restored`;
   });
   await check("a section's alert still comes up with the sheet docked", async () => {

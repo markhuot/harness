@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, reopening a docked ticket no longer leaves its message bar raised above where it
+  sits when the ticket first opens.
+
 ## [app-20261008.0100](https://github.com/markhuot/harness/releases/tag/app-20261008.0100) - 2026-10-08
 
 ### Added
