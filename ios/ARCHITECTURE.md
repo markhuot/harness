@@ -443,8 +443,11 @@ as the `ticketPanelWidth` pref and re-clamped on rotation). Its title bar names 
 top and has dock, pop-out and close; that ticket's screen leaves its key out of the navigation
 bar (`\.inTicketPanel` in TicketDetailHeader), which keeps Back and the titles of screens pushed
 above it. New session in the panel likewise drops its own title and Cancel ✕, keeping Plan first
-and Start session; closing the panel saves its draft, as the screen going away always does. A
-rightward fling on the title bar docks it and Esc closes it. Docked, the panel stays
+and Start session. While it's on top it hands its `cancel()` to the panel through
+`TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
+or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
+registered they just dismiss. Docking, pop-out and the pill's Close don't ask, and the draft is
+saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it. Docked, the panel stays
 mounted (drafts, scroll and path survive) but off the edge and `disabled`, and `TicketDockPill`
 stands in for it on the trailing edge, Picture in Picture style, with the iPhone dock's
 `ticket-dock` identifier and "<key>, docked" label; a tap or a leftward drag restores it, and
@@ -590,10 +593,12 @@ root it leaves the panel where it was. The dock button leaves the "KEY, docked" 
 centred and partly off the trailing edge, and a tap on it restores the pushed child, Back and all.
 The pill's menu Close sends it away, New session opens in the panel with one title and one ✕ and no
 pop-out button (AXe's labels, then the screenshot's ink where its bar would draw a title, then a tap
-where its ✕ would sit, which must leave the panel up), Escape (AXe's HID key 41) closes the panel,
-and pop-out opens a ticket window and closes the panel. Shots are `panel-*.png`. A compact window's
-bottom sheet isn't covered, since AXe and simctl can't resize a window or enter Split View; the
-iPhone's `--sheets` checks drive the same sheet.
+where its ✕ would sit, which must leave the panel up), with a draft typed Escape and the panel's ✕
+each bring up Save or Discard (Keep editing, then Discard, which closes the panel and takes the
+draft's card off the board), Escape (AXe's HID key 41) closes the panel, and pop-out opens a ticket
+window and closes the panel. Shots are `panel-*.png`. A compact window's bottom sheet isn't covered,
+since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets` checks drive
+the same sheet.
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
 `CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and

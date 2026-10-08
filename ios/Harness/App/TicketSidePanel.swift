@@ -278,6 +278,7 @@ struct TicketPanelHost: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.supportsMultipleWindows) private var multipleWindows
+    @State private var closer = TicketPanelCloser()
 
     var body: some View {
         let sheet = router.ticketSheet ?? router.dock
@@ -288,8 +289,8 @@ struct TicketPanelHost: View {
                 TicketSidePanel(title: sheet.title, canPopOut: multipleWindows && router.canPopOutSheet,
                                 docked: docked, widthFraction: width,
                                 onDock: { router.dockSheet() }, onPopOut: { router.popOutSheet() },
-                                onClose: { router.dismissSheet() }) {
-                    TicketSheetContent(sheet: sheet).environment(\.inTicketPanel, true)
+                                onClose: { if !closer.close() { router.dismissSheet() } }) {
+                    TicketSheetContent(sheet: sheet).environment(\.inTicketPanel, true).environment(closer)
                 }
                 // Down to the window's bottom edge; the content keeps the home indicator clear.
                 .ignoresSafeArea(.container, edges: .bottom)
@@ -310,6 +311,34 @@ struct TicketPanelHost: View {
     /// The person's width, kept in prefs; nil until they first drag the panel's edge.
     private var width: Binding<Double?> {
         Binding(get: { app.prefs.ticketPanelWidth }, set: { app.setPref(\.ticketPanelWidth, $0) })
+    }
+}
+
+/// How the panel's close button (and Escape) closes what's on screen in it: the screen on top can
+/// take it over while it's up, as New session does to ask Discard or Save like its own Cancel would.
+/// Nothing registered, the button just closes the panel (`Router.dismissSheet()`).
+@Observable final class TicketPanelCloser {
+    private var owner: ObjectIdentifier?
+    private var handler: (() -> Void)?
+
+    /// Runs the registered handler; false when there's none, for the caller's default.
+    func close() -> Bool {
+        guard let handler else { return false }
+        handler()
+        return true
+    }
+
+    /// `owner` handles the close until it lets go (a later owner replaces it).
+    func take(_ owner: AnyObject, _ handler: @escaping () -> Void) {
+        self.owner = ObjectIdentifier(owner)
+        self.handler = handler
+    }
+
+    /// Stops `owner` handling the close, unless another has taken it since.
+    func release(_ owner: AnyObject) {
+        guard self.owner == ObjectIdentifier(owner) else { return }
+        self.owner = nil
+        handler = nil
     }
 }
 

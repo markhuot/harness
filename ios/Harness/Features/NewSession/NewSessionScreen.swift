@@ -40,6 +40,8 @@ private struct NewSessionEditorView: View {
     @Environment(\.palette) private var c
     /// In the iPad's ticket panel, whose title bar names and closes it.
     @Environment(\.inTicketPanel) private var inTicketPanel
+    /// The panel's close button and Escape, which run `cancel()` while this is on screen there.
+    @Environment(TicketPanelCloser.self) private var panelCloser: TicketPanelCloser?
 
     @State private var editor: NewSessionEditor?
     @State private var branches = TicketBranches()
@@ -60,9 +62,9 @@ private struct NewSessionEditorView: View {
             .navigationTitle(reopen != nil ? "Draft" : "New session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // The iPad panel's title bar already names New session and closes it (Escape too),
-                // so its own bar keeps only Plan first and Start session. Closing the panel saves
-                // the draft, as the screen going away always does.
+                // The iPad panel's title bar already names New session and closes it (Escape too,
+                // through `cancel()`: see onAppear), so its own bar keeps only Plan first and
+                // Start session.
                 if inTicketPanel {
                     ToolbarItem(placement: .principal) {
                         // Something in the slot, so the system doesn't draw the title there.
@@ -117,11 +119,14 @@ private struct NewSessionEditorView: View {
             }
             .onAppear {
                 onScreen.count += 1
+                // The panel's ✕ and Escape ask Discard or Save like Cancel, while this is on top.
+                panelCloser?.take(onScreen) { cancel() }
                 // Reopening a draft: keep its key resolved while the store may not have it yet.
                 if let reopen, releaseKey == nil { releaseKey = store.watchKey(reopen) }
             }
             .onDisappear {
                 onScreen.count -= 1
+                panelCloser?.release(onScreen)
                 releaseKey?()
                 releaseKey = nil
                 // Swiping the sheet down (or any other way the screen goes) saves the draft. Not

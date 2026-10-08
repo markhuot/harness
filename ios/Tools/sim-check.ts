@@ -1514,6 +1514,45 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     } else await closePanel();
     return `New session in the panel, one title and one ✕${landscape ? " (the title by AXe only)" : ""}, no pop-out`;
   });
+  await check("with a draft typed, the panel's ✕ and Escape ask Discard or Save, and Discard leaves no draft", async () => {
+    const words = "Throw this panel draft away";
+    const ours = (l: string) => l.includes(words);
+    await goto(udid, `harness://new?projectId=${encodeURIComponent(s.project.id)}`, (l) => l.some(isOptions) && panelOn(l, "New session"));
+    await Bun.sleep(600);
+    // The prompt has focus as New session opens; typing saves a draft, whose card the board lists.
+    await axe("type", words, "--udid", udid);
+    await until("the draft's card", async () => (await labels(udid)).some((l) => ours(l) && l.endsWith(", draft")), 10000).catch(async (e) => {
+      await say("after typing");
+      throw e;
+    });
+    const asking = (l: string[]) => l.includes("Discard draft") && l.includes("Save draft");
+    // Escape asks too, and Keep editing leaves it as it was.
+    await axe("key", "41", "--udid", udid);
+    await until("Escape's Discard or Save", async () => asking(await labels(udid)), 5000);
+    await tapWhere(udid, "Keep editing");
+    await until("still on New session", async () => {
+      const l = await labels(udid);
+      return !asking(l) && panelOn(l, "New session");
+    }, 5000);
+    // The landscape-only build's keyboard covers the title bar: Escape again there.
+    if (landscape) await axe("key", "41", "--udid", udid);
+    else await tapWhere(udid, "Close New session");
+    await until("the ✕'s Discard or Save", async () => asking(await labels(udid)), 5000).catch(async (e) => {
+      await say("after the panel's ✕");
+      throw e;
+    });
+    await shot(udid, "panel-new-session-ask-light");
+    await tapWhere(udid, "Discard draft");
+    await until("the panel gone, and the draft", async () => {
+      const l = await labels(udid);
+      return !l.includes(RESIZE) && !l.some(ours);
+    }, 8000).catch(async (e) => {
+      await say("after Discard draft");
+      throw e;
+    });
+    moved(udid);
+    return `asked on Escape and on the panel's ✕${landscape ? " (Escape, in landscape)" : ""}; Discard closed it and its card went`;
+  });
   await check("Escape on a hardware keyboard closes the panel", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}`, (l) => panelOn(l, key));
     await Bun.sleep(600);
