@@ -1345,11 +1345,13 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const cards = (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
     if (cards.length !== 2 || !card(kid.key)(cards[0]!.AXLabel!)) throw new Error(`the cards read ${cards.map((n) => `"${n.AXLabel}"`).join(", ")}`);
     if (cards[1]!.frame.y <= cards[0]!.frame.y) throw new Error("the newest card isn't at the bottom");
-    // The board's bottom bar rides above the taller dock.
-    const sheet = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-sheet");
+    // The board's bottom bar rides above the whole stack: the topmost card, or "N more…" over it.
+    const more = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-more");
+    const dockTop = Math.min(cards[0]!.frame.y, more?.frame.y ?? Infinity);
     const newSession = await findElement(udid, (x) => x === "New session");
-    if (sheet && newSession && newSession.frame.y + newSession.frame.height > sheet.frame.y)
-      throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(sheet.frame.y)})`);
+    if (!newSession) throw new Error("no New session button on the board");
+    if (newSession.frame.y + newSession.frame.height > dockTop)
+      throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(dockTop)})`);
     await shootBoth(udid, "dock-stack");
     await appearance(udid, "light");
     return `${keyOf(cards[0]!.AXLabel!)} over ${keyOf(label)}`;

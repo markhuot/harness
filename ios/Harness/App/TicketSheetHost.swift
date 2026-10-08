@@ -209,8 +209,8 @@ extension EnvironmentValues {
     /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardStack); 0
     /// without one.
     var cards: CGFloat = 0
-    /// The iPad: where the board's column starts in the window, right of the sidebar, so the pill
-    /// stack keeps off the sidebar (DesktopShell measures it).
+    /// The iPad: where the board's column starts in the window, right of the sidebar, so the docked
+    /// card stack keeps off the sidebar (DesktopShell measures it).
     var contentLeading: CGFloat = 0
 }
 
