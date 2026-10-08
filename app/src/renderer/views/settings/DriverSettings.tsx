@@ -1,11 +1,11 @@
-// Settings → Drivers: each driver opens into its own settings (sign-in, review model, the
-// Anthropic API key for anthropic-api, and the long-lived token for claude-code), with the app's default driver + model below the list.
+// Settings → Drivers: each driver opens into its own settings (sign-in, the Anthropic API key for
+// anthropic-api, and the long-lived token for claude-code), with the app's per-phase models below the list.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { DriverInfo, PublicSettings } from "@harness/shared";
 import { useAction, useStore } from "../../state/store";
-import { modelCacheFor, settingsChoice, settingsChoicePatch } from "@harness/shared/state";
-import { DriverModelSelect, ModelSelect } from "../../components/ModelSelect";
+import { modelCacheFor } from "@harness/shared/state";
+import { PhaseModelSelect } from "../../components/PhaseModelSelect";
 import { Icon } from "../../components/Icon";
 import { Row, Section } from "../Settings";
 import "./drivers.css";
@@ -51,7 +51,7 @@ export function DriversSection() {
     <Section
       id="drivers"
       title="Drivers"
-      desc="Open a driver for its sign-in and models. Tickets and projects can pick their own model; the default below applies when they don't."
+      desc="Open a driver for its sign-in. Tickets and projects can pick their own models; the choices below apply when they don't."
       actions={
         <button className="btn btn-ghost btn-sm" onClick={reload} disabled={loading} title="Refresh drivers">
           {loading ? <span className="spinner" /> : <Icon name="refresh" size={13} />}
@@ -110,20 +110,6 @@ function DriverPanel({ driver: d, settings }: { driver: DriverInfo; settings: Pu
       {d.id === "anthropic-api" && settings && <AnthropicKeyRow settings={settings} />}
       {d.id === "claude-code" && settings && <ClaudeTokenRow settings={settings} />}
       {d.id === "github-copilot" && settings && <CopilotTokenRow settings={settings} />}
-      {settings && (
-        <Row title="Review model" sub="Model for agent review runs on this driver.">
-          <div data-testid={`model-settings-${d.id}`}>
-            <ModelSelect
-              driver={d.id}
-              value={settings.reviewModels[d.id] ?? null}
-              defaultLabel="Same as work"
-              plainDefault
-              onChange={(m) => void act(() => client.updateSettings({ reviewModels: { [d.id]: m } }))}
-              showRefresh
-            />
-          </div>
-        </Row>
-      )}
     </div>
   );
 }
@@ -293,20 +279,14 @@ function SecretRow(props: {
   );
 }
 
-/** The app's default driver + model, right under the driver list. */
+/** The app's driver + model per run phase, right under the driver list. */
 function DefaultModelCard({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
   return (
     <div className="card-surface settings-card driver-default" data-testid="default-model">
-      <Row title="Default model" sub="Used for new sessions unless the project or ticket picks its own.">
-        <DriverModelSelect
-          value={settingsChoice(settings)}
-          resolved={{ driver: settings.defaultDriver, model: null }}
-          defaultLabel="Driver default"
-          autoWidth
-          onChange={(c) => void act(() => client.updateSettings(settingsChoicePatch(c, settings)))}
-        />
+      <Row title="Models" sub="The driver and model each run phase uses unless the project or ticket picks its own.">
+        <PhaseModelSelect value={settings.phaseModels} inherited={null} autoWidth onChange={(phaseModels) => void act(() => client.updateSettings({ phaseModels }))} />
       </Row>
     </div>
   );

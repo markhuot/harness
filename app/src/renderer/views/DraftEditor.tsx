@@ -151,9 +151,10 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   const cache = modelCacheFor(client);
   useSyncExternalStore(cache.subscribe, () => cache.version);
   const choice = view ? ticketChoice(view, project, state.settings) : null;
+  const summaryDrivers = [...new Set([choice?.driver, ...Object.values(view?.phaseModels ?? {}).map((c) => c?.driver)].filter((d): d is string => !!d))].join(",");
   useEffect(() => {
-    if (choice?.driver) void cache.load(choice.driver);
-  }, [cache, choice?.driver]);
+    for (const d of summaryDrivers ? summaryDrivers.split(",") : []) void cache.load(d);
+  }, [cache, summaryDrivers]);
   const summary =
     view && project
       ? newSessionOptionsSummary(view, project, state.settings, {

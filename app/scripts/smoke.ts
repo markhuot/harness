@@ -645,21 +645,21 @@ try {
   /** Open the combined Model combobox inside `scope` and list its rows ("# Driver" for headings). */
   const comboRows = async (scope: string) => {
     await comboClose();
-    await js(`document.querySelector(${JSON.stringify(`${scope} [data-testid=driver-model-select] button`)}).click()`);
+    await js(`document.querySelector(${JSON.stringify(`${scope} [data-testid=phase-model-select] button`)}).click()`);
     return until(`${scope} model rows`, () =>
       js<string[]>(`[...document.querySelectorAll(".model-combo-list > *")].map(e => (e.classList.contains("model-combo-heading") ? "# " : "") + e.textContent)`).then((r) => r.length > 0 && r),
     );
   };
-  /** Pick the open combobox's option whose label starts with `label`. */
-  const comboPick = (label: string) =>
-    js<boolean>(`(() => { const el = [...document.querySelectorAll(".model-combo-option")].find(e => e.textContent.startsWith(${JSON.stringify(label)})); if (!el) return false; el.click(); return true; })()`);
+  /** In the open phase picker, pick the row whose label starts with `label` (on `driver`, when given) for `phase`. */
+  const comboPick = (label: string, phase = "work", driver?: string) =>
+    js<boolean>(`(() => { const row = [...document.querySelectorAll(".phase-combo-row")].find(r => r.querySelector("[role=rowheader]").textContent.startsWith(${JSON.stringify(label)}) && (${JSON.stringify(driver ?? "")} === "" || r.dataset.row.startsWith(${JSON.stringify((driver ?? "") + "\u0001")}))); const el = row?.querySelector("[role=radio][data-phase=${phase}]"); if (!el) return false; el.click(); return true; })()`);
   const ccRows = await comboRows(inPane(printId, ".draft-options"));
   check(
-    "the draft's Model combobox: Default first, then models under each signed-in driver",
-    ccRows[0]!.startsWith("Default (") && ccRows.includes("# Claude Code") && ccRows.includes("Sonnet 5") && ccRows.includes("# Dummy") && ccRows.includes("Dummy Slow") && !ccRows.includes("# Anthropic API"),
+    "the draft's Models picker: Inherit first, then models under each signed-in driver",
+    ccRows[0]!.startsWith("Inherit (") && ccRows.includes("# Claude Code") && ccRows.includes("Sonnet 5") && ccRows.includes("# Dummy") && ccRows.includes("Dummy Slow") && !ccRows.includes("# Anthropic API"),
     ccRows.join(","),
   );
-  check("the combobox picks a driver + model in one go", await comboPick("Dummy Slow"));
+  check("the picker sets the Work phase's driver + model in one go", await comboPick("Dummy Slow"));
   const modeOpts = await js<string[]>(`[...document.querySelectorAll('${inPane(printId, "[data-testid=permission-mode] option")}')].map(o => o.textContent)`);
   check("the draft offers the permission modes, inheriting by default", modeOpts.join(",") === "Default (Auto),Auto,Ask,Read only", modeOpts.join(","));
   await pick(inPane(printId, "[data-testid=permission-mode]"), "read_only");
@@ -670,7 +670,7 @@ try {
   check("Options picks PATCH the draft", !!patched, JSON.stringify({ d: patched.driver, m: patched.model, p: patched.permissionMode }));
   const settingsRows = (scope: string) => js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid=ticket-settings] > dt`)})].map(d => d.textContent)`);
   const draftRows = await settingsRows(inPane(printId, ".draft-options"));
-  check("the draft's Options rows", draftRows.join(",") === "Model,Permissions,Agent review,Human review,Branch,Base branch,Depends on", draftRows.join(","));
+  check("the draft's Options rows", draftRows.join(",") === "Models,Permissions,Agent review,Human review,Branch,Base branch,Depends on", draftRows.join(","));
   await js(`document.querySelector('${inPane(printId, "[data-testid=draft-options]")}').click()`);
   const summaryText = await until("Options summary", () => js<string>(`document.querySelector('${inPane(printId, "[data-testid=draft-options-summary]")}')?.textContent ?? ""`).then((t) => t.includes("Read only") && t));
   check("collapsed Options sums up what differs from the defaults", summaryText === "Dummy Slow · Read only", summaryText);
@@ -779,8 +779,8 @@ try {
   const detailRows = await settingsRows(".details");
   check("Details renders the same TicketSettings rows, then the read-only ones", detailRows.slice(0, draftRows.length).join(",") === draftRows.join(",") && detailRows.includes("Workdir"), detailRows.join(","));
   const controls = (scope: string) =>
-    js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid=ticket-settings]`)})].flatMap(s => ["driver-model-select", "permission-mode", "depends-on"].filter(t => s.querySelector("[data-testid=" + t + "]")).concat(s.querySelector("input[role=switch]") ? ["switch"] : []))`);
-  check("…with the same controls as a draft's Options", (await controls(".details")).join(",") === "driver-model-select,permission-mode,depends-on,switch", (await controls(".details")).join(","));
+    js<string[]>(`[...document.querySelectorAll(${JSON.stringify(`${scope} [data-testid=ticket-settings]`)})].flatMap(s => ["phase-model-select", "permission-mode", "depends-on"].filter(t => s.querySelector("[data-testid=" + t + "]")).concat(s.querySelector("input[role=switch]") ? ["switch"] : []))`);
+  check("…with the same controls as a draft's Options", (await controls(".details")).join(",") === "phase-model-select,permission-mode,depends-on,switch", (await controls(".details")).join(","));
 
   const withModel = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
   check("the launched ticket keeps the draft's driver + model", withModel.driver === "dummy" && withModel.model === "dummy-slow", `${withModel.driver} / ${withModel.model}`);
@@ -789,23 +789,24 @@ try {
   const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-titlebar .model-badge")?.textContent ?? ""`).then((t) => t && t));
   check("ticket header shows the model badge", headBadge === "Dummy Slow", headBadge);
   await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);
-  check("Details has one Model combobox (no Driver select)", (await until("details model combobox", () => exists(".props [data-testid=driver-model-select]"))) && !(await exists(".props select.select:not([data-testid])")));
+  check("Details has one Models picker (no Driver select)", (await until("details model picker", () => exists(".props [data-testid=phase-model-select]"))) && !(await exists(".props select.select:not([data-testid])")));
   const busyRows = await comboRows(".props");
-  check("mid-run the Model combobox keeps the ticket's driver (its models only, no Default)", busyRows.join(",") === "Dummy Fast,Dummy Slow", busyRows.join(","));
+  check("mid-run the Models picker still lists every signed-in driver", busyRows.includes("# Claude Code") && busyRows.includes("# Dummy"), busyRows.join(","));
+  check("…and says settings apply to the next run", (await js<string>(`document.querySelector(".props .phase-model-hint")?.textContent ?? ""`)) === "Settings apply to the next run.");
   await comboClose();
   // Between runs: a planning ticket on Dummy lists every driver, and Default moves it back to the project's.
   const idle = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Pick a model between runs", start: false, driver: "dummy", model: "dummy-slow" });
   await until("plan run finished", async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${idle.key}`)).ticket.busy, 15000);
   await js(`location.hash = "#/board/all/ticket/${idle.key}/details"`);
-  await until("idle details", () => js<boolean>(`location.hash.includes(${JSON.stringify(idle.key)}) && !!document.querySelector(".props [data-testid=driver-model-select]")`));
+  await until("idle details", () => js<boolean>(`location.hash.includes(${JSON.stringify(idle.key)}) && !!document.querySelector(".props [data-testid=phase-model-select]")`));
   const idleRows = await comboRows(".props");
-  check("between runs it lists every signed-in driver with Default first", idleRows[0]!.startsWith("Default (") && idleRows.includes("# Claude Code") && idleRows.includes("# Dummy"), idleRows.join(","));
-  await comboPick("Default");
+  check("between runs it lists every signed-in driver with Inherit first", idleRows[0]!.startsWith("Inherit (") && idleRows.includes("# Claude Code") && idleRows.includes("# Dummy"), idleRows.join(","));
+  await comboPick("Inherit");
   const cleared = await until("model cleared", async () => {
     const t = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${idle.key}`)).ticket;
     return t.model === null && t.driver === "claude-code" && t;
   });
-  check("Details Default puts the ticket back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
+  check("Details Inherit puts the ticket's Work phase back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
   check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-titlebar .model-badge")))));
   await api("PATCH", `/tickets/${idle.key}`, { permissionMode: "ask" });
   await until("mode shown", () => js<boolean>(`document.querySelector(".props [data-testid=permission-mode]")?.value === "ask"`));
@@ -822,25 +823,25 @@ try {
   const cardBadge = await js<string>(`document.querySelector('.card[data-key="NYTIMES-1"] .model-badge')?.textContent ?? ""`);
   check("board card shows a non-default model", cardBadge === "Sonnet 5", cardBadge);
   await js(`location.hash = "#/settings/drivers"`);
-  await until("model settings", () => exists("#settings-drivers [data-testid=default-model] [data-testid=driver-model-select]"));
-  await comboRows("[data-testid=default-model]");
-  await comboPick("Haiku 4.5");
-  const savedDefault = await until("settings default model", async () => {
+  await until("model settings", () => exists("#settings-drivers [data-testid=default-model] [data-testid=phase-model-select]"));
+  const appRows = await comboRows("[data-testid=default-model]");
+  check("app settings have no Inherit row", !appRows.some((r) => r.startsWith("Inherit")), appRows.join(","));
+  await comboPick("Haiku 4.5", "work", "claude-code");
+  const savedDefault = await until("settings work model", async () => {
     const st = await api<{ defaultDriver: string; defaultModels: Record<string, string | null> }>("GET", "/settings");
     return st.defaultDriver === "claude-code" && st.defaultModels["claude-code"] === "haiku";
   });
-  check("Settings → Drivers saves the default driver + model from one combobox", savedDefault);
-  await comboRows("[data-testid=default-model]");
-  await comboPick("Driver default");
-  await until("settings default cleared", async () => !(await api<{ defaultModels: Record<string, string | null> }>("GET", "/settings")).defaultModels["claude-code"]);
-  check("driver settings stay closed until the driver is opened", !(await exists("[data-testid=model-settings-claude-code]")));
-  await js(`document.querySelector('[data-driver-row="claude-code"]').click()`);
-  await until("claude code settings", () => exists("[data-testid=driver-settings-claude-code] [data-testid=model-settings-claude-code] select"));
-  check("the Anthropic API key only shows in the Anthropic API driver", !(await exists("[data-testid=driver-settings-claude-code] [data-testid=anthropic-api-key]")));
-  await pick("[data-testid=model-settings-claude-code] select", "haiku");
+  check("Settings → Drivers saves the Work driver + model from the picker", savedDefault);
+  await comboPick("Default", "work", "claude-code");
+  await until("settings work model cleared", async () => !(await api<{ defaultModels: Record<string, string | null> }>("GET", "/settings")).defaultModels["claude-code"]);
+  await comboPick("Haiku 4.5", "review", "claude-code");
   const savedReview = await until("review model", async () => (await api<{ reviewModels: Record<string, string | null> }>("GET", "/settings")).reviewModels["claude-code"] === "haiku");
-  check("a driver's own settings save its review model", savedReview);
-  await pick("[data-testid=model-settings-claude-code] select", "");
+  check("the Review column saves the app's review model", savedReview);
+  await comboPick("Default", "review", "claude-code");
+  await comboClose();
+  await js(`document.querySelector('[data-driver-row="claude-code"]').click()`);
+  await until("claude code settings", () => exists("[data-testid=driver-settings-claude-code]"));
+  check("the Anthropic API key only shows in the Anthropic API driver", !(await exists("[data-testid=driver-settings-claude-code] [data-testid=anthropic-api-key]")));
   await js(`location.hash = "#/settings/permissions"`);
   await until("permission settings", () => exists("#settings-permissions [data-testid=permission-mode]"));
   await pick("#settings-permissions [data-testid=permission-mode]", "ask");

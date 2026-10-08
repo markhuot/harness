@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
-import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserSize } from "@harness/shared";
+import { applyLegacySettings, BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, legacySettingsFields, legacyWork, mergePhaseModels, resolvePhaseChoice, type BrowserSize } from "@harness/shared";
 import type {
   ActivityAuthor,
   ActivityEntry,
@@ -99,6 +99,7 @@ let settings: PublicSettings = {
   classifier: "claude-cli",
   defaultModels: {},
   reviewModels: {},
+  phaseModels: { complete: { driver: "claude-code", model: "haiku" } },
   watcherDriver: null,
   watcherModels: {},
   anthropicApiKeySet: false,
@@ -1462,6 +1463,7 @@ function createTicket(body: Record<string, any>): Ticket {
     pendingApproval: null,
     allowedTools: [],
     model: typeof body.model === "string" && body.model ? body.model : null,
+    ...(body.phaseModels ? { phaseModels: mergePhaseModels({}, body.phaseModels) } : {}),
     position: tickets.size,
     createdAt: now(),
     updatedAt: now(),
@@ -1591,6 +1593,12 @@ async function route(req: Request, url: URL): Promise<Response> {
         if (key !== p.key) renameProjectKey(p, key); // throws 409 on collisions
       }
       if (body.defaultModels !== undefined) body.defaultModels = mergeModels(p.defaultModels, body.defaultModels);
+      if (body.phaseModels !== undefined) {
+        body.phaseModels = mergePhaseModels(p.phaseModels, body.phaseModels);
+        const legacy = legacyWork(body.phaseModels);
+        body.defaultDriver = legacy.driver;
+        body.defaultModels = legacy.models;
+      }
       if (body.color !== undefined) {
         const color = normalizeProjectColor(body.color);
         if (color === undefined) throw new HttpError(400, `Invalid color ${JSON.stringify(body.color)}`);
@@ -1683,6 +1691,11 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (body[k] !== undefined) (t as any)[k] = body[k];
         }
         if (body.model !== undefined) t.model = body.model || null;
+        if (body.phaseModels !== undefined) {
+          t.phaseModels = mergePhaseModels(t.phaseModels, body.phaseModels);
+          t.driver = resolvePhaseChoice("work", { ticket: t.phaseModels, project: projects.get(t.projectId)?.phaseModels, settings: settings.phaseModels }).driver;
+          t.model = t.phaseModels.work?.model ?? null;
+        }
         if (body.permissionMode !== undefined) t.permissionMode = body.permissionMode || null;
         if (body.baseBranch !== undefined) t.baseBranch = body.baseBranch || null;
         if (body.externalRef !== undefined) {
@@ -2013,13 +2026,16 @@ async function route(req: Request, url: URL): Promise<Response> {
     if (method === "GET") return ok(settings);
     if (method === "PATCH") {
       const body = await readBody(req);
-      const { anthropicApiKey, claudeOauthToken, copilotGithubToken, defaultModels, reviewModels, watcherModels, listen, prompts, ...rest } = body;
+      const { anthropicApiKey, claudeOauthToken, copilotGithubToken, defaultModels, reviewModels, watcherModels, listen, prompts, phaseModels, ...rest } = body;
       if (prompts !== undefined) settings.prompts = mergePrompts(prompts);
       if (listen !== undefined) {
         settings.listen = applyListen(listen);
         networkError = null;
       }
-      settings = { ...settings, ...rest, defaultModels: mergeModels(settings.defaultModels, defaultModels), reviewModels: mergeModels(settings.reviewModels, reviewModels), watcherModels: mergeModels(settings.watcherModels ?? {}, watcherModels) };
+      let pm = settings.phaseModels ?? {};
+      if (rest.defaultDriver !== undefined || defaultModels !== undefined || reviewModels !== undefined) pm = applyLegacySettings(pm, { defaultDriver: rest.defaultDriver, defaultModels, reviewModels });
+      if (phaseModels !== undefined) pm = mergePhaseModels(pm, phaseModels);
+      settings = { ...settings, ...rest, phaseModels: pm, ...legacySettingsFields(pm), watcherModels: mergeModels(settings.watcherModels ?? {}, watcherModels) };
       if (anthropicApiKey !== undefined) {
         settings.anthropicApiKeySet = !!anthropicApiKey;
         const d = drivers.find((x) => x.id === "anthropic-api")!;

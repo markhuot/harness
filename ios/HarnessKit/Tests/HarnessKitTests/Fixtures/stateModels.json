@@ -6341,6 +6341,992 @@
       ]
     }
   ],
+  "phaseMatrixCases": [
+    {
+      "name": "app level",
+      "input": {
+        "value": {
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        },
+        "inherited": null
+      },
+      "output": {
+        "inherit": null,
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001",
+          "work": "claude-code\u0001opus",
+          "review": "claude-code\u0001",
+          "complete": "claude-code\u0001haiku"
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        },
+        "summary": "Opus 5.5 · Complete: Haiku 5.5",
+        "filtered": null
+      }
+    },
+    {
+      "name": "app level, nothing set",
+      "input": {
+        "value": null,
+        "inherited": null
+      },
+      "output": {
+        "inherit": null,
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001",
+          "work": "claude-code\u0001",
+          "review": "claude-code\u0001",
+          "complete": "claude-code\u0001"
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": null
+          }
+        },
+        "summary": "Opus 5.5",
+        "filtered": null
+      }
+    },
+    {
+      "name": "ticket inherits everything",
+      "input": {
+        "value": {},
+        "inherited": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        }
+      },
+      "output": {
+        "inherit": {
+          "key": "",
+          "choice": null,
+          "label": "Inherit (Opus 5.5 · Complete: Haiku 5.5)",
+          "model": null
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "",
+          "work": "",
+          "review": "",
+          "complete": ""
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        },
+        "summary": "Opus 5.5 · Complete: Haiku 5.5",
+        "filtered": null
+      }
+    },
+    {
+      "name": "ticket works on another driver",
+      "input": {
+        "value": {
+          "work": {
+            "driver": "codex",
+            "model": "luna"
+          }
+        },
+        "inherited": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        }
+      },
+      "output": {
+        "inherit": {
+          "key": "",
+          "choice": null,
+          "label": "Inherit (Opus 5.5 · Complete: Haiku 5.5)",
+          "model": null
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          },
+          {
+            "driver": "codex",
+            "label": "Codex",
+            "rows": [
+              {
+                "key": "codex\u0001",
+                "choice": {
+                  "driver": "codex",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              },
+              {
+                "key": "codex\u0001luna",
+                "choice": {
+                  "driver": "codex",
+                  "model": "luna"
+                },
+                "label": "Luna",
+                "model": "luna"
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "",
+          "work": "codex\u0001luna",
+          "review": "",
+          "complete": ""
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "codex",
+            "model": "luna"
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        },
+        "summary": "Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5",
+        "filtered": null
+      }
+    },
+    {
+      "name": "an unlisted driver and a custom model are kept",
+      "input": {
+        "value": {
+          "review": {
+            "driver": "gone",
+            "model": "x-1"
+          },
+          "plan": {
+            "driver": "claude-code",
+            "model": "custom-1"
+          }
+        },
+        "inherited": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        }
+      },
+      "output": {
+        "inherit": {
+          "key": "",
+          "choice": null,
+          "label": "Inherit (Opus 5.5 · Complete: Haiku 5.5)",
+          "model": null
+        },
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              },
+              {
+                "key": "claude-code\u0001custom-1",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "custom-1"
+                },
+                "label": "custom-1 (custom)",
+                "model": "custom-1"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          },
+          {
+            "driver": "gone",
+            "label": "gone",
+            "rows": [
+              {
+                "key": "gone\u0001",
+                "choice": {
+                  "driver": "gone",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              },
+              {
+                "key": "gone\u0001x-1",
+                "choice": {
+                  "driver": "gone",
+                  "model": "x-1"
+                },
+                "label": "x-1 (custom)",
+                "model": "x-1"
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001custom-1",
+          "work": "",
+          "review": "gone\u0001x-1",
+          "complete": ""
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": "custom-1"
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
+          "review": {
+            "driver": "gone",
+            "model": "x-1"
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        },
+        "summary": "Claude Code · Opus 5.5 · Planning: Claude Code · custom-1 · Review: gone · x-1 · Complete: Claude Code · Haiku 5.5",
+        "filtered": null
+      }
+    },
+    {
+      "name": "type-ahead by model name",
+      "input": {
+        "value": null,
+        "inherited": null,
+        "query": "hai"
+      },
+      "output": {
+        "inherit": null,
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001",
+          "work": "claude-code\u0001",
+          "review": "claude-code\u0001",
+          "complete": "claude-code\u0001"
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": null
+          }
+        },
+        "summary": "Opus 5.5",
+        "filtered": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "type-ahead by driver",
+      "input": {
+        "value": null,
+        "inherited": null,
+        "query": "codex"
+      },
+      "output": {
+        "inherit": null,
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001",
+          "work": "claude-code\u0001",
+          "review": "claude-code\u0001",
+          "complete": "claude-code\u0001"
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": null
+          }
+        },
+        "summary": "Opus 5.5",
+        "filtered": []
+      }
+    },
+    {
+      "name": "type-ahead by model id",
+      "input": {
+        "value": null,
+        "inherited": null,
+        "query": "luna"
+      },
+      "output": {
+        "inherit": null,
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001",
+          "work": "claude-code\u0001",
+          "review": "claude-code\u0001",
+          "complete": "claude-code\u0001"
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": null
+          }
+        },
+        "summary": "Opus 5.5",
+        "filtered": []
+      }
+    },
+    {
+      "name": "type-ahead with no match",
+      "input": {
+        "value": null,
+        "inherited": null,
+        "query": "zzz"
+      },
+      "output": {
+        "inherit": null,
+        "groups": [
+          {
+            "driver": "claude-code",
+            "label": "Claude Code",
+            "rows": [
+              {
+                "key": "claude-code\u0001",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": null
+                },
+                "label": "Default (Opus 5.5)",
+                "model": null
+              },
+              {
+                "key": "claude-code\u0001opus",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "opus"
+                },
+                "label": "Opus 5.5",
+                "model": "opus"
+              },
+              {
+                "key": "claude-code\u0001haiku",
+                "choice": {
+                  "driver": "claude-code",
+                  "model": "haiku"
+                },
+                "label": "Haiku 5.5",
+                "model": "haiku"
+              }
+            ]
+          },
+          {
+            "driver": "anthropic-api",
+            "label": "Anthropic API",
+            "rows": [
+              {
+                "key": "anthropic-api\u0001",
+                "choice": {
+                  "driver": "anthropic-api",
+                  "model": null
+                },
+                "label": "Default",
+                "model": null
+              }
+            ]
+          }
+        ],
+        "selected": {
+          "plan": "claude-code\u0001",
+          "work": "claude-code\u0001",
+          "review": "claude-code\u0001",
+          "complete": "claude-code\u0001"
+        },
+        "effective": {
+          "plan": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "work": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": null
+          }
+        },
+        "summary": "Opus 5.5",
+        "filtered": []
+      }
+    }
+  ],
+  "phasePickPatchCases": [
+    {
+      "name": "a model",
+      "input": {
+        "phase": "complete",
+        "choice": {
+          "driver": "codex",
+          "model": "luna"
+        }
+      },
+      "output": {
+        "complete": {
+          "driver": "codex",
+          "model": "luna"
+        }
+      }
+    },
+    {
+      "name": "a driver default",
+      "input": {
+        "phase": "work",
+        "choice": {
+          "driver": "claude-code",
+          "model": null
+        }
+      },
+      "output": {
+        "work": {
+          "driver": "claude-code",
+          "model": null
+        }
+      }
+    },
+    {
+      "name": "inherit",
+      "input": {
+        "phase": "plan",
+        "choice": null
+      },
+      "output": {
+        "plan": null
+      }
+    }
+  ],
   "projectChoiceCases": [
     {
       "name": "pinned driver with its model",

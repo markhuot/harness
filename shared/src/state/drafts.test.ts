@@ -157,11 +157,10 @@ describe("ticketSettingsRows", () => {
     expect(ticketSettingsRows(launched({ status: "in_progress", workdir: "/w", branch: "harness/web-4" }), project()).branch.editable).toBe(false);
   });
 
-  test("done: nothing editable; busy: the driver is locked", () => {
+  test("done: nothing editable; busy: still editable (settings apply to the next run)", () => {
     const done = ticketSettingsRows(launched({ status: "done" }), project());
     expect([done.editable, done.branch.editable]).toEqual([false, false]);
-    expect(ticketSettingsRows(launched({ busy: true, driver: "codex" }), project()).onlyDriver).toBe("codex");
-    expect(ticketSettingsRows(launched(), project()).onlyDriver).toBeUndefined();
+    expect(ticketSettingsRows(launched({ busy: true, driver: "codex" }), project()).editable).toBe(true);
   });
 });
 
@@ -225,5 +224,34 @@ describe("newSessionOptionsSummary", () => {
 
   test("a worktree on a project that doesn't use them shows the branch it will get", () => {
     expect(newSessionOptionsSummary({ ...blank(), useWorktree: true }, project({ useWorktrees: false }), settings, labels)).toEqual(["harness/web-4"]);
+  });
+});
+
+describe("per-phase choices on a draft", () => {
+  const haiku = { driver: "claude-code", model: "haiku" };
+  test("a phase pick merges locally, and Work drives the legacy driver and model", () => {
+    const t = applyTicketPatch(blank(), { phaseModels: { work: { driver: "codex", model: "luna" }, complete: haiku } });
+    expect(t.phaseModels).toEqual({ work: { driver: "codex", model: "luna" }, complete: haiku });
+    expect([t.driver, t.model]).toEqual(["codex", "luna"]);
+    const cleared = applyTicketPatch(t, { phaseModels: { work: null } });
+    expect(cleared.phaseModels).toEqual({ complete: haiku });
+    expect(cleared.model).toBeNull();
+  });
+
+  test("a draft with a phase choice isn't empty, and its create body and PATCH carry the phases", () => {
+    const prev = blank();
+    const next = applyTicketPatch(prev, { phaseModels: { complete: haiku } });
+    expect(draftIsEmpty(prev, project(), settings)).toBe(true);
+    expect(draftIsEmpty(next, project(), settings)).toBe(false);
+    expect(draftCreateBody(next, project()).phaseModels).toEqual({ complete: haiku });
+    expect(draftPatch(prev, next)).toEqual({ phaseModels: { complete: haiku } });
+    expect(draftPatch(next, prev)).toEqual({ phaseModels: { complete: null } });
+  });
+
+  test("the Options summary names the draft's own phases", () => {
+    const t = applyTicketPatch(blank(), { phaseModels: { work: { driver: "claude-code", model: "opus" }, complete: haiku } });
+    const models: Record<string, string> = { opus: "Opus 5.5", haiku: "Haiku 5.5" };
+    expect(newSessionOptionsSummary(t, project(), settings, { model: (_d, m) => (m ? models[m] : null) })[0]).toBe("Opus 5.5");
+    expect(newSessionOptionsSummary(t, project(), settings, { model: (_d, m) => (m ? models[m] : null) })[1]).toBe("Complete: Haiku 5.5");
   });
 });

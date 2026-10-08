@@ -6,7 +6,8 @@
 // summary. Platform-independent: no React, DOM or native APIs.
 
 import { harnessBranch, resolveBaseBranch } from "../branches";
-import type { BranchInfo, CreateTicketBody, Project, PublicSettings, Ticket, UpdateTicketBody } from "../protocol";
+import { PHASES, type BranchInfo, type CreateTicketBody, type PhaseModels, type PhaseModelsPatch, type Project, type PublicSettings, type Ticket, type UpdateTicketBody } from "../protocol";
+import { mergePhaseModels, PHASE_LABELS, samePhaseChoice } from "../phases";
 import { attachmentFromInput, attachmentInputs, sameAttachments } from "./promptAttachments";
 import { branchChoice, branchChoiceHint, canChangeBranch, ticketHasBranch, type BranchChoice } from "./branches";
 import { permissionModeLabel } from "./format";
@@ -96,6 +97,12 @@ export function applyTicketPatch(t: Ticket, patch: UpdateTicketBody): Ticket {
     if (patch.model === undefined) next.model = null;
   }
   if (patch.model !== undefined) next.model = patch.model || null;
+  if (patch.phaseModels !== undefined) {
+    next.phaseModels = mergePhaseModels(t.phaseModels, patch.phaseModels);
+    const work = next.phaseModels.work;
+    if (work) next.driver = work.driver;
+    next.model = work?.model ?? null;
+  }
   if (patch.permissionMode !== undefined) next.permissionMode = patch.permissionMode;
   if (patch.baseBranch !== undefined) next.baseBranch = blankToNull(patch.baseBranch);
   if (patch.branch !== undefined) next.requestedBranch = blankToNull(patch.branch);
@@ -128,6 +135,7 @@ export function draftIsEmpty(t: Ticket, project: DraftProject | null | undefined
     !t.promptAttachments?.length &&
     t.kind === "task" &&
     choice.driver === null &&
+    !hasPhaseModels(t.phaseModels) &&
     t.permissionMode === null &&
     (t.useWorktree ?? null) === null &&
     !t.requestedBranch &&
@@ -153,6 +161,7 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
     kind: t.kind,
     driver: t.driver || undefined,
     model: t.model,
+    ...(hasPhaseModels(t.phaseModels) ? { phaseModels: { ...t.phaseModels } } : {}),
     permissionMode: t.permissionMode,
     useWorktree: project.isGit === false ? null : (t.useWorktree ?? null),
     ...(worktree ? { branch: t.requestedBranch ?? null, baseBranch: t.baseBranch ?? null } : {}),
@@ -165,6 +174,15 @@ export function draftCreateBody(t: Ticket, project: DraftProject): CreateTicketB
 
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
+const hasPhaseModels = (pm: PhaseModels | null | undefined) => !!pm && PHASES.some((p) => pm[p]);
+
+/** The per-phase patch taking `prev`'s own choices to `next`'s (null clears a phase), or null when none changed. */
+function phaseModelsDiff(prev: PhaseModels | null | undefined, next: PhaseModels | null | undefined): PhaseModelsPatch | null {
+  const out: PhaseModelsPatch = {};
+  for (const p of PHASES) if (!samePhaseChoice(prev?.[p], next?.[p])) out[p] = next?.[p] ?? null;
+  return Object.keys(out).length ? out : null;
+}
+
 /**
  * The PATCH taking a saved draft from `prev` (what the service has) to `next` (the editor's
  * state): only the fields that changed, or null when nothing did. The title isn't sent: the
@@ -176,7 +194,12 @@ export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null 
   if (next.spec !== prev.spec) p.spec = next.spec;
   if (next.kind !== prev.kind) p.kind = next.kind;
   if (next.driver !== prev.driver) p.driver = next.driver;
-  if (next.model !== prev.model || (p.driver !== undefined && next.model)) p.model = next.model;
+  const phases = phaseModelsDiff(prev.phaseModels, next.phaseModels);
+  if (phases) {
+    // The per-phase choices carry the driver and model; the legacy fields only follow them.
+    p.phaseModels = phases;
+    delete p.driver;
+  } else if (next.model !== prev.model || (p.driver !== undefined && next.model)) p.model = next.model;
   if (next.permissionMode !== prev.permissionMode) p.permissionMode = next.permissionMode;
   if ((next.useWorktree ?? null) !== (prev.useWorktree ?? null)) p.useWorktree = next.useWorktree ?? null;
   if ((next.requestedBranch ?? null) !== (prev.requestedBranch ?? null)) p.branch = next.requestedBranch ?? null;
@@ -192,8 +215,6 @@ export function draftPatch(prev: Ticket, next: Ticket): UpdateTicketBody | null 
 export interface TicketSettingsRows {
   /** Anything can change: the ticket isn't done */
   editable: boolean;
-  /** The driver can't change mid-run: the Model menu offers only this driver's models */
-  onlyDriver: string | undefined;
   /** The ticket works (or will work) in a worktree of its own */
   worktree: boolean;
   /**
@@ -212,7 +233,6 @@ export function ticketSettingsRows(t: Ticket, project: Pick<Project, "isGit" | "
   const gitProject = !!project && project.isGit !== false;
   return {
     editable,
-    onlyDriver: t.busy ? t.driver : undefined,
     worktree,
     branch: draft ? { show: gitProject, editable, offerCheckout: true } : { show: worktree, editable: canChangeBranch(t, project), offerCheckout: false },
     base: { show: worktree, editable },
@@ -300,8 +320,19 @@ export interface OptionsSummaryLabels {
  */
 export function newSessionOptionsSummary(t: Ticket, project: DraftProject, settings: DraftSettings | null | undefined, labels: OptionsSummaryLabels = {}): string[] {
   const out: string[] = [];
-  const choice = ticketChoice(t, project, settings);
-  if (choice.driver) out.push(labels.model?.(choice.driver, choice.model) || choice.model || labels.driver?.(choice.driver) || choice.driver);
+  const own = t.phaseModels;
+  const name = (driver: string, model: string | null) => labels.model?.(driver, model) || model || labels.driver?.(driver) || driver;
+  if (hasPhaseModels(own)) {
+    // The phases the draft picks itself: Work unlabelled first, then the rest by name.
+    for (const p of PHASES) {
+      const c = own?.[p];
+      if (!c || (p !== "work" && samePhaseChoice(c, own?.work))) continue;
+      out.push(p === "work" ? name(c.driver, c.model) : `${PHASE_LABELS[p]}: ${name(c.driver, c.model)}`);
+    }
+  } else {
+    const choice = ticketChoice(t, project, settings);
+    if (choice.driver) out.push(name(choice.driver, choice.model));
+  }
   if (t.permissionMode) out.push(permissionModeLabel(t.permissionMode));
   if (project.isGit !== false) {
     const worktree = draftUsesWorktree(t, project);

@@ -85,6 +85,202 @@
       }
     },
     {
+      "name": "a phase pick sets that phase, and Work the legacy driver and model",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "spec": "",
+          "specRevision": 1,
+          "specBaselineRevision": null,
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "promptAttachments": [],
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": "opus",
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "patch": {
+          "phaseModels": {
+            "work": {
+              "driver": "codex",
+              "model": "luna"
+            },
+            "complete": {
+              "driver": "claude-code",
+              "model": "haiku"
+            }
+          }
+        }
+      },
+      "output": {
+        "id": "",
+        "key": "WEB-4",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "",
+        "spec": "",
+        "specRevision": 1,
+        "specBaselineRevision": null,
+        "status": "planning",
+        "sessionId": "",
+        "driver": "codex",
+        "parentId": null,
+        "childCount": 0,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "requestedBranch": null,
+        "baseBranch": null,
+        "useWorktree": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false,
+        "draft": true,
+        "promptAttachments": [],
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": "luna",
+        "position": 0,
+        "createdAt": 1,
+        "updatedAt": 1,
+        "phaseModels": {
+          "work": {
+            "driver": "codex",
+            "model": "luna"
+          },
+          "complete": {
+            "driver": "claude-code",
+            "model": "haiku"
+          }
+        }
+      }
+    },
+    {
+      "name": "clearing Work clears the legacy model",
+      "input": {
+        "ticket": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "spec": "",
+          "specRevision": 1,
+          "specBaselineRevision": null,
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "promptAttachments": [],
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": "opus",
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "phaseModels": {
+            "work": {
+              "driver": "claude-code",
+              "model": "opus"
+            }
+          }
+        },
+        "patch": {
+          "phaseModels": {
+            "work": null
+          }
+        }
+      },
+      "output": {
+        "id": "",
+        "key": "WEB-4",
+        "projectId": "p1",
+        "kind": "task",
+        "title": "",
+        "spec": "",
+        "specRevision": 1,
+        "specBaselineRevision": null,
+        "status": "planning",
+        "sessionId": "",
+        "driver": "claude-code",
+        "parentId": null,
+        "childCount": 0,
+        "dependsOn": [],
+        "autoStart": false,
+        "agentReview": "pending",
+        "humanReview": "pending",
+        "externalRef": null,
+        "workdir": null,
+        "branch": null,
+        "requestedBranch": null,
+        "baseBranch": null,
+        "useWorktree": null,
+        "skipAgentReview": false,
+        "skipHumanReview": false,
+        "draft": true,
+        "promptAttachments": [],
+        "blockedReason": null,
+        "busy": false,
+        "pendingApproval": null,
+        "allowedTools": [],
+        "permissionMode": null,
+        "model": null,
+        "position": 0,
+        "createdAt": 1,
+        "updatedAt": 1,
+        "phaseModels": {}
+      }
+    },
+    {
       "name": "a driver change keeps a model that comes with it",
       "input": {
         "ticket": {
@@ -5921,6 +6117,194 @@
       },
       "output": {
         "model": null
+      }
+    },
+    {
+      "name": "a phase change sends the per-phase patch instead of driver and model",
+      "input": {
+        "prev": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "spec": "a",
+          "specRevision": 1,
+          "specBaselineRevision": null,
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "promptAttachments": [],
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1
+        },
+        "next": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "spec": "a",
+          "specRevision": 1,
+          "specBaselineRevision": null,
+          "status": "planning",
+          "sessionId": "",
+          "driver": "codex",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "promptAttachments": [],
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": "luna",
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "phaseModels": {
+            "work": {
+              "driver": "codex",
+              "model": "luna"
+            }
+          }
+        }
+      },
+      "output": {
+        "phaseModels": {
+          "work": {
+            "driver": "codex",
+            "model": "luna"
+          }
+        }
+      }
+    },
+    {
+      "name": "a cleared phase is sent as null",
+      "input": {
+        "prev": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "spec": "a",
+          "specRevision": 1,
+          "specBaselineRevision": null,
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "promptAttachments": [],
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "phaseModels": {
+            "complete": {
+              "driver": "claude-code",
+              "model": "haiku"
+            }
+          }
+        },
+        "next": {
+          "id": "",
+          "key": "WEB-4",
+          "projectId": "p1",
+          "kind": "task",
+          "title": "",
+          "spec": "a",
+          "specRevision": 1,
+          "specBaselineRevision": null,
+          "status": "planning",
+          "sessionId": "",
+          "driver": "claude-code",
+          "parentId": null,
+          "childCount": 0,
+          "dependsOn": [],
+          "autoStart": false,
+          "agentReview": "pending",
+          "humanReview": "pending",
+          "externalRef": null,
+          "workdir": null,
+          "branch": null,
+          "requestedBranch": null,
+          "baseBranch": null,
+          "useWorktree": null,
+          "skipAgentReview": false,
+          "skipHumanReview": false,
+          "draft": true,
+          "promptAttachments": [],
+          "blockedReason": null,
+          "busy": false,
+          "pendingApproval": null,
+          "allowedTools": [],
+          "permissionMode": null,
+          "model": null,
+          "position": 0,
+          "createdAt": 1,
+          "updatedAt": 1,
+          "phaseModels": {}
+        }
+      },
+      "output": {
+        "phaseModels": {
+          "complete": null
+        }
       }
     },
     {
@@ -11917,7 +12301,7 @@
       }
     },
     {
-      "name": "busy: the driver is locked",
+      "name": "busy: still editable",
       "input": {
         "ticket": {
           "id": "",
@@ -11976,7 +12360,6 @@
       },
       "output": {
         "editable": true,
-        "onlyDriver": "codex",
         "worktree": true,
         "branch": {
           "show": true,
