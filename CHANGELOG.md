@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261008.0100](https://github.com/markhuot/harness/releases/tag/app-20261008.0100) - 2026-10-08
+
 ### Added
 
 - Agents can fill in forms that sit inside an embedded frame, like a Stripe card field or a 3-D
@@ -30,6 +32,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   screen as a small tab, with your place and drafts kept, until you tap it. Narrow iPad windows
   keep the bottom sheet the iPhone uses. A ticket you open from the board or the Inbox takes the
   panel's place, and a ticket linked from inside the panel opens on top of it with a Back button.
+- On iPad, New session in the panel shows a single title and a single ✕. Closing it with the ✕ or
+  Escape after you've typed something asks whether to save it as a draft or discard it.
 - On iPhone and iPad, a ticket opened from a notification or from a link in another app replaces
   the ticket that's open, rather than stacking on top of it behind Back.
 
