@@ -13,7 +13,7 @@ import SwiftUI
 /// Attachment record (`\.specAttachments`, TicketDetail.attachments), so annotating it adds that
 /// attachment, by its id, to the message being written.
 ///
-/// `size` is the body text size; `color` overrides the text color (nil = palette text). File links
+/// `size` is the body text size and `lineHeight` its line height as a multiple of it; `color` overrides the text color (nil = palette text). File links
 /// resolve against `linkContext` when it names a ticket or project, else the nearest
 /// `.fileLinkScope(…)`.
 ///
@@ -25,6 +25,8 @@ struct MarkdownView: View {
     let text: String
     var previous: String?
     var size: CGFloat = 15
+    /// Line height as a multiple of `size` (the Spec tab reads at 1.5).
+    var lineHeight: CGFloat = 1.45
     var color: Color?
     /// Where relative file links open (the ticket's folder, else the project's).
     var linkContext = FileLinkContext()
@@ -47,7 +49,7 @@ struct MarkdownView: View {
 
     var body: some View {
         let media = previous.map { MarkdownCache.shared.media($0, text) } ?? MarkdownCache.shared.media(text)
-        let style = MarkdownStyle(size: size, color: color ?? c.text, palette: c, linkable: linkable, media: mediaScope(media))
+        let style = MarkdownStyle(size: size, lineHeight: lineHeight, color: color ?? c.text, palette: c, linkable: linkable, media: mediaScope(media))
         VStack(alignment: .leading, spacing: 8) {
             if let previous {
                 let diff = MarkdownCache.shared.diff(previous, text)
@@ -117,6 +119,8 @@ struct MarkdownView: View {
 @MainActor
 struct MarkdownStyle {
     let size: CGFloat
+    /// Line height as a multiple of `size`.
+    var lineHeight: CGFloat = 1.45
     let color: Color
     let palette: Palette
     let linkable: (String) -> Bool
@@ -136,8 +140,8 @@ struct MarkdownStyle {
     static let bullets = ["•", "◦", "▪"]
 
     var font: Font { .scaled(size: size) }
-    /// A line height of round(size × 1.45), as extra spacing over the font's own line height.
-    var lineSpacing: CGFloat { (size * 1.45).rounded() - size * 1.2 }
+    /// A line height of round(size × lineHeight), as extra spacing over the font's own line height.
+    var lineSpacing: CGFloat { (size * lineHeight).rounded() - size * 1.2 }
 
     /// Inline tokens as one AttributedString: code spans in mono on bgActive, bold, italic, links
     /// and linkable ticket keys (both in the tint, accentText). An attachment can't sit inside a

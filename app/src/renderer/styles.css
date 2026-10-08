@@ -649,6 +649,25 @@ kbd {
   color: var(--text);
   word-wrap: break-word;
 }
+/* The Spec tab is long-form reading: a size up, with a 1.5 line height. */
+.spec-doc .md {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.spec-doc .md h1,
+.spec-doc .md h2,
+.spec-doc .md h3,
+.spec-doc .md h4 {
+  font-size: 14.5px;
+}
+.spec-doc .md h1 {
+  font-size: 16px;
+}
+.spec-doc .md code,
+.spec-doc .md pre,
+.spec-doc .md a.file-link {
+  font-size: 12.5px;
+}
 .md > :first-child {
   margin-top: 0;
 }

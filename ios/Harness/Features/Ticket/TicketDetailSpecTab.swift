@@ -50,7 +50,7 @@ struct TicketDetailSpecTab: View {
                                 EmptyState(icon: "check", title: "No changes", message: "Rev \(rev) has the same text as rev \(previous).")
                                     .padding(.top, 20)
                             } else {
-                                MarkdownView(text: body, previous: previousBody)
+                                MarkdownView(text: body, previous: previousBody, size: 16, lineHeight: 1.5)
                             }
                         } else if let previousFailed {
                             Callout(tone: .red, icon: "alert", title: "Couldn't load the changes", message: previousFailed)
@@ -63,7 +63,7 @@ struct TicketDetailSpecTab: View {
                                        message: ticket.status == .planning ? "The planning agent writes it. You can also write it in Details." : "This revision is empty.")
                                 .padding(.top, 20)
                         } else {
-                            MarkdownView(text: body, annotatable: true)
+                            MarkdownView(text: body, size: 16, lineHeight: 1.5, annotatable: true)
                         }
                     } else {
                         Spinner().frame(maxWidth: .infinity).padding(30)

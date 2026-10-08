@@ -21,7 +21,19 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   running its full height, without replacing the ticket you already have open beside the board. A
   ticket that's already open just gets the focus.
 
+### Changed
+
+- Specs are easier to read on the Mac, iPhone and iPad. The text is a size larger (14 px on the Mac,
+  16 pt on iOS) with a line height of 1.5, and headings and code grow to match. Summaries and the
+  transcript keep their size.
+
 ### Fixed
+
+- A code block under a numbered or bulleted step in a spec, a summary or any other markdown now
+  shows as code inside that step, on the Mac, iPhone and iPad. Before, the code ran into the step's
+  text, and a stray closing fence near the end could turn the rest of the document into one code
+  block. Text after the code, and paragraphs separated from their step by a blank line, stay in the
+  step too.
 
 - On the Mac, a long Agents & tasks list now scrolls. Before, rows past the bottom of the pane were
   cut off with no way to reach them.
