@@ -2,11 +2,33 @@
    output view. Rows reuse the Tickets tab's
    .children-group / .child-row styles (components/conductor.css). */
 .agents-tab {
-  overflow-y: auto;
-  padding: 16px 20px 20px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+}
+/* The filter stays put above the list, which scrolls on its own (a block, so the card never
+   shrinks to fit and clips its rows). */
+.agents-filter {
+  flex: none;
+  padding: 12px 20px 0;
+}
+.agents-filter .count {
+  margin-left: 3px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.agents-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 20px 20px;
+}
+.agents-empty {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-3);
 }
 .agent-row .child-summary.mono {
   font-size: 11.5px;

@@ -162,4 +162,71 @@ async function checkBackgroundTask({ api, app, check, shot, project }: { api: Ap
 
   const served = await api<TaskOutput>("GET", `/sessions/${t.sessionId}/subagents/${encodeURIComponent(row.id)}/output`);
   check("the API serves the task's output", served.done && served.text.includes(`line ${lines}`));
+
+  await checkLongList({ api, app, check, shot, project, ticket: t });
+}
+
+/**
+ * A long session: three more `/agents 5` turns on the task's ticket make 16 rows (15 agents, one
+ * task), more than the pane holds. The list scrolls under its filter, and the filter's Agents and
+ * Tasks toggles narrow it (both or neither: everything).
+ */
+async function checkLongList({ api, app, check, shot, project, ticket: t }: { api: Api; app: App; check: Check; shot: (name: string) => Promise<void>; project: Project; ticket: Ticket }) {
+  const { js, exists, go } = app;
+  const settled = () => until("ticket settles", async () => !(await api<TicketDetail>("GET", `/tickets/${t.key}`)).ticket.busy, 30000);
+  await settled();
+  for (let i = 1; i <= 3; i++) {
+    await api("POST", `/tickets/${t.key}/messages`, { text: "/agents 5", move: true });
+    await until(`${1 + i * 5} sub-agents and tasks`, async () => ((await api<TicketDetail>("GET", `/tickets/${t.key}`)).subagents?.length ?? 0) >= 1 + i * 5, 30000);
+    await settled();
+  }
+  await go(`#/board/${project.id}/ticket/${t.key}/agents`);
+  const rowCount = () => js<number>(`document.querySelectorAll(".agents-scroll .agent-row").length`);
+  await until("16 rows", async () => ((await rowCount()) === 16 ? true : null), 10000);
+  check("the long list has every row", (await rowCount()) === 16);
+
+  // It scrolls, and its last row comes into view; the filter stays put above it.
+  const scroll = await js<{ overflows: boolean; lastVisible: boolean; filterVisible: boolean }>(`(() => {
+    const s = document.querySelector(".agents-scroll");
+    const overflows = s.scrollHeight > s.clientHeight + 4;
+    s.scrollTop = s.scrollHeight;
+    const box = s.getBoundingClientRect();
+    const last = [...s.querySelectorAll(".agent-row")].at(-1).getBoundingClientRect();
+    const filter = document.querySelector(".agents-filter").getBoundingClientRect();
+    return { overflows, lastVisible: last.bottom <= box.bottom + 1 && last.top >= box.top, filterVisible: filter.bottom <= box.top + 1 && filter.height > 0 };
+  })()`);
+  check("a list longer than the pane overflows its scroller", scroll.overflows);
+  check("scrolled to the end, the last row is in view", scroll.lastVisible);
+  check("the filter stays above the scrolled list", scroll.filterVisible);
+  await shot("tasks-5-long-list-scrolled");
+
+  const state = () =>
+    js<{ pressed: string[]; kinds: string[]; counts: string[] }>(`({
+      pressed: [...document.querySelectorAll('.agents-filter button[aria-pressed="true"]')].map(b => b.dataset.filter),
+      kinds: [...new Set([...document.querySelectorAll(".agents-scroll .agent-row")].map(r => r.dataset.kind))].sort(),
+      counts: [...document.querySelectorAll(".agents-filter .count")].map(c => c.textContent),
+    })`);
+  const toggle = (k: "agents" | "tasks") => js(`document.querySelector('.agents-filter [data-filter="${k}"]').click()`);
+  const s0 = await state();
+  check("the filter counts agents and tasks, nothing pressed", s0.counts.join() === "15,1" && s0.pressed.length === 0 && s0.kinds.join() === "agent,bash", JSON.stringify(s0));
+  await toggle("tasks");
+  const s1 = await state();
+  check("Tasks alone shows only the task", s1.pressed.join() === "tasks" && s1.kinds.join() === "bash" && (await rowCount()) === 1, JSON.stringify(s1));
+  await shot("tasks-6-filter-tasks");
+  await toggle("agents");
+  const s2 = await state();
+  check("Agents and Tasks together show everything", s2.pressed.join() === "agents,tasks" && (await rowCount()) === 16, JSON.stringify(s2));
+  await toggle("tasks");
+  const s3 = await state();
+  check("Agents alone shows only agents", s3.pressed.join() === "agents" && s3.kinds.join() === "agent" && (await rowCount()) === 15, JSON.stringify(s3));
+
+  // The filter survives opening a row and coming back.
+  await js(`document.querySelector(".agents-scroll .agent-row").click()`);
+  await until("an agent's view", () => exists(".agent-view"));
+  await js(`document.querySelector('[data-testid="agents-back"]').click()`);
+  await until("back to the list", () => exists(".agents-scroll .agent-row"));
+  check("the filter is still on Agents after opening one and coming back", (await state()).pressed.join() === "agents" && (await rowCount()) === 15);
+
+  await toggle("agents");
+  check("with neither pressed, everything shows again", (await state()).pressed.length === 0 && (await rowCount()) === 16);
 }

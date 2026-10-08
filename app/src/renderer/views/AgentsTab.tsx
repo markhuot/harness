@@ -6,11 +6,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Subagent, SubagentStatus, Ticket } from "@harness/shared";
 import {
+  filterSubagents,
   isTask,
+  NO_SUBAGENT_FILTER,
   plainText,
   sortSubagents,
   SUBAGENT_STATUS_LABEL,
   subagentById,
+  subagentCounts,
   subagentDuration,
   subagentModelLabel,
   subagentPath,
@@ -19,6 +22,7 @@ import {
   subagentTypeLabel,
   TAB_LABEL,
   TASK_OUTPUT_POLL_MS,
+  type SubagentFilter,
   taskOutputOf,
 } from "@harness/shared/state";
 import { useStore } from "../state/store";
@@ -56,19 +60,48 @@ function SubagentModelBadge({ agent }: { agent: Subagent }) {
   return label ? <ModelBadgeView name={label} model={agent.model!} /> : null;
 }
 
+/**
+ * Each session's filter, kept while the app runs so opening a row and coming back (which unmounts
+ * the list) doesn't reset it.
+ */
+const filters = new Map<string, SubagentFilter>();
+
 /** Only shown once the session has sub-agents or tasks (effectiveTab falls back to Spec until then). */
 export function AgentsTab({ ticket, onOpen }: { ticket: Ticket; onOpen: (subagentId: string) => void }) {
   const { state } = useStore();
   const list = subagentsOf(state, ticket.sessionId);
   const sorted = useMemo(() => sortSubagents(list ?? []), [list]);
-  const now = useNow(sorted.some((a) => a.status === "running"));
+  const counts = useMemo(() => subagentCounts(sorted), [sorted]);
+  const [, rerender] = useState(0);
+  const filter = filters.get(ticket.sessionId) ?? NO_SUBAGENT_FILTER;
+  const setFilter = (next: SubagentFilter) => {
+    filters.set(ticket.sessionId, next);
+    rerender((n) => n + 1);
+  };
+  const shown = useMemo(() => filterSubagents(sorted, filter), [sorted, filter]);
+  const now = useNow(shown.some((a) => a.status === "running"));
 
   return (
     <div className="agents-tab">
-      <div className="children-list card-surface">
-        {sorted.map((a) => (
-          <AgentRow key={a.id} agent={a} parent={a.parentId ? subagentById(state, ticket.sessionId, a.parentId) : null} now={now} onOpen={onOpen} />
-        ))}
+      <div className="agents-filter">
+        <div className="segmented" role="group" aria-label="Show agents, tasks or both">
+          {(["agents", "tasks"] as const).map((k) => (
+            <button key={k} className={filter[k] ? "on" : ""} aria-pressed={filter[k]} data-filter={k} onClick={() => setFilter({ ...filter, [k]: !filter[k] })}>
+              {k === "agents" ? "Agents" : "Tasks"} <span className="count">{counts[k]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="agents-scroll">
+        {shown.length ? (
+          <div className="children-list card-surface">
+            {shown.map((a) => (
+              <AgentRow key={a.id} agent={a} parent={a.parentId ? subagentById(state, ticket.sessionId, a.parentId) : null} now={now} onOpen={onOpen} />
+            ))}
+          </div>
+        ) : (
+          <div className="agents-empty">{filter.agents ? "No sub-agents yet" : "No background tasks yet"}</div>
+        )}
       </div>
     </div>
   );

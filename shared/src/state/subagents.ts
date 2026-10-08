@@ -97,6 +97,26 @@ export function sortSubagents(list: Subagent[]): Subagent[] {
   return [...list].sort((a, b) => b.updatedAt - a.updatedAt || b.startedAt - a.startedAt);
 }
 
+/** The Agents & tasks filter's two toggles. Both on, or both off, shows everything. */
+export interface SubagentFilter {
+  agents: boolean;
+  tasks: boolean;
+}
+
+export const NO_SUBAGENT_FILTER: SubagentFilter = { agents: false, tasks: false };
+
+/** The rows the filter shows: only agents, only tasks, or (both or neither toggled) all of them. */
+export function filterSubagents(list: Subagent[], filter: SubagentFilter): Subagent[] {
+  if (filter.agents === filter.tasks) return list;
+  return list.filter((s) => isTask(s) === filter.tasks);
+}
+
+/** How many of each kind, for the filter's toggles. */
+export function subagentCounts(list: Pick<Subagent, "kind">[]): { agents: number; tasks: number } {
+  const tasks = list.filter(isTask).length;
+  return { agents: list.length - tasks, tasks };
+}
+
 /** The chain of sub-agents from the top down to `id` (for a nested agent's breadcrumb). */
 export function subagentPath(state: State, sessionId: string, id: string): Subagent[] {
   const path: Subagent[] = [];

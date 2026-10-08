@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Session, Subagent, TaskOutput, TicketDetail, TranscriptEntry } from "../index";
 import { initialState, reducer, TASK_OUTPUT_KEEP_CHARS, transcriptKey, type Action, type State } from "./reducer";
-import { isTask, sortSubagents, subagentById, subagentModelLabel, subagentOpenLabel, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTranscript, subagentTypeLabel, taskOutputOf } from "./subagents";
+import { filterSubagents, isTask, NO_SUBAGENT_FILTER, sortSubagents, subagentCounts, subagentById, subagentModelLabel, subagentOpenLabel, subagentDuration, subagentPath, subagentsOf, subagentTitle, subagentTranscript, subagentTypeLabel, taskOutputOf } from "./subagents";
 import { effectiveTab, isTicketTab, parseSubagentTab, showsAgentsTab, subagentTabRoute, tabStripTab } from "./tabs";
 
 const sub = (id: string, over: Partial<Subagent> = {}): Subagent => ({
@@ -210,5 +210,26 @@ describe("task output", () => {
     const gone = { text: "", start: 2, end: 2, size: 0, done: true, available: false };
     expect(taskOutputOf(fold(out("a\n", 0), gone), "s1", "c1")).toMatchObject({ text: "a\n", done: true, available: true });
     expect(taskOutputOf(fold(gone), "s1", "c1")).toMatchObject({ text: "", available: false, done: true });
+  });
+});
+
+describe("Agents & tasks filter", () => {
+  // An older service sends no kind: that's an agent.
+  const list = [sub("a1", { kind: "agent" }), sub("b1", { kind: "bash" }), sub("a2"), sub("m1", { kind: "monitor" })];
+  const ids = (l: Subagent[]) => l.map((s) => s.id);
+
+  test("agents alone shows agents, tasks alone shows tasks, in the list's order", () => {
+    expect(ids(filterSubagents(list, { agents: true, tasks: false }))).toEqual(["a1", "a2"]);
+    expect(ids(filterSubagents(list, { agents: false, tasks: true }))).toEqual(["b1", "m1"]);
+  });
+
+  test("both toggles on, or both off, shows everything", () => {
+    expect(ids(filterSubagents(list, { agents: true, tasks: true }))).toEqual(["a1", "b1", "a2", "m1"]);
+    expect(ids(filterSubagents(list, NO_SUBAGENT_FILTER))).toEqual(["a1", "b1", "a2", "m1"]);
+  });
+
+  test("counts each kind, a kind-less row as an agent", () => {
+    expect(subagentCounts(list)).toEqual({ agents: 2, tasks: 2 });
+    expect(subagentCounts([])).toEqual({ agents: 0, tasks: 0 });
   });
 });
