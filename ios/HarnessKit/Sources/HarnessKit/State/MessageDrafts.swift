@@ -171,9 +171,13 @@ public final class MessageDraftSync {
     public func flush() async -> Bool {
         if let timer { timers.clear(timer) }
         timer = nil
+        // Two flushes overlap when the debounce fires during a PUT. Whichever resumes first clears
+        // the finished task: awaiting a finished task doesn't suspend, so looping on it would spin
+        // the main actor forever and the other flush would never get to clear it.
         while true {
-            if let inflight {
-                await inflight.value
+            if let current = inflight {
+                await current.value
+                if inflight == current { inflight = nil }
                 if failed { return false }
                 continue
             }
@@ -192,7 +196,7 @@ public final class MessageDraftSync {
             }
             inflight = task
             await task.value
-            inflight = nil
+            if inflight == task { inflight = nil }
             if failed { return false }
         }
     }
