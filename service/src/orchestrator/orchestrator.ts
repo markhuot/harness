@@ -4363,23 +4363,27 @@ ${numberLines(r.body)}`;
         const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + missing + (attached?.block ?? "");
         active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
+        // The system prompt holds only what's stable for the session; what changes per run goes
+        // in front of the first message (DESIGN.md "System prompt and run context").
+        const promptInfo = {
+          kind: run.kind,
+          project,
+          ticket,
+          session,
+          parent,
+          children,
+          builtinTools: driver.hasBuiltinTools,
+          subagentTool: driver.subagentTool,
+          branches: ticket ? this.branchContext(ticket, project) : undefined,
+          activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
+        };
         const req: RunRequest = {
           runId: run.id,
           kind: run.kind,
           prompt,
           ...(attached?.images.length ? { images: attached.images } : {}),
-          systemPrompt: this.prompts().systemPrompt({
-            kind: run.kind,
-            project,
-            ticket,
-            session,
-            parent,
-            children,
-            builtinTools: driver.hasBuiltinTools,
-            subagentTool: driver.subagentTool,
-            branches: ticket ? this.branchContext(ticket, project) : undefined,
-            activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
-          }),
+          systemPrompt: this.prompts().systemPrompt(promptInfo),
+          runContext: this.prompts().runContext(promptInfo),
           cwd,
           model,
           permissionMode: this.permissionModeFor(ticket, project),

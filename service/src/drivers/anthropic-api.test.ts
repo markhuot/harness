@@ -168,6 +168,14 @@ describe("anthropic-api driver", () => {
     expect(fake.signals[0]).toBe(req.signal);
   });
 
+  test("the run context goes in front of the run's message; the system prompt stays as it is", async () => {
+    const { driver, fake } = driverWith([{ content: [text("ok")], stop_reason: "end_turn" }]);
+    const { req } = makeReq("work", "Go");
+    await collect(driver, { ...req, runContext: "## This run: work" });
+    expect(fake.requests[0]!.system).toBe("You are a harness agent.");
+    expect(fake.requests[0]!.messages).toEqual([{ role: "user", content: [{ type: "text", text: "<harness_run>\n## This run: work\n</harness_run>\n\nGo" }] }]);
+  });
+
   test("streams text_delta then emits the full text block", async () => {
     const { driver } = driverWith([{ content: [text("Hello there, world")], stop_reason: "end_turn" }]);
     const { events, error } = await collect(driver, makeReq("work", "x").req);

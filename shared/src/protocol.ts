@@ -889,12 +889,15 @@ export type SettingsPatch = Partial<Omit<Settings, "notifications">> & { notific
 // ---------------------------------------------------------------------------
 
 /**
- * Every prompt the user can override. `system.*` are sections of a run's system prompt (the
- * service decides which sections a run gets and their order); `run.*` are the message that
- * starts a run. GET /prompts describes each one.
+ * Every prompt the user can override. `system.*` are the sections of a run's instructions (the
+ * service decides which sections a run gets and their order): the ones stable for the agent's
+ * session make up its system prompt, and the ones that change per run its run context, at the
+ * front of the run's first message. `run.*` are the message that starts a run. GET /prompts
+ * describes each one.
  */
 export const PROMPT_IDS = [
   "system.intro",
+  "system.session",
   "system.context",
   "system.lifecycle",
   "system.plan",

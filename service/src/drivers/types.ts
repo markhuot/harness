@@ -82,8 +82,19 @@ export interface RunRequest {
    * anthropic-api) send them as image content blocks; the prompt lists their paths either way.
    */
   images?: RunImage[];
-  /** Harness system prompt for this run kind (drivers append it to their own, if any) */
+  /**
+   * Harness system prompt for the run's session (drivers append it to their own, if any). It's
+   * the same on every run that resumes the session, so a resumed conversation reads its prefix
+   * from the prompt cache (DESIGN.md "System prompt and run context").
+   */
   systemPrompt: string;
+  /**
+   * What changes from run to run (the ticket's status, this run's instructions, the spec revision
+   * and recent Activity, agent notes). Drivers put it at the front of the run's first user
+   * message with withRunContext; messages steered into the run later don't repeat it. Absent:
+   * the prompt goes as it is.
+   */
+  runContext?: string;
   cwd: string;
   /**
    * Model for this run, resolved by the orchestrator (ticket → project → settings; review runs
@@ -121,6 +132,15 @@ export interface RunRequest {
    * each, and closes the input when it stops taking more (DESIGN.md "Steering").
    */
   input?: RunInput;
+}
+
+/**
+ * The run's first user message: its run context in a <harness_run> block, then the prompt. The
+ * block comes first so the agent reads this run's instructions before the message they apply to.
+ */
+export function withRunContext(req: Pick<RunRequest, "prompt" | "runContext">): string {
+  const ctx = req.runContext?.trim();
+  return ctx ? `<harness_run>\n${ctx}\n</harness_run>\n\n${req.prompt}` : req.prompt;
 }
 
 export interface RunGrants {

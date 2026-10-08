@@ -19,7 +19,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { DriverInfo, ModelInfo, PermissionMode, Settings, ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
-import { ModelListError, type Driver, type DriverEvent, type RunGrants, type RunRequest } from "./types";
+import { ModelListError, withRunContext, type Driver, type DriverEvent, type RunGrants, type RunRequest } from "./types";
 
 export const COPILOT_MCP_SERVER = "harness";
 const MCP_PREFIX = `${COPILOT_MCP_SERVER}-`;
@@ -200,15 +200,17 @@ export function planCopilotPermissions(
 
 /**
  * The prompt as the CLI gets it. There's no --append-system-prompt, so the harness instructions
- * go in front of the user's message on every run (run kinds have different instructions).
+ * go in front of the user's message on every run, then the run context. Both come after the
+ * conversation's history, so they never invalidate its prompt cache.
  */
-export function copilotPrompt(req: Pick<RunRequest, "prompt" | "systemPrompt">): string {
-  if (!req.systemPrompt) return req.prompt;
-  return `<harness_instructions>\n${req.systemPrompt}\n</harness_instructions>\n\n${req.prompt}`;
+export function copilotPrompt(req: Pick<RunRequest, "prompt" | "systemPrompt" | "runContext">): string {
+  const prompt = withRunContext(req);
+  if (!req.systemPrompt) return prompt;
+  return `<harness_instructions>\n${req.systemPrompt}\n</harness_instructions>\n\n${prompt}`;
 }
 
 export function buildCopilotArgs(
-  req: Pick<RunRequest, "kind" | "prompt" | "systemPrompt" | "mcp" | "model" | "permissionMode" | "grants">,
+  req: Pick<RunRequest, "kind" | "prompt" | "systemPrompt" | "runContext" | "mcp" | "model" | "permissionMode" | "grants">,
   settings: Settings,
   sessionId: string,
 ): string[] {

@@ -151,6 +151,9 @@ describe("args and environment", () => {
     const args = buildCopilotArgs(req, settings, "sess-1");
     expect(args.slice(0, 2)).toEqual(["-p", copilotPrompt(req)]);
     expect(args[1]).toContain("<harness_instructions>\nYou are in a harness.");
+    expect(copilotPrompt({ ...req, prompt: "Go", runContext: "## This run: work" })).toBe(
+      "<harness_instructions>\nYou are in a harness.\n</harness_instructions>\n\n<harness_run>\n## This run: work\n</harness_run>\n\nGo",
+    );
     expect(args).toContain("--no-ask-user");
     expect(args[args.indexOf("--session-id") + 1]).toBe("sess-1");
     expect(args[args.indexOf("--output-format") + 1]).toBe("json");

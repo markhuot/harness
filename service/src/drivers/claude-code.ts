@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
-import type { Driver, DriverEvent, RunGrants, RunImage, RunRequest } from "./types";
+import { withRunContext, type Driver, type DriverEvent, type RunGrants, type RunImage, type RunRequest } from "./types";
 
 export const MCP_SERVER_NAME = "harness";
 const MCP_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
@@ -1003,7 +1003,7 @@ export class ClaudeCodeDriver implements Driver {
     };
     const promptId = crypto.randomUUID();
     let promptTaken = false;
-    writeUser(userContent(req.prompt, req.images), promptId);
+    writeUser(userContent(withRunContext(req), req.images), promptId);
     // Messages written to a previous attempt (a failed --resume) that its CLI never took in.
     for (const m of req.input?.inFlight() ?? []) writeUser(userContent(m.text, m.images), m.id);
     writeInput();

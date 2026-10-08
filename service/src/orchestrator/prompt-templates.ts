@@ -45,10 +45,33 @@ export const PROMPTS: Record<PromptId, PromptDef> = {
       "You are an autonomous coding agent running inside Harness. A human follows your ticket on a kanban board and can message you at any time. Harness tools may carry a client prefix (e.g. `mcp__harness__`); the names below are base names.",
   },
 
+  "system.session": {
+    group: "system",
+    label: "Session",
+    description:
+      "Every run, in its system prompt: the ticket, project and working directory, which stay the same for the agent's whole session. The system prompt holds only what doesn't change between the runs that resume a session, so a resumed run reads the conversation from the prompt cache; what changes from run to run is in the run context at the front of the run's first message.",
+    variables: {
+      ticket: "The ticket key, e.g. NYT-3; empty in triage runs",
+      ticketKind: 'The ticket kind: "task" or "conductor"',
+      triage: "True in triage runs, which have no ticket",
+      sessionKey: "The session key, e.g. TRIAGE-4",
+      project: 'The project name and key, e.g. "New York Times (NYT)" (just the key when they match), or empty',
+      projectPath: "The project's main checkout",
+      workdir: "The directory the run works in",
+    },
+    template: `## Session
+{{#if ticket}}Ticket: {{ticket}} ({{ticketKind}})
+{{else if triage}}Session: {{sessionKey}} (triage)
+{{/if}}{{#if project}}Project: {{project}}, main checkout at {{projectPath}}
+{{/if}}Working directory: {{workdir}}
+Each run starts with a <harness_run> block in front of its first message: the ticket's current context and this run's instructions. The newest block is the one in force; it replaces any earlier run's block in this conversation.`,
+  },
+
   "system.context": {
     group: "system",
     label: "Context",
-    description: "Every run: the ticket, project, working directory and branches the run works with.",
+    description:
+      "Every run, in the run context at the front of its first message: the ticket's current status, project, working directory and branches the run works with.",
     variables: {
       ticket: `${TICKET}; empty in triage runs`,
       ticketKind: 'The ticket kind: "task" or "conductor"',

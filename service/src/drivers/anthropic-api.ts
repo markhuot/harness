@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { DriverInfo, ModelInfo, Settings } from "@harness/shared";
 import { advertisedDescription, advertisedTools } from "../tools/dispatch";
 import type { ToolDefinition, ToolResult } from "../tools/types";
-import { executeTool, type Driver, type DriverEvent, type RunImage, type RunRequest } from "./types";
+import { executeTool, withRunContext, type Driver, type DriverEvent, type RunImage, type RunRequest } from "./types";
 
 export const MAX_ITERATIONS = 50;
 /** Used when no model is chosen for a run (ticket, project and settings all unset). */
@@ -196,7 +196,7 @@ export class AnthropicApiDriver implements Driver {
 
     const messages = readState(req.state);
     const pending = danglingToolResults(messages);
-    messages.push({ role: "user", content: [...pending, { type: "text", text: req.prompt }, ...imageBlocks(req.images)] });
+    messages.push({ role: "user", content: [...pending, { type: "text", text: withRunContext(req) }, ...imageBlocks(req.images)] });
 
     let inputTokens = 0;
     let outputTokens = 0;

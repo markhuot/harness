@@ -343,7 +343,16 @@ function fileTools(builtinTools: boolean) {
     : { readTool: "`read_file`", searchTools: "`list_files`", editTool: "`edit_file`", writeTool: "`write_file`", shell: "bash" };
 }
 
-/** Runs that change files (work, completion and chat runs). */
+/**
+ * The run kind whose tools a run has (tools/index.ts toolsForRun): a chat gets its ticket's work
+ * tools, or a conductor ticket's conductor tools. The system prompt's capability sections go by
+ * this, so a chat and the work (or conductor) runs that share its session read the same prompt.
+ */
+function toolKind(kind: RunKind, ticket: Ticket | null): Exclude<RunKind, "chat"> {
+  return kind === "chat" ? (ticket?.kind === "conductor" ? "conductor" : "work") : kind;
+}
+
+/** Runs that change files (work, completion, and chat runs of a task ticket). */
 function editsFiles(kind: RunKind): boolean {
   return kind === "work" || kind === "complete" || kind === "chat";
 }
@@ -357,8 +366,8 @@ function editsFiles(kind: RunKind): boolean {
  * sub-agent when it has one (Driver.subagentTool).
  */
 function filesSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
-  const { kind } = info;
-  const explores = kind === "plan" || kind === "work" || kind === "conductor" || kind === "chat";
+  const kind = toolKind(info.kind, info.ticket);
+  const explores = kind === "plan" || kind === "work" || kind === "conductor";
   return renderPrompt(
     "system.files",
     { ...fileTools(info.builtinTools ?? true), canEdit: editsFiles(kind), subagentTool: explores ? (info.subagentTool ?? "") : "" },
@@ -371,7 +380,7 @@ function filesSection(info: PromptInfo, o: PromptOverrides | null | undefined): 
  * context size. Every run kind gets it; the edit rule only where the run changes files.
  */
 function turnsSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
-  return renderPrompt("system.turns", { canEdit: editsFiles(info.kind) }, o);
+  return renderPrompt("system.turns", { canEdit: editsFiles(toolKind(info.kind, info.ticket)) }, o);
 }
 
 /**
@@ -421,18 +430,79 @@ function notesSection(info: PromptInfo, o: PromptOverrides | null | undefined): 
   );
 }
 
+/**
+ * The stable part of the run's context (system.session): what can't change while the agent's
+ * session lives, so it can sit in the system prompt.
+ */
+function sessionSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
+  const { ticket, project, session } = info;
+  return renderPrompt(
+    "system.session",
+    {
+      ticket: ticket?.key ?? "",
+      ticketKind: ticket?.kind ?? "",
+      triage: !ticket && info.kind === "triage",
+      sessionKey: session.key,
+      project: project ? (project.name === project.key ? project.key : `${project.name} (${project.key})`) : "",
+      projectPath: project?.path ?? "",
+      workdir: ticket?.workdir ?? session.cwd ?? project?.path ?? "(unknown)",
+    },
+    o,
+  );
+}
+
+/**
+ * The run's system prompt: only what stays the same for every run that resumes the agent's
+ * session (DESIGN.md "System prompt and run context"). The system prompt sits ahead of the
+ * conversation, so anything here that changed between runs would make a resumed run write the
+ * whole conversation to the prompt cache again (and Claude Code keeps a resumed conversation's
+ * first system prompt anyway). Runs that share a session (plan; work and chat; conductor and chat)
+ * get the same text here: the capability sections go by the run's tool set (toolKind), and
+ * everything about this run (status, instructions, spec revision, Activity, notes) is in
+ * runContext, which goes in the run's first message.
+ */
 export function systemPrompt(info: PromptInfo): string {
+  const { ticket } = info;
+  const kind = toolKind(info.kind, ticket);
+  const o = info.overrides;
+  const ticketRun = kind !== "triage";
+  const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor";
+  const changes = kind === "work" || kind === "conductor";
+  const conductor = kind === "conductor";
+  return join(
+    renderPrompt("system.intro", {}, o),
+    sessionSection(info, o),
+    ticketRun && renderPrompt("system.lifecycle", {}, o),
+    ticketRun && filesSection(info, o),
+    turnsSection(info, o),
+    // harness://file links (shared/src/fileLinks.ts) open the file pane from any message, note or spec.
+    ticketRun && renderPrompt("system.file_links", {}, o),
+    // Read-only board tools, given to every run kind (tools/board.ts).
+    renderPrompt("system.board", {}, o),
+    // Board tools that change other tickets (tools/board-write.ts).
+    changes && renderPrompt("system.board_changes", { conductor }, o),
+    // Config tools (tools/config.ts): reads for every run; the gated writes where a human can approve them.
+    renderPrompt("system.config", { canChange: changes }, o),
+    (changes || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" }, o),
+    browser && renderPrompt("system.browser", {}, o),
+  );
+}
+
+/**
+ * What this run reads about the ticket and itself: its current context, the run kind's
+ * instructions ("This run: …"), children, branches, the spec's revision with recent Activity, and
+ * the agent notes. It changes from run to run, so it goes at the front of the run's first user
+ * message (drivers wrap it in <harness_run>, drivers/types.ts withRunContext) rather than in the
+ * system prompt.
+ */
+export function runContext(info: PromptInfo): string {
   const { kind, ticket } = info;
   const o = info.overrides;
   const ticketRun = kind !== "triage";
   const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor" || kind === "chat";
-  // A chat is the ticket's agent with its work tools (tools/index.ts toolsForRun).
   const changes = kind === "work" || kind === "conductor" || kind === "chat";
-  const conductor = kind === "conductor" || (kind === "chat" && ticket?.kind === "conductor");
   return join(
-    renderPrompt("system.intro", {}, o),
     contextSection(info, o),
-    ticketRun && renderPrompt("system.lifecycle", {}, o),
     instructionsSection(info, o),
     // A task ticket that has taken children conducts them too; conductor runs list theirs in their instructions.
     // A chat (conductor tickets too) gets the same child-steering notes, since its instructions don't list them.
@@ -443,20 +513,8 @@ export function systemPrompt(info: PromptInfo): string {
     changes &&
       !!ticket?.branch &&
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
-    ticketRun && filesSection(info, o),
-    turnsSection(info, o),
     ticketRun && specSection(info, browser, o),
     ticketRun && notesSection(info, o),
-    // harness://file links (shared/src/fileLinks.ts) open the file pane from any message, note or spec.
-    ticketRun && renderPrompt("system.file_links", {}, o),
-    // Read-only board tools, given to every run kind (tools/board.ts).
-    renderPrompt("system.board", {}, o),
-    // Board tools that change other tickets (tools/board-write.ts).
-    changes && renderPrompt("system.board_changes", { conductor }, o),
-    // Config tools (tools/config.ts): reads for every run; the gated writes where a human can approve them.
-    renderPrompt("system.config", { canChange: changes }, o),
-    (changes || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" || (kind === "chat" && !conductor) }, o),
-    browser && renderPrompt("system.browser", {}, o),
   );
 }
 
@@ -613,6 +671,7 @@ export function triagePrompt(
 export function promptsWith(overrides: PromptOverrides | null | undefined) {
   return {
     systemPrompt: (info: Omit<PromptInfo, "overrides">) => systemPrompt({ ...info, overrides }),
+    runContext: (info: Omit<PromptInfo, "overrides">) => runContext({ ...info, overrides }),
     workStartPrompt: (ticket: Ticket) => workStartPrompt(ticket, overrides),
     reviewPrompt: (ticket: Ticket, ctx: ReviewContext) => reviewPrompt(ticket, ctx, overrides),
     completePrompt: (ticket: Ticket, instructions?: string, branches?: BranchContext, project: Project | null = null) =>

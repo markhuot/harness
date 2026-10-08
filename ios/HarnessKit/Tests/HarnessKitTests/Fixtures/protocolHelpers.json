@@ -26,6 +26,7 @@
     ],
     "PROMPT_IDS": [
       "system.intro",
+      "system.session",
       "system.context",
       "system.lifecycle",
       "system.plan",

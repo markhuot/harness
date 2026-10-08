@@ -576,6 +576,16 @@ describe("StreamJsonParser background task rows", () => {
 });
 
 describe("ClaudeCodeDriver.run (fake binary)", () => {
+  test("the run context goes in front of the first message on stdin; --append-system-prompt gets only the system prompt", async () => {
+    const s = setup({ script: [init("sess-1"), success()] });
+    const req = request({ prompt: "Go", runContext: "## This run: work", tools: toolsForRun("work", s.driver) });
+    const { error } = await collect(s.driver.run(req));
+    expect(error).toBeNull();
+    const [inv] = s.invocations();
+    expect(inv!.stdin).toBe("<harness_run>\n## This run: work\n</harness_run>\n\nGo");
+    expect(argValue(inv!.argv, "--append-system-prompt")).toBe(req.systemPrompt);
+  });
+
   test("spawns with argv, stdin prompt, cwd and a cleaned env; streams parsed events", async () => {
     const s = setup({
       script: [
