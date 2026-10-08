@@ -229,7 +229,9 @@ struct TicketPanelHost: View {
         let waiting = docked ? router.dockedSheets : Array(router.dockedSheets.dropFirst())
         GeometryReader { geo in
             let besidePanel = sheet != nil && !docked ? panelWidth : 0
-            let board = CGSize(width: max(0, geo.size.width - besidePanel), height: geo.size.height)
+            // The board's column only: the sidebar (left of `contentLeading`) stays clear.
+            let sidebar = max(0, (dockInset?.contentLeading ?? 0) - geo.frame(in: .global).minX)
+            let board = CGSize(width: max(0, geo.size.width - besidePanel - sidebar), height: geo.size.height)
             ZStack(alignment: .trailing) {
                 Color.clear.allowsHitTesting(false)
                 if let sheet {
@@ -264,7 +266,7 @@ struct TicketPanelHost: View {
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
-            .onChange(of: DockedPillStack.height(count: waiting.count, available: board.height), initial: true) { _, h in
+            .onChange(of: DockedPillStack.height(count: waiting.count, available: board), initial: true) { _, h in
                 dockInset?.pills = h > 0 ? h + DockedPillStack.margin * 2 : 0
             }
         }

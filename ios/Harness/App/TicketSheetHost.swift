@@ -175,7 +175,7 @@ struct TicketSheetContent: View {
         bottomEdge(screen)
             .toolbar {
                 if router.dockedSheets.count > 1 {
-                    ToolbarItem(placement: .topBarTrailing) { DockedTicketsButton() }
+                    ToolbarItem(placement: .topBarTrailing) { DockedTicketsButton(othersOnly: true) }
                 }
             }
     }
@@ -211,6 +211,9 @@ extension EnvironmentValues {
     /// The iPad: how much of the board's bottom the docked pill stack takes (DockedPillStack); 0
     /// without one.
     var pills: CGFloat = 0
+    /// The iPad: where the board's column starts in the window, right of the sidebar, so the pill
+    /// stack keeps off the sidebar (DesktopShell measures it).
+    var contentLeading: CGFloat = 0
 }
 
 /// Watches drags on the ticket sheet alongside the system's own, without taking any touches: a pan

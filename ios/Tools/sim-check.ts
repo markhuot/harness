@@ -1365,7 +1365,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     }
     return `${kid.key} back, on its pushed screen`;
   });
-  await check("the expanded sheet's toolbar menu switches without docking", async () => {
+  await check("the expanded sheet's toolbar menu lists the other docked tickets and switches without docking", async () => {
     await Bun.sleep(600); // the sheet finishes coming up
     await shot(udid, "dock-toolbar-light");
     // AXe's tree leaves out the glass toolbar items: the stack button sits left of the ticket's
@@ -1378,6 +1378,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     await shot(udid, "dock-toolbar-menu-light");
+    // The other docked tickets only: not the one on screen.
+    if ((await labels(udid)).some(row(kid.key))) throw new Error(`the toolbar's menu lists ${kid.key}, the ticket on screen`);
     await tapWhere(udid, row(b.key));
     moved(udid);
     await until(`${b.key} in the sheet`, async () => {
@@ -1576,11 +1578,36 @@ async function pillStackChecks(udid: string, s: { project: Project; conductor: T
   const open = (t: Ticket) => goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => panelOn(l, t.key));
   const [a, b, c] = [ts[0]!, ts[1]!, ts[2]!];
 
-  await check("the tickets behind the panel wait as pills just left of it, showing ref and title", async () => {
+  /** The sidebar's Settings button: the pills must never cover it. */
+  const settings = async () => {
+    const n = (await nodes(udid)).find((x) => x.AXLabel === "Settings" && x.frame.x < 300);
+    if (!n) throw new Error("no Settings button in the sidebar");
+    return n;
+  };
+  /** Every pill (and "+N") sits right of the sidebar, clear of its Settings button. */
+  const offSidebar = async () => {
+    const s = await settings();
+    const right = s.frame.x + s.frame.width;
+    const all = (await nodes(udid)).filter((n) => n.AXLabel && (isDock(n.AXLabel) || /^\d+ (more )?docked tickets$/.test(n.AXLabel)));
+    const over = all.filter((n) => n.frame.x < right);
+    if (over.length) throw new Error(`over the sidebar: ${over.map((n) => `"${n.AXLabel}" at x=${Math.round(n.frame.x)}`).join(", ")}`);
+    return all;
+  };
+
+  await check("the tickets behind the panel wait as pills just left of it, never over the sidebar", async () => {
     await goto(udid, BOARD);
     for (const t of [a, b, c]) await open(t);
     await Bun.sleep(800);
+    // The default panel (80%) leaves no board column beside it: nothing over the sidebar.
+    const wide = await offSidebar();
+    // A narrow panel leaves room for full pills in the board's column.
+    const { W } = await panelFraction(udid);
+    await dragPanelEdge(udid, W - 20);
     const { leading, H } = await panelFraction(udid);
+    await until("the pills beside the panel", async () => (await pills()).length === 2, 4000).catch(async (e) => {
+      await say("with the panel at 25%");
+      throw e;
+    });
     const ps = await pills();
     if (ps.map((n) => n.AXLabel).sort().join("|") !== [a, b].map((t) => `${t.key}, ${t.title}, docked`).sort().join("|"))
       throw new Error(`the pills read ${ps.map((n) => `"${n.AXLabel}"`).join(", ")}`);
@@ -1588,9 +1615,33 @@ async function pillStackChecks(udid: string, s: { project: Project; conductor: T
     const [pa, pb] = [ps.find((n) => pillOf(a.key)(n.AXLabel!))!, ps.find((n) => pillOf(b.key)(n.AXLabel!))!];
     if (pb.frame.y <= pa.frame.y) throw new Error(`${b.key}'s pill (y=${Math.round(pb.frame.y)}) isn't under ${a.key}'s (y=${Math.round(pa.frame.y)})`);
     pillInCorner(pb, leading, H);
+    await offSidebar();
     await shootBoth(udid, "panel-pills-open");
     await appearance(udid, "light");
-    return `${a.key} over ${b.key}, left of the panel at x=${Math.round(leading)}`;
+    // Halfway, the column is too narrow for a pill: one "+2" holds them, still off the sidebar.
+    await dragPanelEdge(udid, W * 0.5);
+    const collapsed = await until("one \"+2\" pill", async () => {
+      const all = await offSidebar();
+      return all.length === 1 && all[0]!.AXLabel === "2 docked tickets" ? all[0] : null;
+    }, 4000).catch(async (e) => {
+      await say("with the panel at 50%");
+      throw e;
+    });
+    await shot(udid, "panel-pills-collapsed-light");
+    // And Settings still takes a tap.
+    await tapWhere(udid, "Settings");
+    moved(udid);
+    await until("Settings", async () => (await labels(udid)).some((l) => l.startsWith("Rotate token")), 6000).catch(async (e) => {
+      await say("after a tap on Settings");
+      throw e;
+    });
+    // Back to the board (the section link docked the panel), the panel on c at its default width.
+    await goto(udid, BOARD);
+    await tapWhere(udid, pillOf(c.key));
+    moved(udid);
+    await until(`the panel on ${c.key}`, async () => panelOn(await labels(udid), c.key), 8000);
+    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
+    return `none over the sidebar at 80% (${wide.length} shown); ${a.key} over ${b.key} left of the panel at 25%; "+2" at x=${Math.round(collapsed.frame.x)} at 50%; Settings tapped`;
   });
   await check("docked, every ticket is a pill in the bottom-right corner; a tap opens that one", async () => {
     await tapWhere(udid, `Dock ${c.key}`);

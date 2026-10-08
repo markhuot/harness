@@ -61,10 +61,12 @@ struct DockedTicketLabel: View {
     }
 }
 
-/// The docked tickets as a menu: the `Router.shownDockCount` most recently used (the top checked),
-/// then "+N more" with the rest. Choosing one makes it the top, docked or presented as the top
-/// was; `then` runs after (the iPad's pills restore the panel).
+/// The docked tickets as a menu: the `Router.shownDockCount` most recently used, then "+N more" with
+/// the rest. The dock bar's lists them all, the top checked; `othersOnly` (the expanded sheet's
+/// toolbar) leaves out the ticket on screen. Choosing one makes it the top, docked or presented as
+/// the top was; `then` runs after.
 struct DockedTicketsMenu<Label: View>: View {
+    var othersOnly = false
     var then: () -> Void = {}
     @ViewBuilder let label: () -> Label
     @Environment(Router.self) private var router
@@ -73,8 +75,9 @@ struct DockedTicketsMenu<Label: View>: View {
     var body: some View {
         Menu {
             let state = app.store?.state
-            ForEach(router.shownDockedSheets) { row($0, state: state, isTop: $0.id == router.dockedSheets.first?.id) }
-            let overflow = router.overflowDockedSheets
+            let listed = othersOnly ? Array(router.dockedSheets.dropFirst()) : router.dockedSheets
+            ForEach(listed.prefix(Router.shownDockCount)) { row($0, state: state, isTop: $0.id == router.dockedSheets.first?.id) }
+            let overflow = Array(listed.dropFirst(Router.shownDockCount))
             if !overflow.isEmpty {
                 Menu("\(overflow.count) more") {
                     ForEach(overflow) { row($0, state: state, isTop: false) }
@@ -94,20 +97,23 @@ struct DockedTicketsMenu<Label: View>: View {
             router.activateSheet(id: sheet.id)
             then()
         } label: {
-            // One line, not a title and subtitle: eleven rows still fit a phone's menu unscrolled.
+            // One line rather than a title and subtitle, which keeps rows as short as the system
+            // allows; it still wraps a long title to three lines, and a long list scrolls.
             if isTop { SwiftUI.Label(text.menuLine, systemImage: "checkmark") } else { Text(text.menuLine) }
         }
     }
 }
 
-/// The stack button: the docked tickets' count, opening `DockedTicketsMenu`.
+/// The stack button: the docked tickets' count, opening `DockedTicketsMenu` (`othersOnly` in the
+/// expanded sheet's toolbar).
 struct DockedTicketsButton: View {
+    var othersOnly = false
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
 
     var body: some View {
         let count = router.dockedSheets.count
-        DockedTicketsMenu {
+        DockedTicketsMenu(othersOnly: othersOnly) {
             HStack(spacing: 3) {
                 Image(systemName: "square.stack")
                 Text("\(count)").monospacedDigit()
@@ -170,11 +176,14 @@ struct DockedTicketsKeeper: ViewModifier {
 /// The iPad's docked tickets, waiting in the board's bottom-right corner as a stack of pills,
 /// newest at the bottom: every sheet while docked, the ones behind the panel while it's open.
 /// At most `Router.shownDockCount`, fewer when the height doesn't fit them, then a "+N" pill with
-/// the rest in a menu. A tap opens one in the panel; its context menu closes it.
+/// the rest in a menu. A tap opens one in the panel; its context menu closes it. It keeps to the
+/// board's column (never over the sidebar): where that's too narrow for a useful pill, one "+N"
+/// pill holds them all, and where even that won't fit, nothing shows (the panel's toolbar menu
+/// still lists them).
 struct DockedPillStack: View {
     /// What the stack lists, most recently used first.
     let sheets: [TicketSheet]
-    /// The room it has: the board area left of the panel.
+    /// The room it has: the board's column left of the panel.
     let available: CGSize
     @Environment(Router.self) private var router
     @Environment(AppModel.self) private var app
@@ -184,6 +193,26 @@ struct DockedPillStack: View {
     static let spacing: CGFloat = 8
     static let margin: CGFloat = 16
     static let maxWidth: CGFloat = 320
+    /// The narrowest pill worth showing: the ref and a few words of title.
+    static let minWidth: CGFloat = 200
+    /// The room a lone "+N" pill needs, margins included.
+    static let collapsedRoom: CGFloat = 96
+
+    enum Mode: Equatable {
+        /// Pills this wide.
+        case pills(CGFloat)
+        /// One "+N" pill with every docked ticket in its menu.
+        case collapsed
+        case hidden
+    }
+
+    /// What fits a column `width` wide.
+    static func mode(width: CGFloat) -> Mode {
+        let room = width - margin * 2
+        if room >= minWidth { return .pills(min(maxWidth, room)) }
+        return width >= collapsedRoom ? .collapsed : .hidden
+    }
+
 
     /// How many pills (the "+N" one included) fit `height`.
     static func fitting(height: CGFloat) -> Int {
@@ -201,22 +230,33 @@ struct DockedPillStack: View {
     }
 
     /// The stack's height for `sheets`, for the board's bottom clearance.
-    static func height(count: Int, available: CGFloat) -> CGFloat {
+    static func height(count: Int, available: CGSize) -> CGFloat {
         guard count > 0 else { return 0 }
-        let split = split(count: count, height: available)
+        switch mode(width: available.width) {
+        case .hidden: return 0
+        case .collapsed: return pillHeight
+        case .pills: break
+        }
+        let split = split(count: count, height: available.height)
         let pills = split.shown + (split.overflow > 0 ? 1 : 0)
         return CGFloat(pills) * pillHeight + CGFloat(max(0, pills - 1)) * spacing
     }
 
     var body: some View {
-        let width = max(120, min(Self.maxWidth, available.width - Self.margin * 2))
         let split = Self.split(count: sheets.count, height: available.height)
-        let shown = Array(sheets.prefix(split.shown))
-        let rest = Array(sheets.dropFirst(split.shown))
         VStack(alignment: .trailing, spacing: Self.spacing) {
-            if !rest.isEmpty { more(rest, width: width) }
-            // Oldest at the top, newest at the bottom.
-            ForEach(shown.reversed()) { pill($0, width: width) }
+            switch Self.mode(width: available.width) {
+            case let .pills(width):
+                let shown = Array(sheets.prefix(split.shown))
+                let rest = Array(sheets.dropFirst(split.shown))
+                if !rest.isEmpty { more(rest, all: false) }
+                // Oldest at the top, newest at the bottom.
+                ForEach(shown.reversed()) { pill($0, width: width) }
+            case .collapsed:
+                more(sheets, all: true)
+            case .hidden:
+                EmptyView()
+            }
         }
         .padding(Self.margin)
         .animation(.snappy, value: sheets.map(\.id))
@@ -252,8 +292,8 @@ struct DockedPillStack: View {
         .accessibilityAction(named: "Close") { router.closeSheet(id: sheet.id) }
     }
 
-    /// "+N": the sheets past the pills, in a menu.
-    private func more(_ rest: [TicketSheet], width: CGFloat) -> some View {
+    /// "+N": the sheets past the pills (or `all` of them, where no pill fits), in a menu.
+    private func more(_ rest: [TicketSheet], all: Bool) -> some View {
         Menu {
             let state = app.store?.state
             ForEach(rest) { sheet in
@@ -277,7 +317,7 @@ struct DockedPillStack: View {
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
         .shadow(color: .black.opacity(0.18), radius: 10, x: -2, y: 2)
-        .accessibilityLabel("\(rest.count) more docked tickets")
+        .accessibilityLabel(all ? "\(rest.count) docked tickets" : "\(rest.count) more docked tickets")
         .accessibilityIdentifier("ticket-dock-more")
     }
 }

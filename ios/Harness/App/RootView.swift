@@ -243,6 +243,7 @@ private struct DesktopShell: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
+    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     var body: some View {
         NavigationSplitView(columnVisibility: visibility) {
@@ -252,6 +253,8 @@ private struct DesktopShell: View {
         } detail: {
             // The column paints the system background; the phone's sections show RootView's `bg`.
             SectionStack().environment(\.desktopShell, true).background(c.bg.ignoresSafeArea())
+                // Where the column starts, for the docked pills to keep off the sidebar.
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { dockInset?.contentLeading = $0 }
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
         .navigationSplitViewStyle(.balanced)
