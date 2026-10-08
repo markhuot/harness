@@ -296,18 +296,38 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged (a cancelled complete run reopens the human review, above) |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
-**Driver state and phases.** A ticket's session keeps one saved driver conversation (`sessions.driver_state`)
-per phase: **planning**, **work** (in progress, blocked and review, chats and requested changes
-included) and **done**. Every move from one phase to another (`transition`: Start, a worktree that
-couldn't be created, Re-open, Move to done, a completion landing, a move back to planning) clears
-it, so the phase's first agent run starts a fresh conversation and later runs in that phase resume
-it: a reopened ticket's work starts fresh, and the first chat on a done ticket starts fresh while a
-second chat resumes the first. Review and complete runs (`FRESH_RUN_KINDS`) always start fresh
-(an independent reviewer; a completion needs only its prompt, not the 300k-token work history) and
-never write state back. A run saves its state only while the ticket is still in the phase it
-started in (an in-memory epoch per session), so a run that outlives its phase can't write the old
+**Driver state and sessions.** A ticket's session keeps one saved driver conversation
+(`sessions.driver_state`). Where the card moves _from_ decides whether the next run resumes it:
+every real column move (`transition`) clears it, except a move into Blocked or out of Blocked. So
+Start, submit for review, requested changes, a drag between columns, Move to done, a completion
+landing, Re-open and a move back to planning all make the next run start fresh, which keeps a
+requested-changes round or a chat in Review from re-reading the whole work history. A block keeps
+the conversation that was running, and leaving Blocked resumes it wherever the card goes: the
+human's answer, a restart after a failed run (spend limit, crash) or a usage-limit auto-restart
+carry on the half-finished work. Runs with no move since the state was saved resume it (a second
+chat in the same column, the "Continue." that finishes an interrupted run). `resume_work` from a
+chat (Review or Done → In progress) is the one move that keeps the session (`keepSession`): the
+chat is mid-run and already started fresh when the ticket entered Review or Done, so it keeps
+working in its own conversation, which becomes the In progress session; its later
+`submit_for_review` clears it as usual. Review and complete runs (`FRESH_RUN_KINDS`) always start
+fresh (an independent reviewer; a completion needs only its prompt) and never write state back. A
+run saves its state only while no clearing move has happened since it started (an in-memory epoch
+per session), so the work run whose own `submit_for_review` moved the ticket can't write its
 conversation back. A `null` state is a fresh start on every driver (claude-code: no `--resume`;
 github-copilot: a new `--session-id`).
+
+**Agent notes.** Fresh runs lose what a resumed conversation knew, and the spec stays a product doc
+for the human, so each ticket has agent notes (`tickets.agent_notes`): a markdown document agents
+write for the agents after them, holding technical findings (where things live, gotchas,
+approaches tried and rejected, how to verify, what's half done). `update_notes { notes }` replaces
+the whole document (an empty string clears it); there's no hard limit, but the tool and prompts ask
+for under about 8,000 characters and the result says when it's over. Every ticket run's system
+prompt carries the notes in the "Sessions and agent notes" section (`system.notes`), which also
+explains the session rule and where past context lives (`get_ticket` with `include_transcript` and
+`include_agents`, `get_ticket_agent`, the branch's `git log` / `git diff <base>...`). `get_ticket`
+returns `agentNotes`; `list_tickets` and `search_tickets` leave them out. When a run hasn't called
+`update_notes`, the results of `submit_for_review` and `block` end with a reminder (not a gate).
+Writes add no Activity entry; the Details tab shows the notes read-only on the Mac and iPhone/iPad.
 
 ### Usage limits
 
@@ -820,6 +840,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `read_spec` | plan, work, review, complete, conductor, chat | `{ revision? }` → `Revision N (current)…` (with the approved baseline when there is one), then the text with line numbers like Read; an earlier `revision` is for reference only |
 | `edit_spec` | plan, work, review (Open questions only, per its prompt), complete, conductor, chat | `{ base_revision, note, edits: [{ old_string, new_string, replace_all? } \| { start_line, end_line, new_text, expected? }] }`: atomic (one bad edit applies none), line numbers are the base revision's (an earlier edit in the call doesn't shift them; overlapping one is refused), `end_line = start_line - 1` inserts. A `base_revision` that isn't current, or a failed edit, errors with the current revision. Local images become attachments (see "Spec revisions and attachments") |
 | `update_spec` | plan, work, complete, conductor, chat | `{ spec, note, base_revision, title? }`: replaces the whole spec as a new revision (planning writes the first full spec this way); same revision check and images as `edit_spec`; `title` retitles the ticket |
+| `update_notes` | plan, work, conductor, chat | `{ notes }`: replaces the ticket's agent notes (see "Agent notes"); no Activity entry; the result flags notes over about 8,000 characters without rejecting them |
 | `block` | work, chat (not a conductor ticket's) | `{ question }` |
 | `unblock` | work, conductor, chat | `{ note? }`: blocked → in progress once the human's message resolves the block |
 | `resume_work` | work, conductor, chat | `{ note? }`: review or done → in progress before a chat works on the ticket again (both reviews start over; a done ticket is re-opened, its worktree recreated, and the result names it when it moved) |
@@ -830,7 +851,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
-| `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
+| `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |

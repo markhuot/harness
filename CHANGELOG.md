@@ -11,6 +11,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Agents keep notes on each ticket for the agents that work on it after them: where things live,
+  gotchas, what they tried, how to verify and what's half done. They write them with the new
+  `update_notes` tool, every later run on the ticket reads them in its prompt, `get_ticket` returns
+  them, and `submit_for_review` and `block` remind an agent that hasn't written any. You can read
+  them on the ticket's Details tab on the Mac, iPhone and iPad.
+- `bun ios/Tools/dev-sim.ts` seeds GREET-6, a ticket in review with agent notes, and the Mac
+  `shoot` script has a `details-notes` shot, for checking the notes on the Details tab.
+
 - The Agents & tasks tab on the Mac has a filter at the top: press Agents to see only sub-agents,
   Tasks to see only background tasks, and both or neither to see everything. Each toggle shows how
   many there are, and the filter stays put while you open a row and come back.
@@ -22,6 +30,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   ticket that's already open just gets the focus.
 
 ### Changed
+
+- Agent runs start a fresh conversation whenever the ticket moves between columns, so a round of
+  requested changes or a chat on a ticket in Review no longer re-reads the whole earlier work
+  conversation, which cuts what those runs cost. Answering a blocked ticket, or restarting one
+  after a failed run, still picks up the conversation where it stopped, and another message in the
+  same column still continues the last one. A chat that moves its ticket back to In progress keeps
+  working in its own conversation. The prompts tell agents where earlier context lives: the
+  spec, their notes, `get_ticket` and the branch's commits.
 
 - Specs are easier to read on the Mac, iPhone and iPad. The text is a size larger (14 px on the Mac,
   16 pt on iOS) with a line height of 1.5, and headings and code grow to match. Each heading after
