@@ -670,7 +670,7 @@ draft's card off the board), Escape (AXe's HID key 41) closes the panel, and pop
 window and closes the panel. Then `cardStackChecks` docks a dozen tickets of their own: the ones
 behind an open panel wait as cards just left of it, ref and title in their labels, newest at the
 bottom, and never over the sidebar (none beside the default 80% panel, full cards at 25%, the lone
-"2 docked…" card at 50%, with Settings still taking a tap); docked, every one is a card in the
+"2 docked…" card beside a column about 190pt wide, none at 50%, with Settings still taking a tap); docked, every one is a card in the
 corner and a tap opens that one; a card's ✕ closes just its ticket; twelve show five cards and "7
 more…", which expands into the list of all twelve, one of the oldest opening from it; and
 harness://projects closes them all. Shots are `panel-*.png`. A compact window's bottom sheet isn't
