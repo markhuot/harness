@@ -40,6 +40,8 @@ describe("usage-limit restarts", () => {
     await h.orch.resumeDue();
     await h.orch.idle();
     expect(h.store.runs.listBySession(t.sessionId).map((r) => `${r.kind}:${r.status}`)).toEqual(["work:failed", "work:failed"]);
+    // Out of Blocked: the restart carries on the failed run's conversation.
+    expect(h.driver.calls.map((c) => c.state)).toEqual([null, { turns: 1 }]);
     expect(h.orch.activity(t.key).map((a) => a.body)).toContain("Restarted after the usage limit reset");
     d = h.orch.ticketDetail(t.key).ticket;
     expect(d.status).toBe("blocked");

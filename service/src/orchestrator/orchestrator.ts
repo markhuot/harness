@@ -248,8 +248,8 @@ interface ActiveRun {
   input: RunInput | null;
   /** The run's working directory, for @-mentions in steered messages */
   cwd: string | null;
-  /** The session's phase epoch when the run started (Orchestrator.phaseEpochs) */
-  phaseEpoch: number;
+  /** The session's epoch when the run started (Orchestrator.sessionEpochs) */
+  sessionEpoch: number;
 }
 
 interface TriageMeta {
@@ -297,8 +297,6 @@ const AGENT_RUNS = new Set<RunKind>(["work", "conductor", "chat"]);
  * reviewer judges the work cold, and a completion needs only its own prompt, not the work's history.
  */
 const FRESH_RUN_KINDS = new Set<RunKind>(["review", "complete"]);
-/** A ticket's phase: each keeps its own driver conversation, and moving to another starts a new one. */
-const phaseOf = (s: TicketStatus): "plan" | "work" | "done" => (s === "planning" ? "plan" : s === "done" ? "done" : "work");
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
 const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 /**
@@ -477,11 +475,11 @@ export class Orchestrator {
    */
   private movesRecorded = new Map<string, { to: TicketStatus; entryId: string }>();
   /**
-   * sessionId → how many times its ticket has changed phase (planning, work, done) since the
-   * service started. A run saves its driver state only while this is what it was when the run
-   * started, so a run that outlives its phase can't write the old conversation back.
+   * sessionId → how many times its ticket's driver conversation has been dropped (`newSession`)
+   * since the service started. A run saves its driver state only while this is what it was when
+   * the run started, so a run that outlives its conversation can't write it back.
    */
-  private phaseEpochs = new Map<string, number>();
+  private sessionEpochs = new Map<string, number>();
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
   /**
@@ -2573,9 +2571,11 @@ ${numberLines(r.body)}`;
     if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can move it.`);
     if (t.status !== "review" && t.status !== "done") throw new Error(`${t.key} is ${t.status}, not in review or done: resume_work only takes a ticket out of review or done.`);
     const why = typeof note === "string" ? note.trim() : "";
+    // The chat keeps running in its own conversation, which started fresh when the ticket entered
+    // review or done: it becomes the in-progress session (keepSession), so it's saved as it goes.
     if (t.status === "review") {
       await this.cancelReviewRuns(t.sessionId);
-      this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`, undefined, { by: "agent", line: why || "Changing the reviewed work" });
+      this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`, undefined, { by: "agent", line: why || "Changing the reviewed work", keepSession: true });
       return "";
     }
     const dir = await this.workdirFor(t);
@@ -2583,7 +2583,7 @@ ${numberLines(r.body)}`;
     this.autoRetries.delete(t.id);
     this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
     this.addActivityLine(t, "reopened", "agent", why || "Re-opened to pick the work back up", this.moveMeta(t, "in_progress"));
-    this.transition(t, "in_progress", { ...dir, agentReview: "pending", humanReview: "pending", blockedReason: null, reviewRejections: 0 }, `Re-opened by the agent${why ? `: ${why}` : ""}`);
+    this.transition(t, "in_progress", { ...dir, agentReview: "pending", humanReview: "pending", blockedReason: null, reviewRejections: 0 }, `Re-opened by the agent${why ? `: ${why}` : ""}`, undefined, { keepSession: true });
     return dir.workdir === ctx.cwd ? "" : dir.workdir;
   }
 
@@ -3889,7 +3889,7 @@ ${numberLines(r.body)}`;
    * the entry the caller just added for it (moveMeta) carries from/to, otherwise a `moved` entry
    * by `by` says why in one line (`line`, else the status text).
    */
-  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string, move: { by?: ActivityAuthor; line?: string } = {}): Ticket {
+  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string, move: { by?: ActivityAuthor; line?: string; keepSession?: boolean } = {}): Ticket {
     const from = ticket.status;
     const pending = this.movesRecorded.get(ticket.id);
     this.movesRecorded.delete(ticket.id);
@@ -3904,7 +3904,10 @@ ${numberLines(r.body)}`;
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
     if (from !== to) {
-      if (phaseOf(from) !== phaseOf(to)) this.newPhase(t.sessionId);
+      // Where the card moved from decides whether the next run resumes (DESIGN.md "Driver state"):
+      // a block keeps the running conversation and leaving Blocked resumes it; every other move
+      // starts the next run fresh.
+      if (from !== "blocked" && to !== "blocked" && !move.keepSession) this.newSession(t.sessionId);
       if (!recorded) this.addActivityLine(t, "moved", move.by ?? "system", move.line ?? status ?? "", { from, to });
       if (t.parentId && !(from === "planning" && to === "in_progress")) {
         this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
@@ -3922,12 +3925,12 @@ ${numberLines(r.body)}`;
   }
 
   /**
-   * The ticket entered another phase (planning, work, done): its next agent run starts a new
-   * driver conversation, and runs still going from the old phase no longer save theirs.
+   * The ticket moved columns: its next agent run starts a new driver conversation, and runs still
+   * going from before the move no longer save theirs.
    */
-  private newPhase(sessionId: string) {
+  private newSession(sessionId: string) {
     this.store.sessions.setDriverState(sessionId, null);
-    this.phaseEpochs.set(sessionId, (this.phaseEpochs.get(sessionId) ?? 0) + 1);
+    this.sessionEpochs.set(sessionId, (this.sessionEpochs.get(sessionId) ?? 0) + 1);
   }
 
   /** A child its conductor still approves and lands (`managingConductor`: the parent isn't done). */
@@ -4234,7 +4237,7 @@ ${numberLines(r.body)}`;
       // From the start, so a message sent while the run gets going is waiting when the driver starts.
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
       cwd: null,
-      phaseEpoch: this.phaseEpochs.get(session.id) ?? 0,
+      sessionEpoch: this.sessionEpochs.get(session.id) ?? 0,
     };
     this.active.set(run.id, active);
     let error: string | null;
@@ -4490,7 +4493,7 @@ ${numberLines(r.body)}`;
         return null;
       }
       case "state":
-        if (!FRESH_RUN_KINDS.has(run.kind) && active.phaseEpoch === (this.phaseEpochs.get(run.sessionId) ?? 0)) {
+        if (!FRESH_RUN_KINDS.has(run.kind) && active.sessionEpoch === (this.sessionEpochs.get(run.sessionId) ?? 0)) {
           this.store.sessions.setDriverState(run.sessionId, ev.state);
         }
         return null;

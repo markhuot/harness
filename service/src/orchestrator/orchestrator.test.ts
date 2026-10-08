@@ -89,33 +89,82 @@ describe("ticket lifecycle", () => {
     await expect(h.orch.startTicket(t.key)).rejects.toBeInstanceOf(HarnessError);
   });
 
-  test("work runs resume driver state; review runs start fresh and never write state", async () => {
+  test("Start starts the work fresh; review runs start fresh and never write state", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await h.orch.idle();
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+    await h.orch.sendMessage(t.key, "more");
+    await h.orch.idle();
     await h.orch.startTicket(t.key);
     await h.orch.idle();
-    const [plan, work, review] = h.driver.calls;
+    const [plan, plan2, work, review] = h.driver.calls;
     expect(plan!.state).toBeNull();
-    // Work is a phase of its own: it doesn't carry on the planning conversation.
+    // A second planning run with no move in between resumes the first.
+    expect(plan2!.state).toEqual({ turns: 1 });
+    // Moving out of planning: the work doesn't carry on the planning conversation.
     expect(work!.kind).toBe("work");
     expect(work!.state).toBeNull();
     expect(review!.kind).toBe("review");
     expect(review!.state).toBeNull();
-    // The reviewer's { reviewer: true } state must not leak into the session
-    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+    // The submit moved the card to review, so the work's conversation is dropped, and the
+    // reviewer's { reviewer: true } state must not leak into the session.
+    expect(h.store.sessions.getDriverState(t.sessionId)).toBeNull();
   });
 
-  test("requested changes resume the work conversation", async () => {
+  test("requested changes start a fresh work conversation", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "request_changes", notes: "rename it" });
     await h.orch.idle();
     const works = h.driver.calls.filter((c) => c.kind === "work");
-    expect(works.map((c) => c.state)).toEqual([null, { turns: 1 }]);
+    expect(works.map((c) => c.state)).toEqual([null, null]);
+  });
+
+  test("chats in review: the first after the submit starts fresh, a second resumes it", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "why?");
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "and then?");
+    await h.orch.idle();
+    const chats = h.driver.calls.filter((c) => c.kind === "chat");
+    expect(chats.map((c) => c.state)).toEqual([null, { turns: 1 }]);
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
+  });
+
+  test("blocked → in progress resumes the conversation running when the ticket blocked", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
+    await h.orch.idle();
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+    // The human drags the card back to in progress: the restart carries on.
+    await h.orch.updateTicket(t.key, { status: "in_progress" });
+    await h.orch.idle();
+    expect(h.driver.calls.filter((c) => c.kind === "work").map((c) => c.state)).toEqual([null, { turns: 1 }]);
+
+    // The human's answer, from the chat, resumes it too.
+    const b = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which port?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(b.key, "5432 /unblock /submit");
+    await h.orch.idle();
+    const chat = h.driver.calls.find((c) => c.kind === "chat" && c.prompt.startsWith("5432"))!;
+    expect(chat.state).toEqual({ turns: 1 });
+  });
+
+  test("a failed run → blocked → restart resumes the failed run's conversation", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /fail boom" });
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+    await h.orch.updateTicket(t.key, { status: "in_progress" });
+    await h.orch.idle();
+    const works = h.driver.calls.filter((c) => c.kind === "work");
+    expect(works).toHaveLength(2);
+    expect(works[1]!.state).toEqual({ turns: 1 });
   });
 
   test("a complete run starts fresh and saves nothing; chats on Done start a new conversation and keep it", async () => {
@@ -877,9 +926,10 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     // Only a blocked ticket's message carries the unblock note.
     expect(chat.prompt).toBe("why a button?");
     expect(chat.permissionMode).not.toBe("read_only");
-    // It continues the work agent's conversation (not the reviewer's), and later work picks it up.
-    expect(chat.state).toEqual({ turns: 1 });
-    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
+    // The submit moved the card, so the chat starts fresh (not the work's or the reviewer's
+    // conversation), and saves its own for the next chat in review.
+    expect(chat.state).toBeNull();
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
     expect(chat.toolNames).toEqual(h.driver.calls[0]!.toolNames);
     expect(h.orch.activity(t.key).some((s) => s.kind === "blocked")).toBe(false);
     // The exchange is in the transcript only: neither the question nor the answer goes into Activity.
@@ -916,6 +966,43 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     // Left in progress, the chat auto-submits like a work run, and a fresh agent review judges the new work.
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded", "review:succeeded"]);
     expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
+  });
+
+  test("resume_work keeps the chat's conversation: a block resumes it, and the next submit drops it", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "make it red /resume /block Which red?");
+    await h.orch.idle();
+    // The chat ran on in progress (no restart), and its conversation is the in-progress session.
+    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "chat:succeeded"]);
+    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "blocked", blockedReason: "Which red?" });
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
+    await h.orch.sendMessage(t.key, "crimson /unblock /submit");
+    await h.orch.idle();
+    const chats = h.driver.calls.filter((c) => c.kind === "chat");
+    expect(chats.map((c) => c.state)).toEqual([null, { turns: 1 }]);
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
+    // The submit moved the card: the next chat starts fresh.
+    await h.orch.sendMessage(t.key, "done?");
+    await h.orch.idle();
+    expect(h.driver.calls.filter((c) => c.kind === "chat").at(-1)!.state).toBeNull();
+  });
+
+  test("resume_work from a done chat keeps the chat's conversation for the next run", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    await h.orch.completeTicket(t.key, { skipAgent: true });
+    await h.orch.sendMessage(t.key, "one more thing");
+    await h.orch.idle();
+    await h.orch.sendMessage(t.key, "fix it /resume /block Which file?");
+    await h.orch.idle();
+    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
+    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
+    await h.orch.sendMessage(t.key, "a.ts /unblock /submit");
+    await h.orch.idle();
+    expect(h.driver.calls.filter((c) => c.kind === "chat").map((c) => c.state)).toEqual([null, { turns: 1 }, { turns: 2 }]);
   });
 
   test("resume_work is refused on a ticket that isn't in review or done", async () => {
