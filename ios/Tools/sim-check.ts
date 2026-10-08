@@ -2078,6 +2078,9 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await axe("key", "41", "--udid", udid); // HID Escape
     await until("the panel gone", async () => !(await labels(udid)).includes(RESIZE), 5000);
     moved(udid);
+    // The panel's slide-out finishes before the next check opens a ticket: opening one at once
+    // has brought up New session's "Save this draft?" for the draft discarded two checks back.
+    await Bun.sleep(1500);
     return "closed";
   });
   await check("the pop-out button moves the panel's ticket into a window of its own", async () => {
