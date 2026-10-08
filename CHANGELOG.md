@@ -24,6 +24,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, typing quickly in a ticket's message box no longer freezes the app (or gets
+  it closed by iOS). The freeze came when your draft was saved again while an earlier save was
+  still on its way.
 - On iPhone and iPad, coming back to the app shows what happened while it was in the background.
   An open ticket's transcript now catches up on the agent's replies instead of stopping where it
   was when you left.

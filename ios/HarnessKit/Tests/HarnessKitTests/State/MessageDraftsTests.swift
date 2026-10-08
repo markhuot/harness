@@ -190,6 +190,24 @@ struct MessageDraftSyncTests {
         #expect(done)
     }
 
+    /// Typing on while a PUT is out: the debounce fires a second flush that waits on the first.
+    /// When the PUT lands, whichever flush resumes first must not spin on the finished task (that
+    /// froze the main actor, and the composer with it), and the newer text still goes out.
+    @Test func aSaveDebouncedDuringAnotherWaitsForItThenSendsTheNewerText() async {
+        let r = Rig()
+        r.service.hold = true
+        r.sync.setText("a")
+        await r.wait()
+        r.sync.setText("ab")
+        await r.wait()
+        #expect(r.service.puts.map(\.text) == ["a"])
+        r.service.hold = false
+        r.service.release()
+        await r.wait()
+        #expect(r.service.puts.map(\.text) == ["a", "ab"])
+        #expect(!r.sync.dirty)
+    }
+
     @Test func aFailedSendPicksSavingBackUp() async {
         let r = Rig()
         r.sync.setText("retry me")
