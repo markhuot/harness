@@ -899,7 +899,11 @@ async function seed() {
     settle(fileLink.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(linked.key, (t) => t.status === "planning" && !t.busy),
     settle(linkedStage.key, (t) => t.status === "planning" && !t.busy),
-    settle(tasks.key, (t) => t.status === "review" && !t.busy),
+    // Then a `/agents 2` turn: its Agents & tasks list mixes both kinds, for the filter.
+    settle(tasks.key, (t) => t.status === "review" && !t.busy)
+      .then(() => api("POST", `/tickets/${tasks.key}/messages`, { text: "/agents 2", move: true }))
+      .then(() => until(`${tasks.key} has its sub-agents`, async () => ((await api<TicketDetail>("GET", `/tickets/${tasks.key}`)).subagents?.length ?? 0) >= 3, 30000, 200))
+      .then(() => settle(tasks.key, (t) => t.status === "review" && !t.busy)),
     until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
@@ -3533,6 +3537,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${t.key} → ${t.status}`;
       });
     }),
+    chain(8, (udid) => agentsFilterChecks(udid, s)),
     chain(6, async (udid) => {
       await check("a relative file link in a spec opens the file viewer in the ticket's folder, at its lines", async () => {
         const label = "greetingFor fallback";
@@ -3555,6 +3560,52 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
     }),
   ];
+}
+
+/**
+ * The Agents & tasks filter on the background-task ticket (one Bash task, two sub-agents): Agents
+ * and Tasks toggles with their counts, one pressed shows only that kind, both or neither everything,
+ * and the filter survives opening a row and coming back (Subagents.filter has the rules).
+ */
+async function agentsFilterChecks(udid: string, s: Seeded) {
+  const url = `harness://ticket/${encodeURIComponent(s.tasks.key)}?tab=agents`;
+  const isTaskRow = (l: string) => l.startsWith("Count to 30");
+  const isAgentRow = (l: string) => /^Sub-task \d+, /.test(l);
+  const rows = async () => {
+    const l = await labels(udid);
+    return { tasks: l.filter(isTaskRow).length, agents: l.filter(isAgentRow).length };
+  };
+  const shows = (agents: number, tasks: number) => async () => ((r) => (r.agents === agents && r.tasks === tasks ? r : null))(await rows());
+  const chip = (name: string) => (l: string) => l.startsWith(`${name}, `);
+  await check("Agents & tasks: the filter's toggles carry each kind's count, and neither pressed shows everything", async () => {
+    await goto(udid, url, (l) => l.some(isTaskRow));
+    const l = await labels(udid);
+    if (!l.includes("Agents, 2") || !l.includes("Tasks, 1")) {
+      await shot(udid, "ticket-agents-filter-failed");
+      throw new Error(`toggles: ${l.filter((x) => chip("Agents")(x) || chip("Tasks")(x)).join(" | ")}; on screen: ${l.join(" | ")}`);
+    }
+    await until("all three rows", shows(2, 1), 8000);
+    await shot(udid, "ticket-agents-filter-all");
+    return "Agents, 2 · Tasks, 1; 3 rows";
+  });
+  await check("Agents & tasks: Tasks alone shows only the task, both shows everything, Agents alone only the sub-agents", async () => {
+    await tapWhere(udid, chip("Tasks"));
+    await until("only the task", shows(0, 1), 5000);
+    await shot(udid, "ticket-agents-filter-tasks");
+    await tapWhere(udid, chip("Agents"));
+    await until("both pressed: every row", shows(2, 1), 5000);
+    await tapWhere(udid, chip("Tasks"));
+    await until("only the sub-agents", shows(2, 0), 5000);
+    return "tasks 1 → all 3 → agents 2";
+  });
+  await check("Agents & tasks: the filter survives opening a row and coming back", async () => {
+    await tapWhere(udid, isAgentRow);
+    await tapWhere(udid, (l) => l.includes("Back to Agents & tasks"), { timeout: 8000 });
+    await until("still only the sub-agents", shows(2, 0), 8000);
+    await tapWhere(udid, chip("Agents"));
+    await until("neither pressed: every row", shows(2, 1), 5000);
+    return "Agents alone kept; unpressed shows all 3";
+  });
 }
 
 async function walk(udids: string[], s: Seeded): Promise<boolean> {

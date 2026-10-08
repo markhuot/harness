@@ -1475,8 +1475,9 @@ background task: until then (and on a session without any) the tab is hidden, an
 they arrive. It lists sub-agents and tasks in one list, the latest updated first
 (`sortSubagents`: `updatedAt` desc, then `startedAt` desc). The list scrolls under a filter of two
 toggles, Agents and Tasks, each with its count (`filterSubagents`, `subagentCounts`): one pressed
-shows only that kind, both or neither show everything. The Mac app keeps each session's filter
-while it runs, so opening a row and coming back keeps it; the iPhone app has no filter. A sub-agent's row and its view's
+shows only that kind, both or neither show everything. The filter stays pinned above the list on
+the Mac, iPhone and iPad (HarnessKit's `Subagents.filter` and `Subagents.counts` port the selectors),
+and each app keeps each session's filter while it runs, so opening a row and coming back keeps it. A sub-agent's row and its view's
 header carry a model chip once its model is known (`subagentModelLabel`: "Haiku 4.5" for
 `claude-haiku-4-5-20251001`, the raw id in its tooltip). A row opens the tab `agent:<id>`: a
 sub-agent's transcript, with its task above it and a breadcrumb back through its parents, or a

@@ -109,6 +109,34 @@ public enum Subagents {
             return a.offset < b.offset
         }.map(\.element)
     }
+
+    /// The Agents & tasks filter's two toggles. Both on, or both off, shows everything.
+    public struct Filter: Codable, Equatable, Hashable, Sendable {
+        public var agents: Bool
+        public var tasks: Bool
+
+        public init(agents: Bool = false, tasks: Bool = false) {
+            self.agents = agents
+            self.tasks = tasks
+        }
+    }
+
+    /// The rows the filter shows: only agents, only tasks, or (both or neither toggled) all of them.
+    public static func filter(_ list: [Subagent], _ filter: Filter) -> [Subagent] {
+        if filter.agents == filter.tasks { return list }
+        return list.filter { isTask($0) == filter.tasks }
+    }
+
+    public struct Counts: Codable, Equatable, Sendable {
+        public let agents: Int
+        public let tasks: Int
+    }
+
+    /// How many of each kind, for the filter's toggles.
+    public static func counts(_ list: [Subagent]) -> Counts {
+        let tasks = list.count { isTask($0) }
+        return Counts(agents: list.count - tasks, tasks: tasks)
+    }
 }
 
 extension BoardState {

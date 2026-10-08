@@ -73,6 +73,11 @@ public enum AgentsLogic {
         "\(Subagents.title(a)), \(Subagents.statusLabel(a.status))"
     }
 
+    /// In place of the list when the filter keeps one kind and the session has none of it.
+    public static func emptyNote(_ filter: Subagents.Filter) -> String {
+        filter.agents ? "No sub-agents yet" : "No background tasks yet"
+    }
+
     /// How often the durations tick: every second while something runs, else every minute.
     public static func tickSeconds(running: Bool) -> Double { running ? 1 : 60 }
 

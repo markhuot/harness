@@ -11,6 +11,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- The Agents & tasks tab on iPhone and iPad has the same filter as the Mac: Agents and Tasks
+  toggles pinned above the list, each with its count. One pressed shows only that kind, and both or
+  neither show everything. The filter stays put while you open a row and come back, and with one
+  kind filtered and none of it present the list says "No sub-agents yet" or "No background tasks
+  yet".
+- sim-check gives the background-task ticket two sub-agents as well and taps through the filter on
+  the simulator, saving `ticket-agents-filter-all` and `ticket-agents-filter-tasks` shots.
 - On iPhone and iPad you can dock as many tickets as you like and switch between them. Docked
   tickets wait as small glass cards, each with a status dot (green for done, red for blocked), the ref,
   as much of the title as fits and an ✕. Tap a card to open that ticket. iPhone shows two cards and
