@@ -13,6 +13,7 @@ struct TicketDetailHero: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
+    @Environment(\.inTicketSheet) private var inTicketSheet
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @State private var localExpanded = false
@@ -107,6 +108,8 @@ struct TicketDetailHero: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
+        // In the ticket sheet or panel, a long press lists the other docked tickets to switch to.
+        .dockedTicketsMenu(router, inSheet: inTicketSheet)
         .padding(.horizontal, -14)
         .padding(.top, -10)
         .padding(.bottom, compact ? -10 : -5)

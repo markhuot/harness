@@ -253,7 +253,7 @@ private struct DesktopShell: View {
         } detail: {
             // The column paints the system background; the phone's sections show RootView's `bg`.
             SectionStack().environment(\.desktopShell, true).background(c.bg.ignoresSafeArea())
-                // Where the column starts, for the docked pills to keep off the sidebar.
+                // Where the column starts, for the docked cards to keep off the sidebar.
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { dockInset?.contentLeading = $0 }
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.

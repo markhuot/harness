@@ -11,13 +11,13 @@ import SwiftUI
 /// the app binds it to the `ticketPanelWidth` pref to keep it across launches. Dragging the leading
 /// handle resizes it; flinging the title bar right docks it (it slides off the edge first, then
 /// `onDock` runs); Escape on a hardware keyboard closes it. `docked` keeps it mounted (drafts,
-/// scroll, the nav path) but off the trailing edge, inert, while the docked pills stand in for it.
+/// scroll, the nav path) but off the trailing edge, inert, while the docked cards stand in for it.
 struct TicketSidePanel<Content: View>: View {
     let title: String
     var subtitle: String? = nil
     /// Whether the pop-out (own window) button shows.
     var canPopOut = true
-    /// Off the edge and inert, for the dock pill.
+    /// Off the edge and inert, for the docked cards.
     var docked = false
     @Binding var widthFraction: Double?
     let onDock: () -> Void
@@ -209,9 +209,9 @@ extension Animation {
 /// The ticket sheets (`Router.dockedSheets`) at regular width, over DesktopShell: TicketSidePanel
 /// around the top sheet's TicketSheetContent (the iPhone sheet's content), with every live sheet
 /// (`Router.liveSheets`) mounted behind it, hidden, so switching is instant and keeps each one's
-/// place. The other docked tickets wait as a stack of pills in the board's bottom-right corner
-/// (DockedPillStack), left of the panel while it's open and following its resize; while docked the
-/// panel stays mounted off the edge and every ticket is a pill. Pickers, the watcher form and
+/// place. The other docked tickets wait as a stack of cards in the board's bottom-right corner
+/// (DockedCardStack), left of the panel while it's open and following its resize; while docked the
+/// panel stays mounted off the edge and every ticket is a card. Pickers, the watcher form and
 /// covers come up from the root (SceneChrome), which presents nothing else here. Pop-out hands the
 /// top ticket to its own window (`Router.popOutSheet()`) where the device has windows.
 struct TicketPanelHost: View {
@@ -225,7 +225,7 @@ struct TicketPanelHost: View {
     var body: some View {
         let sheet = router.ticketSheet ?? router.dock
         let docked = router.ticketSheetState == .docked
-        // Docked, every ticket is a pill; open, the ones behind the panel's.
+        // Docked, every ticket is a card; open, the ones behind the panel's.
         let waiting = docked ? router.dockedSheets : Array(router.dockedSheets.dropFirst())
         GeometryReader { geo in
             let besidePanel = sheet != nil && !docked ? panelWidth : 0
@@ -260,14 +260,14 @@ struct TicketPanelHost: View {
                     .transition(.ticketPanel)
                 }
                 if !waiting.isEmpty {
-                    DockedPillStack(sheets: waiting, available: board)
+                    DockedCardStack(sheets: waiting, available: board)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(.trailing, besidePanel)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
-            .onChange(of: DockedPillStack.height(count: waiting.count, available: board), initial: true) { _, h in
-                dockInset?.pills = h > 0 ? h + DockedPillStack.margin * 2 : 0
+            .onChange(of: DockedCardStack.height(count: waiting.count, available: board), initial: true) { _, h in
+                dockInset?.cards = h > 0 ? h + DockedCardStack.margin * 2 : 0
             }
         }
         .animation(.ticketPanel, value: router.ticketSheetState)
@@ -278,7 +278,7 @@ struct TicketPanelHost: View {
             if docked { resignFirstResponder() }
         }
         .onChange(of: sheet?.id) { resignFirstResponder() }
-        .onDisappear { dockInset?.pills = 0 }
+        .onDisappear { dockInset?.cards = 0 }
     }
 
     /// The person's width, kept in prefs; nil until they first drag the panel's edge.
