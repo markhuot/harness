@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261008.0736](https://github.com/markhuot/harness/releases/tag/app-20261008.0736) - 2026-10-08
+
 ### Added
 
 - Agents can write a browser script as a list of steps, each followed by what the page should show
