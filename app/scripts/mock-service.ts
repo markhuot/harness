@@ -540,6 +540,8 @@ interface SeedTicket {
   autoStart?: boolean;
   /** A message the human started writing to the agent (Ticket.messageDraft) */
   messageDraft?: string;
+  /** The agents' notes for the next run (Ticket.agentNotes) */
+  agentNotes?: string;
   /** Activity entries: [author, body, kind (default: note from an agent, system from the system, message from a human)] */
   activity?: [ActivityAuthor, string, ActivityKind?][];
   ageMin: number;
@@ -586,6 +588,7 @@ function seedTicket(s: SeedTicket): Ticket {
     allowedTools: s.allowedTools ?? [],
     messageDraft: s.messageDraft ? { text: s.messageDraft, attachments: [], origin: null, updatedAt: createdAt + 60_000 } : null,
     model: s.model ?? null,
+    agentNotes: s.agentNotes ?? null,
     position: tickets.size,
     completedAt: s.status === "done" ? createdAt + 60_000 : null,
     createdAt,
@@ -672,6 +675,8 @@ function seed() {
     model: "sonnet",
     busy: true,
     ageMin: 42,
+    agentNotes:
+      "## Where things live\n- `src/hooks/useArticle.ts`: the cache, keyed by `slug` (the bug)\n- `src/api/articles.ts`: `renameSlug()` returns the article with its stable `id`\n\n## Gotchas\n- The SSR path warms the cache from `getServerSideProps`; key it by `id` there too.\n\n## Verify\n- `bun test src/hooks/useArticle.test.ts`\n- Rename a slug in the editor and reload the article page.\n\n## Half done\n- Regression test written, not yet passing.",
     activity: [
       ["agent", "Reproduced the bug locally. The cache is keyed by `slug`, so a rename orphans the old entry.\n\nNext:\n- switch the key to `article.id`\n- add a regression test"],
     ],

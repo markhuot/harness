@@ -174,6 +174,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },
   // A ticket in planning: its branch can still change (no worktree yet).
   { name: "details-planning", route: "#/board/all/ticket/NYTIMES-2/details" },
+  { name: "details-notes", route: "#/board/all/ticket/NYTIMES-1/details", setup: scrollToEl("[data-testid=agent-notes]") },
   // Its one Model combobox (driver + model) open.
   { name: "details-model", route: "#/board/all/ticket/NYTIMES-2/details", setup: openCombo(".props") },
   { name: "browser", route: "#/board/all/ticket/NYTIMES-1/browser", delay: 3500 },

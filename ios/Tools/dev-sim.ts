@@ -322,12 +322,13 @@ function client(d: Daemon) {
   };
 }
 
-export type Seeded = { project: Project; review: Ticket; planning: Ticket; blocked: Ticket; done: Ticket; waiting: Ticket };
+export type Seeded = { project: Project; review: Ticket; planning: Ticket; blocked: Ticket; done: Ticket; waiting: Ticket; notes: Ticket };
 
 /**
  * One git project (GREET, with worktrees) and a ticket in each of review (with sub-agents), planning,
  * blocked and done, plus GREET-5: started while GREET-1 was still in review, so it waits in planning to start
- * on its own. Created one at a time so the keys are always GREET-1 … GREET-5.
+ * on its own, and GREET-6, in review with agent notes for its Details tab. Created one at a time so the
+ * keys are always GREET-1 … GREET-6.
  */
 async function seed(d: Daemon): Promise<Seeded> {
   const api = client(d);
@@ -362,8 +363,21 @@ async function seed(d: Daemon): Promise<Seeded> {
     revised = await api<Ticket>("PATCH", `/tickets/${dn.key}`, { spec, baseRevision: revised.specRevision });
   }
   const waiting = await create("Link the install page from the README", { dependsOn: [r.key] });
-  return { project, review: r, planning: p, blocked: b, done: revised, waiting };
+  const notes = await settle(
+    await create(`Greet by name\n/tools ${JSON.stringify([
+      { name: "update_notes", input: { notes: GREET_NOTES } },
+      { name: "submit_for_review", input: { note: "Greets by name.", spec_is_up_to_date: true } },
+    ])}`),
+    (t) => t.status === "review" && !t.busy,
+  );
+  // The directive did its job; the spec reads like a real one.
+  const greeted = await api<Ticket>("PATCH", `/tickets/${notes.key}`, { spec: "Greet the user by name.", baseRevision: notes.specRevision });
+  return { project, review: r, planning: p, blocked: b, done: revised, waiting, notes: greeted };
 }
+
+/** GREET-6's agent notes, the way a work run leaves them for the next one. */
+const GREET_NOTES =
+  "## Where things live\n- `src/app.ts`: `main(name)` builds the greeting\n- `README.md`: the usage example\n\n## Gotchas\n- `main()` defaults to `world`; keep that for the README example.\n\n## Verify\n- `bun src/app.ts Ada` prints `Hello, Ada`\n\n## Half done\n- README usage not updated yet.";
 
 /** Revisions 2 and 3 of GREET-4's spec: edited words, an added list item and table row, a changed code line, a removed paragraph. */
 const TIDY_REVISIONS = [
@@ -375,7 +389,7 @@ function printSeeded(d: Daemon, s: Seeded) {
   log(`daemon:  ${d.base}`);
   log(`token:   ${join(d.home, "token")}`);
   log(`project: ${s.project.key} (id ${s.project.id})`);
-  for (const t of [s.review, s.planning, s.blocked, s.done, s.waiting]) log(`  ${t.key}  ${t.status.padEnd(9)} ${t.title}`);
+  for (const t of [s.review, s.planning, s.blocked, s.done, s.waiting, s.notes]) log(`  ${t.key}  ${t.status.padEnd(9)} ${t.title}`);
 }
 
 // ------------------------------------------------------------------ main

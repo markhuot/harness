@@ -3,6 +3,7 @@ import { specConflict, type RelatedTicket, type SpecConflict, type Ticket, type 
 import { useAction, useStore } from "../state/store";
 import { dependentsOf } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
+import { Markdown } from "../components/Markdown";
 import { driverLabel, relativeTime, STATUS_LABEL, StatusDot, TicketKey, useNow } from "../components/bits";
 import { useOpenTicket } from "../components/paneContext";
 import { TicketSettings } from "../components/TicketSettings";
@@ -152,6 +153,13 @@ export function TicketDetails({
           )
         )}
       </div>
+      {ticket.agentNotes && (
+        <div className="field" data-testid="agent-notes">
+          <label>Agent notes</label>
+          <Markdown className="agent-notes" text={ticket.agentNotes} />
+          <span className="field-hint">What the ticket's agents keep for the next run (update_notes). Read-only.</span>
+        </div>
+      )}
 
       {/* The settings rows (the same ones a draft's Options shows), then what's read-only. */}
       <TicketSettings

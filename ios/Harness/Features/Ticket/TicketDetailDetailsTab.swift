@@ -1,7 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-/// The Details tab: the title and spec, the settings rows
+/// The Details tab: the title and spec, the agents' notes (read-only, when there are any), the
+/// settings rows
 /// (TicketSettingsForm), then what it blocks, where it works, its remote ID and the tickets sharing
 /// it, granted tools, auto-start, timestamps and its runs. A spec save names the revision the edit
 /// started from (SpecDraft); when the spec moved on meanwhile, the service refuses it and an alert
@@ -52,6 +53,18 @@ struct TicketDetailDetailsTab: View {
                 }
             }
             .listRowBackground(c.bgElev)
+            if let notes = ticket.agentNotes.optional, !notes.isEmpty {
+                Section {
+                    MarkdownView(text: notes, size: 14.5)
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("agent-notes")
+                } header: {
+                    Text("Agent notes")
+                } footer: {
+                    Text("What the ticket's agents keep for the next run (update_notes). Read-only.")
+                }
+                .listRowBackground(c.bgElev)
+            }
             Section {
                 TicketSettingsForm(ticket: ticket) { patch($0) }
                 readOnlyRows(state)

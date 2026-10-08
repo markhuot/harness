@@ -727,6 +727,16 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   color: var(--amber);
   flex: none;
 }
+/* Details tab: the agents' notes, read-only rendered markdown in a box like the spec's */
+.agent-notes {
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  max-height: 360px;
+  overflow: auto;
+  user-select: text;
+}
 
 /* Activity tab: a compact timeline, one look per kind */
 .activity {
