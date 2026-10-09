@@ -194,9 +194,12 @@ extension EnvironmentValues {
     /// Inside the ticket sheet's stack (TicketSheetContent), at either width: a link there is a
     /// step within the sheet rather than a new choice from outside it (`Router.openTicket`).
     @Entry var inTicketSheet = false
-    /// Inside the iPad's ticket panel (TicketPanelHost), whose title bar names the ticket on top,
-    /// so that ticket's screen leaves its key out of the navigation bar (TicketDetailHeader).
+    /// Inside the iPad's ticket panel (TicketPanelHost), whose buttons float over the top trailing
+    /// corner and whose root ticket has no navigation bar (TicketDetailHeader).
     @Entry var inTicketPanel = false
+    /// How far the panel's buttons reach in from the trailing edge: the root ticket's hero title
+    /// wraps before them. 0 outside the panel.
+    @Entry var ticketPanelTitleInset: CGFloat = 0
 }
 
 /// Where the system floats the docked ticket sheet, as last measured docked: how far from the
@@ -446,5 +449,14 @@ struct DockedCardsAbove: View {
         expanded = false
         router.activateSheet(id: sheet.id)
         router.restoreDock()
+    }
+}
+
+extension Router {
+    /// `key` is the ticket at the root of the top ticket sheet, with nothing pushed above it: its
+    /// screen has no navigation bar, and its hero title is the top of the sheet.
+    @MainActor func showsAsSheetRoot(_ key: String) -> Bool {
+        let sheet = ticketSheet ?? dock
+        return sheet?.path.isEmpty == true && sheet?.rootKey == key
     }
 }

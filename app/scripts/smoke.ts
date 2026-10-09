@@ -343,8 +343,12 @@ try {
   await until("approve split", () => exists("[data-testid=approve-primary]"));
   await js(`document.querySelector("[data-testid=approve-primary]").click()`);
   await until("completion running", async () => (await stoppedT()).busy);
-  await until("cancel run button", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.includes("Cancel run"))`));
-  await clickText(".actions button", "Cancel run");
+  await until("cancel run in the More menu", async () => {
+    if (!(await exists(".menu"))) await js(`document.querySelector(".actions [data-testid=ticket-more]").click()`);
+    return js<boolean>(`[...document.querySelectorAll(".menu button")].some(b => b.textContent.includes("Cancel run"))`);
+  });
+  check("Cancel run has no button of its own in the action row", await js<boolean>(`![...document.querySelectorAll(".actions > button")].some(b => b.textContent.includes("Cancel run"))`));
+  await clickText(".menu button", "Cancel run");
   const approvalBack = await until("approval back", async () => {
     const t = await stoppedT();
     return t.humanReview === "pending" && t;
@@ -394,7 +398,7 @@ try {
     const ghPrimary = await openApprove(ghT!.key);
     check("gh project: the Approve primary reads Approve and merge", ghPrimary === "Approve and merge", ghPrimary);
     const moreItems = async () => {
-      await js(`document.querySelector(".detail-titlebar button[title=More]").click()`);
+      await js(`document.querySelector(".actions [data-testid=ticket-more]").click()`);
       const items = await until("more menu", async () => {
         const t = await js<string[]>(`[...document.querySelectorAll(".menu button")].map(b => b.textContent.trim())`);
         return t.length > 0 && t;
@@ -404,7 +408,8 @@ try {
       return items;
     };
     const inReviewMore = await moreItems();
-    check("the More menu has no Mark done while the ticket is in review", !inReviewMore.includes("Mark done") && inReviewMore.includes("Copy key"), inReviewMore.join(","));
+    check("the More menu has no Move to done while the ticket is in review, and always has Delete ticket", !inReviewMore.includes("Move to done") && inReviewMore.includes("Delete ticket") && !inReviewMore.includes("Copy key"), inReviewMore.join(","));
+    check("the ticket's title bar has no More menu", !(await exists(".detail-titlebar button[title=More]")));
     const ghItems = await openMenu();
     check(
       "gh project: the Approve menu offers merge, open PR, clean up, Approve and…, then take no action after a separator",
@@ -501,7 +506,7 @@ try {
     await js(`location.hash = "#/board/all/ticket/NYTIMES-1"`);
     await until("NYTIMES-1 header", () => js<boolean>(`document.querySelector(".detail-key")?.textContent === "NYTIMES-1"`));
     const workingMore = await moreItems();
-    check("outside review the More menu still offers Mark done", workingMore.includes("Mark done"), workingMore.join(","));
+    check("outside review the More menu offers Move to done", workingMore.includes("Move to done"), workingMore.join(","));
 
     await js(`location.hash = "#/board/all"`);
     for (const t of [plainT!, siteT!]) await api("DELETE", `/tickets/${t.key}`);
@@ -788,7 +793,7 @@ try {
   check("the launched ticket keeps the draft's driver + model", withModel.driver === "dummy" && withModel.model === "dummy-slow", `${withModel.driver} / ${withModel.model}`);
   const withMode = (await api<{ ticket: { permissionMode: string | null } }>("GET", `/tickets/${created.key}`)).ticket;
   check("…and its permission mode", withMode.permissionMode === "read_only", String(withMode.permissionMode));
-  const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-titlebar .model-badge")?.textContent ?? ""`).then((t) => t && t));
+  const headBadge = await until("header model badge", () => js<string>(`document.querySelector(".detail-head .model-badge")?.textContent ?? ""`).then((t) => t && t));
   check("ticket header shows the model badge", headBadge === "Dummy Slow", headBadge);
   await js(`location.hash = "#/board/all/ticket/${created.key}/details"`);
   check("Details has one Models picker (no Driver select)", (await until("details model picker", () => exists(".props [data-testid=phase-model-select]"))) && !(await exists(".props select.select:not([data-testid])")));
@@ -809,7 +814,7 @@ try {
     return t.model === null && t.driver === "claude-code" && t;
   });
   check("Details Defaults puts the ticket's Work phase back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
-  check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-titlebar .model-badge")))));
+  check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-head .model-badge")))));
   await api("PATCH", `/tickets/${idle.key}`, { permissionMode: "ask" });
   await until("mode shown", () => js<boolean>(`document.querySelector(".props [data-testid=permission-mode]")?.value === "ask"`));
   await pick(".props [data-testid=permission-mode]", "");
@@ -1579,26 +1584,8 @@ try {
     check("dragging a pane's header grip onto the board's left half moves the pane there", b5[0]!.key === "NYTIMES-3" && near(b5[0]!.x + b5[0]!.w, board5.x) && b5[0]!.h === board5.h, JSON.stringify(b5));
     check("the board has no grip (it can't be dragged)", !(await exists(".pane-board [data-testid=pane-grip]")));
 
-    // The keyboard route for re-docking: More → Move pane → Board ↓ puts the pane below the board (movePane).
-    const boardId = await js<string>(`document.querySelector(".pane-board").dataset.paneId`);
-    await js(`(${paneOf("NYTIMES-4")}).querySelector(".detail-titlebar button[title=More]").click()`);
-    await until("move menu", () => exists(`[data-testid="move-pane-bottom-${boardId}"]`));
-    const moveLabel = await js<string>(`document.querySelector('[data-testid="move-pane-bottom-${boardId}"]').getAttribute("aria-label")`);
-    await js(`document.querySelector('[data-testid="move-pane-bottom-${boardId}"]').click()`);
-    const underBoard = await until("moved below the board", async () => {
-      const b = await boxes();
-      const bd = b.find((x) => x.key === "board");
-      const four = b.find((x) => x.key === "NYTIMES-4");
-      return bd && four && four.y > bd.y && { bd, four };
-    }).catch(() => null);
-    check(
-      "More → Move pane → below the board docks the pane under the board, sharing its width",
-      !!underBoard && moveLabel === "Move pane below the board" && near(underBoard.four.x, underBoard.bd.x) && near(underBoard.four.w, underBoard.bd.w) && near(underBoard.bd.y + underBoard.bd.h, underBoard.four.y) && !(await exists(".menu")),
-      JSON.stringify({ moveLabel, underBoard }),
-    );
-
-    // Narrow panes: 4 across a 1280px window. The rightmost pane's More menu (with its Move pane
-    // arrows) stays inside the window, and no titlebar runs into the pane next to it. Then a pane
+    // Narrow panes: 4 across a 1280px window. The rightmost pane's More menu (in the hero's action
+    // row) stays inside the window, its long title truncates, and no titlebar runs into the pane next to it. Then a pane
     // stacked at the bottom opens its menu upward, still inside the window.
     await cdp("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
     const tLeaf = (id: string, ticketKey: string) => ({ type: "leaf", id, content: { kind: "ticket", ticketKey, tab: "spec" } });
@@ -1607,18 +1594,17 @@ try {
       focusedId: "n3",
       zoomedId: null,
     });
-    await until("four panes", async () => (await boxes()).length === 4 && (await exists("[data-pane-id=n3] .detail-titlebar button[title=More]")));
+    await until("four panes", async () => (await boxes()).length === 4 && (await exists("[data-pane-id=n3] .actions [data-testid=ticket-more]")));
     await Bun.sleep(300);
-    /** The open menu's rect, how far its Move pane arrows reach, and the viewport. */
+    /** The open menu's rect, and the viewport. */
     const menuFit = () =>
-      js<{ vw: number; vh: number; left: number; right: number; top: number; bottom: number; arrowsRight: number; above: boolean }>(`(() => {
+      js<{ vw: number; vh: number; left: number; right: number; top: number; bottom: number; above: boolean }>(`(() => {
         const m = document.querySelector(".menu"); const r = m.getBoundingClientRect();
-        const arrows = [...m.querySelectorAll(".menu-move button")].map(b => b.getBoundingClientRect().right);
-        return { vw: innerWidth, vh: innerHeight, left: r.left, right: r.right, top: r.top, bottom: r.bottom, arrowsRight: Math.max(0, ...arrows), above: m.dataset.above === "true" };
+        return { vw: innerWidth, vh: innerHeight, left: r.left, right: r.right, top: r.top, bottom: r.bottom, above: m.dataset.above === "true" };
       })()`);
-    const inside = (f: Awaited<ReturnType<typeof menuFit>>) => f.left >= 0 && f.top >= 0 && f.right <= f.vw && f.bottom <= f.vh && f.arrowsRight > 0 && f.arrowsRight <= f.vw;
-    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
-    await until("rightmost menu", () => exists(".menu .menu-move"));
+    const inside = (f: Awaited<ReturnType<typeof menuFit>>) => f.left >= 0 && f.top >= 0 && f.right <= f.vw && f.bottom <= f.vh;
+    await js(`document.querySelector("[data-pane-id=n3] .actions [data-testid=ticket-more]").click()`);
+    await until("rightmost menu", () => exists(".menu"));
     await Bun.sleep(100);
     const fit = await menuFit();
     const titlebarSpill = await js<string[]>(`[...document.querySelectorAll(".pane-ticket")].flatMap(p => {
@@ -1626,22 +1612,24 @@ try {
       return [...p.querySelectorAll(".detail-titlebar > *")].filter(c => getComputedStyle(c).display !== "none" && c.getBoundingClientRect().right > pr.right + 0.5).map(c => p.dataset.paneId + ":" + c.className);
     })`);
     const narrow = (await boxes()).map((b) => b.w);
-    check("at 1280px with 4 panes, the rightmost pane's More menu and its Move pane arrows stay inside the window", fit.vw === 1280 && inside(fit), JSON.stringify({ fit, narrow }));
+    check("at 1280px with 4 panes, the rightmost pane's More menu stays inside the window", fit.vw === 1280 && inside(fit), JSON.stringify({ fit, narrow }));
     check("narrow ticket panes' titlebars don't run into the next pane", titlebarSpill.length === 0, titlebarSpill.join(","));
-    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    const clipped = await js<boolean>(`(() => { const t = document.querySelector("[data-pane-id=n3] .detail-titlebar .detail-title"); return !!t && getComputedStyle(t).textOverflow === "ellipsis" && t.scrollWidth >= t.clientWidth; })()`);
+    check("a narrow pane's titlebar truncates the ticket title with an ellipsis", clipped);
+    await js(`document.querySelector("[data-pane-id=n3] .actions [data-testid=ticket-more]").click()`);
     await setPanes({
       root: { type: "split", id: "r", dir: "row", children: [{ type: "leaf", id: "b", content: { kind: "board" } }, { type: "split", id: "c", dir: "column", children: [tLeaf("n1", "NYTIMES-4"), tLeaf("n3", "NYTIMES-1")], sizes: [0.85, 0.15] }], sizes: [0.6, 0.4] },
       focusedId: "n3",
       zoomedId: null,
     });
-    await until("stacked pane", () => exists("[data-pane-id=n3] .detail-titlebar button[title=More]"));
+    await until("stacked pane", () => exists("[data-pane-id=n3] .actions [data-testid=ticket-more]"));
     await Bun.sleep(300);
-    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
-    await until("bottom menu", () => exists(".menu .menu-move"));
+    await js(`document.querySelector("[data-pane-id=n3] .actions [data-testid=ticket-more]").click()`);
+    await until("bottom menu", () => exists(".menu"));
     await Bun.sleep(100);
     const low = await menuFit();
     check("a More menu near the bottom of the window opens upward, inside it", low.above && inside(low), JSON.stringify(low));
-    await js(`document.querySelector("[data-pane-id=n3] .detail-titlebar button[title=More]").click()`);
+    await js(`document.querySelector("[data-pane-id=n3] .actions [data-testid=ticket-more]").click()`);
     await cdp("Emulation.clearDeviceMetricsOverride");
     await Bun.sleep(200);
 
@@ -1878,7 +1866,7 @@ try {
     await type(".pane.active .composer-input", "");
 
     // The ticket's More menu: Enter opens it with the first item focused, ↓ moves, Escape returns.
-    await js(`document.querySelector(".pane.active .detail-titlebar button[title=More]").focus()`);
+    await js(`document.querySelector(".pane.active .actions [data-testid=ticket-more]").focus()`);
     await press.enter();
     const inMenu = await until("menu focus", async () => ((await active()).menu ? true : null)).catch(() => false);
     const item1 = await js<string>(`document.activeElement?.textContent ?? ""`);

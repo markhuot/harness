@@ -14,6 +14,8 @@ struct TicketDetailHero: View {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.inTicketSheet) private var inTicketSheet
+    @Environment(\.inTicketPanel) private var inTicketPanel
+    @Environment(\.ticketPanelTitleInset) private var panelInset
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @State private var localExpanded = false
@@ -21,6 +23,7 @@ struct TicketDetailHero: View {
     @State private var requestingChanges = false
     @State private var reopening = false
     @State private var approvingCustom = false
+    @State private var confirm: Confirmation?
 
     private var api: HarnessClient? { store.api }
     private var expanded: Bool { disclosure?.expanded ?? localExpanded }
@@ -51,6 +54,7 @@ struct TicketDetailHero: View {
         .sheet(isPresented: $requestingChanges) { TicketDetailNotesSheet(ticket: ticket) }
         .sheet(isPresented: $reopening) { TicketDetailNotesSheet(ticket: ticket, reopen: true) }
         .sheet(isPresented: $approvingCustom) { TicketDetailApproveCustomSheet(ticket: ticket) }
+        .confirmation($confirm)
     }
 
     @ViewBuilder private func content(compact: Bool) -> some View {
@@ -64,6 +68,7 @@ struct TicketDetailHero: View {
         if !compact {
             FlowLayout(spacing: 6) {
                 if let project { ProjectKeyBadge(project.key, color: project.color) }
+                TicketKeyLabel(ticket: ticket, size: 12.5, color: c.text2)
                 StatusPill(status: ticket.status)
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
                 ModelBadge(ticket: ticket, state: state)
@@ -79,7 +84,8 @@ struct TicketDetailHero: View {
         if let approval = ticket.pendingApproval {
             TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
         }
-        if !compact && (ticket.busy || [.planning, .review, .done].contains(ticket.status)) {
+        // Always there when expanded: the More menu's Delete always applies.
+        if !compact {
             FlowLayout(spacing: 8) { buttons(project: project, parent: parent) }
         }
         // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
@@ -102,6 +108,8 @@ struct TicketDetailHero: View {
                 text
                 Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
             }
+            // The iPad panel's buttons float over the root ticket's top corner.
+            .padding(.trailing, inTicketPanel && router.showsAsSheetRoot(ticket.key) ? panelInset : 0)
             .padding(.horizontal, 14)
             .padding(.top, 10)
             .padding(.bottom, compact ? 10 : 5)
@@ -113,6 +121,7 @@ struct TicketDetailHero: View {
         .padding(.horizontal, -14)
         .padding(.top, -10)
         .padding(.bottom, compact ? -10 : -5)
+        .accessibilityAddTraits(.isHeader)
         .accessibilityValue(expanded ? "Expanded" : "Collapsed")
         .accessibilityHint(expanded ? "Hides the ticket's status and actions" : "Shows the ticket's status and actions")
     }
@@ -186,11 +195,46 @@ struct TicketDetailHero: View {
         if ticket.status == .done {
             HButton("Re-open", icon: "refresh", small: true, fullWidth: false) { reopening = true }
         }
-        if ticket.busy {
-            HButton("Cancel run", icon: "stop", variant: .danger, small: true, fullWidth: false, haptic: .warning) {
-                perform { try await $0.cancelTicket($1) }
+        moreMenu(label: label)
+    }
+
+    /// The secondary […] after the actions: Move to done (not in review, where Approve and take no
+    /// action does it), Cancel run while a run is busy, and Delete.
+    private func moreMenu(label: String) -> some View {
+        Menu {
+            if TicketDetailLogic.offersMarkDone(ticket) {
+                Button("Move to done", systemImage: "checkmark.circle") {
+                    perform { try await $0.completeTicket($1, CompleteBody(skipAgent: true)) }
+                }
             }
+            if ticket.busy {
+                Button("Cancel run", systemImage: "stop.circle", role: .destructive) {
+                    perform { try await $0.cancelTicket($1) }
+                }
+            }
+            Button("Delete ticket", systemImage: "trash", role: .destructive) {
+                confirm = Confirmation(title: "Delete \(label)?", message: "Its transcript, spec history and activity are removed too.", action: "Delete") {
+                    guard let api else { return }
+                    let key = ticket.key
+                    Task {
+                        if await actions.run({ try await api.deleteTicket(key) }) != nil { pop(key) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis").font(.system(size: 13 * 0.92, weight: .semibold)).frame(width: 13, height: 13)
         }
+        .menuStyle(.button)
+        .menuOrder(.fixed)
+        .buttonStyle(.harness(.secondary, small: true, fullWidth: false))
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("ticket-more")
+    }
+
+    /// Back off the deleted ticket's screen.
+    private func pop(_ key: String) {
+        let state = store.state
+        router.removeTicket { $0.uppercased() == key.uppercased() || state.ticketByKey($0) == nil }
     }
 
     /// The chevron beside Approve: every way to approve, then approving without an action.
