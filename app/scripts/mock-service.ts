@@ -613,7 +613,28 @@ function seedTicket(s: SeedTicket): Ticket {
     createdAt,
     startedAt: createdAt,
     endedAt: t.busy ? null : createdAt + 5 * 60_000,
+    // What the Runs list shows when a driver reports usage (Claude Code: tokens and cost)
+    ...(t.driver === "claude-code" ? { inputTokens: 41_300, outputTokens: 6_900, costUsd: 0.42 } : {}),
   });
+  if (!t.busy && s.status !== "planning") {
+    // A review run on another driver and model than the phase default, with tokens but no cost
+    const reviewId = newId("run");
+    runs.set(reviewId, {
+      id: reviewId,
+      sessionId: session.id,
+      kind: "review",
+      status: "succeeded",
+      driver: "anthropic-api",
+      prompt: "Review the changes on this branch",
+      error: null,
+      createdAt: createdAt + 6 * 60_000,
+      startedAt: createdAt + 6 * 60_000,
+      endedAt: createdAt + 6 * 60_000 + 83_000,
+      model: "claude-sonnet-5",
+      inputTokens: 1_240_000,
+      outputTokens: 3_100,
+    });
+  }
   let seq = 0;
   let at = createdAt;
   const push = (role: TranscriptRole, content: TranscriptContent) => {
