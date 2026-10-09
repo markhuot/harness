@@ -269,7 +269,10 @@ private struct SheetFlickTracker: UIViewRepresentable {
             isUserInteractionEnabled = false
             flick.panIsActive = { [weak self] in
                 guard let state = self?.pan.state else { return false }
-                return state == .began || state == .changed
+                // UIKit sets every recognizer's state before it sends any action, so `.ended` and
+                // `.cancelled` are an end still on its way to `panned`, not a drag that never ended.
+                // Only a pan back at `.possible` (its actions already ran) or `.failed` has no drag.
+                return state != .possible && state != .failed
             }
         }
 

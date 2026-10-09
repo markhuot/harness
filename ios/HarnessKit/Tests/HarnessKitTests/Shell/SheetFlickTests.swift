@@ -105,6 +105,22 @@ import Testing
         #expect(g.isDragging)
     }
 
+    @Test func aPanWhoseEndIsStillQueuedDoesNotCountAsStale() {
+        // The pan's state is already `.ended` when the sheet settles, but its action hasn't run.
+        // The app reports that as an active pan, so the settle waits for the release and dismisses.
+        enum Pan { case changed, endedActionQueued, reset }
+        var pan = Pan.changed
+        let f = SheetFlick()
+        f.panIsActive = { pan != .reset }
+        f.began()
+        pan = .endedActionQueued
+        let a = settle(f, at: t0)
+        #expect(a.outcome == nil)
+        f.ended(velocity: 2000, at: t0)
+        pan = .reset
+        #expect(a.outcome == .dismiss)
+    }
+
     @Test func resetClearsAStuckDragAndDocksAWaitingSettle() {
         let f = SheetFlick()
         f.began()
