@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Ticket } from "../index";
 import {
+  startLabel,
   attentionOf,
   autoStartTitle,
   autoStartWaitingOn,
@@ -247,5 +248,17 @@ describe("hide-children preference", () => {
     expect(readHideChildren(broken)).toBe(true);
     expect(() => writeHideChildren(true, broken)).not.toThrow();
     expect(readHideChildren(undefined)).toBe(true);
+  });
+});
+
+describe("startLabel", () => {
+  test("only a running planning ticket reads Approve plan", () => {
+    expect((["start", "approve", "approved", "waiting", "none"] as const).map(startLabel)).toEqual([
+      "Start work",
+      "Approve plan",
+      "Start work",
+      "Start work",
+      "Start work",
+    ]);
   });
 });

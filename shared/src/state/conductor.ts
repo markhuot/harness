@@ -160,6 +160,11 @@ export function startState(t: Ticket, deps: DepState[]): StartState {
   return t.busy ? "approve" : "start";
 }
 
+/** The Start button's label (and the ⌘K command's): "Approve plan" while a planning run is going, "Start work" otherwise. */
+export function startLabel(state: StartState): string {
+  return state === "approve" ? "Approve plan" : "Start work";
+}
+
 /** The disabled button and the card's clock while the plan is approved and still being written. */
 export const APPROVED_TITLE = "Plan approved: the work starts when planning finishes";
 

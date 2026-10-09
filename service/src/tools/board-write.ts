@@ -221,6 +221,7 @@ export const startTicket = defineTool<{ key: string }>({
   inputSchema: schema({ key: keyProp }, ["key"]),
   async run({ key }, ctx) {
     const ticket = await ctx.ops.startTicket(ctx, key);
+    if (ticket.status === "planning" && ticket.startAfterPlan) return `Approved ${ticket.key}'s plan; its work starts when its planning run ends (status: planning).`;
     return `Started ${ticket.key} (status: ${ticket.status}).`;
   },
 });

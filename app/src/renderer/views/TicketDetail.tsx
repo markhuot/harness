@@ -9,6 +9,7 @@ import {
   autoStartTitle,
   APPROVED_TITLE,
   autoStartWaitingOn,
+  startLabel,
   startState,
   restartsAt,
   restartTitle,
@@ -629,7 +630,7 @@ function DetailHeader({
         <div className="actions">
           {canStart && (
             <button className="btn btn-primary" onClick={start}>
-              <Icon name="play" /> {startMode === "approve" ? "Approve plan" : "Start work"}
+              <Icon name="play" /> {startLabel(startMode)}
             </button>
           )}
           {startMode === "approved" && (
@@ -743,7 +744,7 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     return c && { label: c.label, run: () => choose(c) };
   };
   useCommands(owner, {
-    "ticket.start": canStart && { label: startMode === "approve" ? "Approve plan" : "Start work", run: start },
+    "ticket.start": canStart && { label: startLabel(startMode), run: start },
     "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
     "ticket.land.merge": landChoice("merge"),
     "ticket.land.pr": landChoice("pr"),

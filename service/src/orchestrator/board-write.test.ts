@@ -451,14 +451,17 @@ describe("update, move, start, cancel, reopen", () => {
     const planned = await h.make("planned");
     const blocked = await h.make("blocked", { status: "blocked" });
     const done = await h.make("done", { status: "done" });
+    const reviewing = await h.make("reviewing", { status: "review" });
     await h.orch.idle();
     for (const t of [planned, blocked, done]) {
       await expect(h.orch.ops.moveTicket(h.ctx("work", me), t.key, "in_progress")).rejects.toThrow("start_ticket");
+    }
+    for (const t of [planned, blocked, reviewing, done]) {
       await expect(h.orch.updateTicket(t.key, { status: "in_progress" })).rejects.toThrow("/start");
       expect(h.get(t).status).toBe(t.status);
     }
     // Nothing started: no work run on any of them.
-    expect([planned, blocked, done].flatMap((t) => h.runKinds(t)).filter((k) => k === "work")).toEqual([]);
+    expect([planned, blocked, reviewing, done].flatMap((t) => h.runKinds(t)).filter((k) => k === "work")).toEqual([]);
     // Start (the agent tool) is how it begins.
     await h.orch.ops.startTicket(h.ctx("work", me), planned.key);
     await h.orch.idle();

@@ -331,6 +331,13 @@ describe("conductor tools → HarnessOps", () => {
     expect(ops.calls).toEqual([]);
   });
 
+  test("start_ticket says when it only approved the plan", async () => {
+    const approved = fakeOps({ startTicket: async () => ({ key: "TEST-2", status: "planning", startAfterPlan: true }) });
+    expect(text(await tool("start_ticket").execute({ key: "TEST-2" }, fakeContext({ ops: approved })))).toContain("Approved TEST-2's plan");
+    const started = fakeOps({ startTicket: async () => ({ key: "TEST-2", status: "in_progress" }) });
+    expect(text(await tool("start_ticket").execute({ key: "TEST-2" }, fakeContext({ ops: started })))).toBe("Started TEST-2 (status: in_progress).");
+  });
+
   test("start/message/review/complete map key and arguments", async () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
