@@ -150,7 +150,7 @@ export const resumeWork = defineTool<{ note?: string }>({
 const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:
-    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, verification, screenshots). Moves the ticket to Review with a note on this round only: one short line (400 characters or less) on what changed since the last submit and why, not a recap of the spec. Activity shows only its first line, so that line MUST stand on its own. Make no further changes after calling it.",
+    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, screenshots). Moves the ticket to Review with a note on this round only: one short line (400 characters or less) on what changed since the last submit and why, not a recap of the spec. Activity shows only its first line, so that line MUST stand on its own. Make no further changes after calling it.",
   inputSchema: schema(
     {
       note: {
@@ -160,7 +160,7 @@ const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip
       },
       spec_is_up_to_date: {
         type: "boolean",
-        description: "Required, and must be true: the spec already describes the finished work (its Status, decisions, verification and screenshots). Bring it up to date with edit_spec or update_spec first.",
+        description: "Required, and must be true: the spec already describes the finished work (its Status, decisions and screenshots). Bring it up to date with edit_spec or update_spec first.",
       },
       skip_agent_review: {
         type: "boolean",

@@ -296,6 +296,19 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).toContain("`harness/nyt-3`");
   });
 
+  test("review runs treat missing tests, screenshots and admitted skips as grounds for request_changes", () => {
+    const text = sys("review", ticket(worktree));
+    expect(text).toMatch(/Run the relevant tests and the typecheck yourself/);
+    expect(text).toMatch(/Request changes, never a nit, when a behaviour change or bug fix has no test, when a user-visible change has no screenshot in Status, or when Status admits verification was skipped/);
+    expect(text).toMatch(/Look at the screenshots in the spec, and take your own/);
+  });
+
+  test("spec guidance asks for screenshots, not passing test results", () => {
+    const text = sys("work");
+    expect(text).toMatch(/screenshots of visible changes; verification only when a check couldn't run or behaved unexpectedly, not passing test results/);
+    expect(text).not.toContain("the latest verification commands and results");
+  });
+
   test("complete with a harness branch merges into the base branch by name, then removes the worktree and the branch", () => {
     const text = sys("complete", ticket(worktree), { branches: { base: "develop", baseSource: "project", ownsWorktree: true } });
     expect(text).toContain("Merge `harness/nyt-3` into the base branch `develop`");
@@ -647,6 +660,33 @@ describe("work-run conduct rules", () => {
     expect(text).toMatch(/conversational or trivial/);
     expect(text).toMatch(/answer it in text and call `submit_for_review` with the answer as the note and `spec_is_up_to_date` true/);
     expect(text).toMatch(/Don't create files unless asked/);
+  });
+
+  test("done means tests, passing checks and screenshots, and a check that can't run blocks instead of submitting", () => {
+    const text = sys("work");
+    expect(text).toMatch(/behaviour change or bug fix gets an automated test that would fail without it/);
+    expect(text).toMatch(/Run the tests and the typecheck, and fix what fails/);
+    expect(text).toMatch(/user-visible change gets screenshots[^\n]*embedded in Status/);
+    expect(text).toMatch(/environmental reason[^\n]*fix it\. If it truly can't run, call `block`/);
+    expect(text).toMatch(/Right before you submit, confirm three things/);
+    // passing results stay out of the spec, and "verification" isn't something Status must hold
+    expect(text).toMatch(/don't write the results into the spec/);
+    expect(text).toContain("(Status, decisions, screenshots)");
+    expect(text).not.toMatch(/Status, decisions, verification/);
+    expect(text).not.toContain("verification commands and results");
+  });
+
+  test("only a worktree run is told to confirm gitignored dependencies", () => {
+    const inWorktree = sys("work", ticket({ ...worktree }));
+    expect(inWorktree).toMatch(/Gitignored dependencies[^\n]*aren't in a new worktree\. Before you build or test, confirm they're present/);
+    expect(sys("work", ticket({ ...worktree }), { branches: { base: "nyt", baseSource: "ticket", ownsWorktree: true } })).toContain("Gitignored dependencies");
+    expect(sys("work")).not.toContain("Gitignored dependencies");
+  });
+
+  test("re-work runs hold the fix to the same standard", () => {
+    const standard = /a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes/;
+    expect(changesRequestedPrompt("fix it", "agent")).toMatch(standard);
+    expect(reopenPrompt(ticket({ ...worktree }), "More", "main")).toMatch(standard);
   });
 
   test("questions go through block, never plain text", () => {
