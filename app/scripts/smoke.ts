@@ -275,7 +275,7 @@ try {
   const cardOpened = await until("card click opens the ticket", () => js<string>("location.hash").then((h) => h.startsWith("#/board/all/ticket/NYTIMES-2") && h));
   check("clicking a board card opens it", !!cardOpened, cardOpened);
   await js(`location.hash = "#/board/all"`);
-  await api("PATCH", "/tickets/NYTIMES-2", { status: "in_progress" });
+  await api("POST", "/tickets/NYTIMES-2/start");
   const inColumn = await until("card re-rendered in column", () =>
     js<boolean>(`[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "In progress")?.textContent.includes("NYTIMES-2")`),
   );

@@ -247,11 +247,28 @@ carries the mode (`app`, `login`, `external`).
 Columns: **planning → in_progress → blocked → review → done**.
 Humans own planning and blocked, agents own in_progress, review is shared.
 
+**Start.** Work begins through Start (`POST /tickets/:key/start`, the `start_ticket` tool, the
+button and the ⌘K command) and nothing else: setting a status of in_progress with `PATCH` or
+`move_ticket` is refused, and a done ticket goes back to work through Re-open. What Start does
+depends on the ticket. A planning ticket with nothing running begins its work run. While a
+planning run is queued or running, Start is **Approve plan**: it sets `tickets.start_after_plan`
+(`Ticket.startAfterPlan`), adds an Activity line and leaves the ticket in planning with the plan
+run undisturbed. When that run ends, `schedule()` begins the work as Start would have, against
+the final plan (the spec baseline is the revision the run ended on), and clears the flag, even
+when the plan ends by asking a question. An open dependency waits as before (`autoStart`). The
+approval is cleared before the scheduler can act when the run is cancelled (`cancelTicket`),
+fails (`afterRun`), or is cut off by a restart (`interruptRun`), and by a human message to the
+ticket, because the message may change the plan; each says why in Activity. There's no withdraw
+button, the same as approving in review; Cancel run stops the run and drops the approval. The
+apps derive the button from `startState` (shared/src/state/conductor.ts, mirrored in
+`Conductor.swift`): Start work, Approve plan, a disabled "Starts after planning" with a clock
+(the board card shows the same clock), or "Starts automatically" while waiting on dependencies.
+
 **Messages.** A human message never moves the ticket (`POST /messages {text}`,
 `Orchestrator.sendMessage`). It goes to the agent and the transcript, never to Activity
 (an older app's `log` field is ignored), and the apps switch to the Transcript once it's sent
-(`tabAfterSend`). The human moves a ticket with buttons instead: Start (planning), Request changes
-(review) and Re-open (done). Older apps had a composer switch that sent `move: true`, which still
+(`tabAfterSend`). The human moves a ticket with buttons instead: Start or Approve plan (planning),
+Request changes (review) and Re-open (done). Older apps had a composer switch that sent `move: true`, which still
 sends a review ticket back to in progress or re-opens a done one before the run starts; today's
 apps never send it. The ticket's own agent gets
 the message where the ticket is, with its work tools, and moves the ticket itself: `unblock` once
@@ -299,7 +316,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 **Driver state and sessions.** A ticket's session keeps one saved driver conversation
 (`sessions.driver_state`). Where the card moves _from_ decides whether the next run resumes it:
 every real column move (`transition`) clears it, except a move into Blocked or out of Blocked. So
-Start, submit for review, requested changes, a drag between columns, Move to done, a completion
+Start, submit for review, requested changes, Move to done, a completion
 landing, Re-open and a move back to planning all make the next run start fresh, which keeps a
 requested-changes round or a chat in Review from re-reading the whole work history. A block keeps
 the conversation that was running, and leaving Blocked resumes it wherever the card goes: the
@@ -344,8 +361,7 @@ Mac's zone when none is named). Errors that name no reset time block without a r
 
 - **Restart.** When `resumeAt` comes, the scheduler (`Orchestrator.resumeDue`, on a timer
   `armResume` points at the earliest `resumeAt`, and once at start-up for restarts that came due
-  while the service was down) moves the ticket to in progress with `run.work_start`, as a human
-  moving it there does, and a `moved` entry "Restarted after the usage limit reset". If the limit
+  while the service was down) moves the ticket to in progress with `run.work_start`, as Start does, and a `moved` entry "Restarted after the usage limit reset". If the limit
   hits again, the ticket blocks again with a new `resumeAt`.
 - **Cancelling.** Any move of the ticket (to planning, in progress, done, or a new block) clears
   `resumeAt`. A ticket waiting on a tool approval, or with a run going, when its time comes keeps
@@ -852,14 +868,14 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `update_branch` | work, conductor, chat | `{ branch?, base_branch? }`: the run's own ticket (`update_ticket` refuses it). `branch` re-points it: a branch checked out in another worktree moves the ticket (`workdir`, session cwd) into that worktree; any other branch is switched to in the ticket's worktree (`git switch`, `-c` at HEAD when new; git's message when it refuses). `base_branch` sets `ticket.baseBranch` (`"inherit"`/`""` → null). Never deletes a branch or worktree. See "Branches" |
 | `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, phase_models?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url?, attachments?: string[] }`. `attachments` sets `promptAttachments` (paths that exist now, relative ones against the run's cwd; see "Prompt attachments"). `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | plan (own ticket only), work, conductor | `{ key, title?, spec?, base_revision?, driver?, model?, phase_models?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
-| `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position). Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
+| `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position) to planning, blocked or done; never to in_progress (`start_ticket` starts work) or review. Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit? }`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor? }` → `{ total, hits: [{ key, title, status, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
-| `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children) |
+| `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |
 | `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
@@ -951,7 +967,7 @@ hits them too:
   new ticket isn't looser, since the scheduler may start it on its own. The rule above already
   guarantees that, so the check is a backstop.) An agent can't put work into a ticket whose
   effective mode is looser than its own: `message_ticket`, `start_ticket`, `reopen_ticket` and
-  `move_ticket` to in_progress or planning are refused ("<KEY> runs in auto, looser than your
+  `move_ticket` to planning is refused ("<KEY> runs in auto, looser than your
   read_only; ask a human"). Nor can it edit one with `update_ticket`, whatever the field: the
   spec is what its next run follows and `depends_on` lets the scheduler start it.
   The one exception is a call that only changes `permission_mode` to a stricter one, which can
@@ -1024,7 +1040,7 @@ client state, not service state.
 | Board | create a ticket (task or conductor, driver, model, permission mode, start or plan, branch picked from the project's branches, base branch) | `create_ticket` (`branch`, `base_branch`; `remote_id`, `remote_url` link it as the Remote ID field does) | the branch list itself (`GET /projects/:id/branches`) has no tool: agents run `git branch` |
 | Board | edit title, spec, dependencies, driver, model, permission mode, base branch, branch (until it has a worktree), remote ID and its link | `update_ticket` (`remote_id`, `remote_url`; a plan run's on its own ticket) | permission modes only tighten on another ticket |
 | Board | move a ticket's work to another branch after it started | `update_branch` (the ticket's own agent; ask it with a message) | the apps don't re-point a running ticket themselves: the agent has to move its commits |
-| Board | move to another column or reorder (iPhone only, from the touch-and-hold menu; the Mac board leaves moves to agents) | `move_ticket` | not into or out of review; done only from planning |
+| Board | move to another column (planning, blocked, done) or reorder (agents only; neither app moves cards by hand) | `move_ticket` | not into or out of review; done only from planning |
 | Board | start, message or answer a question, cancel, re-open | `start_ticket`, `message_ticket`, `cancel_ticket`, `reopen_ticket` | |
 | Board | attach files to a new session (drop, pick, paste; images go to the agent inline) and see them, missing ones flagged, on the Spec tab | `create_ticket` (`attachments`), `get_ticket` (`promptAttachments`) | uploads (`POST /uploads`) have no tool: an agent's files are already on disk |
 | Board | annotate a spec image, a prompt or message attachment, a browser tab's page, or an image in the composer or a New session with numbered arrows and notes, as part of a message | none | annotations are a human's way of pointing at things; agents send images with `update_spec` |
@@ -1979,7 +1995,7 @@ their `ActivityMeta`:
 | `changes_requested` | the agent review, a conductor or a human requests changes | `by`; the agent review adds `round` and `commit`; a reviewer's or conductor's notes are summarized, with all of them in `detail` |
 | `approved` | a human (or a conductor) approves | `by` |
 | `reopened` | a done ticket goes back to work | |
-| `moved` | the ticket changes columns and no other entry records it (a drag, Start, resume_work, Completed); the body says why in one line, or is empty | `from`, `to` |
+| `moved` | the ticket changes columns and no other entry records it (Start, resume_work, Completed); the body says why in one line, or is empty | `from`, `to` |
 | `failed` | a run fails, or a worktree can't be made | `detail` when the error ran past one line |
 | `permission` | a tool approval is asked for or answered, or the classifier denied calls in a run that still submitted | `detail`: the classifier's reason, or the denied calls |
 | `system` | anything else the service records | |
@@ -2016,7 +2032,7 @@ shows, or all of it when it doesn't start with that line (a permission entry's c
 **Every column change is in Activity.** `transition()` records each status change. An entry that
 moved the ticket itself carries `meta.from`/`meta.to` (`moveMeta`: submitted, blocked, unblocked,
 changes_requested, reopened, failed → blocked, a permission entry that blocks); otherwise
-`transition()` adds a `moved` entry by the mover (`human` for a drag or an approval, `agent` for
+`transition()` adds a `moved` entry by the mover (`human` for an approval, `agent` for
 `resume_work`, else `system`). The apps end such an entry's heading with "→ <column>". Board cards
 and the Tickets tab show the newest entry of `NEWS_KINDS` (no moves, questions or permission
 entries).

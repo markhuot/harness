@@ -304,7 +304,7 @@ describe("guard rails", () => {
     h.store.tickets.update(waiting.id, { pendingApproval: approval });
     for (const ctx of [h.ctx("work", me), h.ctx("conductor", h.get(c))]) {
       await expect(h.orch.ops.messageTicket(ctx, waiting.key, "go ahead")).rejects.toThrow("waiting on a human to answer a tool approval (Bash)");
-      await expect(h.orch.ops.moveTicket(ctx, waiting.key, "in_progress")).rejects.toThrow("tool approval");
+      await expect(h.orch.ops.moveTicket(ctx, waiting.key, "planning")).rejects.toThrow("tool approval");
       await expect(h.orch.ops.startTicket(ctx, waiting.key)).rejects.toThrow("tool approval");
       await expect(h.orch.ops.cancelTicket(ctx, waiting.key)).rejects.toThrow("tool approval");
     }
@@ -372,7 +372,7 @@ describe("permission modes across tickets", () => {
     await expect(h.orch.ops.messageTicket(c, blocked.key, "delete X")).rejects.toThrow(`${blocked.key} ${msg}`);
     await expect(h.orch.ops.startTicket(c, planning.key)).rejects.toThrow(msg);
     await expect(h.orch.ops.reopenTicket(c, done.key, "again")).rejects.toThrow(msg);
-    await expect(h.orch.ops.moveTicket(c, planning.key, "in_progress")).rejects.toThrow(msg);
+    await expect(h.orch.ops.moveTicket(c, planning.key, "in_progress")).rejects.toThrow("doesn't start it");
     await expect(h.orch.ops.moveTicket(c, blocked.key, "planning")).rejects.toThrow(msg);
     expect([h.get(planning).status, h.get(blocked).status, h.get(done).status]).toEqual(["planning", "blocked", "done"]);
     // Moves that start nothing, and tickets at least as strict, are still fine.
@@ -445,22 +445,24 @@ describe("update, move, start, cancel, reopen", () => {
     await expect(h.orch.ops.updateTicket(h.ctx("work", me), t.key, { title: " " })).rejects.toThrow("title can't be empty");
   });
 
-  test("move_ticket to in_progress starts a work run exactly like the board's PATCH", async () => {
+  test("move_ticket and PATCH refuse in_progress: Start is the only way to begin work", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
-    const viaAgent = await h.make("same brief");
-    const viaHttp = await h.make("same brief");
-    await h.orch.ops.moveTicket(h.ctx("work", me), viaAgent.key, "in_progress");
-    await h.orch.updateTicket(viaHttp.key, { status: "in_progress" });
+    const planned = await h.make("planned");
+    const blocked = await h.make("blocked", { status: "blocked" });
+    const done = await h.make("done", { status: "done" });
     await h.orch.idle();
-    expect(h.runKinds(viaAgent)).toEqual(h.runKinds(viaHttp));
-    expect(h.runKinds(viaAgent)).toEqual(["plan", "work", "review"]);
-    const workPrompt = (t: Ticket) => {
-      const run = h.store.runs.listBySession(t.sessionId).find((r) => r.kind === "work")!;
-      return h.driver.calls.find((c) => c.runId === run.id)!.prompt.replaceAll(t.key, "KEY");
-    };
-    expect(workPrompt(viaAgent)).toEqual(workPrompt(viaHttp));
-    expect(h.get(viaAgent).status).toBe(h.get(viaHttp).status);
+    for (const t of [planned, blocked, done]) {
+      await expect(h.orch.ops.moveTicket(h.ctx("work", me), t.key, "in_progress")).rejects.toThrow("start_ticket");
+      await expect(h.orch.updateTicket(t.key, { status: "in_progress" })).rejects.toThrow("/start");
+      expect(h.get(t).status).toBe(t.status);
+    }
+    // Nothing started: no work run on any of them.
+    expect([planned, blocked, done].flatMap((t) => h.runKinds(t)).filter((k) => k === "work")).toEqual([]);
+    // Start (the agent tool) is how it begins.
+    await h.orch.ops.startTicket(h.ctx("work", me), planned.key);
+    await h.orch.idle();
+    expect(h.runKinds(planned)).toContain("work");
   });
 
   test("move_ticket reorders by 0-based slot within the column, and needs a change", async () => {
@@ -602,7 +604,7 @@ describe("end to end", () => {
       const r = await run("create_ticket", { title: "Found bug", spec: "The footer overlaps on mobile." });
       created = text(r).match(/Created (\S+)\./)![1]!;
       await run("update_ticket", { key: created, title: "Footer overlaps on mobile", permission_mode: "ask" });
-      await run("move_ticket", { key: created, status: "in_progress" });
+      await run("start_ticket", { key: created });
       await run("move_ticket", { key: ctx.ticket!.key, status: "done" }); // own ticket: refused
       await ctx.ops.submitForReview(ctx, "Filed and started a follow-up.", true);
     };
@@ -612,7 +614,7 @@ describe("end to end", () => {
     expect(results).toEqual([
       `create_ticket: Created ${created}.`,
       `update_ticket: Updated ${created}.`,
-      `move_ticket: Moved ${created} (status: in_progress).`,
+      `start_ticket: Started ${created} (status: in_progress).`,
       `move_ticket: error ${me.key} is your own ticket. move_ticket acts on other tickets; use block or submit_for_review to change your own.`,
     ]);
     const other = h.orch.ticketDetail(created).ticket;

@@ -23,6 +23,7 @@ import {
   restartsAt,
   restartTitle,
   SEGMENT_ORDER,
+  startState,
   waitingOn,
   workingTitle,
   type DepState,
@@ -232,6 +233,20 @@ export const autoStartCases = cases(
     "no dependencies": { tickets: {}, ticket: tk({ key: "S-10", autoStart: true }) },
   },
 );
+
+const planWaiter = (o: Partial<Ticket>) => tk({ key: "P-1", dependsOn: ["S-1"], ...o });
+export const startStateCases = cases(({ tickets, ticket }: AutoStartInput) => startState(ticket, depStates(tickets, ticket)), {
+  "idle planning ticket": { tickets: {}, ticket: tk({ key: "P-2" }) },
+  "a planning run is going": { tickets: {}, ticket: tk({ key: "P-3", busy: true }) },
+  "approved while the planning run goes": { tickets: {}, ticket: tk({ key: "P-4", busy: true, startAfterPlan: true }) },
+  "approved, the run is over and the work is about to start": { tickets: {}, ticket: tk({ key: "P-5", startAfterPlan: true }) },
+  "approved, run over, dependency still open": { tickets: rec(a1), ticket: planWaiter({ startAfterPlan: true }) },
+  "approved and busy, dependency open: the planning run comes first": { tickets: rec(a1), ticket: planWaiter({ startAfterPlan: true, busy: true }) },
+  "waiting on a dependency": { tickets: rec(a1), ticket: planWaiter({ autoStart: true }) },
+  "dependency done": { tickets: rec(a2), ticket: planWaiter({ autoStart: true }) },
+  "in progress": { tickets: {}, ticket: tk({ key: "P-6", status: "in_progress", startAfterPlan: true }) },
+  draft: { tickets: {}, ticket: tk({ key: "P-7", draft: true, busy: true }) },
+});
 
 export const restartsAtCases = cases(restartsAt, {
   "blocked with a restart": tk({ key: "R-1", status: "blocked", resumeAt: 1_791_230_700_000 }),

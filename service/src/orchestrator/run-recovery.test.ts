@@ -169,3 +169,19 @@ test("start() reconciles orphaned runs on a timer until stop()", async () => {
   await Bun.sleep(50);
   expect(h.store.runs.get(later.id)!.status).toBe("running");
 });
+
+test("a plan run cut off by a restart clears the approval, so the work doesn't start", async () => {
+  const h = setup();
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "plan it", start: false });
+  await h.orch.idle();
+  // The previous process approved the plan mid-run, then died.
+  h.store.tickets.update(t.id, { startAfterPlan: true });
+  const orphan = h.store.runs.create({ sessionId: t.sessionId, kind: "plan", driver: "fake", prompt: "p" });
+  h.store.runs.markRunning(orphan.id);
+
+  expect(h.orch.recoverStaleRuns()).toBe(1);
+  await h.orch.idle();
+  expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", startAfterPlan: false });
+  expect(h.store.runs.listBySession(t.sessionId).some((r) => r.kind === "work")).toBe(false);
+  expect(h.orch.activity(t.key).map((e) => e.body)).toContain("Plan approval cleared: planning run interrupted; work not started");
+});

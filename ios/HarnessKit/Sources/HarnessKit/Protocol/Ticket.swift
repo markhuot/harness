@@ -37,6 +37,9 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var dependsOn: [String]
     /// Start automatically once every dependency is done (used by conductors)
     public var autoStart: Bool
+    /// The human approved the plan while its planning run was still going: the work starts when
+    /// that run ends cleanly. Optional so older services and fixtures decode; nil means false.
+    public var startAfterPlan: Bool?
     public var agentReview: ReviewState
     public var humanReview: ReviewState
     /// The remote item this ticket is linked to (a Jira issue, a PR), from a watcher's triage or set
@@ -131,7 +134,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, specRevision: Int? = nil,
         specBaselineRevision: Patch<Int> = .absent, agentNotes: Patch<String> = .absent,
         status: TicketStatus, sessionId: String, driver: String, phaseModels: PhaseModels? = nil, parentId: String? = nil, childCount: Int? = nil,
-        dependsOn: [String] = [], autoStart: Bool = false, agentReview: ReviewState = .pending,
+        dependsOn: [String] = [], autoStart: Bool = false, startAfterPlan: Bool? = nil, agentReview: ReviewState = .pending,
         humanReview: ReviewState = .pending, externalRef: ExternalRef? = nil, workdir: String? = nil,
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
@@ -158,6 +161,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.childCount = childCount
         self.dependsOn = dependsOn
         self.autoStart = autoStart
+        self.startAfterPlan = startAfterPlan
         self.agentReview = agentReview
         self.humanReview = humanReview
         self.externalRef = externalRef

@@ -317,7 +317,7 @@ const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]
 const STEERABLE_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 /** Why a plan run can't leave Claude Code's plan mode itself (ExitPlanMode). */
 export const PLAN_APPROVAL_MESSAGE =
-  "The human approves the plan on the board by pressing Start, which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved in the spec with update_spec, then end your turn.";
+  "The human approves the plan on the board by pressing Start (Approve plan, while the plan run is still going), which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved in the spec with update_spec, then end your turn.";
 /** submit_for_review without spec_is_up_to_date: true */
 export const SPEC_NOT_UP_TO_DATE_MESSAGE =
   "Bring the spec up to date with edit_spec or update_spec first (Status, decisions, verification, screenshots), then submit again with spec_is_up_to_date: true.";
@@ -653,6 +653,10 @@ export class Orchestrator {
     this.bus.emit({ kind: "run.upserted", run: r });
     this.stopSubagents(run.id);
     this.appendStatus(run.sessionId, run.id, `Run interrupted (${run.kind}): ${reason}`);
+    if (run.kind === "plan") {
+      const planned = this.store.sessions.get(run.sessionId)?.ticketId;
+      if (planned) this.dropPlanApproval(planned, "Plan approval cleared: planning run interrupted; work not started");
+    }
     if (run.kind === "complete") this.completionStopped(run.sessionId, "interrupted");
     const session = this.store.sessions.get(run.sessionId);
     if (session?.kind === "triage" && session.triageStatus === "triaging") {
@@ -1558,6 +1562,9 @@ export class Orchestrator {
     const skipHuman = validBoolean("skipHumanReview", body.skipHumanReview);
     if (skipHuman !== undefined && skipHuman !== !!ticket.skipHumanReview) patch.skipHumanReview = skipHuman;
     if (body.status !== undefined && !TICKET_STATUSES.includes(body.status)) throw badRequest(`Invalid status: ${body.status}`);
+    if (body.status === "in_progress" && body.status !== ticket.status) {
+      throw badRequest("Work doesn't start by setting the status: use POST /tickets/:key/start to start it, or POST /tickets/:key/reopen to re-open a done ticket");
+    }
     const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket.externalRef, body.externalRef) : undefined;
     // The spec first: a conflict refuses the whole PATCH before anything else changed.
     if (spec !== undefined) {
@@ -1588,10 +1595,6 @@ export class Orchestrator {
     if (patch.skipHumanReview !== undefined) ticket = this.applySkipHumanReview(ticket);
     if (body.status !== undefined && body.status !== ticket.status) {
       switch (body.status) {
-        case "in_progress":
-          if (ticket.status === "done") await this.reopen(ticket, this.prompts().workStartPrompt(ticket), "Re-opened: moved to in progress", [], as.author);
-          else await this.begin(ticket, this.prompts().workStartPrompt(ticket), {}, undefined, [], as.author);
-          break;
         case "done":
           this.transition(ticket, "done", { blockedReason: null }, "Moved to done", undefined, { by: as.author, line: "" });
           break;
@@ -1691,6 +1694,15 @@ export class Orchestrator {
     this.notDraft(ticket, "started");
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
     if (ticket.status === "done" || ticket.status === "review") throw conflict(`${ticket.key} is in ${ticket.status}; it cannot be started`);
+    // A plan run is still going: the press approves the plan, and the work starts when the run
+    // ends (schedule()). The ticket stays in planning with the plan run undisturbed.
+    if (ticket.status === "planning" && ticket.busy) {
+      if (ticket.startAfterPlan) return ticket; // already approved
+      const approved = this.store.tickets.update(ticket.id, { startAfterPlan: true })!;
+      this.touchTicket(approved.id);
+      this.addActivityLine(approved, "system", by, "Plan approved; work starts when planning finishes");
+      return this.store.tickets.get(ticket.id)!;
+    }
     // A planning ticket with open dependencies is queued, not started: it stays in planning with
     // autoStart on, and the scheduler starts it once they're done (as `start` does on create).
     if (ticket.status === "planning" && !this.depsDone(ticket)) {
@@ -1702,6 +1714,15 @@ export class Orchestrator {
     }
     await this.begin(ticket, this.prompts().workStartPrompt(ticket), {}, undefined, [], by);
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** Withdraw a plan approval (the run was cancelled, failed or is answering a message), saying why. */
+  private dropPlanApproval(ticketId: string, why: string) {
+    const t = this.store.tickets.get(ticketId);
+    if (!t?.startAfterPlan) return;
+    const cleared = this.store.tickets.update(t.id, { startAfterPlan: false })!;
+    this.touchTicket(cleared.id);
+    this.addActivityLine(cleared, "system", "system", why);
   }
 
   /**
@@ -1771,6 +1792,8 @@ export class Orchestrator {
     const sent = { text, attachments };
     switch (ticket.status) {
       case "planning":
+        // The message can change the plan: the approval was for the plan as it stood.
+        this.dropPlanApproval(ticket.id, "Plan approval withdrawn: a message may change the plan");
         await this.steerOrEnqueue(ticket.sessionId, "plan", sent);
         break;
       case "in_progress":
@@ -2197,6 +2220,8 @@ export class Orchestrator {
   async cancelTicket(key: string): Promise<Ticket> {
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "cancelled (nothing runs on a draft)");
+    // Before the run ends: the scheduler runs as soon as it does.
+    this.dropPlanApproval(ticket.id, "Plan approval cleared: run cancelled; work not started");
     await this.cancelSession(ticket.sessionId, true);
     return this.store.tickets.get(ticket.id)!;
   }
@@ -3139,10 +3164,13 @@ ${numberLines(r.body)}`;
         );
       }
       if (status === "review") throw new Error(`Only ${target.key}'s own agent moves it to review (submit_for_review).`);
+      if (status === "in_progress") {
+        throw new Error(`Moving ${target.key} to in_progress doesn't start it: use start_ticket to start work, or resume_work (its own agent) to re-open reviewed work.`);
+      }
       if (status === "done" && target.status !== "planning") {
         throw new Error(`${target.key} is ${target.status}: only a ticket still in planning can be moved straight to done (to close one that isn't needed). Finished work goes through review.`);
       }
-      if (status === "in_progress" || status === "planning") this.notLooserThanCaller(actor, target);
+      if (status === "planning") this.notLooserThanCaller(actor, target);
     } else if (position === undefined) {
       throw new Error(`${target.key} is already ${status}; pass position to reorder it`);
     }
@@ -3922,7 +3950,7 @@ ${numberLines(r.body)}`;
       }
       this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
       const line = fresh.status === "planning" ? "Work started" : note === "Moved to in progress" ? "" : note;
-      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, note, undefined, { by, line });
+      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0, startAfterPlan: false }, note, undefined, { by, line });
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt, undefined, { attachments });
     } finally {
       this.starting.delete(ticket.id);
@@ -3983,7 +4011,9 @@ ${numberLines(r.body)}`;
     // A completion's choice is spent once the ticket is done: a re-opened ticket's next approval
     // starts from the defaults again (clean up when it has a pull request open).
     const spent: TicketPatch = from === "done" && to !== "done" ? { completionAction: null, completionInstructions: null } : {};
-    const t = this.store.tickets.update(ticket.id, { ...spent, ...patch, ...resume, status: to })!;
+    // An approval to start after planning means nothing outside planning.
+    const approval: TicketPatch = to !== "planning" && ticket.startAfterPlan ? { startAfterPlan: false } : {};
+    const t = this.store.tickets.update(ticket.id, { ...spent, ...approval, ...patch, ...resume, status: to })!;
     if (patch.resumeAt !== undefined || "resumeAt" in resume) this.armResume();
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
@@ -4187,11 +4217,12 @@ ${numberLines(r.body)}`;
   async schedule() {
     if (this.stopping) return;
     for (const t of this.store.tickets.list({ drafts: false })) {
-      if (!t.autoStart || t.status !== "planning" || t.busy || this.starting.has(t.id)) continue;
+      if (!(t.autoStart || t.startAfterPlan) || t.status !== "planning" || t.busy || this.starting.has(t.id)) continue;
       if (!this.depsDone(t)) continue;
       const fresh = this.store.tickets.get(t.id); // an earlier await may have started it already
       if (!fresh || fresh.draft || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
-      await this.begin(fresh, this.prompts().workStartPrompt(fresh));
+      // An approved plan is a human's Start, whatever the dependency wait or the plan's last message.
+      await this.begin(fresh, this.prompts().workStartPrompt(fresh), {}, undefined, [], fresh.startAfterPlan ? "human" : "system");
     }
   }
 
@@ -4630,6 +4661,9 @@ ${numberLines(r.body)}`;
     }
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (!ticket) return;
+    if (run.kind === "plan" && run.status !== "succeeded") {
+      this.dropPlanApproval(ticket.id, run.status === "failed" ? "Planning run failed; work not started" : "Plan approval cleared: run cancelled; work not started");
+    }
     if (run.status === "cancelled") {
       if (run.kind === "complete") this.completionStopped(run.sessionId, "cancelled");
       return;

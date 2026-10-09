@@ -19,6 +19,7 @@ interface TicketRow {
   driver: string;
   parent_id: string | null;
   auto_start: number;
+  start_after_plan?: number;
   agent_review: string;
   human_review: string;
   external_ref: string | null;
@@ -131,6 +132,7 @@ export type TicketPatch = Partial<{
   title: string;
   status: TicketStatus;
   autoStart: boolean;
+  startAfterPlan: boolean;
   agentReview: ReviewState;
   humanReview: ReviewState;
   workdir: string | null;
@@ -164,6 +166,7 @@ const COLUMNS: Record<string, string> = {
   title: "title",
   status: "status",
   autoStart: "auto_start",
+  startAfterPlan: "start_after_plan",
   agentReview: "agent_review",
   humanReview: "human_review",
   workdir: "workdir",
@@ -268,6 +271,7 @@ export class TicketRepo {
       parentId: r.parent_id,
       dependsOn: deps.get(r.id) ?? [],
       autoStart: bool(r.auto_start),
+      startAfterPlan: bool(r.start_after_plan),
       agentReview: r.agent_review as ReviewState,
       humanReview: r.human_review as ReviewState,
       externalRef: fromJson<ExternalRef | null>(r.external_ref, null),

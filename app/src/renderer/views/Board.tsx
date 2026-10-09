@@ -3,6 +3,7 @@ import { isConductor, keyLabel, TICKET_STATUSES, type Ticket } from "@harness/sh
 import { useAction, useStore } from "../state/store";
 import {
   autoStartTitle,
+  APPROVED_TITLE,
   autoStartWaitingOn,
   boardColumns,
   canLoadMoreSearch,
@@ -23,6 +24,7 @@ import {
   plainText,
   progressOf,
   restartsAt,
+  startState,
   restartTitle,
   scopeGroup,
   searchColumns,
@@ -378,6 +380,7 @@ const TicketCard = memo(function TicketCard({
   const working = isWorking(state.tickets, t);
   const messageDrafted = hasMessageDraft(t.messageDraft);
   const waitingToStart = autoStartWaitingOn(t, deps);
+  const planApproved = startState(t, deps) === "approved";
   const restart = restartsAt(t);
   const restartLabel = restart === null ? "" : restartTitle(new Date(restart).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
 
@@ -422,6 +425,11 @@ const TicketCard = memo(function TicketCard({
           {working && <span className="spinner" title={workingTitle(t)} />}
           {!working && waitingToStart.length > 0 && (
             <span className="card-autostart" data-testid="card-autostart" title={autoStartTitle(waitingToStart)} aria-label={autoStartTitle(waitingToStart)}>
+              <Icon name="clock" size={12} />
+            </span>
+          )}
+          {planApproved && (
+            <span className="card-autostart" data-testid="card-plan-approved" title={APPROVED_TITLE} aria-label={APPROVED_TITLE}>
               <Icon name="clock" size={12} />
             </span>
           )}

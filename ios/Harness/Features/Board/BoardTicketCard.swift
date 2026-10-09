@@ -91,6 +91,10 @@ struct BoardTicketCard: View {
                 } else if !waiting.isEmpty || Conductor.restartsAt(t) != nil {
                     Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
                 }
+                if Conductor.startState(t, state.dependencyStates(t)) == .approved {
+                    Icon("clock", size: 13, weight: .semibold).foregroundStyle(c.accent)
+                        .accessibilityLabel(Conductor.approvedTitle)
+                }
                 if MessageDrafts.has(t.messageDraft.optional) {
                     Icon("edit", size: 13, weight: .semibold)
                         .foregroundStyle(c.text2)

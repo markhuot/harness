@@ -202,7 +202,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var baseRevision: Int?
     /// A few words on what the edit changed, kept with the revision (default "Edited by hand")
     public var specNote: String?
-    /// manual moves from the board
+    /// Move to planning, blocked, review or done. in_progress is refused (400): Start and Re-open do that.
     public var status: TicketStatus?
     /// Legacy shorthand: sets Planning, Work and Review to this driver (with `model`, else its default)
     public var driver: String?

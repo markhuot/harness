@@ -187,6 +187,12 @@ export interface Ticket {
   dependsOn: string[];
   /** Start automatically once every dependency is done (used by conductors) */
   autoStart: boolean;
+  /**
+   * The human approved the plan while its planning run was still going: the work starts when that
+   * run ends cleanly. Cleared when the run is cancelled, fails or is interrupted, and by a message.
+   * Optional so older services and fixtures type-check; absent means false.
+   */
+  startAfterPlan?: boolean;
   agentReview: ReviewState;
   humanReview: ReviewState;
   /**
@@ -1508,7 +1514,8 @@ export interface UpdateTicketBody {
   baseRevision?: number;
   /** A few words on what the edit changed, kept with the revision (default "Edited by hand") */
   specNote?: string;
-  status?: TicketStatus; // manual moves from the board
+  /** Move to planning, blocked, review or done. in_progress is refused (400): Start and Re-open do that. */
+  status?: TicketStatus;
   /** Legacy shorthand: sets Planning, Work and Review to this driver (with `model`, else its default) */
   driver?: string;
   /** Legacy shorthand: the model for Planning, Work and Review (on `driver`, else the current Work driver) */

@@ -141,6 +141,11 @@ struct ConductorTests {
         #expect(AutoStartOutput(waitingOn: keys, title: keys.isEmpty ? nil : Conductor.autoStartTitle(keys)) == c.output)
     }
 
+    @Test(arguments: Fixture.cases("stateConductor", "startStateCases", input: DepStatesInput.self, output: Conductor.StartState.self))
+    func startState(_ c: Fixture.Case<DepStatesInput, Conductor.StartState>) {
+        #expect(Conductor.startState(c.input.ticket, Conductor.depStates(c.input.tickets, c.input.ticket)) == c.output)
+    }
+
     @Test(arguments: Fixture.cases("stateConductor", "autoStartTitleCases", input: [String].self, output: String.self))
     func autoStartTitle(_ c: Fixture.Case<[String], String>) {
         #expect(Conductor.autoStartTitle(c.input) == c.output)

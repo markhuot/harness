@@ -126,7 +126,7 @@ you answer.
   keep current. It reads like a requirements doc: what the change is, why, and which parts are
   implemented (with their commits). Requests you add later in review or a re-open become Goal
   requirements. The turn-by-turn story stays in Activity and the transcript. Every edit, yours or an agent's, is a revision, and pressing Start marks the one
-  you approved, so the reviewer can see what changed since. **Activity** is the ticket's
+  you approved (while the plan is still being written the button reads **Approve plan**: the work starts on its own when the plan run ends, and sending a message or cancelling the run withdraws the approval), so the reviewer can see what changed since. **Activity** is the ticket's
   at-a-glance progress, one line per entry: agent notes (at least every 10 minutes on long work),
   each spec revision with its note, submits, questions, review decisions, approvals, and every column change. Messages you send go
   to the agent and the transcript, and the ticket switches to its Transcript once you send one.

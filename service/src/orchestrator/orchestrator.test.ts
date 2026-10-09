@@ -140,8 +140,8 @@ describe("ticket lifecycle", () => {
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
-    // The human drags the card back to in progress: the restart carries on.
-    await h.orch.updateTicket(t.key, { status: "in_progress" });
+    // The human starts the blocked ticket again: the restart carries on.
+    await h.orch.startTicket(t.key);
     await h.orch.idle();
     expect(h.driver.calls.filter((c) => c.kind === "work").map((c) => c.state)).toEqual([null, { turns: 1 }]);
 
@@ -160,7 +160,7 @@ describe("ticket lifecycle", () => {
     await h.orch.idle();
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
-    await h.orch.updateTicket(t.key, { status: "in_progress" });
+    await h.orch.startTicket(t.key);
     await h.orch.idle();
     const works = h.driver.calls.filter((c) => c.kind === "work");
     expect(works).toHaveLength(2);
@@ -579,18 +579,18 @@ describe("ticket lifecycle", () => {
     expect(h.orch.activity(t.key).map((s) => `${s.kind}:${s.author}:${s.body}`)).toContain("reopened:human:the button is the wrong color");
   });
 
-  test("dragging a done ticket to in progress re-opens it with the plan", async () => {
+  test("re-opening a done ticket works on the plan again", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "the plan" });
     await h.orch.idle();
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
-    const cur = await h.orch.updateTicket(t.key, { status: "in_progress" });
+    const cur = await h.orch.reopenTicket(t.key, { notes: "go again" });
     expect(cur.status).toBe("in_progress");
     expect(cur.humanReview).toBe("pending");
     await h.orch.idle();
     expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt).toContain("the plan");
-    expect(statuses(h, t.sessionId)).toContain("Re-opened: moved to in progress");
+    expect(statuses(h, t.sessionId)).toContain("Re-opened by human");
   });
 
   test("only moving to done suspends the ticket's browser tabs", async () => {
@@ -1388,6 +1388,136 @@ describe("scheduling", () => {
     await h.orch.updateTicket(blocked.key, { dependsOn: [open.key] });
     await h.orch.startTicket(blocked.key);
     expect(h.orch.ticketDetail(blocked.key).ticket.status).toBe("in_progress");
+  });
+});
+
+describe("approving the plan while planning runs", () => {
+  /** A ticket whose plan run is held open: the human can approve now. */
+  async function planning(h: ReturnType<typeof setup>, spec = "plan it /hold", extra: { dependsOn?: string[] } = {}) {
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec, start: false, ...extra });
+    while (h.driver.holding === 0) await Bun.sleep(1);
+    return t;
+  }
+  /** Release the held runs (the work run's prompt holds too, it carries the brief) until nothing runs. */
+  const drain = async (h: ReturnType<typeof setup>) => {
+    while (!h.orch.isIdle()) {
+      h.driver.release();
+      await Bun.sleep(2);
+    }
+    await h.orch.idle();
+  };
+  const cur = (h: ReturnType<typeof setup>, t: Ticket) => h.orch.ticketDetail(t.key).ticket;
+  const lines = (h: ReturnType<typeof setup>, t: Ticket) => h.orch.activity(t.key).map((e) => e.body);
+
+  test("Start during a plan run approves the plan; the work starts when the run ends, on the final plan", async () => {
+    const h = setup();
+    const t = await planning(h);
+    const approved = await h.orch.startTicket(t.key);
+    expect(approved).toMatchObject({ status: "planning", startAfterPlan: true, busy: true });
+    expect(runKinds(h, t)).toEqual(["plan:running"]); // the plan run is undisturbed, no work run queued
+    expect(lines(h, t)).toContain("Plan approved; work starts when planning finishes");
+
+    await drain(h);
+    expect(runKinds(h, t).slice(0, 2)).toEqual(["plan:succeeded", "work:succeeded"]);
+    const after = cur(h, t);
+    expect(after.startAfterPlan).toBe(false);
+    expect(after.status).toBe("review");
+    // The baseline is the revision the plan run ended on, not the one the human pressed Start at.
+    expect(after.specRevision).toBeGreaterThan(1);
+    expect(after.specBaselineRevision).toBe(after.specRevision);
+  });
+
+  test("a second press changes nothing", async () => {
+    const h = setup();
+    const t = await planning(h);
+    await h.orch.startTicket(t.key);
+    const before = lines(h, t).length;
+    expect((await h.orch.startTicket(t.key)).startAfterPlan).toBe(true);
+    expect(lines(h, t).length).toBe(before);
+    await drain(h);
+  });
+
+  test("an agent's start_ticket approves it too, credited to the agent", async () => {
+    const h = setup();
+    const t = await planning(h);
+    await h.orch.startTicket(t.key, "agent");
+    expect(h.orch.activity(t.key).find((e) => e.body.startsWith("Plan approved"))).toMatchObject({ author: "agent" });
+    await drain(h);
+    expect(cur(h, t).status).toBe("review");
+  });
+
+  test("a plan that ends by asking a question still starts the work", async () => {
+    const h = setup();
+    const t = await planning(h, "plan it /hold /ask");
+    await h.orch.startTicket(t.key);
+    await drain(h);
+    expect(runKinds(h, t).slice(0, 2)).toEqual(["plan:succeeded", "work:succeeded"]);
+  });
+
+  test("cancelling the plan run clears the approval and starts nothing", async () => {
+    const h = setup();
+    const t = await planning(h);
+    await h.orch.startTicket(t.key);
+    await h.orch.cancelTicket(t.key);
+    await h.orch.idle();
+    expect(cur(h, t)).toMatchObject({ status: "planning", startAfterPlan: false, busy: false });
+    expect(runKinds(h, t)).toEqual(["plan:cancelled"]);
+    expect(lines(h, t)).toContain("Plan approval cleared: run cancelled; work not started");
+  });
+
+  test("a failed plan run clears the approval and says why", async () => {
+    const h = setup();
+    const t = await planning(h, "plan it /hold /fail boom");
+    await h.orch.startTicket(t.key);
+    await drain(h);
+    expect(cur(h, t)).toMatchObject({ status: "planning", startAfterPlan: false });
+    expect(runKinds(h, t)).toEqual(["plan:failed"]);
+    expect(lines(h, t)).toContain("Planning run failed; work not started");
+  });
+
+  test("a message to an approved ticket withdraws the approval; the next Start while it answers approves again", async () => {
+    const h = setup();
+    const t = await planning(h);
+    await h.orch.startTicket(t.key);
+    await h.orch.sendMessage(t.key, "also handle logout");
+    expect(cur(h, t).startAfterPlan).toBe(false);
+    expect(lines(h, t).some((l) => l.startsWith("Plan approval withdrawn"))).toBe(true);
+    await drain(h);
+    expect(runKinds(h, t).filter((r) => r.startsWith("work"))).toEqual([]);
+    expect(cur(h, t).status).toBe("planning");
+  });
+
+  test("with open dependencies the work starts once the plan run has ended and they are done", async () => {
+    const h = setup();
+    const dep = await h.orch.createTicket({ projectId: h.project.id, spec: "dep", start: false });
+    await h.orch.idle();
+    const t = await planning(h, "plan it /hold", { dependsOn: [dep.key] });
+    await h.orch.startTicket(t.key);
+    await drain(h);
+    // The plan run ended, the dependency is still open: it waits (and the UI shows the dependency wait).
+    expect(cur(h, t)).toMatchObject({ status: "planning", startAfterPlan: true, busy: false });
+    expect(runKinds(h, t)).toEqual(["plan:succeeded"]);
+    await h.orch.updateTicket(dep.key, { status: "done" });
+    await drain(h);
+    expect(runKinds(h, t).slice(0, 2)).toEqual(["plan:succeeded", "work:succeeded"]);
+    expect(cur(h, t).startAfterPlan).toBe(false);
+  });
+
+  test("moving the ticket out of planning drops the approval", async () => {
+    const h = setup();
+    const t = await planning(h);
+    await h.orch.startTicket(t.key);
+    await h.orch.updateTicket(t.key, { status: "blocked" });
+    expect(cur(h, t)).toMatchObject({ status: "blocked", startAfterPlan: false });
+    await drain(h);
+  });
+
+  test("with nothing running, Start begins the work as before", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "plan it", start: false });
+    await h.orch.idle();
+    const started = await h.orch.startTicket(t.key);
+    expect(started).toMatchObject({ status: "in_progress", startAfterPlan: false });
   });
 });
 

@@ -200,3 +200,20 @@ describe("migration 30: one attachment registry", () => {
     expect(db.query("SELECT COUNT(*) AS n FROM attachments").get()).toEqual({ n: 4 });
   });
 });
+
+describe("migration 39: start after plan", () => {
+  test("existing tickets are not approved, and the flag round-trips", () => {
+    const db = dbAt(38);
+    const t0 = 1_700_000_000_000;
+    db.exec(`
+      INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'WEB', 'Web', '/tmp/web', ${t0}, ${t0});
+      INSERT INTO sessions (id, key, kind, ticket_id, driver, cwd, created_at, updated_at) VALUES ('s1', 'WEB-1', 'ticket', 't1', 'fake', '/tmp/web', ${t0}, ${t0});
+      INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, created_at, updated_at)
+        VALUES ('t1', 'WEB-1', 'p1', 'task', 'Toggle', 'x', 'planning', 's1', 'fake', ${t0}, ${t0});`);
+    migrate(db, { attachmentsDir: "/tmp/a", uploadsDir: "/tmp/u" });
+    expect(db.query("SELECT start_after_plan FROM tickets WHERE id = 't1'").get()).toEqual({ start_after_plan: 0 });
+    const store = new Store(db);
+    expect(store.tickets.get("t1")!.startAfterPlan).toBe(false);
+    expect(store.tickets.update("t1", { startAfterPlan: true })!.startAfterPlan).toBe(true);
+  });
+});

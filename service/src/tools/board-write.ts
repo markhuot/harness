@@ -199,7 +199,7 @@ export const updateTicket = defineTool<{
 export const moveTicket = defineTool<{ key: string; status: TicketStatus; position?: number }>({
   name: "move_ticket",
   description:
-    "Move another ticket to a column, or reorder it within one, exactly like dragging its card. Moving to in_progress starts its work (re-opens it when done); moving to planning or blocked pauses it for a human. You can't move a ticket into or out of review, move one whose permission mode is looser than yours to in_progress or planning (its own agent submits it, reviewers decide), move one to done unless it's still in planning (closing a ticket that isn't needed), or move one waiting on a tool approval. position is the 0-based slot in the target column (0 = top); omit it to keep the card's place.",
+    "Move another ticket to a column, or reorder it within one. Moving to planning or blocked pauses it for a human. It never starts work: start_ticket does, and resume_work re-opens reviewed work. You can't move a ticket into or out of review or to in_progress, move one whose permission mode is looser than yours to planning (its own agent submits it, reviewers decide), move one to done unless it's still in planning (closing a ticket that isn't needed), or move one waiting on a tool approval. position is the 0-based slot in the target column (0 = top); omit it to keep the card's place.",
   inputSchema: schema(
     {
       key: keyProp,
@@ -217,7 +217,7 @@ export const moveTicket = defineTool<{ key: string; status: TicketStatus; positi
 export const startTicket = defineTool<{ key: string }>({
   name: "start_ticket",
   description:
-    "Start work on a ticket in planning or blocked (for example one created with auto_start false, or to start one before its dependencies finish), as if a person pressed Start.",
+    "Start work on a ticket in planning or blocked (for example one created with auto_start false, or to start one before its dependencies finish), as if a person pressed Start. While the ticket's planning run is still going, this approves the plan instead: the ticket stays in planning and its work starts when the planning run ends.",
   inputSchema: schema({ key: keyProp }, ["key"]),
   async run({ key }, ctx) {
     const ticket = await ctx.ops.startTicket(ctx, key);

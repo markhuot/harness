@@ -114,7 +114,7 @@ describe("notifications end to end", () => {
     s.setPresence({ deviceId: "ios-1", platform: "ios", visible: true, tickets: [b.key] });
     await until(() => h.notifications["opts"].presence.isOnScreen(b.key));
     const before = Date.now();
-    await client.updateTicket(b.key, { status: "in_progress" });
+    await client.startTicket(b.key);
     await h.orchestrator.idle();
     await h.notifications.idle();
     // The run did write agent activity (so the silence is the presence's doing).

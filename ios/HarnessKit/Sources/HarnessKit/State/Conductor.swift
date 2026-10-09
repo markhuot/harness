@@ -220,9 +220,27 @@ public enum Conductor {
     /// done. Empty when it isn't waiting. Only loaded, unfinished dependencies count: an unknown key
     /// is usually an older done ticket, and the service treats a deleted one as done.
     public static func autoStartWaitingOn(_ t: Ticket, _ deps: [DepState]) -> [String] {
-        guard t.draft != true, t.autoStart, t.status == .planning else { return [] }
+        guard t.draft != true, t.autoStart || t.startAfterPlan == true, t.status == .planning else { return [] }
+        // An approved plan waits for the planning run first: that wait has its own state (`startState`).
+        if t.startAfterPlan == true && t.busy { return [] }
         return deps.filter { $0.state == .pending }.map(\.key)
     }
+
+    /// What the Start button (and the board card's clock) means for a ticket, as in the TypeScript
+    /// `startState`: `start` (nothing runs), `approve` (a planning run is going: Approve plan),
+    /// `approved` (plan approved, run still going), `waiting` (starts on its own once its open
+    /// dependencies are done) or `none` (not a planning ticket, or a draft).
+    public enum StartState: String, Codable, Equatable, Sendable { case start, approve, approved, waiting, none }
+
+    public static func startState(_ t: Ticket, _ deps: [DepState]) -> StartState {
+        if t.draft == true || t.status != .planning { return .none }
+        if !autoStartWaitingOn(t, deps).isEmpty { return .waiting }
+        if t.startAfterPlan == true { return .approved } // (idle with open dependencies is .waiting, above)
+        return t.busy ? .approve : .start
+    }
+
+    /// The disabled button and the card's clock while the plan is approved and still being written.
+    public static let approvedTitle = "Plan approved: the work starts when planning finishes"
 
     /// The waiting card's clock and the disabled Start button: "Starts on its own once A and B are done".
     public static func autoStartTitle(_ keys: [String]) -> String {

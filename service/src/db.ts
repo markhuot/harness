@@ -713,6 +713,11 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN phase_models TEXT;
   ALTER TABLE sessions ADD COLUMN driver_state_driver TEXT;
   `,
+  // 39: tickets.start_after_plan: the human approved the plan while its planning run was still
+  //     going; the work starts when that run ends (DESIGN.md "Ticket lifecycle").
+  `
+  ALTER TABLE tickets ADD COLUMN start_after_plan INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

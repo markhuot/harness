@@ -134,11 +134,20 @@ struct TicketDetailHero: View {
         let managed = managedReason != nil
         // Started while its dependencies were open: the service starts it once they're done, so
         // Start is off (it would skip the wait and run it now).
-        let waiting = Conductor.autoStartWaitingOn(ticket, store.state.dependencyStates(ticket))
-        if ticket.status == .planning && waiting.isEmpty {
-            HButton("Start work", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: .success) {
+        let deps = store.state.dependencyStates(ticket)
+        let waiting = Conductor.autoStartWaitingOn(ticket, deps)
+        // Start work when nothing runs; Approve plan while a planning run does (the work starts
+        // when it ends).
+        let startMode = Conductor.startState(ticket, deps)
+        if startMode == .start || startMode == .approve {
+            HButton(startMode == .approve ? "Approve plan" : "Start work", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: .success) {
                 perform { try await $0.startTicket($1) }
             }
+        }
+        if startMode == .approved {
+            HButton("Starts after planning", icon: "clock", variant: .primary, small: true, fullWidth: false,
+                    accessibilityLabel: Conductor.approvedTitle) {}
+                .disabled(true)
         }
         if !waiting.isEmpty {
             HButton("Starts automatically", icon: "clock", variant: .primary, small: true, fullWidth: false,

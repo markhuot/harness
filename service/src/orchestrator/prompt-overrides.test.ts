@@ -198,6 +198,7 @@ describe("overrides reach runs", () => {
       },
     });
     const t = await h.orch.createTicket({ projectId: project.id, spec: "Ship it", start: false });
+    await h.orch.idle(); // the plan run first: Start during it only approves the plan
     await h.orch.startTicket(t.key);
     await h.orch.idle();
     const work = h.driver.calls.find((c) => c.kind === "work")!;
@@ -205,7 +206,7 @@ describe("overrides reach runs", () => {
     expect(work.runContext).not.toContain("Do the work the ticket describes");
     expect(work.systemPrompt).not.toContain("## This run");
     expect(work.systemPrompt).toContain("## Ticket lifecycle"); // untouched sections stay built-in
-    expect(work.prompt).toMatch(/^Start PROJ-1 ".*" now\.\n\n## Plan \(revision \d+\)\nShip it$/);
+    expect(work.prompt).toMatch(/^Start PROJ-1 ".*" now\.\n\n## Plan \(revision \d+\)\n1\. Do Ship it$/);
 
     const catalog = h.orch.promptCatalog();
     expect(catalog.map((e) => e.id)).toEqual([...PROMPT_IDS]);

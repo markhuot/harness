@@ -355,8 +355,8 @@ export interface HarnessOps {
   /** Edit a card: PATCH /tickets/:key without status/position. Can't loosen its permission mode. */
   updateTicket(ctx: ToolContext, key: string, patch: UpdateTicketInput): Promise<Ticket>;
   /**
-   * Drag a card: change column and/or position, with the same effects as the board. Refuses
-   * moves into or out of review, to done from anything but planning, and tickets waiting on a
+   * Change a card's column and/or position. Never starts work (startTicket does). Refuses
+   * moves into or out of review, to in_progress, to done from anything but planning, and tickets waiting on a
    * tool approval.
    */
   moveTicket(ctx: ToolContext, key: string, status: TicketStatus, position?: number): Promise<Ticket>;

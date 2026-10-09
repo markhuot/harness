@@ -182,30 +182,24 @@ describe("NotificationService", () => {
       expect(pushedKeys(h)).not.toContain(t.key);
     });
 
-    test("a human submitting a draft, pressing Start, or dragging to in progress gets no push", async () => {
+    test("a human submitting a draft, or pressing Start gets no push", async () => {
       const h = setup();
       const draft = await h.orch.createTicket({ projectId: h.project.id, spec: "Draft", draft: true });
       await h.orch.submitTicket(draft.key, { start: true });
       const planned = await h.ticket("Planned");
       await h.orch.startTicket(planned.key);
-      const dragged = await h.ticket("Dragged");
-      await h.orch.updateTicket(dragged.key, { status: "in_progress" });
       await settle(h);
-      expect(pushedKeys(h)).not.toContainAnyValues([draft.key, planned.key, dragged.key]);
+      expect(pushedKeys(h)).not.toContainAnyValues([draft.key, planned.key]);
     });
 
-    test("an agent starting or moving another ticket still notifies, as the agent", async () => {
+    test("an agent starting another ticket still notifies, as the agent", async () => {
       const h = setup();
       const ctx = await agentCtx(h);
       const started = await h.ticket("Started by an agent");
-      const moved = await h.ticket("Moved by an agent");
       await h.orch.ops.startTicket(ctx, started.key);
-      await h.orch.ops.moveTicket(ctx, moved.key, "in_progress");
       await settle(h);
-      for (const t of [started, moved]) {
-        expect(h.store.activity.listBySession(t.sessionId).find((e) => e.kind === "moved")).toMatchObject({ author: "agent" });
-      }
-      expect(pushedKeys(h)).toContainValues([started.key, moved.key]);
+      expect(h.store.activity.listBySession(started.sessionId).find((e) => e.kind === "moved")).toMatchObject({ author: "agent" });
+      expect(pushedKeys(h)).toContain(started.key);
     });
 
     test("an agent creating a ticket that starts right away notifies", async () => {

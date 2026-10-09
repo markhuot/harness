@@ -136,9 +136,32 @@ export const waitingOn = (deps: DepState[]) => deps.filter((d) => !d.done).map((
  * usually an older done ticket, and the service treats a deleted one as done, so neither holds it.
  */
 export function autoStartWaitingOn(t: Ticket, deps: DepState[]): string[] {
-  if (t.draft || !t.autoStart || t.status !== "planning") return [];
+  if (t.draft || !(t.autoStart || t.startAfterPlan) || t.status !== "planning") return [];
+  // An approved plan waits for the planning run first: that wait has its own state (`startState`).
+  if (t.startAfterPlan && t.busy) return [];
   return deps.filter((d) => d.state === "pending").map((d) => d.key);
 }
+
+/**
+ * What the Start button (and its palette command and the board card's clock) means for a ticket:
+ *  - "start": a planning ticket with nothing running; Start begins the work,
+ *  - "approve": a planning run is queued or running; Approve plan records the approval and the
+ *    work starts when the run ends,
+ *  - "approved": the plan is approved (the planning run is still going, or the work is about to start); nothing left to press,
+ *  - "waiting": it starts on its own once its open dependencies are done; nothing left to press,
+ *  - "none": not a planning ticket (or a draft).
+ */
+export type StartState = "start" | "approve" | "approved" | "waiting" | "none";
+
+export function startState(t: Ticket, deps: DepState[]): StartState {
+  if (t.draft || t.status !== "planning") return "none";
+  if (autoStartWaitingOn(t, deps).length) return "waiting";
+  if (t.startAfterPlan) return "approved"; // (idle with open dependencies is "waiting", above)
+  return t.busy ? "approve" : "start";
+}
+
+/** The disabled button and the card's clock while the plan is approved and still being written. */
+export const APPROVED_TITLE = "Plan approved: the work starts when planning finishes";
 
 /** The waiting card's clock and the disabled Start button: "Starts on its own once A and B are done". */
 export function autoStartTitle(keys: string[]): string {

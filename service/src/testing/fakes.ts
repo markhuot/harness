@@ -294,6 +294,11 @@ export class FakeDriver implements Driver {
           if (req.signal.aborted) return;
           yield* this.steered(req);
         }
+        const planFail = /\/fail (.+)/.exec(p);
+        if (planFail) {
+          yield { type: "error", message: planFail[1]! };
+          return;
+        }
         // "/set-ticket {json}" stands in for an agent reading settings off the brief: it calls the
         // run's own update_ticket tool on this ticket, so the tool has to be offered to plan runs.
         const settings = p.match(/^\/set-ticket (\{.*\})$/m)?.[1];
@@ -304,6 +309,7 @@ export class FakeDriver implements Driver {
         yield { type: "text_delta", text: "Here's " };
         yield { type: "text", text: `Here's a plan for: ${p.split("\n")[0]}` };
         await ops.updateSpec(ctx, { spec: `1. Do ${p.split("\n")[0]}`, note: "Plan drafted", baseRevision: ctx.ticket?.specRevision ?? 1 });
+        if (p.includes("/ask")) yield { type: "text", text: "Should I use Postgres or MySQL? 🤔**" };
         yield { type: "state", state: { turns } };
         return;
       }

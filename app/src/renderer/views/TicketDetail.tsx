@@ -7,7 +7,9 @@ import {
   annotateAttachment,
   attachmentInputs,
   autoStartTitle,
+  APPROVED_TITLE,
   autoStartWaitingOn,
+  startState,
   restartsAt,
   restartTitle,
   CHANGES_LABEL,
@@ -523,7 +525,7 @@ function DetailHeader({
   const { state } = useStore();
   const openTicket = useOpenTicket();
   const popout = usePopout();
-  const { k, label, parent, project, land, conductor, managedReason, start, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals } = useTicketActions(
+  const { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals } = useTicketActions(
     owner,
     ticket,
     onClose,
@@ -627,7 +629,12 @@ function DetailHeader({
         <div className="actions">
           {canStart && (
             <button className="btn btn-primary" onClick={start}>
-              <Icon name="play" /> Start work
+              <Icon name="play" /> {startMode === "approve" ? "Approve plan" : "Start work"}
+            </button>
+          )}
+          {startMode === "approved" && (
+            <button className="btn btn-primary" data-testid="plan-approved" disabled title={APPROVED_TITLE}>
+              <Icon name="clock" /> Starts after planning
             </button>
           )}
           {waitingToStart.length > 0 && (
@@ -703,7 +710,9 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
   // Started while its dependencies were open: it starts on its own once they're done, so there's
   // nothing to start (Start would skip the wait and run it now).
   const waitingToStart = autoStartWaitingOn(ticket, dependencyStates(state, ticket));
-  const canStart = ticket.status === "planning" && !waitingToStart.length;
+  // Start work when nothing runs, Approve plan while a planning run does (the work starts when it ends).
+  const startMode = startState(ticket, dependencyStates(state, ticket));
+  const canStart = startMode === "start" || startMode === "approve";
   // How the approved work lands: the Approve split button (state/approveMenu.ts). Approving lands
   // it once both reviews pass; there's no separate Complete step.
   // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
@@ -734,7 +743,7 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     return c && { label: c.label, run: () => choose(c) };
   };
   useCommands(owner, {
-    "ticket.start": canStart && start,
+    "ticket.start": canStart && { label: startMode === "approve" ? "Approve plan" : "Start work", run: start },
     "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
     "ticket.land.merge": landChoice("merge"),
     "ticket.land.pr": landChoice("pr"),
@@ -766,7 +775,7 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
       )}
     </>
   );
-  return { k, label, parent, project, land, conductor, managedReason, start, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals };
+  return { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals };
 }
 
 /**

@@ -9,6 +9,30 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On a planning ticket whose plan is still being written, the Start button reads **Approve plan**
+  (in the ⌘K palette too). Press it and the ticket stays in Planning while the plan run finishes,
+  then its work starts on its own against the final plan, even if the plan ends with a question.
+  The button becomes a disabled **Starts after planning** with a clock, and the board card shows the
+  same clock, on Mac and on iPhone and iPad. Cancelling the run, a failed or interrupted plan run,
+  or sending the ticket a message withdraws the approval and says so in Activity. If the ticket also
+  waits on dependencies, it starts once the plan run is over and they're done. An agent's
+  `start_ticket` does the same.
+
+### Fixed
+
+- Pressing Start (or an agent's `start_ticket`) while a plan run was still going moved the ticket
+  to In progress at once, with the work run queued behind the plan. It now approves the plan and
+  leaves the ticket in Planning until the plan run ends.
+
+### Removed
+
+- Setting a ticket's status to In progress through the API (`PATCH /tickets/:key`) or an agent's
+  `move_ticket` no longer starts it, and is refused. Use Start (`POST /tickets/:key/start`,
+  `start_ticket`), or Re-open for a done ticket. Moves to Planning, Blocked, Review and Done work
+  as before.
+
 ## [app-20261008.2352](https://github.com/markhuot/harness/releases/tag/app-20261008.2352) - 2026-10-08
 
 ### Added
