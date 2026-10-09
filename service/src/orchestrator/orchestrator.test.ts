@@ -1442,8 +1442,20 @@ describe("approving the plan while planning runs", () => {
     const t = await planning(h);
     await h.orch.startTicket(t.key, "agent");
     expect(h.orch.activity(t.key).find((e) => e.body.startsWith("Plan approved"))).toMatchObject({ author: "agent" });
+    expect(cur(h, t).startAfterPlanBy).toBe("agent");
     await drain(h);
     expect(cur(h, t).status).toBe("review");
+    expect(cur(h, t).startAfterPlanBy).toBeNull();
+    // The work start is credited to the approver, not always the human.
+    expect(h.orch.activity(t.key).find((e) => e.body === "Work started")).toMatchObject({ author: "agent" });
+  });
+
+  test("a human's approval credits the work start to the human", async () => {
+    const h = setup();
+    const t = await planning(h);
+    await h.orch.startTicket(t.key);
+    await drain(h);
+    expect(h.orch.activity(t.key).find((e) => e.body === "Work started")).toMatchObject({ author: "human" });
   });
 
   test("a plan that ends by asking a question still starts the work", async () => {

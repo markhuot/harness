@@ -18,7 +18,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   same clock, on Mac and on iPhone and iPad. Cancelling the run, a failed or interrupted plan run,
   or sending the ticket a message withdraws the approval and says so in Activity. If the ticket also
   waits on dependencies, it starts once the plan run is over and they're done. An agent's
-  `start_ticket` does the same, and its reply tells the agent when it only approved the plan.
+  `start_ticket` does the same, and its reply tells the agent when it only approved the plan. When the work starts from an approval, Activity credits whoever approved it, a person or an
+  agent.
 
 ### Fixed
 

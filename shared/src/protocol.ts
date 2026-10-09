@@ -193,6 +193,8 @@ export interface Ticket {
    * Optional so older services and fixtures type-check; absent means false.
    */
   startAfterPlan?: boolean;
+  /** Who approved it (an agent's start_ticket or the human); the work start is credited to them. */
+  startAfterPlanBy?: "human" | "agent" | null;
   agentReview: ReviewState;
   humanReview: ReviewState;
   /**

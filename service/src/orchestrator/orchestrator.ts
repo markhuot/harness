@@ -1698,7 +1698,7 @@ export class Orchestrator {
     // ends (schedule()). The ticket stays in planning with the plan run undisturbed.
     if (ticket.status === "planning" && ticket.busy) {
       if (ticket.startAfterPlan) return ticket; // already approved
-      const approved = this.store.tickets.update(ticket.id, { startAfterPlan: true })!;
+      const approved = this.store.tickets.update(ticket.id, { startAfterPlan: true, startAfterPlanBy: by === "agent" ? "agent" : "human" })!;
       this.touchTicket(approved.id);
       this.addActivityLine(approved, "system", by, "Plan approved; work starts when planning finishes");
       return this.store.tickets.get(ticket.id)!;
@@ -1720,7 +1720,7 @@ export class Orchestrator {
   private dropPlanApproval(ticketId: string, why: string) {
     const t = this.store.tickets.get(ticketId);
     if (!t?.startAfterPlan) return;
-    const cleared = this.store.tickets.update(t.id, { startAfterPlan: false })!;
+    const cleared = this.store.tickets.update(t.id, { startAfterPlan: false, startAfterPlanBy: null })!;
     this.touchTicket(cleared.id);
     this.addActivityLine(cleared, "system", "system", why);
   }
@@ -3950,7 +3950,7 @@ ${numberLines(r.body)}`;
       }
       this.store.sessions.update(fresh.sessionId, { cwd: dir.workdir });
       const line = fresh.status === "planning" ? "Work started" : note === "Moved to in progress" ? "" : note;
-      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0, startAfterPlan: false }, note, undefined, { by, line });
+      this.transition(fresh, "in_progress", { ...patch, ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0, startAfterPlan: false, startAfterPlanBy: null }, note, undefined, { by, line });
       this.enqueueRun(fresh.sessionId, this.workKind(fresh), prompt, undefined, { attachments });
     } finally {
       this.starting.delete(ticket.id);
@@ -4012,7 +4012,7 @@ ${numberLines(r.body)}`;
     // starts from the defaults again (clean up when it has a pull request open).
     const spent: TicketPatch = from === "done" && to !== "done" ? { completionAction: null, completionInstructions: null } : {};
     // An approval to start after planning means nothing outside planning.
-    const approval: TicketPatch = to !== "planning" && ticket.startAfterPlan ? { startAfterPlan: false } : {};
+    const approval: TicketPatch = to !== "planning" && ticket.startAfterPlan ? { startAfterPlan: false, startAfterPlanBy: null } : {};
     const t = this.store.tickets.update(ticket.id, { ...spent, ...approval, ...patch, ...resume, status: to })!;
     if (patch.resumeAt !== undefined || "resumeAt" in resume) this.armResume();
     this.touchSession(t.sessionId);
@@ -4221,8 +4221,8 @@ ${numberLines(r.body)}`;
       if (!this.depsDone(t)) continue;
       const fresh = this.store.tickets.get(t.id); // an earlier await may have started it already
       if (!fresh || fresh.draft || fresh.status !== "planning" || fresh.busy || this.starting.has(t.id)) continue;
-      // An approved plan is a human's Start, whatever the dependency wait or the plan's last message.
-      await this.begin(fresh, this.prompts().workStartPrompt(fresh), {}, undefined, [], fresh.startAfterPlan ? "human" : "system");
+      // An approved plan is the approver's Start (human or agent), whatever the dependency wait or the plan's last message.
+      await this.begin(fresh, this.prompts().workStartPrompt(fresh), {}, undefined, [], fresh.startAfterPlan ? fresh.startAfterPlanBy ?? "human" : "system");
     }
   }
 

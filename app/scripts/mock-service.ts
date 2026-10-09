@@ -1722,14 +1722,10 @@ async function route(req: Request, url: URL): Promise<Response> {
         }
         if (body.status && body.status !== t.status) {
           const to = body.status as TicketStatus;
-          if (to === "in_progress" && t.status === "planning") {
-            setStatus(t, "in_progress");
-            markBaseline(t);
-            workRun(t, "The plan is approved. Begin work.");
-          } else {
-            setStatus(t, to);
-            if (to !== "blocked") t.blockedReason = null;
-          }
+          // Mirrors the service: Start (or Re-open) is the only way into in_progress.
+          if (to === "in_progress") throw new HttpError(400, "Use POST /tickets/:key/start (or /reopen) to start work");
+          setStatus(t, to);
+          if (to !== "blocked") t.blockedReason = null;
         }
         upsertTicket(t);
         return ok(t);
@@ -1787,6 +1783,16 @@ async function route(req: Request, url: URL): Promise<Response> {
             }
             return ok(t);
           }
+          // Mirrors the service: a press during a plan run approves the plan; the work starts when
+          // the run ends (see simulateRun's callback in "messages").
+          if (t.status === "planning" && t.busy) {
+            if (!t.startAfterPlan) {
+              t.startAfterPlan = true;
+              upsertTicket(t);
+              appendEntry(t.sessionId, null, "system", { type: "status", text: "Plan approved; work starts when planning finishes" });
+            }
+            return ok(t);
+          }
           setStatus(t, "in_progress");
           markBaseline(t);
           workRun(t, "The plan is approved. Begin work.");
@@ -1804,7 +1810,14 @@ async function route(req: Request, url: URL): Promise<Response> {
           if (t.status === "planning") {
             appendEntry(t.sessionId, null, "user", { type: "text", text });
             const answer = `Updated the plan to account for: "${text}"`;
-            simulateRun(t, "plan", text, answer, () => {});
+            t.startAfterPlan = false; // a message may change the plan, so it withdraws the approval
+            simulateRun(t, "plan", text, answer, (cur) => {
+              if (!cur.startAfterPlan) return;
+              cur.startAfterPlan = false;
+              setStatus(cur, "in_progress");
+              markBaseline(cur);
+              workRun(cur, "The plan is approved. Begin work.");
+            });
           } else if (t.status === "in_progress") {
             workRun(t, text);
           } else if (body.move === true && (t.status === "review" || t.status === "done")) {

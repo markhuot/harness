@@ -717,6 +717,7 @@ export const MIGRATIONS: string[] = [
   //     going; the work starts when that run ends (DESIGN.md "Ticket lifecycle").
   `
   ALTER TABLE tickets ADD COLUMN start_after_plan INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE tickets ADD COLUMN start_after_plan_by TEXT;
   `,
 ];
 
