@@ -186,11 +186,10 @@ struct TicketDetailHero: View {
         if ticket.status == .review && ticket.humanReview != .approved {
             HButton("Request changes", icon: "edit", small: true, fullWidth: false) { requestingChanges = true }
         }
-        if ticket.status == .review {
-            HButton(TicketDetailLogic.agentReviewButton(ticket.agentReview), icon: "refresh", variant: .ghost, small: true, fullWidth: false) {
-                perform { try await $0.rerunAgentReview($1) }
-            }
-            .disabled(ticket.busy)
+        // A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty.
+        if ticket.status == .inProgress {
+            HButton("Working…", icon: "clock", small: true, fullWidth: false) {}
+                .disabled(true)
         }
         if ticket.status == .done {
             HButton("Re-open", icon: "refresh", small: true, fullWidth: false) { reopening = true }
@@ -202,6 +201,12 @@ struct TicketDetailHero: View {
     /// action does it), Cancel run while a run is busy, and Delete.
     private func moreMenu(label: String) -> some View {
         Menu {
+            if ticket.status == .review {
+                Button(TicketDetailLogic.agentReviewButton(ticket.agentReview), systemImage: "arrow.clockwise") {
+                    perform { try await $0.rerunAgentReview($1) }
+                }
+                .disabled(ticket.busy)
+            }
             if TicketDetailLogic.offersMarkDone(ticket) {
                 Button("Move to done", systemImage: "checkmark.circle") {
                     perform { try await $0.completeTicket($1, CompleteBody(skipAgent: true)) }

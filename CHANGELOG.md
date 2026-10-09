@@ -33,6 +33,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- "Re-run agent review" (or "Run agent review" when it was skipped) moved from the action row into
+  the ··· menu on Mac, iPhone and iPad. A ticket that's in progress now shows a disabled "Working…"
+  button before the ···, so its action row isn't empty.
 - A ticket's header is shorter on Mac and iPhone/iPad, and the ticket's title now leads it. On
   iPhone the sheet starts with the title right under the drag indicator, with no navigation bar and
   no HARNESS-123 title (a ticket pushed inside the sheet keeps its Back button and has no title). On

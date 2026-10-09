@@ -101,6 +101,7 @@ try {
   const busyItems = await moreItems();
   check("a busy ticket's More menu adds Cancel run", busyItems.includes("Cancel run") && busyItems.includes("Move to done") && busyItems.at(-1) === "Delete ticket", busyItems.join("|"));
   check("the action row has no separate Cancel run button", await js<boolean>(`![...document.querySelectorAll(".actions > button")].some(b => b.textContent.includes("Cancel run"))`));
+  check("a running ticket shows a disabled Working… button", await js<boolean>(`(() => { const b = document.querySelector(".actions [data-testid=working]"); return !!b && b.disabled && b.textContent.includes("Working"); })()`));
   await shot("more-busy");
   await closeMenu();
 
@@ -109,7 +110,8 @@ try {
   await idle(t2.key);
   await until("approve", () => exists("[data-testid=approve-primary]"), 10000);
   const reviewItems = await moreItems();
-  check("in review the More menu is just Delete ticket", reviewItems.join("|") === "Delete ticket", reviewItems.join("|"));
+  check("in review the More menu is Re-run agent review, then Delete ticket", /^(Re-run|Run) agent review\|Delete ticket$/.test(reviewItems.join("|")), reviewItems.join("|"));
+  check("…and the action row has no separate rerun button", await js<boolean>(`![...document.querySelectorAll(".actions > button")].some(b => /agent review/i.test(b.textContent))`));
   check("…and it's the last thing in the action row", await js<boolean>(`!!document.querySelector(".actions")?.lastElementChild?.querySelector("[data-testid=ticket-more]")`));
   await shot("more-review");
   await closeMenu();

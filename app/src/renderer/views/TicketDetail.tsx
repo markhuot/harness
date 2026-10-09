@@ -629,12 +629,11 @@ function DetailHeader({
               <Icon name="edit" /> Request changes
             </button>
           )}
-          {ticket.status === "review" && (
-            <>
-              <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
-                <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
-              </button>
-            </>
+          {/* A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty. */}
+          {ticket.status === "in_progress" && (
+            <button className="btn" data-testid="working" disabled>
+              <Icon name="clock" /> Working…
+            </button>
           )}
           {ticket.status === "done" && (
             <button className="btn" onClick={() => setReopening(true)}>
@@ -652,6 +651,11 @@ function DetailHeader({
           >
             {(close) => (
               <>
+                {ticket.status === "review" && (
+                  <button role="menuitem" disabled={ticket.busy} onClick={() => (close(), void rerunReview())}>
+                    <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
+                  </button>
+                )}
                 {ticket.status !== "done" && ticket.status !== "review" && (
                   <button role="menuitem" onClick={() => (close(), void markDone())}>
                     <Icon name="check" /> Move to done

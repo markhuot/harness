@@ -408,7 +408,7 @@ try {
       return items;
     };
     const inReviewMore = await moreItems();
-    check("the More menu has no Move to done while the ticket is in review, and always has Delete ticket", !inReviewMore.includes("Move to done") && inReviewMore.includes("Delete ticket") && !inReviewMore.includes("Copy key"), inReviewMore.join(","));
+    check("the More menu has no Move to done while the ticket is in review, and always has Delete ticket", !inReviewMore.includes("Move to done") && inReviewMore.some(i => /agent review/i.test(i)) && inReviewMore.includes("Delete ticket") && !inReviewMore.includes("Copy key"), inReviewMore.join(","));
     check("the ticket's title bar has no More menu", !(await exists(".detail-titlebar button[title=More]")));
     const ghItems = await openMenu();
     check(
