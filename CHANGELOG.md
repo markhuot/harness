@@ -30,6 +30,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Headings in a spec (and other markdown) on Mac and iPhone/iPad now have a full size scale, so
+  `#`, `##`, `###` and `####` each look different (H2 and H3 used to be the same size). A heading
+  right after another heading no longer gets the large gap above it; only a heading after other
+  content does.
 - Pressing Start (or an agent's `start_ticket`) while a plan run was still going moved the ticket
   to In progress at once, with the work run queued behind the plan. It now approves the plan and
   leaves the ticket in Planning until the plan run ends.

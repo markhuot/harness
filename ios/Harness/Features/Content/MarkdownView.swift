@@ -58,13 +58,13 @@ struct MarkdownView: View {
                 let diff = MarkdownCache.shared.diff(previous, text)
                 ForEach(diff.indices, id: \.self) { i in
                     MarkdownDiffBlockView(diff: diff[i], style: style)
-                        .padding(.top, i > 0 ? headingLead(Self.headingLevel(diff[i]), style) : 0)
+                        .padding(.top, i > 0 ? headingLead(Self.headingLevel(diff[i]), after: Self.headingLevel(diff[i - 1]), style) : 0)
                 }
             } else {
                 let blocks = MarkdownCache.shared.blocks(text)
                 ForEach(blocks.indices, id: \.self) { i in
                     MarkdownBlockView(block: blocks[i], style: style)
-                        .padding(.top, i > 0 ? headingLead(Self.headingLevel(blocks[i]), style) : 0)
+                        .padding(.top, i > 0 ? headingLead(Self.headingLevel(blocks[i]), after: Self.headingLevel(blocks[i - 1]), style) : 0)
                 }
             }
         }
@@ -113,9 +113,12 @@ struct MarkdownView: View {
     }
 
     /// The space `headingSpace` adds over the stack's 8 pt and the heading's own 2 pt, so a heading sits
-    /// headingSpace × its size below the block before it.
-    private func headingLead(_ level: Int?, _ style: MarkdownStyle) -> CGFloat {
-        guard let level, headingSpace > 0 else { return 0 }
+    /// headingSpace × its size below the block before it. A heading straight after another heading
+    /// (`previous`) gets none of that and pulls in 4 pt closer than the usual gap.
+    private func headingLead(_ level: Int?, after previous: Int?, _ style: MarkdownStyle) -> CGFloat {
+        guard let level else { return 0 }
+        if previous != nil { return -4 }
+        guard headingSpace > 0 else { return 0 }
         return max(0, (headingSpace * style.headingSize(level)).rounded() - 10)
     }
 
@@ -164,8 +167,15 @@ struct MarkdownStyle {
     static let bullets = ["•", "◦", "▪"]
 
     var font: Font { .scaled(size: size) }
-    /// A heading's text size: two points up for levels 1–2, half a point for 3–4.
-    func headingSize(_ level: Int) -> CGFloat { level <= 2 ? size + 2 : size + 0.5 }
+    /// A heading's text size: a scale down from the body size + 7 pt (level 1) through +4, +2 and +0.5.
+    func headingSize(_ level: Int) -> CGFloat {
+        switch level {
+        case 1: size + 7
+        case 2: size + 4
+        case 3: size + 2
+        default: size + 0.5
+        }
+    }
     /// A line height of round(size × lineHeight), as extra spacing over the font's own line height.
     var lineSpacing: CGFloat { (size * lineHeight).rounded() - size * 1.2 }
 

@@ -658,15 +658,29 @@ kbd {
 .spec-doc .md h2,
 .spec-doc .md h3,
 .spec-doc .md h4 {
-  font-size: 14.5px;
-  /* Sets each section apart from the one above. */
+  /* Sets each section apart from the block above. */
   margin-top: 2em;
+}
+/* Heading scale at 14px body: 22 / 18 / 16 / 14.5. */
+.spec-doc .md h1 {
+  font-size: 22px;
+}
+.spec-doc .md h2 {
+  font-size: 18px;
+}
+.spec-doc .md h3 {
+  font-size: 16px;
+}
+.spec-doc .md h4 {
+  font-size: 14.5px;
 }
 .spec-doc .md > :first-child {
   margin-top: 0;
 }
-.spec-doc .md h1 {
-  font-size: 16px;
+/* A heading right after another heading sits close to it: only a heading after other content gets
+   the large top margin. */
+.spec-doc .md :is(h1, h2, h3, h4) + :is(h1, h2, h3, h4) {
+  margin-top: 6px;
 }
 .spec-doc .md code,
 .spec-doc .md pre,
@@ -804,8 +818,18 @@ ol.md-list {
   font-weight: 600;
   margin: 12px 0 6px;
 }
+/* Heading scale at 13px body: 18 / 16 / 14.5 / 13.5. */
 .md h1 {
-  font-size: 15px;
+  font-size: 18px;
+}
+.md h2 {
+  font-size: 16px;
+}
+.md h3 {
+  font-size: 14.5px;
+}
+.md :is(h1, h2, h3, h4) + :is(h1, h2, h3, h4) {
+  margin-top: 4px;
 }
 .md code {
   font-size: 11.5px;
