@@ -110,9 +110,12 @@ struct TicketDetailHero: View {
             }
             // The iPad panel's buttons float over the root ticket's top corner.
             .padding(.trailing, inTicketPanel && router.showsAsSheetRoot(ticket.key) ? panelInset : 0)
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .padding(.bottom, compact ? 10 : 5)
+            // Collapsed, the title gets double the margin above and below, and its text lines
+            // up with the Spec tab's label under it (the strip's 8pt inset plus the tab's 10).
+            .padding(.leading, compact ? 18 : 14)
+            .padding(.trailing, 14)
+            .padding(.top, compact ? 20 : 10)
+            .padding(.bottom, compact ? 24 : 5)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)

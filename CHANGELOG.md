@@ -33,6 +33,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone, a ticket's collapsed title row has twice the space above and below it, and its text
+  lines up with the left edge of the Spec tab's label beneath it.
 - "Re-run agent review" (or "Run agent review" when it was skipped) moved from the action row into
   the ··· menu on Mac, iPhone and iPad. A ticket that's in progress now shows a disabled "Working…"
   button before the ···, so its action row isn't empty.
