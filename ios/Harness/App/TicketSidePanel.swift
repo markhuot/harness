@@ -183,6 +183,8 @@ struct TicketSidePanel<Content: View>: View {
     }
 
     private static var buttonSize: CGFloat { 40 }
+    /// The room the floating buttons need above a screen with toolbar items of its own.
+    static var buttonRowHeight: CGFloat { buttonSize + 12 }
     /// The top edge that flings the panel (the hero's top padding).
     private static var flingStripHeight: CGFloat { 14 }
     /// The handle's touch target, centred on the panel's leading edge.
@@ -240,6 +242,8 @@ struct TicketPanelHost: View {
                             ForEach(router.liveSheets) { s in
                                 let isTop = s.id == sheet.id
                                 TicketSheetContent(sheet: s)
+                                    // Anything but a ticket's hero on top keeps clear of the floating buttons.
+                                    .padding(.top, Self.topIsTicket(s) ? 0 : TicketSidePanel<EmptyView>.buttonRowHeight)
                                     .environment(\.inTicketPanel, true)
                                     .environment(closers.closer(s.id))
                                     .opacity(isTop ? 1 : 0)
@@ -274,6 +278,17 @@ struct TicketPanelHost: View {
         }
         .onChange(of: sheet?.id) { resignFirstResponder() }
         .onDisappear { dockInset?.cards = 0 }
+    }
+
+    /// A ticket is the screen on top of `sheet`: its hero (or a pushed ticket's Back button) is level
+    /// with the panel's buttons, which float over it; any other screen (New session, a file) has
+    /// toolbar items of its own up there.
+    private static func topIsTicket(_ sheet: TicketSheet) -> Bool {
+        if let route = sheet.path.last {
+            if case .ticket = route { return true }
+            return false
+        }
+        return sheet.rootKey != nil
     }
 
     /// The person's width, kept in prefs; nil until they first drag the panel's edge.

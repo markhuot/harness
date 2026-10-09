@@ -475,7 +475,7 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
     }
 }
 
-/// The navigation bar: the ticket's key names it for the Back button of whatever's pushed above.
+/// The navigation bar: the ticket's key stays as its navigation title (the app switcher, VoiceOver).
 /// The title itself is in the hero, so at the root of the ticket sheet or panel there's no bar;
 /// a ticket pushed inside keeps one (a Back button, no title). The More menu is in the hero.
 private struct TicketDetailHeader: ViewModifier {
@@ -487,11 +487,18 @@ private struct TicketDetailHeader: ViewModifier {
 
     func body(content: Content) -> some View {
         // The sheet's and panel's root ticket has nothing to go back to.
-        let isRoot = (inTicketSheet || inTicketPanel) && router.showsAsSheetRoot(ticket.key)
+        let inSheet = inTicketSheet || inTicketPanel
+        let isRoot = inSheet && router.showsAsSheetRoot(ticket.key)
         content
             .navigationTitle(Keys.keyLabel(ticket))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(isRoot ? .hidden : .automatic, for: .navigationBar)
+            .toolbar {
+                // The hero names the ticket: a pushed one keeps its Back button but draws no title.
+                if inSheet {
+                    ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
+                }
+            }
     }
 }
 

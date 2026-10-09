@@ -11,6 +11,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- `bun run --cwd app ticket-header` drives a Mac ticket pane against a real service and checks the
+  title bar, the hero's key row and the ··· menu in each state, with screenshots. The iPhone and iPad
+  sim-check also check the new header, the ··· menu and flinging the panel's top edge.
 - A ticket's Runs list on Mac and iPhone/iPad is easier to read. Each run shows its status, kind and
   prompt (or error), with how long it ran (counting up live while it runs, or how long it has waited
   in the queue) and, on a line below, when it started, its token count (the input/output split on
@@ -30,6 +33,19 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- A ticket's header is shorter on Mac and iPhone/iPad, and the ticket's title now leads it. On
+  iPhone the sheet starts with the title right under the drag indicator, with no navigation bar and
+  no HARNESS-123 title (a ticket pushed inside the sheet keeps its Back button and has no title). On
+  iPad the side panel starts with the title, wrapping before the dock, pop-out and close buttons,
+  which float over its corner; you can still fling the panel's top edge to dock it. On Mac the pane's
+  title bar shows the title (truncated with an ellipsis in a narrow pane) beside its pop-out,
+  maximize and close buttons. Below it, the ticket's first row is now `[HAR] HARNESS-123 <status>`
+  followed by the existing badges, on iPhone, iPad and Mac.
+- The less common actions moved into one secondary **···** button at the end of the ticket's action
+  row, always shown (collapsing the hero on iPhone and iPad hides it with the other actions). It
+  offers Move to done (renamed from Mark done, and only where it applied before), Cancel run while a
+  run is busy (it no longer has a red button of its own), and Delete ticket, which still asks first.
+  The ⌘K palette's Mark done command is now called Move to done.
 - Agents are held to a higher bar before they hand work over, whichever model runs them. A Work run
   adds tests for what it changes, runs the tests and typecheck, confirms a new worktree has its
   dependencies installed, embeds screenshots in Status for visible changes, and blocks to ask rather
@@ -55,6 +71,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Removed
 
+- The ticket header's overflow menus are gone: the (···) menu on iPhone and iPad, and the More menu
+  in a Mac ticket pane's title bar. Copy key, Open in New Window, Open <remote ID>, Open pull request
+  (the PR badge in the hero still opens it) and the Mac's Move pane rows no longer appear in a ticket.
+  Copy key is still in a board card's long-press menu on iPhone and iPad and in the Mac's ⌘K
+  palette, a Mac pane still moves by its drag grip, and a pinned iPad window's **Return to ticket** is
+  now a plain button.
 - Setting a ticket's status to In progress through the API (`PATCH /tickets/:key`) or an agent's
   `move_ticket` no longer starts it, and is refused. Use Start (`POST /tickets/:key/start`,
   `start_ticket`), or Re-open for a done ticket. Moves to Planning, Blocked, Review and Done work
