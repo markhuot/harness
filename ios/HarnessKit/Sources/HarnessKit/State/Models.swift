@@ -84,8 +84,10 @@ public struct PhaseGroup: Codable, Sendable, Equatable, Hashable, Identifiable {
 }
 
 public struct PhaseMatrix: Codable, Sendable, Equatable {
-    /// The Inherit row, naming what each phase inherits; nil at app level (nothing above it)
+    /// The "Defaults" row (clears a phase's own choice); nil at app level (nothing above it)
     @Nullable public var inherit: PhaseRow?
+    /// What each phase inherits, as the help text under the Defaults row names it; nil at app level
+    @Nullable public var inheritNames: PerPhase<String>?
     public var groups: [PhaseGroup]
     /// The row key each phase column has selected (exactly one per column)
     public var selected: PerPhase<String>
@@ -94,8 +96,9 @@ public struct PhaseMatrix: Codable, Sendable, Equatable {
     /// The closed control's text, e.g. "Opus 5.5 · Complete: Haiku 5.5"
     public var summary: String
 
-    public init(inherit: PhaseRow?, groups: [PhaseGroup], selected: PerPhase<String>, effective: PerPhase<PhaseChoice>, summary: String) {
+    public init(inherit: PhaseRow?, inheritNames: PerPhase<String>?, groups: [PhaseGroup], selected: PerPhase<String>, effective: PerPhase<PhaseChoice>, summary: String) {
         self.inherit = inherit
+        self.inheritNames = inheritNames
         self.groups = groups
         self.selected = selected
         self.effective = effective
@@ -398,17 +401,24 @@ public enum Models {
         return list?.first { $0.default == true }?.name ?? "Default"
     }
 
+    /// Each phase's choice as a name: the model's. Driver names show only when the phases use more than
+    /// one driver ("Codex · Luna").
+    public static func phaseChoiceNames(_ choices: PerPhase<PhaseChoice>, _ models: [String: [ModelInfo]], driverName: (String) -> String = { $0 }) -> PerPhase<String> {
+        let multi = Set(Phase.allCases.map { choices[$0].driver }).count > 1
+        return PerPhase { p in
+            let c = choices[p]
+            return multi ? "\(driverName(c.driver)) · \(phaseChoiceModelName(c, models))" : phaseChoiceModelName(c, models)
+        }
+    }
+
     /// The summary of a full set of phase choices: the Work choice first, then each phase that differs
     /// from it ("Opus 5.5 · Complete: Haiku 5.5"). Driver names show only when the phases use more than
     /// one driver.
     public static func phaseSummary(_ choices: PerPhase<PhaseChoice>, _ models: [String: [ModelInfo]], driverName: (String) -> String = { $0 }) -> String {
-        let multi = Set(Phase.allCases.map { choices[$0].driver }).count > 1
-        func name(_ c: PhaseChoice) -> String {
-            multi ? "\(driverName(c.driver)) · \(phaseChoiceModelName(c, models))" : phaseChoiceModelName(c, models)
-        }
-        var parts = [name(choices.work)]
+        let names = phaseChoiceNames(choices, models, driverName: driverName)
+        var parts = [names.work]
         for p in Phase.allCases where p != .work {
-            let n = name(choices[p])
+            let n = names[p]
             if n == parts[0] { continue }
             parts.append("\(p.label): \(n)")
         }
@@ -447,8 +457,9 @@ public enum Models {
             return PhaseGroup(driver: d.id, label: d.name, rows: rows)
         }
 
-        let inherit = inherited.map { PhaseRow(key: "", choice: nil, label: "Inherit (\(phaseSummary($0, models, driverName: driverName)))", model: nil) }
-        return PhaseMatrix(inherit: inherit, groups: groups, selected: selected, effective: effective, summary: phaseSummary(effective, models, driverName: driverName))
+        let inherit = inherited.map { _ in PhaseRow(key: "", choice: nil, label: "Defaults", model: nil) }
+        let inheritNames = inherited.map { phaseChoiceNames($0, models, driverName: driverName) }
+        return PhaseMatrix(inherit: inherit, inheritNames: inheritNames, groups: groups, selected: selected, effective: effective, summary: phaseSummary(effective, models, driverName: driverName))
     }
 
     /// The groups a type-ahead query leaves (every word in the row's label, model id or driver name).

@@ -294,6 +294,7 @@ describe("the phase matrix", () => {
   test("app level: no Inherit row, every column resolves, unset phases select the Work driver's default", () => {
     const m = phaseMatrix(drivers, models, settings, null);
     expect(m.inherit).toBeNull();
+    expect(m.inheritNames).toBeNull();
     expect(m.groups.map((g) => g.driver)).toEqual(["claude-code", "codex"]);
     expect(m.groups[0]!.rows.map((r) => r.label)).toEqual(["Default (Opus 5.5)", "Opus 5.5", "Haiku 5.5"]);
     expect(m.selected).toEqual({ plan: encodeChoice({ driver: "claude-code", model: null }), work: encodeChoice({ driver: "claude-code", model: "opus" }), review: encodeChoice({ driver: "claude-code", model: null }), complete: encodeChoice({ driver: "claude-code", model: "haiku" }) });
@@ -303,10 +304,18 @@ describe("the phase matrix", () => {
   test("ticket level: unset phases select Inherit, which names what they inherit", () => {
     const inherited = inheritedPhaseModels("ticket", null, settings)!;
     const m = phaseMatrix(drivers, models, { work: { driver: "codex", model: "luna" } }, inherited);
-    expect(m.inherit?.label).toBe("Inherit (Opus 5.5 · Complete: Haiku 5.5)");
+    expect(m.inherit?.label).toBe("Defaults");
+    expect(m.inheritNames).toEqual({ plan: "Opus 5.5", work: "Opus 5.5", review: "Opus 5.5", complete: "Haiku 5.5" });
     expect(m.selected.plan).toBe("");
     expect(m.selected.work).toBe(encodeChoice({ driver: "codex", model: "luna" }));
     expect(m.summary).toBe("Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5");
+  });
+
+  test("defaults spanning several drivers name each phase's driver; an unknown model id shows as is", () => {
+    const mixed = { plan: { driver: "codex", model: "luna" }, work: { driver: "claude-code", model: "opus" }, review: { driver: "claude-code", model: "gpt-9" }, complete: { driver: "claude-code", model: null } };
+    const m = phaseMatrix(drivers, models, {}, mixed);
+    expect(m.inheritNames).toEqual({ plan: "Codex · Luna", work: "Claude Code · Opus 5.5", review: "Claude Code · gpt-9", complete: "Claude Code · Opus 5.5" });
+    expect(m.summary).toBe("Claude Code · Opus 5.5 · Planning: Codex · Luna · Review: Claude Code · gpt-9");
   });
 
   test("a picked driver or model that isn't listed is kept", () => {

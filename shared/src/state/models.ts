@@ -225,8 +225,10 @@ export interface PhaseGroup {
 }
 
 export interface PhaseMatrix {
-  /** The Inherit row, naming what each phase inherits; null at app level (nothing above it) */
+  /** The "Defaults" row (clears a phase's own choice); null at app level (nothing above it) */
   inherit: PhaseRow | null;
+  /** What each phase inherits, as the help text under the Defaults row names it; null at app level */
+  inheritNames: Record<Phase, string> | null;
   groups: PhaseGroup[];
   /** The row key each phase column has selected (exactly one per column) */
   selected: Record<Phase, string>;
@@ -246,18 +248,27 @@ export function phaseChoiceModelName(c: PhaseChoice, models: ModelLists): string
 }
 
 /**
+ * Each phase's choice as a name: the model's. Driver names show only when the phases use more than
+ * one driver ("Codex · Luna").
+ */
+export function phaseChoiceNames(choices: Record<Phase, PhaseChoice>, models: ModelLists, driverName: (id: string) => string = (id) => id): Record<Phase, string> {
+  const multi = new Set(PHASES.map((p) => choices[p].driver)).size > 1;
+  return Object.fromEntries(
+    PHASES.map((p) => [p, multi ? `${driverName(choices[p].driver)} · ${phaseChoiceModelName(choices[p], models)}` : phaseChoiceModelName(choices[p], models)]),
+  ) as Record<Phase, string>;
+}
+
+/**
  * The summary of a full set of phase choices: the Work choice first, then each phase that differs
  * from it ("Opus 5.5 · Complete: Haiku 5.5"). Driver names show only when the phases use more than
  * one driver.
  */
 export function phaseSummary(choices: Record<Phase, PhaseChoice>, models: ModelLists, driverName: (id: string) => string = (id) => id): string {
-  const multi = new Set(PHASES.map((p) => choices[p].driver)).size > 1;
-  const name = (c: PhaseChoice) => (multi ? `${driverName(c.driver)} · ${phaseChoiceModelName(c, models)}` : phaseChoiceModelName(c, models));
-  const work = choices.work;
-  const parts = [name(work)];
+  const names = phaseChoiceNames(choices, models, driverName);
+  const parts = [names.work];
   for (const p of PHASES) {
-    if (p === "work" || name(choices[p]) === parts[0]) continue;
-    parts.push(`${PHASE_LABELS[p]}: ${name(choices[p])}`);
+    if (p === "work" || names[p] === parts[0]) continue;
+    parts.push(`${PHASE_LABELS[p]}: ${names[p]}`);
   }
   return parts.join(" · ");
 }
@@ -295,8 +306,9 @@ export function phaseMatrix(
     return { driver: d.id, label: d.name, rows };
   });
 
-  const inherit: PhaseRow | null = inherited ? { key: "", choice: null, label: `Inherit (${phaseSummary(inherited, models, driverName)})`, model: null } : null;
-  return { inherit, groups, selected, effective, summary: phaseSummary(effective, models, driverName) };
+  const inherit: PhaseRow | null = inherited ? { key: "", choice: null, label: "Defaults", model: null } : null;
+  const inheritNames = inherited ? phaseChoiceNames(inherited, models, driverName) : null;
+  return { inherit, inheritNames, groups, selected, effective, summary: phaseSummary(effective, models, driverName) };
 }
 
 /** The groups a type-ahead query leaves (every word in the row's label, model id or driver name). */
