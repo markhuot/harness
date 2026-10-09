@@ -399,7 +399,7 @@ A round is an agent `review_approved` or `changes_requested` entry. `review_deci
 (`system.review`) judge the work against the Goal and acceptance criteria as approved and treat
 Status and notes as claims to verify. Two spec problems are grounds for `request_changes`: Goal or
 acceptance-criteria changes since the baseline that the human's messages, review notes or re-open
-notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Notes cover one round, and their first line
+notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Missing proof is also grounds, never a nit: a behaviour change without a test, a user-visible change without a screenshot in Status, or a Status that admits verification was skipped. The reviewer runs the tests and typecheck itself. Notes cover one round, and their first line
 must state the outcome on its own ("Approved, with three open questions in the spec."), since that's
 all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (an open
 question for the human, a follow-up) under the spec's Open questions; `update_spec` is refused, and
@@ -2086,7 +2086,7 @@ On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
 
 A ticket's **spec** is its living markdown document, what a human reads to know where the work
 stands: Goal (the request and its acceptance criteria, changed only when the human asks), Plan,
-Status (what's done and left, decisions, how each piece was verified, screenshots inline) and
+Status (what's done and left, decisions, screenshots inline; passing test results stay out) and
 Open questions. It replaced the ticket description and the plan (migration 26 renamed
 `tickets.description` to `tickets.spec`). Agents keep it current rather than appending to it,
 since its history lives in its revisions.

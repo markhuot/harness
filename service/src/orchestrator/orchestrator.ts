@@ -320,7 +320,7 @@ export const PLAN_APPROVAL_MESSAGE =
   "The human approves the plan on the board by pressing Start (Approve plan, while the plan run is still going), which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved in the spec with update_spec, then end your turn.";
 /** submit_for_review without spec_is_up_to_date: true */
 export const SPEC_NOT_UP_TO_DATE_MESSAGE =
-  "Bring the spec up to date with edit_spec or update_spec first (Status, decisions, verification, screenshots), then submit again with spec_is_up_to_date: true.";
+  "Bring the spec up to date with edit_spec or update_spec first (Status, decisions, screenshots), then submit again with spec_is_up_to_date: true.";
 /** How many recent Activity entries a run's system prompt shows */
 export const PROMPT_ACTIVITY_ENTRIES = 5;
 /** Transcript note when a message meant for the running agent had to wait for the next run */

@@ -12,6 +12,22 @@ entries as Added, Changed, Fixed, or Removed, and write each one for the person 
 what they or their agents will see or can now do, not what the commit did. For an internal change,
 say in a plain sentence what it changes for the people working on Harness.
 
+## Verifying changes
+
+A change isn't done until it has a test, `bun run test` and `bun run typecheck` pass, and a visible
+change has screenshots in the spec's Status.
+
+- **Dependencies.** A ticket worktree starts without `node_modules`, so typecheck and tests fail
+  until you add them. Clone the main checkout's with `cp -Rc /Users/markhuot/Sites/harness/node_modules .`
+  (copy-on-write, no extra disk) or run `bun install`. That failure is yours to fix, not a reason to
+  submit unverified.
+- **Mac app.** `bun run --cwd app spec-activity`, `shoot`, `smoke` and `changes` drive the built
+  renderer and write screenshots (`spec-activity` to `app/out/screenshots/`). Put new UI behaviour
+  under an assertion in the closest `app/scripts/*-check.ts` script, as the margin check in
+  `spec-activity.ts` does.
+- **iPhone and iPad.** Use sim-check and the screenshots under `bun run sim with-lock`, as the
+  Simulators section below describes.
+
 ## Simulators
 
 Several agents build and test the iPhone app at once on a Mac with little free disk, so they share

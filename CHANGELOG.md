@@ -30,6 +30,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Agents are held to a higher bar before they hand work over, whichever model runs them. A Work run
+  adds tests for what it changes, runs the tests and typecheck, confirms a new worktree has its
+  dependencies installed, embeds screenshots in Status for visible changes, and blocks to ask rather
+  than submitting work it couldn't verify. The review agent now requests changes, instead of
+  noting a nit, when a behaviour change has no test, a visible change has no screenshot, or Status
+  admits a check was skipped. Status no longer carries test results. CLAUDE.md also lists how to
+  verify changes in this repo.
+
 - For people working on Harness: `bun run spec-headings` (`app/scripts/spec-headings-check.ts`) launches
   the built Mac app and checks that spec headings render at four decreasing sizes and that a heading
   right after another heading sits close to it. `bun run sim-check` does the same on the iPhone: a
