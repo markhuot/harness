@@ -47,6 +47,15 @@ public enum Format {
         scalarsEqual(id, "dummy") ? .bot : scalarsEqual(id, "anthropic-api") ? .key : .sparkle
     }
 
+    /// 42s, 3m 5s, 1h 2m: a span in milliseconds, rounded to the second.
+    public static func duration(_ ms: Double) -> String {
+        let total = Int(max(0, JSCompat.round(ms / 1000)))
+        if total < 60 { return "\(total)s" }
+        let m = total / 60
+        if m < 60 { return "\(m)m \(total % 60)s" }
+        return "\(m / 60)h \(m % 60)m"
+    }
+
     /// "just now" / "42s ago" / "5m ago" / "3h ago" / "2d ago"; a short date (current locale) past
     /// 30 days; "never" for nil or 0. Each unit rounds from the previous one, as in TS.
     public static func relativeTime(_ ts: Double?, now: Double = Date().timeIntervalSince1970 * 1000) -> String {

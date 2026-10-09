@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Run } from "../protocol";
-import { formatCost, formatDuration, formatTokens, runPhaseDefault, runRowInfo } from "./runs";
+import { formatDuration } from "./format";
+import { formatCost, formatTokens, runPhaseDefault, runRowInfo } from "./runs";
 
 const run = (over: Partial<Run> = {}): Run => ({
   id: "r",

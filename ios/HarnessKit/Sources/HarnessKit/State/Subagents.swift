@@ -89,11 +89,7 @@ public enum Subagents {
 
     /// 42s, 3m 5s, 1h 2m: how long it ran (so far, while running).
     public static func duration(startedAt: Timestamp, endedAt: Timestamp?, now: Timestamp = Date().timeIntervalSince1970 * 1000) -> String {
-        let total = Int(max(0, JSCompat.round(((endedAt ?? now) - startedAt) / 1000)))
-        if total < 60 { return "\(total)s" }
-        let m = total / 60
-        if m < 60 { return "\(m)m \(total % 60)s" }
-        return "\(m / 60)h \(m % 60)m"
+        Format.duration((endedAt ?? now) - startedAt)
     }
 
     public static func duration(_ s: Subagent, now: Timestamp = Date().timeIntervalSince1970 * 1000) -> String {

@@ -3,6 +3,7 @@
 // tab, the sub-agent transcript view and the task output view, shared by every client.
 
 import type { Subagent, SubagentKind, SubagentStatus } from "../index";
+import { formatDuration } from "./format";
 import { transcriptKey, type State, type TaskOutputState, type TranscriptState } from "./reducer";
 
 export const SUBAGENT_STATUS_LABEL: Record<SubagentStatus, string> = {
@@ -85,11 +86,7 @@ export const TASK_OUTPUT_POLL_MS = 1000;
 
 /** 42s, 3m 5s, 1h 2m: how long it ran (so far, while running). */
 export function subagentDuration(s: Pick<Subagent, "startedAt" | "endedAt">, now = Date.now()): string {
-  const total = Math.max(0, Math.round(((s.endedAt ?? now) - s.startedAt) / 1000));
-  if (total < 60) return `${total}s`;
-  const m = Math.floor(total / 60);
-  if (m < 60) return `${m}m ${total % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
+  return formatDuration((s.endedAt ?? now) - s.startedAt);
 }
 
 /** The Agents & tasks list: sub-agents and tasks together, the latest updated first. */

@@ -5,15 +5,6 @@ import Foundation
 // print the same text.
 
 public enum RunRows {
-    /// 42s, 3m 5s, 1h 2m: a span in milliseconds, rounded to the second.
-    public static func formatDuration(_ ms: Double) -> String {
-        let total = Int(max(0, JSCompat.round(ms / 1000)))
-        if total < 60 { return "\(total)s" }
-        let m = total / 60
-        if m < 60 { return "\(m)m \(total % 60)s" }
-        return "\(m / 60)h \(m % 60)m"
-    }
-
     /// 850, 12.3k, 1.2M (one decimal, dropped when it's .0).
     public static func formatTokens(_ n: Double) -> String {
         let count = Int(max(0, JSCompat.round(n)))
@@ -78,9 +69,9 @@ public enum RunRows {
         let ended = run.endedAt.flatMap { $0 == 0 ? nil : $0 }
         var elapsed: String?
         if queued {
-            elapsed = "waiting \(formatDuration(now - run.createdAt))"
+            elapsed = "waiting \(Format.duration(now - run.createdAt))"
         } else if let started, ended != nil || running {
-            elapsed = formatDuration(max(1000, (ended ?? now) - started))
+            elapsed = Format.duration(max(1000, (ended ?? now) - started))
         }
 
         let hasTokens = run.inputTokens != nil || run.outputTokens != nil

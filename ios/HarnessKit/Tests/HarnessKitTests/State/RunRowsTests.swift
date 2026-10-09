@@ -16,7 +16,7 @@ struct RunRowsTests {
         (0.0, "0s"), (42_000, "42s"), (59_500, "1m 0s"), (185_000, "3m 5s"), (3_720_000, "1h 2m"), (-5000, "0s"),
     ])
     func duration(ms: Double, text: String) {
-        #expect(RunRows.formatDuration(ms) == text)
+        #expect(Format.duration(ms) == text)
     }
 
     @Test("token counts", arguments: [

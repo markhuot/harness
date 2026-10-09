@@ -3,16 +3,7 @@
 
 import { inheritedPhaseModels, runPhase } from "../phases";
 import type { PhaseChoice, PhaseModels, Run, RunKind } from "../protocol";
-import { relativeTime } from "./format";
-
-/** 42s, 3m 5s, 1h 2m: a span in milliseconds, rounded to the second. */
-export function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000));
-  if (total < 60) return `${total}s`;
-  const m = Math.floor(total / 60);
-  if (m < 60) return `${m}m ${total % 60}s`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
+import { formatDuration, relativeTime } from "./format";
 
 /** 850, 12.3k, 1.2M (one decimal, dropped when it's .0). Integer maths, so Swift matches it. */
 export function formatTokens(n: number): string {

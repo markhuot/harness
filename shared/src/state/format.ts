@@ -42,6 +42,15 @@ export function driverIcon(id: string): "bot" | "key" | "sparkle" {
   return id === "dummy" ? "bot" : id === "anthropic-api" ? "key" : "sparkle";
 }
 
+/** 42s, 3m 5s, 1h 2m: a span in milliseconds, rounded to the second. */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  if (total < 60) return `${total}s`;
+  const m = Math.floor(total / 60);
+  if (m < 60) return `${m}m ${total % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 export function relativeTime(ts: number | null | undefined, now = Date.now()): string {
   if (!ts) return "never";
   const s = Math.round((now - ts) / 1000);
