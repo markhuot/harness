@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, a quick swipe down on a ticket can no longer get stuck bouncing back open after the sheet misses the end of a drag; the sheet now notices the drag is over and carries on.
+
 ## [app-20261008.2352](https://github.com/markhuot/harness/releases/tag/app-20261008.2352) - 2026-10-08
 
 ### Added

@@ -267,12 +267,18 @@ private struct SheetFlickTracker: UIViewRepresentable {
             self.flick = flick
             super.init(frame: .zero)
             isUserInteractionEnabled = false
+            flick.panIsActive = { [weak self] in
+                guard let state = self?.pan.state else { return false }
+                return state == .began || state == .changed
+            }
         }
 
         required init?(coder: NSCoder) { fatalError() }
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            // A pan pulled off its view mid-drag never reports its end.
+            if pan.view != nil { flick.reset() }
             for g in [pan, left, right] { g.view?.removeGestureRecognizer(g) }
             guard window != nil, let container = presentedController?.presentationController?.containerView else { return }
             for g in [pan, left, right] { container.addGestureRecognizer(g) }

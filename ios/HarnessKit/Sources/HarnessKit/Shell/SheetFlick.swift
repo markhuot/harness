@@ -23,7 +23,20 @@ import Foundation
     private var release: (velocity: Double, at: Date)?
     private var waiting: (at: Date, decide: (Outcome) -> Void)?
 
+    /// Whether the pan that reports the drag is really mid-drag, asked when the sheet settles. A
+    /// drag whose end UIKit never delivered (the pan was pulled off its view mid-touch, say) would
+    /// otherwise leave `isDragging` set for good: the dock's inset would stop updating and every
+    /// later flick would wait on a release that never comes.
+    public var panIsActive: () -> Bool = { true }
+
     public init() {}
+
+    /// The pan is gone or was pulled off its view: no drag is in flight.
+    public func reset() {
+        isDragging = false
+        release = nil
+        resolve()
+    }
 
     public func began() {
         isDragging = true
@@ -47,6 +60,7 @@ import Foundation
     /// has let go (or there was none), else when it does.
     public func settled(at: Date, decide: @escaping (Outcome) -> Void) {
         waiting = (at, decide)
+        if isDragging, !panIsActive() { isDragging = false; release = nil }
         if !isDragging { resolve() }
     }
 

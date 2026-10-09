@@ -90,6 +90,30 @@ import Testing
         #expect(a.calls == 1)
     }
 
+    @Test func aDragWhosePanIsNoLongerActiveDoesNotBlockTheSettle() {
+        let f = SheetFlick()
+        f.panIsActive = { false }
+        f.began()
+        let a = settle(f, at: t0)
+        #expect(a.outcome == .dock)
+        #expect(!f.isDragging)
+
+        let g = SheetFlick()
+        g.panIsActive = { true }
+        g.began()
+        #expect(settle(g, at: t0).outcome == nil)
+        #expect(g.isDragging)
+    }
+
+    @Test func resetClearsAStuckDragAndDocksAWaitingSettle() {
+        let f = SheetFlick()
+        f.began()
+        let a = settle(f, at: t0)
+        f.reset()
+        #expect(a.outcome == .dock)
+        #expect(!f.isDragging)
+    }
+
     @Test func draggingIsTrackedForMeasurements() {
         let f = SheetFlick()
         #expect(!f.isDragging)
