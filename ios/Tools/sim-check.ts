@@ -3026,8 +3026,8 @@ function screens(s: Seeded): Screen[] {
     // The spec's fenced code: plain at first, colored once its grammar has loaded.
     { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500 },
     { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=spec`, wait: 1500 },
-  // Heading sizes and spacing (the interaction chain asserts the frames).
-  { name: "ticket-headings", url: `harness://ticket/${k(s.headings)}?tab=spec`, ready: (l) => l.includes("Heading four"), wait: 500 },
+    // Heading sizes and spacing (the interaction chain asserts the frames).
+    { name: "ticket-headings", url: `harness://ticket/${k(s.headings)}?tab=spec`, ready: (l) => l.includes("Heading four"), wait: 500 },
     // The file viewer, from an OS-level harness://file link : opened at a range
     // below the first screenful, then its Diff tab.
     { name: "file", url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 },
@@ -3562,9 +3562,10 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
     }),
     chain(8, (udid) => agentsFilterChecks(udid, s)),
-    // Longest-first puts it ahead of the checks that leave a context menu open.
-    chain(200, async (udid) => {
+    chain(6, async (udid) => {
       await check("spec headings step down in size, and a heading after a heading sits closer than one after a paragraph", async () => {
+        // An earlier check may have left a context menu open over the screen.
+        if (await findElement(udid, (l) => l === "Dismiss context menu")) await dismissMenu(udid);
         await goto(udid, `harness://ticket/${k(s.headings)}?tab=spec`, (l) => l.includes("Heading four"));
         const frame = async (label: string) => (await until(label, () => findElement(udid, (l) => l === label), 8000)).frame;
         const [h1, h2, h3, h4, intro, under] = [await frame("Heading one"), await frame("Heading two"), await frame("Heading three"), await frame("Heading four"), await frame("Intro paragraph."), await frame("Paragraph under three.")];
