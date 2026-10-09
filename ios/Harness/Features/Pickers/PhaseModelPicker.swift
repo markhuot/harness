@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The per-phase driver + model pick (ticket settings, project settings, app settings), on
 /// Models.phaseMatrix. The trigger shows the summary ("Opus 5.5 · Complete: Haiku 5.5") and opens
-/// a page sheet: a search field over the rows (Inherit first, absent at app level, then each
+/// a page sheet: a search field over the rows (Defaults first, absent at app level, then each
 /// signed-in driver's models under its heading, a "Default (…)" row first) and a radio column per
 /// phase (Planning, Work, Review, Complete), one radio selected per column. Tapping a radio sends
 /// that phase's patch right away and leaves the sheet open for the next one.
@@ -63,7 +63,7 @@ struct PhaseModelPicker: View {
     }
 }
 
-/// The sheet: the column headings pinned under the search field, then the Inherit row and a section
+/// The sheet: the column headings pinned under the search field, then the Defaults row and a section
 /// per driver, each row with a radio per phase.
 private struct PhaseModelSheet: View {
     let title: String
@@ -75,6 +75,7 @@ private struct PhaseModelSheet: View {
 
     @State private var query = ""
     @Environment(\.palette) private var c
+    @Environment(\.dismiss) private var dismiss
 
     static let columnWidth: CGFloat = 58
 
@@ -87,6 +88,10 @@ private struct PhaseModelSheet: View {
             } else {
                 Button("Refresh model lists", systemImage: "arrow.clockwise", action: onRefresh)
             }
+        } trailing: {
+            // A radio tap already saved its pick, so there's nothing to confirm: Done only closes.
+            Button("Done", systemImage: "checkmark") { dismiss() }
+                .font(.system(size: 17, weight: .semibold))
         } content: {
             VStack(spacing: 0) {
                 columnHeadings
@@ -94,6 +99,8 @@ private struct PhaseModelSheet: View {
                     if let inherit {
                         Section {
                             row(inherit, group: nil)
+                        } footer: {
+                            if let names = matrix.inheritNames { DefaultsHelp(names: names) }
                         }
                     }
                     ForEach(groups) { group in
@@ -159,5 +166,53 @@ private struct PhaseModelSheet: View {
         }
         .listRowBackground(c.bgElev)
         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 4))
+    }
+}
+
+/// The models the Defaults row inherits, as its section footer: each name under its phase's radio
+/// when every name fits the column, else one line per phase with the phase in bold (long ids,
+/// names with a driver prefix, large Dynamic Type). VoiceOver reads it as one line.
+private struct DefaultsHelp: View {
+    let names: PerPhase<String>
+
+    @Environment(\.palette) private var c
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private static let size: CGFloat = 11.5
+
+    /// Whether every name fits the 58pt column (less a point of air each side) at the current text size.
+    private var fitsColumns: Bool {
+        let scale = UIFontMetrics(forTextStyle: .body).scaledValue(for: Self.size, compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(ContentSizeCategory(typeSize) ?? .large)))
+        let font = UIFont.systemFont(ofSize: scale)
+        return Phase.allCases.allSatisfy { p in
+            ceil((names[p] as NSString).size(withAttributes: [.font: font]).width) <= PhaseModelSheet.columnWidth - 4
+        }
+    }
+
+    var body: some View {
+        Group {
+            if fitsColumns {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ForEach(Phase.allCases, id: \.self) { p in
+                        Text(names[p])
+                            .lineLimit(1)
+                            .frame(width: PhaseModelSheet.columnWidth)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Phase.allCases, id: \.self) { p in
+                        Text("\(Text("\(p.label):").bold()) \(names[p])")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .font(.scaled(size: Self.size))
+        .foregroundStyle(c.text3)
+        .textCase(nil)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Defaults: " + Phase.allCases.map { "\($0.label) \(names[$0])" }.joined(separator: ", "))
     }
 }

@@ -1,7 +1,7 @@
 // The per-phase driver + model pick (app Settings, project settings, ticket settings): the trigger
 // summarises the choices ("Opus 5.5 · Complete: Haiku 5.5"); its popover lists every signed-in
 // driver's models down the left and a radio column per phase (Planning, Work, Review, Complete) on
-// the right, one radio selected per column. The Inherit row (absent at app level) clears a phase.
+// the right, one radio selected per column. The Defaults row (absent at app level) clears a phase, with the models it inherits listed under it.
 // Arrow keys move over the rows and columns, Space/Enter picks, and typing filters the rows.
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -14,7 +14,20 @@ import { placeMenu, type MenuPlacement } from "./menuPlacement";
 import { isTypeaheadKey } from "./modelCombobox";
 import "./model-combobox.css";
 
-type Line = { kind: "heading"; driver: string; label: string } | { kind: "row"; row: PhaseRow };
+type Line = { kind: "heading"; driver: string; label: string } | { kind: "row"; row: PhaseRow } | { kind: "help"; names: Record<Phase, string> };
+
+/** The width a name has for itself in a phase column (64px less 2px of air a side). */
+const HELP_COLUMN_WIDTH = 60;
+const HELP_FONT = "11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+/** Whether every inherited name fits under its radio; false means list them one per line instead. */
+function helpFitsColumns(names: Record<Phase, string>): boolean {
+  if (measureCtx === undefined) measureCtx = document.createElement("canvas").getContext("2d");
+  if (!measureCtx) return Object.values(names).every((n) => n.length <= 9);
+  measureCtx.font = HELP_FONT;
+  return PHASES.every((p) => measureCtx!.measureText(names[p]).width <= HELP_COLUMN_WIDTH);
+}
 
 export function PhaseModelSelect({
   value,
@@ -72,7 +85,7 @@ export function PhaseModelSelect({
 
   const lines: Line[] = open
     ? [
-        ...(matrix.inherit && !query.trim() ? [{ kind: "row" as const, row: matrix.inherit }] : []),
+        ...(matrix.inherit && !query.trim() ? [{ kind: "row" as const, row: matrix.inherit }, ...(matrix.inheritNames ? [{ kind: "help" as const, names: matrix.inheritNames }] : [])] : []),
         ...filterPhaseGroups(matrix.groups, query).flatMap((g) => [{ kind: "heading" as const, driver: g.driver, label: g.label }, ...g.rows.map((row) => ({ kind: "row" as const, row }))]),
       ]
     : [];
@@ -254,7 +267,33 @@ export function PhaseModelSelect({
             <div className="model-combo-list" id={listId} role="grid" aria-label="Model per phase">
               {lines.length === 0 && <div className="model-combo-empty">No models match</div>}
               {lines.map((l) =>
-                l.kind === "heading" ? (
+                l.kind === "help" ? (
+                  <div key="help" role="row" className="phase-combo-help" data-testid="phase-defaults-help">
+                    <div
+                      role="gridcell"
+                      aria-label={`Defaults: ${PHASES.map((p) => `${PHASE_LABELS[p]} ${l.names[p]}`).join(", ")}`}
+                      className={helpFitsColumns(l.names) ? "columns" : "lines"}
+                      style={helpFitsColumns(l.names) ? { gridTemplateColumns: cols } : undefined}
+                    >
+                      {helpFitsColumns(l.names) ? (
+                        <>
+                          <span aria-hidden />
+                          {PHASES.map((p) => (
+                            <span key={p} aria-hidden data-phase={p}>
+                              {l.names[p]}
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        PHASES.map((p) => (
+                          <div key={p} aria-hidden data-phase={p}>
+                            <b>{PHASE_LABELS[p]}:</b> {l.names[p]}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : l.kind === "heading" ? (
                   <div key={`h-${l.driver}`} className="model-combo-heading" role="presentation">
                     {l.label}
                   </div>

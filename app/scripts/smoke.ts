@@ -655,10 +655,12 @@ try {
     js<boolean>(`(() => { const row = [...document.querySelectorAll(".phase-combo-row")].find(r => r.querySelector("[role=rowheader]").textContent.startsWith(${JSON.stringify(label)}) && (${JSON.stringify(driver ?? "")} === "" || r.dataset.row.startsWith(${JSON.stringify((driver ?? "") + "\u0001")}))); const el = row?.querySelector("[role=radio][data-phase=${phase}]"); if (!el) return false; el.click(); return true; })()`);
   const ccRows = await comboRows(inPane(printId, ".draft-options"));
   check(
-    "the draft's Models picker: Inherit first, then models under each signed-in driver",
-    ccRows[0]!.startsWith("Inherit (") && ccRows.includes("# Claude Code") && ccRows.includes("Sonnet 5") && ccRows.includes("# Dummy") && ccRows.includes("Dummy Slow") && !ccRows.includes("# Anthropic API"),
+    "the draft's Models picker: Defaults first, then models under each signed-in driver",
+    ccRows[0] === "Defaults" && ccRows.includes("# Claude Code") && ccRows.includes("Sonnet 5") && ccRows.includes("# Dummy") && ccRows.includes("Dummy Slow") && !ccRows.includes("# Anthropic API"),
     ccRows.join(","),
   );
+  const defaultsHelp = await js<string>(`document.querySelector("[data-testid=phase-defaults-help] [role=gridcell]")?.getAttribute("aria-label") ?? ""`);
+  check("the Defaults row names what each phase inherits right under it", /^Defaults: Planning .+, Work .+, Review .+, Complete .+$/.test(defaultsHelp), defaultsHelp);
   check("the picker sets the Work phase's driver + model in one go", await comboPick("Dummy Slow"));
   const modeOpts = await js<string[]>(`[...document.querySelectorAll('${inPane(printId, "[data-testid=permission-mode] option")}')].map(o => o.textContent)`);
   check("the draft offers the permission modes, inheriting by default", modeOpts.join(",") === "Default (Auto),Auto,Ask,Read only", modeOpts.join(","));
@@ -800,13 +802,13 @@ try {
   await js(`location.hash = "#/board/all/ticket/${idle.key}/details"`);
   await until("idle details", () => js<boolean>(`location.hash.includes(${JSON.stringify(idle.key)}) && !!document.querySelector(".props [data-testid=phase-model-select]")`));
   const idleRows = await comboRows(".props");
-  check("between runs it lists every signed-in driver with Inherit first", idleRows[0]!.startsWith("Inherit (") && idleRows.includes("# Claude Code") && idleRows.includes("# Dummy"), idleRows.join(","));
-  await comboPick("Inherit");
+  check("between runs it lists every signed-in driver with Defaults first", idleRows[0] === "Defaults" && idleRows.includes("# Claude Code") && idleRows.includes("# Dummy"), idleRows.join(","));
+  await comboPick("Defaults");
   const cleared = await until("model cleared", async () => {
     const t = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${idle.key}`)).ticket;
     return t.model === null && t.driver === "claude-code" && t;
   });
-  check("Details Inherit puts the ticket's Work phase back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
+  check("Details Defaults puts the ticket's Work phase back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
   check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-titlebar .model-badge")))));
   await api("PATCH", `/tickets/${idle.key}`, { permissionMode: "ask" });
   await until("mode shown", () => js<boolean>(`document.querySelector(".props [data-testid=permission-mode]")?.value === "ask"`));
@@ -825,7 +827,7 @@ try {
   await js(`location.hash = "#/settings/drivers"`);
   await until("model settings", () => exists("#settings-drivers [data-testid=default-model] [data-testid=phase-model-select]"));
   const appRows = await comboRows("[data-testid=default-model]");
-  check("app settings have no Inherit row", !appRows.some((r) => r.startsWith("Inherit")), appRows.join(","));
+  check("app settings have no Defaults row", !appRows.some((r) => r === "Defaults"), appRows.join(","));
   await comboPick("Haiku 4.5", "work", "claude-code");
   const savedDefault = await until("settings work model", async () => {
     const st = await api<{ defaultDriver: string; defaultModels: Record<string, string | null> }>("GET", "/settings");

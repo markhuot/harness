@@ -163,6 +163,25 @@
   color: var(--text);
   cursor: default;
 }
+/* The models the Defaults row inherits: each name under its phase's radio, or one labelled line a phase. */
+.phase-combo-help {
+  padding: 0 8px 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: default;
+}
+.phase-combo-help .columns {
+  display: grid;
+  column-gap: 0;
+}
+.phase-combo-help .columns > span {
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.phase-combo-help .lines b {
+  font-weight: 600;
+}
 .phase-combo-row.active {
   background: var(--bg-hover);
 }

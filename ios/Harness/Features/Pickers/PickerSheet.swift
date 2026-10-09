@@ -1,11 +1,11 @@
 import HarnessKit
 import SwiftUI
 
-/// The page sheet behind the searchable pickers (model, branch): Cancel, the title, a trailing
-/// accessory (refresh / spinner), a search field pinned under the bar with an optional problem
+/// The page sheet behind the searchable pickers (model, branch): Cancel (or another `leading`
+/// control), the title, a trailing accessory (refresh / spinner), a search field pinned under the bar with an optional problem
 /// line, and the list. The search field is our own rather than `.searchable` so it can be mono
 /// (branches), focus on open, and carry the AX label sim-check looks for.
-struct PickerSheet<Content: View, Trailing: View>: View {
+struct PickerSheet<Content: View, Leading: View, Trailing: View>: View {
     let title: String
     @Binding var query: String
     let placeholder: String
@@ -15,10 +15,38 @@ struct PickerSheet<Content: View, Trailing: View>: View {
     var problem: String?
     var submitLabel: SubmitLabel = .search
     var onSubmit: () -> Void = {}
-    @ViewBuilder var trailing: Trailing
-    @ViewBuilder var content: Content
+    let leading: Leading
+    let trailing: Trailing
+    let content: Content
 
-    @Environment(\.dismiss) private var dismiss
+    init(
+        title: String,
+        query: Binding<String>,
+        placeholder: String,
+        searchLabel: String,
+        mono: Bool = false,
+        autofocus: Bool = false,
+        problem: String? = nil,
+        submitLabel: SubmitLabel = .search,
+        onSubmit: @escaping () -> Void = {},
+        @ViewBuilder leading: () -> Leading,
+        @ViewBuilder trailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self._query = query
+        self.placeholder = placeholder
+        self.searchLabel = searchLabel
+        self.mono = mono
+        self.autofocus = autofocus
+        self.problem = problem
+        self.submitLabel = submitLabel
+        self.onSubmit = onSubmit
+        self.leading = leading()
+        self.trailing = trailing()
+        self.content = content()
+    }
+
     @Environment(\.palette) private var c
     @FocusState private var focused: Bool
 
@@ -36,13 +64,13 @@ struct PickerSheet<Content: View, Trailing: View>: View {
         .onAppear { if autofocus { focused = true } }
     }
 
-    /// Cancel, the title and the accessory in the sheet itself: AXe doesn't see a
-    /// sheet's toolbar items, and sim-check taps "Cancel" by label.
+    /// The leading control, the title and the trailing accessory in the sheet itself: AXe doesn't
+    /// see a sheet's toolbar items, and sim-check taps them by label.
     private var header: some View {
         HStack(spacing: 10) {
-            Button("Cancel") { dismiss() }
-                .font(.scaled(size: 16))
+            leading
                 .foregroundStyle(c.accent)
+                .labelStyle(.iconOnly)
                 .frame(width: 72, alignment: .leading)
             Text(title)
                 .font(.scaled(size: 16, weight: .semibold))
@@ -92,6 +120,37 @@ struct PickerSheet<Content: View, Trailing: View>: View {
         .padding(.bottom, 10)
         .background(c.bg)
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
+    }
+}
+
+/// The default leading control: Cancel, which dismisses the sheet.
+struct PickerCancelButton: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Button("Cancel") { dismiss() }.font(.scaled(size: 16))
+    }
+}
+
+extension PickerSheet where Leading == PickerCancelButton {
+    /// A sheet whose leading control is Cancel.
+    init(
+        title: String,
+        query: Binding<String>,
+        placeholder: String,
+        searchLabel: String,
+        mono: Bool = false,
+        autofocus: Bool = false,
+        problem: String? = nil,
+        submitLabel: SubmitLabel = .search,
+        onSubmit: @escaping () -> Void = {},
+        @ViewBuilder trailing: () -> Trailing,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.init(
+            title: title, query: query, placeholder: placeholder, searchLabel: searchLabel, mono: mono, autofocus: autofocus,
+            problem: problem, submitLabel: submitLabel, onSubmit: onSubmit, leading: { PickerCancelButton() }, trailing: trailing, content: content
+        )
     }
 }
 

@@ -3469,9 +3469,9 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await tapWhere(udid, (l) => l.startsWith("Models, "));
         await until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000);
       };
-      // The sheet stays open after a pick: Cancel closes it before the next deep link.
-      const closeModels = () => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000));
-      await check("ticket details: the Models picker sets a phase's driver and model, and Inherit clears it", async () => {
+      // The sheet stays open after a pick: Done closes it before the next deep link.
+      const closeModels = () => tapWhere(udid, "Done").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000));
+      await check("ticket details: the Models picker sets a phase's driver and model, and Defaults clears it", async () => {
         await openModels();
         // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy (Claude
         // Code's models) can leave its rows unrealized and out of AXe's tree.
@@ -3484,7 +3484,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         });
         await closeModels();
         await openModels();
-        await tapWhere(udid, (l) => l.startsWith("Work, Inherit"));
+        await tapWhere(udid, (l) => l === "Work, Defaults");
         const cleared = await settle(s.branchPlan.key, (x) => !x.phaseModels?.work, 8000);
         await closeModels();
         moved(udid);
