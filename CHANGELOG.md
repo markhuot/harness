@@ -28,6 +28,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
   `start_ticket` does the same, and its reply tells the agent when it only approved the plan. When the work starts from an approval, Activity credits whoever approved it, a person or an
   agent.
 
+### Changed
+
+- For people working on Harness: `bun run spec-headings` (`app/scripts/spec-headings-check.ts`) launches
+  the built Mac app and checks that spec headings render at four decreasing sizes and that a heading
+  right after another heading sits close to it.
+
 ### Fixed
 
 - Headings in a spec (and other markdown) on Mac and iPhone/iPad now have a full size scale, so

@@ -19,6 +19,7 @@
     "changes": "bun run build && bun scripts/changes.ts",
     "spec-activity": "bun run build && bun scripts/spec-activity.ts",
     "browser-tabs": "bun run build && bun scripts/browser-tabs.ts",
+    "spec-headings": "bun run build && bun scripts/spec-headings-check.ts",
     "browser-size": "bun run build && bun scripts/browser-size-check.ts",
     "icon": "bun scripts/icon.ts",
     "typecheck": "tsc --noEmit -p .",
