@@ -32,7 +32,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - For people working on Harness: `bun run spec-headings` (`app/scripts/spec-headings-check.ts`) launches
   the built Mac app and checks that spec headings render at four decreasing sizes and that a heading
-  right after another heading sits close to it.
+  right after another heading sits close to it. `bun run sim-check` does the same on the iPhone: a
+  new spec with every heading level is screenshotted and its heading heights and gaps asserted.
 
 ### Fixed
 

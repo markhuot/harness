@@ -689,6 +689,22 @@ const TABLE_BRIEF = [
   "```",
 ].join("\n");
 
+/** Every heading level, one straight after another (H2 then H3) and one after a paragraph (H4). */
+const HEADINGS_BRIEF = [
+  "# Heading one",
+  "",
+  "Intro paragraph.",
+  "",
+  "## Heading two",
+  "### Heading three",
+  "",
+  "Paragraph under three.",
+  "",
+  "#### Heading four",
+  "",
+  "Closing paragraph.",
+].join("\n");
+
 /** Fenced code in three languages, syntax highlighted by CodeBlock (lib/highlight). */
 const CODE_BRIEF = [
   "Greet from the API",
@@ -843,6 +859,7 @@ async function seed() {
   // Specs with fenced code and diffs, for the syntax highlighting (last, so the keys above stay put).
   const code = await create(other.id, CODE_BRIEF, { skipAgentReview: true });
   const diff = await create(other.id, DIFF_BRIEF, { skipAgentReview: true });
+  const headings = await create(other.id, HEADINGS_BRIEF, { skipAgentReview: true });
   // A spec with a relative file link, which opens in the ticket's own worktree.
   // The link is a paragraph of its own, so a tap near the paragraph's start lands on it.
   const fileLink = await create(project.id, `Tidy the greetings\n\n[greetingFor fallback](${GREETINGS_PATH}#L${GREETING_FOR[0]}-L${GREETING_FOR[1]})`, { skipAgentReview: true });
@@ -896,6 +913,7 @@ async function seed() {
     settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
     settle(code.key, (t) => t.status === "review" && !t.busy),
     settle(diff.key, (t) => t.status === "review" && !t.busy),
+    settle(headings.key, (t) => t.status === "review" && !t.busy),
     settle(fileLink.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     settle(linked.key, (t) => t.status === "planning" && !t.busy),
     settle(linkedStage.key, (t) => t.status === "planning" && !t.busy),
@@ -919,7 +937,7 @@ async function seed() {
   const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
   const task = (await api<TicketDetail>("GET", `/tickets/${tasks.key}`)).subagents!.find((s) => s.kind === "bash")!;
   const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tasks, task, tables, code, diff, fileLink, linked, linkedStage };
+  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tasks, task, tables, code, diff, headings, fileLink, linked, linkedStage };
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -3008,6 +3026,8 @@ function screens(s: Seeded): Screen[] {
     // The spec's fenced code: plain at first, colored once its grammar has loaded.
     { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500 },
     { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=spec`, wait: 1500 },
+  // Heading sizes and spacing (the interaction chain asserts the frames).
+  { name: "ticket-headings", url: `harness://ticket/${k(s.headings)}?tab=spec`, ready: (l) => l.includes("Heading four"), wait: 500 },
     // The file viewer, from an OS-level harness://file link : opened at a range
     // below the first screenful, then its Diff tab.
     { name: "file", url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 },
@@ -3542,6 +3562,25 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
       });
     }),
     chain(8, (udid) => agentsFilterChecks(udid, s)),
+    // Longest-first puts it ahead of the checks that leave a context menu open.
+    chain(200, async (udid) => {
+      await check("spec headings step down in size, and a heading after a heading sits closer than one after a paragraph", async () => {
+        await goto(udid, `harness://ticket/${k(s.headings)}?tab=spec`, (l) => l.includes("Heading four"));
+        const frame = async (label: string) => (await until(label, () => findElement(udid, (l) => l === label), 8000)).frame;
+        const [h1, h2, h3, h4, intro, under] = [await frame("Heading one"), await frame("Heading two"), await frame("Heading three"), await frame("Heading four"), await frame("Intro paragraph."), await frame("Paragraph under three.")];
+        await shot(udid, "headings-light");
+        if (!(h1.height > h2.height && h2.height > h3.height && h3.height >= h4.height)) {
+          throw new Error(`heading heights aren't stepping down: ${[h1, h2, h3, h4].map((f) => f.height).join(" > ")}`);
+        }
+        const after = (a: { y: number; height: number }, b: { y: number }) => b.y - (a.y + a.height);
+        const afterHeading = after(h2, h3);
+        const afterParagraph = after(under, h4);
+        if (!(afterHeading < afterParagraph) || afterHeading > 8) throw new Error(`H3 sits ${afterHeading} pt under H2, H4 ${afterParagraph} pt under its paragraph`);
+        const h2Gap = after(intro, h2);
+        if (!(h2Gap > afterHeading)) throw new Error(`H2 sits ${h2Gap} pt under a paragraph, no more than H3 under H2 (${afterHeading})`);
+        return `heights ${[h1, h2, h3, h4].map((f) => f.height).join("/")}; H3 ${afterHeading} pt under H2, H2 ${h2Gap} and H4 ${afterParagraph} under paragraphs`;
+      });
+    }),
     chain(6, async (udid) => {
       await check("a relative file link in a spec opens the file viewer in the ticket's folder, at its lines", async () => {
         const label = "greetingFor fallback";
