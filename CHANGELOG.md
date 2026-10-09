@@ -73,6 +73,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The per-phase Models picker's first row is now **Defaults** instead of a long "Inherit (Sonnet 5.5
+  · Planning: Opus 5.5 …)" line that got cut off. The models it inherits are listed right under it,
+  each one under its phase's radio when the names fit, or one line per phase with the phase in bold
+  when they don't (long model ids, defaults that span several drivers, large text sizes). On
+  iPhone and iPad the Models sheet also drops Cancel: refresh moves to the left and a **Done**
+  checkmark on the right closes the sheet (your picks were already saved when you tapped them).
 - Opening a ticket while another is open or docked now adds it to the dock instead of replacing
   the other one. A card's ✕, or a swipe down on the iPhone dock, closes only that ticket.
 - On iPhone the other docked tickets' cards stack above the dock, lifting the board's bottom bar

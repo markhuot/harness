@@ -82,17 +82,17 @@ private struct PhaseModelSheet: View {
     var body: some View {
         let groups = Models.filterPhaseGroups(matrix.groups, query)
         let inherit = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? matrix.inherit : nil
-        PickerSheet(title: title, query: $query, placeholder: "Search models", searchLabel: "Search models", problem: problem) {
+        PickerSheet(title: title, query: $query, placeholder: "Search models", searchLabel: "Search models", problem: problem, leading: {
             if loading {
                 ProgressView()
             } else {
                 Button("Refresh model lists", systemImage: "arrow.clockwise", action: onRefresh)
             }
-        } trailing: {
+        }, trailing: {
             // A radio tap already saved its pick, so there's nothing to confirm: Done only closes.
             Button("Done", systemImage: "checkmark") { dismiss() }
                 .font(.system(size: 17, weight: .semibold))
-        } content: {
+        }, content: {
             VStack(spacing: 0) {
                 columnHeadings
                 List {
@@ -117,7 +117,7 @@ private struct PhaseModelSheet: View {
                     }
                 }
             }
-        }
+        })
     }
 
     /// Planning, Work, Review, Complete over the radio columns.
@@ -176,16 +176,14 @@ private struct DefaultsHelp: View {
     let names: PerPhase<String>
 
     @Environment(\.palette) private var c
-    @Environment(\.dynamicTypeSize) private var typeSize
+    /// The footer's type size at the current Dynamic Type setting, for measuring the names.
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 10.5
 
-    private static let size: CGFloat = 11.5
-
-    /// Whether every name fits the 58pt column (less a point of air each side) at the current text size.
+    /// Whether every name fits the 58pt column (less a point of air) at the current text size.
     private var fitsColumns: Bool {
-        let scale = UIFontMetrics(forTextStyle: .body).scaledValue(for: Self.size, compatibleWith: UITraitCollection(preferredContentSizeCategory: UIContentSizeCategory(ContentSizeCategory(typeSize) ?? .large)))
-        let font = UIFont.systemFont(ofSize: scale)
+        let font = UIFont.systemFont(ofSize: size)
         return Phase.allCases.allSatisfy { p in
-            ceil((names[p] as NSString).size(withAttributes: [.font: font]).width) <= PhaseModelSheet.columnWidth - 4
+            ceil((names[p] as NSString).size(withAttributes: [.font: font]).width) <= PhaseModelSheet.columnWidth - 2
         }
     }
 
@@ -209,7 +207,7 @@ private struct DefaultsHelp: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .font(.scaled(size: Self.size))
+        .font(.scaled(size: 10.5))
         .foregroundStyle(c.text3)
         .textCase(nil)
         .accessibilityElement(children: .ignore)
