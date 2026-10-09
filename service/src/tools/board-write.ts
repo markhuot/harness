@@ -203,7 +203,7 @@ export const moveTicket = defineTool<{ key: string; status: TicketStatus; positi
   inputSchema: schema(
     {
       key: keyProp,
-      status: { type: "string", enum: [...TICKET_STATUSES], description: "Target column. Pass the current one with position to reorder." },
+      status: { type: "string", enum: TICKET_STATUSES.filter((s) => s !== "in_progress"), description: "Target column (not in_progress: start_ticket starts work). Pass the current one with position to reorder." },
       position: { type: "integer", minimum: 0, description: "0-based slot in the target column." },
     },
     ["key", "status"],

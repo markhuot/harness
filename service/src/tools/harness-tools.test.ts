@@ -291,17 +291,19 @@ describe("board write tools → HarnessOps", () => {
     const ops = fakeOps();
     const ctx = fakeContext({ ops });
     await tool("create_ticket").execute({ title: "one", spec: "d" }, ctx);
-    const m = await tool("move_ticket").execute({ key: "TEST-2", status: "in_progress", position: 0 }, ctx);
+    const m = await tool("move_ticket").execute({ key: "TEST-2", status: "planning", position: 0 }, ctx);
     await tool("move_ticket").execute({ key: "TEST-2", status: "blocked" }, ctx);
+    // in_progress isn't a column to move to: start_ticket starts work.
+    expect((await tool("move_ticket").execute({ key: "TEST-2", status: "in_progress" }, ctx)).isError).toBe(true);
     await tool("cancel_ticket").execute({ key: "TEST-2" }, ctx);
     await tool("reopen_ticket").execute({ key: "TEST-2", notes: "the footer is still broken" }, ctx);
     expect(ops.calls.slice(1)).toEqual([
-      { method: "moveTicket", args: ["TEST-2", "in_progress", 0] },
+      { method: "moveTicket", args: ["TEST-2", "planning", 0] },
       { method: "moveTicket", args: ["TEST-2", "blocked", undefined] },
       { method: "cancelTicket", args: ["TEST-2"] },
       { method: "reopenTicket", args: ["TEST-2", "the footer is still broken"] },
     ]);
-    expect(text(m)).toBe("Moved TEST-2 (status: in_progress).");
+    expect(text(m)).toBe("Moved TEST-2 (status: planning).");
     expect((await tool("reopen_ticket").execute({ key: "TEST-2", notes: " " }, ctx)).isError).toBe(true);
   });
 });
