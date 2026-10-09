@@ -84,16 +84,6 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.runs(state, sessionId: "s1").map(\.id) == ["r3", "r2", "r1"])
     }
 
-    @Test("a run's time is its duration once it ran, at least a second")
-    func runTime() {
-        #expect(TicketDetailLogic.runTime(Self.run("r", createdAt: 0, startedAt: 1000, endedAt: 13_400), now: 0) == "12s")
-        #expect(TicketDetailLogic.runTime(Self.run("r", createdAt: 0, startedAt: 1000, endedAt: 1100), now: 0) == "1s")
-        // Math.round rounds .5 up.
-        #expect(TicketDetailLogic.runTime(Self.run("r", createdAt: 0, startedAt: 0.5, endedAt: 2500.5), now: 0) == "3s")
-        let queued = Self.run("r", createdAt: 1_000_000, startedAt: 1_000_000)
-        #expect(TicketDetailLogic.runTime(queued, now: 1_000_000 + 5 * 60_000) == Format.relativeTime(1_000_000, now: 1_000_000 + 5 * 60_000))
-    }
-
     @Test("a run's detail is its error, else its prompt's first line")
     func runDetail() {
         #expect(TicketDetailLogic.runDetail(Self.run("r", createdAt: 0, error: "exit 1", prompt: "a\nb")) == "exit 1")

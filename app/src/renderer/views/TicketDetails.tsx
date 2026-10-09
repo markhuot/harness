@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { specConflict, type RelatedTicket, type SpecConflict, type Ticket, type TicketStatus } from "@harness/shared";
+import { specConflict, type DriverInfo, type PhaseChoice, type Run, type RelatedTicket, type SpecConflict, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { dependentsOf } from "@harness/shared/state";
+import { dependentsOf, runPhaseDefault, runRowInfo } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { driverLabel, relativeTime, STATUS_LABEL, StatusDot, TicketKey, useNow } from "../components/bits";
@@ -49,6 +49,10 @@ export function TicketDetails({
   );
   const editable = ticket.status !== "done";
   const project = state.projects[ticket.projectId];
+  const rowProps = (r: Run) => ({
+    phaseDefault: runPhaseDefault(r.kind, { hasTicket: true, project: project?.phaseModels, settings: state.settings?.phaseModels }),
+    drivers: state.drivers,
+  });
 
   const open = (key: string) => openTicket(key);
   const related = useMemo(
@@ -246,22 +250,47 @@ export function TicketDetails({
             Runs
           </div>
           <div className="runs card-surface">
-            {runs.map((r) => (
-              <div key={r.id} className="run-row">
-                <span className={`run-status run-${r.status}`}>{r.status === "running" || r.status === "queued" ? <span className="spinner" /> : null}{r.status}</span>
-                <span className="run-kind">{r.kind}</span>
-                <span className="muted">{driverLabel(r.driver, state.drivers)}</span>
-                <span className="grow truncate muted" title={r.error ?? r.prompt}>
-                  {r.error ? <span style={{ color: "var(--red)" }}>{r.error}</span> : r.prompt.split("\n")[0]}
-                </span>
-                <span className="muted run-time">
-                  {r.startedAt && r.endedAt ? `${Math.max(1, Math.round((r.endedAt - r.startedAt) / 1000))}s` : relativeTime(r.createdAt, now)}
-                </span>
-              </div>
-            ))}
+            {runs.map((r) =>
+              r.status === "running" || r.status === "queued" ? (
+                <LiveRunRow key={r.id} run={r} {...rowProps(r)} />
+              ) : (
+                <RunRow key={r.id} run={r} now={now} {...rowProps(r)} />
+              ),
+            )}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+type RunRowProps = { run: Run; phaseDefault: PhaseChoice | null; drivers: DriverInfo[] | undefined };
+
+/** A running or queued run's row: its elapsed time counts up every second. */
+function LiveRunRow(props: RunRowProps) {
+  return <RunRow {...props} now={useNow(1000)} />;
+}
+
+/** One run: status, kind, prompt and elapsed time, then muted chips for what it used. */
+function RunRow({ run: r, now, phaseDefault, drivers }: RunRowProps & { now: number }) {
+  const info = runRowInfo(r, phaseDefault, now);
+  return (
+    <div className="run-row">
+      <div className="run-main">
+        <span className={`run-status run-${r.status}`}>{r.status === "running" || r.status === "queued" ? <span className="spinner" /> : null}{r.status}</span>
+        <span className="run-kind">{r.kind}</span>
+        <span className="grow truncate muted" title={r.error ?? r.prompt}>
+          {r.error ? <span style={{ color: "var(--red)" }}>{r.error}</span> : r.prompt.split("\n")[0]}
+        </span>
+        {info.elapsed && <span className="muted run-time">{info.elapsed}</span>}
+      </div>
+      <div className="run-meta muted">
+        {info.start && <span title={new Date(r.startedAt ?? r.createdAt).toLocaleString()}>{info.start}</span>}
+        {info.tokens && <span title={info.tokensDetail ?? undefined}>{info.tokens}</span>}
+        {info.cost && <span>{info.cost}</span>}
+        {info.driver && <span>{driverLabel(info.driver, drivers)}</span>}
+        {info.model && <span className="run-model">{info.model}</span>}
+      </div>
     </div>
   );
 }

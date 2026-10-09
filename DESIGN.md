@@ -1430,6 +1430,18 @@ conversation with a new `--model` (verified against the real CLI). Standalone se
 keep their own driver and take the project/settings Work model only when it's on that driver.
 `Run started (kind · model)` names the driver too when it differs from the ticket's Work driver.
 
+**What a run records.** When a run starts, the row stores the model it resolved (`runs.model`, null
+= the driver's default), and each driver `usage` event adds its input tokens, output tokens and
+cost to the run's totals (`input_tokens`, `output_tokens`, `cost_usd`, null until a driver reports
+one; migration 40) and broadcasts `run.upserted`, so a running row updates live. claude-code reports
+cost as a per-turn delta, so the sum is the run's cost; anthropic-api reports tokens only; Copilot
+reports nothing. The ticket's Runs list (`runRowInfo` in `shared/src/state/runs.ts`, ported to
+`RunRows.swift`) shows the driver and model only when they differ from the run's **phase default**:
+what the ticket inherits for that phase from the project and settings (`inheritedPhaseModels`). A
+ticket-level override therefore shows on its runs. Triage runs (no phase) and runs outside a ticket
+have no default and always show both. The default is resolved when the list is drawn, so a later
+settings change can add or drop chips on old runs; the stored driver and model stay accurate.
+
 Out of the box only **Complete** has a choice: Haiku on the default driver (`haiku` on
 claude-code, `claude-haiku-5-5` on anthropic-api), seeded once by migration 38 with `INSERT OR
 IGNORE`, so a user's later clear sticks. PATCH bodies and tools merge `phaseModels` /

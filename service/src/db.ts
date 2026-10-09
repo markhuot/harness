@@ -719,6 +719,14 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE tickets ADD COLUMN start_after_plan INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE tickets ADD COLUMN start_after_plan_by TEXT;
   `,
+  // 40: runs.model and the run's usage totals (DESIGN.md "What a run records"). All NULL for runs
+  //     from before, and for a driver that reports nothing.
+  `
+  ALTER TABLE runs ADD COLUMN model TEXT;
+  ALTER TABLE runs ADD COLUMN input_tokens INTEGER;
+  ALTER TABLE runs ADD COLUMN output_tokens INTEGER;
+  ALTER TABLE runs ADD COLUMN cost_usd REAL;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

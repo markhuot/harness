@@ -466,6 +466,15 @@ export interface Run {
   createdAt: number;
   startedAt: number | null;
   endedAt: number | null;
+  /**
+   * What the run used, for the Runs list. All optional/nullable so clients tolerate an older
+   * service and runs from before they were recorded. `model` null: the driver's own default.
+   * Tokens and cost are summed over the driver's usage reports; null when it reported none.
+   */
+  model?: string | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  costUsd?: number | null;
 }
 
 export type TranscriptRole = "user" | "assistant" | "tool" | "system";

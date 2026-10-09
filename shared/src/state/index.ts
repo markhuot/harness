@@ -13,6 +13,7 @@ export * from "./changesTab";
 export * from "./changes";
 export * from "./subagents";
 export * from "./format";
+export * from "./runs";
 export * from "./markdown";
 export * from "./specDiff";
 export * from "./icons";

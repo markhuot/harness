@@ -422,6 +422,21 @@ describe("tickets", () => {
     expect(s.tickets.getByKey("foo-3")!.id).toBe(t.id);
   });
 
+  test("runs sum usage reports, keeping a field nobody reported null", () => {
+    const s = mk();
+    const run = s.runs.create({ sessionId: "s1", kind: "work", driver: "dummy", prompt: "hi" });
+    expect(run).toMatchObject({ model: null, inputTokens: null, outputTokens: null, costUsd: null });
+    expect(s.runs.setModel(run.id, "opus").model).toBe("opus");
+    expect(s.runs.addUsage(run.id, { inputTokens: 100, outputTokens: 20, costUsd: 0.25 })).toMatchObject({ inputTokens: 100, outputTokens: 20, costUsd: 0.25 });
+    expect(s.runs.addUsage(run.id, { inputTokens: 50 })).toMatchObject({ inputTokens: 150, outputTokens: 20, costUsd: 0.25 });
+    expect(s.runs.addUsage(run.id, { costUsd: 0.5 })).toMatchObject({ inputTokens: 150, outputTokens: 20, costUsd: 0.75 });
+    // Starting and finishing keep the totals
+    s.runs.markRunning(run.id);
+    expect(s.runs.finish(run.id, "succeeded")).toMatchObject({ model: "opus", inputTokens: 150, costUsd: 0.75 });
+    const tokensOnly = s.runs.create({ sessionId: "s1", kind: "work", driver: "dummy", prompt: "hi" });
+    expect(s.runs.addUsage(tokensOnly.id, { inputTokens: 1 }).costUsd).toBeNull();
+  });
+
   test("update patches only given fields and replaces deps", () => {
     const s = mk();
     const p = s.projects.create({ path: "/a/foo", name: "foo" });

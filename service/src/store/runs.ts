@@ -14,6 +14,10 @@ interface RunRow {
   created_at: number;
   started_at: number | null;
   ended_at: number | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cost_usd: number | null;
 }
 
 const toRun = (r: RunRow): Run => {
@@ -30,6 +34,10 @@ const toRun = (r: RunRow): Run => {
     createdAt: r.created_at,
     startedAt: r.started_at,
     endedAt: r.ended_at,
+    model: r.model,
+    inputTokens: r.input_tokens,
+    outputTokens: r.output_tokens,
+    costUsd: r.cost_usd,
   };
 };
 
@@ -71,6 +79,26 @@ export class RunRepo {
 
   markRunning(id: string): Run {
     this.db.query("UPDATE runs SET status = 'running', started_at = $t WHERE id = $id").run({ id, t: now() });
+    return this.get(id)!;
+  }
+
+  /** The model the run was started with (null: the driver's own default). */
+  setModel(id: string, model: string | null): Run {
+    this.db.query("UPDATE runs SET model = $model WHERE id = $id").run({ id, model });
+    return this.get(id)!;
+  }
+
+  /** Adds one driver usage report to the run's totals. A field nobody has reported stays NULL. */
+  addUsage(id: string, usage: { inputTokens?: number; outputTokens?: number; costUsd?: number }): Run {
+    this.db
+      .query(
+        `UPDATE runs SET
+           input_tokens = CASE WHEN $i IS NULL THEN input_tokens ELSE COALESCE(input_tokens, 0) + $i END,
+           output_tokens = CASE WHEN $o IS NULL THEN output_tokens ELSE COALESCE(output_tokens, 0) + $o END,
+           cost_usd = CASE WHEN $c IS NULL THEN cost_usd ELSE COALESCE(cost_usd, 0) + $c END
+         WHERE id = $id`,
+      )
+      .run({ id, i: usage.inputTokens ?? null, o: usage.outputTokens ?? null, c: usage.costUsd ?? null });
     return this.get(id)!;
   }
 

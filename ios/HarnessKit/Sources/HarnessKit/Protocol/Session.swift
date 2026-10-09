@@ -52,11 +52,18 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
     public var createdAt: Timestamp
     @Nullable public var startedAt: Timestamp?
     @Nullable public var endedAt: Timestamp?
+    /// What the run used, for the Runs list; nil from an older service, for runs from before they
+    /// were recorded, and for a driver that reported nothing. `model` nil: the driver's own default.
+    public var model: String?
+    public var inputTokens: Double?
+    public var outputTokens: Double?
+    public var costUsd: Double?
 
     public init(
         id: String, sessionId: String, kind: RunKind, status: RunStatus, driver: String, prompt: String,
         attachments: [Attachment]? = nil,
-        error: String? = nil, createdAt: Timestamp, startedAt: Timestamp? = nil, endedAt: Timestamp? = nil
+        error: String? = nil, createdAt: Timestamp, startedAt: Timestamp? = nil, endedAt: Timestamp? = nil,
+        model: String? = nil, inputTokens: Double? = nil, outputTokens: Double? = nil, costUsd: Double? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -69,6 +76,10 @@ public struct Run: Codable, Sendable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.startedAt = startedAt
         self.endedAt = endedAt
+        self.model = model
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.costUsd = costUsd
     }
 }
 

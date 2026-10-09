@@ -2324,3 +2324,28 @@ describe("agent notes", () => {
     expect(h.orch.ticketDetail(t.key).ticket.agentNotes).toBeNull();
   });
 });
+
+describe("run usage", () => {
+  test("a run records its model and sums the driver's usage reports", async () => {
+    const h = setup();
+    h.store.settings.set({ phaseModels: { work: { driver: h.driver.id, model: "model-x" } } });
+    h.driver.script = async function* () {
+      yield { type: "usage", inputTokens: 1000, outputTokens: 200, costUsd: 0.1 };
+      yield { type: "usage", inputTokens: 500, costUsd: 0.05 };
+      yield { type: "usage" }; // nothing in it: no write
+      yield { type: "text", text: "done" };
+    };
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
+    h.events.length = 0;
+    await h.orch.startTicket(t.key);
+    await h.orch.idle();
+    const run = h.store.runs.listBySession(t.sessionId).find((r) => r.kind === "work")!;
+    expect(run).toMatchObject({ status: "succeeded", inputTokens: 1500, outputTokens: 200 });
+    expect(run.costUsd).toBeCloseTo(0.15, 6);
+    expect(run.model).toBe("model-x");
+    // Running totals went out as run.upserted, so a live row updates
+    const seen = h.events.flatMap((e) => (e.kind === "run.upserted" && e.run.id === run.id ? [e.run.inputTokens] : []));
+    expect(seen).toContain(1000);
+    expect(seen).toContain(1500);
+  });
+});

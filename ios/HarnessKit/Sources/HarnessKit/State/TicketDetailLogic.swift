@@ -127,14 +127,6 @@ public enum TicketDetailLogic {
         state.runs.values.filter { $0.sessionId == sessionId }.sorted { $0.createdAt != $1.createdAt ? $0.createdAt > $1.createdAt : $0.id > $1.id }
     }
 
-    /// A run's time column: its duration once it ran ("12s", at least 1s), else when it was queued.
-    public static func runTime(_ r: Run, now: Double) -> String {
-        if let start = r.startedAt, let end = r.endedAt, start != 0, end != 0 {
-            return "\(max(1, Int(JSCompat.round((end - start) / 1000))))s"
-        }
-        return Format.relativeTime(r.createdAt, now: now)
-    }
-
     /// A run's second line: its error, or its prompt's first line.
     public static func runDetail(_ r: Run) -> String {
         if let e = r.error { return e }

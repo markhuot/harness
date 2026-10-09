@@ -4419,10 +4419,11 @@ ${numberLines(r.body)}`;
   /** Start the driver and consume its events; returns the run error, if any. */
   private async drive(active: ActiveRun, session: Session, ticket: Ticket | null, project: Project | null, driver: Driver | undefined): Promise<string | null> {
     const { controller } = active;
-    const run = this.store.runs.markRunning(active.run.id);
+    const started = this.store.runs.markRunning(active.run.id);
+    const model = this.runModel(started, session, ticket, project);
+    const run = this.store.runs.setModel(started.id, model);
     active.run = run;
     this.bus.emit({ kind: "run.upserted", run });
-    const model = this.runModel(run, session, ticket, project);
     // Name the driver when this phase runs on another one than the ticket's Work runs.
     const onOtherDriver = ticket && run.driver !== ticket.driver ? ` · ${run.driver}` : "";
     this.appendStatus(session.id, run.id, `Run started (${run.kind}${onOtherDriver}${model ? ` · ${model}` : ""})`);
@@ -4624,8 +4625,13 @@ ${numberLines(r.body)}`;
           this.store.sessions.setDriverState(run.sessionId, ev.state, run.driver);
         }
         return null;
-      case "usage":
+      case "usage": {
+        // Summed per run (Claude Code reports cost as a per-turn delta); a report with nothing in it is skipped.
+        if (ev.inputTokens === undefined && ev.outputTokens === undefined && ev.costUsd === undefined) return null;
+        active.run = this.store.runs.addUsage(run.id, ev);
+        this.bus.emit({ kind: "run.upserted", run: active.run });
         return null;
+      }
       case "status":
         this.appendStatus(run.sessionId, run.id, ev.text);
         return null;

@@ -217,3 +217,14 @@ describe("migration 39: start after plan", () => {
     expect(store.tickets.update("t1", { startAfterPlan: true })!.startAfterPlan).toBe(true);
   });
 });
+
+describe("migration 40: model and usage on runs", () => {
+  test("a run from before has none of them, and can then take usage", () => {
+    const db = dbAt(39);
+    db.exec(`INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, created_at) VALUES ('r1', 's1', 'work', 'succeeded', 'dummy', 'hi', '[]', 1)`);
+    migrate(db);
+    const store = new Store(db);
+    expect(store.runs.get("r1")).toMatchObject({ model: null, inputTokens: null, outputTokens: null, costUsd: null });
+    expect(store.runs.addUsage("r1", { inputTokens: 5 })).toMatchObject({ inputTokens: 5, outputTokens: null, costUsd: null });
+  });
+});

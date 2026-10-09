@@ -11,6 +11,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A ticket's Runs list on Mac and iPhone/iPad is easier to read. Each run shows its status, kind and
+  prompt (or error), with how long it ran (counting up live while it runs, or how long it has waited
+  in the queue) and, on a line below, when it started, its token count (the input/output split on
+  hover on Mac, beside it on iPhone/iPad) and its cost when the driver reports them. The driver and
+  model appear only when a run used something other than the default for its phase, so a ticket
+  that overrides its Work model shows it on each of its runs. Runs from before this release show
+  what they have.
 - On a planning ticket whose plan is still being written, the Start button reads **Approve plan**
   (in the ⌘K palette too). Press it and the ticket stays in Planning while the plan run finishes,
   then its work starts on its own against the final plan, even if the plan ends with a question.

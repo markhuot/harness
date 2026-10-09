@@ -1169,11 +1169,27 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 }
 .run-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 12px;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
   font-size: 12px;
   border-top: 1px solid var(--border);
+}
+.run-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.run-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.run-model {
+  font-family: var(--mono);
 }
 .run-row:first-child {
   border-top: 0;
@@ -1182,7 +1198,7 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  width: 84px;
+  min-width: 72px;
   flex: none;
   font-weight: 500;
   text-transform: capitalize;
@@ -1207,7 +1223,6 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 .run-kind {
   font-family: var(--mono);
   font-size: 11px;
-  width: 70px;
   flex: none;
 }
 .run-time {

@@ -73,8 +73,13 @@ struct TicketDetailDetailsTab: View {
             let runs = TicketDetailLogic.runs(state, sessionId: ticket.sessionId)
             if !runs.isEmpty {
                 Section("Runs") {
-                    NowReader { now in
-                        ForEach(runs, id: \.id) { r in runRow(r, now: now) }
+                    let project = store.state.projects[ticket.projectId]
+                    ForEach(runs, id: \.id) { r in
+                        let phaseDefault = RunRows.phaseDefault(r.kind, project: project?.phaseModels, settings: store.state.settings?.phaseModels)
+                        // A running or queued run counts up every second; the rest refresh with the 30s clock.
+                        NowReader(interval: r.status == .running || r.status == .queued ? .live : .standard) { now in
+                            runRow(r, info: RunRows.info(r, phaseDefault: phaseDefault, now: now))
+                        }
                     }
                 }
                 .listRowBackground(c.bgElev)
@@ -176,22 +181,40 @@ struct TicketDetailDetailsTab: View {
         LabeledContent("Updated") { RelativeTimeText(ms: ticket.updatedAt).font(.scaled(size: 14)).foregroundStyle(c.text) }
     }
 
-    private func runRow(_ r: Run, now: Double) -> some View {
+    private func runRow(_ r: Run, info: RunRows.Info) -> some View {
         let running = r.status == .running || r.status == .queued
         let tint: Color = r.status == .failed ? c.red : r.status == .succeeded ? c.green : c.text2
+        let drivers = store.state.drivers
+        // Start, tokens (with their split), cost, then the driver and model when they aren't the phase default.
+        let meta = [
+            info.start,
+            info.tokens.map { t in info.tokensDetail.map { "\(t) (\($0))" } ?? t },
+            info.cost,
+            info.driver.map { Format.driverLabel($0, drivers: drivers) },
+            info.model,
+        ].compactMap { $0 }
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 if running { Spinner() }
                 Text(r.status.rawValue).font(.scaled(size: 13, weight: .semibold)).foregroundStyle(tint)
                 Text(r.kind.rawValue).font(.scaled(size: 13)).foregroundStyle(c.text)
-                Text(Format.driverLabel(r.driver, drivers: store.state.drivers)).font(.scaled(size: 13)).foregroundStyle(c.text3)
                 Spacer(minLength: 0)
-                Text(TicketDetailLogic.runTime(r, now: now)).font(.scaled(size: 12.5)).foregroundStyle(c.text3)
+                if let elapsed = info.elapsed {
+                    Text(elapsed).font(.scaled(size: 12.5)).foregroundStyle(c.text3).monospacedDigit()
+                }
             }
-            Text(TicketDetailLogic.runDetail(r))
-                .font(.scaled(size: 13))
-                .foregroundStyle(r.error != nil ? c.red : c.text3)
-                .lineLimit(2)
+            let detail = TicketDetailLogic.runDetail(r)
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.scaled(size: 13))
+                    .foregroundStyle(r.error != nil ? c.red : c.text2)
+                    .lineLimit(2)
+            }
+            if !meta.isEmpty {
+                Text(meta.joined(separator: " · "))
+                    .font(.scaled(size: 12))
+                    .foregroundStyle(c.text3)
+            }
         }
         .accessibilityElement(children: .combine)
     }
