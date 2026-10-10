@@ -3,7 +3,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { DriverInfo, ModelInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
+import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
@@ -146,7 +147,7 @@ export function DraftInput({ value, onCommit, placeholder, type = "text", classN
 }
 
 function GeneralSection({ settings }: { settings: PublicSettings }) {
-  const { client } = useStore();
+  const { client, toast } = useStore();
   const act = useAction();
 
   const save = (body: Partial<Settings>) => act(() => client.updateSettings(body));
@@ -161,6 +162,17 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
             onCommit={(v) => {
               const n = Math.round(Number(v));
               if (Number.isFinite(n)) save({ maxConcurrentRuns: Math.min(32, Math.max(1, n)) });
+            }}
+          />
+        </Row>
+        <Row title="Context gauge limit" sub="Tokens, 10k to 2M. The ticket header's gauge turns red past it. Also set from the gauge's menu.">
+          <DraftInput
+            value={String(settings.contextGaugeLimit ?? DEFAULT_CONTEXT_GAUGE_LIMIT)}
+            onCommit={(v) => {
+              const n = parseLimit(v);
+              const bad = limitError(n);
+              if (bad) toast(bad, "error");
+              else save({ contextGaugeLimit: n });
             }}
           />
         </Row>

@@ -42,6 +42,8 @@ import { Icon, isIconName } from "../components/Icon";
 import { FileLinkScope, SpecAttachmentsScope } from "../components/Markdown";
 import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 import { ModelBadge } from "../components/ModelSelect";
+import { ContextGauge } from "../components/ContextGauge";
+import { COMPACTING_PLACEHOLDER } from "../state/contextGauge";
 import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
 import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
@@ -571,6 +573,7 @@ function DetailHeader({
           <StatusPill status={ticket.status} />
           <ModelBadge ticket={ticket} />
           {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
+          <ContextGauge ticket={ticket} />
           <KindBadge ticket={ticket} childCount={children.length} />
           {ticket.branch && (
             <span className="badge badge-outline mono" title={ticket.workdir ?? undefined}>
@@ -599,7 +602,8 @@ function DetailHeader({
 
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
 
-        <div className="actions">
+        {/* A fieldset, so a compacting session disables every action in the row at once. */}
+        <fieldset className="actions" disabled={!!ticket.compacting} data-testid="ticket-actions">
           {canStart && (
             <button className="btn btn-primary" onClick={start}>
               <Icon name="play" /> {startLabel(startMode)}
@@ -672,7 +676,7 @@ function DetailHeader({
               </>
             )}
           </MenuButton>
-        </div>
+        </fieldset>
       </div>
       {modals}
     </div>
@@ -969,7 +973,9 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   });
   // One row: (+), the input and Send. The only note it needs goes on Send's tooltip.
   const sendTitle = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : "Send";
-  const canSend = composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
+  // A compact run owns the session: the service refuses messages (409) until it ends.
+  const compacting = !!ticket.compacting;
+  const canSend = !compacting && composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
 
   useEffect(() => {
     const el = ref.current;
@@ -1050,11 +1056,13 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
           </MenuButton>
         )}
         <input ref={attach.fileInput} type="file" multiple hidden data-testid="composer-attach-input" onChange={attach.onFilesPicked} />
+        {compacting && <span className="spinner composer-compacting" data-testid="composer-compacting" role="status" aria-label="Compacting" />}
         <MentionTextarea
           ref={ref}
           rows={1}
           className="composer-input"
-          placeholder={COMPOSER_PLACEHOLDER[ticket.status]}
+          placeholder={compacting ? COMPACTING_PLACEHOLDER : COMPOSER_PLACEHOLDER[ticket.status]}
+          disabled={compacting}
           value={text}
           onValueChange={setText}
           onFocus={() => draft.focus(true, ticket.messageDraft)}
