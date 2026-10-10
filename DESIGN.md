@@ -3299,8 +3299,9 @@ Settings, project settings, or on the board route the pane workspace.
   `openTerminal(projectId?)`. It picks the board (`terminalScope`: the board on screen, a
   project's own board from its settings, otherwise the board last shown or All projects) and the
   folder (`terminalCwd`: the project's `path`, `~` on All projects or for an unknown project).
-  Then it runs `openTerminal` in that scope, which docks the terminal on the right of the focused
-  pane (half of it) or of the board (40%) and focuses it, and goes to that board if it isn't on
+  Then it runs `openTerminal` in that scope, which appends the terminal as the far-right, full-height pane of the
+  workspace, 70em wide like a New session pane (`COMPOSE_WIDTH_PX`, shared sizing in
+  `fixedWidthShare`, floor 320px), and focuses it, and goes to that board if it isn't on
   screen. Each call adds a pane. The content's `sessionId` is `t:<uuid>` (`newTerminalContent`)
   and names the PTY. It isn't the leaf id: leaf ids come from a per-window counter, so two
   windows can mint the same one before either sees the other's write, and loading re-ids a

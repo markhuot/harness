@@ -614,15 +614,23 @@ export function orphanSessions(running: readonly string[], store: PaneStore): st
 }
 
 /**
- * Open a terminal beside `fromLeafId`, else the focused pane, else the board (splitTarget), on its
- * right: half of that pane's space, or the ticket's 40% beside the board. The new pane is focused.
- * Every call adds a pane (terminals aren't one-per-anything), unless `content`'s session is already
- * open, which just focuses it.
+ * Open a terminal on the far right of the workspace, running its full height, like a New session
+ * pane (see openCompose): COMPOSE_WIDTH_PX wide when `workspaceWidth` (px) allows, else what the
+ * other panes leave past their minimums (never under the terminal's own); an equal share without a
+ * width. Every call adds a pane (terminals aren't one-per-anything), unless `content`'s session is
+ * already open, which just focuses it. The new pane is focused.
  */
-export function openTerminal(state: PaneState, content: TerminalContent, fromLeafId: string | null = null): PaneState {
+export function openTerminal(state: PaneState, content: TerminalContent, workspaceWidth?: number): PaneState {
   const existing = terminalLeafBySession(state.root, content.sessionId);
   if (existing) return focusPane(state, existing.id);
-  return dock(state, null, splitTarget(state, fromLeafId), "right", content);
+  return appendAtRightEdge(state, content, (root, count) => fixedWidthShare(root, count, workspaceWidth, PANE_MIN_WIDTH.terminal));
+}
+
+/** The row share of a COMPOSE_WIDTH_PX pane (at least `minPx`, at most what the others' minimums leave), or an equal share without a width. */
+function fixedWidthShare(root: PaneState["root"], count: number, workspaceWidth: number | undefined, minPx: number): number {
+  if (!workspaceWidth || workspaceWidth <= 0) return 1 / (count + 1);
+  const px = Math.max(minPx, Math.min(COMPOSE_WIDTH_PX, workspaceWidth - minSize(root, "row")));
+  return Math.min(px / workspaceWidth, 0.9);
 }
 
 let composeCounter = 0;
@@ -646,11 +654,7 @@ export const COMPOSE_WIDTH_PX = 70 * 13;
 export function openCompose(state: PaneState, content: ComposeContent = newComposeContent(), workspaceWidth?: number): PaneState {
   const existing = composeLeafById(state.root, content.id);
   if (existing) return focusPane(state, existing.id);
-  return appendAtRightEdge(state, content, (root, count) => {
-    if (!workspaceWidth || workspaceWidth <= 0) return 1 / (count + 1);
-    const px = Math.max(PANE_MIN_WIDTH.compose, Math.min(COMPOSE_WIDTH_PX, workspaceWidth - minSize(root, "row")));
-    return Math.min(px / workspaceWidth, 0.9);
-  });
+  return appendAtRightEdge(state, content, (root, count) => fixedWidthShare(root, count, workspaceWidth, PANE_MIN_WIDTH.compose));
 }
 
 /**

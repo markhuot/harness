@@ -1208,21 +1208,31 @@ const TT = (sessionId: string, cwd = "/work"): PaneLeaf => ({ type: "leaf", id: 
 const sessionsOf = (s: PaneState) => leaves(s.root).flatMap((l) => (l.content.kind === "terminal" ? [l.content.sessionId] : []));
 
 describe("openTerminal", () => {
-  test("splits the focused pane in half, on its right, and focuses the terminal", () => {
-    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), term("t:1")));
-    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.2, $t:1 0.2]");
-    expect(focusedLabel(s)).toBe("$t:1");
+  test("lands on the far right, full height, wherever focus is, and takes focus", () => {
+    for (const focus of ["A-1", "A-2", "B"]) {
+      const s = valid(openTerminal(st(row("r", [B, T("A-1"), T("A-2")]), focus), term("t:1"), 2000));
+      expect(label((s.root as PaneSplit).children.at(-1) as PaneLeaf)).toBe("$t:1");
+      expect(focusedLabel(s)).toBe("$t:1");
+    }
+    const stacked = valid(openTerminal(st(row("r", [B, col("c", [T("A-1"), T("A-2")])]), "A-2"), term("t:1"), 2000));
+    expect(shape(stacked.root)).toMatch(/^row\[board [\d.]+, col\[A-1 0\.5, A-2 0\.5\] [\d.]+, \$t:1 [\d.]+\]$/);
   });
 
-  test("with nothing focused it opens beside the board, which keeps 60%", () => {
-    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.6, 0.4])), term("t:1")));
-    expect(shape(s.root)).toBe("row[board 0.36, $t:1 0.24, A-1 0.4]");
-    expect(focusedLabel(s)).toBe("$t:1");
+  test("is 70em (910px) wide when the workspace has room, the others shrinking in proportion", () => {
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.6, 0.4])), term("t:1"), 1820));
+    expect(shape(s.root)).toBe("row[board 0.3, A-1 0.2, $t:1 0.5]");
   });
 
-  test("a focused pane that's gone falls back to the board", () => {
-    const s = valid(openTerminal(st(B, "nope"), term("t:1")));
-    expect(shape(s.root)).toBe("row[board 0.6, $t:1 0.4]");
+  test("in a narrow window it keeps the others' minimums and never goes under the terminal's own", () => {
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.5, 0.5])), term("t:1"), 1000));
+    const sizes = (s.root as PaneSplit).sizes;
+    expect(sizes.at(-1)! * 1000).toBeCloseTo(320, 0); // 1000 − board 320 − ticket 360
+    expect(valid(openTerminal(st(row("r", [B, T("A-1")])), term("t:2"), 400)).root).toBeDefined();
+  });
+
+  test("a column root is wrapped in a row, and without a width it takes an equal share", () => {
+    const s = valid(openTerminal(st(col("c", [B, T("A-1")])), term("t:1")));
+    expect(shape(s.root)).toBe("row[col[board 0.5, A-1 0.5] 0.5, $t:1 0.5]");
   });
 
   test("every new terminal is another pane, each with its own session", () => {
@@ -1241,7 +1251,7 @@ describe("openTerminal", () => {
   });
 
   test("a zoom ends so the new terminal is visible", () => {
-    const s = valid(openTerminal(st(row("r", [B, T("A-1")]), "A-1", "A-1"), term("t:1")));
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")]), "A-1", "A-1"), term("t:1"), 2000));
     expect(s.zoomedId).toBeNull();
     expect(focusedLabel(s)).toBe("$t:1");
   });

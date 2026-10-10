@@ -488,6 +488,9 @@ export function StoreProvider({
     await onTokenRotated(rotated);
   }, [onTokenRotated]);
 
+  // The share a fixed-width pane takes is a plain fraction of the workspace as it is now; it doesn't track later resizes.
+  const workspaceWidth = () => document.querySelector<HTMLElement>(".pane-workspace")?.clientWidth || window.innerWidth;
+
   // --- Terminals ---------------------------------------------------------------------------
   useTerminalLifecycle();
   const openTerminal = useCallback(
@@ -500,7 +503,7 @@ export function StoreProvider({
       const focused = projectId === undefined && r.view === "board" ? focusedTicket(getPanes(scope)) : null;
       const { projects, tickets } = stateRef.current;
       const cwd = terminalCwd(scope, projects, focused ? (tickets[focused.ticketKey] ?? null) : null);
-      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(cwd)));
+      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(cwd), workspaceWidth()));
       if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate],
@@ -510,9 +513,7 @@ export function StoreProvider({
     (projectId: string | null = null) => {
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
-      // The share is a plain fraction of the workspace as it is now; it doesn't track later resizes.
-      const width = document.querySelector<HTMLElement>(".pane-workspace")?.clientWidth || window.innerWidth;
-      updatePanes(scope, (s) => openComposePane(s, newComposeContent(projectId), width));
+      updatePanes(scope, (s) => openComposePane(s, newComposeContent(projectId), workspaceWidth()));
       if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate],
