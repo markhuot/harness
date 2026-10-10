@@ -50,6 +50,8 @@ describe("return_to_planning", () => {
   test("a blocked work chat hands off to a Plan run on the Plan model; Start resumes work on the Work model", async () => {
     const h = setup();
     const t = await blocked(h);
+    const { workdir, branch } = cur(h, t);
+    expect(workdir).toBeTruthy();
     await h.orch.sendMessage(t.key, "let's rethink this /replan");
     await h.orch.idle();
     expect(calls(h)).toEqual(["work:sonnet", "chat:sonnet", "plan:opus"]);
@@ -65,7 +67,8 @@ describe("return_to_planning", () => {
     await h.orch.startTicket(t.key);
     await h.orch.idle();
     expect(calls(h).slice(3)).toEqual(["work:sonnet", "review:opus"]);
-    expect(cur(h, t).status).toBe("review");
+    expect(cur(h, t)).toMatchObject({ status: "review", workdir, branch });
+    expect(h.driver.calls[3]!.cwd).toBe(workdir!);
   });
 
   test("the Plan run is a new conversation even though the card left Blocked", async () => {
@@ -133,13 +136,19 @@ describe("return_to_planning", () => {
     const h = setup();
     const dep = await h.orch.createTicket({ projectId: h.project.id, spec: "dep", start: false });
     const t = await blocked(h);
-    h.store.tickets.update(t.id, { autoStart: true });
+    h.store.tickets.update(t.id, { dependsOn: [dep.key], autoStart: true });
     expect(cur(h, t).autoStart).toBe(true);
     await h.orch.sendMessage(t.key, "rethink /replan");
     await h.orch.idle();
     expect(cur(h, t)).toMatchObject({ status: "planning", autoStart: false });
-    expect(h.driver.calls.filter((c) => c.kind === "work")).toHaveLength(1);
-    expect(dep.status).toBe("planning");
+    // The dependency finishing must not start the re-planned child on its own.
+    await h.orch.startTicket(dep.key);
+    await h.orch.idle();
+    await h.orch.completeTicket(dep.key, { skipAgent: true });
+    await h.orch.idle();
+    expect(cur(h, dep).status).toBe("done");
+    expect(cur(h, t)).toMatchObject({ status: "planning", autoStart: false });
+    expect(h.driver.calls.filter((c) => c.kind === "work" && c.prompt.includes("Add a button"))).toHaveLength(1);
   });
 
   test("from Review it stops a queued review run and resets both reviews", async () => {
@@ -168,6 +177,32 @@ describe("return_to_planning", () => {
     await h.orch.idle();
     expect(cur(h, t).status).toBe("planning");
     expect(calls(h).at(-1)).toBe("plan:opus");
+  });
+
+  test("refused while the ticket's complete run is going, and for plan and review runs", async () => {
+    const h = setup();
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    await h.orch.idle();
+    let open!: () => void;
+    const gate = new Promise<void>((r) => (open = r));
+    let started = false;
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      started = true;
+      await gate;
+    };
+    await h.orch.completeTicket(t.key);
+    while (!started) await Bun.sleep(2);
+    const ctx = (kind: string) => ({ ticket: cur(h, t), session: h.store.sessions.get(t.sessionId)!, runKind: kind, runId: "x", cwd: "/", ops: (h.orch as any).opsFacade }) as any;
+    await expect(h.orch.returnToPlanning(ctx("work"), "rethink", false)).rejects.toThrow(/is completing/);
+    expect(cur(h, t).status).toBe("review");
+    for (const kind of ["plan", "review"]) {
+      await expect(h.orch.returnToPlanning(ctx(kind), "rethink", false)).rejects.toThrow(/only available in work, conductor and chat runs/);
+    }
+    expect(cur(h, t).status).toBe("review");
+    open();
+    await h.orch.idle();
+    expect(cur(h, t).status).toBe("done");
   });
 
   test("refused for a ticket already in Planning, and for an empty reason", async () => {
