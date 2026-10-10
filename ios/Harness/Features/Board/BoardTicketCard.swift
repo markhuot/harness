@@ -2,8 +2,11 @@ import HarnessKit
 import SwiftUI
 
 /// A board card with everything the desktop card shows. Touch and hold
-/// previews the ticket's screen on its Spec tab above the context menu (open the parent, copy the
-/// key). Only agents move cards between columns, so neither the menu, VoiceOver nor a drag does.
+/// previews the ticket's screen on its Spec tab above the context menu: the actions its screen
+/// offers right now (Start work, Approve, Request changes, Re-open and the More menu's), open the
+/// parent, copy the key. The actions that need input (notes, instructions, a delete confirmation)
+/// present from the board screen (TicketActionHost), which the cards reach through the environment.
+/// Only agents move cards between columns, so neither a drag nor VoiceOver does.
 /// On iPad at regular width a card also drags out of the window into a ticket window of its own
 /// (TearOff.swift); the board has no drop destination. A draft (a New session saved before launch)
 /// is dashed and dimmed with a Draft badge, opens in the New session editor, offers Discard with
@@ -15,6 +18,8 @@ struct BoardTicketCard: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
+    @Environment(Actions.self) private var actions
+    @Environment(TicketActionRunner.self) private var runner
     @Environment(\.palette) private var c
     @Environment(\.supportsMultipleWindows) private var multipleWindows
     /// The card's width, which the preview takes as its own.
@@ -28,7 +33,7 @@ struct BoardTicketCard: View {
         Button { open() } label: { card(state: state, parent: parent, waiting: waiting) }
             .buttonStyle(BoardCardPressStyle())
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-            .modifier(CardMenu(ticket: t, width: width) { menu(parent: parent) })
+            .modifier(CardMenu(ticket: t, width: width) { menu(parent: parent, state: state) })
             .modifier(CardDrag(ticket: t))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(BoardScreenRules.cardAccessibilityLabel(t) + (waiting.isEmpty ? "" : ", " + Conductor.autoStartTitle(waiting).replacingOccurrences(of: "Starts", with: "starts")) + restartLabel(t) + (MessageDrafts.has(t.messageDraft.optional) ? ", a message is drafted" : ""))
@@ -177,10 +182,10 @@ struct BoardTicketCard: View {
 
     // MARK: Menu
 
-    @ViewBuilder private func menu(parent: Ticket?) -> some View {
+    @ViewBuilder private func menu(parent: Ticket?, state: BoardState) -> some View {
         let t = ticket
         // The ticket's key and title, as the menu's header.
-        Section(BoardScreenRules.menuTitle(t)) { menuItems(t, parent: parent) }
+        Section(BoardScreenRules.menuTitle(t)) { menuItems(t, parent: parent, state: state) }
         // iPad: the ticket in a window of its own (Windows.swift).
         if multipleWindows && t.draft != true {
             Button("Open in New Window", systemImage: "macwindow.badge.plus") {
@@ -189,17 +194,36 @@ struct BoardTicketCard: View {
         }
     }
 
-    @ViewBuilder private func menuItems(_ t: Ticket, parent: Ticket?) -> some View {
-        ForEach(Array(BoardScreenRules.cardMenu(t, parent: parent).enumerated()), id: \.offset) { _, item in
+    @ViewBuilder private func menuItems(_ t: Ticket, parent: Ticket?, state: BoardState) -> some View {
+        let menu = BoardScreenRules.cardMenu(t, parent: parent, project: state.projects[t.projectId], deps: state.dependencyStates(t), settingsBaseBranch: state.settings?.baseBranch)
+        ForEach(Array(menu.enumerated()), id: \.offset) { _, item in
             switch item {
             case .discardDraft:
                 Button("Discard draft", systemImage: "trash", role: .destructive) { onDiscard(t) }
+            case let .ticket(action):
+                ticketAction(action, t)
             case let .openParent(key):
                 Button("Open \(parent.map { Keys.keyLabel($0) } ?? key)", systemImage: "arrow.turn.left.up") {
                     router.openTicket(key: key, tab: nil)
                 }
             case .copyKey:
                 Button("Copy key", systemImage: "doc.on.doc") { UIPasteboard.general.string = t.key }
+            }
+        }
+    }
+
+    /// One of the ticket's actions. Approve is a submenu of the ways to approve, the last of which
+    /// approves without an action (a plain tap on a submenu would have no primary to fire).
+    @ViewBuilder private func ticketAction(_ action: TicketAction, _ t: Ticket) -> some View {
+        if case let .approve(_, _, choices, _) = action {
+            Menu(action.title, systemImage: action.symbol) {
+                ForEach(Array(choices.enumerated()), id: \.offset) { _, choice in
+                    Button(choice.label ?? "") { runner.approve(choice.value, ticket: t, api: store.api, actions: actions) }
+                }
+            }
+        } else {
+            Button(action.title, systemImage: action.symbol, role: action.isDestructive ? .destructive : nil) {
+                runner.run(action, ticket: t, api: store.api, actions: actions)
             }
         }
     }

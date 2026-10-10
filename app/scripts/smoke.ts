@@ -744,7 +744,7 @@ try {
   const coHint = await js<string>(`document.querySelector('${inPane(coId, "[data-testid=branch-hint]")}')?.textContent ?? ""`);
   check("…and the hint says it works in the project directory", coHint.includes("with no worktree"), coHint);
   const coRows = await settingsRows(inPane(coId, ".draft-options"));
-  check("without a worktree there's no Base branch row", coRows.join(",") === "Model,Permissions,Agent review,Human review,Branch,Depends on", coRows.join(","));
+  check("without a worktree there's no Base branch row", coRows.join(",") === "Models,Permissions,Agent review,Human review,Branch,Depends on", coRows.join(","));
   // Moving a saved draft to another project re-keys it; its pane follows the new key.
   await pickProjectKey("HARNESS", coId);
   const moved = await until("draft moved", async () => (await draftList()).find((t) => t.title.includes("right in the checkout") && t.key.startsWith("HARNESS-")));

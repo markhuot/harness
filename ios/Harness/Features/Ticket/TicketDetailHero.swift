@@ -25,12 +25,9 @@ struct TicketDetailHero: View {
     @Environment(\.palette) private var c
     @State private var localExpanded = false
     @State private var contentHeight: CGFloat = 0
-    @State private var requestingChanges = false
-    @State private var reopening = false
-    @State private var approvingCustom = false
-    @State private var confirm: Confirmation?
+    /// Runs the actions and hosts what they ask for (the notes and instructions sheets, the delete confirmation).
+    @State private var runner = TicketActionRunner()
 
-    private var api: HarnessClient? { store.api }
     private var expanded: Bool { disclosure?.expanded ?? localExpanded }
 
     private func toggle() {
@@ -56,10 +53,7 @@ struct TicketDetailHero: View {
         .scrollBounceBehavior(.basedOnSize)
         .frame(height: min(contentHeight, maxHeight))
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
-        .sheet(isPresented: $requestingChanges) { TicketDetailNotesSheet(ticket: ticket) }
-        .sheet(isPresented: $reopening) { TicketDetailNotesSheet(ticket: ticket, reopen: true) }
-        .sheet(isPresented: $approvingCustom) { TicketDetailApproveCustomSheet(ticket: ticket) }
-        .confirmation($confirm)
+        .modifier(TicketActionHost(runner: runner))
     }
 
     @ViewBuilder private func content(compact: Bool) -> some View {
@@ -95,8 +89,9 @@ struct TicketDetailHero: View {
         if !compact {
             // While the session compacts the service refuses ticket actions; Cancel run in More stays.
             FlowLayout(spacing: 8) {
-                Group { buttons(project: project, parent: parent) }.disabled(ticket.compacting == true)
-                moreMenu(label: Keys.keyLabel(ticket))
+                let set = TicketActions.set(for: ticket, project: project, parent: parent, deps: state.dependencyStates(ticket), settingsBaseBranch: state.settings?.baseBranch)
+                Group { buttons(set, parent: parent) }.disabled(ticket.compacting == true)
+                moreMenu(set)
             }
         }
         // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
@@ -201,24 +196,13 @@ struct TicketDetailHero: View {
         .accessibilityHint("Opens it in the browser")
     }
 
-    @ViewBuilder private func buttons(project: Project?, parent: Ticket?) -> some View {
-        // A ticket on its base branch offers no merge or pull request, only clean up.
-        let opts = Completion.completionOptions(ticket: ticket, project: project, parent: parent, settingsBaseBranch: store.state.settings?.baseBranch)
-        let label = Keys.keyLabel(ticket)
-        let managedReason = Completion.managingConductor(ticket: ticket, parent: parent).map { Completion.conductorManagedReason(conductorKey: $0.key) }
-        let managed = managedReason != nil
+    /// The status action, Approve and the like come from the shared list (`TicketActions`, also the
+    /// board card's menu); the disabled stand-ins for a state with no action of its own are drawn here.
+    @ViewBuilder private func buttons(_ set: TicketActionSet, parent: Ticket?) -> some View {
         // Started while its dependencies were open: the service starts it once they're done, so
         // Start is off (it would skip the wait and run it now).
-        let deps = store.state.dependencyStates(ticket)
-        let waiting = Conductor.autoStartWaitingOn(ticket, deps)
-        // Start work when nothing runs; Approve plan while a planning run does (the work starts
-        // when it ends).
-        let startMode = Conductor.startState(ticket, deps)
-        if startMode == .start || startMode == .approve {
-            HButton(startMode == .approve ? "Approve plan" : "Start work", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: .success) {
-                perform { try await $0.startTicket($1) }
-            }
-        }
+        let waiting = Conductor.autoStartWaitingOn(ticket, store.state.dependencyStates(ticket))
+        let startMode = Conductor.startState(ticket, store.state.dependencyStates(ticket))
         if startMode == .approved {
             HButton("Starts after planning", icon: "clock", variant: .primary, small: true, fullWidth: false,
                     accessibilityLabel: Conductor.approvedTitle) {}
@@ -236,63 +220,45 @@ struct TicketDetailHero: View {
                     accessibilityLabel: Conductor.restartTitle(time)) {}
                 .disabled(true)
         }
-        // Approving lands the work once both reviews pass; there's no separate Complete step. A
-        // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.
-        if ticket.status == .review && (ticket.humanReview != .approved || managed) {
-            HStack(spacing: 2) {
-                let approveTitle = Completion.approveLabel(opts) ?? "Approve"
-                HButton(approveTitle, icon: "check", variant: .primary, small: true, fullWidth: false, haptic: .success,
-                        accessibilityLabel: TicketDetailLogic.approveButtonLabel(approveTitle, managedReason: managedReason)) {
-                    send(Approve.primaryApproveRequest(opts, ticket: ticket))
-                }
-                .disabled(managed)
-                approveMenu(opts, label: label).disabled(managed)
-            }
-        }
-        if ticket.status == .review && ticket.humanReview != .approved {
-            HButton("Request changes", icon: "edit", small: true, fullWidth: false) { requestingChanges = true }
+        ForEach(Array(set.primary.enumerated()), id: \.offset) { _, item in
+            primaryButton(item)
         }
         // A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty.
         if ticket.status == .inProgress {
             HButton("Working…", icon: "clock", small: true, fullWidth: false) {}
                 .disabled(true)
         }
-        if ticket.status == .done {
-            HButton("Re-open", icon: "refresh", small: true, fullWidth: false) { reopening = true }
+    }
+
+    @ViewBuilder private func primaryButton(_ item: TicketActionItem) -> some View {
+        switch item.action {
+        case .start:
+            HButton(item.action.title, icon: "play", variant: .primary, small: true, fullWidth: false, haptic: nil) { run(item.action) }
+                .disabled(!item.enabled)
+        case let .approve(title, _, choices, managedReason):
+            HStack(spacing: 2) {
+                HButton(title, icon: "check", variant: .primary, small: true, fullWidth: false, haptic: nil,
+                        accessibilityLabel: TicketDetailLogic.approveButtonLabel(title, managedReason: managedReason)) { run(item.action) }
+                    .disabled(!item.enabled)
+                approveMenu(choices).disabled(!item.enabled)
+            }
+        case .reopen:
+            HButton(item.action.title, icon: "refresh", small: true, fullWidth: false) { run(item.action) }
+                .disabled(!item.enabled)
+        default:
+            HButton(item.action.title, icon: "edit", small: true, fullWidth: false) { run(item.action) }
+                .disabled(!item.enabled)
         }
     }
 
-    /// The secondary […] after the actions: Move to done (not in review, where Approve and take no
-    /// action does it), Cancel run while a run is busy, and Delete.
-    private func moreMenu(label: String) -> some View {
+    /// The secondary […] after the actions: the agent review (in review), Move to done (not in
+    /// review, where Approve and take no action does it), Cancel run while a run is busy, and Delete.
+    private func moreMenu(_ set: TicketActionSet) -> some View {
         Menu {
-            if ticket.status == .review {
-                Button(TicketDetailLogic.agentReviewButton(ticket.agentReview), systemImage: "arrow.clockwise") {
-                    perform { try await $0.rerunAgentReview($1) }
-                }
-                .disabled(ticket.busy || ticket.compacting == true)
+            ForEach(Array(set.more.enumerated()), id: \.offset) { _, item in
+                Button(item.action.title, systemImage: item.action.symbol, role: item.action.isDestructive ? .destructive : nil) { run(item.action) }
+                    .disabled(!item.enabled)
             }
-            if TicketDetailLogic.offersMarkDone(ticket) {
-                Button("Move to done", systemImage: "checkmark.circle") {
-                    perform { try await $0.completeTicket($1, CompleteBody(skipAgent: true)) }
-                }
-                .disabled(ticket.compacting == true)
-            }
-            if ticket.busy {
-                Button("Cancel run", systemImage: "stop.circle", role: .destructive) {
-                    perform { try await $0.cancelTicket($1) }
-                }
-            }
-            Button("Delete ticket", systemImage: "trash", role: .destructive) {
-                confirm = Confirmation(title: "Delete \(label)?", message: "Its transcript, spec history and activity are removed too.", action: "Delete") {
-                    guard let api else { return }
-                    let key = ticket.key
-                    Task {
-                        if await actions.run({ try await api.deleteTicket(key) }) != nil { pop(key) }
-                    }
-                }
-            }
-            .disabled(ticket.compacting == true)
         } label: {
             Image(systemName: "ellipsis").font(.system(size: 13 * 0.92, weight: .semibold)).frame(width: 13, height: 13)
         }
@@ -303,6 +269,10 @@ struct TicketDetailHero: View {
         .accessibilityIdentifier("ticket-more")
     }
 
+    private func run(_ action: TicketAction) {
+        runner.run(action, ticket: ticket, api: store.api, actions: actions, onDeleted: pop)
+    }
+
     /// Back off the deleted ticket's screen.
     private func pop(_ key: String) {
         let state = store.state
@@ -310,15 +280,14 @@ struct TicketDetailHero: View {
     }
 
     /// The chevron beside Approve: every way to approve, then approving without an action.
-    private func approveMenu(_ opts: Completion.Options, label: String) -> some View {
-        let choices = Approve.approveMenuChoices(opts)
-        return Menu {
+    private func approveMenu(_ choices: [Approve.MenuChoice]) -> some View {
+        Menu {
             Section {
                 ForEach(Array(choices.dropLast().enumerated()), id: \.offset) { _, choice in
                     Button(choice.label ?? "") { approve(choice.value) }
                 }
             } header: {
-                Text("Approve \(label)")
+                Text("Approve \(Keys.keyLabel(ticket))")
             }
             if let last = choices.last {
                 Section { Button(last.label ?? "") { approve(last.value) } }
@@ -333,25 +302,6 @@ struct TicketDetailHero: View {
     }
 
     private func approve(_ choice: Approve.Choice) {
-        if choice == .action(.custom) {
-            approvingCustom = true
-            return
-        }
-        haptic(.success)
-        send(Approve.approveRequest(choice))
-    }
-
-    private func send(_ request: Approve.Request) {
-        switch request {
-        case let .review(body): perform { try await $0.humanReview($1, body) }
-        case let .complete(body): perform { try await $0.completeTicket($1, body) }
-        }
-    }
-
-    /// `act(() => client.…(key))` with the ticket's key.
-    private func perform<T: Sendable>(_ fn: @escaping @MainActor (HarnessClient, String) async throws -> T) {
-        guard let api else { return }
-        let key = ticket.key
-        actions.perform { _ = try await fn(api, key) }
+        runner.approve(choice, ticket: ticket, api: store.api, actions: actions)
     }
 }

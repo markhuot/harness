@@ -3648,8 +3648,8 @@ function interactionChains(s: Seeded): Chain[] {
         return "no Conductor pill";
       });
     }),
-    chain("card-preview", ["hello"], 6, async (udid) => {
-      await check("touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu", async () => {
+    chain("card-preview", ["hello", "plan"], 6, async (udid) => {
+      await check("touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu, and offers the ticket's actions", async () => {
         await goto(udid, BOARD);
         await tapWhere(udid, (l) => l.startsWith("Review,"));
         await until("card on screen", async () => ((await findElement(udid, (l) => l.startsWith(`${s.hello.key} `)))?.frame.x ?? 999) < 100, 3000).catch(() => {});
@@ -3666,10 +3666,45 @@ function interactionChains(s: Seeded): Chain[] {
         // screenshot shows that); a plain menu has none. A crash in the preview drops to SpringBoard,
         // whose Preview app has the label too, but no Copy key.
         if (!l.includes("Preview")) throw new Error(`no preview over the menu; on screen: ${l.slice(0, 30).join(" | ")}`);
-        // Closing the menu is tidying, not the check: a Copy key tap that leaves it up gets dismissed.
+        // A review card offers what its ticket screen does: Approve (a submenu of the ways to
+        // approve), Request changes and the More menu's items.
+        for (const want of ["Approve", "Request changes", "Delete ticket"]) {
+          if (!l.some((x) => x === want || x.startsWith(`${want} `))) throw new Error(`the review card's menu has no ${want}; on screen: ${l.slice(0, 30).join(" | ")}`);
+        }
+        // Request changes needs notes: it opens the same sheet the ticket screen's button does.
+        await tapWhere(udid, "Request changes");
+        await until("the notes sheet", async () => (await labels(udid)).includes("What should the agent change?"), 6000).catch(async (e) => {
+          await shot(udid, "board-card-request-changes-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
+        await shot(udid, "board-card-request-changes-light");
+        await tapWhere(udid, "Cancel");
+        await until("the sheet gone", async () => !(await labels(udid)).includes("What should the agent change?"), 4000);
+        return `${s.hello.key}: Spec preview, Approve / Request changes / Delete in the menu, Request changes opens the notes sheet`;
+      });
+      await check("a planning card's menu offers Start work", async () => {
+        await goto(udid, BOARD);
+        // Page to Planning until its card is on screen.
+        await until("the planning card on screen", async () => {
+          const x = (await findElement(udid, (l) => l.startsWith(`${s.plan.key} `)))?.frame.x ?? -1;
+          if (x >= 0 && x < 100) return true;
+          // Review is where the board lands, with Planning's chip scrolled off the strip: page back by hand.
+          await axe("swipe", "--start-x", "30", "--start-y", "520", "--end-x", "370", "--end-y", "520", "--duration", "0.3", "--udid", udid);
+          await Bun.sleep(700);
+          return false;
+        }, 12000, 0);
+        await tapWhere(udid, (l) => l.startsWith(`${s.plan.key} `), { longPress: 1.2 });
+        const l = await until("the menu", async () => ((x) => (x.includes("Copy key") ? x : null))(await labels(udid)), 5000).catch(async (e) => {
+          await shot(udid, "board-card-planning-menu-failed");
+          throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
+        });
+        await Bun.sleep(800);
+        await shot(udid, "board-card-planning-menu-light");
+        if (!l.includes("Start work")) throw new Error(`the planning card's menu has no Start work; on screen: ${l.slice(0, 30).join(" | ")}`);
+        if (l.includes("Approve") || l.includes("Request changes")) throw new Error(`a planning card offers review actions: ${l.join(" | ")}`);
         await tapWhere(udid, "Copy key");
         await until("the menu gone", async () => !(await labels(udid)).includes("Copy key"), 4000).catch(() => dismissMenu(udid));
-        return `${s.hello.key}: Spec preview, no moves`;
+        return `${s.plan.key}: Start work in the menu`;
       });
     }),
     chain("agents-filter", ["tasks"], 5, (udid) => agentsFilterChecks(udid, s)),

@@ -4,7 +4,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, pushNotifications, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { dirname, join } from "node:path";
 import { HarnessClient } from "@harness/shared";
@@ -599,20 +599,38 @@ ipcMain.handle("harness:revealInFinder", (_e, path: unknown) => {
 });
 ipcMain.handle("harness:contextMenu", (e, raw: unknown) => {
   const items = Array.isArray(raw) ? (raw as ContextMenuItem[]) : [];
+  // Smoke tests can't read a native menu over CDP: they set this to a file and read each menu's labels from it (a submenu's in brackets).
+  if (process.env.HARNESS_MENU_LOG) appendFileSync(process.env.HARNESS_MENU_LOG, JSON.stringify(menuLabels(items)) + "\n");
   const autopick = process.env.HARNESS_MENU_AUTOPICK?.split(",");
-  if (autopick) {
-    const hit = items.find((i) => i.type !== "separator" && autopick.includes(i.id) && i.enabled !== false);
-    return hit && hit.type !== "separator" ? hit.id : null;
-  }
+  if (autopick) return findMenuItem(items, (i) => autopick.includes(i.id) && i.enabled !== false)?.id ?? null;
   return new Promise<string | null>((resolve) => {
-    const template: MenuItemConstructorOptions[] = items.map((i) =>
-      i.type === "separator" ? { type: "separator" } : { label: String(i.label), enabled: i.enabled !== false, click: () => resolve(String(i.id)) },
-    );
+    const build = (list: ContextMenuItem[]): MenuItemConstructorOptions[] =>
+      list.map((i) =>
+        i.type === "separator"
+          ? { type: "separator" }
+          : i.submenu
+            ? { label: String(i.label), enabled: i.enabled !== false, submenu: build(i.submenu) }
+            : { label: String(i.label), enabled: i.enabled !== false, click: () => resolve(String(i.id)) },
+      );
     const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
     // On macOS the close callback can fire before the item's click; give the click a beat to win.
-    Menu.buildFromTemplate(template).popup({ window: win, callback: () => void setTimeout(() => resolve(null), 100) });
+    Menu.buildFromTemplate(build(items)).popup({ window: win, callback: () => void setTimeout(() => resolve(null), 100) });
   });
 });
+/** The first selectable item (a submenu's too) `match` accepts. */
+function findMenuItem(items: ContextMenuItem[], match: (i: Extract<ContextMenuItem, { id: string }>) => boolean): Extract<ContextMenuItem, { id: string }> | undefined {
+  for (const i of items) {
+    if (i.type === "separator") continue;
+    if (match(i)) return i;
+    const inner = i.submenu && findMenuItem(i.submenu, match);
+    if (inner) return inner;
+  }
+  return undefined;
+}
+/** A menu's labels, separators as "-" and a submenu as the labels in brackets after its own. */
+function menuLabels(items: ContextMenuItem[]): unknown[] {
+  return items.map((i) => (i.type === "separator" ? "-" : i.submenu ? [i.label, menuLabels(i.submenu)] : i.label));
+}
 ipcMain.on("harness:getThemeSync", (e) => {
   e.returnValue = themeState();
 });

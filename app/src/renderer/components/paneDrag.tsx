@@ -14,6 +14,8 @@
 // It's also kept here, since dragover needs to know what's dragged to decide whether a drop
 // would do anything.
 
+import { actionMenuItems, pickedAction, type TicketAction } from "../state/ticketActions";
+import type { LandChoice } from "../state/approveMenu";
 import { useSyncExternalStore, type DragEvent, type MouseEvent } from "react";
 import { dropOnBoard, findLeaf, getPanes, isPopoutScope, returnTabPane, splitTarget, tabContent, tornId, type DragSource, type DropZone, type PaneContent, type TabDrag, type TornOff } from "../state/panes";
 import { dragOutPoint } from "../state/dragOut";
@@ -170,9 +172,10 @@ const NEW_WINDOW = { id: "window", label: "Open in New Window" };
  * Right-click (or the context-menu key on a focused card or row): Open, or open in a new split in
  * the `scope` workspace beside the pane `fromPaneId` (a child row's own pane), else the focused
  * pane, else the board, or in a window of its own. `discard` adds Discard draft (a draft's card).
- * The keyboard way to do what dragging does. Outside Electron the browser's own menu shows.
+ * `actions` adds the ticket's own actions (Start work, Approve, Request changes, the More menu's…)
+ * after Open, and `onAction` runs the one picked. The keyboard way to do what dragging does. Outside Electron the browser's own menu shows.
  */
-export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey: string, open: () => void, fromPaneId: string | null = null, discard?: () => void, boardScope: string = scope) {
+export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey: string, open: () => void, fromPaneId: string | null = null, discard?: () => void, boardScope: string = scope, actions?: { list: TicketAction[]; run: (picked: { action: TicketAction; choice?: LandChoice }) => void }) {
   const bridge = window.harness;
   if (!bridge?.showContextMenu) return;
   e.preventDefault();
@@ -182,6 +185,7 @@ export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey:
   const choice = await bridge.showContextMenu([
     { id: "open", label: "Open" },
     { type: "separator" },
+    ...(actions?.list.length ? [...actionMenuItems(actions.list), { type: "separator" as const }] : []),
     ...splits.map(({ id, label }) => ({ id, label })),
     NEW_WINDOW,
     // A draft card: throw it away (the delete of a draft).
@@ -189,6 +193,8 @@ export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey:
   ]);
   if (choice === "open") return open();
   if (choice === "discard") return discard?.();
+  const picked = actions && pickedAction(actions.list, choice);
+  if (picked) return actions.run(picked);
   if (choice === NEW_WINDOW.id) return void popOutContentToWindow(boardScope, { kind: "ticket", ticketKey, tab: "spec" });
   const split = splits.find((s) => s.id === choice);
   if (split) dropOnBoard(scope, { kind: "ticket", ticketKey }, splitTarget(getPanes(scope), fromPaneId, ticketKey), split.zone);

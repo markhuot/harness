@@ -40,7 +40,7 @@ export type MenuCommand = string;
 
 /** A native context-menu entry. `id` comes back from showContextMenu when chosen. */
 export type ContextMenuItem =
-  | { type?: "item"; id: string; label: string; enabled?: boolean; danger?: boolean }
+  | { type?: "item"; id: string; label: string; enabled?: boolean; danger?: boolean; submenu?: ContextMenuItem[] }
   | { type: "separator" };
 
 export interface PickDirectoryOptions {
