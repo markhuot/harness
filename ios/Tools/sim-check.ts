@@ -1417,12 +1417,29 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await until("the child", async () => onChild(await labels(udid)), 8000);
     return `closed, the board held still (${frames.length} frames, top half changed by at most ${moved.toFixed(1)})`;
   });
+  await check("a slow drag that stops short of 60% of the way down springs back to full size", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
+    await until("the child", async () => onChild(await labels(udid)), 8000);
+    // Slow like dockSheet's drag (well under SheetFlick.speed), to about 55% of the way to the
+    // bottom: past the halfway the system itself would dock at, short of SheetFlick.fraction.
+    const x = String(Math.round(W / 2));
+    await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(90 + 0.55 * (H - 70))), "--duration", "0.8", "--udid", udid);
+    await Bun.sleep(1200); // the spring back, and a dock if it wrongly came
+    const l = await labels(udid);
+    if (l.some(isDock)) {
+      await say("after the short drag");
+      throw new Error("a drag that stopped at 40% docked the sheet");
+    }
+    if (!onChild(l)) throw new Error("the sheet isn't back at full size on the child");
+    if (shotsWanted) await shot(udid, "sheet-spring-back");
+    return "back at full size, not docked";
+  });
   await check("a flick down from full size sends the sheet away rather than docking it", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
     // The simulator takes each of AXe's touch points slowly whatever --duration says, so a flick
     // is long strides (--delta, in pixels) rather than a short duration: dockSheet's drag lets go
-    // near 230pt/s and docks, this one past SheetFlick.speed (1000pt/s), near 1100pt/s.
+    // near 230pt/s and docks, this one past SheetFlick.speed (600pt/s), near 1100pt/s.
     const x = String(Math.round(W / 2));
     await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
     await until("the sheet gone", async () => {
@@ -2081,6 +2098,36 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     }, 8000);
     await backTo(key);
     return `${p.frame.x}+${p.frame.width} of ${W}, y ${Math.round(mid)} of ${H}; restored on ${kid.key}, Back to ${key}`;
+  });
+  await check("a slow drag along the panel's top edge that stops short of 60% springs back; a fast fling closes the ticket", async () => {
+    const { leading, W } = await panelFraction(udid);
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
+    if (!close) throw new Error("no close button in the panel");
+    const y = String(Math.round(close.frame.y - 4 + 6));
+    const panelW = W - leading;
+    const from = Math.round(leading + panelW * 0.3);
+    // Slow (AXe's touch points are, whatever --duration says), 30% of the panel's width along.
+    await axe("swipe", "--start-x", String(from), "--start-y", y, "--end-x", String(Math.round(from + panelW * 0.3)), "--end-y", y, "--duration", "0.8", "--udid", udid);
+    await Bun.sleep(1000);
+    const l = await labels(udid);
+    if (l.some(isDock) || !panelOn(l, key)) {
+      await say("after the short drag");
+      throw new Error("a drag that stopped short of 60% didn't spring back");
+    }
+    if (shotsWanted) await shot(udid, "panel-spring-back");
+    // Long strides, past SheetFlick.speed: closes rather than docks.
+    await axe("swipe", "--start-x", String(leading + 30), "--start-y", y, "--end-x", String(leading + 30 + 160), "--end-y", y, "--duration", "0.1", "--delta", "160", "--udid", udid);
+    moved(udid);
+    await until("the panel closed, not docked", async () => !panelOn(await labels(udid), key), 6000).catch(async (e) => {
+      await say("after the fast fling");
+      throw e;
+    });
+    await Bun.sleep(500);
+    if ((await labels(udid)).some(isDock)) throw new Error("the fast fling docked the panel");
+    // Back up for the next check.
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}`);
+    await until("the panel back", async () => panelOn(await labels(udid), key), 8000);
+    return "sprang back, then a fast fling closed it";
   });
   await check("flinging the panel's top edge to the right docks it, and its card restores it at its root", async () => {
     // The fling lives on a thin strip along the panel's top and the buttons' corner (no title bar).

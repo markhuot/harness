@@ -31,6 +31,9 @@ struct TicketSheetHost: View {
     @Environment(DockedSheetInset.self) private var dockInset
     /// How the last drag on the sheet let go, for a flick that should send it away.
     @State private var flick = SheetFlick()
+    /// Bumped when a release sends the sheet back to `.large` after the system aimed for the dock:
+    /// the detent binding reads it, so SwiftUI reads the selection again and pushes `.large`.
+    @State private var restoreEpoch = 0
 
     var body: some View {
         let current = router.ticketSheet ?? router.dock
@@ -76,7 +79,8 @@ struct TicketSheetHost: View {
             }
         }
         .background {
-            SheetFlickTracker(flick: flick, swipes: router.ticketSheetState == .docked && router.dockedSheets.count > 1) {
+            SheetFlickTracker(flick: flick, swipes: router.ticketSheetState == .docked && router.dockedSheets.count > 1,
+                              onRelease: { carry(out: $0) }) {
                 TicketDock.step(router, $0)
             }
         }
@@ -104,15 +108,17 @@ struct TicketSheetHost: View {
     /// Gone, the sheet keeps the detent it had, so the dock's ✕ sends it away from the dock
     /// rather than growing it to `.large` on the way out.
     ///
-    /// The system only ever settles a drag from `.large` on the dock, however hard it was flung, so
-    /// a drag that let go moving down fast (SheetFlick) sends the sheet away instead; one that
-    /// slowed or lingered near the bottom docks. It's decided once the drag's end has been seen,
-    /// whichever recognizer UIKit told first, and a flung sheet goes straight from presented to
-    /// gone: never docked for a frame, which would have the board make room for the dock and give
-    /// it back mid-swipe. Going away, it keeps the dock detent it settled on.
+    /// The system only ever settles a drag from `.large` on the dock, however far or hard it was
+    /// dragged, so the app decides what a drag from `.large` does the moment the finger lifts
+    /// (SheetFlick): a fast one sends the sheet away, a slow one past 60% of the way docks, and
+    /// anything shorter goes back to `.large`. The system's own settle after that only confirms it,
+    /// so how busy the app is never changes what a flick does. A dismissed sheet goes straight from
+    /// presented to gone: never docked for a frame, which would have the board make room for the
+    /// dock and give it back mid-swipe. Going away, it keeps the dock detent it settled on.
     private var detent: Binding<PresentationDetent> {
         Binding(get: {
-                    switch router.ticketSheetState {
+                    _ = restoreEpoch
+                    return switch router.ticketSheetState {
                     case .gone: lastDocked ? TicketDock.detent : .large
                     case .docked: TicketDock.detent
                     case .presented: .large
@@ -121,18 +127,21 @@ struct TicketSheetHost: View {
                 set: { new in
                     guard new == TicketDock.detent else { return router.restoreDock() }
                     guard router.ticketSheetState == .presented else { return router.dockSheet() }
-                    flick.settled(at: Date()) { outcome in
-                        guard router.ticketSheetState == .presented else { return }
-                        switch outcome {
-                        case .dock: router.dockSheet()
-                        case .dismiss:
-                            lastDocked = true
-                            router.dismissSheet()
-                        }
-                    }
-                    // A release that never comes (a recognizer UIKit never told) docks a turn later.
-                    DispatchQueue.main.async { flick.flush() }
+                    flick.settled { carry(out: $0) }
                 })
+    }
+
+    /// Does what a release (or the system's settle after one) decided, once: the second report of the
+    /// same decision finds the sheet already docked or gone.
+    private func carry(out outcome: SheetFlick.Outcome) {
+        guard router.ticketSheetState == .presented else { return }
+        switch outcome {
+        case .dock: router.dockSheet()
+        case .dismiss:
+            lastDocked = true
+            router.dismissSheet()
+        case .restore: restoreEpoch += 1
+        }
     }
 
     /// The cover is presented by whichever level is on top: a sheet over this one, else this.
@@ -224,16 +233,20 @@ private struct SheetFlickTracker: UIViewRepresentable {
     let flick: SheetFlick
     /// Docked with more than one ticket: a horizontal swipe on the sheet switches tickets.
     var swipes = false
+    /// What a release from `.large` decided; the host ignores it unless the sheet is presented.
+    var onRelease: (SheetFlick.Outcome) -> Void = { _ in }
     var onSwipe: (Router.DockStep) -> Void = { _ in }
 
     func makeUIView(context: Context) -> Probe { Probe(flick: flick) }
     func updateUIView(_ view: Probe, context: Context) {
+        view.onRelease = onRelease
         view.onSwipe = onSwipe
         view.swipesEnabled = swipes
     }
 
     final class Probe: UIView, UIGestureRecognizerDelegate {
         let flick: SheetFlick
+        var onRelease: (SheetFlick.Outcome) -> Void = { _ in }
         var onSwipe: (Router.DockStep) -> Void = { _ in }
         var swipesEnabled = false {
             didSet { [left, right].forEach { $0.isEnabled = swipesEnabled } }
@@ -295,10 +308,21 @@ private struct SheetFlickTracker: UIViewRepresentable {
             return found?.presentingViewController == nil ? nil : found
         }
 
+        /// How far the sheet has to go to reach the bottom of the screen, from where it was when the
+        /// drag began (`.large`, when it's presented).
+        private var travel: CGFloat = 0
+
         @objc private func panned(_ pan: UIPanGestureRecognizer) {
             switch pan.state {
-            case .began: flick.began()
-            case .ended: flick.ended(velocity: pan.velocity(in: pan.view).y, at: Date())
+            case .began:
+                if let container = pan.view, let top = presentedController?.presentationController?.presentedView?.frame.minY {
+                    travel = container.bounds.height - top
+                }
+                flick.began()
+            case .ended:
+                // UIKit's own velocity, from the touches' timestamps rather than when this runs.
+                flick.ended(velocity: pan.velocity(in: pan.view).y, distance: pan.translation(in: pan.view).y,
+                            travel: travel, apply: onRelease)
             case .cancelled, .failed: flick.cancelled()
             default: break
             }

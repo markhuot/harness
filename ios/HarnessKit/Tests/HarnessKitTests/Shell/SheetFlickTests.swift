@@ -3,91 +3,119 @@ import Testing
 @testable import HarnessKit
 
 @MainActor struct SheetFlickTests {
-    let t0 = Date(timeIntervalSinceReferenceDate: 1000)
+    typealias Outcome = SheetFlick.Outcome
 
-    /// Runs `settled` and returns what it decided, nil while it's still waiting.
-    final class Answer { var outcome: SheetFlick.Outcome?; var calls = 0 }
-    func settle(_ f: SheetFlick, at: Date) -> Answer {
+    // MARK: The rule
+
+    @Test func fastDismissesEvenOverAShortDistance() {
+        #expect(SheetFlick.outcome(velocity: 601, distance: 20, travel: 800) == .dismiss)
+        #expect(SheetFlick.outcome(velocity: 600, distance: 20, travel: 800) == .restore)
+        #expect(SheetFlick.outcome(velocity: 599, distance: 20, travel: 800) == .restore)
+    }
+
+    @Test func slowDocksFromSixtyPercentOfTheTravel() {
+        #expect(SheetFlick.outcome(velocity: 200, distance: 479, travel: 800) == .restore)
+        #expect(SheetFlick.outcome(velocity: 200, distance: 480, travel: 800) == .dock)
+        #expect(SheetFlick.outcome(velocity: 200, distance: 800, travel: 800) == .dock)
+    }
+
+    @Test func movingBackTowardOpenNeverDismissesOrDocks() {
+        #expect(SheetFlick.outcome(velocity: -3000, distance: 20, travel: 800) == .restore)
+        #expect(SheetFlick.outcome(velocity: -3000, distance: -50, travel: 800) == .restore)
+        #expect(SheetFlick.outcome(velocity: 0, distance: -500, travel: 800) == .restore)
+    }
+
+    @Test func noDistanceOrNoTravelRestores() {
+        #expect(SheetFlick.outcome(velocity: 0, distance: 0, travel: 800) == .restore)
+        #expect(SheetFlick.outcome(velocity: 0, distance: 0, travel: 0) == .restore)
+        #expect(SheetFlick.outcome(velocity: 0, distance: 50, travel: 0) == .restore)
+    }
+
+    // MARK: Release first, settle second
+
+    final class Answer { var outcomes: [Outcome] = [] }
+    func settle(_ f: SheetFlick) -> Answer {
         let a = Answer()
-        f.settled(at: at) { a.outcome = $0; a.calls += 1 }
+        f.settled { a.outcomes.append($0) }
         return a
     }
-
-    @Test func aFastReleaseSeenBeforeTheSettleDismissesAtOnce() {
-        let f = SheetFlick()
-        f.began()
-        f.ended(velocity: 1500, at: t0)
-        #expect(settle(f, at: t0).outcome == .dismiss)
+    @discardableResult
+    func release(_ f: SheetFlick, velocity: Double, distance: Double = 100) -> [Outcome] {
+        var applied: [Outcome] = []
+        f.ended(velocity: velocity, distance: distance, travel: 800) { applied.append($0) }
+        return applied
     }
 
-    @Test func aSettleBeforeTheReleaseWaitsForItWithoutDocking() {
+    @Test func theReleaseIsAppliedTheMomentTheFingerLifts() {
         let f = SheetFlick()
         f.began()
-        let a = settle(f, at: t0)
-        #expect(a.outcome == nil)
-        f.ended(velocity: 1500, at: t0)
-        #expect(a.outcome == .dismiss)
-        #expect(a.calls == 1)
+        #expect(release(f, velocity: 1500) == [.dismiss])
+        #expect(!f.isDragging)
     }
 
-    @Test func aSlowReleaseDocksWhicheverComesFirst() {
+    @Test func aSettleAfterAReleaseOnlyConfirmsIt() {
+        // However long the system took to report, a fast flick is a dismiss: nothing is timed.
         let f = SheetFlick()
         f.began()
-        f.ended(velocity: 999, at: t0)
-        #expect(settle(f, at: t0).outcome == .dock)
+        release(f, velocity: 1500)
+        #expect(settle(f).outcomes == [.dismiss])
 
         let g = SheetFlick()
         g.began()
-        let a = settle(g, at: t0)
-        g.ended(velocity: 200, at: t0)
-        #expect(a.outcome == .dock)
+        release(g, velocity: 100, distance: 300)
+        #expect(settle(g).outcomes == [.restore])
     }
 
-    @Test func anUpwardFlingDocks() {
+    @Test func aSettleBeforeTheReleaseWaitsForItAndNeverDocksOnItsOwn() {
         let f = SheetFlick()
         f.began()
-        f.ended(velocity: -3000, at: t0)
-        #expect(settle(f, at: t0).outcome == .dock)
+        let a = settle(f)
+        #expect(a.outcomes.isEmpty)
+        #expect(release(f, velocity: 1500) == [.dismiss])
+        #expect(a.outcomes == [.dismiss])
     }
 
-    @Test func aReleaseOutsideTheWindowIsAnotherDrag() {
+    @Test func aSlowReleaseDecidesByDistanceInEitherOrder() {
         let f = SheetFlick()
         f.began()
-        f.ended(velocity: 3000, at: t0)
-        #expect(settle(f, at: t0.addingTimeInterval(SheetFlick.window + 0.01)).outcome == .dock)
-        #expect(settle(f, at: t0.addingTimeInterval(SheetFlick.window - 0.01)).outcome == .dismiss)
+        release(f, velocity: 200, distance: 700)
+        #expect(settle(f).outcomes == [.dock])
+
+        let g = SheetFlick()
+        g.began()
+        let a = settle(g)
+        release(g, velocity: 200, distance: 100)
+        #expect(a.outcomes == [.restore])
+    }
+
+    @Test func aSettleIsConfirmedOnce() {
+        let f = SheetFlick()
+        f.began()
+        release(f, velocity: 1500)
+        #expect(settle(f).outcomes == [.dismiss])
+        // With no drag behind it, the next settle is a programmatic one.
+        #expect(settle(f).outcomes == [.dock])
     }
 
     @Test func aNewDragForgetsTheLastRelease() {
         let f = SheetFlick()
         f.began()
-        f.ended(velocity: 3000, at: t0)
+        release(f, velocity: 3000)
         f.began()
         f.cancelled()
-        #expect(settle(f, at: t0).outcome == .dock)
+        #expect(settle(f).outcomes == [.dock])
     }
 
-    @Test func aCancelledDragDocksAWaitingSettle() {
+    @Test func aCancelledDragLetsAWaitingSettleDock() {
         let f = SheetFlick()
         f.began()
-        let a = settle(f, at: t0)
+        let a = settle(f)
         f.cancelled()
-        #expect(a.outcome == .dock)
+        #expect(a.outcomes == [.dock])
     }
 
-    @Test func noDragAtAllDocks() {
-        #expect(settle(SheetFlick(), at: t0).outcome == .dock)
-    }
-
-    @Test func flushDocksAStuckSettleOnceAndThenTheReleaseIsIgnored() {
-        let f = SheetFlick()
-        f.began()
-        let a = settle(f, at: t0)
-        f.flush()
-        #expect(a.outcome == .dock)
-        f.ended(velocity: 3000, at: t0)
-        f.flush()
-        #expect(a.calls == 1)
+    @Test func aSettleWithNoDragDocks() {
+        #expect(settle(SheetFlick()).outcomes == [.dock])
     }
 
     @Test func draggingIsTrackedForMeasurements() {
@@ -95,7 +123,7 @@ import Testing
         #expect(!f.isDragging)
         f.began()
         #expect(f.isDragging)
-        f.ended(velocity: 0, at: t0)
+        release(f, velocity: 0)
         #expect(!f.isDragging)
     }
 }
