@@ -603,4 +603,20 @@ struct RouterSheetTests {
         #expect(w.path(.board) == [t("A-2")] && w.ticketSheetState == .gone)
         #expect(w.sheet == draft)
     }
+
+    /// The memory rule `sim-check --memory` used to measure: only the most recent sheets stay mounted, however many are docked.
+    @Test func twentyDockedTicketsKeepAtMostFiveLive() {
+        let r = sheeted()
+        for n in 1...20 {
+            r.push(t("M-\(n)"))
+            r.dockSheet()
+        }
+        #expect(r.dockedSheets.count == 20)
+        #expect(r.liveSheets.count == Router.liveSheetCount && Router.liveSheetCount <= 5)
+        // The live ones are the newest, and the oldest are the parked ones.
+        #expect(r.liveSheets.map(\.id) == r.dockedSheets.prefix(5).map(\.id))
+        #expect(r.liveSheets.first?.root == .ticket(key: "M-20", tab: nil))
+        #expect(!r.liveSheets.contains { $0.root == .ticket(key: "M-1", tab: nil) })
+        #expect(r.shownDockedSheets.count + r.overflowDockedSheets.count == 20)
+    }
 }

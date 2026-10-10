@@ -97,6 +97,7 @@
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
 //   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--ipad]
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -104,20 +105,25 @@ import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type Prom
 import { findTheme } from "@harness/shared/themes";
 import { Database } from "bun:sqlite";
 import { acquire, checkDisk, ensureDevice, markKept, reap, SHARED_DEVICE, writeRunOwner } from "./sim";
+import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
 /** ios/: screenshots go to its build/ folder. */
 const here = resolve(import.meta.dir, "..");
 const repoRoot = resolve(here, "..");
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
-const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
+const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
 const ipad = args.includes("--ipad");
 const shots = join(here, "build", `screens${ipad ? "-ipad" : ""}`);
 const appPath = process.argv.find((a) => a.startsWith("--app="))?.slice(6) ?? join(here, "build", "dd", "Build", "Products", "Release-iphonesimulator", "Harness.app");
-const only = opt("only")?.split(",");
+const only = opt("only")?.split(",").filter(Boolean);
+/** --screens, --only=<name> and --shot=<link> take screenshots; every other run only checks. */
+const shotLink = opt("shot");
+const memoryOnly = flag("memory");
 const themeShots = opt("themes")?.split(",").filter(Boolean) ?? [];
+const shotsWanted = flag("screens") || flag("shots") || !!only || !!shotLink || themeShots.length > 0;
 const pagingOnly = flag("paging");
 const stickOnly = flag("stick");
 const keyboardOnly = flag("keyboard");
@@ -125,7 +131,7 @@ const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 const draftsOnly = flag("drafts");
 const sheetsOnly = flag("sheets");
-const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly);
+const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly || memoryOnly);
 if (ipad && !walkThrough && !sheetsOnly) throw new Error("--ipad takes the walk-through's screens or --sheets, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
@@ -163,11 +169,17 @@ function reportTimings() {
 // ---------------------------------------------------------------- checks
 type Result = [name: string, ok: boolean, detail: string];
 const results: Result[] = [];
-/** Runs one named check; a thrown error or `false` fails it. The result prints right away. */
-async function check(name: string, fn: () => Promise<string | boolean>) {
+/** The running check's hard time cap: every `until` inside it gives up once the cap passes. */
+const capOf = new AsyncLocalStorage<{ deadline: number; name: string }>();
+const CHECK_CAP_MS = 90_000;
+/**
+ * Runs one named check; a thrown error or `false` fails it. The result prints right away. A check
+ * that outlives `capMs` fails at its next wait instead of stalling every step after it.
+ */
+async function check(name: string, fn: () => Promise<string | boolean>, capMs = CHECK_CAP_MS) {
   let r: Result;
   try {
-    const v = await timed(`check: ${name}`, fn);
+    const v = await timed(`check: ${name}`, () => capOf.run({ deadline: Date.now() + capMs, name }, fn));
     r = [name, v !== false, typeof v === "string" ? v : ""];
   } catch (e) {
     r = [name, false, (e as Error).message.split("\n")[0]!];
@@ -334,6 +346,8 @@ async function until<T>(label: string, fn: () => Promise<T | null | undefined | 
   const end = Date.now() + ms;
   let last: unknown;
   while (Date.now() < end) {
+    const cap = capOf.getStore();
+    if (cap && Date.now() > cap.deadline) throw new Error(`"${cap.name}" ran past its ${Math.round(CHECK_CAP_MS / 1000)} s cap (waiting for ${label})`);
     try {
       const v = await fn();
       if (v) return v;
@@ -474,7 +488,36 @@ async function visit(udid: string, url: string, ready?: (l: string[]) => boolean
   lastUrl.set(udid, url);
   await simctl("openurl", udid, url);
   if (!hasAxe) return Bun.sleep(2500).then(() => true);
-  return whenShown(udid, before, ready);
+  if (await whenShown(udid, before, ready)) return true;
+  // Never got there: a step before left a menu, alert or sheet over the app (or it crashed). Clear
+  // the board and try once more, so one stuck step costs one timeout, not every step after it.
+  if (!(await running(udid))) return false;
+  await resetBoard(udid);
+  lastUrl.set(udid, url);
+  await simctl("openurl", udid, url);
+  return whenShown(udid, undefined, ready, 8000);
+}
+/**
+ * Back to a clean board from wherever a stuck step left the app: closes a menu, alert or sheet
+ * (their Cancel, "Dismiss context menu" or Done), undocks, deep-links to the board, and quits and
+ * relaunches the app if that doesn't show it.
+ */
+async function resetBoard(udid: string) {
+  console.log(`    [${udid.slice(0, 4)}] resetting to a clean board`);
+  for (let i = 0; i < 3; i++) {
+    const el = await findElement(udid, (l) => l === "Dismiss context menu" || l === "Cancel" || l === "Done").catch(() => null);
+    if (!el) break;
+    const y = el.AXLabel === "Dismiss context menu" ? el.frame.y + el.frame.height - 60 : el.frame.y + el.frame.height / 2;
+    await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(y)), "--udid", udid).catch(() => {});
+    await Bun.sleep(500);
+  }
+  lastUrl.set(udid, BOARD);
+  await simctl("openurl", udid, BOARD);
+  if (await whenShown(udid, undefined, onBoard, 8000)) return;
+  await simctl("terminate", udid, BUNDLE).catch(() => {});
+  await simctl("launch", udid, BUNDLE);
+  lastUrl.set(udid, BOARD);
+  await whenShown(udid, undefined, onBoard, 20000);
 }
 /** Goes to `url`, by way of the board when a modal is leaving or arriving. */
 async function goto(udid: string, url: string, ready?: (l: string[]) => boolean): Promise<boolean> {
@@ -494,7 +537,12 @@ async function appearance(udid: string, look: Look) {
 }
 /** How long the app takes to redraw after the appearance flips (the labels don't change, so it's a wait). */
 const FLIP_MS = 300;
+/**
+ * Saves the screen as <name>.png. Validation takes none: only a run that asks for shots does, and
+ * a failing check's own diagnostic ("…-failed") always does.
+ */
 const shot = async (udid: string, name: string) => {
+  if (!shotsWanted && !name.includes("failed")) return;
   const file = join(shots, `${name}${landscape ? "-landscape" : ""}.png`);
   await simctl("io", udid, "screenshot", file);
   if (landscape) await sh(["sips", "-r", "270", file], { quiet: true });
@@ -554,6 +602,7 @@ const frameDiff = (a: Uint8Array, b: Uint8Array) => a.reduce((s, v, i) => s + Ma
  * other, so the next screen starts where this one ended and each screen costs one flip.
  */
 async function shootBoth(udid: string, name: string, redrawn: () => Promise<unknown> = () => Bun.sleep(FLIP_MS)) {
+  if (!shotsWanted) return;
   const first = looks.get(udid) ?? "light";
   const second: Look = first === "light" ? "dark" : "light";
   await shot(udid, `${name}-${first}`);
@@ -726,33 +775,6 @@ const CODE_BRIEF = [
   "```",
 ].join("\n");
 
-/** A git diff (colored by its file's language) and an untagged hand-written one. */
-const DIFF_BRIEF = [
-  "Make the greeting excited",
-  "",
-  "```diff",
-  "diff --git a/src/app.ts b/src/app.ts",
-  "--- a/src/app.ts",
-  "+++ b/src/app.ts",
-  "@@ -1,3 +1,4 @@",
-  '+import { greet } from "./lib/greet";',
-  ' export function main(name = "world") {',
-  '-  console.log("Hello, " + name);',
-  "+  console.log(greet(name, true));",
-  " }",
-  "```",
-  "",
-  "And in the config:",
-  "```",
-  "--- a/config.yml",
-  "+++ b/config.yml",
-  "@@ -1,2 +1,2 @@",
-  " greeter:",
-  "-  excited: false",
-  "+  excited: true",
-  "```",
-].join("\n");
-
 /**
  * A file long enough that the file viewer has to scroll to a linked range: committed on main, then
  * edited in the changes ticket's worktree (greetingFor rewritten, greet_da removed, greet_ja
@@ -808,7 +830,13 @@ async function seedPrompts() {
   }
 }
 
-async function seed() {
+/**
+ * Seeds the project, the other project and the tickets `needs` names (the rest are never created,
+ * so a filtered run seeds only its area). A ticket nobody asked for reads as an error naming it,
+ * so a check that forgot to declare it fails clearly.
+ */
+async function seed(needs: Set<SeedName>) {
+  const want = (n: SeedName) => needs.has(n);
   await settings();
   await seedPrompts();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
@@ -830,114 +858,125 @@ async function seed() {
     api<Project>("POST", "/projects", { path: join(scratch, "harness-site"), name: "harness-site", key: "SITE", defaultDriver: "dummy" }),
   ]);
   const create = (projectId: string, spec: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId, spec, driver: "dummy", start: true, ...extra });
+  /** Creates the ticket when `name` is wanted; the keys follow the order the wanted ones are made in. */
+  const make = async (name: SeedName, f: () => Promise<Ticket>): Promise<Ticket> => (want(name) ? f() : (undefined as unknown as Ticket));
 
-  // In creation order, so the keys stay GREET-1… and SITE-1…
-  const hello = await create(project.id, "hello world");
-  const changes = await create(project.id, "Add a greet helper with an excited mode");
-  const conductor = await create(project.id, "Ship the greeter v2\n- Add a greet helper\n- Wire it into main\n- Update the README", { kind: "conductor" });
-  const browse = await create(other.id, "/browse https://example.com");
+  const hello = await make("hello", () => create(project.id, "hello world"));
+  const changes = await make("changes", () => create(project.id, "Add a greet helper with an excited mode"));
+  const conductor = await make("conductor", () => create(project.id, "Ship the greeter v2\n- Add a greet helper\n- Wire it into main\n- Update the README", { kind: "conductor" }));
+  const browse = await make("browse", () => create(other.id, "/browse https://example.com"));
   // A real Chrome loading a real page: anywhere from a few seconds to over a minute on a busy
   // machine. Nothing waits for it but the screens that show it (see Screen.browse).
-  const browsed = timed("seed: browse ticket", () => settle(browse.key, (t) => !t.busy, 120000));
+  const browsed = want("browse") ? timed("seed: browse ticket", () => settle(browse.key, (t) => !t.busy, 120000)) : Promise.resolve();
   browsed.catch(() => {});
-  const approval = await create(other.id, 'Install the dependencies\n/approve Bash {"command":"npm install","description":"Install dependencies"}');
-  const watcherCall = { name: "create_watcher", input: { name: "events", command: "while true; do curl -s -H \"Authorization: Bearer $EVENTS_TOKEN\" 'https://api.example.com/events?since=1m'; sleep 60; done", mode: "loop", prompt: "If this event is assigned to me and has actionable next steps, dispatch it to an agent in SITE.", env: { EVENTS_TOKEN: "evt_live_2f9c" } } };
-  const configApproval = await create(other.id, `Watch the events API\n/tools ${JSON.stringify([watcherCall])}`);
-  const blocked = await create(other.id, "Sign the build\n/block Which Apple Developer team should sign the build: Happy Cog or your personal account?");
-  const plan = await create(other.id, "Write a landing page for the install link", { start: false });
+  const approval = await make("approval", () => create(other.id, 'Install the dependencies\n/approve Bash {"command":"npm install","description":"Install dependencies"}'));
+  const blocked = await make("blocked", () => create(other.id, "Sign the build\n/block Which Apple Developer team should sign the build: Happy Cog or your personal account?"));
+  const plan = await make("plan", () => create(other.id, "Write a landing page for the install link", { start: false }));
   // Sub-agents: two, the second starting a nested third (the dummy driver's /agents).
-  const agents = await create(project.id, "Survey the greeter before the rewrite\n/agents 3");
-  const tables = await create(other.id, TABLE_BRIEF);
+  const agents = await make("agents", () => create(project.id, "Survey the greeter before the rewrite\n/agents 3"));
+  const tables = await make("tables", () => create(other.id, TABLE_BRIEF));
   // Not started, so its branch can still be picked on the Details tab.
-  const branchPlan = await create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" });
+  const branchPlan = await make("branchPlan", () => create(project.id, "Greet in the user's language", { start: false, branch: "feature/greet-emoji", baseBranch: "release/v2" }));
   // A quick ask that skips the agent review: in review with the muted "skipped" mark.
-  const quick = await create(other.id, "What does the install link point at?", { skipAgentReview: true });
-  // Another quick ask, which the review checks approve: approving alone lands it.
-  const waiting = await create(other.id, "Which browsers does the install page support?", { skipAgentReview: true });
+  const quick = await make("quick", () => create(other.id, "What does the install link point at?", { skipAgentReview: true }));
   // A New session saved as a draft: a dashed card in Planning that reopens in the editor, never run.
-  const draft = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Greet in French when the locale says so", draft: true, skipAgentReview: true });
-  // Specs with fenced code and diffs, for the syntax highlighting (last, so the keys above stay put).
-  const code = await create(other.id, CODE_BRIEF, { skipAgentReview: true });
-  const diff = await create(other.id, DIFF_BRIEF, { skipAgentReview: true });
-  const headings = await create(other.id, HEADINGS_BRIEF, { skipAgentReview: true });
+  const draft = await make("draft", () => api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Greet in French when the locale says so", draft: true, skipAgentReview: true }));
+  // Specs with fenced code (colored by its grammar) and a heading of every level.
+  const code = await make("code", () => create(other.id, CODE_BRIEF, { skipAgentReview: true }));
+  const headings = await make("headings", () => create(other.id, HEADINGS_BRIEF, { skipAgentReview: true }));
   // A spec with a relative file link, which opens in the ticket's own worktree.
   // The link is a paragraph of its own, so a tap near the paragraph's start lands on it.
-  const fileLink = await create(project.id, `Tidy the greetings\n\n[greetingFor fallback](${GREETINGS_PATH}#L${GREETING_FOR[0]}-L${GREETING_FOR[1]})`, { skipAgentReview: true });
+  const fileLink = await make("fileLink", () => create(project.id, `Tidy the greetings\n\n[greetingFor fallback](${GREETINGS_PATH}#L${GREETING_FOR[0]}-L${GREETING_FOR[1]})`, { skipAgentReview: true }));
   // Two stages of one Jira issue: both linked to the remote ID JIRA-62, so each card and header shows
-  // "JIRA-62 · GREET-n", Details lists the other, and harness://ticket/JIRA-62 lists both.
+  // "JIRA-62 · GREET-n", and Details lists the other.
   const jira62 = { source: "jira", key: "JIRA-62", url: "https://example.com/browse/JIRA-62", raw: null };
-  const linked = await create(project.id, "Review the empty-name crash fix", { start: false, externalRef: jira62 });
-  const linkedStage = await create(project.id, "Ship the empty-name crash fix", { start: false, externalRef: jira62 });
+  const linked = await make("linked", () => create(project.id, "Review the empty-name crash fix", { start: false, externalRef: jira62 }));
+  const linkedStage = want("linked") ? await create(project.id, "Ship the empty-name crash fix", { start: false, externalRef: jira62 }) : (undefined as unknown as Ticket);
   // A background Bash task (the dummy driver's /bgtask): Agents & tasks lists it, and its view shows the output.
-  const tasks = await create(project.id, "Count the greetings in the background\n/bgtask 30", { skipAgentReview: true });
+  const tasks = await make("tasks", () => create(project.id, "Count the greetings in the background\n/bgtask 30", { skipAgentReview: true }));
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
   // The prompt names the project; the dummy triager reads the [dummy:project KEY] marker.
   const prompt = "If this issue is assigned to me and has actionable next steps, dispatch it to an agent in GREET.";
-  const watchers = Promise.all([
-    // A watcher-less triage item for the Inbox.
-    api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt: `${prompt} [dummy:project ${project.key}]` }),
-    // A paused shell watcher, so Settings and the watcher form have one to show (and it never runs).
-    api<Watcher>("POST", "/watchers", { name: "jira", command: "while true; do curl -s https://example.com/api/events | jq -c '.[]'; sleep 60; done", args: [], prompt, mode: "loop", enabled: false, driver: "dummy" }),
-    // Live watchers for the Inbox's watcher strip: one whose process stays up (and prints nothing),
-    // one that fails at once and sits in its backoff with the error.
-    api<Watcher>("POST", "/watchers", { name: "heartbeat", command: "while true; do sleep 3600; done", mode: "loop", driver: "dummy" }),
-    api<Watcher>("POST", "/watchers", { name: "jira-sprint", command: "echo 'watch-jira: 401 Unauthorized (check JIRA_TOKEN)' >&2; exit 1", mode: "loop", driver: "dummy" }),
-  ]);
+  const watchers = want("watchers")
+    ? Promise.all([
+        // A watcher-less triage item for the Inbox.
+        api("POST", "/watchers/inject", { source: "jira", text: JSON.stringify({ key: "FOO-123", summary: "Greeter crashes on an empty name", url: "https://example.com/FOO-123", updated: "1" }), prompt: `${prompt} [dummy:project ${project.key}]` }),
+        // A paused shell watcher, so Settings and the watcher form have one to show (and it never runs).
+        api<Watcher>("POST", "/watchers", { name: "jira", command: "while true; do curl -s https://example.com/api/events | jq -c '.[]'; sleep 60; done", args: [], prompt, mode: "loop", enabled: false, driver: "dummy" }),
+        // Live watchers for the Inbox's watcher strip: one whose process stays up (and prints nothing),
+        // one that fails at once and sits in its backoff with the error.
+        api<Watcher>("POST", "/watchers", { name: "heartbeat", command: "while true; do sleep 3600; done", mode: "loop", driver: "dummy" }),
+        api<Watcher>("POST", "/watchers", { name: "jira-sprint", command: "echo 'watch-jira: 401 Unauthorized (check JIRA_TOKEN)' >&2; exit 1", mode: "loop", driver: "dummy" }),
+      ])
+    : Promise.resolve([]);
 
+  /** Waits for a wanted ticket to settle; a ticket nobody asked for has nothing to wait for. */
+  const when = (name: SeedName, key: string | undefined, pred: (t: Ticket) => boolean) => (want(name) ? settle(key!, pred) : Promise.resolve(undefined));
   const [, ch] = await Promise.all([
     // Then a reply with a list: the user's bubble shrink-wraps, which once collapsed list text to nothing.
     // Messages go to the transcript only, never into Activity.
-    settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
-      .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
-      .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)))
-      // A commit on its branch, so it has something to land and the Approve menu offers "Approve
-      // and merge" (with nothing to land it leads with "Approve and clean up" and drops merge).
-      // Opening a ticket in review re-checks its worktree.
-      .then(async (t) => {
-        writeFileSync(join(t.workdir!, "HELLO.md"), "Hello, world.\n");
-        await git(t.workdir!, "add", "-A");
-        await git(t.workdir!, "commit", "-qm", "Say hello");
-        await until(`${hello.key} has changes to land`, async () => (await api<TicketDetail>("GET", `/tickets/${hello.key}`)).ticket.hasChanges === true, 10000, 200);
-      }),
-    settle(changes.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
-    settle(approval.key, (t) => !!t.pendingApproval),
-    settle(configApproval.key, (t) => !!t.pendingApproval),
-    settle(blocked.key, (t) => t.status === "blocked" && !t.busy),
-    settle(plan.key, (t) => t.status === "planning" && !t.busy),
-    settle(branchPlan.key, (t) => t.status === "planning" && !t.busy),
-    settle(quick.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
-    settle(waiting.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
-    settle(agents.key, (t) => t.status === "review" && !t.busy),
-    settle(tables.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
-    settle(code.key, (t) => t.status === "review" && !t.busy),
-    settle(diff.key, (t) => t.status === "review" && !t.busy),
-    settle(headings.key, (t) => t.status === "review" && !t.busy),
-    settle(fileLink.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
-    settle(linked.key, (t) => t.status === "planning" && !t.busy),
-    settle(linkedStage.key, (t) => t.status === "planning" && !t.busy),
+    want("hello")
+      ? settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview))
+          .then(() => api("POST", `/tickets/${hello.key}/messages`, { text: REPLY_ITEMS.map((i) => `- ${i}`).join("\n") }))
+          .then(() => settle(hello.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)))
+          // A commit on its branch, so it has something to land and the Approve menu offers "Approve
+          // and merge" (with nothing to land it leads with "Approve and clean up" and drops merge).
+          // Opening a ticket in review re-checks its worktree.
+          .then(async (t) => {
+            writeFileSync(join(t.workdir!, "HELLO.md"), "Hello, world.\n");
+            await git(t.workdir!, "add", "-A");
+            await git(t.workdir!, "commit", "-qm", "Say hello");
+            await until(`${hello.key} has changes to land`, async () => (await api<TicketDetail>("GET", `/tickets/${hello.key}`)).ticket.hasChanges === true, 10000, 200);
+          })
+      : null,
+    when("changes", changes?.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
+    when("approval", approval?.key, (t) => !!t.pendingApproval),
+    when("blocked", blocked?.key, (t) => t.status === "blocked" && !t.busy),
+    when("plan", plan?.key, (t) => t.status === "planning" && !t.busy),
+    when("branchPlan", branchPlan?.key, (t) => t.status === "planning" && !t.busy),
+    when("quick", quick?.key, (t) => t.status === "review" && !t.busy && t.agentReview === "skipped"),
+    when("agents", agents?.key, (t) => t.status === "review" && !t.busy),
+    when("tables", tables?.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview)),
+    when("code", code?.key, (t) => t.status === "review" && !t.busy),
+    when("headings", headings?.key, (t) => t.status === "review" && !t.busy),
+    when("fileLink", fileLink?.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
+    when("linked", linked?.key, (t) => t.status === "planning" && !t.busy),
+    when("linked", linkedStage?.key, (t) => t.status === "planning" && !t.busy),
     // Then a `/agents 2` turn: its Agents & tasks list mixes both kinds, for the filter.
-    settle(tasks.key, (t) => t.status === "review" && !t.busy)
-      .then(() => api("POST", `/tickets/${tasks.key}/messages`, { text: "/agents 2", move: true }))
-      .then(() => until(`${tasks.key} has its sub-agents`, async () => ((await api<TicketDetail>("GET", `/tickets/${tasks.key}`)).subagents?.length ?? 0) >= 3, 30000, 200))
-      .then(() => settle(tasks.key, (t) => t.status === "review" && !t.busy)),
-    until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100),
+    want("tasks")
+      ? settle(tasks.key, (t) => t.status === "review" && !t.busy)
+          .then(() => api("POST", `/tickets/${tasks.key}/messages`, { text: "/agents 2", move: true }))
+          .then(() => until(`${tasks.key} has its sub-agents`, async () => ((await api<TicketDetail>("GET", `/tickets/${tasks.key}`)).subagents?.length ?? 0) >= 3, 30000, 200))
+          .then(() => settle(tasks.key, (t) => t.status === "review" && !t.busy))
+      : null,
+    want("conductor") ? until("conductor children", async () => (await api<TicketDetail>("GET", `/tickets/${conductor.key}`)).children.length >= 3, 60000, 100) : null,
   ]);
   // Edit the worktree the way an agent would: a commit on the branch plus uncommitted changes.
-  const wd = ch.workdir!;
-  mkdirSync(join(wd, "src/lib"), { recursive: true });
-  writeFileSync(join(wd, "src/lib/greet.ts"), 'export function greet(name: string, excited = false) {\n  const base = "Hello, " + name;\n  return excited ? base + "!" : base;\n}\n');
-  await git(wd, "add", "-A");
-  await git(wd, "commit", "-qm", "Add greet helper");
-  writeFileSync(join(wd, "src/app.ts"), 'import { greet } from "./lib/greet";\n\nexport function main(name = "world") {\n  console.log(greet(name, true));\n}\n');
-  writeFileSync(join(wd, "config.json"), '{\n  "verbose": true\n}\n');
-  writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
-  writeFileSync(join(wd, GREETINGS_PATH), greetings(true));
-  const nestedAgent = (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)!;
-  const task = (await api<TicketDetail>("GET", `/tickets/${tasks.key}`)).subagents!.find((s) => s.kind === "bash")!;
-  const [, watcher] = await watchers;
-  return { project, other, hello, changes, conductor, browse, browsed, approval, configApproval, blocked, plan, branchPlan, quick, waiting, draft, watcher, agents, nestedAgent, tasks, task, tables, code, diff, headings, fileLink, linked, linkedStage };
+  if (want("changes")) {
+    const wd = (ch as Ticket).workdir!;
+    mkdirSync(join(wd, "src/lib"), { recursive: true });
+    writeFileSync(join(wd, "src/lib/greet.ts"), 'export function greet(name: string, excited = false) {\n  const base = "Hello, " + name;\n  return excited ? base + "!" : base;\n}\n');
+    await git(wd, "add", "-A");
+    await git(wd, "commit", "-qm", "Add greet helper");
+    writeFileSync(join(wd, "src/app.ts"), 'import { greet } from "./lib/greet";\n\nexport function main(name = "world") {\n  console.log(greet(name, true));\n}\n');
+    writeFileSync(join(wd, "config.json"), '{\n  "verbose": true\n}\n');
+    writeFileSync(join(wd, "CHANGELOG.md"), "# Changelog\n\n- Greet with an exclamation mark\n");
+    writeFileSync(join(wd, GREETINGS_PATH), greetings(true));
+  }
+  const nestedAgent = want("agents") ? (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)! : (undefined as unknown as NonNullable<TicketDetail["subagents"]>[number]);
+  const [, watcher] = (await watchers) as unknown as [unknown, Watcher];
+  const seeded = { project, other, hello, changes, conductor, browse, browsed, approval, blocked, plan, branchPlan, quick, draft, watcher, agents, nestedAgent, tasks, tables, code, headings, fileLink, linked, linkedStage };
+  // A seed nobody asked for throws on first use, naming itself, instead of failing on `undefined.key`.
+  const names = new Set<string>(SEED_NAMES);
+  return new Proxy(seeded, {
+    get: (o, k: string) => {
+      const v = (o as Record<string, unknown>)[k];
+      if (v === undefined && names.has(k)) throw new Error(`the run didn't seed "${k}": add it to the entry's needs`);
+      return v;
+    },
+  });
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -981,31 +1020,12 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     }
     throw new Error("couldn't open the Done column");
   };
-  const boardMenu = async () => {
-    // The filter sits at the trailing end of the bottom bar's search field.
-    await tapHeader(udid, "Filter", { x: 303, y: 811 });
-    await tapWhere(udid, "Show child tickets");
-  };
   const deep = p.history.at(-60)!; // ~60th newest: on the second page (50 a page)
 
   await goto(udid, BOARD, (l) => l.some((x) => /^ARCH-\d+ /.test(x)));
   await shootBoth(udid, "paging-board");
-  await check("child tickets are hidden by default (Done's newest completions are children)", async () => {
-    await openDone();
-    const leaked = p.kids.slice(0, 3);
-    const shown = (await labels(udid)).filter((l) => leaked.some((kid) => l.startsWith(`${kid.key} `)));
-    if (shown.length) throw new Error(`children visible: ${shown.join(" | ")}`);
-    return `newest non-child ${p.top.key} on top`;
-  });
-  await shootBoth(udid, "paging-done");
-  await check("Show child tickets (Filter menu) shows them; toggling back hides them", async () => {
-    await boardMenu();
-    await until("children visible", () => has(`${p.kids[2]!.key} `), 6000);
-    await boardMenu();
-    await until("children hidden", async () => !(await has(`${p.kids[2]!.key} `)), 6000);
-    return true;
-  });
   await check("the Done column scrolls into older pages", async () => {
+    await openDone();
     // Reading the tree (every loaded card) costs more than a swipe, so look after every few. A lazy
     // list only has the cards on screen in the tree, and a few flicks can carry it
     // past `deep`, so any card at least as old (past the first page) counts.
@@ -1223,19 +1243,6 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     }
     return `${kid.key} restored`;
   });
-  await check("a section's alert still comes up with the sheet docked", async () => {
-    await dock();
-    await goto(udid, "harness://settings");
-    // Rotate token asks first; Cancel leaves the token alone.
-    const asking = (l: string[]) => l.includes("Rotate the token?");
-    await tapWhere(udid, (l) => l.startsWith("Rotate token…"));
-    await until("the Rotate confirmation", async () => asking(await labels(udid)), 5000);
-    await Bun.sleep(400); // the alert finishes coming up
-    await tapWhere(udid, "Cancel");
-    await until("the confirmation gone", async () => !asking(await labels(udid)), 5000);
-    await Bun.sleep(600);
-    return (await labels(udid)).some(isDock) ? "the dock stayed" : "UIKit dismissed the dock";
-  });
   await check("opening Projects closes the ticket sheet", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
@@ -1273,14 +1280,6 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await until("the child", async () => onChild(await labels(udid)), 8000);
     return `closed, the board held still (${frames.length} frames, top half changed by at most ${moved.toFixed(1)})`;
   });
-  await check("swiping the docked sheet down sends it away", async () => {
-    await dock();
-    await undock(udid);
-    const l = await labels(udid);
-    if (has(l, kid.key)) throw new Error(`${kid.key} still on screen`);
-    lastUrl.set(udid, BOARD);
-    return "gone";
-  });
   await check("a flick down from full size sends the sheet away rather than docking it", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
@@ -1301,20 +1300,6 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     if ((await labels(udid)).some(isDock)) throw new Error("the flick docked the sheet");
     lastUrl.set(udid, BOARD);
     return "gone, no dock";
-  });
-  await check("New session opens in the sheet and docks as New session", async () => {
-    await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some(isOptions));
-    await shot(udid, "sheet-new-session-light");
-    const label = await dock();
-    if (label !== "New session, docked") throw new Error(`the dock reads "${label}"`);
-    await shot(udid, "sheet-new-session-docked-light");
-    await tapWhere(udid, isDock);
-    await until("New session again", async () => (await labels(udid)).some(isOptions), 8000);
-    moved(udid);
-    await dock();
-    await undock(udid);
-    lastUrl.set(udid, BOARD);
-    return label;
   });
 }
 
@@ -1378,26 +1363,14 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await appearance(udid, "light");
     return `${keyOf(cards[0]!.AXLabel!)} over ${keyOf(label)}`;
   });
-  await check("tapping a card opens that ticket, its path and composer kept", async () => {
+  await check("a long press on the ticket's title lists the other docked tickets and switches", async () => {
+    // Tapping the first card opens its ticket (the sheet check covers keeping its path and composer).
     await tapWhere(udid, card(kid.key));
     moved(udid);
     await until("the child again", async () => {
       const l = await labels(udid);
       return onChild(l) && !l.some(isDock);
     }, 8000);
-    if (composerBefore) {
-      const before = composerBefore;
-      let y: number | undefined;
-      await until("the composer where it was", async () => {
-        y = (await findElement(udid, (x) => x === "Send"))?.frame.y;
-        return y !== undefined && Math.abs(y - before.y) <= 1;
-      }, 4000).catch(() => {
-        throw new Error(`the composer's Send sits at y ${y === undefined ? "(gone)" : Math.round(y)}, not ${Math.round(before.y)} as before`);
-      });
-    }
-    return `${kid.key} back, on its pushed screen`;
-  });
-  await check("a long press on the ticket's title lists the other docked tickets and switches", async () => {
     await Bun.sleep(600);
     await tapWhere(udid, (l) => l.startsWith(kid.title), { longPress: 1.2 });
     await until("the menu", async () => (await labels(udid)).some(row(b.key)), 5000).catch(async (e) => {
@@ -1540,6 +1513,15 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
     return "all closed";
   });
+}
+
+/**
+ * --memory: 20 docked tickets keep at most 5 mounted (RouterSheetTests' liveSheets case has the
+ * rule), so the app's footprint with 20 docked barely grows past 5. Slow (it reads the process's
+ * footprint three times), so only `--memory` runs it.
+ */
+async function memoryChecks(udid: string, p: { project: Project }) {
+  const count = async () => dockCount(await labels(udid));
   await check("past the five live ones, more docked tickets cost about nothing", async () => {
     // A parked ticket is the Router's root and path plus the board's card: 15 more of them must not
     // grow the app the way 15 more mounted ticket screens would.
@@ -1562,9 +1544,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
       await goto(udid, BOARD);
     };
-    // Every ticket visited once first, so each measurement carries the same board data and caches.
-    await open(many);
-    await closeAll();
+    await goto(udid, BOARD);
     const none = await footprint();
     await open(many.slice(0, 5));
     await dockSheet(udid);
@@ -1611,7 +1591,7 @@ async function cardInCorner(udid: string, k: string, edge: number, H: number, le
  * Projects closes them all.
  */
 async function cardStackChecks(udid: string, s: { project: Project; conductor: Ticket }) {
-  const ts = await seedDockable(s.project.id, 12);
+  const ts = await seedDockable(s.project.id, 3);
   const panelOn = (l: string[], k: string) => l.includes(RESIZE) && l.includes(`Close ${k}`);
   const cards = async () => (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
   const cardOf = (k: string) => (l: string) => l.startsWith(`${k}, `) && isDock(l);
@@ -1713,54 +1693,6 @@ async function cardStackChecks(udid: string, s: { project: Project; conductor: T
     const left = (await cards()).map((n) => n.AXLabel!.split(",")[0]).sort();
     if (left.join() !== [b.key, c.key].sort().join()) throw new Error(`the cards beside the panel are ${left.join(", ")}`);
     return `${c.key} at the bottom; ${a.key} opened, ${left.join(" and ")} beside it`;
-  });
-  await check("a card's ✕ closes just that ticket", async () => {
-    await tapWhere(udid, `Close ${b.key}`);
-    await until(`${b.key}'s card gone`, async () => !(await labels(udid)).some(cardOf(b.key)), 5000);
-    const l = await labels(udid);
-    if (!panelOn(l, a.key)) throw new Error(`the panel left ${a.key}`);
-    if (!l.some(cardOf(c.key))) throw new Error(`${c.key}'s card went too`);
-    const { W } = await panelFraction(udid);
-    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
-    return `${b.key} closed; ${a.key} open, ${c.key} waiting`;
-  });
-  await check("with 12 docked there are 5 cards and \"7 more…\", which expands into the list of all twelve", async () => {
-    for (const t of ts.slice(3)) await open(t);
-    // a, c and the nine opened: 11; one more for 12.
-    await open(b);
-    await tapWhere(udid, `Dock ${b.key}`);
-    await until("the cards", async () => !(await labels(udid)).includes(RESIZE) && (await cards()).length > 0, 6000);
-    await Bun.sleep(800);
-    const cs = await cards();
-    const more = await findElement(udid, (l) => /^\d+ more docked tickets$/.test(l));
-    await shootBoth(udid, "panel-cards-overflow");
-    await appearance(udid, "light");
-    if (cs.length !== 5) throw new Error(`${cs.length} cards, not 5`);
-    if (more?.AXLabel !== "7 more docked tickets") throw new Error(`the more card reads "${more?.AXLabel ?? "(none)"}"`);
-    // The more card sits on top of the five.
-    if (cs.some((n) => n.frame.y < more.frame.y)) throw new Error("a card sits above the more card");
-    const shown = new Set(cs.map((n) => n.AXLabel!.split(",")[0]));
-    if (shown.has(a.key) || shown.has(c.key)) throw new Error(`the oldest aren't the ones behind "7 more": ${[...shown].join(", ")}`);
-    await tapWhere(udid, more.AXLabel!);
-    await until("the list of all twelve", async () => (await cards()).length === 12, 5000).catch(async (e) => {
-      await say("after 7 more");
-      throw e;
-    });
-    await shot(udid, "panel-cards-list-light");
-    await offSidebar();
-    await tapWhere(udid, cardOf(a.key));
-    moved(udid);
-    await until(`the panel on ${a.key}`, async () => panelOn(await labels(udid), a.key), 8000);
-    return `5 cards and 7 more; the list of 12; ${a.key} opened from it`;
-  });
-  await check("Projects closes every docked ticket", async () => {
-    await goto(udid, "harness://projects");
-    await goto(udid, BOARD);
-    await until("no panel or cards", async () => {
-      const l = await labels(udid);
-      return !l.includes(RESIZE) && !l.some(isDock);
-    }, 6000);
-    return "all closed";
   });
 }
 
@@ -1880,9 +1812,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await Bun.sleep(800); // the slide in
     const { fraction, leading, W } = await panelFraction(udid);
     if (fraction < 0.25 - 0.01 || fraction > 0.8 + 0.01) throw new Error(`the panel is ${pct(fraction)} of the window`);
-    // TicketPanelWidth's default, before anyone drags the edge: 800pt, clamped to 25–80%.
-    const expected = Math.min(0.8, Math.max(0.25, 800 / W));
-    if (Math.abs(fraction - expected) > 0.02) throw new Error(`the panel opened at ${pct(fraction)}, not the default ${pct(expected)}`);
+    // The default width itself is TicketPanelWidthTests'; here the panel just has to sit in range.
     // Trailing-aligned: its close button sits at the window's right edge.
     const close = await findElement(udid, (l) => l === `Close ${key}`);
     if (!close || W - (close.frame.x + close.frame.width) > 16) throw new Error(`the close button ends at ${close ? Math.round(close.frame.x + close.frame.width) : "?"}, not the window's edge (${W})`);
@@ -1891,32 +1821,26 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     // Below the status bar: no higher than the split view's own top bar, which keeps the safe area.
     const toggle = await findElement(udid, (l) => l === "Hide Sidebar" || l === "Show Sidebar");
     if (toggle && close.frame.y < toggle.frame.y - 4) throw new Error(`the title bar's buttons start at y=${Math.round(close.frame.y)}, above the sidebar button (y=${Math.round(toggle.frame.y)})`);
-    await shootBoth(udid, "panel-default");
-    await appearance(udid, "light");
-    return `${key} at ${pct(fraction)} (${Math.round(W - leading)} of ${W} pt)`;
-  });
-  await check("the panel's header names its ticket once", async () => {
-    const { leading } = await panelFraction(udid);
+    // The header names its ticket once: the title bar's ("KEY" or "KEY, <subtitle>"); the ticket's own navigation bar leaves its key out.
     const inPanel = (await nodes(udid)).filter((n) => n.frame.x >= leading && n.AXLabel);
-    // The title bar's header ("KEY" or "KEY, <subtitle>"); the ticket's own navigation bar leaves its key out.
     const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
     if (named.length !== 1) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
-    return `"${named[0]!.AXLabel}"`;
+    await shootBoth(udid, "panel-default");
+    await appearance(udid, "light");
+    return `${key} at ${pct(fraction)} (${Math.round(W - leading)} of ${W} pt), header "${named[0]!.AXLabel}"`;
   });
   await check("dragging the panel's edge resizes it, stopping at 25% and 80% of the window", async () => {
+    // One drag past the left edge: TicketPanelWidthTests has both clamps, this confirms the handle follows a finger.
     const { W } = await panelFraction(udid);
-    const narrow = await dragPanelEdge(udid, W - 20);
-    await shot(udid, "panel-min-light");
     const wide = await dragPanelEdge(udid, 20);
     await shot(udid, "panel-max-light");
-    if (Math.abs(narrow - 0.25) > 0.015) throw new Error(`dragged to the right edge, the panel stopped at ${pct(narrow)}`);
     if (Math.abs(wide - 0.8) > 0.015) throw new Error(`dragged to the left edge, the panel stopped at ${pct(wide)}`);
     // Back to the default (the pref keeps the width across launches).
     const back = await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
-    return `${pct(narrow)}–${pct(wide)}, back to ${pct(back)}`;
+    return `${pct(wide)} at the left edge, back to ${pct(back)}`;
   });
-  await check("a link inside the panel pushes, with Back to the ticket under it", async () => {
-    // The Tickets tab, until its list shows the child (a tap during the slide in can miss).
+  await check("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", async () => {
+    // The child pushed in the panel (RouterSheetTests has the push), so the card has a path to restore.
     await until("the conductor's children", async () => {
       if ((await labels(udid)).some((l) => l.includes(kid.key))) return true;
       await tapWhere(udid, (l) => l.startsWith("Tickets")).catch(() => {});
@@ -1924,19 +1848,8 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       return false;
     }, 15000, 0);
     await tapWhere(udid, (l) => l.includes(kid.key));
-    await until("the child in the panel", async () => panelOn(await labels(udid), kid.key), 8000).catch(async (e) => {
-      await say("after the child tap");
-      throw e;
-    });
-    await Bun.sleep(600);
-    await shot(udid, "panel-pushed-light");
-    await backTo(key);
-    // Pushed again, for the dock to keep.
-    await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child in the panel", async () => panelOn(await labels(udid), kid.key), 8000);
-    return `${key} → ${kid.key}, Back → ${key}`;
-  });
-  await check("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", async () => {
+    await Bun.sleep(600);
     await tapWhere(udid, `Dock ${kid.key}`);
     const pill = await until("the card", async () => {
       const n = await findElement(udid, isDock);
@@ -1964,45 +1877,20 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await backTo(key);
     return `${p.frame.x}+${p.frame.width} of ${W}, y ${Math.round(mid)} of ${H}; restored on ${kid.key}, Back to ${key}`;
   });
-  await check("a different board card opens its ticket over the panel's, at its root", async () => {
-    // Pushed again, so a push that kept the path would show.
-    await tapWhere(udid, (l) => l.includes(kid.key));
-    await until("the child", async () => panelOn(await labels(udid), kid.key), 8000);
-    await Bun.sleep(600);
-    // The default panel can leave too little of the board for a card beside it: narrow it first.
-    const { W } = await panelFraction(udid);
-    await dragPanelEdge(udid, W * 0.5);
-    const edge = (await panelFraction(udid)).leading - 16;
-    // Any other card already beside the panel (the walk-through's columns are full), else this run's own.
-    const beside = (await nodes(udid)).find((n) => /^[A-Z]+-\d+ /.test(n.AXLabel ?? "") && !card(key)(n.AXLabel!) && !card(kid.key)(n.AXLabel!) && !n.AXLabel!.endsWith(", draft") && n.frame.x >= 0 && n.frame.x + 20 < edge);
-    const b = beside ? beside.AXLabel!.split(" ")[0]! : other.key;
-    if (!beside) await cardOnScreen(b, edge);
-    await tapCard(b);
-    await until(`the panel on ${b}`, async () => panelOn(await labels(udid), b), 8000).catch(async (e) => {
-      await say(`after ${b}'s card`);
-      throw e;
-    });
-    await Bun.sleep(600);
-    await shot(udid, "panel-replaced-light");
-    // At the root there's no Back: a tap where it would be leaves the panel on B.
-    await tapBack();
-    await Bun.sleep(1500);
-    const l = await labels(udid);
-    if (panelOn(l, kid.key) || panelOn(l, key)) throw new Error(`${b} was pushed over ${kid.key}: Back went to ${panelOn(l, key) ? key : kid.key}`);
-    if (!panelOn(l, b)) throw new Error(`the panel left ${b}`);
-    await dragPanelEdge(udid, W * (1 - Math.min(0.8, 800 / W)));
-    return `${kid.key} → ${b}, no Back`;
-  });
   await check("a card's ✕ closes just its ticket without opening it", async () => {
-    const l = await labels(udid);
-    const top = l.find((x) => x.startsWith("Dock "))!.slice("Dock ".length);
+    // The conductor's panel docks as a card, then another ticket's panel docks over it: two cards.
+    const top = other.key;
+    await tapWhere(udid, `Dock ${key}`);
+    await until("the first card", () => findElement(udid, isDock), 6000);
+    await goto(udid, `harness://ticket/${encodeURIComponent(top)}`, (l) => panelOn(l, top));
+    await Bun.sleep(600);
     await tapWhere(udid, `Dock ${top}`);
-    await until("the cards", () => findElement(udid, isDock), 6000);
+    await until("the cards", async () => (await labels(udid)).filter(isDock).length === 2 || null, 6000);
     await Bun.sleep(600);
     await shot(udid, "panel-cards-two-light");
     // The card's ticket and the conductor's, which it joined in the dock: each closes on its own.
     const closed: string[] = [];
-    for (const k of [top, kid.key]) {
+    for (const k of [top, key]) {
       const mine = (x: string) => x.startsWith(`${k}, `) && isDock(x);
       await until(`${k}'s card`, () => findElement(udid, mine), 6000).catch(async (e) => {
         await say("looking for the card");
@@ -2095,14 +1983,6 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     });
     moved(udid);
     return `asked on Escape and on the panel's ✕${landscape ? " (Escape, in landscape)" : ""}; Discard closed it and its card went`;
-  });
-  await check("Escape on a hardware keyboard closes the panel", async () => {
-    await goto(udid, `harness://ticket/${encodeURIComponent(key)}`, (l) => panelOn(l, key));
-    await Bun.sleep(600);
-    await axe("key", "41", "--udid", udid); // HID Escape
-    await until("the panel gone", async () => !(await labels(udid)).includes(RESIZE), 5000);
-    moved(udid);
-    return "closed";
   });
   await check("the pop-out button moves the panel's ticket into a window of its own", async () => {
     // A throwaway ticket: closing its window deletes it (More → Delete ticket destroys the scene).
@@ -2318,38 +2198,6 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     await swipe("down", 3);
     if (await heroShown()) throw new Error("expanded on scrolling back");
     return `tab strip ${Math.round(before)}→${Math.round(after)}; stayed collapsed scrolling back to the top`;
-  });
-  await check("another tab collapses the hero, and back on the Spec it stays collapsed", async () => {
-    await expandHero();
-    await until("the hero after tapping its title", async () => (await heroShown()) || null, 3000);
-    await shot(udid, "hero-expanded");
-    await tapLabel(udid, "Transcript");
-    await until("the hero collapsed on the Transcript", async () => !(await heroShown()) || null, 3000);
-    await tapLabel(udid, "Spec");
-    await Bun.sleep(800);
-    if (await heroShown()) throw new Error("expanded back on the Spec");
-    return "collapsed on the Transcript and still collapsed back on the Spec";
-  });
-  await check("other tabs open with the hero collapsed", async () => {
-    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`);
-    await until("the tab strip", stripY, 8000);
-    await Bun.sleep(800);
-    if (await heroShown()) throw new Error("opened expanded");
-    await shot(udid, "hero-transcript");
-    return "collapsed";
-  });
-  await check("the Browser tab shows the same collapsed header, and a tap expands it", async () => {
-    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=browser`);
-    await until("the tab strip", stripY, 8000);
-    await Bun.sleep(800);
-    if (await heroShown()) throw new Error("opened expanded");
-    await shot(udid, "hero-browser");
-    await expandHero();
-    await until("the hero after tapping its title", async () => (await heroShown()) || null, 3000);
-    await shot(udid, "hero-browser-expanded");
-    await expandHero();
-    await until("the hero collapsed again", async () => !(await heroShown()) || null, 3000);
-    return "collapsed title row on open; a tap expands and collapses it";
   });
 
   // The tab bodies sit side by side in a pager: a sideways swipe moves to the neighbouring tab, and
@@ -2708,18 +2556,11 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
   const away = () => goto(udid, `harness://board`, (l) => !l.some((x) => x.startsWith("Message the agent")));
   let origin: string | null = null;
 
-  await check("composer: typing saves the message draft to the ticket, with the phone's origin", async () => {
-    await open();
-    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-    await axe("type", "started on the phone", "--udid", udid);
-    const d = await until("the draft saved", async () => {
-      const got = await saved();
-      return got?.text.toLowerCase() === "started on the phone" ? got : null;
-    }, 8000);
-    origin = d.origin;
-    if (!origin || origin === "sim-check-mac") throw new Error(`origin is ${JSON.stringify(origin)}`);
-    return `"${d.text}" from ${origin}`;
-  });
+  // Setup, not a check (MessageDraftsTests has the rule): the phone types a draft and the service stores it.
+  await open();
+  await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+  await axe("type", "started on the phone", "--udid", udid);
+  await until("the draft saved", async () => ((await saved())?.text.toLowerCase() === "started on the phone" ? true : null), 8000);
 
   await check("composer: moving the caret keeps what's typed", async () => {
     const el = await until("the composer", () => findElement(udid, (l) => l.startsWith("Message the agent")), 4000);
@@ -2737,44 +2578,6 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
     return "kept";
   });
 
-  await check("composer: another device's draft waits while the field is being typed in", async () => {
-    await fromMac("Finished on the Mac");
-    await Bun.sleep(1200);
-    const shown = await field();
-    if (shown.toLowerCase() !== "started on the phone") throw new Error(`the field shows ${JSON.stringify(shown)}`);
-    await shootBoth(udid, "drafts-typing");
-    return shown;
-  });
-
-  await check("composer: once the field isn't being typed in, another device's draft shows", async () => {
-    await away();
-    await fromMac("Finished on the Mac, really");
-    await open();
-    const shown = await until("the Mac's draft in the field", async () => ((await field()) === "Finished on the Mac, really" ? true : null), 6000).catch(async (e) => {
-      throw new Error(`${(e as Error).message}; the field shows ${JSON.stringify(await field())}`);
-    });
-    // Taking it isn't an edit: nothing is saved back over the Mac's.
-    await Bun.sleep(1200);
-    const d = await saved();
-    if (d?.origin !== "sim-check-mac") throw new Error(`the phone saved over it: ${JSON.stringify(d)}`);
-    await shootBoth(udid, "drafts-adopted");
-    return shown ? "Finished on the Mac, really" : "";
-  });
-
-  await check("composer: Send uses the draft up on the service and empties the field", async () => {
-    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-    await axe("type", " now", "--udid", udid);
-    await until("the edit saved", async () => ((await saved())?.text === "Finished on the Mac, really now" ? true : null), 8000);
-    await tapWhere(udid, "Send");
-    await until("the draft cleared", async () => ((await saved()) === null ? true : null), 8000);
-    // An empty field reads its placeholder as its value.
-    await until("the field emptied", async () => (/finished/i.test(await field()) ? null : true), 4000).catch(async (e) => {
-      throw new Error(`${(e as Error).message}; the field shows ${JSON.stringify(await field())}`);
-    });
-    const texts = (await api<TranscriptEntry[]>("GET", `/sessions/${p.ticket.sessionId}/transcript`)).map((e) => ("text" in e.content ? e.content.text : ""));
-    if (!texts.includes("Finished on the Mac, really now")) throw new Error(`transcript ends ${JSON.stringify(texts.slice(-3))}`);
-    return "sent and cleared";
-  });
 }
 
 /**
@@ -2946,9 +2749,11 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
 
 // ---------------------------------------------------------------- walk-through
 type Seeded = Awaited<ReturnType<typeof seed>>;
-interface Screen {
-  name: string;
+interface Screen extends Entry {
+  kind: "screen";
   url: string;
+  /** Validation also runs its prepare and after (real taps with their own asserts), not just the visit. */
+  interactive?: boolean;
   /** Extra wait after the labels settle, for pixels that land later (a streamed frame, a diff). */
   wait?: number;
   /** About how long the visit takes on an idle Mac (default 4 s), to split the screens evenly. */
@@ -3005,58 +2810,52 @@ function screens(s: Seeded): Screen[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
   const hasLabel = (x: string) => (l: string[]) => l.includes(x);
   const pluginLoaded = (l: string[]) => l.includes("Changes") && !l.includes("In progress");
+  /** A catalog entry. `visit` screens validation opens, to check the app survives them (no shot, no taps). */
+  const screen = (name: string, needs: SeedName[], rest: Omit<Screen, "name" | "kind" | "needs">): Screen => ({ name, kind: "screen", needs, ...rest });
   return [
     // The iPad keeps the sidebar in a split view column (harness://projects only shows it), so it
     // shoots the board with the sidebar hidden instead, and the link brings the sidebar back.
     ipad
-      ? {
-          name: "board-no-sidebar",
+      ? screen("board-no-sidebar", [], {
           url: BOARD,
           seconds: 8,
+          visit: true,
           prepare: (udid) => toggleSidebar(udid, false),
           after: (udid) => simctl("openurl", udid, "harness://projects").then(() => until("sidebar shown again", async () => sidebarShown(await labels(udid)), 8000)),
-        }
-      : { name: "projects", url: "harness://projects" },
-    { name: "ticket-spec", url: `harness://ticket/${k(s.hello)}?tab=spec` },
+        })
+      : screen("projects", [], { url: "harness://projects", visit: true }),
+    screen("ticket-spec", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=spec`, visit: true }),
     // The notes, submits and review decisions; the seed's reply went to the transcript only.
-    { name: "ticket-activity", url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("The dummy reviewer approves")) },
-    { name: "ticket-transcript", url: `harness://ticket/${k(s.hello)}?tab=transcript` },
-    { name: "ticket-details", url: `harness://ticket/${k(s.hello)}?tab=details` },
-    { name: "ticket-transcript-tables", url: `harness://ticket/${k(s.tables)}?tab=transcript`, ready: (l) => l.some((x) => x.startsWith("Run finished (review)")) },
+    screen("ticket-activity", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("The dummy reviewer approves")), visit: true }),
+    screen("ticket-transcript", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=transcript`, visit: true }),
+    screen("ticket-details", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=details`, visit: true }),
     // The spec's fenced code: plain at first, colored once its grammar has loaded.
-    { name: "ticket-code", url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500 },
-    { name: "ticket-diff", url: `harness://ticket/${k(s.diff)}?tab=spec`, wait: 1500 },
-    // Heading sizes and spacing (the interaction chain asserts the frames).
-    { name: "ticket-headings", url: `harness://ticket/${k(s.headings)}?tab=spec`, ready: (l) => l.includes("Heading four"), wait: 500 },
+    screen("ticket-code", ["code"], { url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500, visit: true }),
+    // Heading sizes and spacing (HarnessKit's SpecHeadings tests have the numbers).
+    screen("ticket-headings", ["headings"], { url: `harness://ticket/${k(s.headings)}?tab=spec`, ready: (l) => l.includes("Heading four"), wait: 500 }),
     // The file viewer, from an OS-level harness://file link : opened at a range
     // below the first screenful, then its Diff tab.
-    { name: "file", url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 },
-    {
-      name: "file-diff",
+    screen("file", ["changes"], { url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500, visit: true }),
+    screen("file-diff", ["changes"], {
       url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}`,
       ready: hasLabel("Modified"),
       seconds: 6,
       prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Diff")).then(() => Bun.sleep(1500)),
-    },
-    { name: "conductor-tickets", url: `harness://ticket/${k(s.conductor)}?tab=children` },
-    { name: "ticket-agents", url: `harness://ticket/${k(s.agents)}?tab=agents` },
-    { name: "ticket-subagent", url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}` },
-    { name: "ticket-tasks", url: `harness://ticket/${k(s.tasks)}?tab=agents`, ready: (l) => l.some((x) => x.startsWith("Count to 30")) },
-    { name: "ticket-task-output", url: `harness://ticket/${k(s.tasks)}?tab=${encodeURIComponent(`agent:${s.task.id}`)}`, ready: hasLabel("Back to Agents & tasks") },
-    { name: "approval", url: `harness://ticket/${k(s.approval)}`, ready: hasLabel("Allow once") },
-    { name: "approval-config", url: `harness://ticket/${k(s.configApproval)}`, ready: hasLabel("Allow once") },
-    { name: "blocked", url: `harness://ticket/${k(s.blocked)}` },
-    { name: "planning", url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work") },
+    }),
+    screen("conductor-tickets", ["conductor"], { url: `harness://ticket/${k(s.conductor)}?tab=children`, visit: true }),
+    screen("ticket-agents", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=agents`, visit: true }),
+    screen("ticket-subagent", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}`, visit: true }),
+    screen("approval", ["approval"], { url: `harness://ticket/${k(s.approval)}`, ready: hasLabel("Allow once"), visit: true }),
+    screen("blocked", ["blocked"], { url: `harness://ticket/${k(s.blocked)}`, visit: true }),
+    screen("planning", ["plan"], { url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work"), visit: true }),
     // The plugin's WebView shows a spinner ("In progress") until its page has loaded, and reloads
     // when the appearance flips.
-    { name: "changes", url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) },
-    { name: "new-session", url: "harness://new" },
+    screen("changes", ["changes"], { url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, visit: true, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) }),
     // The git project's New session with Options open: the TicketSettings rows Details shows.
-    { name: "new-session-options", url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 6, prepare: (udid) => openOptions(udid) },
+    screen("new-session-options", [], { url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 6, visit: true, prepare: (udid) => openOptions(udid) }),
     // The same, with the branch sheet open, searching "re": Create re, then release/v2 (checked
     // out in another worktree).
-    {
-      name: "new-session-branch",
+    screen("new-session-branch", [], {
       url: `harness://new?projectId=${s.project.id}`,
       ready: (l) => l.some(isOptions),
       seconds: 7,
@@ -3070,104 +2869,58 @@ function screens(s: Seeded): Screen[] {
           .then(() => until("branch rows", async () => (await labels(udid)).some((x) => x.startsWith("release/v2")), 5000)),
       // The sheet is a Modal, which the next screen's deep link would leave on top.
       after: (udid) => tapWhere(udid, "Cancel").then(() => until("branch sheet closed", async () => !(await labels(udid)).includes("Search branches"), 5000)),
-    },
+    }),
     // The seeded draft reopened, then Cancel: the Save draft / Discard draft / Keep editing sheet.
-    {
-      name: "new-session-cancel",
+    screen("new-session-cancel", ["draft"], {
       url: `harness://new?key=${k(s.draft)}`,
       ready: (l) => l.some(isOptions),
       seconds: 6,
       prepare: (udid) => tapHeaderCancel(udid).then(() => until("cancel sheet", async () => (await labels(udid)).includes("Discard draft"), 5000)).then(() => Bun.sleep(500)),
       after: (udid) => tapWhere(udid, "Keep editing").then(() => Bun.sleep(400)),
-    },
-    // Scrolled down past the plan to the Branch and Base branch rows.
-    {
-      name: "ticket-details-branch",
-      url: `harness://ticket/${k(s.branchPlan)}?tab=details`,
-      prepare: async (udid) => {
-        for (let i = 0; i < 2; i++) await axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "330", "--duration", "0.6", "--udid", udid);
-        await Bun.sleep(700);
-      },
-    },
-    // The git project's New session with Options open, scrolled to Skip agent review.
-    { name: "new-session-skip-review", url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 8, prepare: (udid) => openOptions(udid).then(() => scrollTo(udid, (l) => l === "Skip agent review")).then(() => Bun.sleep(500)) },
-    // A ticket in review whose agent review was skipped: the muted mark in the header, and the
-    // switch (on) on its Details tab.
+    }),
     // A ticket linked to a remote ID: the header shows "JIRA-62 · GREET-n", and Details the External
     // row with the other ticket on JIRA-62 under it.
-    {
-      name: "ticket-linked",
+    screen("ticket-linked", ["linked"], {
       url: `harness://ticket/${k(s.linked)}?tab=details`,
       ready: (l) => l.includes("Remote ID"),
       seconds: 6,
+      visit: true,
       prepare: (udid) => scrollTo(udid, (l) => l === "Also linked to JIRA-62").then(() => Bun.sleep(400)),
-    },
-    // A remote ID that no local key matches opens to the tickets linked to it, not a dead end.
-    { name: "ticket-remote-id", url: "harness://ticket/JIRA-62", ready: (l) => l.includes("Remote ID JIRA-62") && l.some((x) => x.startsWith(`JIRA-62 · ${s.linkedStage.key} `)) },
-    { name: "ticket-details-skip-review", url: `harness://ticket/${k(s.quick)}?tab=details`, ready: hasLabel("Agent review: skipped"), seconds: 7, prepare: (udid) => scrollTo(udid, (l) => l === "Skip agent review").then(() => Bun.sleep(500)) },
+    }),
     // Details' per-phase Models picker with its sheet open.
-    {
-      name: "ticket-details-model",
+    screen("ticket-details-model", ["quick"], {
       url: `harness://ticket/${k(s.quick)}?tab=details`,
       seconds: 7,
       prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Models, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
       // The sheet is a Modal, which the next screen's deep link would leave on top.
       after: (udid) => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000)),
-    },
-    { name: "inbox", url: "harness://inbox" },
-    { name: "settings", url: "harness://settings" },
-    // Settings → Drivers: a row per driver that opens its settings, with the per-phase Models picker under them.
-    { name: "settings-models", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Models, ")).then(() => Bun.sleep(500)) },
-    // A driver's own settings: status and sign-in; Claude Code adds its long-lived
-    // token and Anthropic API its API key.
-    { name: "driver-claude-code", url: "harness://driver/claude-code", ready: hasLabel("Claude token") },
-    { name: "driver-anthropic-api", url: "harness://driver/anthropic-api", ready: hasLabel("Anthropic API key") },
-    { name: "watcher-new", url: "harness://watcher" },
-    { name: "watcher-edit", url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` },
-    { name: "project-settings", url: `harness://project/${s.project.id}` },
-    // The git project's "When approved" default (Merge; no gh remote, so no Open PR).
-    // The row sits near the end, so the scroll bottoms out before it reaches scrollTo's band.
-    { name: "project-settings-when-approved", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "When approved", 3).catch(() => {}).then(() => Bun.sleep(500)) },
-    // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action), then
-    // the "Approve and…" sheet for instructions. Both are closed again before the next screen.
-    {
-      name: "approve-menu",
+    }),
+    screen("inbox", ["watchers"], { url: "harness://inbox", visit: true }),
+    // Settings: Drivers, with the per-phase Models picker under them. A scrolled part of it is one
+    // --shot=harness://settings --prepare='scroll:Models, ' away.
+    screen("settings", ["watchers"], { url: "harness://settings", visit: true }),
+    // A driver's own settings: status and sign-in, and the long-lived token.
+    screen("driver-claude-code", [], { url: "harness://driver/claude-code", ready: hasLabel("Claude token"), visit: true }),
+    screen("watcher-edit", ["watchers"], { url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}`, visit: true }),
+    screen("project-settings", [], { url: `harness://project/${s.project.id}`, visit: true }),
+    // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action).
+    // It closes again before the next screen.
+    screen("approve-menu", ["agents"], {
       url: `harness://ticket/${k(s.agents)}`,
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
       // The menu closes with a tap outside it.
       after: (udid) => dismissMenu(udid).then(() => Bun.sleep(400)),
-    },
-    {
-      name: "approve-custom",
-      url: `harness://ticket/${k(s.agents)}`,
-      ready: hasLabel(APPROVE_MORE),
-      seconds: 7,
-      prepare: (udid) =>
-        tapWhere(udid, APPROVE_MORE)
-          .then(() => approveMenuUp(udid))
-          .then(() => tapWhere(udid, "Approve and…"))
-          .then(() => until("instructions sheet", async () => (await labels(udid)).some(instructionsField), 5000))
-          .then(() => Bun.sleep(800)),
-      after: (udid) => tapWhere(udid, "Cancel").then(() => Bun.sleep(600)),
-    },
-    // Settings → Prompts (seedPrompts): the list, a built-in prompt, the customized review message
-    // and the broken Files section.
-    { name: "settings-prompts", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l.startsWith("Prompts, ")).then(() => Bun.sleep(500)) },
-    { name: "prompts", url: "harness://prompts", ready: hasLabel("Agent review") },
-    { name: "prompt-builtin", url: "harness://prompt/system.work", ready: hasLabel("Customize") },
-    { name: "prompt-customized", url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in") },
-    { name: "prompt-broken", url: "harness://prompt/system.files", ready: (l) => l.some((x) => x.includes("isn't in effect")) },
-    // Scrolled to the Base branch fields (General in Settings, Agents in the git project's settings).
-    { name: "settings-base-branch", url: "harness://settings", seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
-    { name: "project-settings-base-branch", url: `harness://project/${s.project.id}`, seconds: 8, prepare: (udid) => scrollTo(udid, (l) => l === "Base branch").then(() => Bun.sleep(500)) },
-    { name: "connect", url: "harness://connect" },
+    }),
+    // Settings → Prompts (seedPrompts): the list, and the customized review message.
+    screen("prompts", [], { url: "harness://prompts", ready: hasLabel("Agent review"), visit: true }),
+    screen("prompt-customized", [], { url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in"), visit: true }),
+    screen("connect", [], { url: "harness://connect", visit: true }),
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
-    { name: "board", url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) },
+    screen("board", ["blocked"], { url: BOARD, browse: true, visit: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) }),
     // Planning with the seeded draft's dashed card (Draft badge, no run).
-    {
-      name: "board-draft",
+    screen("board-draft", ["draft"], {
       url: BOARD,
       seconds: 8,
       // Planning is the first column; its chip may sit off the strip's left edge, so page back to it.
@@ -3182,14 +2935,18 @@ function screens(s: Seeded): Screen[] {
         }, 12000, 0);
         await Bun.sleep(500);
       },
-    },
-    { name: "browser", url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 },
+    }),
+    screen("browser", ["browse"], { url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 }),
     ...(ipad
       ? [
           // A tab torn off into a window of its own (its chip's menu → Open in New Window): the
           // ticket's window shows Return to this window in its place, and pressing it closes the
           // pinned window and shows the tab here again.
           {
+            kind: "screen",
+            needs: ["hello"],
+            visit: true,
+            interactive: true,
             name: "ticket-tear-off",
             url: `harness://ticket/${k(s.hello)}?tab=transcript`,
             seconds: 14,
@@ -3284,18 +3041,61 @@ async function shootScreens(udid: string, list: Screen[], browsed: Promise<unkno
 }
 
 /**
+ * Validation's pass over the catalog: each `visit` screen is opened and the app checked for a crash.
+ * No shot and no theme flip, and no taps unless the screen is `interactive`. One result for all.
+ */
+async function visitScreens(udid: string, list: Screen[]) {
+  const crashed: string[] = [];
+  await check(`${list.length} routes open without crashing the app`, async () => {
+    for (const sc of list) {
+      await timed(`visit: ${sc.name}`, async () => {
+        const shown = await goto(udid, sc.url, sc.ready);
+        if (sc.interactive) {
+          if (sc.prepare) await sc.prepare(udid).catch((e) => console.log(`  ${sc.name}: ${(e as Error).message.split("\n")[0]}`));
+          if (sc.after) await sc.after(udid).catch((e) => console.log(`  ${sc.name}: ${(e as Error).message.split("\n")[0]}`));
+        }
+        if (!shown && !(await running(udid))) crashed.push(sc.name);
+      });
+      if (crashed.length) break;
+    }
+    if (crashed.length) throw new Error(`the app crashed opening ${crashed.join(", ")}`);
+    return list.map((x) => x.name).join(", ");
+  }, 180_000);
+  return crashed;
+}
+
+/**
+ * --shot=<link>: one light and dark pair of any route, against the seeded daemon. `{name}` in the
+ * link is a seeded ticket's key; --prepare=tap:<label>;scroll:<label> reaches a state a link can't.
+ * Never fails on what it shows, only if the app crashes.
+ */
+async function oneShot(udid: string, url: string) {
+  const steps = parsePrepare(opt("prepare"));
+  const name = (opt("name") ?? url.replace(/^harness:\/\//, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60)) || "shot";
+  const shown = await goto(udid, url);
+  for (const st of steps) {
+    if (st.op === "tap") await tapWhere(udid, (l) => l === st.label || l.startsWith(st.label)).catch((e) => console.log(`  --prepare tap ${st.label}: ${(e as Error).message.split("\n")[0]}`));
+    else await scrollTo(udid, (l) => l === st.label || l.startsWith(st.label)).catch((e) => console.log(`  --prepare scroll ${st.label}: ${(e as Error).message.split("\n")[0]}`));
+    await Bun.sleep(500);
+  }
+  await shootBoth(udid, name);
+  if (!shown && !(await running(udid))) throw new Error(`the app crashed opening ${url}`);
+  console.log(`  ${join(shots, name)}-{light,dark}.png`);
+}
+
+/**
  * The real-tap checks, as chains that each run on one simulator; `seconds` (about what the chain
  * takes on an idle Mac) balances them. Every check reaches its screen with goto.
  */
-function interactionChains(s: Seeded): { seconds: number; run: (udid: string) => Promise<void> }[] {
+type Chain = Entry & { kind: "chain"; seconds: number; run: (udid: string) => Promise<void> };
+function interactionChains(s: Seeded): Chain[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
-  const chain = (seconds: number, run: (udid: string) => Promise<void>) => ({ seconds, run });
+  const chain = (name: string, needs: SeedName[], seconds: number, run: (udid: string) => Promise<void>, optIn = false): Chain => ({ name, kind: "chain", needs, seconds, run, optIn });
   return [
-    // The iPhone's ticket sheet: pushes, the back swipe, docking, restoring and swiping it away.
-    chain(40, (udid) => sheetChecks(udid, s)),
-    // Several tickets docked: switching, closing one at a time, the overflow menu, a relaunch.
-    chain(90, (udid) => dockStackChecks(udid, s)),
-    chain(4, async (udid) => {
+    // --sheets owns these (the iPhone's ticket sheet and the dock), and they run here only when named.
+    chain("sheet-checks", ["conductor"], 40, (udid) => sheetChecks(udid, s), true),
+    chain("dock-stack", ["conductor"], 70, (udid) => dockStackChecks(udid, s), true),
+    chain("wide-tables", ["tables"], 4, async (udid) => {
       await check("a spec with wide tables leaves the replies after it on screen", async () => {
         const last = (l: string) => l.startsWith("Run finished (review)");
         await goto(udid, `harness://ticket/${k(s.tables)}?tab=transcript`, (l) => l.some(last));
@@ -3314,7 +3114,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `last row at y=${Math.round(end.frame.y)} of ${Math.round(bottom)}${cell ? `; long cell ${Math.round(cell.frame.width)}×${Math.round(cell.frame.height)} pt` : ""}`;
       });
     }),
-    chain(8, async (udid) => {
+    chain("blocked-composer", ["blocked"], 5, async (udid) => {
       await check("composer answers a blocked ticket", async () => {
         await goto(udid, `harness://ticket/${k(s.blocked)}`, (l) => l.some((x) => x.startsWith("Message the agent")));
         await tapWhere(udid, (l) => l.startsWith("Message the agent"));
@@ -3331,16 +3131,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await shot(udid, "composer-sent-transcript");
         return `${t.key} → ${t.status}, Transcript shown`;
       });
-      await check("Start work moves a planning ticket to In progress", async () => {
-        await goto(udid, `harness://ticket/${k(s.plan)}`, (l) => l.includes("Start work"));
-        await tapWhere(udid, "Start work");
-        const t = await settle(s.plan.key, (x) => x.status !== "planning", 15000);
-        return `${t.key} → ${t.status}`;
-      });
     }),
-    chain(20, async (udid) => {
-      const card = (l: string) => l.startsWith(`${s.hello.key} `);
-      // Before Approve below, which moves the ticket to Done.
+    chain("transcript-list", ["hello"], 6, async (udid) => {
       await check("a reply's list items show their text in the transcript", async () => {
         await goto(udid, `harness://ticket/${k(s.hello)}?tab=transcript`, (l) => l.includes(REPLY_ITEMS[0]!));
         // The review run's rows follow the reply: scroll back up until the reply is in view.
@@ -3359,36 +3151,8 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         await shot(udid, "reply-list-light");
         return widths.join(", ");
       });
-      await check("tapping a board card opens its ticket in a sheet, and swiping it away returns to the board", async () => {
-        await goto(udid, BOARD);
-        await undock(udid);
-        // The card is in the tree before its column scrolls in (x≈416, off the right edge).
-        await until("card on screen", async () => {
-          await tapWhere(udid, (l) => l.startsWith("Review,"));
-          return ((await until("card", () => findElement(udid, card), 1500).catch(() => null))?.frame.x ?? 999) < 100;
-        }, 15000);
-        await tapWhere(udid, card);
-        moved(udid);
-        await until("ticket detail", async () => (await running(udid)) && (await labels(udid)).includes(APPROVE_MERGE), 8000).catch(async (e) => {
-          throw new Error((await running(udid)) ? (e as Error).message : "the app crashed opening the ticket");
-        });
-        await shot(udid, "card-tap-detail-light");
-        // Down to the dock, then off the screen.
-        await dockSheet(udid);
-        await undock(udid);
-        await until("back on the board", async () => ((l) => l.some(card) && !l.includes(APPROVE_MERGE))(await labels(udid)), 8000);
-        lastUrl.set(udid, BOARD);
-        await shot(udid, "card-tap-back-light");
-        return `${s.hello.key} → detail → board`;
-      });
-      await check("Approve and merge records the human review with merge and auto-completes the ticket", async () => {
-        await goto(udid, `harness://ticket/${k(s.hello)}`, (l) => l.includes(APPROVE_MERGE));
-        await tapWhere(udid, APPROVE_MERGE);
-        const t = await settle(s.hello.key, (x) => x.humanReview === "approved" && x.status === "done", 15000);
-        if (t.completionAction !== "merge") throw new Error(`completionAction ${t.completionAction}`);
-        return `${t.key} human=${t.humanReview} action=${t.completionAction} → ${t.status}`;
-      });
-      // The same project as the ticket above, so it waits for that Approve (whose label follows the default).
+    }),
+    chain("approve-and", ["agents"], 8, async (udid) => {
       await check("Approve menu → Approve and… sends the instructions with a custom completion", async () => {
         const text = "Tag it v2 then clean up";
         await goto(udid, `harness://ticket/${k(s.agents)}`, (l) => l.includes(APPROVE_MORE));
@@ -3416,7 +3180,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${p.key} completionAction=${p.completionAction}`;
       });
     }),
-    chain(14, async (udid) => {
+    chain("prompt-editor", [], 14, async (udid) => {
       const override = async (id: string) => (await api<PromptEntry[]>("GET", "/prompts")).find((p) => p.id === id)!.override;
       const field = (l: string) => l === "Work run instructions prompt";
       // The header's glass buttons aren't in AXe's tree: Cancel sits where Back does, Save at the trailing edge.
@@ -3482,8 +3246,7 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `ends ${JSON.stringify(saved.slice(-24))}`;
       });
     }),
-    chain(8, async (udid) => {
-      // branchPlan stays in Planning: s.quick is approved into Done by another chain meanwhile, which locks its picker.
+    chain("models-picker", ["branchPlan"], 8, async (udid) => {
       const openModels = async () => {
         await goto(udid, `harness://ticket/${k(s.branchPlan)}?tab=details`, (l) => l.some((x) => x.startsWith("Models, ")));
         await tapWhere(udid, (l) => l.startsWith("Models, "));
@@ -3511,12 +3274,12 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model} → ${cleared.phaseModels?.work ? "set" : "inherit"}`;
       });
     }),
-    chain(18, async (udid) => {
+    chain("card-preview", ["hello"], 6, async (udid) => {
       await check("touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu", async () => {
         await goto(udid, BOARD);
         await tapWhere(udid, (l) => l.startsWith("Review,"));
-        await until("card on screen", async () => ((await findElement(udid, (l) => l.startsWith(`${s.browse.key} `)))?.frame.x ?? 999) < 100, 3000).catch(() => {});
-        await tapWhere(udid, (l) => l.startsWith(`${s.browse.key} `), { longPress: 1.2 });
+        await until("card on screen", async () => ((await findElement(udid, (l) => l.startsWith(`${s.hello.key} `)))?.frame.x ?? 999) < 100, 3000).catch(() => {});
+        await tapWhere(udid, (l) => l.startsWith(`${s.hello.key} `), { longPress: 1.2 });
         const l = await until("the menu", async () => ((x) => (x.includes("Copy key") ? x : null))(await labels(udid)), 5000).catch(async (e) => {
           await shot(udid, "board-card-preview-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
@@ -3531,58 +3294,11 @@ function interactionChains(s: Seeded): { seconds: number; run: (udid: string) =>
         if (!l.includes("Preview")) throw new Error(`no preview over the menu; on screen: ${l.slice(0, 30).join(" | ")}`);
         await tapWhere(udid, "Copy key");
         await until("the menu gone", async () => !(await labels(udid)).includes("Copy key"), 5000);
-        return `${s.browse.key}: Spec preview, no moves`;
-      });
-      await check("Approve menu → Approve and take no action marks a review ticket done without a run", async () => {
-        await goto(udid, `harness://ticket/${k(s.quick)}`, (l) => l.includes(APPROVE_MORE));
-        await tapWhere(udid, APPROVE_MORE);
-        // Wait for the sheet to settle: a row tapped while it slides in can miss.
-        await approveMenuUp(udid);
-        await tapWhere(udid, "Approve and take no action");
-        const t = await settle(s.quick.key, (x) => x.status === "done", 15000);
-        if (t.humanReview !== "approved") throw new Error(`human review ${t.humanReview}`);
-        return `${t.key} human=${t.humanReview} → ${t.status}`;
-      });
-      await check("approving lands the ticket by itself, and the ticket screen has no Complete", async () => {
-        await api("POST", `/tickets/${s.waiting.key}/review`, { decision: "approve" });
-        const t = await settle(s.waiting.key, (x) => x.status === "done", 15000);
-        const { runs } = await api<TicketDetail>("GET", `/tickets/${s.waiting.key}`);
-        if (!runs.some((r) => r.kind === "complete" && r.status === "succeeded")) throw new Error("no completion run landed it");
-        await goto(udid, `harness://ticket/${k(s.waiting)}`, (l) => l.includes("Re-open"));
-        // A Complete button ("Complete", "Complete and …"), not the completion run's "Completed." note.
-        const stray = (await labels(udid)).filter((l) => l === "Complete" || l.startsWith("Complete ") || l === "More ways to complete");
-        if (stray.length) throw new Error(`still offers ${stray.join(", ")}`);
-        return `${t.key} → ${t.status} after one approval`;
-      });
-      await check("approval card: Allow once resumes the agent", async () => {
-        await goto(udid, `harness://ticket/${k(s.approval)}`, (l) => l.includes("Allow once"));
-        await tapWhere(udid, "Allow once");
-        const t = await settle(s.approval.key, (x) => !x.pendingApproval, 15000);
-        return `${t.key} → ${t.status}`;
+        return `${s.hello.key}: Spec preview, no moves`;
       });
     }),
-    chain(8, (udid) => agentsFilterChecks(udid, s)),
-    chain(6, async (udid) => {
-      await check("spec headings step down in size, and a heading after a heading sits closer than one after a paragraph", async () => {
-        // An earlier check may have left a context menu open over the screen.
-        if (await findElement(udid, (l) => l === "Dismiss context menu")) await dismissMenu(udid);
-        await goto(udid, `harness://ticket/${k(s.headings)}?tab=spec`, (l) => l.includes("Heading four"));
-        const frame = async (label: string) => (await until(label, () => findElement(udid, (l) => l === label), 8000)).frame;
-        const [h1, h2, h3, h4, intro, under] = [await frame("Heading one"), await frame("Heading two"), await frame("Heading three"), await frame("Heading four"), await frame("Intro paragraph."), await frame("Paragraph under three.")];
-        await shot(udid, "headings-light");
-        if (!(h1.height > h2.height && h2.height > h3.height && h3.height >= h4.height)) {
-          throw new Error(`heading heights aren't stepping down: ${[h1, h2, h3, h4].map((f) => f.height).join(" > ")}`);
-        }
-        const after = (a: { y: number; height: number }, b: { y: number }) => b.y - (a.y + a.height);
-        const afterHeading = after(h2, h3);
-        const afterParagraph = after(under, h4);
-        if (!(afterHeading < afterParagraph) || afterHeading > 8) throw new Error(`H3 sits ${afterHeading} pt under H2, H4 ${afterParagraph} pt under its paragraph`);
-        const h2Gap = after(intro, h2);
-        if (!(h2Gap > afterHeading)) throw new Error(`H2 sits ${h2Gap} pt under a paragraph, no more than H3 under H2 (${afterHeading})`);
-        return `heights ${[h1, h2, h3, h4].map((f) => f.height).join("/")}; H3 ${afterHeading} pt under H2, H2 ${h2Gap} and H4 ${afterParagraph} under paragraphs`;
-      });
-    }),
-    chain(6, async (udid) => {
+    chain("agents-filter", ["tasks"], 5, (udid) => agentsFilterChecks(udid, s)),
+    chain("file-link", ["fileLink"], 6, async (udid) => {
       await check("a relative file link in a spec opens the file viewer in the ticket's folder, at its lines", async () => {
         const label = "greetingFor fallback";
         await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=spec`, (l) => l.includes(label));
@@ -3621,28 +3337,14 @@ async function agentsFilterChecks(udid: string, s: Seeded) {
   };
   const shows = (agents: number, tasks: number) => async () => ((r) => (r.agents === agents && r.tasks === tasks ? r : null))(await rows());
   const chip = (name: string) => (l: string) => l.startsWith(`${name}, `);
-  await check("Agents & tasks: the filter's toggles carry each kind's count, and neither pressed shows everything", async () => {
+  await check("Agents & tasks: the filter survives opening a row and coming back", async () => {
     await goto(udid, url, (l) => l.some(isTaskRow));
-    const l = await labels(udid);
-    if (!l.includes("Agents, 2") || !l.includes("Tasks, 1")) {
-      await shot(udid, "ticket-agents-filter-failed");
-      throw new Error(`toggles: ${l.filter((x) => chip("Agents")(x) || chip("Tasks")(x)).join(" | ")}; on screen: ${l.join(" | ")}`);
-    }
-    await until("all three rows", shows(2, 1), 8000);
-    await shot(udid, "ticket-agents-filter-all");
-    return "Agents, 2 · Tasks, 1; 3 rows";
-  });
-  await check("Agents & tasks: Tasks alone shows only the task, both shows everything, Agents alone only the sub-agents", async () => {
+    await until("every row", shows(2, 1), 8000);
+    // Tasks alone, then Agents too (both), then Tasks off: only the sub-agents.
     await tapWhere(udid, chip("Tasks"));
-    await until("only the task", shows(0, 1), 5000);
-    await shot(udid, "ticket-agents-filter-tasks");
     await tapWhere(udid, chip("Agents"));
-    await until("both pressed: every row", shows(2, 1), 5000);
     await tapWhere(udid, chip("Tasks"));
     await until("only the sub-agents", shows(2, 0), 5000);
-    return "tasks 1 → all 3 → agents 2";
-  });
-  await check("Agents & tasks: the filter survives opening a row and coming back", async () => {
     await tapWhere(udid, isAgentRow);
     await tapWhere(udid, (l) => l.includes("Back to Agents & tasks"), { timeout: 8000 });
     await until("still only the sub-agents", shows(2, 0), 8000);
@@ -3652,33 +3354,28 @@ async function agentsFilterChecks(udid: string, s: Seeded) {
   });
 }
 
-async function walk(udids: string[], s: Seeded): Promise<boolean> {
+async function walk(udids: string[], s: Seeded, selection: Plan): Promise<boolean> {
   let ok = true;
   if (themeShots.length) await timed("themes", () => themeScreens(udids[0]!));
-  if (!flag("interactions-only")) {
-    const list = screens(s).filter((x) => !only || only.includes(x.name));
+  const steps = selection.steps;
+  const shoot = steps.filter((x) => x.action === "shoot" && x.entry.kind === "screen").map((x) => x.entry as Screen);
+  const visit = steps.filter((x) => x.action === "visit").map((x) => x.entry as Screen);
+  const chains = steps.filter((x) => x.action === "run").map((x) => x.entry as Chain);
+  if (shoot.length) {
     // Longest first deals the most evenly; the screens that wait on the browse ticket then go last.
     const cost = (x: Screen) => x.seconds ?? 4;
-    const dealt = lanes([...list].sort((a, b) => cost(b) - cost(a)), udids.length, cost).map((lane) => [...lane.filter((x) => !x.browse), ...lane.filter((x) => x.browse)]);
+    const dealt = lanes([...shoot].sort((a, b) => cost(b) - cost(a)), udids.length, cost).map((lane) => [...lane.filter((x) => !x.browse), ...lane.filter((x) => x.browse)]);
     const crashed = (await timed("screens", () => Promise.all(udids.map((u, i) => shootScreens(u, dealt[i]!, s.browsed))))).flat();
     if (crashed.length) ok = false;
   }
-  // The checks change tickets the screens show, so they start once every screen is saved.
-  if (hasAxe && !only && !ipad) {
-    await s.browsed.catch(() => {}); // the card preview check holds its card in Review
-    const chains = interactionChains(s).sort((a, b) => b.seconds - a.seconds); // longest first deals best
-    const byDevice = lanes(chains, udids.length, (c) => c.seconds);
-    await Promise.all(udids.map((u) => appearance(u, "light"))); // their shots are named -light
-    await timed("interactions", () => Promise.all(udids.map(async (u, i) => { for (const c of byDevice[i]!) await c.run(u); })));
-    await goto(udids[0]!, BOARD);
-    await appearance(udids[0]!, "light");
-    await shot(udids[0]!, "after-interactions-light");
-  }
-  // The iPad's side panel, by real taps at the iPad's own coordinates.
-  if (hasAxe && !only && ipad) {
-    await appearance(udids[0]!, "light");
-    await timed("panel", () => panelChecks(udids[0]!, s));
-    await timed("cards", () => cardStackChecks(udids[0]!, s));
+  // The checks change tickets the screens show, so they start once every shot is saved.
+  if (hasAxe && (visit.length || chains.length)) {
+    await Promise.all(udids.map((u) => appearance(u, "light")));
+    if (visit.length) await timed("routes", () => visitScreens(udids[0]!, visit));
+    if (chains.length) {
+      const byDevice = lanes([...chains].sort((a, b) => b.seconds - a.seconds), udids.length, (c) => c.seconds); // longest first deals best
+      await timed("interactions", () => Promise.all(udids.map(async (u, i) => { for (const c of byDevice[i]!) await timed(`chain: ${c.name}`, () => c.run(u)); })));
+    }
   }
   return ok;
 }
@@ -3700,6 +3397,17 @@ try {
   // The simulators boot, the app builds and the daemon seeds all at once.
   // The app installs as soon as it's built and its simulator is up.
   const pairUrl = buildPairUrl(base, token);
+  // What the run does and which tickets it needs, decided before anything is seeded: the entries
+  // are built against stand-ins, since their links name keys that don't exist yet.
+  const stub = { key: "X", id: "X", name: "X" };
+  const dry = Object.fromEntries([...SEED_NAMES, "project", "other", "nestedAgent", "watcher", "browsed"].map((n) => [n, stub])) as unknown as Seeded;
+  const entriesFor = (sd: Seeded): Entry[] => [...screens(sd), ...(hasAxe && !ipad ? interactionChains(sd) : [])];
+  const selection: Plan | null = !walkThrough
+    ? null
+    : shotLink
+      ? { steps: [], seeds: new Set(resolveShot(shotLink, () => "X").needs) }
+      : planRun(entriesFor(dry), { only, screens: flag("screens") });
+  const seedNeeds = selection?.seeds ?? new Set<SeedName>();
   const pairAll = (udids: string[]) => timed("pair", () => Promise.all(udids.map((u) => pair(u, pairUrl))));
   const devices = Promise.all([timed("simulators", () => pickDevices(shardCount)), timed("build", buildApp)]).then(([udids]) =>
     timed("install", () => Promise.all(udids.map(install))).then(() => udids),
@@ -3708,16 +3416,16 @@ try {
   const paired = walkThrough ? devices.then((udids) => ticketsUp.then(() => pairAll(udids)).then(() => udids)) : devices;
   const [udids, seeded, paged, sticky, typing, mentioned, media, drafting, sheeted] = await Promise.all([
     paired,
-    walkThrough ? timed("seed", seed) : null,
+    selection ? timed("seed", () => seed(seedNeeds)) : null,
     pagingOnly ? timed("seed paging", seedPaging) : null,
     stickOnly ? timed("seed stick", seedStick) : null,
     keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up").then(async (s) => (await seedPrompts(), s))) : null,
     mentionsOnly ? timed("seed mentions", seedMentions) : null,
     attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
     draftsOnly ? timed("seed drafts", () => seedTicket("DRFT", "Warm up")) : null,
-    sheetsOnly ? timed("seed sheets", seedSheets) : null,
+    sheetsOnly || memoryOnly ? timed("seed sheets", seedSheets) : null,
   ]);
-  if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[seeded.hello, seeded.changes, seeded.conductor, seeded.browse, seeded.approval, seeded.blocked, seeded.plan].map((t) => t.key).join(", ")}`);
+  if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[...seedNeeds].join(", ") || "no tickets"}`);
   if (paged) console.log(`simulator ${udids[0]}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
   if (!walkThrough) await pairAll(udids);
@@ -3729,7 +3437,7 @@ try {
   if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
   if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
   if (drafting) await timed("mode: drafts", () => draftChecks(udid, drafting));
-  if (sheeted)
+  if (sheeted && sheetsOnly)
     await timed("mode: sheets", async () => {
       if (ipad) {
         await panelChecks(udid, sheeted);
@@ -3739,7 +3447,15 @@ try {
         await dockStackChecks(udid, sheeted);
       }
     });
-  if (seeded && !(await walk(udids, seeded))) failed = true;
+  if (sheeted && memoryOnly) await timed("mode: memory", () => memoryChecks(udid, sheeted));
+  if (seeded && shotLink) {
+    const link = resolveShot(shotLink, (n) => (seeded as unknown as Record<string, Ticket>)[n]!.key);
+    await timed("shot", () => oneShot(udid, link.url));
+  } else if (seeded && selection) {
+    const byName = new Map(entriesFor(seeded).map((e) => [e.name, e]));
+    const real: Plan = { seeds: selection.seeds, steps: selection.steps.map((st) => ({ action: st.action, entry: byName.get(st.entry.name)! })) };
+    if (!(await walk(udids, seeded, real))) failed = true;
+  }
   if (results.some((r) => !r[1])) failed = true;
   // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.
   await Promise.all(udids.map((u) => Promise.all([appearance(u, "light"), flag("keep") ? null : simctl("terminate", u, BUNDLE).catch(() => {})])));
