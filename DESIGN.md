@@ -310,6 +310,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
 | `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; a `reopened` entry with the notes; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket (older apps only), a triage update to it, or a move back to in_progress re-opens it the same way (with the message / the spec). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
+| `POST /session {action}` | `compact` or `new`: what to do with the saved session, on the next run; 409 while a run is going; see "Context gauge" |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged (a cancelled complete run reopens the human review, above) |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
 
@@ -333,7 +334,7 @@ Since each phase can run on its own driver, the saved state records the driver t
 of handing one driver another's conversation. A
 run saves its state only while no clearing move has happened since it started (an in-memory epoch
 per session), so the work run whose own `submit_for_review` moved the ticket can't write its
-conversation back. A `null` state is a fresh start on every driver (claude-code: no `--resume`;
+conversation back. The saved conversation's size and cache misses (`sessions.context`) are cleared with it (see "Context gauge"). A `null` state is a fresh start on every driver (claude-code: no `--resume`;
 github-copilot: a new `--session-id`).
 
 **Agent notes.** Fresh runs lose what a resumed conversation knew, and the spec stays a product doc
@@ -1243,11 +1244,88 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   read-only and plan runs → `--deny-tool write --deny-tool shell`. The harness server is always
   allowed and `--no-ask-user` is always set. A call the rules don't allow fails with
   `error.code: "denied"`, which the driver reports as `permission_denied`, so it becomes a pending
-  approval. Usage carries no tokens or cost: Copilot bills premium requests. A GitHub token in
+  approval. Usage carries no cost: Copilot bills premium requests. Token counts come from the
+  session's own log, not from stdout (verified against 1.0.94): each model call is a
+  `session.usage_record` line in `$COPILOT_HOME/session-state/<id>/events.jsonl` (`inputTokens`
+  counts the cache too, plus `cacheReadTokens`, `cacheWriteTokens`, `outputTokens`), which the driver
+  reads after each turn and at the end of the run (sub-agent records carry an `agentId` and are
+  skipped). A CLI whose log has none gets one estimate per run, counted from the conversation's
+  words at 0.75 words per token, marked `estimated` (see "Context gauge"). A GitHub token in
   Settings (`copilotGithubToken`, write-only like `claudeOauthToken`; clients see
   `copilotGithubTokenSet`) goes to every CLI call as `COPILOT_GITHUB_TOKEN`, which the CLI prefers
   over its Keychain login. A run that fails to sign in marks the driver signed out until a run gets
   through, a login finishes or the token changes.
+
+### Context gauge
+
+The ticket header shows how full the conversation is that the ticket's next resumed run re-reads
+on every model call (HARNESS-375: a 369k-token session, mostly stale, resumed for a change request;
+110 calls at a median 482k, then the spend limit). It only shows and offers actions; nothing
+compacts or clears by itself.
+
+- **Per-call usage.** A driver reports each model call of the session's own agent as
+  `{ type: "call", call: { input, cacheRead, cacheWrite, output, estimated? } }` (`DriverEvent`).
+  claude-code reads `message.usage` of each stream-json `assistant` event, once per message id
+  (its content blocks repeat it) and never a sub-agent's; anthropic-api reports one per API
+  response; github-copilot reads its log (see "Drivers"). The orchestrator keeps every call in
+  `driver_calls` (migration 41) and folds it into `sessions.context` (`context-usage.ts`):
+  the last call, the first call's total as the `prefix` (the system prompt, tools and project
+  instructions every run starts with), and the cache-miss tally. Calls from review and complete
+  runs (fresh conversations of their own) and from compact runs don't move it, and neither does a
+  run from before the session was cleared (the epoch guard that protects `driver_state`).
+- **Cleared with the state.** `sessions.context` is cleared wherever `driver_state` is: every
+  column move except into and out of Blocked (`newSession`), and New session. So the gauge shows
+  the session the next run will actually resume, and reads empty in review and done.
+- **Cache misses.** A miss is a call in the middle of a run (never its first, never an estimate)
+  that writes more than 30k tokens to the cache and reads back less than half of the previous
+  call's context: the cache expired (Claude's 5-minute TTL, a long build), so the whole
+  conversation was written again at about 20× the price of reading it. `context.misses` counts
+  them and `missTokens` sums what they wrote. It was exact on HARNESS-396's data (5 gaps over
+  5 minutes, 5 misses). A cache hit rate can't do this (it stays 92–96% with misses), nor can the
+  share of input cost that is writes (reviews with no misses score 63–73%). `CLAUDE_CODE_PROMPT_CACHE_TTL=1h`
+  in the Claude Code driver's environment keeps the cache for an hour.
+- **On the ticket.** `Ticket.context` is `{ input, cacheRead, cacheWrite, output, prefix, at,
+  estimated, misses, missTokens }` or null (a fresh session), re-broadcast with `ticket.upserted`
+  on every call. `Ticket.compacting` is true while a compact run is queued or running.
+  `Settings.contextGaugeLimit` (10k–2M, default 250k) is where the gauge reads full. Drivers say
+  what they can do in `DriverInfo.sessionActions` and `reportsContextUsage`.
+- **Session actions.** `POST /tickets/:key/session` with `{ action: "compact" | "new" }` takes
+  effect on the ticket's next run and is refused with 409 while a run is going (each rewrites the
+  state the run is still saving). *New session* clears `driver_state` and `context` and bumps the
+  epoch; the Activity entry reads "Session cleared (482k tokens); the next run starts fresh".
+  *Compact* needs a saved session and `Driver.sessionActions.compact`: it queues a `compact` run
+  (a run kind with no tools, prompt or card move; it uses the driver that saved the state) that
+  calls `Driver.compact`. claude-code runs `claude -p /compact --resume <id>` (verified against
+  2.1.294: the same session id continues, and the stream's `compact_boundary` carries
+  `pre_tokens` and `post_tokens`); the gauge then shows the new size with the miss tally restarted,
+  and Activity reads "Session compacted: 482k → 61k tokens". While it runs, `Ticket.compacting` is
+  true and messages and ticket actions (start, review, complete, re-open) answer 409 "The session
+  is compacting"; Cancel run stops it and leaves the session as it was. github-copilot has no
+  compaction, so only New session. There is no Fork: branching off a conversation is a new ticket.
+
+### Plan usage
+
+The limit that stops work is the account's plan, not one conversation. `GET /usage` and the
+`usage.updated` event carry `PlanUsageReport`: per driver with a plan, windows of
+`{ id, label, usedPercent, resetsAt, windowSeconds }` (the length lets clients compute how far
+through the window we are: `1 − (resetsAt − now) ÷ windowSeconds`), a `status`, and an `error`
+when the numbers can't be read. `PlanUsageTracker` (`plan-usage.ts`) keeps the last reading per
+driver, polls every 5 minutes while a WebSocket client is connected and once after each run, and
+backs off (5 minutes doubling to an hour) after a 429, a 5xx or a network failure. The CLI's own
+`rate_limit_event` (claude-code; each window's `utilization` as a 0–1 share and its reset)
+stands in when the endpoint can't be read, and a warning or rejection reads it again at once.
+
+- **claude-code** reads `GET https://api.anthropic.com/api/oauth/usage` with
+  `Authorization: Bearer <token>`, `anthropic-beta: oauth-2025-04-20` and a `claude-code`
+  user agent (the endpoint Claude Code's own `/usage` screen uses; it is undocumented). Windows:
+  `five_hour`, `seven_day`, and `seven_day_opus` / `seven_day_sonnet` when the account has them,
+  `utilization` as 0–100. The token is the stored `claudeOauthToken` if it works, else the login
+  the CLI keeps in the macOS Keychain (`Claude Code-credentials`) or `~/.claude/.credentials.json`.
+- **github-copilot** reads `GET https://api.github.com/copilot_internal/user`
+  (`quota_snapshots.premium_interactions`, with the month ending at `quota_reset_date`), with the
+  stored `copilotGithubToken` or `gh auth token`. An unlimited account (token-based billing with no
+  entitlement) has no window, so no row.
+- **anthropic-api** bills per token with no plan window: no row.
 
 ### Permissions
 
@@ -1691,7 +1769,7 @@ GET    /tickets/page?status=done&projectId=&group=&q=&limit=50&cursor= → Ticke
 GET    /tickets/search?q=&projectId=&group=&limit=100&cursor=       → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
-POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review
+POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review | /session {action}
 PUT    /tickets/:key/message-draft {text, attachments?, origin?}   → Ticket (see "Message drafts"; empty clears it)
 GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
 GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
@@ -1707,6 +1785,7 @@ GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/tra
 GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
 POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
+GET    /usage                    → PlanUsageReport (see "Plan usage"; pushed as the usage.updated event)
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings           (PATCH { listen } rebinds live; 409 keeps the old binding)
 GET    /prompts                  → PromptEntry[] (see "Prompt overrides")

@@ -116,6 +116,28 @@ for example) moves the ticket to **Blocked** with an approval card. You can allo
 call, always allow that tool for the ticket, or deny it with a note. The agent resumes once
 you answer.
 
+## Context gauge and plan usage
+
+A ticket's header shows how full its agent's conversation is: a dial with the size of what the
+next run re-reads on every model call, split into what came from the prompt cache (cheap, slate)
+and what was sent fresh or written to it (amber, about 20× the price). It counts toward a limit,
+250k tokens by default (Settings → Context gauge limit, or Limit… in the gauge's menu), and turns
+red past it. An amber badge counts **cache misses**: model calls that had to write the whole
+conversation into an expired cache, usually after the agent waited more than five minutes on a
+long build. Setting `CLAUDE_CODE_PROMPT_CACHE_TTL=1h` in the Claude Code driver's environment
+keeps the cache for an hour. Tapping the gauge opens a menu: **Compact** summarizes the session and
+carries on from the summary, **New session** drops it so the next run starts fresh from the spec,
+Activity and branch. Both wait for the current run to end and take effect on the next run. GitHub
+Copilot reports its calls too but can't compact.
+
+The bottom of the sidebar shows your plan's limits, which are what actually stop a run: Claude's
+5-hour and weekly windows (and Copilot's monthly premium requests when your account has a quota).
+Choose which drivers to show, or switch to **Projected at reset**, which shows whether the agents
+are on pace to run out before the window resets. They're shared with anything else on the same
+account, such as Claude Code in your terminal. Claude's numbers come from an undocumented endpoint
+that Claude Code's own `/usage` screen uses, so they may stop working; the gauge then says why
+instead of showing a stale bar.
+
 ## Workflow
 
 **Planning → In progress → Blocked → Review → Done.**

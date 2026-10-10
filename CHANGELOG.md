@@ -11,6 +11,21 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A ticket's header shows a context gauge on Mac and iPhone/iPad: how many tokens of conversation
+  the ticket's agent re-reads on every model call, split into cached (cheap) and fresh (costly),
+  counting toward a limit (250k by default; change it in Settings or from the gauge's menu) and
+  turning red past it. An amber badge counts cache misses, the model calls that had to write the
+  whole conversation into an expired cache, which is how a long wait quietly multiplies a ticket's
+  cost. Tapping the gauge offers **Compact** (summarize the session and continue from the summary,
+  with the message box and ticket buttons disabled while it runs) and **New session** (the next run
+  starts fresh), and ⓘ buttons explain what is measured. Claude Code and the Anthropic API report
+  exact counts; GitHub Copilot reports them from its session log (or an estimate marked with an
+  asterisk) and can only start a new session.
+- The bottom of the sidebar shows your plan's usage limits on Mac and iPhone/iPad: Claude's 5-hour
+  and weekly windows and, when your account has a quota, Copilot's monthly premium requests, each
+  with its percentage and reset time. A menu picks which drivers to show and switches to
+  **Projected at reset**, which shows whether the agents are on pace to run out before the window
+  resets. When the numbers can't be read the row says why.
 - `bun run --cwd app ticket-header` drives a Mac ticket pane against a real service and checks the
   title bar, the hero's key row and the ··· menu in each state, with screenshots. The iPhone and iPad
   sim-check also check the new header, the ··· menu and flinging the panel's top edge.
