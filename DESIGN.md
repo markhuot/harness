@@ -3396,7 +3396,7 @@ the conventions, and ios/README.md the build and test commands.
   it, which waits docked, and a link inside the panel (a child, a dep, a file) pushes inside it
   with Back. The panel resizes from its leading edge (25–80% of the window, 800pt until resized,
   then remembered as a fraction of the window), and its title bar docks, pops out or closes the
-  ticket it shows. Docked tickets (the dock button, a fling to the right, or another ticket opened
+  ticket it shows. Docked tickets (the dock button, a slow drag to the right past 60% of the panel's width, or another ticket opened
   over them) wait as minimized cards in the board's bottom-right corner, newest at the bottom: each
   its own fully rounded glass capsule, as the single docked sheet was, about 320pt wide with a
   status dot (the board's colors), the ticket's ref, as much of its title as fits, and an ✕, keeping their drafts and place; while the panel is open they sit just left of it,

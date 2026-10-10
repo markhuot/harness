@@ -112,8 +112,10 @@ struct TicketSidePanel<Content: View>: View {
         .accessibilityIdentifier(id)
     }
 
-    /// A rightward drag from the top edge or the buttons' corner moves the panel with the finger; past `flingDistance` (or a throw whose
-    /// predicted end gets there) it carries on off the edge and docks, otherwise it springs back.
+    /// A rightward drag from the top edge or the buttons' corner moves the panel with the finger. Let
+    /// go, the one rule the iPhone's sheet follows decides (SheetFlick): a fast fling carries it off
+    /// the edge and closes the ticket, a slow drag 60% of the panel's width or more carries it off
+    /// and docks it, and anything shorter springs back.
     private func fling(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { value in
@@ -121,24 +123,18 @@ struct TicketSidePanel<Content: View>: View {
                 flingOffset = max(0, value.translation.width)
             }
             .onEnded { value in
-                let docks = Self.shouldDock(translation: value.translation.width, predicted: value.predictedEndTranslation.width, width: width)
-                if docks {
+                let outcome = SheetFlick.outcome(velocity: value.velocity.width, distance: value.translation.width, travel: width)
+                switch outcome {
+                case .dismiss, .dock:
                     withAnimation(.snappy(duration: 0.25)) {
                         flingOffset = width + Self.shadowReach
                     } completion: {
-                        onDock()
+                        if outcome == .dock { onDock() } else { onClose() }
                     }
-                } else {
+                case .restore:
                     withAnimation(.spring(duration: 0.3, bounce: 0.2)) { flingOffset = 0 }
                 }
             }
-    }
-
-    /// Whether a fling that ended at `translation` (with the system's predicted end)
-    /// docks a panel `width` wide: a third of the panel or 160pt dragged, whichever is less, or a
-    /// throw predicted to carry half the panel.
-    static func shouldDock(translation: CGFloat, predicted: CGFloat, width: CGFloat) -> Bool {
-        translation >= min(160, width / 3) || predicted >= width / 2
     }
 
     // MARK: Resize

@@ -495,7 +495,7 @@ bottom bar rides above the whole stack. The cards aren't drawn inside the sheet 
 sheet keeps its glass rim and shadow even with `presentationBackground(.clear)`, which drew one
 outline around them all. "N more…" expands every ticket but the top into the `DockedCardList` over
 the board, on the backdrop, the sheet's card staying under it; a tap on the backdrop collapses it.
-A horizontal swipe on the docked sheet moves to the next or previous ticket: UIKit swipe
+Dragging the presented sheet down lets go by one rule, `SheetFlick.outcome` (also the iPad panel's): faster than 600 pt/s dismisses (the only gesture that does), a slower drag of 60% of the way or more docks, and a shorter one goes back to `.large`. The pan on the container (`SheetFlickTracker`) decides the moment the finger lifts, from UIKit's own velocity (taken from the touches' timestamps, so a busy main thread can't change it); the system's later detent report only confirms that, so nothing pairs the two by the clock. A horizontal swipe on the docked sheet moves to the next or previous ticket: UIKit swipe
 recognizers on the sheet's container beside the flick pan (`SheetFlickTracker`), enabled only
 while docked with more than one; a SwiftUI gesture on the card kept the sheet's own pan from taking
 a swipe down. VoiceOver has Next and Previous docked ticket actions on the dock. At regular width SceneChrome
@@ -515,7 +515,7 @@ and Start session. While it's on top it hands its `cancel()` to the panel throug
 `TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
 or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
 registered they just dismiss. Docking, pop-out and a card's ✕ don't ask, and the draft is
-saved as whenever the screen goes. A rightward fling on the panel's top edge or its button corner docks it and Esc closes it.
+saved as whenever the screen goes. A rightward drag on the panel's top edge or its button corner moves the panel and lets go by the shared `SheetFlick` rule: faster than 600 pt/s closes the ticket, a slower drag of 60% of the panel's width or more docks it, and a shorter one springs back. Esc closes it too.
 Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
 and every docked ticket waits as a glass-capsule `DockedCard` in `DockedCardStack`, the same
 cards as the iPhone's, in the board's
