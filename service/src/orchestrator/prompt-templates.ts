@@ -149,7 +149,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * A behaviour change or bug fix gets an automated test that would fail without it. A visual-only change gets an assertion in the project's real-app or screenshot check where one exists.
 * Run the tests and the typecheck, and fix what fails. Passing is the expected state, so don't write the results into the spec.
 * A user-visible change gets screenshots (browser, app or simulator) embedded in Status.
-* Where a project's app check separates validating from screenshots (sim-check: validation takes none, shots are opt-in), run the validation for the area you changed and take screenshots of just the screens you changed (\`--only=<screen>\` or \`--shot=<link>\`), never a whole-gallery run.
+* Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true{{#if canSkipReview}}{{#if skipAgentReview}}{{else}} and \`skip_agent_review\` true{{/if}}{{/if}}. Don't create files unless asked.

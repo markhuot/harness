@@ -754,9 +754,8 @@ describe("http api", () => {
     await h.orchestrator.idle();
     const done = (await client.getTicket(t.key)).ticket;
     expect([done.status, done.humanReview, done.skipHumanReview]).toEqual(["done", "approved", true]);
-    // One approval, no second run: the review, then Completed.
-    const kinds = (await client.getTicket(t.key)).runs.map((r) => r.kind);
-    expect(kinds.filter((k) => k === "complete").length).toBeLessThanOrEqual(1);
+    // The work, the agent review, then exactly one completion run: nobody approved it by hand.
+    expect((await client.getTicket(t.key)).runs.map((r) => r.kind)).toEqual(["work", "review", "complete"]);
   });
 });
 

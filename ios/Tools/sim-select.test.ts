@@ -37,6 +37,9 @@ describe("plan", () => {
     expect(r.steps).toEqual(["shoot:ticket-headings", "run:composer"]);
     expect(r.seeds).toEqual(["blocked", "headings"]);
   });
+  test("a chain that needs two tickets seeds both of them", () => {
+    expect(run({ only: ["approve"] }).seeds).toEqual(["agents", "hello"]);
+  });
   test("--only can name an opt-in chain", () => {
     expect(run({ only: ["sheet-checks"] }).steps).toEqual(["run:sheet-checks"]);
   });
@@ -54,6 +57,9 @@ describe("resolveShot", () => {
   });
   test("a link with no placeholders needs no seeds", () => {
     expect(resolveShot("harness://settings", () => "x")).toEqual({ url: "harness://settings", needs: [] });
+  });
+  test("a ticket key is URL-encoded into the link", () => {
+    expect(resolveShot("harness://ticket/{headings}", () => "A B/1").url).toBe("harness://ticket/A%20B%2F1");
   });
   test("an unknown name fails, so a typo doesn't open a dead link", () => {
     expect(() => resolveShot("harness://ticket/{nope}", () => "x")).toThrow(/no seeded ticket named \{nope\}/);

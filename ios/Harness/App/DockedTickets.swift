@@ -117,7 +117,7 @@ struct DockedCard: View {
     }
 
     /// From the ✕'s tap target to the capsule's trailing edge.
-    static let closeInset: CGFloat = 10
+    static let closeInset = DockMetrics.closeInset
 
     @ViewBuilder private func statusIcon(_ text: DockedTicketText) -> some View {
         if text.isNewSession {
@@ -374,31 +374,18 @@ struct DockedCardStack: View {
 
     static let cardHeight = DockedCardMetrics.height
     static let spacing = DockedCardMetrics.spacing
-    static let margin: CGFloat = 16
-    static let maxWidth: CGFloat = 320
-    /// The narrowest card worth showing: the ref and a few words of title.
-    static let minWidth: CGFloat = 200
-    /// The room a lone "N more…" card needs, margins included.
-    static let collapsedRoom: CGFloat = 150
-
-    enum Mode: Equatable {
-        /// Cards this wide.
-        case cards(CGFloat)
-        /// The "N more…" card alone, this wide, holding every docked ticket.
-        case collapsed(CGFloat)
-        case hidden
-    }
+    static let margin = DockMetrics.cornerMargin
+    static let maxWidth = DockMetrics.maxCardWidth
+    static let minWidth = DockMetrics.minCardWidth
+    static let collapsedRoom = DockMetrics.collapsedRoom
+    typealias Mode = DockMetrics.CardMode
 
     /// What fits a column `width` wide.
-    static func mode(width: CGFloat) -> Mode {
-        let room = width - margin * 2
-        if room >= minWidth { return .cards(min(maxWidth, room)) }
-        return width >= collapsedRoom ? .collapsed(room) : .hidden
-    }
+    static func mode(width: CGFloat) -> Mode { DockMetrics.cardMode(width: width) }
 
     /// How many rows (cards and "N more…") fit `height`.
     static func fitting(height: CGFloat) -> Int {
-        max(1, Int((height - margin * 2 + spacing) / (cardHeight + spacing)))
+        DockMetrics.rowsFitting(height: height)
     }
 
     /// The stack's height for `count` docked tickets, for the board's bottom clearance.
