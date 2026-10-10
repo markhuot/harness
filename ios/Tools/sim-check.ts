@@ -847,6 +847,32 @@ async function seedPrompts() {
  * Seeds the project, the other project and the tickets `needs` names (the rest are never created,
  * so a filtered run seeds only its area).
  */
+/** A ticket's session context (what recording a model call leaves), and with `compacting` a compact run going. */
+function seedContext(t: Ticket | undefined, c: { input: number; cacheRead: number; cacheWrite: number; estimated?: boolean; misses?: number; missTokens?: number }) {
+  if (!t) return;
+  const db = new Database(join(home, "harness.db"));
+  try {
+    db.exec("PRAGMA busy_timeout = 5000;");
+    const ctx = { output: 0, estimated: false, at: Date.now(), prefix: 50000, misses: 0, missTokens: 0, ...c };
+    db.query("UPDATE sessions SET context = $c WHERE id = $id").run({ $c: JSON.stringify(ctx), $id: t.sessionId });
+  } finally {
+    db.close();
+  }
+}
+
+/** A compact run going on the ticket's session, which is what makes `compacting` true. The service's
+ *  startup sweep fails runs it didn't start, so this goes in right before the app loads the ticket. */
+function startCompactRun(t: Ticket) {
+  const db = new Database(join(home, "harness.db"));
+  try {
+    db.exec("PRAGMA busy_timeout = 5000;");
+    db.query("INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, created_at, started_at) VALUES ($id, $s, 'compact', 'running', 'claude-code', '/compact', '[]', $t, $t)")
+      .run({ $id: `sim-compact-${t.key}`, $s: t.sessionId, $t: Date.now() });
+  } finally {
+    db.close();
+  }
+}
+
 async function seed(needs: Set<SeedName>) {
   const want = (n: SeedName) => needs.has(n);
   await settings();
@@ -906,6 +932,28 @@ async function seed(needs: Set<SeedName>) {
   const linkedStage = want("linked") ? await create(project.id, "Ship the empty-name crash fix", { start: false, externalRef: jira62 }) : (undefined as unknown as Ticket);
   // A background Bash task (the dummy driver's /bgtask): Agents & tasks lists it, and its view shows the output.
   const tasks = await make("tasks", () => create(project.id, "Count the greetings in the background\n/bgtask 30", { skipAgentReview: true }));
+  // Context gauge tickets: planning tickets (nothing runs on them past the dummy's plan) that are
+  // then switched to the drivers that report context, so no real CLI ever runs. Their gauge numbers
+  // go straight into the sessions table, the way the service's per-call recording would leave them.
+  const gaugeOf = (name: SeedName, driver: string) =>
+    make(name, async () => {
+      const t = await create(other.id, `Gauge ${name}`, { start: false, skipAgentReview: true });
+      await settle(t.key, (x) => x.status === "planning" && !x.busy);
+      return api<Ticket>("PATCH", `/tickets/${t.key}`, { driver });
+    });
+  const [gauge, gaugeOver, gaugeMiss, gaugeCompact, gaugeCopilot, gaugeNew] = await Promise.all([
+    gaugeOf("gauge", "claude-code"),
+    gaugeOf("gaugeOver", "claude-code"),
+    gaugeOf("gaugeMiss", "claude-code"),
+    gaugeOf("gaugeCompact", "claude-code"),
+    gaugeOf("gaugeCopilot", "github-copilot"),
+    gaugeOf("gaugeNew", "claude-code"),
+  ]);
+  seedContext(gauge, { input: 6000, cacheRead: 61000, cacheWrite: 15000 });
+  seedContext(gaugeOver, { input: 2000, cacheRead: 330000, cacheWrite: 120000 });
+  seedContext(gaugeMiss, { input: 4000, cacheRead: 60000, cacheWrite: 36000, misses: 3, missTokens: 377000 });
+  seedContext(gaugeCompact, { input: 3000, cacheRead: 150000, cacheWrite: 20000 });
+  seedContext(gaugeCopilot, { input: 82000, cacheRead: 0, cacheWrite: 0, estimated: true });
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -979,7 +1027,7 @@ async function seed(needs: Set<SeedName>) {
   }
   const nestedAgent = want("agents") ? (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)! : (undefined as unknown as NonNullable<TicketDetail["subagents"]>[number]);
   const [, watcher] = (await watchers) as unknown as [unknown, Watcher];
-  const seeded = { project, other, hello, changes, conductor, browse, browsed, approval, blocked, plan, branchPlan, quick, draft, watcher, agents, nestedAgent, tasks, tables, code, headings, fileLink, linked, linkedStage };
+  const seeded = { gauge, gaugeOver, gaugeMiss, gaugeCompact, gaugeCopilot, gaugeNew, project, other, hello, changes, conductor, browse, browsed, approval, blocked, plan, branchPlan, quick, draft, watcher, agents, nestedAgent, tasks, tables, code, headings, fileLink, linked, linkedStage };
   // Every entry builds its link from the seed, selected or not: a ticket nobody asked for reads as a
   // stand-in ("UNSEEDED"), which only an entry that forgot to declare it in `needs` would ever open.
   const names = new Set<string>([...SEED_NAMES, "nestedAgent", "watcher"]);
@@ -3301,6 +3349,94 @@ function interactionChains(s: Seeded): Chain[] {
         await closeModels();
         moved(udid);
         return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model} → ${cleared.phaseModels?.work ? "set" : "inherit"}`;
+      });
+    }),
+    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew"], 60, async (udid) => {
+      const open = (t: { key: string }, ready: (l: string) => boolean) => goto(udid, `harness://ticket/${encodeURIComponent(t.key)}?tab=spec`, (ls) => ls.some(ready));
+      const gaugeLabel = async (ready: (l: string) => boolean) =>
+        until("the gauge", async () => (await labels(udid)).find(ready) ?? null, 8000).catch(async (e) => {
+          throw new Error(`${e.message}; on screen: ${(await labels(udid)).join(" | ")}`);
+        });
+      const closeMenu = async () => {
+        const root = (await tree(udid))[0]!.frame;
+        await axe("tap", "-x", String(Math.round(root.width * 0.5)), "-y", String(Math.round(root.height * 0.9)), "--udid", udid);
+        await Bun.sleep(400);
+      };
+      await check("a fresh session shows the grey New gauge", async () => {
+        await open(s.gaugeNew, (l) => l.startsWith("New session"));
+        const l = await gaugeLabel((x) => x.startsWith("New session"));
+        await shot(udid, "gauge-new-light");
+        return l;
+      });
+      await check("a gauge reads cached and fresh against the limit, and its menu offers Compact, New session, Limit…", async () => {
+        await open(s.gauge, (l) => l.startsWith("Context 82k"));
+        const l = await gaugeLabel((x) => x.startsWith("Context 82k"));
+        if (!l.startsWith("Context 82k of 250k: 61k cached, 21k fresh")) throw new Error(l);
+        if (l.includes("miss")) throw new Error(`a miss badge with none: ${l}`);
+        await shot(udid, "gauge-normal-light");
+        await tapWhere(udid, (x) => x.startsWith("Context 82k"));
+        const menu = await until("the gauge menu", async () => ((x) => (x.includes("Limit…") ? x : null))(await labels(udid)), 5000);
+        for (const item of ["Compact", "New session", "About this gauge"]) if (!menu.includes(item)) throw new Error(`no ${item}: ${menu.join(" | ")}`);
+        await shot(udid, "gauge-menu-light");
+        await tapWhere(udid, "About this gauge");
+        await until("the gauge info", async () => (await labels(udid)).some((x) => x.startsWith("How much conversation the next run")), 5000);
+        await shot(udid, "gauge-info-light");
+        await closeMenu();
+        return "82k of 250k, menu and info";
+      });
+      await check("New session asks first, and Limit… opens the limit sheet", async () => {
+        await open(s.gauge, (l) => l.startsWith("Context 82k"));
+        await tapWhere(udid, (x) => x.startsWith("Context 82k"));
+        await until("the menu", async () => (await labels(udid)).includes("New session"), 5000);
+        await tapWhere(udid, "New session");
+        await until("the confirmation", async () => (await labels(udid)).includes("Start a new session?"), 5000);
+        await tapWhere(udid, "Cancel");
+        await until("the alert gone", async () => !(await labels(udid)).includes("Start a new session?"), 5000);
+        await tapWhere(udid, (x) => x.startsWith("Context 82k"));
+        await until("the menu", async () => (await labels(udid)).includes("Limit…"), 5000);
+        await tapWhere(udid, "Limit…");
+        await until("the limit sheet", async () => (await labels(udid)).some((x) => x.startsWith("How many tokens the gauge counts up to")), 5000).catch(async (e) => {
+          throw new Error(`${e.message}; on screen: ${(await labels(udid)).join(" | ")}`);
+        });
+        await shot(udid, "gauge-limit-light");
+        return "confirmed and cancelled; limit sheet open";
+      });
+      await check("past the limit the gauge says so", async () => {
+        await open(s.gaugeOver, (l) => l.startsWith("Context 452k"));
+        const l = await gaugeLabel((x) => x.startsWith("Context 452k"));
+        if (!l.includes("over the limit")) throw new Error(l);
+        await shot(udid, "gauge-over-light");
+        return l;
+      });
+      await check("a session with misses shows the badge, and the menu's top row counts them", async () => {
+        await open(s.gaugeMiss, (l) => l.startsWith("Context 100k"));
+        const l = await gaugeLabel((x) => x.startsWith("Context 100k"));
+        if (!l.includes("3 misses")) throw new Error(l);
+        await tapWhere(udid, (x) => x.startsWith("Context 100k"));
+        const menu = await until("the menu", async () => ((x) => (x.includes("Limit…") ? x : null))(await labels(udid)), 5000);
+        if (!menu.includes("3 cache misses (377k tokens re-written)")) throw new Error(menu.join(" | "));
+        await shot(udid, "gauge-misses-light");
+        await tapWhere(udid, "3 cache misses (377k tokens re-written)");
+        await until("the miss info", async () => (await labels(udid)).some((x) => x.startsWith("A cache miss is a model call")), 5000);
+        await shot(udid, "gauge-misses-info-light");
+        await closeMenu();
+        return l;
+      });
+      await check("a compacting session shows the spinner gauge and a Compacting… composer", async () => {
+        startCompactRun(s.gaugeCompact);
+        await open(s.gaugeCompact, (l) => l === "Context, compacting");
+        await gaugeLabel((x) => x === "Context, compacting");
+        await until("the Compacting… composer", async () => (await labels(udid)).includes("Compacting…"), 5000);
+        if ((await labels(udid)).includes("Message the agent")) throw new Error("the composer's field is still there");
+        await shot(udid, "gauge-compacting-light");
+        return "spinner, Compacting…";
+      });
+      await check("Copilot's gauge is an estimate", async () => {
+        await open(s.gaugeCopilot, (l) => l.startsWith("Context about 82k"));
+        const l = await gaugeLabel((x) => x.startsWith("Context about 82k"));
+        if (!l.includes("estimated from word count")) throw new Error(l);
+        await shot(udid, "gauge-estimated-light");
+        return l;
       });
     }),
     chain("card-preview", ["hello"], 6, async (udid) => {

@@ -222,7 +222,7 @@ private struct ContextDial: View {
                 if !compacting {
                     let a = Angle.degrees(180 + 180 * gauge.fraction).radians
                     let tip = CGPoint(x: center.x + (radius - 1) * cos(a), y: center.y + (radius - 1) * sin(a))
-                    let color = empty ? c.text3 : gauge.isOver ? c.red : c.text
+                    let color = empty ? c.text3 : c.text
                     ctx.stroke(Path { $0.move(to: center); $0.addLine(to: tip) }, with: .color(color), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     ctx.fill(Path(ellipseIn: CGRect(x: center.x - 2.5, y: center.y - 2.5, width: 5, height: 5)), with: .color(color))
                 }
