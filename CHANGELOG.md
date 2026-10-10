@@ -9,8 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A ticket whose merge didn't actually happen no longer shows as Done. When a completion run ends without its branch in the base branch (a conflict it gave up on, say), the ticket moves to Blocked with a reason naming the branch, so you answer and the agent finishes the merge.
+
 ### Changed
 
+- Completion runs can now ask you something. If a merge hits a conflict that needs a decision, or `gh` isn't logged in, or cleanup would lose commits, the agent calls `block` and the ticket moves to Blocked with its question, instead of finishing as Done. Your answer starts new work, and the ticket goes through Review again.
 - On iPhone and iPad, a ticket's header is less crowded. The context gauge moves to the end of the row with the ticket key, so the title can run the full width. The project, status and Conductor pills are gone; a colored status dot now leads the title instead (VoiceOver still reads the status). On iPhone, the expanded title sits 25pt below the top, clear of the sheet's rounded corner, and the space under the header is 14pt, down from 28pt when collapsed.
 
 ## [app-20261010.1050](https://github.com/markhuot/harness/releases/tag/app-20261010.1050) - 2026-10-10

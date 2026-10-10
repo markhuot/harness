@@ -53,7 +53,7 @@ describe("toolsForRun", () => {
     plan: ["post_note", ...SPEC, "update_notes", "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
     work: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     review: ["post_note", "read_spec", "edit_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
-    complete: ["post_note", ...SPEC, "record_pull_request", ...BOARD, ...CONFIG_READ],
+    complete: ["post_note", ...SPEC, "block", "record_pull_request", ...BOARD, ...CONFIG_READ],
     conductor: ["post_note", ...SPEC, "update_notes", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
     triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
     // A chat (a message to a blocked, review or done task ticket) gets the work run's tools.
@@ -91,7 +91,7 @@ describe("toolsForRun", () => {
   test("ticket-state tools are only offered to the run kinds that may use them", () => {
     const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
     const who = (tool: string) => kinds.filter((k) => names(k, builtin).includes(tool));
-    expect(who("block")).toEqual(["work", "chat"]);
+    expect(who("block")).toEqual(["work", "complete", "chat"]);
     expect(who("unblock")).toEqual(["work", "conductor", "chat"]);
     expect(who("resume_work")).toEqual(["work", "conductor", "chat"]);
     expect(who("submit_for_review")).toEqual(["work", "conductor", "chat"]);

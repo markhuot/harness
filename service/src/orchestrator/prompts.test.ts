@@ -46,7 +46,7 @@ const TOOLS: Record<Exclude<RunKind, "compact">, string[]> = {
   plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
   work: ["post_note", ...SPEC, "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   review: ["post_note", "read_spec", "edit_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
-  complete: ["post_note", ...SPEC, ...BOARD, ...CONFIG_READ],
+  complete: ["post_note", ...SPEC, "block", ...BOARD, ...CONFIG_READ],
   conductor: ["post_note", ...SPEC, "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   triage: [...BOARD, "dispatch_ticket", "decline_work", ...CONFIG_READ],
   // A chat about a blocked ticket (the fixture's worktree ticket is blocked below) has the work tools.

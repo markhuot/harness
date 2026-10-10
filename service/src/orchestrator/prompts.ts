@@ -485,7 +485,7 @@ export function systemPrompt(info: PromptInfo): string {
     changes && renderPrompt("system.board_changes", { conductor }, o),
     // Config tools (tools/config.ts): reads for every run; the gated writes where a human can approve them.
     renderPrompt("system.config", { canChange: changes }, o),
-    (changes || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" }, o),
+    (changes || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" || kind === "complete" }, o),
     browser && renderPrompt("system.browser", {}, o),
   );
 }
