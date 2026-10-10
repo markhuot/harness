@@ -60,19 +60,35 @@ try {
   await idle(t1.key);
   await go(`#/board/${project.id}/ticket/${t1.key}`);
   await until("the hero", () => exists(".detail-hero"), 10000);
-  const bar = await js<{ title: string; barText: string; more: boolean; heroFirst: string }>(`(() => {
+  const bar = await js<{ title: string; barText: string; more: boolean; metaFirst: string; hero: { project: boolean; status: boolean; conductor: boolean }; dot: { before: boolean; label: string; status: string } }>(`(() => {
     const bar = document.querySelector(".pane-ticket .detail-titlebar, .detail .detail-titlebar");
     return {
       title: bar.querySelector(".detail-title")?.textContent ?? "",
       barText: bar.textContent,
       more: !!bar.querySelector("button[title=More]"),
-      heroFirst: [...document.querySelectorAll(".detail-meta > *")].slice(0, 3).map(e => e.textContent.trim()).join(" | "),
+      metaFirst: document.querySelector(".detail-meta").firstElementChild?.getAttribute("data-testid") ?? "",
+      hero: {
+        project: !!document.querySelector(".detail-hero .project-key"),
+        status: !!document.querySelector(".detail-hero .status-pill"),
+        conductor: !!document.querySelector(".detail-hero .badge-violet"),
+      },
+      dot: (() => {
+        const dot = bar.querySelector(".detail-status-dot");
+        const title = bar.querySelector(".detail-title");
+        return {
+          before: !!dot && !!title && !!(dot.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING),
+          label: dot?.getAttribute("aria-label") ?? "",
+          status: dot?.querySelector(".status-dot")?.getAttribute("data-status") ?? "",
+        };
+      })(),
     };
   })()`);
   check("the title bar shows the ticket's title", bar.title === LONG, bar.title);
   check("the title bar has no key, status or More menu", !bar.barText.includes(t1.key) && !bar.more, bar.barText);
   check("the hero has no large title", !(await exists("h1.detail-title")));
-  check("the hero's first row is the project, key, then status", /^\S+ \| HELLO-\d+ \| \S+/.test(bar.heroFirst), bar.heroFirst);
+  check("the meta row starts with the key", bar.metaFirst === "detail-key", bar.metaFirst);
+  check("the hero has no project, status or Conductor pill", !bar.hero.project && !bar.hero.status && !bar.hero.conductor, JSON.stringify(bar.hero));
+  check("a status dot leads the title, labelled with the status", bar.dot.before && bar.dot.label.length > 0 && bar.dot.status === "planning", JSON.stringify(bar.dot));
   const idleItems = await moreItems();
   check("an idle planning ticket's More menu: Move to done, Delete ticket", idleItems.join("|") === "Move to done|Delete ticket", idleItems.join("|"));
   await shot("more-planning");

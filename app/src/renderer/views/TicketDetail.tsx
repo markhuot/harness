@@ -43,7 +43,7 @@ import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator
 import { ModelBadge } from "../components/ModelSelect";
 import { ContextGauge } from "../components/ContextGauge";
 import { COMPACTING_PLACEHOLDER } from "../state/contextGauge";
-import { DriverBadge, KindBadge, MenuButton, MOD, ReviewMark, StatusDot, StatusPill, TicketKey } from "../components/bits";
+import { DriverBadge, MenuButton, MOD, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
 import { LandButton } from "../components/LandButton";
 import { landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
 import { paletteEntries, ticketActions, type TicketAction, type TicketActionId } from "../state/ticketActions";
@@ -60,7 +60,6 @@ import { ChangesTab } from "./ChangesTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
 import { ParentCrumb } from "../components/Conductor";
-import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { useBoardScope, useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
 import { PaneGrip, PaneWindowButton } from "../components/paneHeader";
@@ -534,7 +533,6 @@ function DetailHeader({
     ticket,
     onClose,
   );
-  const children = isConductor(ticket) ? childrenOf(state, ticket.id) : [];
   // Stopped on a usage limit: the service restarts it on its own after the limit resets.
   const restart = restartsAt(ticket);
 
@@ -542,7 +540,10 @@ function DetailHeader({
     <div className="detail-head">
       <div className="view-header detail-titlebar">
         <PaneGrip paneId={paneId} chip={k} label={label} title={ticket.title} />
-        <span className="detail-title selectable" title={`${ticket.title || "Untitled"} · ${label}`} data-testid="detail-title">
+        <span className="detail-status-dot" role="img" aria-label={STATUS_LABEL[ticket.status]}>
+          <StatusDot status={ticket.status} />
+        </span>
+        <span className="detail-title selectable" title={`${ticket.title || "Untitled"} · ${label} · ${STATUS_LABEL[ticket.status]}`} data-testid="detail-title">
           {ticket.title || "Untitled"}
         </span>
         <div className="grow" />
@@ -567,15 +568,11 @@ function DetailHeader({
       <div className="detail-hero">
         {parent && <ParentCrumb parent={parent} onOpen={(key) => openTicket(key, "children")} />}
         <div className="detail-meta">
-          {project && <ProjectKey project={project} />}
           <span className="detail-key selectable" data-testid="detail-key" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} · ticket ${k}` : undefined}>
             <TicketKey ticket={ticket} />
           </span>
-          <StatusPill status={ticket.status} />
-          <ModelBadge ticket={ticket} />
           {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
-          <ContextGauge ticket={ticket} />
-          <KindBadge ticket={ticket} childCount={children.length} />
+          <ModelBadge ticket={ticket} />
           {ticket.branch && (
             <span className="badge badge-outline mono" title={ticket.workdir ?? undefined}>
               <Icon name="branch" />
@@ -599,6 +596,7 @@ function DetailHeader({
               <ReviewMark who="human" state={ticket.humanReview} />
             </>
           )}
+          <ContextGauge ticket={ticket} />
         </div>
 
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}

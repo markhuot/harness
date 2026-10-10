@@ -3271,7 +3271,7 @@ Settings, project settings, or on the board route the pane workspace.
   edge drag the window, apart from their controls. The board header sheds extras through a
   container query when its pane is narrow. A ticket pane's titlebar holds the grip, the ticket's title
   and the pane buttons; the title truncates with an ellipsis and the row clips as a last resort, so
-  its buttons never run into the next pane. The key, status and model sit in the hero below. The titlebar is the container, not the pane:
+  its buttons never run into the next pane. A status dot leads the title (labelled with the status for screen readers). The hero below starts its meta row with the key, then the driver, model, branch, PR and review marks, and ends with the context gauge. The titlebar is the container, not the pane:
   a container is the containing block for fixed descendants, which would trap modals inside the
   pane.
 - **Menus.** `MenuButton` (`components/bits.tsx`) renders its menu in a portal with fixed

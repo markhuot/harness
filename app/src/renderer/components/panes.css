@@ -427,8 +427,13 @@ html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.acti
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.detail-titlebar > :is(.no-drag, .btn, .pane-grip) {
+.detail-titlebar > :is(.no-drag, .btn, .pane-grip, .detail-status-dot) {
   flex: none;
+}
+.detail-status-dot {
+  display: inline-flex;
+  align-items: center;
+  margin-right: -2px;
 }
 /* The More → Move pane rows of the other panes' headers: a target's name, then ← → ↑ ↓ buttons. */
 .menu .menu-caption {

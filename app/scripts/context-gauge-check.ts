@@ -54,6 +54,7 @@ try {
   await open("HARNESS-901");
   check("normal gauge reads 82k", (await text("[data-testid=gauge-label]")) === "82k", await text("[data-testid=gauge-label]"));
   check("…titled with the cached/fresh split", (await attr("[data-testid=context-gauge]", "aria-label")) === "Context 82k of 250k: 61k cached, 21k fresh");
+  check("…the gauge ends the meta row", await js<boolean>(`document.querySelector(".detail-meta")?.lastElementChild?.classList.contains("context-gauge-wrap") === true`));
   check("…no miss badge", !(await exists("[data-testid=gauge-miss-badge]")));
   check("…not red", (await attr("[data-testid=context-gauge]", "data-over")) === null);
   check("…the prefix tick is on the dial", await exists("[data-testid=gauge-prefix]"));

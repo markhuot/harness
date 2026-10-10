@@ -139,10 +139,10 @@ try {
     js<boolean>(`!!document.querySelector('.card[data-key=${JSON.stringify(parent.key)}] [data-testid=conductor-rollup]')`),
   ).catch(() => false);
   check("board card of a task with a child gets the conductor rollup", card);
-  // Cards dropped the Conductor badge (the rollup marks them); the ticket page keeps it.
+  // Cards dropped the Conductor badge (the rollup marks them); the ticket page has none either, only the Children tab.
   check(
-    "the task's page shows the Conductor badge",
-    !!(await until("Conductor badge on the ticket page", () => js<boolean>(`[...document.querySelectorAll('.detail .badge-violet')].some(b => b.textContent.includes("Conductor"))`)).catch(() => false)),
+    "the task's page has no Conductor badge",
+    await js<boolean>(`!![...document.querySelectorAll('.detail')].length && ![...document.querySelectorAll('.detail .badge-violet')].some(b => b.textContent.includes("Conductor"))`),
   );
   await go(`#/board/${project.id}/ticket/${parent.key}/children`);
   const row = await until("child row in the Tickets tab", () => js<boolean>(`!!document.querySelector('.child-row[data-key=${JSON.stringify(kid.key)}]')`)).catch(() => false);

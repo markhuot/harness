@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { displayKey, isConductor, secondaryKey, type ReviewState, type Ticket, type TicketStatus } from "@harness/shared";
+import { displayKey, secondaryKey, type ReviewState, type Ticket, type TicketStatus } from "@harness/shared";
 import { driverIcon, driverLabel, STATUS_LABEL } from "@harness/shared/state";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
@@ -62,16 +62,6 @@ export function ReviewMark({ who, state }: { who: "agent" | "human"; state: Revi
     <span className={`badge ${cls}`} data-review={state} title={`${label} review: ${state.replace("_", " ")}`}>
       <Icon name={who === "agent" ? "bot" : "user"} />
       {mark}
-    </span>
-  );
-}
-
-export function KindBadge({ ticket, childCount }: { ticket: Ticket; childCount?: number }) {
-  if (!isConductor(ticket)) return null;
-  return (
-    <span className="badge badge-violet" title="Conductor: orchestrates child tickets">
-      <Icon name="conductor" />
-      Conductor{childCount ? ` · ${childCount}` : ""}
     </span>
   );
 }
