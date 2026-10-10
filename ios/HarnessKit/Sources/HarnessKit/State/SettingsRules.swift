@@ -59,6 +59,19 @@ public enum SettingsRules {
         return Int(min(32, max(1, n)))
     }
 
+    /// The context gauge limit as typed, in tokens: a number, optionally with a `k` or `m` suffix
+    /// ("250k", "1.5m"), rounded and clamped to 10k…2M; nil when it's blank or not a number
+    /// (nothing is saved).
+    public static func contextGaugeLimit(_ text: String) -> Int? {
+        var t = JSCompat.trim(text).lowercased()
+        var scale = 1.0
+        if t.hasSuffix("k") { scale = 1000; t.removeLast() } else if t.hasSuffix("m") { scale = 1_000_000; t.removeLast() }
+        guard !JSCompat.trim(t).isEmpty else { return nil }
+        let n = JSCompat.round(JSNumber.parse(t) * scale)
+        guard n.isFinite else { return nil }
+        return Int(min(Double(ContextGaugeLimits.max), max(Double(ContextGaugeLimits.min), n)))
+    }
+
     /// Suspend unused browser tabs after N minutes, as typed: `Math.round(Number(v))`, clamped to
     /// 0…1440 (0 = never); nil when it's blank or not a finite number (nothing is saved).
     public static func browserIdleTabMinutes(_ text: String) -> Int? {
