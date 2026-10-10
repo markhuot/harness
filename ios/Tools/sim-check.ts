@@ -3519,7 +3519,7 @@ function interactionChains(s: Seeded): Chain[] {
         return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model} → ${cleared.phaseModels?.work ? "set" : "inherit"}`;
       });
     }),
-    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew"], 60, async (udid) => {
+    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew", "conductor"], 60, async (udid) => {
       const open = (t: { key: string }, ready: (l: string) => boolean) => goto(udid, `harness://ticket/${encodeURIComponent(t.key)}?tab=spec`, (ls) => ls.some(ready));
       const gaugeLabel = async (ready: (l: string) => boolean) =>
         until("the gauge", async () => (await labels(udid)).find(ready) ?? null, 8000).catch(async (e) => {
@@ -3535,6 +3535,32 @@ function interactionChains(s: Seeded): Chain[] {
         const l = await gaugeLabel((x) => x.startsWith("New session"));
         await shot(udid, "gauge-new-light");
         return l;
+      });
+      await check("the expanded header's meta row ends in the gauge, with no status, project or Conductor pill", async () => {
+        const hero = async (t: { key: string }, ready: (l: string) => boolean) => {
+          await open(t, ready);
+          await gaugeLabel(ready);
+          const all = await nodes(udid);
+          return { all, labels: all.map((n) => n.AXLabel ?? "") };
+        };
+        const { all, labels: ls } = await hero(s.gauge, (l) => l.startsWith("Context 82k"));
+        const gaugeNode = all.find((n) => n.AXLabel?.startsWith("Context 82k"));
+        const keyNode = all.find((n) => n.AXLabel === s.gauge.key);
+        const titleNode = all.find((n) => n.AXLabel?.startsWith("Gauge gauge"));
+        if (!gaugeNode || !keyNode || !titleNode) throw new Error(`missing: gauge ${!!gaugeNode} key ${!!keyNode} title ${!!titleNode}: ${ls.join(" | ")}`);
+        // Its 44pt tap target may overlap the title's bottom padding; its middle is the row's.
+        if (gaugeNode.frame.y + gaugeNode.frame.height / 2 < titleNode.frame.y + titleNode.frame.height) throw new Error(`the gauge sits in the title's row: ${JSON.stringify([gaugeNode.frame, titleNode.frame, keyNode.frame])}`);
+        if (Math.abs(gaugeNode.frame.y + gaugeNode.frame.height / 2 - (keyNode.frame.y + keyNode.frame.height / 2)) > 12) throw new Error("the gauge is off the key's row");
+        if (gaugeNode.frame.x < keyNode.frame.x) throw new Error("the gauge comes before the ticket key");
+        if (gaugeNode.frame.height < 43) throw new Error(`the gauge's tap target is ${gaugeNode.frame.height}pt tall`);
+        if (ls.some((l) => l === "Planning" || l === "Conductor" || l.startsWith("Conductor ·"))) throw new Error(`a pill is back: ${ls.join(" | ")}`);
+        if (!ls.some((l) => l.startsWith("Gauge gauge") && l.includes("Planning"))) throw new Error("the title's label has no status");
+        // The title sits 25pt under the hero's top, clear of the sheet's corner.
+        await shot(udid, "hero-meta-row-light");
+        await open(s.conductor, (l) => l.startsWith("Ship the greeter v2"));
+        const c = { labels: await labels(udid) };
+        if (c.labels.some((l) => l.startsWith("Conductor"))) throw new Error(`the Conductor pill is back: ${c.labels.join(" | ")}`);
+        return `gauge ${Math.round(gaugeNode.frame.y)} under the title ${Math.round(titleNode.frame.y)}, no pills`;
       });
       await check("a gauge reads cached and fresh against the limit, and its menu offers Compact, New session, Limit…", async () => {
         await open(s.gauge, (l) => l.startsWith("Context 82k"));

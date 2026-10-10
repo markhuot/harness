@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and iPad, a ticket's header is less crowded. The context gauge moves to the end of the row with the ticket key, so the title can run the full width. The project, status and Conductor pills are gone; a colored status dot now leads the title instead (VoiceOver still reads the status). On iPhone, the expanded title sits 25pt below the top, clear of the sheet's rounded corner, and the space under the header is 14pt, down from 28pt when collapsed.
+
 ## [app-20261010.1050](https://github.com/markhuot/harness/releases/tag/app-20261010.1050) - 2026-10-10
 
 ### Added

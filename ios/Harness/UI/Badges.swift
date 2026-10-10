@@ -50,23 +50,6 @@ struct StatusDot: View {
 
 func statusLabel(_ s: TicketStatus) -> String { Format.statusLabel[s] ?? s.rawValue }
 
-struct StatusPill: View {
-    let status: TicketStatus
-    @Environment(\.palette) private var c
-
-    var body: some View {
-        HStack(spacing: 6) {
-            StatusDot(status: status)
-            Text(statusLabel(status)).font(.scaled(size: 12.5, weight: .medium)).foregroundStyle(c.text2)
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 24)
-        .background(c.bgElev, in: .capsule)
-        .overlay(Capsule().strokeBorder(c.border, lineWidth: 1 / 3))
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-    }
-}
-
 /// A project's key badge ("HAR") in the project's color (nil → the theme accent).
 struct ProjectKeyBadge: View {
     enum Size { case sm, md, lg }
@@ -136,18 +119,6 @@ struct DriverBadge: View {
 
     var body: some View {
         Badge(Format.driverLabel(driver, drivers: drivers), outline: true, icon: driverIconName(driver), iconColor: driver == "claude-code" ? claudeOrange : nil)
-    }
-}
-
-/// "Conductor · N" on a conductor ticket; nothing otherwise.
-struct KindBadge: View {
-    let ticket: Ticket
-    var childCount: Int?
-
-    var body: some View {
-        if ticket.isConductor {
-            Badge("Conductor\(childCount.map { $0 > 0 ? " · \($0)" : "" } ?? "")", tone: .violet, icon: "conductor")
-        }
     }
 }
 

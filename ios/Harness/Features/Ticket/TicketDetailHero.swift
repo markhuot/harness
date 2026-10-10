@@ -72,17 +72,19 @@ struct TicketDetailHero: View {
         header(compact: compact, crumb: crumb)
         if !compact {
             FlowLayout(spacing: 6) {
-                if let project { ProjectKeyBadge(project.key, color: project.color) }
                 TicketKeyLabel(ticket: ticket, size: 12.5, color: c.text2)
-                StatusPill(status: ticket.status)
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
                 ModelBadge(ticket: ticket, state: state)
-                KindBadge(ticket: ticket, childCount: ticket.isConductor ? state.childrenOf(ticket.id).count : nil)
                 if let branch = ticket.branch { Badge(branch, outline: true, icon: "branch") }
                 if let url = ticket.pullRequestUrl.optional { pullRequestBadge(url) }
                 if ticket.status == .review {
                     ReviewMark(who: .agent, state: ticket.agentReview)
                     ReviewMark(who: .human, state: ticket.humanReview)
+                }
+                // At the row's end. Its 44pt tap target overflows the 24pt the row gives it, so it
+                // doesn't make the badges' row taller.
+                if TicketContextGauge.isShown(for: ticket, drivers: state.drivers) {
+                    TicketContextGauge(ticket: ticket).frame(height: 24)
                 }
             }
         }
@@ -116,17 +118,11 @@ struct TicketDetailHero: View {
     /// and level with them, so the title, its chevron and the buttons share one middle.
     @ViewBuilder private func header(compact: Bool, crumb: ParentCrumb?) -> some View {
         let back = showsBack
-        let gauge = TicketContextGauge.isShown(for: ticket, drivers: store.state.drivers)
         let row = HStack(spacing: 0) {
             if back { backButton }
             VStack(alignment: .leading, spacing: inTicketPanel ? 4 : 10) {
                 if let crumb { crumb }
-                title(compact: compact, hasBack: back, gauge: gauge)
-            }
-            // The context gauge sits at the row's trailing edge, left of the panel's floating buttons.
-            if gauge {
-                TicketContextGauge(ticket: ticket)
-                    .padding(.trailing, inTicketPanel ? panelInset : 0)
+                title(compact: compact, hasBack: back)
             }
         }
         if inTicketPanel {
@@ -154,7 +150,7 @@ struct TicketDetailHero: View {
         .accessibilityIdentifier("ticket-back")
     }
 
-    private func title(compact: Bool, hasBack: Bool, gauge: Bool) -> some View {
+    private func title(compact: Bool, hasBack: Bool) -> some View {
         let text = Text(ticket.title.isEmpty ? "Untitled" : ticket.title)
             .font(.scaled(size: compact ? 16 : 19, weight: .bold))
             .foregroundStyle(c.text)
@@ -162,19 +158,24 @@ struct TicketDetailHero: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         // The whole header row takes the tap, its padding included, not just the text and chevron.
         return Button(action: toggle) {
-            HStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // The status, as on a docked ticket's card, in the title's first line.
+                StatusDot(status: ticket.status, size: 10).frame(width: 14)
                 text
                 Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
             }
             // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
             // they are, so the title, its chevron and the buttons share one middle.
-            .padding(.trailing, inTicketPanel && !gauge ? panelInset : 0)
-            // Collapsed, the title gets double the margin above and below, and its text lines
-            // up with the Spec tab's label under it (the strip's 8pt inset plus the tab's 10).
+            .padding(.trailing, inTicketPanel ? panelInset : 0)
+            // Collapsed, the title gets double the margin above, and its status dot lines up with
+            // the Spec tab's label under it (the strip's 8pt inset plus the tab's 10). Expanded
+            // gets 5pt more above, clear of the sheet's rounded corner. Net of the hero's own
+            // 10pt and the -10 below, the inner values are the spacing. The hero's 14pt bottom
+            // padding is the space below, so the title adds none.
             .padding(.leading, hasBack ? 0 : compact ? 18 : 14)
             .padding(.trailing, 14)
-            .padding(.top, !inTicketPanel && compact ? 20 : 10)
-            .padding(.bottom, inTicketPanel ? (compact ? 10 : 5) : compact ? 24 : 5)
+            .padding(.top, inTicketPanel ? 10 : compact ? 20 : 25)
+            .padding(.bottom, compact ? 10 : 5)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -185,6 +186,7 @@ struct TicketDetailHero: View {
         .padding(.top, -10)
         .padding(.bottom, compact ? -10 : -5)
         .accessibilityAddTraits(.isHeader)
+        .accessibilityLabel("\(ticket.title.isEmpty ? "Untitled" : ticket.title), \(statusLabel(ticket.status))")
         .accessibilityValue(expanded ? "Expanded" : "Collapsed")
         .accessibilityHint(expanded ? "Hides the ticket's status and actions" : "Shows the ticket's status and actions")
     }
