@@ -100,6 +100,7 @@ struct ProjectsSidebar: View {
         // Settings and the connection stay at the bottom while the projects scroll.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
+                PlanUsageSection(report: store.usage)
                 Card {
                     ProjectsNavRow(icon: "settings", label: "Settings", active: row == .settings) {
                         select(.settings)

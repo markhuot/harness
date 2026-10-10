@@ -18,6 +18,7 @@ struct BoardStoreTests {
             var activityHold: [String: Deferred<[ActivityEntry]>] = [:]
             var details: [String: TicketDetail] = [:]
             var health: Health? = Health(version: "0.1.0", pid: 1)
+            var usage: PlanUsageReport?
         }
 
         let s = Mutex(State())
@@ -27,6 +28,12 @@ struct BoardStoreTests {
         func health() async throws -> Health {
             calls.append("health")
             if let h = s.withLock({ $0.health }) { return h }
+            throw URLError(.cannotConnectToHost)
+        }
+
+        func getUsage() async throws -> PlanUsageReport {
+            calls.append("usage")
+            if let u = s.withLock({ $0.usage }) { return u }
             throw URLError(.cannotConnectToHost)
         }
 
@@ -341,6 +348,31 @@ struct BoardStoreTests {
         await h.store.refresh()
         #expect(!h.store.state.ready)
         #expect(h.store.loadError == "boom")
+    }
+
+    @Test func planUsageIsFetchedOnRefreshKeptWhenAFetchFailsAndReplacedByLiveEvents() async {
+        func report(_ pct: Double) -> PlanUsageReport {
+            PlanUsageReport(drivers: [DriverPlanUsage(driver: "claude-code", name: "Claude Code", windows: [
+                PlanWindow(id: .fiveHour, label: "5-hour", usedPercent: pct, resetsAt: 1, windowSeconds: 18_000),
+            ], fetchedAt: 1)])
+        }
+        let h = Harness()
+        // A service without /usage (or one that fails) leaves no report, and doesn't fail the snapshot.
+        await h.store.refresh()
+        #expect(h.store.usage == nil)
+        #expect(h.store.loadError == nil)
+
+        h.client.s.withLock { $0.usage = report(10) }
+        await h.store.refresh()
+        #expect(h.store.usage == report(10))
+
+        h.client.s.withLock { $0.usage = nil }
+        await h.store.refresh()
+        #expect(h.store.usage == report(10))
+
+        h.store.start()
+        h.socket.emit(.usageUpdated(usage: report(42)))
+        await eventually { h.store.usage == report(42) }
     }
 
     @Test func browserEventsBypassTheReducerAndReachListeners() async {

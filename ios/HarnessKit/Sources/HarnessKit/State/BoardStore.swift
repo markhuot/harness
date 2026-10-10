@@ -79,6 +79,9 @@ public final class BoardStore {
     public private(set) var socketGeneration = 0
     /// The service's /health from the last refresh that got one (nil until then).
     public private(set) var health: Health?
+    /// The plan-usage gauges' last report (GET /usage, then each usage.updated); nil until one arrives.
+    /// Held here, not in the reducer: the TS reducer has no usage state to stay in parity with.
+    public private(set) var usage: PlanUsageReport?
     /// The release mismatch the person closed: hidden until the service or the app changes.
     public private(set) var dismissedMismatch: ReleaseMismatch?
 
@@ -287,6 +290,7 @@ public final class BoardStore {
 
     private func receive(_ event: HarnessEvent) {
         switch event {
+        case .usageUpdated(let u): usage = u
         case .browserFrame, .browserState: break
         default: dispatch(.event(event))
         }
@@ -372,10 +376,12 @@ public final class BoardStore {
         // /health is optional: a failure here leaves the last answer (the snapshot reports errors).
         let client = client
         async let health = try? await client.health()
+        async let usage = try? await client.getUsage()
         do {
             let snapshot = try await loadSnapshot(scope)
             guard !closed else { return }
             if let h = await health { self.health = h }
+            if let u = await usage { self.usage = u }
             dispatch(.snapshot(snapshot))
             loader.legacy = snapshot.donePage == nil
             loader.snapshotApplied()
