@@ -9,6 +9,7 @@
 export const SEED_NAMES = [
   "hello", "changes", "conductor", "browse", "approval", "configApproval", "blocked", "plan", "agents", "tables",
   "branchPlan", "quick", "waiting", "draft", "code", "diff", "headings", "fileLink", "linked", "tasks", "watchers",
+  "gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew",
 ] as const;
 export type SeedName = (typeof SEED_NAMES)[number];
 

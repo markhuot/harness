@@ -97,7 +97,8 @@ public enum TicketDetailLogic {
     /// The composer's placeholder: what a message does in the ticket's state ("Answer the agent…",
     /// "Send a follow-up…").
     public static func composerPlaceholder(_ t: Ticket) -> String {
-        Format.composerPlaceholder[t.status] ?? "Message the agent…"
+        if t.compacting == true { return "Compacting…" }
+        return Format.composerPlaceholder[t.status] ?? "Message the agent…"
     }
 
     // MARK: Message attachments
@@ -111,8 +112,9 @@ public enum TicketDetailLogic {
     /// Whether Send goes: there's text or at least one attachment, nothing is still uploading, no
     /// send is in flight, and no attachment would go with a message that answers a waiting tool
     /// approval (the service refuses that).
-    public static func canSendMessage(text: String, attachments: Int, uploading: Int, sending: Bool, approvalPending: Bool) -> Bool {
-        guard !sending, uploading == 0 else { return false }
+    /// While the ticket's session compacts the service refuses messages, so Send is off.
+    public static func canSendMessage(text: String, attachments: Int, uploading: Int, sending: Bool, approvalPending: Bool, compacting: Bool = false) -> Bool {
+        guard !sending, !compacting, uploading == 0 else { return false }
         if attachments > 0 { return !approvalPending }
         return !trim(text).isEmpty
     }

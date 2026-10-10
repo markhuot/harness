@@ -36,6 +36,8 @@ struct TicketDetailComposer: View {
 
     private var outgoing: MessageAttachments { draft.attachments }
     private var text: String { draft.text }
+    /// The session is compacting: the service refuses messages until it ends.
+    private var compacting: Bool { ticket.compacting == true }
 
     var body: some View {
         let empty = TicketDetailLogic.trim(text).isEmpty
@@ -43,7 +45,8 @@ struct TicketDetailComposer: View {
         let attention = ticket.status == .blocked
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
         let canSend = TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
-                                                       sending: sending, approvalPending: !accepts)
+                                                       sending: sending, approvalPending: !accepts,
+                                                       compacting: compacting)
         VStack(spacing: 4) {
             if !outgoing.isEmpty || !uploader.pending.isEmpty {
                 attachmentTray(accepts: accepts)
@@ -52,6 +55,9 @@ struct TicketDetailComposer: View {
                 if accepts {
                     attachButton
                 }
+                if compacting {
+                    compactingField
+                } else {
                 MentionTextEditor(text: Binding(get: { draft.text }, set: { draft.setText($0) }),
                                   placeholder: TicketDetailLogic.composerPlaceholder(ticket),
                                   ticketKey: ticket.key,
@@ -70,7 +76,8 @@ struct TicketDetailComposer: View {
                                                             glass: true),
                                   focusRequest: focusRequest,
                                   onSubmit: { send() })
-                sendButton(active: writing, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
+                }
+                sendButton(active: writing && !compacting, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
             }
         }
         .padding(.top, 6)
@@ -112,6 +119,23 @@ struct TicketDetailComposer: View {
                 .disabled(true)
                 .accessibilityLabel("Send")
         }
+    }
+
+    /// The field while the session compacts: a spinner and "Compacting…", no input.
+    private var compactingField: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text(TicketDetailLogic.composerPlaceholder(ticket))
+                .font(.body)
+                .foregroundStyle(c.text3)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .glassEffect(.regular, in: .rect(cornerRadius: 22, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Compacting…")
+        .accessibilityIdentifier("composer-compacting")
     }
 
     /// Why Send ignores a tap (VoiceOver's hint).
@@ -182,7 +206,7 @@ struct TicketDetailComposer: View {
         let body = TicketDetailLogic.trim(text)
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
         guard TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
-                                               sending: sending, approvalPending: !accepts) else { return }
+                                               sending: sending, approvalPending: !accepts, compacting: compacting) else { return }
         let files = outgoing.list
         let attachments = outgoing.inputs
         let key = ticket.key

@@ -72,6 +72,16 @@ struct SettingsGeneralSection: View {
                 .frame(maxWidth: 80)
                 .accessibilityLabel("Max concurrent runs")
             }
+            SettingsRow(label: "Context gauge limit", hint: "Tokens. The ticket gauge counts up to it and turns red past it. 10k to 2M; \"250k\" works too.") {
+                DraftField(value: String(settings.contextLimit)) { v in
+                    if let n = SettingsRules.contextGaugeLimit(v) { save(SettingsPatch(contextGaugeLimit: n)) }
+                }
+                .keyboardType(.numbersAndPunctuation)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .frame(maxWidth: 100)
+                .accessibilityLabel("Context gauge limit")
+            }
             SettingsRow(label: "Suspend unused browser tabs after", hint: "In minutes. A suspended tab's page closes to free memory and reloads when you or an agent open it. Tabs you're watching aren't suspended. 0 means never.") {
                 DraftField(value: String(settings.idleTabMinutes)) { v in
                     if let n = SettingsRules.browserIdleTabMinutes(v) { save(SettingsPatch(browserIdleTabMinutes: n)) }

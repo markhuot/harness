@@ -91,7 +91,11 @@ struct TicketDetailHero: View {
         }
         // Always there when expanded: the More menu's Delete always applies.
         if !compact {
-            FlowLayout(spacing: 8) { buttons(project: project, parent: parent) }
+            // While the session compacts the service refuses ticket actions; Cancel run in More stays.
+            FlowLayout(spacing: 8) {
+                Group { buttons(project: project, parent: parent) }.disabled(ticket.compacting == true)
+                moreMenu(label: Keys.keyLabel(ticket))
+            }
         }
         // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
         if !compact, ticket.status == .review, let conductor = Completion.managingConductor(ticket: ticket, parent: parent) {
@@ -112,11 +116,17 @@ struct TicketDetailHero: View {
     /// and level with them, so the title, its chevron and the buttons share one middle.
     @ViewBuilder private func header(compact: Bool, crumb: ParentCrumb?) -> some View {
         let back = showsBack
+        let gauge = TicketContextGauge.isShown(for: ticket, drivers: store.state.drivers)
         let row = HStack(spacing: 0) {
             if back { backButton }
             VStack(alignment: .leading, spacing: inTicketPanel ? 4 : 10) {
                 if let crumb { crumb }
-                title(compact: compact, hasBack: back)
+                title(compact: compact, hasBack: back, gauge: gauge)
+            }
+            // The context gauge sits at the row's trailing edge, left of the panel's floating buttons.
+            if gauge {
+                TicketContextGauge(ticket: ticket)
+                    .padding(.trailing, inTicketPanel ? panelInset : 0)
             }
         }
         if inTicketPanel {
@@ -144,7 +154,7 @@ struct TicketDetailHero: View {
         .accessibilityIdentifier("ticket-back")
     }
 
-    private func title(compact: Bool, hasBack: Bool) -> some View {
+    private func title(compact: Bool, hasBack: Bool, gauge: Bool) -> some View {
         let text = Text(ticket.title.isEmpty ? "Untitled" : ticket.title)
             .font(.scaled(size: compact ? 16 : 19, weight: .bold))
             .foregroundStyle(c.text)
@@ -158,7 +168,7 @@ struct TicketDetailHero: View {
             }
             // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
             // they are, so the title, its chevron and the buttons share one middle.
-            .padding(.trailing, inTicketPanel ? panelInset : 0)
+            .padding(.trailing, inTicketPanel && !gauge ? panelInset : 0)
             // Collapsed, the title gets double the margin above and below, and its text lines
             // up with the Spec tab's label under it (the strip's 8pt inset plus the tab's 10).
             .padding(.leading, hasBack ? 0 : compact ? 18 : 14)
@@ -247,7 +257,6 @@ struct TicketDetailHero: View {
         if ticket.status == .done {
             HButton("Re-open", icon: "refresh", small: true, fullWidth: false) { reopening = true }
         }
-        moreMenu(label: label)
     }
 
     /// The secondary […] after the actions: Move to done (not in review, where Approve and take no
@@ -258,12 +267,13 @@ struct TicketDetailHero: View {
                 Button(TicketDetailLogic.agentReviewButton(ticket.agentReview), systemImage: "arrow.clockwise") {
                     perform { try await $0.rerunAgentReview($1) }
                 }
-                .disabled(ticket.busy)
+                .disabled(ticket.busy || ticket.compacting == true)
             }
             if TicketDetailLogic.offersMarkDone(ticket) {
                 Button("Move to done", systemImage: "checkmark.circle") {
                     perform { try await $0.completeTicket($1, CompleteBody(skipAgent: true)) }
                 }
+                .disabled(ticket.compacting == true)
             }
             if ticket.busy {
                 Button("Cancel run", systemImage: "stop.circle", role: .destructive) {
@@ -279,6 +289,7 @@ struct TicketDetailHero: View {
                     }
                 }
             }
+            .disabled(ticket.compacting == true)
         } label: {
             Image(systemName: "ellipsis").font(.system(size: 13 * 0.92, weight: .semibold)).frame(width: 13, height: 13)
         }
