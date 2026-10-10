@@ -10,12 +10,16 @@ struct TicketDetailHero: View {
     let ticket: Ticket
     var disclosure: TicketDetailHeroCollapse?
     let maxHeight: CGFloat
+    /// The screen's navigation bar is hidden, so the hero draws the Back button itself, level with
+    /// the title, when there's something to go back to.
+    var navigable = false
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.inTicketSheet) private var inTicketSheet
     @Environment(\.inTicketPanel) private var inTicketPanel
     @Environment(\.ticketPanelTitleInset) private var panelInset
+    @Environment(\.dismiss) private var dismiss
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @State private var localExpanded = false
@@ -61,10 +65,10 @@ struct TicketDetailHero: View {
         let state = store.state
         let project = state.projects[ticket.projectId]
         let parent = ticket.parentId.flatMap { state.tickets[$0] }
-        if let parent, !compact {
-            ParentCrumb(parent: parent) { router.push(.ticket(key: $0, tab: .children)) }
+        let crumb = parent.flatMap { parent in
+            compact ? nil : ParentCrumb(parent: parent) { router.push(.ticket(key: $0, tab: .children)) }
         }
-        title(compact: compact)
+        header(compact: compact, crumb: crumb)
         if !compact {
             FlowLayout(spacing: 6) {
                 if let project { ProjectKeyBadge(project.key, color: project.color) }
@@ -96,7 +100,48 @@ struct TicketDetailHero: View {
         }
     }
 
-    private func title(compact: Bool) -> some View {
+    private var showsBack: Bool {
+        navigable && !((inTicketSheet || inTicketPanel) && router.showsAsSheetRoot(ticket.key))
+    }
+
+    /// The crumb and title, with the Back button at their leading edge when there is one, centered
+    /// on the two together. In the iPad panel the header is as tall as the floating window buttons
+    /// and level with them, so the title, its chevron and the buttons share one middle.
+    @ViewBuilder private func header(compact: Bool, crumb: ParentCrumb?) -> some View {
+        let back = showsBack
+        let row = HStack(spacing: 0) {
+            if back { backButton }
+            VStack(alignment: .leading, spacing: inTicketPanel ? 4 : 10) {
+                if let crumb { crumb }
+                title(compact: compact, hasBack: back)
+            }
+        }
+        if inTicketPanel {
+            row
+                .frame(minHeight: TicketSidePanel<EmptyView>.buttonSize)
+                // The hero's 10pt top padding up to the buttons' 4; below, what the title had.
+                .padding(.top, -6)
+                .padding(.bottom, compact ? 20 : -4)
+        } else {
+            row
+        }
+    }
+
+    private var backButton: some View {
+        Button { dismiss() } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(c.accent)
+                .frame(width: 36, height: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.leading, -8)
+        .accessibilityLabel("Back")
+        .accessibilityIdentifier("ticket-back")
+    }
+
+    private func title(compact: Bool, hasBack: Bool) -> some View {
         let text = Text(ticket.title.isEmpty ? "Untitled" : ticket.title)
             .font(.scaled(size: compact ? 16 : 19, weight: .bold))
             .foregroundStyle(c.text)
@@ -108,20 +153,22 @@ struct TicketDetailHero: View {
                 text
                 Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
             }
-            // The iPad panel's buttons float over the root ticket's top corner.
-            .padding(.trailing, inTicketPanel && router.showsAsSheetRoot(ticket.key) ? panelInset : 0)
+            // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
+            // they are, so the title, its chevron and the buttons share one middle.
+            .padding(.trailing, inTicketPanel ? panelInset : 0)
             // Collapsed, the title gets double the margin above and below, and its text lines
             // up with the Spec tab's label under it (the strip's 8pt inset plus the tab's 10).
-            .padding(.leading, compact ? 18 : 14)
+            .padding(.leading, hasBack ? 0 : compact ? 18 : 14)
             .padding(.trailing, 14)
-            .padding(.top, compact ? 20 : 10)
-            .padding(.bottom, compact ? 24 : 5)
+            .padding(.top, !inTicketPanel && compact ? 20 : 10)
+            .padding(.bottom, inTicketPanel ? (compact ? 10 : 5) : compact ? 24 : 5)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         // In the ticket sheet or panel, a long press lists the other docked tickets to switch to.
         .dockedTicketsMenu(router, inSheet: inTicketSheet)
-        .padding(.horizontal, -14)
+        .padding(.leading, hasBack ? 0 : -14)
+        .padding(.trailing, -14)
         .padding(.top, -10)
         .padding(.bottom, compact ? -10 : -5)
         .accessibilityAddTraits(.isHeader)

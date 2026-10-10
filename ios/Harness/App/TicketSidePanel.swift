@@ -182,7 +182,7 @@ struct TicketSidePanel<Content: View>: View {
         UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, style: .continuous)
     }
 
-    private static var buttonSize: CGFloat { 40 }
+    static var buttonSize: CGFloat { 40 }
     /// The room the floating buttons need above a screen with toolbar items of its own.
     static var buttonRowHeight: CGFloat { buttonSize + 12 }
     /// The top edge that flings the panel (the hero's top padding).

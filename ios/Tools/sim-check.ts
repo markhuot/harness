@@ -1913,8 +1913,10 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
   await check("the panel names its ticket once, in the hero", async () => {
     const { leading } = await panelFraction(udid);
     const inPanel = (await nodes(udid)).filter((n) => n.frame.x >= leading && n.AXLabel);
-    // The hero's key label; the root ticket has no navigation bar, and no title bar above the hero.
-    const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
+    // The hero names it: its key label when expanded, its title row when collapsed (a conductor
+    // opens on Tickets). The root ticket has no navigation bar, and no title bar above the hero.
+    const title = s.conductor.title;
+    const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel === title || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
     if (named.length !== 1) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
     return `"${named[0]!.AXLabel}"`;
   });

@@ -167,7 +167,7 @@ private struct TicketDetailBody: View {
             // (HeroSlide, PagerSlide), sliding as it collapses or expands. No layout changes, so a
             // collapse mid-scroll re-lays out no tab body. The hero's state is read only in the hero
             // and the modifiers, so a toggle doesn't re-render this body either.
-            TicketDetailHero(ticket: ticket, disclosure: hero, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket, disclosure: hero, maxHeight: height * 0.45, navigable: true)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
             // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
             // up under the bar, the strip's background would slide down over the hero.
@@ -475,30 +475,46 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
     }
 }
 
-/// The navigation bar: the ticket's key stays as its navigation title (the app switcher, VoiceOver).
-/// The title itself is in the hero, so at the root of the ticket sheet or panel there's no bar;
-/// a ticket pushed inside keeps one (a Back button, no title). The More menu is in the hero.
+/// The navigation bar: the ticket's key stays as its navigation title (the app switcher, VoiceOver),
+/// but the bar itself is hidden. The hero draws the title and, for a pushed ticket, the Back button
+/// beside it. The More menu is in the hero too. Swipe-back keeps working (PopGestureRestorer).
 private struct TicketDetailHeader: ViewModifier {
     let ticket: Ticket
 
-    @Environment(Router.self) private var router
-    @Environment(\.inTicketSheet) private var inTicketSheet
-    @Environment(\.inTicketPanel) private var inTicketPanel
-
     func body(content: Content) -> some View {
-        // The sheet's and panel's root ticket has nothing to go back to.
-        let inSheet = inTicketSheet || inTicketPanel
-        let isRoot = inSheet && router.showsAsSheetRoot(ticket.key)
         content
             .navigationTitle(Keys.keyLabel(ticket))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(isRoot ? .hidden : .automatic, for: .navigationBar)
-            .toolbar {
-                // The hero names the ticket: a pushed one keeps its Back button but draws no title.
-                if inSheet {
-                    ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1).accessibilityHidden(true) }
-                }
+            .toolbar(.hidden, for: .navigationBar)
+            .background(PopGestureRestorer())
+    }
+}
+
+/// A hidden navigation bar turns the edge swipe-back off; this puts it back for the stack the
+/// screen is in.
+private struct PopGestureRestorer: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController { Restorer() }
+    func updateUIViewController(_ vc: UIViewController, context: Context) {}
+
+    private final class Restorer: UIViewController {
+        /// The pop gesture's delegate: the edge swipe goes whenever there's a screen to go back to.
+        private final class Allow: NSObject, UIGestureRecognizerDelegate {
+            func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+                ((g.view?.next as? UINavigationController)?.viewControllers.count ?? 0) > 1
             }
+        }
+        private static let allow = Allow()
+
+        private func restore() {
+            guard let nav = navigationController else { return }
+            for pop in [nav.interactivePopGestureRecognizer, nav.interactiveContentPopGestureRecognizer] {
+                pop?.delegate = Self.allow
+                pop?.isEnabled = true
+            }
+        }
+
+        override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); restore() }
+        override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); restore() }
     }
 }
 

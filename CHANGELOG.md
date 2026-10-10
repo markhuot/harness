@@ -33,6 +33,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone and iPad, a ticket you opened from another one (a child, a parent, a link) now has its
+  Back button on the same row as its title, with the "Part of" line above the title beside it,
+  instead of in a navigation bar over them; swiping back still works. In the iPad side panel, the
+  title, its chevron and the dock, pop-out and close buttons are all centered on one line.
 - On iPhone, a ticket's collapsed title row has twice the space above and below it, and its text
   lines up with the left edge of the Spec tab's label beneath it.
 - "Re-run agent review" (or "Run agent review" when it was skipped) moved from the action row into
