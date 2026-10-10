@@ -36,7 +36,8 @@ export function runStartedText(text: string): string | null {
  * current section's. The human's messages have no run: they form sections of their own with no
  * header (so no run's header sticks above them), and so do rows before the first run. A run that
  * carries on after such a message opens another section, with its header again. Rows that tell
- * nothing about their run (`at` returns null: streaming text, "Working…") go to the last section.
+ * nothing about their run (`at` returns null: streaming text, "Working…", a status written without
+ * a run) go to the last section.
  * The "Run started" rows are consumed (they become the header).
  */
 export function splitRunSections<T>(rows: T[], at: (row: T) => RowRun | null): RunSection<T>[] {
@@ -116,9 +117,14 @@ function phaseOrKindLabel(kind: string): string {
   return phase && (kind === "work" || phase !== "work") ? PHASE_LABELS[phase] : kindLabel(kind);
 }
 
-/** A grouped transcript item's run, for `splitRunSections`. */
-export function itemRun(item: TranscriptItem): RowRun {
+/**
+ * A grouped transcript item's run, for `splitRunSections`. The human's messages with no run are
+ * their own section; anything else the service wrote without a run ("Moved to review") says nothing
+ * about its run (null), so it stays where it is.
+ */
+export function itemRun(item: TranscriptItem): RowRun | null {
   const e = item.kind === "tool" ? item.call : item.entry;
   const c = e.content;
+  if (!e.runId && !(e.role === "user" && c.type === "text")) return null;
   return { runId: e.runId, startText: item.kind === "entry" && c.type === "status" && !c.permission ? runStartedText(c.text) : null, createdAt: e.createdAt };
 }

@@ -39,6 +39,11 @@ describe("splitRunSections", () => {
     ]);
   });
 
+  test("a status written without a run stays in the run around it; only a human message has no header", () => {
+    const sections = split([e("1", "a", "Run started (work)", 1, "status"), e("2", null, "Moved to review", 2, "status"), e("3", "a", "Run finished (work)", 3, "status")]);
+    expect(sections.map((s) => [s.runId, s.rows.length])).toEqual([["a", 2]]);
+  });
+
   test("rows before the first run have no run id, so no header", () => {
     expect(split([e("1", null, "first", 1), e("2", "a", "x", 2)]).map((s) => s.runId)).toEqual([null, "a"]);
   });

@@ -2323,6 +2323,26 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     });
   }
   await shot(udid, "stick-activity");
+  // Each run opens with a header that stays pinned at the top while its rows scroll under it, and
+  // the next run's header takes over. Scrolling up from the bottom passes through several runs.
+  await check("the transcript pins the current run's header, and the next run's header takes it over", async () => {
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=transcript`);
+    await until("at the bottom", () => atBottom((l) => l.startsWith("Run finished (")), 10000);
+    const pinned = async () => (await nodes(udid)).find((x) => x.AXUniqueId === "run-header-pinned")?.AXLabel ?? null;
+    const seen: string[] = [];
+    for (let i = 0; i < 24 && seen.length < 4; i++) {
+      const label = await pinned();
+      if (label && seen[seen.length - 1] !== label) seen.push(label);
+      await swipe("down", 1);
+    }
+    const stamps = seen.map((l) => l.replace(/ · .*$/, ""));
+    if (seen.length < 2 || new Set(stamps).size < 2) {
+      await shot(udid, "run-headers-failed");
+      throw new Error(`the pinned header never changed run: ${JSON.stringify(seen)}`);
+    }
+    await shot(udid, "run-header-pinned");
+    return seen.join(" → ");
+  });
   // Each tab's content runs on under the composer's glass rather than stopping above it: the pager
   // reaches the bottom of the screen, and only the scroll content's inset keeps the last row clear.
   for (const tab of ["spec", "activity", "transcript"]) {
@@ -3426,26 +3446,6 @@ function interactionChains(s: Seeded): Chain[] {
         }
         await shot(udid, "reply-list-light");
         return widths.join(", ");
-      });
-    }),
-    chain("run-headers", ["hello"], 25, async (udid) => {
-      await check("the transcript pins its current run's header, and the next run's header takes it over", async () => {
-        await goto(udid, `harness://ticket/${k(s.hello)}?tab=transcript`, (l) => l.some((x) => RUN_HEADER.test(x)));
-        const pinned = async () => (await nodes(udid)).find((n) => n.AXUniqueId === "run-header-pinned")?.AXLabel ?? null;
-        const seen: string[] = [];
-        const note = (l: string | null) => l && seen[seen.length - 1] !== l && seen.push(l);
-        // It opens at the bottom, in the last run.
-        note(await pinned());
-        // Scroll back up through the runs; each run's header is pinned while its rows pass under it.
-        for (let i = 0; i < 14; i++) {
-          await axe("swipe", "--start-x", "200", "--start-y", "420", "--end-x", "200", "--end-y", "700", "--duration", "0.3", "--udid", udid);
-          await Bun.sleep(350);
-          note(await pinned());
-        }
-        const phases = seen.map((l) => l.split(" • ")[0]);
-        if (seen.length < 2 || new Set(phases).size < 2) throw new Error(`the pinned header never changed run: ${JSON.stringify(seen)}`);
-        await shot(udid, "run-header-pinned");
-        return seen.join(" → ");
       });
     }),
     chain("approve-and", ["agents"], 8, async (udid) => {

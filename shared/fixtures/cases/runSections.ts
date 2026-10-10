@@ -37,6 +37,7 @@ export const runSectionCases = cases(
     "only a Run started status is a header: other statuses are rows": [status("1", "a", "Run started (work)", 10), status("2", "a", "Run finished (work)", 11), status("3", "a", "Run started later", 12)],
     "a message first, then nothing else": [text("1", null, 1)],
     "a section whose only row is its start": [status("1", "a", "Run started (work)", 10), status("2", "b", "Run started (review)", 20)],
+    "a status written without a run stays in the run around it": [status("1", "a", "Run started (work)", 10), text("2", "a", 11), status("3", null, "Moved to review", 12), status("4", "a", "Run finished (work)", 13)],
     "an interleaved run id starts another section": [text("1", "a", 1), text("2", "b", 2), text("3", "a", 3)],
   },
 );

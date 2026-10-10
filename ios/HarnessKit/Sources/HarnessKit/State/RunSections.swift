@@ -61,16 +61,24 @@ public enum RunSections {
         return sections
     }
 
-    /// A grouped transcript item's run, for `split`.
-    public static func itemRun(_ item: Format.TranscriptItem) -> RowRun {
+    /// A grouped transcript item's run, for `split`. The human's messages with no run are their own
+    /// section; anything else the service wrote without a run ("Moved to review") says nothing about
+    /// its run (nil), so it stays where it is.
+    public static func itemRun(_ item: Format.TranscriptItem) -> RowRun? {
+        let e: TranscriptEntry
         switch item {
-        case let .tool(call, _):
-            return RowRun(runId: call.runId, createdAt: call.createdAt)
-        case let .entry(e):
-            var start: String?
-            if case let .status(text, permission) = e.content, permission == nil { start = runStartedText(text) }
-            return RowRun(runId: e.runId, startText: start, createdAt: e.createdAt)
+        case let .tool(call, _): e = call
+        case let .entry(entry): e = entry
         }
+        var isMessage = false
+        var start: String?
+        switch (item, e.content) {
+        case (.entry, .text): isMessage = e.role == .user
+        case let (.entry, .status(text, permission)): if permission == nil { start = runStartedText(text) }
+        default: break
+        }
+        if (e.runId ?? "").isEmpty && !isMessage { return nil }
+        return RowRun(runId: e.runId, startText: start, createdAt: e.createdAt)
     }
 
     /// A transcript row's run: its entry's, nothing for streaming text and "Working…".
