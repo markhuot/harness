@@ -144,6 +144,21 @@ try {
   check("…on the workspace's right edge", near(last.right, workspaceRight, 2), `${last.right} vs ${workspaceRight}`);
   check("…70em (910px) wide", near(last.w, 910, 2), `${last.w}`);
   if (shots) await screenshot(join(shots, "compose-right-edge.png"));
+
+  // 6. ⌘T opens a terminal the same way: far right, 70em, focused, whichever pane was focused.
+  await setPanes(layout([0.25, 0.5, 0.25]));
+  await js(`document.querySelector('.pane[data-pane-id="a"]')?.focus()`);
+  await key("t", "KeyT", 84, 4);
+  await until("terminal pane", () => js<boolean>(`document.querySelectorAll(".pane").length === 4`), 10000);
+  await Bun.sleep(300);
+  const withTerm = await js<{ cls: string; w: number; right: number }[]>(`[...document.querySelectorAll(".pane")].map(p => { const r = p.getBoundingClientRect(); return { cls: p.className, w: r.width, right: r.right }; })`);
+  const lastTerm = withTerm.reduce((a, b) => (b.right > a.right ? b : a));
+  const termWorkspaceRight = await js<number>(`document.querySelector(".pane-workspace").getBoundingClientRect().right`);
+  check("⌘T from a middle pane adds the terminal pane last", lastTerm.cls.includes("pane-terminal"), JSON.stringify(withTerm));
+  check("…on the workspace's right edge", near(lastTerm.right, termWorkspaceRight, 2), `${lastTerm.right} vs ${termWorkspaceRight}`);
+  check("…70em (910px) wide", near(lastTerm.w, 910, 2), `${lastTerm.w}`);
+  check("…and focused", lastTerm.cls.includes("focused"), lastTerm.cls);
+  if (shots) await screenshot(join(shots, "terminal-right-edge.png"));
 } catch (e) {
   check("run", false, (e as Error).message);
 } finally {

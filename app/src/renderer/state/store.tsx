@@ -92,12 +92,14 @@ export interface Store {
   /**
    * Open a terminal pane on a board, in that board's folder (home on All projects): `projectId`'s
    * board, All projects for null, or when omitted the board on screen (from elsewhere, the board
-   * last shown). Goes to that board if it isn't the one on screen.
+   * last shown). Goes to that board if it isn't the one on screen. Opens at the window's right
+   * edge at 70em, like New session.
    */
   openTerminal: (projectId?: string | null) => void;
   /**
    * Open a New session pane (views/DraftEditor.tsx) on the board on screen (from elsewhere, the
-   * board last shown, which it goes to), beside the focused pane. `projectId` presets its project.
+   * board last shown, which it goes to), at the window's right edge at 70em. `projectId` presets
+   * its project.
    */
   openCompose: (projectId?: string | null) => void;
   /**

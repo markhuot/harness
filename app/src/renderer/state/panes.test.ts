@@ -1223,10 +1223,16 @@ describe("openTerminal", () => {
     expect(shape(s.root)).toBe("row[board 0.3, A-1 0.2, $t:1 0.5]");
   });
 
-  test("in a narrow window it keeps the others' minimums and never goes under the terminal's own", () => {
+  test("in a narrower window it takes the space the others' minimums leave", () => {
+    const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.5, 0.5])), term("t:1"), 1100));
+    const sizes = (s.root as PaneSplit).sizes;
+    expect(sizes.at(-1)! * 1100).toBeCloseTo(420, 0); // 1100 − board 320 − ticket 360
+  });
+
+  test("when even that is under the terminal's own floor it keeps the floor", () => {
     const s = valid(openTerminal(st(row("r", [B, T("A-1")], [0.5, 0.5])), term("t:1"), 1000));
     const sizes = (s.root as PaneSplit).sizes;
-    expect(sizes.at(-1)! * 1000).toBeCloseTo(320, 0); // 1000 − board 320 − ticket 360
+    expect(sizes.at(-1)! * 1000).toBeCloseTo(320, 0);
     expect(valid(openTerminal(st(row("r", [B, T("A-1")])), term("t:2"), 400)).root).toBeDefined();
   });
 
