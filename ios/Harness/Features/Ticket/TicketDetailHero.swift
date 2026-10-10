@@ -20,6 +20,7 @@ struct TicketDetailHero: View {
     @Environment(\.inTicketPanel) private var inTicketPanel
     @Environment(\.ticketPanelTitleInset) private var panelInset
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.isPresented) private var isPresented
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @State private var localExpanded = false
@@ -101,7 +102,9 @@ struct TicketDetailHero: View {
     }
 
     private var showsBack: Bool {
-        navigable && !((inTicketSheet || inTicketPanel) && router.showsAsSheetRoot(ticket.key))
+        // `isPresented` is false at the root of a stack (a ticket window, the board card preview),
+        // where there's nothing to go back to.
+        navigable && isPresented && !((inTicketSheet || inTicketPanel) && router.showsAsSheetRoot(ticket.key))
     }
 
     /// The crumb and title, with the Back button at their leading edge when there is one, centered

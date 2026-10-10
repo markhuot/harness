@@ -1830,9 +1830,9 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     return { x: leading + 29, y: close.frame.y + close.frame.height / 2 };
   };
   /**
-   * Taps where the panel's navigation bar keeps Back: AXe's tree leaves out the glass header items,
-   * so a push shows by where the tap goes. It sits 29pt in from the panel's leading edge, level with
-   * the panel's floating buttons.
+   * Taps where a pushed ticket's hero draws Back, 29pt in from the panel's leading edge and level
+   * with the panel's floating buttons (it's also the `ticket-back` button, but a tap by position
+   * shows at the root that nothing is there).
    */
   const tapBack = async () => {
     const { x, y } = await backPoint();
@@ -1917,7 +1917,9 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     // opens on Tickets). The root ticket has no navigation bar, and no title bar above the hero.
     const title = s.conductor.title;
     const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel === title || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
-    if (named.length !== 1) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
+    // An expanded hero shows both its title and, in the badge row, the key: still the hero alone.
+    const bar = named.filter((n) => n.frame.y < 60 && n.AXLabel !== title && n.AXLabel !== key);
+    if (named.length < 1 || named.length > 2 || bar.length) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
     return `"${named[0]!.AXLabel}"`;
   });
   await check("dragging the panel's edge resizes it, stopping at 25% and 80% of the window", async () => {
@@ -2028,7 +2030,8 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     });
     await Bun.sleep(600);
     await shot(udid, "panel-replaced-light");
-    // At the root there's no Back: a tap where it would be leaves the panel on B.
+    // At the root there's no Back: no `ticket-back` button, and a tap where it would be leaves the panel on B.
+    if ((await nodes(udid)).some((n) => n.AXUniqueId === "ticket-back")) throw new Error(`the root ticket ${b} draws a Back button`);
     await tapBack();
     await Bun.sleep(1500);
     const l = await labels(udid);

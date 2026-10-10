@@ -508,8 +508,9 @@ live. It's resizable from its leading edge between 25% and 80% of the window
 as the `ticketPanelWidth` pref and re-clamped on rotation). It has no bar of its own: the
 dock, pop-out and close buttons float over its top trailing corner, and the root ticket's hero
 title starts at the top, wrapping before them (`\.ticketPanelTitleInset`). The root ticket's
-screen hides its navigation bar (`TicketDetailHeader`), while a ticket pushed above it keeps one
-for Back. New session in the panel likewise drops its own title and Cancel ✕, keeping Plan first
+screen hides its navigation bar (`TicketDetailHeader`), as does every ticket; a pushed ticket's
+hero draws Back (`ticket-back`) beside its title, only when `isPresented` says there's a screen
+under it. New session in the panel likewise drops its own title and Cancel ✕, keeping Plan first
 and Start session. While it's on top it hands its `cancel()` to the panel through
 `TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
 or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
@@ -667,11 +668,10 @@ iPhone's; `--ipad --sheets` runs them alone, on the `--sheets` seed. sim-check r
 geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
 the panel trailing-aligned at TicketPanelWidth's default with the board still showing and its title
 bar no higher than the sidebar button (both keep the top safe area). The panel's labels name its
-ticket once: in the hero's title, with no navigation bar above the root ticket (AXe does list a
-pushed ticket's navigation bar, as in a ticket window). Dragging the handle to either edge stops at 25% and 80%, then sim-check
+ticket once: in the hero's title, with no navigation bar above any ticket and no `ticket-back` button on the root. Dragging the handle to either edge stops at 25% and 80%, then sim-check
 drags it back to the default, since the width is a pref that outlives the run. A child link inside
-pushes, and a different board card opens its ticket over it, at the root. AXe's tree leaves out the glass
-Back button, so sim-check taps where it sits: after a push that goes back to the parent, and at the
+pushes, and a different board card opens its ticket over it, at the root. sim-check taps where the hero's
+Back button sits: after a push that goes back to the parent, and at the
 root it leaves the panel where it was. The dock button leaves the "KEY, title, docked" card in the
 bottom-right corner, and a tap on it restores the pushed child, Back and all. A card's ✕ closes
 just its ticket (sim-check closes the board card's and the conductor's one at a time), New session opens in the panel with one title and one ✕ and no
