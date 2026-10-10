@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261010.1050](https://github.com/markhuot/harness/releases/tag/app-20261010.1050) - 2026-10-10
+
 ### Added
 
 - A ticket's header shows a context gauge on Mac and iPhone/iPad: how many tokens of conversation
