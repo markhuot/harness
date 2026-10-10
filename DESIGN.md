@@ -3335,7 +3335,7 @@ the conventions, and ios/README.md the build and test commands.
   moves a card between columns: only agents move tickets. Touch and hold on a card previews the
   ticket on its Spec tab above the card's menu. Two browser views of one session stream side by
   side because each is its own viewer (`viewerId`, "Browser tabs"). iPhone and compact width have
-  none of this. `sim-check --ipad` shoots the walk-through's screens on iPad simulators. See
+  none of this. `sim-check --ipad` opens the walk-through's routes on an iPad simulator. See
   ios/ARCHITECTURE.md § Windows.
 - **Connection.** `harness://pair?url=…&token=…` (the desktop QR code) opens the app through its
   URL scheme, or the in-app scanner reads it; the app probes `GET /health`, then an authenticated
@@ -3412,8 +3412,8 @@ the conventions, and ios/README.md the build and test commands.
   Keychain prefs blob and normalized on load.
   `harness://settings?lightTheme=<id>&darkTheme=<id>&theme=<system|light|dark>` applies a setup.
 - **Checks.** `ios/Tools/sim-check.ts` runs a simulator walk-through against a real daemon on a
-  throwaway home, through the accessibility tree (AXe) and deep links, and saves light and dark
-  screenshots of every screen.
+  throwaway home, through the accessibility tree (AXe) and deep links, and validates what needs a
+  simulator by real taps (no screenshots). Shots are opt-in: `--screens`, `--only=<name>`, `--shot=<link>`.
 - **Builds.** `release/publish-install.sh` archives the Release app with `ios/Tools/build.ts`,
   exports a development IPA (and uploads a TestFlight build), packages and Developer ID signs the
   Mac app, uploads both to the GitHub release of the annotated `app-YYYYMMDD.HHMM` tag on HEAD (it

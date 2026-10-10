@@ -661,8 +661,7 @@ a ticket in the side panel, picks Open in New Window, expects the pinned window 
 window", then presses Return to this window and expects the pinned window gone and the transcript
 back. AXe can't drive a drag (its touch events don't move), so drag-to-window is checked by hand.
 
-`sim-check --ipad` then runs the side panel's checks (`panelChecks`), which gate the run like the
-iPhone's; `--ipad --sheets` runs them alone, on the `--sheets` seed. sim-check reads the panel's
+`sim-check --ipad --sheets` runs the side panel's checks (`panelChecks`) on the `--sheets` seed. sim-check reads the panel's
 geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
 the panel trailing-aligned at TicketPanelWidth's default with the board still showing and its title
 bar no higher than the sidebar button (both keep the top safe area). The panel's labels name its
@@ -1046,8 +1045,9 @@ for this app they come down to:
 - Every route in § App shell is reachable by a `harness://` link (the same links the 1.x app
   took, so old links keep working), with the same semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
 
-`bun ios/Tools/sim-check.ts --only=<screen>` checks one screen on the shared simulator. A change
-to a screen should keep that screen's `--only=` entries passing.
+`bun ios/Tools/sim-check.ts --only=<name>` shoots one catalog screen (or runs one check) on the shared
+simulator; `--shot=<link>` shoots any route once. Validation (no `--only`) opens every route and
+checks the app survives it. A change to a screen should keep its `--only=` entries passing.
 
 ## Parity table
 

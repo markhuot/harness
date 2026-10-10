@@ -30,6 +30,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- sim-check, the simulator check for the iPhone and iPad apps, is much faster again and no longer takes screenshots while it validates. The default run opens each route to confirm the app survives it and runs only the real-tap checks (gestures, sheets, keyboard, relaunch); logic that unit tests already cover (routing, counts, request bodies, approve and start flows) was removed from it. Screenshots are opt-in for people working on Harness: `--screens` shoots the whole catalog, `--only=<name>` shoots one screen or runs one check, and `--shot='harness://ticket/{headings}?tab=spec'` takes a one-off light and dark pair of any route. A run seeds only the tickets its selection needs, a step that leaves a menu or sheet open is reset instead of stalling the steps after it, each check has a 90 s cap, and the slow memory check is `--memory`. Agents are told to validate the area they changed and shoot only the screens they touched.
+- Heading sizes and spacing in specs, and the dock's gap and "N more docked tickets" label, now live in HarnessKit with their own tests instead of being measured from the simulator.
 - Agents are held to a higher bar before they hand work over, whichever model runs them. A Work run
   adds tests for what it changes, runs the tests and typecheck, confirms a new worktree has its
   dependencies installed, embeds screenshots in Status for visible changes, and blocks to ask rather

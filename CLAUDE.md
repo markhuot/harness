@@ -25,8 +25,11 @@ change has screenshots in the spec's Status.
   renderer and write screenshots (`spec-activity` to `app/out/screenshots/`). Put new UI behaviour
   under an assertion in the closest `app/scripts/*-check.ts` script, as the margin check in
   `spec-activity.ts` does.
-- **iPhone and iPad.** Use sim-check and the screenshots under `bun run sim with-lock`, as the
-  Simulators section below describes.
+- **iPhone and iPad.** Use sim-check under `bun run sim with-lock`, as the Simulators section below
+  describes. Run the mode for the area you touched (`--only=<check>`, `--sheets`, `--ipad --sheets`,
+  `--stick`…), not the whole suite: validation takes no screenshots. Spec screenshots come from
+  `--only=<screen>` or `--shot=<link>` (e.g. `--shot='harness://ticket/{headings}?tab=spec'`), never
+  a full `--screens` run.
 
 ## Simulators
 

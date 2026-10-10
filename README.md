@@ -79,16 +79,19 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
 - **Check on the simulator:** `bun ios/Tools/sim-check.ts` (or `bun run --cwd ios sim-check`)
-  builds a Release app for the simulator, runs it against a throwaway daemon, taps through opening
-  a card, approvals, reviews, replies and moves (via [AXe](https://github.com/cameroncooke/AXe)),
-  and saves light and dark screenshots to `ios/build/screens/` (`--themes=catppuccin-mocha,…` adds
-  board + settings shots per color theme). It runs on the shared `harness-shared` simulator
+  builds a Release app for the simulator, runs it against a throwaway daemon and validates what
+  needs a simulator by real taps (via [AXe](https://github.com/cameroncooke/AXe)): gestures,
+  sheets and docking, the keyboard, scrolling, a relaunch, crashes. It takes no screenshots; logic
+  such as routing and request bodies lives in `swift test` and the service's `bun test`.
+  Screenshots are opt-in: `--screens` shoots the whole catalog (light and dark, to
+  `ios/build/screens/`), `--only=<name>` shoots a catalog entry or runs one check, and
+  `--shot='harness://ticket/{headings}?tab=spec'` takes one pair of any route
+  (`--prepare='scroll:Label;tap:Label'` reaches a state a link can't). `--themes=catppuccin-mocha,…`
+  adds board + settings shots per color theme. It runs on the shared `harness-shared` simulator
   (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
-  the work across extra "sim-check 2" … "sim-check N" simulators, created on iOS 27.0 the first
-  time. `--ipad` saves the same screens from an iPad simulator ("sim-check iPad 1") to
-  `ios/build/screens-ipad/`, then checks the ticket side panel by real taps instead of the
-  iPhone's tap checks. With `--no-build` and the simulator booted,
-  a run takes a few minutes, and `ios/build/screens/timings.json` shows where the time went.
+  the screens across extra "sim-check 2" … "sim-check N" simulators. `--sheets`, `--ipad`,
+  `--ipad --sheets`, `--memory` and the other modes in the header of `ios/Tools/sim-check.ts` each
+  validate one area. `ios/build/screens/timings.json` shows where the time went.
   `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
 - **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the one simulator everyone shares.
   `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls

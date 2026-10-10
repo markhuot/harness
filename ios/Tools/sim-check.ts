@@ -1,40 +1,59 @@
-// Simulator walk-through against a REAL daemon on a throwaway HARNESS_HOME:
+// Simulator checks against a REAL daemon on a throwaway HARNESS_HOME:
 //   1. boots service/src/daemon.ts (temp home, random port, dummy driver, HARNESS_DUMMY_DELAY_MS=1)
-//   2. seeds a project with a hello-world ticket, a conductor with children, a /browse ticket,
-//      an approval, a blocked question, a plan-first ticket, a git-worktree ticket with changes,
-//      sub-agents (/agents), a background task (/bgtask) and a draft (a New session saved before launch),
-//      while it builds the Release app for the simulator with `bun ios/Tools/build.ts sim` (XcodeGen,
-//      then a Release simulator build into ios/build/dd; skip with --no-build, override with --app=)
+//   2. seeds a project and only the tickets the run's selection needs (a conductor with children, a
+//      /browse ticket, an approval, a blocked question, a plan-first ticket, a git-worktree ticket
+//      with changes, sub-agents, a background task, a draft…), while it builds the Release app for
+//      the simulator with `bun ios/Tools/build.ts sim` (XcodeGen, then a Release simulator build
+//      into ios/build/dd; skip with --no-build, override with --app=)
 //   3. on the shared simulator ("harness-shared", see ios/Tools/sim.ts and CLAUDE.md → Simulators),
 //      held under its lock for the whole run so other agents wait rather than install over it,
-//      installs the app and pairs it via `simctl openurl harness://pair?…`. --shards=N adds
-//      "sim-check 2" … "sim-check N" (created on iOS 27.0 on first use, each under its own lock)
-//   4. splits the screens between the simulators: each deep-links the running app to its screens
-//      and saves each one in light and in dark (flipping `simctl ui appearance` in place) to
-//      ios/build/screens/, then the real-tap checks, also split between them
+//      installs the app and pairs it via `simctl openurl harness://pair?…`
 //
-//   Only what needs a simulator lives here (native scrolling, the keyboard, gestures, media, crashes,
-//   the screenshots); the logic behind each check is in swift test (HarnessKit's BoardColumns,
-//   MentionCaret, StickToBottom) and bun test (shared/state paging and details, the service's http tests).
+//   VALIDATING and SHOOTING are separate. A validation run (the default, and every mode) is checks
+//   only: it takes no screenshots, except the "…-failed" one a failing check leaves. Shots are opt-in:
+//
+//   --screens           the whole shot catalog (screens() below), each in light and dark, to
+//                       ios/build/screens/ (screens-ipad/ with --ipad). Never part of validation.
+//   --only=name,name    just those entries: catalog screens are shot, checks and chains (named in
+//                       interactionChains(), e.g. approve-and, prompt-editor, file-link) run. Only
+//                       the tickets they need are seeded. An unknown name lists the known ones.
+//   --shot=<link>       one light and dark pair of any route, no code needed:
+//                         --shot='harness://ticket/{headings}?tab=spec'
+//                       {name} is a seeded ticket's key (hello, changes, conductor, blocked, plan,
+//                       agents, tables, branchPlan, quick, draft, code, headings, fileLink, linked,
+//                       tasks, approval, browse; watchers seeds the watchers and inbox item).
+//                       --prepare='scroll:Models, ;tap:Label' reaches a state a link can't (steps
+//                       split on ;), --name= names the file. It fails only if the app crashes.
+//   --shots             also keep the screenshots chains take along the way, in a --only run.
+//
+//   The default walk-through validates: each route the checks don't visit is opened once and the app
+//   checked for a crash (no shot, no theme flip), then the real-tap chains (wide tables, blocked
+//   composer, transcript list, Approve and…, prompt editor, Models picker, card preview, Agents &
+//   tasks filter, file link). Only what needs a simulator lives here (native scrolling, the
+//   keyboard, gestures, media, crashes, memory, persistence across a relaunch); routing, counting,
+//   layout math, request bodies and state rules are tested in swift test (HarnessKit) and the
+//   service's bun test (approve, start, take no action, Allow once…).
+//
+//   A step that gets stuck doesn't stall the ones after it: a deep link that never shows its screen
+//   dismisses any menu, alert or sheet, goes back to the board, and relaunches the app if that fails;
+//   each check has a 90 s cap (checked at every wait). Every check runs in one mode only.
 //
 //   --themes=catppuccin-mocha,rose-pine-dawn: per theme, applies it with the settings deep link
 //      (harness://settings?darkTheme=…) and saves board-<id>.png + settings-<id>.png
 //
-//   The modes below replace the default walk-through and use one simulator:
+//   The modes below replace the default walk-through and use one simulator (validation, no shots):
 //
 //   --paging: seeds 125+ done tickets (one old "haystack" ticket deep in the history) and a conductor
-//      with done children; checks child tickets are hidden by default (and the Filter menu shows
-//      them), the Done column scrolls into older pages, and the board's search field finds the
-//      unloaded done ticket; paging-*.png
+//      with done children; checks the Done column scrolls into older pages, and the board's search
+//      field finds the unloaded done ticket (what's hidden by default is BoardColumnsTests and
+//      PrefsTests)
 //
 //   --stick: a ticket with a long spec, a long transcript and a long Activity feed (messages that
 //      have the dummy resume and resubmit the work, so each adds a submit and a review to Activity);
-//      swipes the Transcript tab
-//      and checks it follows new content at the bottom, stays put once scrolled up, and follows again
-//      after scrolling back down; the Activity tab opens at the bottom and follows; the ticket's hero
-//      opens in full on the Spec, collapses on scrolling it and stays collapsed scrolling back or
-//      moving to another tab, and opens collapsed on the other tabs; a
-//      sideways swipe moves between the tabs, and a right swipe on the Spec still goes back
+//      swipes the Transcript tab and checks it follows new content at the bottom, stays put once
+//      scrolled up, and follows again after scrolling back down; the Activity tab opens at the
+//      bottom and follows; the hero collapses on scrolling the Spec (the rest is HeroDisclosureTests);
+//      a sideways swipe moves between the tabs, and a right swipe on the Spec still goes back
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
 //      prompt editor and New session's prompt (which grows with no cap) keep the cursor above it as
@@ -49,10 +68,8 @@
 //      lists its commands, a tap completes one, and the CLI gets the spec as typed; the toolbar's Plan
 //      first launches a draft in planning and lands on its Spec tab; mentions-*.png, new-session-toolbar*.png
 //
-//   --drafts: the ticket composer saves what's typed as the ticket's message draft (Ticket.messageDraft);
-//      another device's draft (a PUT with another origin) doesn't touch the field while it's being
-//      typed in, and shows once it isn't; Send clears the draft on the service; a draft saved
-//      elsewhere shows when the ticket opens; drafts-*.png
+//   --drafts: typing in the ticket composer, then moving the caret, keeps what's typed and the
+//      saved draft (the draft rules are MessageDraftsTests)
 //
 //   --attachments (needs ffmpeg): a spec with a tall, a wide and a small PNG as a row of "thumb"
 //      thumbnails and an H.264 clip as a captioned figure (stored by update_spec), plus an attachment:
@@ -61,32 +78,27 @@
 //      attachment, an image smaller than the screen opens centred, swiping pages, Close and
 //      swipe-down close it; attachments-*.png
 //
-//   --sheets: the iPhone's ticket sheet on its own (the walk-through runs the same checks): a board
-//      card opens its ticket in a sheet, a conductor's child pushes inside it and the back swipe
-//      returns, dragging it to the bottom docks it under the board as a bar titled by its key, a
-//      tap on the bar restores it where it was (its composer no higher than before), a section's alert still comes up, Projects closes
-//      it, the bar's ✕ and a swipe down on it send it away, a flick down from full size sends it
-//      away without docking, and New session opens in the sheet too and docks as
-//      "New session"; sheet-*.png. Then several docked: a second ticket joins the dock as a second
-//      card (ref and title, the newest at the bottom), a tap on a card, a long press on the
-//      ticket's title and a swipe along the dock switch (keeping each one's path and composer),
-//      twelve show two cards and "10 more…", which expands into the list of all twelve (the
-//      oldest, parked, opens at its saved path), a card's ✕ and a swipe down close only the top,
-//      the dock comes back after a relaunch, Projects closes them all, and the app's footprint
-//      with none, 5 and 20 docked; dock-*.png
+//   --sheets: the iPhone's ticket sheet on its own: a board card opens its ticket in a sheet, a
+//      conductor's child pushes inside it and the back swipe returns, dragging it to the bottom docks
+//      it under the board as a bar titled by its key, a tap on the bar restores it where it was (its
+//      composer no higher than before), Projects closes it, the bar's ✕ sends it away, a flick down
+//      from full size sends it away without docking. Then several docked: a second ticket joins as a
+//      second card, a long press on the title and a swipe along the dock switch, twelve show two
+//      cards and "10 more…", which expands into the list, a card's ✕ and a swipe down close only the
+//      top, the dock comes back after a relaunch, Projects closes them all.
 //
-//   --ipad: the walk-through's screens on an iPad simulator instead ("sim-check iPad 1", an
-//      iPad Pro 11-inch, plus "sim-check iPad 2" … with --shards), saved to ios/build/screens-ipad/ in whatever orientation each
-//      simulator is in (simctl can't rotate one; Device → Rotate in Simulator.app can). Then the
-//      side panel's checks: a card opens it trailing-aligned at its default width, its edge resizes
-//      it within 25–80%, a link inside pushes and another card opens over it, docked it's a card in
-//      the bottom-right corner that restores it with its path, a card's ✕ closes just its ticket,
-//      New session and Escape, pop-out moves its ticket into a window, and several docked tickets
-//      wait as cards left of the panel, never over the sidebar (five, then "N more…", which
-//      expands into the list); panel-*.png. The iPhone's
-//      real-tap checks and the modes above tap at iPhone coordinates, so they don't run here.
-//      --ipad --sheets runs only the panel's checks. SIM_CHECK_LANDSCAPE=1 runs them on a
-//      landscape-only build (ios/ARCHITECTURE.md § iPad layout), mapping taps and rotating shots.
+//   --memory: the app's footprint with none, 5 and 20 docked tickets (about 45 s on its own; the rule
+//      that only 5 stay mounted is in RouterSheetTests).
+//
+//   --ipad: the walk-through's routes on an iPad simulator instead ("sim-check iPad 1", an iPad Pro
+//      11-inch) in whatever orientation it is in (simctl can't rotate one), plus the tab tear-off.
+//      --ipad --sheets runs the side panel's checks: a card opens it trailing-aligned and its header
+//      names the ticket once, its edge resizes it, docked it's a card in the bottom-right corner that
+//      restores its path, a card's ✕ closes just its ticket, New session and its draft prompt,
+//      pop-out moves its ticket into a window, and several docked tickets wait as cards left of the
+//      panel, never over the sidebar. The iPhone's real-tap checks and the modes above tap at iPhone
+//      coordinates, so they don't run here. SIM_CHECK_LANDSCAPE=1 runs the panel on a landscape-only
+//      build (ios/ARCHITECTURE.md § iPad layout), mapping taps and rotating shots.
 //
 //   It runs on the shared harness-shared simulator under its lock, e.g. `--only=connect`; --udid
 //      still names a specific existing device.
@@ -96,7 +108,7 @@
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--only=name,name] [--interactions-only] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--ipad]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--ipad]
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";

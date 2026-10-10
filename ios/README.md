@@ -155,14 +155,18 @@ dev-sim and sim-check create:
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.
 
-`ios/Tools/sim-check.ts` walks the whole app on the same simulator and under the same lock:
+`ios/Tools/sim-check.ts` validates the app by real taps on the same simulator and under the same lock
+(validation takes no screenshots; shots are opt-in with `--screens`, `--only=<name>` or
+`--shot=<link>`):
 
 ```sh
-bun ios/Tools/sim-check.ts --only=connect     # or: bun run --cwd ios sim-check --only=connect
+bun ios/Tools/sim-check.ts --no-build --only=approve-and     # one check (or: bun run --cwd ios sim-check …)
+bun ios/Tools/sim-check.ts --no-build --only=connect          # one catalog screen, shot light and dark
+bun ios/Tools/sim-check.ts --no-build --shot='harness://ticket/{headings}?tab=spec'
 ```
 
 It builds with `build.ts sim` (skip with `--no-build`), installs
-`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and saves screenshots to
+`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to
 `ios/build/screens/` (`--ipad`: `ios/build/screens-ipad/`). `--udid` still names a specific
 existing simulator. The header of `sim-check.ts` lists every mode.
 
