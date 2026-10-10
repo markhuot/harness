@@ -30,7 +30,7 @@ export const runSectionCases = cases(
     empty: [],
     "one run: its start row becomes the header": [status("1", "a", "Run started (work)", 10), text("2", "a", 11), status("3", "a", "Run finished (work)", 12)],
     "a run change starts a section": [status("1", "a", "Run started (plan)", 10), text("2", "a", 11), status("3", "b", "Run started (work · claude-code · opus)", 20), text("4", "b", 21)],
-    "a message with no run stays in the current section": [status("1", "a", "Run started (work)", 10), text("2", null, 11), text("3", "a", 12), status("4", "b", "Run started (review)", 20)],
+    "a message with no run is a headerless section of its own, and the run carries on after it": [status("1", "a", "Run started (work)", 10), text("2", null, 11), text("3", "a", 12), status("4", "b", "Run started (review)", 20)],
     "rows before the first run form a headerless section": [text("1", null, 1), status("2", "a", "Run started (work)", 10), text("3", "a", 11)],
     "a section cut by the window has no start text": [text("1", "a", 11), status("2", "a", "Run finished (work)", 12), status("3", "b", "Run started (work)", 20)],
     "a tool call and its result stay together in their run": [status("1", "a", "Run started (work)", 10), call("2", "a", "x", 11), result("3", "a", "x", 12), text("4", "b", 20)],

@@ -15,7 +15,7 @@ export interface RowRun {
 }
 
 export interface RunSection<T> {
-  /** null: the leading section, before any run (it has no header) */
+  /** null: a section of the human's messages, or the rows before the first run (no header) */
   runId: string | null;
   /** The run's "Run started (…)" text, when its entry is in the list: the header's fallback when the run isn't loaded */
   startText: string | null;
@@ -33,17 +33,18 @@ export function runStartedText(text: string): string | null {
 
 /**
  * Split rows into run sections. A section starts at the first row whose run differs from the
- * current section's. Rows with no run (the human's messages) stay in the section they appear in, so
- * a message sent mid-run stays with that run; ones before the first run go in a leading section.
- * Rows that tell nothing about their run (`at` returns null: streaming text, "Working…") go to the
- * last section. The "Run started" rows are consumed (they become the header).
+ * current section's. The human's messages have no run: they form sections of their own with no
+ * header (so no run's header sticks above them), and so do rows before the first run. A run that
+ * carries on after such a message opens another section, with its header again. Rows that tell
+ * nothing about their run (`at` returns null: streaming text, "Working…") go to the last section.
+ * The "Run started" rows are consumed (they become the header).
  */
 export function splitRunSections<T>(rows: T[], at: (row: T) => RowRun | null): RunSection<T>[] {
   const sections: RunSection<T>[] = [];
   let cur: RunSection<T> | null = null;
   for (const row of rows) {
     const info = at(row);
-    if (!cur || (info?.runId && info.runId !== cur.runId)) {
+    if (!cur || (info && info.runId !== cur.runId)) {
       cur = { runId: info?.runId ?? null, startText: null, firstAt: null, rows: [] };
       sections.push(cur);
     }

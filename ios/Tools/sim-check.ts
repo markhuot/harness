@@ -286,6 +286,8 @@ async function tree(udid: string): Promise<AXNode[]> {
   return JSON.parse(out.slice(out.indexOf("["))) as AXNode[];
 }
 /** Every node on screen, flattened. */
+const RUN_HEADER = /^(Planning|Work|Review|Complete|Chat|Conductor) • /;
+
 async function nodes(udid: string): Promise<AXNode[]> {
   const all: AXNode[] = [];
   const walk = (n: AXNode) => (all.push(n), (n.children ?? []).forEach(walk));
@@ -3398,7 +3400,7 @@ function interactionChains(s: Seeded): Chain[] {
         const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
         // A sent message opens the Transcript, where it and the reply show (never in Activity): the
         // ticket opened on its Spec, so the transcript's run rows on screen mean the tab switched.
-        await until("the Transcript", async () => (await labels(udid)).some((l) => l.startsWith("Run started (")) || null, 10000).catch(async (e: Error) => {
+        await until("the Transcript", async () => (await labels(udid)).some((l) => RUN_HEADER.test(l)) || null, 10000).catch(async (e: Error) => {
           await shot(udid, "composer-sent-transcript-failed");
           throw new Error(`${e.message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
@@ -3424,6 +3426,26 @@ function interactionChains(s: Seeded): Chain[] {
         }
         await shot(udid, "reply-list-light");
         return widths.join(", ");
+      });
+    }),
+    chain("run-headers", ["hello"], 25, async (udid) => {
+      await check("the transcript pins its current run's header, and the next run's header takes it over", async () => {
+        await goto(udid, `harness://ticket/${k(s.hello)}?tab=transcript`, (l) => l.some((x) => RUN_HEADER.test(x)));
+        const pinned = async () => (await nodes(udid)).find((n) => n.AXUniqueId === "run-header-pinned")?.AXLabel ?? null;
+        const seen: string[] = [];
+        const note = (l: string | null) => l && seen[seen.length - 1] !== l && seen.push(l);
+        // It opens at the bottom, in the last run.
+        note(await pinned());
+        // Scroll back up through the runs; each run's header is pinned while its rows pass under it.
+        for (let i = 0; i < 14; i++) {
+          await axe("swipe", "--start-x", "200", "--start-y", "420", "--end-x", "200", "--end-y", "700", "--duration", "0.3", "--udid", udid);
+          await Bun.sleep(350);
+          note(await pinned());
+        }
+        const phases = seen.map((l) => l.split(" • ")[0]);
+        if (seen.length < 2 || new Set(phases).size < 2) throw new Error(`the pinned header never changed run: ${JSON.stringify(seen)}`);
+        await shot(udid, "run-header-pinned");
+        return seen.join(" → ");
       });
     }),
     chain("approve-and", ["agents"], 8, async (udid) => {

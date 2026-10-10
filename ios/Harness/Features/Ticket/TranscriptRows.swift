@@ -49,6 +49,30 @@ struct TranscriptRowView: View, Equatable {
     }
 }
 
+/// A run's header: "Work • Claude Code, Opus 5.5" on the left, its start time on the right. It
+/// opens its section in the list and, pinned (TranscriptPinnedHeader), stays at the top of the
+/// transcript while the section scrolls under it.
+struct TranscriptRunHeaderRow: View {
+    let title: String
+    let time: String?
+    var pinned = false
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title).font(.scaled(size: 13, weight: .semibold)).foregroundStyle(c.text2).lineLimit(1)
+            Spacer(minLength: 8)
+            if let time { Text(time).font(.scaled(size: 12)).foregroundStyle(c.text3) }
+        }
+        .padding(.vertical, 6)
+        .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(time.map { "\(title) · \($0)" } ?? title)
+        .accessibilityIdentifier(pinned ? "run-header-pinned" : "run-header")
+    }
+}
+
 /// "✦ Agent 3:04 PM" over a message.
 struct TranscriptWho: View {
     let icon: String
@@ -105,14 +129,18 @@ struct TranscriptEntryRow: View {
             if let permission {
                 TranscriptPermissionRow(log: permission, time: time)
             } else {
-                HStack(spacing: 8) {
-                    Rectangle().fill(c.border).frame(height: 1 / 3).frame(maxWidth: .infinity)
-                    Text("\(text) · \(time)").font(.scaled(size: 12)).foregroundStyle(c.text3).multilineTextAlignment(.center)
+                // Text on the left, a rule filling the gap, the time on the right. The text wraps
+                // (a background-task wait is long); the time stays put.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(text).font(.scaled(size: 12)).foregroundStyle(c.text3).multilineTextAlignment(.leading)
                         .layoutPriority(1)
                     Rectangle().fill(c.border).frame(height: 1 / 3).frame(maxWidth: .infinity)
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 3 }
+                    Text(time).font(.scaled(size: 12)).foregroundStyle(c.text3).fixedSize()
                 }
                 .padding(.vertical, 2)
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(text) · \(time)")
             }
         case let .error(text):
             HStack(alignment: .top, spacing: 8) {

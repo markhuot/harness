@@ -121,7 +121,7 @@ export function Transcript({
             ),
           );
           return (
-            <section key={section.runId ?? "start"} className="t-run" data-run={section.runId ?? undefined}>
+            <section key={i} className="t-run" data-run={section.runId ?? undefined}>
               {section.runId && <RunHeader runId={section.runId} startText={section.startText} firstAt={section.firstAt} />}
               {rows}
               {last && streaming}

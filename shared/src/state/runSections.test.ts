@@ -21,11 +21,21 @@ describe("splitRunSections", () => {
     expect(s!.rows.map((r) => (r.kind === "entry" ? r.entry.id : ""))).toEqual(["2"]);
   });
 
-  test("a user message mid-run stays with that run; a run change opens the next section", () => {
+  test("a user message is a headerless section of its own: no run's header sticks above it", () => {
     const sections = split([e("1", "a", "Run started (work)", 1, "status"), e("2", null, "ping", 2), e("3", "b", "Run started (review)", 3, "status"), e("4", "b", "ok", 4)]);
     expect(sections.map((s) => [s.runId, s.rows.length])).toEqual([
-      ["a", 1],
+      ["a", 0],
+      [null, 1],
       ["b", 1],
+    ]);
+  });
+
+  test("a run that carries on after a message opens a second section, so its header sticks over what follows", () => {
+    const sections = split([e("1", "a", "Run started (work)", 1, "status"), e("2", null, "ping", 2), e("3", "a", "more", 3)]);
+    expect(sections.map((s) => [s.runId, s.rows.length])).toEqual([
+      ["a", 0],
+      [null, 1],
+      ["a", 1],
     ]);
   });
 

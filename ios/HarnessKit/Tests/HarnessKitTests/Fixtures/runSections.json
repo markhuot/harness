@@ -683,7 +683,7 @@
       ]
     },
     {
-      "name": "a message with no run stays in the current section",
+      "name": "a message with no run is a headerless section of its own, and the run carries on after it",
       "input": [
         {
           "id": "1",
@@ -739,8 +739,21 @@
           "runId": "a",
           "startText": "Run started (work)",
           "firstAt": 10,
+          "rows": []
+        },
+        {
+          "runId": null,
+          "startText": null,
+          "firstAt": 11,
           "rows": [
-            "2",
+            "2"
+          ]
+        },
+        {
+          "runId": "a",
+          "startText": null,
+          "firstAt": 12,
+          "rows": [
             "3"
           ]
         },

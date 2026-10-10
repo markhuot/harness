@@ -301,6 +301,21 @@ try {
   check("the first run's header is pushed off, not pinned", second.tops[0]! < second.scrollerTop - 1, JSON.stringify(second));
   const first = await pinned(0);
   check("scrolled into the first run, its header is pinned and the second is below", Math.abs(first.tops[0]! - first.scrollerTop) < 1.5 && first.tops[1]! > first.scrollerTop + 20, JSON.stringify(first));
+  // The human's messages sit in a section of their own with no header: the run before it doesn't stick above them.
+  const message = await js<{ scrollerTop: number; headBottoms: number[]; sectionTop: number } | null>(`(() => {
+    const sc = document.querySelector('.transcript');
+    const sec = [...sc.querySelectorAll('.t-run:not([data-run])')].find((x) => x.previousElementSibling?.dataset.run);
+    if (!sec) return null;
+    sc.scrollTop = sec.offsetTop - sc.querySelector('.transcript-inner').offsetTop + 10;
+    return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done({
+      scrollerTop: sc.getBoundingClientRect().top,
+      sectionTop: sec.getBoundingClientRect().top,
+      headBottoms: [...sc.querySelectorAll('[data-testid=run-header]')].filter((h) => sec.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_PRECEDING).map((h) => h.getBoundingClientRect().bottom),
+    }))));
+  })()`);
+  check("a message from the human has no header, and no earlier run's header sticks above it", !!message && message.headBottoms.length > 0 && message.headBottoms.every((b) => b <= message.scrollerTop + 1) && message.sectionTop < message.scrollerTop, JSON.stringify(message));
+  await js(`document.querySelector('.transcript').scrollTop = 0`);
+  await pinned(0);
   await shot("4b-transcript-sticky-header");
   await js(`(() => {
     for (const s of document.querySelectorAll('.transcript .t-run')) s.style.minHeight = '';
