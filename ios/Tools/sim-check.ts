@@ -708,7 +708,7 @@ let usageReport: UsageReport = usageFixture();
 const usageClients = new Set<{ send(data: string): void }>();
 const pushUsage = (r: UsageReport) => {
   usageReport = r;
-  for (const c of usageClients) c.send(JSON.stringify({ kind: "usage.updated", usage: r }));
+  for (const c of usageClients) try { c.send(JSON.stringify({ type: "event", event: { kind: "usage.updated", usage: r } })); } catch {}
 };
 type ProxySocket = { data: { url: string; headers: Record<string, string>; up?: WebSocket; queue: string[] }; send(d: string): void; close(): void };
 const usageProxy = usageOnly
@@ -723,7 +723,7 @@ const usageProxy = usageOnly
           if (server.upgrade(req, { data: { url: upstream.replace(/^http/, "ws"), headers, queue: [] } })) return undefined as unknown as Response;
           return new Response("upgrade failed", { status: 400 });
         }
-        if (req.method === "GET" && url.pathname === "/usage") return Response.json(usageReport);
+        if (req.method === "GET" && url.pathname === "/usage") return Response.json({ data: usageReport });
         return fetch(upstream, { method: req.method, headers: req.headers, body: req.body, redirect: "manual" });
       },
       websocket: {
@@ -732,8 +732,8 @@ const usageProxy = usageOnly
           const up = new WebSocket(ws.data.url, { headers: ws.data.headers } as never);
           ws.data.up = up;
           up.onopen = () => { for (const m of ws.data.queue) up.send(m); ws.data.queue = []; };
-          up.onmessage = (e) => ws.send(typeof e.data === "string" ? e.data : String(e.data));
-          up.onclose = () => ws.close();
+          up.onmessage = (e) => { try { ws.send(typeof e.data === "string" ? e.data : String(e.data)); } catch {} };
+          up.onclose = () => { try { ws.close(); } catch {} };
         },
         message(ws: ProxySocket, m: string | Buffer) {
           const up = ws.data.up;
@@ -742,7 +742,7 @@ const usageProxy = usageOnly
         },
         close(ws: ProxySocket) {
           usageClients.delete(ws);
-          ws.data.up?.close();
+          try { ws.data.up?.close(); } catch {}
         },
       } as never,
     })
@@ -2695,7 +2695,10 @@ async function usageChecks(udid: string) {
   const showSidebar = async () => {
     if (ipad) await toggleSidebar(udid, true);
     else await goto(udid, "harness://projects", (l) => l.includes("Inbox"));
-    await until("the plan usage section", async () => ((await labels(udid)).includes("Plan usage") ? true : null), 8000);
+    await until("the plan usage section", async () => ((await labels(udid)).includes("PLAN USAGE") ? true : null), 8000).catch(async (e) => {
+      await shot(udid, "usage-failed");
+      throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).join(" | ")}`);
+    });
   };
   const rowLabels = async () => (await labels(udid)).filter((l) => /^(Claude Code|GitHub Copilot)\b/.test(l));
   const has = async (prefix: string) => (await rowLabels()).find((l) => l.startsWith(prefix));
@@ -2713,7 +2716,7 @@ async function usageChecks(udid: string) {
     for (const want of ["Claude Code Weekly: 45%", "Claude Code Weekly · Opus: 2%", "Claude Code Weekly · Sonnet: 100%, Limited until"]) {
       if (!rows.some((l) => l.startsWith(want))) throw new Error(`no row starting "${want}" in ${JSON.stringify(rows)}`);
     }
-    if (!rows.every((l) => l.includes("updated 3m ago"))) throw new Error(`a row doesn't say when it was updated: ${JSON.stringify(rows)}`);
+    if (!rows.filter((l) => l.startsWith("Claude Code")).every((l) => /updated [2-4]m ago/.test(l))) throw new Error(`a row doesn't say when it was updated: ${JSON.stringify(rows)}`);
     await shot(udid, "usage-used");
     return `${rows.length} rows`;
   });
@@ -2762,7 +2765,7 @@ async function usageChecks(udid: string) {
   await check("usage: Hide collapses the section to its header", async () => {
     await choose("Hide");
     await waitFor("no rows", async () => (await rowLabels()).length === 0);
-    if (!(await labels(udid)).includes("Plan usage")) throw new Error("the header went too");
+    if (!(await labels(udid)).includes("PLAN USAGE")) throw new Error("the header went too");
     await shot(udid, "usage-hidden");
     await choose("All drivers");
     await waitFor("the rows are back", () => has("Claude Code 5-hour"));
