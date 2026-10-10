@@ -2352,6 +2352,15 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const after = await stripY();
     if (before === null || after === null || after >= before - 40) throw new Error(`tab strip ${before}→${after}`);
     await shot(udid, "hero-collapsed");
+    // The title's text lines up with the Spec tab's label: the status dot hangs in the margin to its
+    // left. Both elements' frames include their padding, so add it back: the title button's 4pt
+    // leading, 10pt dot and 4pt gap; the tab's 10pt inset.
+    const titleEl = await until("the collapsed title", () => findElement(udid, (l) => l.startsWith(title.slice(0, 20))), 3000);
+    const specTab = (await nodes(udid)).find((n) => n.AXLabel === "Spec" && n.frame.y > titleEl.frame.y);
+    if (!specTab) throw new Error("no Spec tab under the collapsed title");
+    const textX = titleEl.frame.x + 4 + 10 + 4;
+    const labelX = specTab.frame.x + 10;
+    if (Math.abs(textX - labelX) > 1) throw new Error(`the collapsed title's text sits at ${textX}, the Spec label at ${labelX}`);
     await swipe("down", 3);
     if (await heroShown()) throw new Error("expanded on scrolling back");
     return `tab strip ${Math.round(before)}→${Math.round(after)}; stayed collapsed scrolling back to the top`;
@@ -3519,7 +3528,7 @@ function interactionChains(s: Seeded): Chain[] {
         return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model} → ${cleared.phaseModels?.work ? "set" : "inherit"}`;
       });
     }),
-    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew", "conductor"], 60, async (udid) => {
+    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew"], 60, async (udid) => {
       const open = (t: { key: string }, ready: (l: string) => boolean) => goto(udid, `harness://ticket/${encodeURIComponent(t.key)}?tab=spec`, (ls) => ls.some(ready));
       const gaugeLabel = async (ready: (l: string) => boolean) =>
         until("the gauge", async () => (await labels(udid)).find(ready) ?? null, 8000).catch(async (e) => {
@@ -3557,9 +3566,6 @@ function interactionChains(s: Seeded): Chain[] {
         if (!ls.some((l) => l.startsWith("Gauge gauge") && l.includes("Planning"))) throw new Error("the title's label has no status");
         // The title sits 25pt under the hero's top, clear of the sheet's corner.
         await shot(udid, "hero-meta-row-light");
-        await open(s.conductor, (l) => l.startsWith("Ship the greeter v2"));
-        const c = { labels: await labels(udid) };
-        if (c.labels.some((l) => l.startsWith("Conductor"))) throw new Error(`the Conductor pill is back: ${c.labels.join(" | ")}`);
         return `gauge ${Math.round(gaugeNode.frame.y)} under the title ${Math.round(titleNode.frame.y)}, no pills`;
       });
       await check("a gauge reads cached and fresh against the limit, and its menu offers Compact, New session, Limit…", async () => {
@@ -3631,6 +3637,15 @@ function interactionChains(s: Seeded): Chain[] {
         if (!l.includes("estimated from word count")) throw new Error(l);
         await shot(udid, "gauge-estimated-light");
         return l;
+      });
+    }),
+    // Its own chain: a seeded conductor starts its children's runs, which race the gauge chain's compact run.
+    chain("conductor-hero", ["conductor"], 10, async (udid) => {
+      await check("a conductor's hero has no Conductor pill", async () => {
+        await goto(udid, `harness://ticket/${encodeURIComponent(s.conductor.key)}?tab=spec`, (ls) => ls.some((l) => l.startsWith("Ship the greeter v2")));
+        const ls = await labels(udid);
+        if (ls.some((l) => l.startsWith("Conductor"))) throw new Error(`the Conductor pill is back: ${ls.join(" | ")}`);
+        return "no Conductor pill";
       });
     }),
     chain("card-preview", ["hello"], 6, async (udid) => {
