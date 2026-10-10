@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Settings } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
@@ -10,6 +10,9 @@ import {
   copilotAccount,
   copilotEnv,
   copilotExactRule,
+  estimateCopilotTokens,
+  parseCopilotQuota,
+  readCopilotCalls,
   CopilotJsonParser,
   copilotPrompt,
   GitHubCopilotDriver,
@@ -274,5 +277,142 @@ describe("info and login", () => {
     const res = await driver.login();
     expect(res.url).toBe("https://github.com/login/device");
     expect(res.message).toContain("AB12-CD34");
+  });
+});
+
+const usageRecord = (id: string, u: { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number }, extra: object = {}) =>
+  JSON.stringify({ type: "session.usage_record", id: `evt-${id}`, data: { usage: { model: "claude-opus-5.5", ...u, apiCallId: id } }, ...extra });
+
+describe("model calls from the session's events.jsonl (copilot 1.0.94)", () => {
+  const events = (lines: string[]) => {
+    const dir = tempDir("harness-copilot-events-");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, "events.jsonl");
+    writeFileSync(file, lines.join("\n") + "\n");
+    return file;
+  };
+
+  test("a usage record's inputTokens counts the cache too, so the uncached share is what's left", () => {
+    const file = events([
+      usageRecord("m1", { inputTokens: 38_828, cacheReadTokens: 0, cacheWriteTokens: 38_824, outputTokens: 460 }),
+      usageRecord("m2", { inputTokens: 40_000, cacheReadTokens: 38_824, cacheWriteTokens: 1_100, outputTokens: 80 }),
+    ]);
+    expect(readCopilotCalls(file)).toEqual([
+      { id: "m1", call: { input: 4, cacheRead: 0, cacheWrite: 38_824, output: 460 } },
+      { id: "m2", call: { input: 76, cacheRead: 38_824, cacheWrite: 1_100, output: 80 } },
+    ]);
+  });
+
+  test("a sub-agent's calls, other events and a half-written line are left out", () => {
+    const file = events([
+      JSON.stringify({ type: "assistant.turn_end", data: {} }),
+      usageRecord("sub", { inputTokens: 90_000, cacheReadTokens: 0, cacheWriteTokens: 90_000, outputTokens: 1 }, { agentId: "agent-1" }),
+      usageRecord("own", { inputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 1 }),
+      '{"type":"session.usage_record","data":{"usa',
+    ]);
+    expect(readCopilotCalls(file).map((c) => c.id)).toEqual(["own"]);
+  });
+
+  test("a missing file has no calls and no estimate", () => {
+    expect(readCopilotCalls("/nonexistent/events.jsonl")).toEqual([]);
+    expect(estimateCopilotTokens("/nonexistent/events.jsonl")).toBeNull();
+  });
+
+  test("the estimate counts the conversation's words at 0.75 words per token, sub-agents excluded", () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `w${i}`).join(" ");
+    const file = events([
+      JSON.stringify({ type: "user.message", data: { content: words(300) } }),
+      JSON.stringify({ type: "assistant.message", data: { content: words(150), toolRequests: [{ name: "bash", arguments: { command: "ls -la" } }] } }),
+      JSON.stringify({ type: "tool.execution_complete", data: { result: { content: words(50) } } }),
+      JSON.stringify({ type: "assistant.message", agentId: "a", data: { content: words(10_000) } }),
+    ]);
+    // 300 + 150 + (bash, ls, -la → name and arguments: "bash" "ls -la" = 3 words) + 50 = 503 words.
+    expect(estimateCopilotTokens(file)).toBe(Math.round(503 / 0.75));
+  });
+});
+
+describe("GitHubCopilotDriver.run: reporting calls", () => {
+  /** A stand-in CLI that appends usage records to the session's events.jsonl, like the real one. */
+  function run(lines: (sessionId: string) => string[], preexisting: string[] = []) {
+    const dir = tempDir("harness-copilot-calls-");
+    const home = join(dir, "home");
+    mkdirSync(home, { recursive: true });
+    const bin = join(dir, "copilot");
+    writeFileSync(
+      bin,
+      `#!${process.execPath}
+const fs = require("fs"), path = require("path");
+const argv = process.argv.slice(2);
+const id = argv[argv.indexOf("--session-id") + 1];
+const file = path.join(process.env.COPILOT_HOME, "session-state", id, "events.jsonl");
+fs.mkdirSync(path.dirname(file), { recursive: true });
+const lines = JSON.parse(process.env.LINES);
+for (const l of lines) fs.appendFileSync(file, l + "\\n");
+console.log(JSON.stringify({ type: "assistant.turn_end", data: {} }));
+console.log(JSON.stringify({ type: "result", sessionId: id, exitCode: 0, usage: {} }));
+`,
+    );
+    chmodSync(bin, 0o755);
+    const sessionId = "11111111-1111-4111-8111-111111111111";
+    if (preexisting.length) {
+      mkdirSync(join(home, "session-state", sessionId), { recursive: true });
+      writeFileSync(join(home, "session-state", sessionId, "events.jsonl"), preexisting.join("\n") + "\n");
+    }
+    const driver = new GitHubCopilotDriver({ settings: () => settings, bin, env: { PATH: process.env.PATH, COPILOT_HOME: home, LINES: JSON.stringify(lines(sessionId)) } });
+    return (async () => {
+      const out: DriverEvent[] = [];
+      for await (const e of driver.run(request({ state: { sessionId } }))) out.push(e);
+      return out;
+    })();
+  }
+
+  test("reports the calls this run added, not the ones already in the log", async () => {
+    const old = usageRecord("old", { inputTokens: 90_000, cacheReadTokens: 80_000, cacheWriteTokens: 10_000, outputTokens: 5 });
+    const events = await run(
+      () => [usageRecord("new1", { inputTokens: 91_000, cacheReadTokens: 90_000, cacheWriteTokens: 900, outputTokens: 20 }), usageRecord("new2", { inputTokens: 92_000, cacheReadTokens: 91_000, cacheWriteTokens: 800, outputTokens: 30 })],
+      [old],
+    );
+    expect(events.filter((e) => e.type === "call")).toEqual([
+      { type: "call", call: { input: 100, cacheRead: 90_000, cacheWrite: 900, output: 20 } },
+      { type: "call", call: { input: 200, cacheRead: 91_000, cacheWrite: 800, output: 30 } },
+    ]);
+  });
+
+  test("with no usage records (an older CLI) it falls back to an estimate marked as one", async () => {
+    const words = Array.from({ length: 750 }, (_, i) => `w${i}`).join(" ");
+    const events = await run(() => [JSON.stringify({ type: "user.message", data: { content: words } })]);
+    expect(events.filter((e) => e.type === "call")).toEqual([{ type: "call", call: { input: 1000, cacheRead: 0, cacheWrite: 0, output: 0, estimated: true } }]);
+  });
+});
+
+describe("plan usage", () => {
+  test("a metered account's premium requests: percent used, reset date and the month's length", () => {
+    const w = parseCopilotQuota({
+      quota_reset_date_utc: "2026-11-01T00:00:00.000Z",
+      quota_snapshots: { premium_interactions: { unlimited: false, entitlement: 300, percent_remaining: 82.5 } },
+    });
+    expect(w).toEqual({ id: "monthly", label: "Premium requests", usedPercent: 17.5, resetsAt: Date.UTC(2026, 10, 1), windowSeconds: 31 * 86400 });
+  });
+
+  test("an account with nothing to run out of has no window (unlimited, or billed by tokens with no entitlement)", () => {
+    expect(parseCopilotQuota({ quota_reset_date: "2026-11-01", quota_snapshots: { premium_interactions: { unlimited: true, entitlement: 0, percent_remaining: 100 } } })).toBeNull();
+    expect(parseCopilotQuota({ quota_reset_date: "2026-11-01", quota_snapshots: { premium_interactions: { unlimited: false, entitlement: 0, percent_remaining: 100 } } })).toBeNull();
+    expect(parseCopilotQuota({ quota_snapshots: {} })).toBeNull();
+  });
+
+  test("the driver reads it with the stored token, and 401 asks to sign in", async () => {
+    const seen: string[] = [];
+    const answer = (status: number, body: unknown) =>
+      new GitHubCopilotDriver({
+        settings: () => ({ ...settings, copilotGithubToken: "ghp_stored" }),
+        fetch: (async (_u: string, init: RequestInit) => {
+          seen.push(new Headers(init.headers).get("authorization")!);
+          return new Response(JSON.stringify(body), { status });
+        }) as never,
+      });
+    const ok = await answer(200, { quota_reset_date: "2026-11-01", quota_snapshots: { premium_interactions: { entitlement: 300, percent_remaining: 50 } } }).planUsage();
+    expect(ok![0]!.usedPercent).toBe(50);
+    expect(seen).toEqual(["token ghp_stored"]);
+    await expect(answer(401, {}).planUsage()).rejects.toThrow("Sign in to GitHub Copilot");
   });
 });

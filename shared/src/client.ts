@@ -55,6 +55,8 @@ import type {
   PluginTab,
   NetworkStatus,
   PairingInfo,
+  PlanUsageReport,
+  SessionActionBody,
 } from "./protocol";
 import type { Device, NotificationStatus, Presence, RegisterDeviceBody, TestNotificationResult } from "./notifications";
 import type { FileMatch } from "./mentions";
@@ -249,6 +251,10 @@ export class HarnessClient {
   rerunAgentReview(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/agent-review`);
   }
+  /** Compact the ticket's saved session, or start a new one (DESIGN.md "Context gauge"); 409 while a run is going. */
+  sessionAction(key: string, action: SessionActionBody["action"]) {
+    return this.request<Ticket>("POST", `/tickets/${key}/session`, { action } satisfies SessionActionBody);
+  }
   cancelTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/cancel`);
   }
@@ -354,6 +360,10 @@ export class HarnessClient {
   }
 
   // Drivers & settings
+  /** The plan-usage gauges' readings (DESIGN.md "Plan usage"). */
+  getUsage() {
+    return this.request<PlanUsageReport>("GET", "/usage");
+  }
   listDrivers() {
     return this.request<DriverInfo[]>("GET", "/drivers");
   }

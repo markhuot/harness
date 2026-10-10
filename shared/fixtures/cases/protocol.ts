@@ -133,6 +133,8 @@ const ticket: P.Ticket = {
   draft: false,
   blockedReason: "Should HarnessEvent decode unknown kinds or drop them?",
   busy: true,
+  compacting: false,
+  context: { input: 3, cacheRead: 61_000, cacheWrite: 21_000, output: 840, prefix: 47_003, at: T0 + 3_000_000, estimated: false, misses: 3, missTokens: 377_000 },
   pendingApproval,
   allowedTools: ["Bash", "WebFetch"],
   permissionMode: "read_only",
@@ -214,6 +216,10 @@ export const Ticket: P.Ticket[] = [
   { ...plainTicket, id: "tkt_4", key: "SCRATCH-4", status: "in_progress", useWorktree: false, completionAction: "merge" },
   { ...plainTicket, id: "tkt_5", key: "SCRATCH-5", status: "review", completionAction: "custom" },
   { ...plainTicket, id: "tkt_6", key: "SCRATCH-6", status: "done", completionAction: "cleanup" },
+  // The context gauge: a compact run going, an empty gauge, and a driver's estimate.
+  { ...plainTicket, id: "tkt_9", key: "SCRATCH-9", status: "in_progress", busy: true, compacting: true, context: { input: 400_000, cacheRead: 0, cacheWrite: 0, output: 0, prefix: 50_000, at: T0, estimated: false, misses: 0, missTokens: 0 } },
+  { ...plainTicket, id: "tkt_10", key: "SCRATCH-10", compacting: false, context: null },
+  { ...plainTicket, id: "tkt_11", key: "SCRATCH-11", context: { input: 82_000, cacheRead: 0, cacheWrite: 0, output: 0, prefix: 60_000, at: T0, estimated: true, misses: 0, missTokens: 0 } },
   { ...plainTicket, id: "tkt_7", key: "SCRATCH-7", agentNotes: "## Where\n- Swift types: `ios/HarnessKit/Sources/HarnessKit/Protocol`\n- Verify: `swift test`" },
   { ...plainTicket, id: "tkt_8", key: "SCRATCH-8", agentNotes: null },
   // A reply half written on another device (Ticket.messageDraft).
@@ -607,7 +613,18 @@ export const Watcher: P.Watcher[] = [
 ];
 
 export const DriverInfo: P.DriverInfo[] = [
-  { id: "claude-code", name: "Claude Code", description: "Runs the claude CLI", available: true, authenticated: true, detail: "mark@happycog.com · Happy Cog (team)", supportsLogin: true },
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    description: "Runs the claude CLI",
+    available: true,
+    authenticated: true,
+    detail: "mark@happycog.com · Happy Cog (team)",
+    supportsLogin: true,
+    sessionActions: { compact: true, newSession: true },
+    reportsContextUsage: true,
+  },
+  { id: "github-copilot", name: "GitHub Copilot", description: "Runs the Copilot CLI", available: true, authenticated: true, detail: "markhuot", supportsLogin: true, sessionActions: { compact: false, newSession: true }, reportsContextUsage: false },
   { id: "anthropic-api", name: "Anthropic API", description: "Calls the Messages API", available: true, authenticated: false, detail: "", supportsLogin: false },
 ];
 
@@ -622,11 +639,37 @@ export const DriverModels: P.DriverModels[] = [
   { driverId: "anthropic-api", models: [], error: "No API key", fetchedAt: T0 },
 ];
 
+export const PlanUsageReport: P.PlanUsageReport[] = [
+  {
+    drivers: [
+      {
+        driver: "claude-code",
+        name: "Claude Code",
+        windows: [
+          { id: "five_hour", label: "5-hour", usedPercent: 8, resetsAt: T0 + 3_600_000, windowSeconds: 18_000 },
+          { id: "seven_day", label: "Weekly", usedPercent: 63.5, resetsAt: T0 + 5 * 86_400_000, windowSeconds: 604_800 },
+          { id: "seven_day_opus", label: "Weekly · Opus", usedPercent: 100, resetsAt: T0 + 5 * 86_400_000, windowSeconds: 604_800 },
+        ],
+        status: "ok",
+        error: null,
+        fetchedAt: T0,
+      },
+      { driver: "github-copilot", name: "GitHub Copilot", windows: [{ id: "monthly", label: "Premium requests", usedPercent: 17.5, resetsAt: T0 + 20 * 86_400_000, windowSeconds: 2_678_400 }], status: "ok", error: null, fetchedAt: T0 },
+    ],
+  },
+  // Unreadable: why, and what the CLI's own rate-limit report still says.
+  { drivers: [{ driver: "claude-code", name: "Claude Code", windows: [], status: "near_limit", error: "Sign in to Claude Code to see plan usage", fetchedAt: T0 }] },
+  { drivers: [] },
+];
+
+export const SessionActionBody: P.SessionActionBody[] = [{ action: "compact" }, { action: "new" }];
+
 export const ListenSetting: P.ListenSetting[] = [{ mode: "localhost" }, { mode: "custom", host: "mac.local" }, { mode: "tailscale" }, { mode: "any" }];
 
 const settings: P.Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
+  contextGaugeLimit: 250_000,
   permissionMode: "auto",
   classifier: "claude-cli",
   defaultModels: { "claude-code": "opus", "anthropic-api": null },
@@ -926,6 +969,7 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "browser.frame", sessionId: "ses_31", tabId: 2, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768, viewerId: "v:spec-2" },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]!, viewerId: "v:spec-2" },
   { kind: "service.status", status: ServiceStatus[0]! },
+  { kind: "usage.updated", usage: PlanUsageReport[0]! },
 ];
 
 export const BrowserInput: P.BrowserInput[] = [
@@ -1127,7 +1171,7 @@ export const enums: Record<string, readonly string[]> = {
   CompletionAction: COMPLETION_ACTIONS satisfies readonly P.CompletionAction[],
   SessionKind: all<P.SessionKind>({ ticket: true, triage: true }),
   TriageStatus: all<P.TriageStatus>({ triaging: true, dispatched: true, declined: true, failed: true }),
-  RunKind: all<P.RunKind>({ plan: true, work: true, review: true, complete: true, conductor: true, triage: true, chat: true }),
+  RunKind: all<P.RunKind>({ plan: true, work: true, review: true, complete: true, conductor: true, triage: true, chat: true, compact: true }),
   RunStatus: all<P.RunStatus>({ queued: true, running: true, succeeded: true, failed: true, cancelled: true }),
   TranscriptRole: all<P.TranscriptRole>({ user: true, assistant: true, tool: true, system: true }),
   SubagentStatus: all<P.SubagentStatus>({ running: true, succeeded: true, failed: true, stopped: true }),
@@ -1178,6 +1222,7 @@ export const discriminators: Record<string, string[]> = {
     "browser.frame": true,
     "browser.state": true,
     "service.status": true,
+    "usage.updated": true,
   }),
   TranscriptContent: all<P.TranscriptContent["type"]>({ text: true, thinking: true, tool_call: true, tool_result: true, status: true, error: true }),
   ToolResultContent: all<P.ToolResultContent["type"]>({ text: true, image: true }),

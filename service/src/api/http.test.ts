@@ -51,6 +51,46 @@ async function until(fn: () => boolean, ms = 5000) {
 }
 
 describe("http api", () => {
+  test("context gauge over HTTP: the ticket carries its context, POST /tickets/:key/session acts on it, drivers list their session actions", async () => {
+    const { client, fake, dir } = await boot();
+    const infos = await client.listDrivers();
+    expect(infos.find((d) => d.id === "fake")).toMatchObject({ sessionActions: { compact: true, newSession: true }, reportsContextUsage: true });
+    const p = await client.createProject({ path: dir });
+    fake.script = async function* (req) {
+      yield { type: "state", state: { sessionId: "s1" } };
+      yield { type: "call", call: { input: 3, cacheRead: 0, cacheWrite: 47_000, output: 10 } };
+      await req.toolContext.ops.block(req.toolContext, "waiting");
+    };
+    const t = await client.createTicket({ projectId: p.id, spec: "x", driver: "fake" });
+    let cur = (await client.getTicket(t.key)).ticket;
+    for (let i = 0; i < 200 && !(cur.context && cur.status === "blocked"); i++) {
+      await Bun.sleep(5);
+      cur = (await client.getTicket(t.key)).ticket;
+    }
+    expect(cur.context).toMatchObject({ cacheWrite: 47_000, prefix: 47_003, misses: 0 });
+    const cleared = await client.sessionAction(t.key, "new");
+    expect(cleared.context).toBeNull();
+    await expect(client.sessionAction(t.key, "fork" as never)).rejects.toMatchObject({ status: 400 });
+    expect((await client.updateSettings({ contextGaugeLimit: 300_000 })).contextGaugeLimit).toBe(300_000);
+    await expect(client.updateSettings({ contextGaugeLimit: 5 })).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("GET /usage reads each driver's plan, and usage.updated pushes later readings to connected clients", async () => {
+    const { client, fake } = await boot();
+    let used = 20;
+    (fake as unknown as { planUsage: () => Promise<unknown> }).planUsage = async () => [{ id: "five_hour", label: "5-hour", usedPercent: used, resetsAt: Date.now() + 3_600_000, windowSeconds: 18_000 }];
+    const first = await client.getUsage();
+    expect(first.drivers).toHaveLength(1);
+    expect(first.drivers[0]).toMatchObject({ driver: "fake", windows: [{ usedPercent: 20 }], error: null });
+    const { events, ready } = collect(client);
+    await ready;
+    used = 60;
+    await harness!.orchestrator.planUsage.refresh(undefined, true);
+    await until(() => events.some((e) => e.kind === "usage.updated"));
+    const e = events.find((x) => x.kind === "usage.updated") as { usage: { drivers: { windows: { usedPercent: number }[] }[] } };
+    expect(e.usage.drivers[0]!.windows[0]!.usedPercent).toBe(60);
+  });
+
   test("auth: /health is public, everything else needs the bearer token; token file is 0600", async () => {
     const { h, client } = await boot();
     const health = await client.health();

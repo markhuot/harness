@@ -205,6 +205,8 @@ export class FakeDriver implements Driver {
   script: ((req: RunRequest) => AsyncIterable<DriverEvent>) | null = null;
   /** What the driver says it can do with a saved session (null: nothing) */
   sessionActions: { compact: boolean; newSession: boolean } | undefined = { compact: true, newSession: true };
+  /** Whether the driver reports token counts (false: its gauge stays empty) */
+  reportsContextUsage = true;
   /** The requests compact() got */
   compactRequests: RunRequest[] = [];
   /** compact() waits for this before it reports (resolve it to let the compaction finish) */

@@ -998,7 +998,26 @@
       "available": true,
       "authenticated": true,
       "detail": "mark@happycog.com · Happy Cog (team)",
-      "supportsLogin": true
+      "supportsLogin": true,
+      "sessionActions": {
+        "compact": true,
+        "newSession": true
+      },
+      "reportsContextUsage": true
+    },
+    {
+      "id": "github-copilot",
+      "name": "GitHub Copilot",
+      "description": "Runs the Copilot CLI",
+      "available": true,
+      "authenticated": true,
+      "detail": "markhuot",
+      "supportsLogin": true,
+      "sessionActions": {
+        "compact": false,
+        "newSession": true
+      },
+      "reportsContextUsage": false
     },
     {
       "id": "anthropic-api",
@@ -1267,6 +1286,18 @@
         "draft": false,
         "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
         "busy": true,
+        "compacting": false,
+        "context": {
+          "input": 3,
+          "cacheRead": 61000,
+          "cacheWrite": 21000,
+          "output": 840,
+          "prefix": 47003,
+          "at": 1759193400000,
+          "estimated": false,
+          "misses": 3,
+          "missTokens": 377000
+        },
         "pendingApproval": {
           "id": "apr_1",
           "runId": "run_7",
@@ -1457,6 +1488,7 @@
       "settings": {
         "defaultDriver": "claude-code",
         "maxConcurrentRuns": 4,
+        "contextGaugeLimit": 250000,
         "permissionMode": "auto",
         "classifier": "claude-cli",
         "defaultModels": {
@@ -1581,6 +1613,59 @@
       "status": {
         "build": "bebc4d8",
         "stale": true
+      }
+    },
+    {
+      "kind": "usage.updated",
+      "usage": {
+        "drivers": [
+          {
+            "driver": "claude-code",
+            "name": "Claude Code",
+            "windows": [
+              {
+                "id": "five_hour",
+                "label": "5-hour",
+                "usedPercent": 8,
+                "resetsAt": 1759194000000,
+                "windowSeconds": 18000
+              },
+              {
+                "id": "seven_day",
+                "label": "Weekly",
+                "usedPercent": 63.5,
+                "resetsAt": 1759622400000,
+                "windowSeconds": 604800
+              },
+              {
+                "id": "seven_day_opus",
+                "label": "Weekly · Opus",
+                "usedPercent": 100,
+                "resetsAt": 1759622400000,
+                "windowSeconds": 604800
+              }
+            ],
+            "status": "ok",
+            "error": null,
+            "fetchedAt": 1759190400000
+          },
+          {
+            "driver": "github-copilot",
+            "name": "GitHub Copilot",
+            "windows": [
+              {
+                "id": "monthly",
+                "label": "Premium requests",
+                "usedPercent": 17.5,
+                "resetsAt": 1760918400000,
+                "windowSeconds": 2678400
+              }
+            ],
+            "status": "ok",
+            "error": null,
+            "fetchedAt": 1759190400000
+          }
+        ]
       }
     }
   ],
@@ -2003,6 +2088,73 @@
       "mode": "read_only"
     }
   ],
+  "PlanUsageReport": [
+    {
+      "drivers": [
+        {
+          "driver": "claude-code",
+          "name": "Claude Code",
+          "windows": [
+            {
+              "id": "five_hour",
+              "label": "5-hour",
+              "usedPercent": 8,
+              "resetsAt": 1759194000000,
+              "windowSeconds": 18000
+            },
+            {
+              "id": "seven_day",
+              "label": "Weekly",
+              "usedPercent": 63.5,
+              "resetsAt": 1759622400000,
+              "windowSeconds": 604800
+            },
+            {
+              "id": "seven_day_opus",
+              "label": "Weekly · Opus",
+              "usedPercent": 100,
+              "resetsAt": 1759622400000,
+              "windowSeconds": 604800
+            }
+          ],
+          "status": "ok",
+          "error": null,
+          "fetchedAt": 1759190400000
+        },
+        {
+          "driver": "github-copilot",
+          "name": "GitHub Copilot",
+          "windows": [
+            {
+              "id": "monthly",
+              "label": "Premium requests",
+              "usedPercent": 17.5,
+              "resetsAt": 1760918400000,
+              "windowSeconds": 2678400
+            }
+          ],
+          "status": "ok",
+          "error": null,
+          "fetchedAt": 1759190400000
+        }
+      ]
+    },
+    {
+      "drivers": [
+        {
+          "driver": "claude-code",
+          "name": "Claude Code",
+          "windows": [],
+          "status": "near_limit",
+          "error": "Sign in to Claude Code to see plan usage",
+          "fetchedAt": 1759190400000
+        }
+      ]
+    },
+    {
+      "drivers": []
+    }
+  ],
   "PluginFrameMessage": [
     {
       "type": "harness:ready"
@@ -2106,6 +2258,18 @@
         "draft": false,
         "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
         "busy": true,
+        "compacting": false,
+        "context": {
+          "input": 3,
+          "cacheRead": 61000,
+          "cacheWrite": 21000,
+          "output": 840,
+          "prefix": 47003,
+          "at": 1759193400000,
+          "estimated": false,
+          "misses": 3,
+          "missTokens": 377000
+        },
         "pendingApproval": {
           "id": "apr_1",
           "runId": "run_7",
@@ -2332,6 +2496,7 @@
     {
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
+      "contextGaugeLimit": 250000,
       "permissionMode": "auto",
       "classifier": "claude-cli",
       "defaultModels": {
@@ -2383,6 +2548,7 @@
     {
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
+      "contextGaugeLimit": 250000,
       "permissionMode": "auto",
       "classifier": "claude-cli",
       "defaultModels": {
@@ -2701,6 +2867,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -2791,10 +2969,19 @@
       "updatedAt": 1759190460000
     }
   ],
+  "SessionActionBody": [
+    {
+      "action": "compact"
+    },
+    {
+      "action": "new"
+    }
+  ],
   "Settings": [
     {
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
+      "contextGaugeLimit": 250000,
       "permissionMode": "auto",
       "classifier": "claude-cli",
       "defaultModels": {
@@ -2846,6 +3033,7 @@
     {
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
+      "contextGaugeLimit": 250000,
       "permissionMode": "auto",
       "classifier": "anthropic-api",
       "defaultModels": {
@@ -3152,6 +3340,18 @@
       "draft": false,
       "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
       "busy": true,
+      "compacting": false,
+      "context": {
+        "input": 3,
+        "cacheRead": 61000,
+        "cacheWrite": 21000,
+        "output": 840,
+        "prefix": 47003,
+        "at": 1759193400000,
+        "estimated": false,
+        "misses": 3,
+        "missTokens": 377000
+      },
       "pendingApproval": {
         "id": "apr_1",
         "runId": "run_7",
@@ -3370,6 +3570,115 @@
       "completionAction": "cleanup"
     },
     {
+      "id": "tkt_9",
+      "key": "SCRATCH-9",
+      "projectId": "prj_00a1",
+      "kind": "task",
+      "title": "Fix the flaky test",
+      "spec": "",
+      "status": "in_progress",
+      "sessionId": "ses_2",
+      "driver": "anthropic-api",
+      "parentId": null,
+      "dependsOn": [],
+      "autoStart": false,
+      "agentReview": "pending",
+      "humanReview": "pending",
+      "externalRef": null,
+      "workdir": null,
+      "branch": null,
+      "blockedReason": null,
+      "busy": true,
+      "pendingApproval": null,
+      "allowedTools": [],
+      "permissionMode": null,
+      "model": null,
+      "position": 0,
+      "createdAt": 1759190400000,
+      "updatedAt": 1759190400000,
+      "compacting": true,
+      "context": {
+        "input": 400000,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "prefix": 50000,
+        "at": 1759190400000,
+        "estimated": false,
+        "misses": 0,
+        "missTokens": 0
+      }
+    },
+    {
+      "id": "tkt_10",
+      "key": "SCRATCH-10",
+      "projectId": "prj_00a1",
+      "kind": "task",
+      "title": "Fix the flaky test",
+      "spec": "",
+      "status": "planning",
+      "sessionId": "ses_2",
+      "driver": "anthropic-api",
+      "parentId": null,
+      "dependsOn": [],
+      "autoStart": false,
+      "agentReview": "pending",
+      "humanReview": "pending",
+      "externalRef": null,
+      "workdir": null,
+      "branch": null,
+      "blockedReason": null,
+      "busy": false,
+      "pendingApproval": null,
+      "allowedTools": [],
+      "permissionMode": null,
+      "model": null,
+      "position": 0,
+      "createdAt": 1759190400000,
+      "updatedAt": 1759190400000,
+      "compacting": false,
+      "context": null
+    },
+    {
+      "id": "tkt_11",
+      "key": "SCRATCH-11",
+      "projectId": "prj_00a1",
+      "kind": "task",
+      "title": "Fix the flaky test",
+      "spec": "",
+      "status": "planning",
+      "sessionId": "ses_2",
+      "driver": "anthropic-api",
+      "parentId": null,
+      "dependsOn": [],
+      "autoStart": false,
+      "agentReview": "pending",
+      "humanReview": "pending",
+      "externalRef": null,
+      "workdir": null,
+      "branch": null,
+      "blockedReason": null,
+      "busy": false,
+      "pendingApproval": null,
+      "allowedTools": [],
+      "permissionMode": null,
+      "model": null,
+      "position": 0,
+      "createdAt": 1759190400000,
+      "updatedAt": 1759190400000,
+      "context": {
+        "input": 82000,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "output": 0,
+        "prefix": 60000,
+        "at": 1759190400000,
+        "estimated": true,
+        "misses": 0,
+        "missTokens": 0
+      }
+    },
+    {
       "id": "tkt_7",
       "key": "SCRATCH-7",
       "projectId": "prj_00a1",
@@ -3525,6 +3834,18 @@
         "draft": false,
         "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
         "busy": true,
+        "compacting": false,
+        "context": {
+          "input": 3,
+          "cacheRead": 61000,
+          "cacheWrite": 21000,
+          "output": 840,
+          "prefix": 47003,
+          "at": 1759193400000,
+          "estimated": false,
+          "misses": 3,
+          "missTokens": 377000
+        },
         "pendingApproval": {
           "id": "apr_1",
           "runId": "run_7",
@@ -4118,6 +4439,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -4720,7 +5053,8 @@
       "devices.changed",
       "browser.frame",
       "browser.state",
-      "service.status"
+      "service.status",
+      "usage.updated"
     ],
     "TranscriptContent": [
       "text",
@@ -4834,7 +5168,8 @@
       "complete",
       "conductor",
       "triage",
-      "chat"
+      "chat",
+      "compact"
     ],
     "RunStatus": [
       "queued",
@@ -5229,6 +5564,7 @@
         {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "paranoid",
           "classifier": "local-llm",
           "defaultModels": {

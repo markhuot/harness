@@ -314,6 +314,18 @@ describe("anthropic-api driver", () => {
     expect(usage).toEqual([{ type: "usage", inputTokens: 173, outputTokens: 9 }]);
   });
 
+  test("each API response is one call with its own cache split (the gauge reads the last)", async () => {
+    const { driver } = driverWith([
+      { content: [toolUse("a", "post_note", { note: "s" })], stop_reason: "tool_use", usage: { input_tokens: 100, output_tokens: 7, cache_read_input_tokens: 50, cache_creation_input_tokens: null } },
+      { content: [text("ok")], stop_reason: "end_turn", usage: { input_tokens: 3, output_tokens: 2, cache_creation_input_tokens: 20, cache_read_input_tokens: 150 } },
+    ]);
+    const { events } = await collect(driver, makeReq("work", "x").req);
+    expect(events.filter((e) => e.type === "call")).toEqual([
+      { type: "call", call: { input: 100, cacheRead: 50, cacheWrite: 0, output: 7 } },
+      { type: "call", call: { input: 3, cacheRead: 150, cacheWrite: 20, output: 2 } },
+    ]);
+  });
+
   test("state holds the full history, and resuming appends the new prompt after it", async () => {
     const first = driverWith([
       { content: [toolUse("a", "post_note", { note: "s" })], stop_reason: "tool_use" },

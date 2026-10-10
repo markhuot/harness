@@ -527,6 +527,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -610,6 +622,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -687,6 +711,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -798,6 +834,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -1081,6 +1129,18 @@
         "draft": false,
         "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
         "busy": true,
+        "compacting": false,
+        "context": {
+          "input": 3,
+          "cacheRead": 61000,
+          "cacheWrite": 21000,
+          "output": 840,
+          "prefix": 47003,
+          "at": 1759193400000,
+          "estimated": false,
+          "misses": 3,
+          "missTokens": 377000
+        },
         "pendingApproval": {
           "id": "apr_1",
           "runId": "run_7",
@@ -1533,6 +1593,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -1592,6 +1664,7 @@
         "settings": {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -1702,6 +1775,7 @@
         "settings": {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -1844,6 +1918,7 @@
         "settings": {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -2016,6 +2091,7 @@
         "settings": {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -2106,6 +2182,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -2202,6 +2290,7 @@
         "settings": {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -2292,6 +2381,18 @@
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
+          "compacting": false,
+          "context": {
+            "input": 3,
+            "cacheRead": 61000,
+            "cacheWrite": 21000,
+            "output": 840,
+            "prefix": 47003,
+            "at": 1759193400000,
+            "estimated": false,
+            "misses": 3,
+            "missTokens": 377000
+          },
           "pendingApproval": {
             "id": "apr_1",
             "runId": "run_7",
@@ -2373,6 +2474,7 @@
         "settings": {
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
+          "contextGaugeLimit": 250000,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
