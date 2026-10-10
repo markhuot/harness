@@ -54,7 +54,7 @@ function Info({ text, testid }: { text: string; testid: string }) {
       </button>
       {open && (
         <p className="gauge-info" role="note" data-testid={`${testid}-text`}>
-          {text}
+          {text.split("`").map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part))}
         </p>
       )}
     </>

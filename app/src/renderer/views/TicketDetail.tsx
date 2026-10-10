@@ -602,8 +602,9 @@ function DetailHeader({
 
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
 
-        {/* A fieldset, so a compacting session disables every action in the row at once. */}
-        <fieldset className="actions" disabled={!!ticket.compacting} data-testid="ticket-actions">
+        {/* A fieldset, so a compacting session disables the row's buttons at once. More sits outside it: Cancel run stops a compact. */}
+        <div className="actions">
+        <fieldset disabled={!!ticket.compacting} data-testid="ticket-actions">
           {canStart && (
             <button className="btn btn-primary" onClick={start}>
               <Icon name="play" /> {startLabel(startMode)}
@@ -644,6 +645,7 @@ function DetailHeader({
               <Icon name="refresh" /> Re-open
             </button>
           )}
+        </fieldset>
           {/* Always there: Delete always applies. */}
           <MenuButton
             align="left"
@@ -656,12 +658,12 @@ function DetailHeader({
             {(close) => (
               <>
                 {ticket.status === "review" && (
-                  <button role="menuitem" disabled={ticket.busy} onClick={() => (close(), void rerunReview())}>
+                  <button role="menuitem" disabled={ticket.busy || !!ticket.compacting} onClick={() => (close(), void rerunReview())}>
                     <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
                   </button>
                 )}
                 {ticket.status !== "done" && ticket.status !== "review" && (
-                  <button role="menuitem" onClick={() => (close(), void markDone())}>
+                  <button role="menuitem" disabled={!!ticket.compacting} onClick={() => (close(), void markDone())}>
                     <Icon name="check" /> Move to done
                   </button>
                 )}
@@ -676,7 +678,7 @@ function DetailHeader({
               </>
             )}
           </MenuButton>
-        </fieldset>
+        </div>
       </div>
       {modals}
     </div>
@@ -1032,6 +1034,7 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
             trigger={(toggle, open) => (
               <button
                 type="button"
+                disabled={compacting}
                 className="btn btn-ghost btn-icon composer-attach"
                 data-testid="composer-attach"
                 aria-expanded={open}

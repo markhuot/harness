@@ -2270,7 +2270,8 @@ button.prompt-attachment-row-main:disabled {
 }
 
 /* Context gauge (components/ContextGauge.tsx) */
-fieldset.actions {
+.actions > fieldset {
+  display: contents;
   border: 0;
   padding: 0;
   min-width: 0;

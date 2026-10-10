@@ -126,6 +126,10 @@ try {
   check("compacting: spinner instead of the needle", (await exists("[data-testid=gauge-spinner]")) && !(await exists(".gauge-needle")));
   check("…the gauge button is disabled", await disabled("context-gauge"));
   check("…every action in the header is disabled", await js<boolean>(`[...document.querySelectorAll("[data-testid=ticket-actions] button")].every(b => b.matches(":disabled"))`));
+  check("…but More stays enabled", !(await disabled("ticket-more")));
+  await js(`document.querySelector("[data-testid=ticket-more]").click()`);
+  check("…and offers Cancel run, with Move to done off", await js<boolean>(`(() => { const items = [...document.querySelectorAll("[role=menuitem]")]; const t = (re) => items.find(b => re.test(b.textContent || "")); return !!t(/Cancel run/) && !t(/Cancel run/).disabled && (!t(/Move to done/) || t(/Move to done/).disabled); })()`));
+  await js(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
   check("…the composer is disabled and says Compacting…", await js<boolean>(`(() => { const t = document.querySelector("[data-testid=composer] textarea"); return !!t && t.disabled && t.placeholder === "Compacting…"; })()`));
   check("…with a spinner and Send off", (await exists("[data-testid=composer-compacting]")) && (await disabled("composer-send")));
   await shot("compacting");
