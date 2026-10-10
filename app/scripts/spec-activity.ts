@@ -271,6 +271,42 @@ try {
   await idle(key);
   await shot("4-transcript-after-send");
 
+  // --- Run sections: each run opens with a sticky header that the next run's header pushes off, and
+  // the status dividers read left to right: text, rule, time.
+  await go(`#/board/${project.id}/ticket/${key}/transcript`);
+  await until("run headers", () => js<boolean>(`document.querySelectorAll('.transcript [data-testid=run-header]').length >= 2`), 10000);
+  check("the start status no longer draws as a divider", await js<boolean>(`![...document.querySelectorAll('.transcript .t-status-text')].some((e) => /^Run started/.test(e.textContent))`));
+  check("a header reads Phase • Driver", await js<boolean>(`[...document.querySelectorAll('.transcript [data-testid=run-header] .t-run-title')].every((e) => /^\\S+ • \\S/.test(e.textContent))`));
+  const divider = await js<{ textLeft: number; ruleLeft: number; timeLeft: number; rowLeft: number } | null>(`(() => {
+    const row = document.querySelector('.transcript .t-status');
+    if (!row) return null;
+    const l = (s) => row.querySelector(s).getBoundingClientRect().left;
+    return { textLeft: l('.t-status-text'), ruleLeft: l('.t-rule'), timeLeft: l('.t-time'), rowLeft: row.getBoundingClientRect().left };
+  })()`);
+  check("a divider shows text, then the rule, then the time", !!divider && divider.textLeft - divider.rowLeft < 2 && divider.ruleLeft > divider.textLeft && divider.timeLeft > divider.ruleLeft, JSON.stringify(divider));
+  // Make each run taller than the pane so there is something to scroll through.
+  await js(`(() => {
+    for (const s of document.querySelectorAll('.transcript .t-run')) s.style.minHeight = '700px';
+    document.querySelector('.transcript-inner').style.paddingBottom = '700px';
+  })()`);
+  const pinned = (n: number) =>
+    js<{ scrollerTop: number; tops: number[] }>(`(() => {
+      const sc = document.querySelector('.transcript');
+      const heads = [...sc.querySelectorAll('[data-testid=run-header]')];
+      sc.scrollTop = heads[${n}].closest('.t-run').offsetTop - sc.querySelector('.transcript-inner').offsetTop + 80;
+      return new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done({ scrollerTop: sc.getBoundingClientRect().top, tops: heads.map((h) => h.getBoundingClientRect().top) }))));
+    })()`);
+  const second = await pinned(1);
+  check("scrolled into the second run, its header is pinned to the top", Math.abs(second.tops[1]! - second.scrollerTop) < 1.5, JSON.stringify(second));
+  check("the first run's header is pushed off, not pinned", second.tops[0]! < second.scrollerTop - 1, JSON.stringify(second));
+  const first = await pinned(0);
+  check("scrolled into the first run, its header is pinned and the second is below", Math.abs(first.tops[0]! - first.scrollerTop) < 1.5 && first.tops[1]! > first.scrollerTop + 20, JSON.stringify(first));
+  await shot("4b-transcript-sticky-header");
+  await js(`(() => {
+    for (const s of document.querySelectorAll('.transcript .t-run')) s.style.minHeight = '';
+    document.querySelector('.transcript-inner').style.paddingBottom = '';
+  })()`);
+
   // --- And one from the Activity tab does the same.
   await go(`#/board/${project.id}/ticket/${key}/activity`);
   await until("activity list", () => exists(".activity-list"), 5000);

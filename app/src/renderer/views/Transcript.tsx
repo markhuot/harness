@@ -1,12 +1,13 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, isTask, liveDelta, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
 import { PromptAttachmentList } from "../components/PromptAttachments";
 import { useStickToBottom } from "../components/stickToBottom";
+import { useDriverModels } from "../state/models";
 
 export { groupTranscript, toolPreview } from "@harness/shared/state";
 
@@ -52,10 +53,36 @@ export function Transcript({
 
   const items = useMemo(() => groupTranscript(transcript?.entries ?? []), [transcript?.entries]);
 
+  const sections = useMemo(() => splitRunSections(items, itemRun), [items]);
+
   // Stick to the bottom while the user is there; leave them alone when they scroll up.
   const scroller = useStickToBottom<HTMLDivElement>();
 
   const loading = !transcript?.loaded && !error;
+
+  // Streaming text and "Working…" belong to the last run's section.
+  const streaming = (
+    <>
+      {deltas.map((d) => (
+        <div key={d.runId} className="t-assistant streaming">
+          <div className="t-who">
+            <Icon name="sparkle" size={12} /> Agent
+          </div>
+          <div className="md selectable">
+            <p>
+              {d.text}
+              <span className="caret" />
+            </p>
+          </div>
+        </div>
+      ))}
+      {working && deltas.length === 0 && (
+        <div className="t-working">
+          <span className="spinner" /> Working…
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="transcript" ref={scroller}>
@@ -78,41 +105,50 @@ export function Transcript({
             {emptyHint}
           </div>
         )}
-        {items.map((item) =>
-          item.kind === "tool" ? (
-            <ToolRow
-              key={item.call.id}
-              call={item.call}
-              result={item.result}
-              agent={onOpenSubagent ? (subagents?.find((a) => a.id === item.call.content.callId) ?? null) : null}
-              onOpenAgent={onOpenSubagent}
-            />
-          ) : (
-            <EntryRow key={item.entry.id} entry={item.entry} who={subagentId ? "Sub-agent" : "Agent"} />
-          ),
-        )}
-        {deltas.map((d) => (
-          <div key={d.runId} className="t-assistant streaming">
-            <div className="t-who">
-              <Icon name="sparkle" size={12} /> Agent
-            </div>
-            <div className="md selectable">
-              <p>
-                {d.text}
-                <span className="caret" />
-              </p>
-            </div>
-          </div>
-        ))}
-        {working && deltas.length === 0 && (
-          <div className="t-working">
-            <span className="spinner" /> Working…
-          </div>
-        )}
+        {sections.map((section, i) => {
+          const last = i === sections.length - 1;
+          const rows = section.rows.map((item) =>
+            item.kind === "tool" ? (
+              <ToolRow
+                key={item.call.id}
+                call={item.call}
+                result={item.result}
+                agent={onOpenSubagent ? (subagents?.find((a) => a.id === item.call.content.callId) ?? null) : null}
+                onOpenAgent={onOpenSubagent}
+              />
+            ) : (
+              <EntryRow key={item.entry.id} entry={item.entry} who={subagentId ? "Sub-agent" : "Agent"} />
+            ),
+          );
+          return (
+            <section key={section.runId ?? "start"} className="t-run" data-run={section.runId ?? undefined}>
+              {section.runId && <RunHeader runId={section.runId} startText={section.startText} firstAt={section.firstAt} />}
+              {rows}
+              {last && streaming}
+            </section>
+          );
+        })}
+        {sections.length === 0 && streaming}
       </div>
     </div>
   );
 }
+
+/** A run's sticky header: "Work • Claude Code, Opus 5.5" with its start time. */
+function RunHeader({ runId, startText, firstAt }: { runId: string; startText: string | null; firstAt: number | null }) {
+  const { state, client, epoch } = useStore();
+  const run = state.runs[runId];
+  const models = useDriverModels(client, run?.driver ?? "", epoch).data?.models;
+  const { title, at } = runHeader(run, { startText, firstAt, drivers: state.drivers, models });
+  return (
+    <div className="t-run-head" data-testid="run-header">
+      <span className="t-run-title truncate">{title}</span>
+      {at != null && <span className="t-time">{formatTime(at)}</span>}
+    </div>
+  );
+}
+
+const formatTime = (at: number) => new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 /**
  * The files sent with a message, under its bubble: read-only, each read by its id. Their images can
@@ -129,7 +165,7 @@ function MessageAttachments({ items }: { items: Attachment[] }) {
 
 const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry; who: string }) {
   const c = entry.content;
-  const time = new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const time = formatTime(entry.createdAt);
   switch (c.type) {
     case "text":
       if (entry.role === "user") {
@@ -168,12 +204,9 @@ const EntryRow = memo(function EntryRow({ entry, who }: { entry: TranscriptEntry
       if (c.permission) return <PermissionStatusRow log={c.permission} time={time} />;
       return (
         <div className="t-status">
+          <span className="t-status-text">{c.text}</span>
           <span className="t-rule" />
-          <span className="t-status-text">
-            {c.text}
-            <span className="t-time">{time}</span>
-          </span>
-          <span className="t-rule" />
+          <span className="t-time">{time}</span>
         </div>
       );
     case "error":

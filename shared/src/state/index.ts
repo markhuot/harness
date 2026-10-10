@@ -14,6 +14,7 @@ export * from "./changes";
 export * from "./subagents";
 export * from "./format";
 export * from "./runs";
+export * from "./runSections";
 export * from "./markdown";
 export * from "./specDiff";
 export * from "./icons";
