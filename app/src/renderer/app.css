@@ -229,6 +229,108 @@
   padding: 8px 10px 10px;
   border-top: 1px solid var(--border);
 }
+/* Plan usage (views/PlanUsage.tsx) */
+.plan-usage {
+  padding: 0 8px 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+}
+.plan-usage-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 -4px 4px 0;
+}
+.plan-usage-btn {
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 18px;
+}
+.plan-usage-btn:hover,
+.plan-usage-btn[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+.plan-usage-info {
+  max-width: 260px;
+  padding: 8px 10px;
+}
+.plan-usage-info-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2, var(--text-3));
+}
+.plan-usage-check {
+  display: inline-block;
+  width: 12px;
+}
+.plan-usage-name {
+  margin: 4px 0 2px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.plan-usage-note {
+  color: var(--text-3);
+  padding: 2px 0;
+}
+.plan-usage-row {
+  padding: 3px 0;
+}
+.plan-usage-line {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.plan-usage-label {
+  min-width: 0;
+}
+.plan-usage-reset {
+  flex: none;
+  max-width: 60%;
+}
+.plan-usage-text,
+.plan-usage-reset {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.plan-usage-bar {
+  position: relative;
+  height: 5px;
+  margin: 3px 0 2px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+}
+.plan-usage-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--text-3);
+}
+.plan-usage-tick {
+  position: absolute;
+  left: 80%;
+  top: -2px;
+  bottom: -2px;
+  width: 1.5px;
+  background: var(--text-2, var(--text-3));
+}
+.tone-amber .plan-usage-fill {
+  background: var(--amber);
+}
+.tone-red .plan-usage-fill {
+  background: var(--red);
+}
+.tone-green .plan-usage-fill {
+  background: var(--green);
+}
+.tone-red .plan-usage-reset {
+  color: var(--red);
+}
 .conn {
   display: flex;
   align-items: center;

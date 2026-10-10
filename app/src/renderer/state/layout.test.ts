@@ -46,11 +46,11 @@ describe("keyWidth", () => {
 
 describe("parseLayout", () => {
   test("round-trips", () => {
-    const l = { sidebarCollapsed: true, sidebarWidth: 300, browserSizeRow: true };
+    const l = { ...DEFAULT_LAYOUT, sidebarCollapsed: true, sidebarWidth: 300, browserSizeRow: true };
     expect(parseLayout(serializeLayout(l))).toEqual(l);
   });
   test("a stored detailWidth from before ticket panes is ignored", () => {
-    expect(parseLayout(JSON.stringify({ sidebarCollapsed: true, sidebarWidth: 300, detailWidth: 720 }))).toEqual({ sidebarCollapsed: true, sidebarWidth: 300, browserSizeRow: false });
+    expect(parseLayout(JSON.stringify({ sidebarCollapsed: true, sidebarWidth: 300, detailWidth: 720 }))).toEqual({ ...DEFAULT_LAYOUT, sidebarCollapsed: true, sidebarWidth: 300 });
   });
   test("missing or corrupt storage falls back to the defaults", () => {
     for (const raw of [null, undefined, "", "{", "null", "[]", "42", '"x"']) expect(parseLayout(raw)).toEqual(DEFAULT_LAYOUT);

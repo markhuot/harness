@@ -8,6 +8,7 @@ import { ProjectKey } from "../components/ProjectKey";
 import { forgetProjectPanes } from "../state/panes";
 import { keysArea, runCommand, useCommands } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
+import { PlanUsage } from "./PlanUsage";
 import { countSegments, sidebarCounts, type StatusCounts } from "../state/sidebarCounts";
 
 export function Sidebar({
@@ -198,6 +199,7 @@ export function Sidebar({
         </div>
 
         <div className="sidebar-foot">
+          <PlanUsage />
           <NavItem icon="settings" label="Settings" active={route.view === "settings"} onClick={() => navigate({ view: "settings", section: null })} />
           <div className={`conn ${state.connected ? "on" : "off"}`} title={client.baseUrl}>
             <span className="conn-dot" />
