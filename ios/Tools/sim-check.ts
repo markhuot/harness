@@ -100,6 +100,9 @@
 //      coordinates, so they don't run here. SIM_CHECK_LANDSCAPE=1 runs the panel on a landscape-only
 //      build (ios/ARCHITECTURE.md § iPad layout), mapping taps and rotating shots.
 //
+//   --usage: the sidebar's plan-usage gauges, against a proxy that fakes GET /usage (and pushes usage.updated)
+//      in front of the daemon. Add --shots to keep its screenshots; --ipad for the split view's sidebar.
+//
 //   It runs on the shared harness-shared simulator under its lock, e.g. `--only=connect`; --udid
 //      still names a specific existing device.
 //
@@ -108,7 +111,7 @@
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--ipad]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--usage] [--ipad]
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -143,8 +146,9 @@ const mentionsOnly = flag("mentions");
 const attachmentsOnly = flag("attachments");
 const draftsOnly = flag("drafts");
 const sheetsOnly = flag("sheets");
-const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly || memoryOnly);
-if (ipad && !walkThrough && !sheetsOnly) throw new Error("--ipad takes the walk-through's screens or --sheets, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
+const usageOnly = flag("usage");
+const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly || memoryOnly || usageOnly);
+if (ipad && !walkThrough && !sheetsOnly && !usageOnly) throw new Error("--ipad takes the walk-through's screens, --sheets or --usage, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 checkDisk();
@@ -675,6 +679,75 @@ const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
   stdout: Bun.file(join(home, "daemon.out")),
   stderr: Bun.file(join(home, "daemon.err")),
 });
+// --usage: the dummy driver reports no plan usage, and the real ones read the account's login, so
+// the app talks to this proxy instead: it forwards everything to the daemon (HTTP and the event
+// socket) except GET /usage, which it answers from `usageReport`, and it can push usage.updated.
+type UsageReport = { drivers: unknown[] };
+const WEEK_S = 7 * 86400;
+const usageNow = () => Date.now();
+/** A window `elapsed` of the way through `windowSeconds`. */
+const usageWindow = (id: string, label: string, used: number, windowSeconds: number, elapsed: number) => ({
+  id, label, usedPercent: used, windowSeconds, resetsAt: Math.round(usageNow() + (1 - elapsed) * windowSeconds * 1000),
+});
+/** Claude: amber 5-hour (red when projected), a weekly that's green projected, an Opus week too early to project, a Sonnet week that's full. Copilot can't be read. */
+const usageFixture = (fiveHourUsed = 82): UsageReport => ({
+  drivers: [
+    {
+      driver: "claude-code", name: "Claude Code", fetchedAt: usageNow() - 180_000,
+      windows: [
+        usageWindow("five_hour", "5-hour", fiveHourUsed, 18000, 1 - (2 * 3600 + 14 * 60) / 18000),
+        usageWindow("seven_day", "Weekly", 45, WEEK_S, 0.8),
+        usageWindow("seven_day_opus", "Weekly · Opus", 2, WEEK_S, 0.05),
+        usageWindow("seven_day_sonnet", "Weekly · Sonnet", 100, WEEK_S, 0.5),
+      ],
+    },
+    { driver: "github-copilot", name: "GitHub Copilot", windows: [], error: "Sign in to GitHub to see Copilot usage", fetchedAt: usageNow() - 180_000 },
+  ],
+});
+let usageReport: UsageReport = usageFixture();
+const usageClients = new Set<{ send(data: string): void }>();
+const pushUsage = (r: UsageReport) => {
+  usageReport = r;
+  for (const c of usageClients) c.send(JSON.stringify({ kind: "usage.updated", usage: r }));
+};
+type ProxySocket = { data: { url: string; headers: Record<string, string>; up?: WebSocket; queue: string[] }; send(d: string): void; close(): void };
+const usageProxy = usageOnly
+  ? Bun.serve<ProxySocket["data"]>({
+      port: 0,
+      async fetch(req, server) {
+        const url = new URL(req.url);
+        const upstream = `${base}${url.pathname}${url.search}`;
+        if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+          const headers: Record<string, string> = {};
+          req.headers.forEach((v, k) => { if (/^(authorization|cookie|x-)/i.test(k)) headers[k] = v; });
+          if (server.upgrade(req, { data: { url: upstream.replace(/^http/, "ws"), headers, queue: [] } })) return undefined as unknown as Response;
+          return new Response("upgrade failed", { status: 400 });
+        }
+        if (req.method === "GET" && url.pathname === "/usage") return Response.json(usageReport);
+        return fetch(upstream, { method: req.method, headers: req.headers, body: req.body, redirect: "manual" });
+      },
+      websocket: {
+        open(ws: ProxySocket) {
+          usageClients.add(ws);
+          const up = new WebSocket(ws.data.url, { headers: ws.data.headers } as never);
+          ws.data.up = up;
+          up.onopen = () => { for (const m of ws.data.queue) up.send(m); ws.data.queue = []; };
+          up.onmessage = (e) => ws.send(typeof e.data === "string" ? e.data : String(e.data));
+          up.onclose = () => ws.close();
+        },
+        message(ws: ProxySocket, m: string | Buffer) {
+          const up = ws.data.up;
+          if (up?.readyState === WebSocket.OPEN) up.send(String(m));
+          else ws.data.queue.push(String(m));
+        },
+        close(ws: ProxySocket) {
+          usageClients.delete(ws);
+          ws.data.up?.close();
+        },
+      } as never,
+    })
+  : null;
+const usageBase = usageProxy ? `http://127.0.0.1:${usageProxy.port}` : base;
 // The temp dirs go however the run ends (the finally at the bottom, process.exit, an uncaught
 // error, Ctrl-C), except with --keep, which leaves the daemon running in them. A run killed
 // outright (SIGKILL) can't clean up; the next run's reap (Tools/sim.ts) does it instead.
@@ -2614,6 +2687,98 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
 }
 
 /**
+ * --usage: the sidebar's plan-usage gauges, against the proxy's fixture (see usageFixture). Used so
+ * far, Projected at reset, the driver filter, Hide, the unreadable driver's reason, and a live
+ * usage.updated. Screenshots go with --shots.
+ */
+async function usageChecks(udid: string) {
+  const showSidebar = async () => {
+    if (ipad) await toggleSidebar(udid, true);
+    else await goto(udid, "harness://projects", (l) => l.includes("Inbox"));
+    await until("the plan usage section", async () => ((await labels(udid)).includes("Plan usage") ? true : null), 8000);
+  };
+  const rowLabels = async () => (await labels(udid)).filter((l) => /^(Claude Code|GitHub Copilot)\b/.test(l));
+  const has = async (prefix: string) => (await rowLabels()).find((l) => l.startsWith(prefix));
+  const waitFor = (what: string, fn: () => Promise<unknown>) => until(what, async () => ((await fn()) ? true : null), 8000);
+  const choose = async (item: string) => {
+    await tapWhere(udid, "Plan usage options");
+    await tapWhere(udid, item);
+    await Bun.sleep(400);
+  };
+  await showSidebar();
+
+  await check("usage: one row per window, used so far, with its reset", async () => {
+    await waitFor("the 5-hour row", () => has("Claude Code 5-hour: 82%, resets in 2h"));
+    const rows = await rowLabels();
+    for (const want of ["Claude Code Weekly: 45%", "Claude Code Weekly · Opus: 2%", "Claude Code Weekly · Sonnet: 100%, Limited until"]) {
+      if (!rows.some((l) => l.startsWith(want))) throw new Error(`no row starting "${want}" in ${JSON.stringify(rows)}`);
+    }
+    if (!rows.every((l) => l.includes("updated 3m ago"))) throw new Error(`a row doesn't say when it was updated: ${JSON.stringify(rows)}`);
+    await shot(udid, "usage-used");
+    return `${rows.length} rows`;
+  });
+
+  await check("usage: an unreadable driver says why, with no bar", async () => {
+    const row = await has("GitHub Copilot: Sign in to GitHub");
+    if (!row) throw new Error(`rows: ${JSON.stringify(await rowLabels())}`);
+    return row;
+  });
+
+  await check("usage: the info popover explains the limits", async () => {
+    await tapWhere(udid, "About plan usage");
+    await waitFor("the explanation", async () => (await labels(udid)).some((l) => l.startsWith("How much of your plan's usage limits")));
+    await shot(udid, "usage-info");
+    await axe("tap", "-x", "20", "-y", "120", "--udid", udid);
+    await until("the popover closes", async () => ((await labels(udid)).some((l) => l.startsWith("How much of your plan's usage limits")) ? null : true), 5000);
+    return "shown and dismissed";
+  });
+
+  await check("usage: Projected at reset shows pace, the tick and too-early", async () => {
+    await tapWhere(udid, "Plan usage options");
+    await shot(udid, "usage-menu");
+    await tapWhere(udid, "Projected at reset");
+    await Bun.sleep(400);
+    await waitFor("pace text", () => has("Claude Code Weekly: on pace for 56% · 45% used, resets"));
+    if (!(await has("Claude Code 5-hour: on pace for 14"))) throw new Error(`rows: ${JSON.stringify(await rowLabels())}`);
+    if (!(await has("Claude Code Weekly · Opus: too early to project · 2% used"))) throw new Error(`rows: ${JSON.stringify(await rowLabels())}`);
+    const sonnet = await has("Claude Code Weekly · Sonnet: 100%, Limited until");
+    if (!sonnet) throw new Error(`a full window isn't limited in projected mode: ${JSON.stringify(await rowLabels())}`);
+    if (!(await has("Claude Code Weekly: on pace for 56% · 45% used"))?.includes("80% of the week gone")) throw new Error("no '80% of the week gone'");
+    await shot(udid, "usage-projected");
+    return "projected";
+  });
+
+  await check("usage: the filter shows one driver, and the choice survives a relaunch", async () => {
+    await choose("GitHub Copilot");
+    await waitFor("only copilot", async () => !(await has("Claude Code")) && !!(await has("GitHub Copilot")));
+    await shot(udid, "usage-filtered");
+    await simctl("terminate", udid, BUNDLE).catch(() => {});
+    await simctl("launch", udid, BUNDLE);
+    await showSidebar();
+    await waitFor("still only copilot", async () => !(await has("Claude Code")) && !!(await has("GitHub Copilot")));
+    return "filtered, saved per device";
+  });
+
+  await check("usage: Hide collapses the section to its header", async () => {
+    await choose("Hide");
+    await waitFor("no rows", async () => (await rowLabels()).length === 0);
+    if (!(await labels(udid)).includes("Plan usage")) throw new Error("the header went too");
+    await shot(udid, "usage-hidden");
+    await choose("All drivers");
+    await waitFor("the rows are back", () => has("Claude Code 5-hour"));
+    return "hidden and restored";
+  });
+
+  await check("usage: a usage.updated event moves the bars", async () => {
+    await choose("Used so far");
+    await waitFor("used so far", () => has("Claude Code 5-hour: 82%"));
+    pushUsage(usageFixture(91));
+    await waitFor("the new percent", () => has("Claude Code 5-hour: 91%"));
+    return "82% → 91%";
+  });
+}
+
+/**
  * --attachments: a ticket whose spec shows real images and a video inline, and one attachment that
  * won't load. The dummy's /tools directive calls update_spec on the fresh ticket's revision 1 with
  * markdown images of local files (relative to the project folder, its workdir), which the service
@@ -3430,7 +3595,7 @@ try {
   token = readFileSync(join(home, "token"), "utf8").trim();
   // The simulators boot, the app builds and the daemon seeds all at once.
   // The app installs as soon as it's built and its simulator is up.
-  const pairUrl = buildPairUrl(base, token);
+  const pairUrl = buildPairUrl(usageBase, token);
   // What the run does and which tickets it needs, decided before anything is seeded: the entries
   // are built against stand-ins, since their links name keys that don't exist yet.
   const stub = { key: "X", id: "X", name: "X" };
@@ -3448,7 +3613,7 @@ try {
   );
   // The walk-through pairs as soon as its tickets exist, while their runs settle; the modes once seeded.
   const paired = walkThrough ? devices.then((udids) => ticketsUp.then(() => pairAll(udids)).then(() => udids)) : devices;
-  const [udids, seeded, paged, sticky, typing, mentioned, media, drafting, sheeted] = await Promise.all([
+  const [udids, seeded, paged, sticky, typing, mentioned, media, drafting, sheeted, usageSeed] = await Promise.all([
     paired,
     selection ? timed("seed", () => seed(seedNeeds)) : null,
     pagingOnly ? timed("seed paging", seedPaging) : null,
@@ -3458,6 +3623,7 @@ try {
     attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
     draftsOnly ? timed("seed drafts", () => seedTicket("DRFT", "Warm up")) : null,
     sheetsOnly || memoryOnly ? timed("seed sheets", seedSheets) : null,
+    usageOnly ? timed("seed usage", () => seedTicket("USE", "Warm up")) : null,
   ]);
   if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[...seedNeeds].join(", ") || "no tickets"}`);
   if (paged) console.log(`simulator ${udids[0]}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
@@ -3471,6 +3637,7 @@ try {
   if (mentioned) await timed("mode: mentions", () => mentionChecks(udid, mentioned));
   if (media) await timed("mode: attachments", () => attachmentChecks(udid, media));
   if (drafting) await timed("mode: drafts", () => draftChecks(udid, drafting));
+  if (usageSeed) await timed("mode: usage", () => usageChecks(udid));
   if (sheeted && sheetsOnly)
     await timed("mode: sheets", async () => {
       if (ipad) {

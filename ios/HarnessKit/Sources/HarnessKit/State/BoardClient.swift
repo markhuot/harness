@@ -24,6 +24,12 @@ public protocol BoardClient: LoaderClient, DetailClient {
     func getSettings() async throws -> PublicSettings
     func listDrivers() async throws -> [DriverInfo]
     func listActivity(_ key: String) async throws -> [ActivityEntry]
+    /// The plan-usage gauges' readings; a client without them throws and the store keeps no report.
+    func getUsage() async throws -> PlanUsageReport
+}
+
+extension BoardClient {
+    public func getUsage() async throws -> PlanUsageReport { throw URLError(.unsupportedURL) }
 }
 
 extension HarnessClient: BoardClient {}
