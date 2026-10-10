@@ -5,6 +5,7 @@
 // "Show Sidebar" checkmark) in sync.
 
 import { useSyncExternalStore } from "react";
+import { parseFilter, parseMode, type UsageFilter, type UsageMode } from "./planUsage";
 
 export const SIDEBAR_MIN = 180;
 export const SIDEBAR_MAX = 400;
@@ -17,9 +18,12 @@ export interface Layout {
   sidebarWidth: number | null;
   /** The Browser pane's second row (Desktop | Mobile, Responsive, width × height), in every pane. */
   browserSizeRow: boolean;
+  /** Sidebar plan-usage gauges: which driver's rows ("all", one driver's id, or "hide") and how they read. */
+  usageFilter: UsageFilter;
+  usageMode: UsageMode;
 }
 
-export const DEFAULT_LAYOUT: Layout = { sidebarCollapsed: false, sidebarWidth: null, browserSizeRow: false };
+export const DEFAULT_LAYOUT: Layout = { sidebarCollapsed: false, sidebarWidth: null, browserSizeRow: false, usageFilter: "all", usageMode: "used" };
 
 export interface Bounds {
   min: number;
@@ -80,6 +84,8 @@ export function parseLayout(raw: string | null | undefined): Layout {
     sidebarCollapsed: o.sidebarCollapsed === true,
     sidebarWidth: widthOrNull(o.sidebarWidth, sidebarBounds()),
     browserSizeRow: o.browserSizeRow === true,
+    usageFilter: parseFilter(o.usageFilter),
+    usageMode: parseMode(o.usageMode),
   };
 }
 

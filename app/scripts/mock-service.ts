@@ -48,7 +48,7 @@ import type {
 } from "@harness/shared";
 import type { PromptEntry, PromptId } from "@harness/shared";
 import { buildPairUrl, canonicalGroup, checkProjectKey, isCompletionAction, isLegacyMirror, isTicketKey, LISTEN_MODES, normalizeProjectColor, normalizeProjectGroup, offeredCompletionActions, outputTitle, projectGroups, PROMPT_IDS, resolveCompletionAction, reviewPassed } from "@harness/shared";
-import type { CompletionAction } from "@harness/shared";
+import type { CompletionAction, PlanUsageReport, PlanWindow } from "@harness/shared";
 // The real catalog, so the Prompts screen shows the text runs get.
 import { isPromptId, PROMPTS, promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
 // The real diff, so the Spec tab's history shows what the service would send.
@@ -282,6 +282,20 @@ const sockets = new Set<ServerWebSocket<WsData>>();
 function sendMsg(ws: ServerWebSocket<WsData>, msg: ServerMessage) {
   ws.send(JSON.stringify(msg));
 }
+
+/** GET /usage: Claude's two windows (one amber) and Copilot's Premium requests (limited). PUT /mock/usage swaps it and pushes usage.updated. */
+function defaultUsage(): PlanUsageReport {
+  const t = Date.now();
+  const win = (id: PlanWindow["id"], label: string, usedPercent: number, resetsIn: number, windowSeconds: number): PlanWindow => ({ id, label, usedPercent, resetsAt: t + resetsIn, windowSeconds });
+  const m = 60_000;
+  return {
+    drivers: [
+      { driver: "claude-code", name: "Claude Code", status: "ok", error: null, fetchedAt: t - 3 * m, windows: [win("five_hour", "5-hour", 42, 134 * m, 18000), win("seven_day", "Weekly", 78, 3 * 86_400_000, 604800)] },
+      { driver: "github-copilot", name: "GitHub Copilot", status: "limited", error: null, fetchedAt: t - 3 * m, windows: [win("monthly", "Premium requests", 100, 9 * 3_600_000, 2_592_000)] },
+    ],
+  };
+}
+let usage: PlanUsageReport = defaultUsage();
 
 function broadcast(event: HarnessEvent) {
   const isBrowser = event.kind === "browser.frame" || event.kind === "browser.state";
@@ -1550,6 +1564,13 @@ async function route(req: Request, url: URL): Promise<Response> {
   const method = req.method;
   const parts = url.pathname.split("/").filter(Boolean);
   const [a, b, c] = parts;
+
+  if (a === "usage" && !b && method === "GET") return ok(usage);
+  if (a === "mock" && b === "usage" && method === "PUT") {
+    usage = (await req.json()) as PlanUsageReport;
+    broadcast({ kind: "usage.updated", usage });
+    return ok(usage);
+  }
 
   if (a === "service" && b === "restart" && !c && method === "POST") {
     STALE = "";
