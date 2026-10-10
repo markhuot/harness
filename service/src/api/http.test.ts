@@ -722,6 +722,42 @@ describe("http api", () => {
     await expect(client.answerApproval(t.key, { decision: "deny" })).rejects.toMatchObject({ status: 409 });
     await expect(client.request("POST", `/tickets/${t.key}/approval`, { decision: "maybe" })).rejects.toMatchObject({ status: 409 });
   });
+
+  test("POST /tickets/:key/approval with allow_once resumes the run without remembering the tool", async () => {
+    const { client, dir, h, fake } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, spec: 'x /tool Bash {"command":"npm test"}', driver: "fake" });
+    await h.orchestrator.idle();
+    expect((await client.getTicket(t.key)).ticket.pendingApproval?.toolName).toBe("Bash");
+    const res = await client.answerApproval(t.key, { decision: "allow_once" });
+    expect([res.status, res.pendingApproval, res.allowedTools ?? []]).toEqual(["in_progress", null, []]);
+    await h.orchestrator.idle();
+    expect(fake.approvals.map((a) => a.behavior)).toEqual(["deny", "allow"]);
+    expect((await client.getTicket(t.key)).ticket.allowedTools ?? []).toEqual([]);
+  });
+
+  test("PATCH /projects/:id saves the 'When approved' default, and refuses one the project doesn't offer", async () => {
+    const { client, dir } = await boot();
+    const p = await client.createProject({ path: dir });
+    expect((await client.updateProject(p.id, { completionAction: "custom" })).completionAction).toBe("custom");
+    expect((await client.listProjects()).find((x) => x.id === p.id)?.completionAction).toBe("custom");
+    // Not an action at all, and an action that needs a git repository (this folder has none).
+    await expect(client.updateProject(p.id, { completionAction: "ship" as any })).rejects.toMatchObject({ status: 400 });
+    await expect(client.updateProject(p.id, { completionAction: "cleanup" })).rejects.toMatchObject({ status: 400 });
+    expect((await client.listProjects()).find((x) => x.id === p.id)?.completionAction).toBe("custom");
+  });
+
+  test("a ticket that skips its human review lands by itself once the agent review passes", async () => {
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, spec: "Which browsers does the install page support?", skipHumanReview: true });
+    await h.orchestrator.idle();
+    const done = (await client.getTicket(t.key)).ticket;
+    expect([done.status, done.humanReview, done.skipHumanReview]).toEqual(["done", "approved", true]);
+    // One approval, no second run: the review, then Completed.
+    const kinds = (await client.getTicket(t.key)).runs.map((r) => r.kind);
+    expect(kinds.filter((k) => k === "complete").length).toBeLessThanOrEqual(1);
+  });
 });
 
 describe("drafts over http", () => {

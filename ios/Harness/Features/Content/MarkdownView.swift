@@ -116,10 +116,7 @@ struct MarkdownView: View {
     /// headingSpace × its size below the block before it. A heading straight after another heading
     /// (`previous`) gets none of that and pulls in 4 pt closer than the usual gap.
     private func headingLead(_ level: Int?, after previous: Int?, _ style: MarkdownStyle) -> CGFloat {
-        guard let level else { return 0 }
-        if previous != nil { return -4 }
-        guard headingSpace > 0 else { return 0 }
-        return max(0, (headingSpace * style.headingSize(level)).rounded() - 10)
+        SpecHeadings.lead(level: level, after: previous, headingSpace: headingSpace, body: style.size)
     }
 
     private static func headingLevel(_ block: Markdown.Block) -> Int? {
@@ -169,12 +166,7 @@ struct MarkdownStyle {
     var font: Font { .scaled(size: size) }
     /// A heading's text size: a scale down from the body size + 7 pt (level 1) through +4, +2 and +0.5.
     func headingSize(_ level: Int) -> CGFloat {
-        switch level {
-        case 1: size + 7
-        case 2: size + 4
-        case 3: size + 2
-        default: size + 0.5
-        }
+        SpecHeadings.size(level: level, body: size)
     }
     /// A line height of round(size × lineHeight), as extra spacing over the font's own line height.
     var lineSpacing: CGFloat { (size * lineHeight).rounded() - size * 1.2 }

@@ -349,7 +349,7 @@ struct TicketDock: View {
     static let height = DockedCardMetrics.height
     static let detent = PresentationDetent.height(height)
     /// How far the board's bottom bar sits above the docked cards, the same on every phone.
-    static let barGap: CGFloat = 11
+    static let barGap = DockMetrics.barGap
 
     /// What a section gives up at its bottom while a sheet is docked, so the dock sits under the
     /// board's bottom bar rather than over it: everything below the docked sheet's top edge, less

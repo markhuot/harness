@@ -69,14 +69,7 @@ struct DockedTicketLabel: View {
 
 /// The size every minimized card shares, on both platforms: the height the single docked sheet
 /// had, and the gap between cards.
-enum DockedCardMetrics {
-    static let height: CGFloat = 64
-    static let spacing: CGFloat = 8
-    /// A stack of `rows` cards, gaps included.
-    static func stackHeight(rows: Int) -> CGFloat {
-        rows > 0 ? CGFloat(rows) * height + CGFloat(rows - 1) * spacing : 0
-    }
-}
+typealias DockedCardMetrics = DockMetrics
 
 /// A docked ticket minimized: its own fully rounded glass capsule, as the single docked sheet was,
 /// with its status dot (the board's colors; a pencil for New session), ref and truncated title, and
@@ -185,7 +178,7 @@ struct DockedMoreCard: View {
         .buttonStyle(.plain)
         .frame(height: DockedCardMetrics.height)
         .glassEffect(.regular.interactive(), in: .capsule)
-        .accessibilityLabel(all ? "\(count) docked tickets" : "\(count) more docked tickets")
+        .accessibilityLabel(DockMetrics.moreLabel(count: count, all: all))
         .accessibilityHint("Double-tap to list them all")
         .accessibilityIdentifier("ticket-dock-more")
     }
