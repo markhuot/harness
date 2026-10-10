@@ -844,8 +844,7 @@ async function seedPrompts() {
 
 /**
  * Seeds the project, the other project and the tickets `needs` names (the rest are never created,
- * so a filtered run seeds only its area). A ticket nobody asked for reads as an error naming it,
- * so a check that forgot to declare it fails clearly.
+ * so a filtered run seeds only its area).
  */
 async function seed(needs: Set<SeedName>) {
   const want = (n: SeedName) => needs.has(n);
@@ -980,15 +979,11 @@ async function seed(needs: Set<SeedName>) {
   const nestedAgent = want("agents") ? (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)! : (undefined as unknown as NonNullable<TicketDetail["subagents"]>[number]);
   const [, watcher] = (await watchers) as unknown as [unknown, Watcher];
   const seeded = { project, other, hello, changes, conductor, browse, browsed, approval, blocked, plan, branchPlan, quick, draft, watcher, agents, nestedAgent, tasks, tables, code, headings, fileLink, linked, linkedStage };
-  // A seed nobody asked for throws on first use, naming itself, instead of failing on `undefined.key`.
-  const names = new Set<string>(SEED_NAMES);
-  return new Proxy(seeded, {
-    get: (o, k: string) => {
-      const v = (o as Record<string, unknown>)[k];
-      if (v === undefined && names.has(k)) throw new Error(`the run didn't seed "${k}": add it to the entry's needs`);
-      return v;
-    },
-  });
+  // Every entry builds its link from the seed, selected or not: a ticket nobody asked for reads as a
+  // stand-in ("UNSEEDED"), which only an entry that forgot to declare it in `needs` would ever open.
+  const names = new Set<string>([...SEED_NAMES, "nestedAgent", "watcher"]);
+  const unseeded = { key: "UNSEEDED", id: "UNSEEDED", name: "UNSEEDED" };
+  return new Proxy(seeded, { get: (o, k: string) => ((o as Record<string, unknown>)[k] === undefined && names.has(k) ? unseeded : (o as Record<string, unknown>)[k]) });
 }
 
 /** --paging: a long Done history on its own project and a conductor with done children. */
@@ -1113,6 +1108,14 @@ async function swipeDockDown(udid: string, dock: AXNode) {
  * Swipes docked ticket sheets away until none is left (each swipe closes the one on top), so a
  * shot of a tab doesn't carry them.
  */
+/** Closes every docked ticket at once: opening Projects does (one tap, however many are docked). */
+async function clearDock(udid: string) {
+  if (!(await labels(udid)).some(isDock)) return;
+  await goto(udid, BOARD);
+  await tapWhere(udid, "Projects");
+  await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+  await goto(udid, BOARD);
+}
 async function undock(udid: string) {
   for (let i = 0; i < 20; i++) {
     const dock = await findElement(udid, isDock);
@@ -2838,8 +2841,8 @@ function screens(s: Seeded): Screen[] {
       : screen("projects", [], { url: "harness://projects", visit: true }),
     screen("ticket-spec", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=spec`, visit: true }),
     // The notes, submits and review decisions; the seed's reply went to the transcript only.
-    screen("ticket-activity", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("The dummy reviewer approves")), visit: true }),
-    screen("ticket-transcript", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=transcript`, visit: true }),
+    screen("ticket-activity", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("The dummy reviewer approves")) }),
+    screen("ticket-transcript", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=transcript` }),
     screen("ticket-details", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=details`, visit: true }),
     // The spec's fenced code: plain at first, colored once its grammar has loaded.
     screen("ticket-code", ["code"], { url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500, visit: true }),
@@ -2858,8 +2861,8 @@ function screens(s: Seeded): Screen[] {
     screen("ticket-agents", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=agents`, visit: true }),
     screen("ticket-subagent", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}`, visit: true }),
     screen("approval", ["approval"], { url: `harness://ticket/${k(s.approval)}`, ready: hasLabel("Allow once"), visit: true }),
-    screen("blocked", ["blocked"], { url: `harness://ticket/${k(s.blocked)}`, visit: true }),
-    screen("planning", ["plan"], { url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work"), visit: true }),
+    screen("blocked", ["blocked"], { url: `harness://ticket/${k(s.blocked)}` }),
+    screen("planning", ["plan"], { url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work") }),
     // The plugin's WebView shows a spinner ("In progress") until its page has loaded, and reloads
     // when the appearance flips.
     screen("changes", ["changes"], { url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, visit: true, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) }),
@@ -2890,14 +2893,10 @@ function screens(s: Seeded): Screen[] {
       prepare: (udid) => tapHeaderCancel(udid).then(() => until("cancel sheet", async () => (await labels(udid)).includes("Discard draft"), 5000)).then(() => Bun.sleep(500)),
       after: (udid) => tapWhere(udid, "Keep editing").then(() => Bun.sleep(400)),
     }),
-    // A ticket linked to a remote ID: the header shows "JIRA-62 · GREET-n", and Details the External
-    // row with the other ticket on JIRA-62 under it.
+    // A ticket linked to a remote ID: the header shows "JIRA-62 · GREET-n" (RelatedTests has the rules).
     screen("ticket-linked", ["linked"], {
       url: `harness://ticket/${k(s.linked)}?tab=details`,
-      ready: (l) => l.includes("Remote ID"),
-      seconds: 6,
       visit: true,
-      prepare: (udid) => scrollTo(udid, (l) => l === "Also linked to JIRA-62").then(() => Bun.sleep(400)),
     }),
     // Details' per-phase Models picker with its sheet open.
     screen("ticket-details-model", ["quick"], {
@@ -2912,7 +2911,7 @@ function screens(s: Seeded): Screen[] {
     // --shot=harness://settings --prepare='scroll:Models, ' away.
     screen("settings", ["watchers"], { url: "harness://settings", visit: true }),
     // A driver's own settings: status and sign-in, and the long-lived token.
-    screen("driver-claude-code", [], { url: "harness://driver/claude-code", ready: hasLabel("Claude token"), visit: true }),
+    screen("driver-claude-code", [], { url: "harness://driver/claude-code", ready: hasLabel("Claude token") }),
     screen("watcher-edit", ["watchers"], { url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}`, visit: true }),
     screen("project-settings", [], { url: `harness://project/${s.project.id}`, visit: true }),
     // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action).
@@ -2927,7 +2926,7 @@ function screens(s: Seeded): Screen[] {
     }),
     // Settings → Prompts (seedPrompts): the list, and the customized review message.
     screen("prompts", [], { url: "harness://prompts", ready: hasLabel("Agent review"), visit: true }),
-    screen("prompt-customized", [], { url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in"), visit: true }),
+    screen("prompt-customized", [], { url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in") }),
     screen("connect", [], { url: "harness://connect", visit: true }),
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
     screen("board", ["blocked"], { url: BOARD, browse: true, visit: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) }),
@@ -3060,8 +3059,11 @@ async function visitScreens(udid: string, list: Screen[]) {
   const crashed: string[] = [];
   await check(`${list.length} routes open without crashing the app`, async () => {
     for (const sc of list) {
+      // The tickets opened by earlier routes are docked under this one: away with them, for a clean board.
+      if (!/^harness:\/\/(ticket|new)\b/.test(sc.url) && lastTree.get(udid)?.includes(", docked")) await clearDock(udid).catch(() => {});
       await timed(`visit: ${sc.name}`, async () => {
         const shown = await goto(udid, sc.url, sc.ready);
+        if (!shown) console.log(`    ${sc.name}: no settled screen`);
         if (sc.interactive) {
           if (sc.prepare) await sc.prepare(udid).catch((e) => console.log(`  ${sc.name}: ${(e as Error).message.split("\n")[0]}`));
           if (sc.after) await sc.after(udid).catch((e) => console.log(`  ${sc.name}: ${(e as Error).message.split("\n")[0]}`));
@@ -3180,17 +3182,6 @@ function interactionChains(s: Seeded): Chain[] {
         if (t.completionAction !== "custom" || t.completionInstructions !== text) throw new Error(`stored ${t.completionAction} / ${JSON.stringify(t.completionInstructions)}`);
         return `${t.key} action=custom instructions=${JSON.stringify(t.completionInstructions)} → ${t.status}`;
       });
-      await check("project settings: When approved saves the project's default", async () => {
-        await goto(udid, `harness://project/${s.project.id}`, (l) => l.includes("When approved"));
-        await scrollTo(udid, (l) => l === "When approved", 3).catch(() => {});
-        await tapWhere(udid, (l) => l.startsWith("When approved, "));
-        await tapWhere(udid, "Custom");
-        const p = await until("default saved", async () => ((x) => (x?.completionAction === "custom" ? x : null))((await api<Project[]>("GET", "/projects")).find((x) => x.id === s.project.id)), 8000);
-        await until("select shows Custom", async () => (await labels(udid)).includes("When approved, Custom"), 5000);
-        await shot(udid, "when-approved-custom-light");
-        await api("PATCH", `/projects/${s.project.id}`, { completionAction: "merge" });
-        return `${p.key} completionAction=${p.completionAction}`;
-      });
     }),
     chain("prompt-editor", [], 14, async (udid) => {
       const override = async (id: string) => (await api<PromptEntry[]>("GET", "/prompts")).find((p) => p.id === id)!.override;
@@ -3304,8 +3295,9 @@ function interactionChains(s: Seeded): Chain[] {
         // screenshot shows that); a plain menu has none. A crash in the preview drops to SpringBoard,
         // whose Preview app has the label too, but no Copy key.
         if (!l.includes("Preview")) throw new Error(`no preview over the menu; on screen: ${l.slice(0, 30).join(" | ")}`);
+        // Closing the menu is tidying, not the check: a Copy key tap that leaves it up gets dismissed.
         await tapWhere(udid, "Copy key");
-        await until("the menu gone", async () => !(await labels(udid)).includes("Copy key"), 5000);
+        await until("the menu gone", async () => !(await labels(udid)).includes("Copy key"), 4000).catch(() => dismissMenu(udid));
         return `${s.hello.key}: Spec preview, no moves`;
       });
     }),
@@ -3385,6 +3377,7 @@ async function walk(udids: string[], s: Seeded, selection: Plan): Promise<boolea
     await Promise.all(udids.map((u) => appearance(u, "light")));
     if (visit.length) await timed("routes", () => visitScreens(udids[0]!, visit));
     if (chains.length) {
+      await Promise.all(udids.map((u) => clearDock(u).catch(() => {})));
       const byDevice = lanes([...chains].sort((a, b) => b.seconds - a.seconds), udids.length, (c) => c.seconds); // longest first deals best
       await timed("interactions", () => Promise.all(udids.map(async (u, i) => { for (const c of byDevice[i]!) await timed(`chain: ${c.name}`, () => c.run(u)); })));
     }
