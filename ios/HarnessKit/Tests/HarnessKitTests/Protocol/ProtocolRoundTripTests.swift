@@ -54,6 +54,8 @@ struct ProtocolRoundTripTests {
         "DriverInfo": rt(DriverInfo.self),
         "ModelInfo": rt(ModelInfo.self),
         "DriverModels": rt(DriverModels.self),
+        "PlanUsageReport": rt(PlanUsageReport.self),
+        "SessionActionBody": rt(SessionActionBody.self),
         "ListenSetting": rt(ListenSetting.self),
         "Settings": rt(Settings.self),
         "PublicSettings": rt(PublicSettings.self),
@@ -268,7 +270,7 @@ struct ProtocolRoundTripTests {
             #expect(Set(seen) == Set(expected), "\(name): samples decode to \(Set(seen).sorted()), TS declares \(expected.sorted())")
         }
         #expect(fixture["HarnessEvent"] == HarnessEvent.knownKinds)
-        #expect(HarnessEvent.knownKinds.count == 19)
+        #expect(HarnessEvent.knownKinds.count == 20)
     }
 
     // MARK: Forward compatibility

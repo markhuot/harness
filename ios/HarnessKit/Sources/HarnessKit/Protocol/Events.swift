@@ -34,6 +34,8 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     case browserState(sessionId: String, state: BrowserState, viewerId: String? = nil)
     /// The service's code on disk changed since it started (or changed back)
     case serviceStatus(status: ServiceStatus)
+    /// Plan usage (GET /usage) was fetched again
+    case usageUpdated(usage: PlanUsageReport)
     case unknown(kind: String, raw: JSONValue)
 
     /// Every `kind` this build knows, in protocol.ts order.
@@ -41,7 +43,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         "project.upserted", "project.deleted", "ticket.upserted", "ticket.deleted", "session.upserted",
         "session.deleted", "run.upserted", "transcript.appended", "subagent.upserted", "transcript.delta",
         "activity.added", "spec.revised", "watcher.upserted", "watcher.deleted", "settings.updated", "devices.changed",
-        "browser.frame", "browser.state", "service.status",
+        "browser.frame", "browser.state", "service.status", "usage.updated",
     ]
 
     /// The wire discriminator.
@@ -66,6 +68,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case .browserFrame: "browser.frame"
         case .browserState: "browser.state"
         case .serviceStatus: "service.status"
+        case .usageUpdated: "usage.updated"
         case let .unknown(kind, _): kind
         }
     }
@@ -106,6 +109,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
             self = .browserState(
                 sessionId: try field("sessionId"), state: try field("state"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
         case "service.status": self = .serviceStatus(status: try field("status"))
+        case "usage.updated": self = .usageUpdated(usage: try field("usage"))
         default: self = .unknown(kind: kind, raw: try JSONValue(from: decoder))
         }
     }
@@ -150,6 +154,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
             try c.encode(state, forKey: "state")
             try c.encodeIfPresent(viewerId, forKey: "viewerId")
         case let .serviceStatus(status): try c.encode(status, forKey: "status")
+        case let .usageUpdated(usage): try c.encode(usage, forKey: "usage")
         case .devicesChanged, .unknown: break
         }
     }

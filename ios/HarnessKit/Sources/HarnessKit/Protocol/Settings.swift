@@ -11,6 +11,9 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Legacy: the Work choice's driver
     public var defaultDriver: String
     public var maxConcurrentRuns: Int
+    /// Where the ticket header's context gauge reads "full" (tokens, 10k–2M, default 250k). nil from an
+    /// older service; `contextLimit` reads the default then.
+    public var contextGaugeLimit: Int?
     /// Default permission mode (projects and tickets may override it). Default "auto".
     public var permissionMode: PermissionMode
     /// Who judges actions in auto mode for drivers without their own permission system
@@ -65,8 +68,9 @@ public struct Settings: Codable, Sendable, Equatable {
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
-        notifications: NotificationSettings? = nil
+        notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil
     ) {
+        self.contextGaugeLimit = contextGaugeLimit
         self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -101,6 +105,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var phaseModels: PhaseModels?
     public var defaultDriver: String
     public var maxConcurrentRuns: Int
+    /// Where the ticket header's context gauge reads "full" (tokens, 10k–2M, default 250k). nil from an
+    /// older service; `contextLimit` reads the default then.
+    public var contextGaugeLimit: Int?
     public var permissionMode: PermissionMode
     public var classifier: ClassifierBackend
     public var defaultModels: [String: String?]
@@ -128,8 +135,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
-        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil
+        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil
     ) {
+        self.contextGaugeLimit = contextGaugeLimit
         self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -151,6 +159,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
 
     /// claudeOauthTokenSet, or false when an older service doesn't send it.
     public var hasClaudeOauthToken: Bool { claudeOauthTokenSet ?? false }
+
+    /// contextGaugeLimit, or the default when an older service doesn't send it.
+    public var contextLimit: Int { contextGaugeLimit ?? ContextGaugeLimits.default }
 
     /// copilotGithubTokenSet, or false when an older service doesn't send it.
     public var hasCopilotGithubToken: Bool { copilotGithubTokenSet ?? false }
@@ -174,8 +185,18 @@ public struct DriverInfo: Codable, Sendable, Equatable, Identifiable {
     public var detail: String
     /// Whether POST /drivers/:id/login is supported
     public var supportsLogin: Bool
+    /// What the driver can do with a ticket's saved session (POST /tickets/:key/session); the apps
+    /// hide the rest. nil from an older service: neither.
+    public var sessionActions: SessionActions?
+    /// false: the driver reports no token counts, so its gauge stays empty. nil from an older service.
+    public var reportsContextUsage: Bool?
 
-    public init(id: String, name: String, description: String, available: Bool, authenticated: Bool, detail: String, supportsLogin: Bool) {
+    public init(
+        id: String, name: String, description: String, available: Bool, authenticated: Bool, detail: String, supportsLogin: Bool,
+        sessionActions: SessionActions? = nil, reportsContextUsage: Bool? = nil
+    ) {
+        self.sessionActions = sessionActions
+        self.reportsContextUsage = reportsContextUsage
         self.id = id
         self.name = name
         self.description = description

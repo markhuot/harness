@@ -113,6 +113,12 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var resumeAt: Patch<Timestamp>
     /// True while any agent run for this ticket is queued or running
     public var busy: Bool
+    /// True while a compact run for this ticket is queued or running: messages and ticket actions are
+    /// refused until it ends. nil from an older service.
+    public var compacting: Bool?
+    /// The size of the conversation the ticket's next resumed run re-reads (DESIGN.md "Context
+    /// gauge"); null when the ticket has no resumable session. Absent from an older service.
+    public var context: Patch<ContextUsage>
     /// A tool-permission request waiting on a human (claude-code driver). Ticket is blocked meanwhile.
     @Nullable public var pendingApproval: PendingApproval?
     /// Tools the human has allowed for every future call on this ticket ("Bash", "WebFetch", ...)
@@ -140,6 +146,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
         pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
+        compacting: Bool? = nil, context: Patch<ContextUsage> = .absent,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
         createdAt: Timestamp, updatedAt: Timestamp
@@ -182,6 +189,8 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.blockedReason = blockedReason
         self.resumeAt = resumeAt
         self.busy = busy
+        self.compacting = compacting
+        self.context = context
         self.pendingApproval = pendingApproval
         self.allowedTools = allowedTools
         self.permissionMode = permissionMode

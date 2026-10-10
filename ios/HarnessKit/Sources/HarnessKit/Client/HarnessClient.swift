@@ -235,6 +235,11 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/agent-review")
     }
 
+    /// Compact the ticket's saved session, or start a new one (DESIGN.md "Context gauge"); 409 while a run is going.
+    public func sessionAction(_ key: String, _ action: SessionActionBody.Action) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/session", body: SessionActionBody(action: action))
+    }
+
     public func cancelTicket(_ key: String) async throws -> Ticket {
         try await request("POST", "/tickets/\(key)/cancel")
     }
@@ -384,6 +389,11 @@ public final class HarnessClient: Sendable {
     }
 
     // MARK: Drivers & settings
+
+    /// The plan-usage gauges' readings (DESIGN.md "Plan usage").
+    public func getUsage() async throws -> PlanUsageReport {
+        try await request("GET", "/usage")
+    }
 
     public func listDrivers() async throws -> [DriverInfo] {
         try await request("GET", "/drivers")

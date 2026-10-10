@@ -415,6 +415,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var phaseModels: PhaseModelsPatch?
     public var defaultDriver: String?
     public var maxConcurrentRuns: Int?
+    public var contextGaugeLimit: Int?
     public var permissionMode: PermissionMode?
     public var classifier: ClassifierBackend?
     public var defaultModels: [String: String?]?
@@ -440,8 +441,9 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
-        prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil
+        prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil
     ) {
+        self.contextGaugeLimit = contextGaugeLimit
         self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -528,4 +530,13 @@ public struct DriverLoginResponse: Codable, Sendable, Equatable {
 public struct RotateTokenResponse: Codable, Sendable, Equatable {
     public var token: String
     public init(token: String) { self.token = token }
+}
+
+/// POST /tickets/:key/session: what to do with the ticket's saved session (takes effect on its next run).
+public struct SessionActionBody: Codable, Sendable, Equatable {
+    public enum Action: String, Codable, Sendable, Equatable {
+        case compact, new
+    }
+    public var action: Action
+    public init(action: Action) { self.action = action }
 }
