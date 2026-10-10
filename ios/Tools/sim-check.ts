@@ -551,10 +551,11 @@ async function appearance(udid: string, look: Look) {
 const FLIP_MS = 300;
 /**
  * Saves the screen as <name>.png. Validation takes none: only a run that asks for shots does, and
- * a failing check's own diagnostic ("…-failed") always does.
+ * a failing check's own diagnostic ("…-failed") always does, and so does `evidence`, a shot the
+ * check itself reads pixels from.
  */
-const shot = async (udid: string, name: string) => {
-  if (!shotsWanted && !name.includes("failed")) return;
+const shot = async (udid: string, name: string, evidence = false) => {
+  if (!shotsWanted && !evidence && !name.includes("failed")) return;
   const file = join(shots, `${name}${landscape ? "-landscape" : ""}.png`);
   await simctl("io", udid, "screenshot", file);
   if (landscape) await sh(["sips", "-r", "270", file], { quiet: true });
@@ -2404,7 +2405,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await until("keyboard up", keyboardTop, 8000);
     await Bun.sleep(600);
     const top = (await keyboardTop())!;
-    await shot(udid, "keyboard-new-session-corner");
+    await shot(udid, "keyboard-new-session-corner", true); // the check reads its pixels
     const file = join(shots, "keyboard-new-session-corner.png");
     const screen = (await tree(udid))[0]!.frame;
     const scale = Number(await sh(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width", "-of", "csv=p=0", file])) / screen.width;
@@ -2552,7 +2553,8 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
           .find((r) => r.argv.includes("--mcp-config"))?.stdin,
       15000,
     );
-    if (!sent.startsWith("/code-walk this branch")) throw new Error(`the CLI got ${JSON.stringify(sent.slice(0, 80))}`);
+    // The service wraps the spec in the run's context block, so it is in the prompt, not at its start.
+    if (!sent.includes("/code-walk this branch")) throw new Error(`the CLI got ${JSON.stringify(sent.slice(0, 80))}`);
     return `${t.key}: ${spec}`;
   });
 }
@@ -2730,7 +2732,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     // A 300 × 652 image used to open with its top-left corner in the middle of the page: it already
     // had its fitted size, so its scroll view's content size was never set.
     await open("Image small.png", 3);
-    await shot(udid, "attachments-viewer-small");
+    await shot(udid, "attachments-viewer-small", true); // the check reads its pixels
     const file = join(shots, "attachments-viewer-small.png");
     const screen = (await tree(udid))[0]!.frame;
     const px = Number(await sh(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width", "-of", "csv=p=0", file]));
@@ -2921,8 +2923,9 @@ function screens(s: Seeded): Screen[] {
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
       prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
-      // The menu closes with a tap outside it.
-      after: (udid) => dismissMenu(udid).then(() => Bun.sleep(400)),
+      // The menu closes with a tap outside it. SIM_CHECK_LEAVE_OPEN=1 leaves it up, to watch the next
+      // step's reset clear it (`--only=approve-menu,connect`).
+      after: (udid) => (process.env.SIM_CHECK_LEAVE_OPEN ? Promise.resolve() : dismissMenu(udid).then(() => Bun.sleep(400))),
     }),
     // Settings → Prompts (seedPrompts): the list, and the customized review message.
     screen("prompts", [], { url: "harness://prompts", ready: hasLabel("Agent review"), visit: true }),
@@ -3397,7 +3400,7 @@ async function buildApp() {
 let failed = false;
 try {
   mkdirSync(shots, { recursive: true });
-  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok, 20000, 50));
+  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok && existsSync(join(home, "token")), 20000, 50));
   token = readFileSync(join(home, "token"), "utf8").trim();
   // The simulators boot, the app builds and the daemon seeds all at once.
   // The app installs as soon as it's built and its simulator is up.
