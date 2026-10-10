@@ -42,7 +42,7 @@ const CONFIG_WRITE = [
   "delete_ticket",
 ];
 const SPEC = ["read_spec", "edit_spec", "update_spec"];
-const TOOLS: Record<RunKind, string[]> = {
+const TOOLS: Record<Exclude<RunKind, "compact">, string[]> = {
   plan: ["post_note", ...SPEC, "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
   work: ["post_note", ...SPEC, "block", "unblock", "submit_for_review", ...BOARD, ...BOARD_WRITE, ...CHILD_TOOLS, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   review: ["post_note", "read_spec", "edit_spec", "review_decision", ...BOARD, ...CONFIG_READ, ...BROWSER],
@@ -137,7 +137,7 @@ function sys(kind: RunKind, t: Ticket | null = ticket(), extra: Partial<Paramete
 }
 
 describe("systemPrompt tool references", () => {
-  const kinds: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
+  const kinds: Exclude<RunKind, "compact">[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat"];
   for (const kind of kinds) {
     test(`${kind} mentions only tools its run can call`, () => {
       const t = kind === "conductor" ? ticket({ kind: "conductor" }) : kind === "triage" ? null : kind === "chat" ? ticket({ ...worktree, status: "blocked" }) : ticket(worktree);

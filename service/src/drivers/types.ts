@@ -54,6 +54,16 @@ export type DriverEvent =
   /** Driver-specific state to persist for resuming the conversation next run */
   | { type: "state"; state: unknown }
   | { type: "usage"; inputTokens?: number; outputTokens?: number; costUsd?: number }
+  /**
+   * One model call the session's own agent made: what it read from the prompt cache, wrote to it
+   * and sent uncached. The gauge's numbers (DESIGN.md "Context gauge"). `estimated`: counted from
+   * the conversation's words, because the driver's CLI reports no tokens.
+   */
+  | { type: "call"; call: { input: number; cacheRead: number; cacheWrite: number; output: number; estimated?: boolean } }
+  /** The CLI's plan-usage report (claude-code's rate_limit_event): each window's used share (0–1) and reset (ms) */
+  | { type: "rate_limit"; status: "allowed" | "allowed_warning" | "rejected" | string; windows: { id: "five_hour" | "seven_day"; used: number | null; resetsAt: number }[] }
+  /** A compact run finished: the conversation went from `before` to `after` tokens (either may be unknown) */
+  | { type: "compacted"; before?: number; after?: number }
   /** A notice for the human, persisted as a transcript status entry (e.g. a mode downgrade) */
   | { type: "status"; text: string }
   /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
@@ -173,6 +183,25 @@ export interface Driver {
   usesPermissionPromptTool?: boolean;
   /** True if a running run takes new human messages through RunRequest.input (steering). */
   supportsSteering?: boolean;
+  /**
+   * What the driver can do with a ticket's saved session (DESIGN.md "Context gauge"). `compact`
+   * means it implements `compact()`; `newSession` (dropping the saved state) works for every
+   * driver but is listed so a driver can opt out. Unset: no session actions.
+   */
+  sessionActions?: { compact: boolean; newSession: boolean };
+  /** False when the driver reports no token counts at all (its gauge stays empty). Default true. */
+  reportsContextUsage?: boolean;
+  /**
+   * Summarize the saved conversation in place (kind "compact" runs): the same session continues
+   * from the summary. Emits "compacted" when done, and "state" if the saved state changed.
+   */
+  compact?(req: RunRequest): AsyncIterable<DriverEvent>;
+  /**
+   * The driver's plan-usage windows (Claude's 5-hour and weekly limits, Copilot's monthly quota)
+   * for the sidebar gauges (DESIGN.md "Plan usage"). Resolve null when the driver has no plan;
+   * throw a PlanUsageError to say why the numbers can't be read.
+   */
+  planUsage?(): Promise<import("@harness/shared").PlanWindow[] | null>;
   info(): Promise<DriverInfo>;
   /** Start an interactive login if supported. Returns a URL to open, if any. */
   login?(): Promise<{ url: string | null; message: string }>;
@@ -213,5 +242,17 @@ export async function executeTool(tools: ToolDefinition[], name: string, input: 
     return await tool.execute(input as any, ctx);
   } catch (err) {
     return { content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }], isError: true };
+  }
+}
+
+/** Plan usage couldn't be read; the message is shown in the sidebar row ("Sign in to Claude Code to see plan usage"). */
+export class PlanUsageError extends Error {
+  constructor(
+    message: string,
+    /** True for a rate limit or server error: poll again later, backing off */
+    readonly transient = false,
+  ) {
+    super(message);
+    this.name = "PlanUsageError";
   }
 }

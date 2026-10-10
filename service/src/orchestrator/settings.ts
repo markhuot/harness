@@ -1,5 +1,5 @@
 import type { ListenSetting, NotificationSettings, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, MAX_BROWSER_IDLE_TAB_MINUTES, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import { applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   phaseModels: {},
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
+  contextGaugeLimit: DEFAULT_CONTEXT_GAUGE_LIMIT,
   permissionMode: "auto",
   classifier: "claude-cli",
   defaultModels: {},
@@ -175,6 +176,11 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 64)
           throw badRequest("maxConcurrentRuns must be an integer between 1 and 64");
         out.maxConcurrentRuns = value;
+        break;
+      case "contextGaugeLimit":
+        if (typeof value !== "number" || !Number.isInteger(value) || value < MIN_CONTEXT_GAUGE_LIMIT || value > MAX_CONTEXT_GAUGE_LIMIT)
+          throw badRequest(`contextGaugeLimit must be an integer between ${MIN_CONTEXT_GAUGE_LIMIT} and ${MAX_CONTEXT_GAUGE_LIMIT} tokens`);
+        out.contextGaugeLimit = value;
         break;
       case "browserIdleTabMinutes":
         if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_BROWSER_IDLE_TAB_MINUTES)

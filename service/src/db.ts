@@ -727,6 +727,25 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE runs ADD COLUMN output_tokens INTEGER;
   ALTER TABLE runs ADD COLUMN cost_usd REAL;
   `,
+  // 41: the context gauge (DESIGN.md "Context gauge"). driver_calls: one row per model call a run
+  //     made (the four token counts), kept for analysis. sessions.context: the saved conversation's
+  //     gauge numbers as JSON (last call, first call's total, cache misses); cleared with
+  //     driver_state. NULL for every session from before, which reads as fresh.
+  `
+  ALTER TABLE sessions ADD COLUMN context TEXT;
+  CREATE TABLE driver_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    input INTEGER NOT NULL,
+    cache_read INTEGER NOT NULL,
+    cache_write INTEGER NOT NULL,
+    output INTEGER NOT NULL,
+    estimated INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX driver_calls_session ON driver_calls(session_id, id);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

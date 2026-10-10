@@ -117,7 +117,7 @@ export const allTools: ToolDefinition[] = [
  */
 export const specTools: ToolDefinition[] = [readSpec, editSpec, updateSpec];
 
-const RUN_TOOLS: Record<Exclude<RunKind, "chat">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
+const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postNote, ...specTools, updateNotes, updateTicket, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
     harness: [postNote, ...specTools, updateNotes, block, unblock, resumeWork, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
@@ -142,7 +142,9 @@ export function toolsForRun(
   driver: Pick<Driver, "hasBuiltinTools" | "usesPermissionPromptTool">,
   ticket: Pick<Ticket, "kind"> | null = null,
 ): ToolDefinition[] {
-  const entry = kind === "chat" ? RUN_TOOLS[ticket?.kind === "conductor" ? "conductor" : "work"] : RUN_TOOLS[kind as Exclude<RunKind, "chat">];
+  // A compact run only summarizes the session: no tools.
+  if (kind === "compact") return [];
+  const entry = kind === "chat" ? RUN_TOOLS[ticket?.kind === "conductor" ? "conductor" : "work"] : RUN_TOOLS[kind as Exclude<RunKind, "chat" | "compact">];
   if (!entry) throw new Error(`Unknown run kind: ${kind}`);
   const tools = [...entry.harness];
   if (driver.usesPermissionPromptTool) tools.push(permissionPrompt);

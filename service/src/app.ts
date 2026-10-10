@@ -178,6 +178,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     presence,
     notifications,
   });
+  orchestrator.planUsage.start(() => http.connectedClients() > 0);
   try {
     await network.boot();
   } catch (err) {
@@ -210,6 +211,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
       if (stopped) return;
       stopped = true;
       codeWatch?.stop();
+      orchestrator.planUsage.stop();
       notifications.stop();
       await orchestrator.stop();
       await plugins.stop();

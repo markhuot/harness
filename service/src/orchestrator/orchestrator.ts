@@ -54,7 +54,7 @@ import type {
   WatcherBody,
   WatcherLive,
 } from "@harness/shared";
-import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PromptEntry } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
 import {
   canonicalGroup,
   checkProjectKey,
@@ -171,6 +171,8 @@ import { AutoModeRulesProvider } from "../permissions/rules";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
+import { applyCall, compactedContext } from "./context-usage";
+import { PlanUsageTracker, POLL_MS } from "./plan-usage";
 
 export interface ConductorChange {
   key: string;
@@ -261,6 +263,10 @@ interface ActiveRun {
   cwd: string | null;
   /** The session's epoch when the run started (Orchestrator.sessionEpochs) */
   sessionEpoch: number;
+  /** Model calls the session's agent made so far this run (the gauge never counts a run's first as a cache miss) */
+  modelCalls: number;
+  /** What a compact run reported (its driver's "compacted" event) */
+  compacted?: { before?: number; after?: number };
 }
 
 interface TriageMeta {
@@ -491,6 +497,8 @@ export class Orchestrator {
    * the run started, so a run that outlives its conversation can't write it back.
    */
   private sessionEpochs = new Map<string, number>();
+  /** The plan-usage gauges' readings (DESIGN.md "Plan usage"); the app polls it while clients are connected */
+  readonly planUsage: PlanUsageTracker;
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
   /**
@@ -560,6 +568,7 @@ export class Orchestrator {
     });
     this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     this.now = opts.now ?? Date.now;
+    this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now());
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
         await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver, watcherId: w.id });
@@ -766,7 +775,8 @@ export class Orchestrator {
     return Promise.all(
       this.driverList().map(async (d) => {
         try {
-          return await d.info();
+          const info = await d.info();
+          return { ...info, ...(d.sessionActions ? { sessionActions: d.sessionActions } : {}), reportsContextUsage: d.reportsContextUsage !== false };
         } catch (err) {
           return {
             id: d.id,
@@ -1692,6 +1702,7 @@ export class Orchestrator {
   async startTicket(key: string, by: ActivityAuthor = "human"): Promise<Ticket> {
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "started");
+    this.notCompacting(ticket, "started");
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
     if (ticket.status === "done" || ticket.status === "review") throw conflict(`${ticket.key} is in ${ticket.status}; it cannot be started`);
     // A plan run is still going: the press approves the plan, and the work starts when the run
@@ -1782,6 +1793,7 @@ export class Orchestrator {
     const attachments = opts.attachments === undefined || opts.attachments === null ? [] : this.resolveAttachments(opts.attachments);
     if (!text.trim() && !attachments.length) throw badRequest("text is required");
     this.notDraft(ticket, "messaged (it has no agent yet)");
+    this.notCompacting(ticket, "messaged");
     if (ticket.pendingApproval) {
       if (attachments.length) throw conflict(`${ticket.key} is waiting on a tool approval: answer it before sending attachments`);
       return this.answerApproval(ticket.key, { decision: "deny", message: text });
@@ -1931,6 +1943,7 @@ export class Orchestrator {
   async reopenTicket(key: string, body: ReopenBody): Promise<Ticket> {
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "re-opened");
+    this.notCompacting(ticket, "re-opened");
     if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
@@ -1951,6 +1964,7 @@ export class Orchestrator {
   humanReview(key: string, body: HumanReviewBody): Ticket {
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "reviewed");
+    this.notCompacting(ticket, "reviewed");
     return this.applyReview(ticket, body.decision, body.notes ?? "", "human", body);
   }
 
@@ -2077,6 +2091,7 @@ export class Orchestrator {
   async completeTicket(key: string, body: CompleteBody = {}): Promise<Ticket> {
     let ticket = this.requireTicket(key);
     this.notDraft(ticket, "completed");
+    this.notCompacting(ticket, "completed");
     if (ticket.status === "done") throw conflict(`${ticket.key} is already done`);
     if (body.skipAgent) {
       // "Approve and take no action": no completion run. In review it counts as the approval.
@@ -2211,6 +2226,7 @@ export class Orchestrator {
   rerunAgentReview(key: string): Ticket {
     const ticket = this.requireTicket(key);
     this.notDraft(ticket, "reviewed");
+    this.notCompacting(ticket, "reviewed");
     if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
     const t = this.store.tickets.update(ticket.id, { agentReview: "pending" })!;
     this.enqueueReview(t);
@@ -4153,6 +4169,55 @@ ${numberLines(r.body)}`;
     );
   }
 
+  /**
+   * GET /usage: the plan-usage readings. Readings older than the poll interval (a service with no
+   * client for a while) are read again first, and the first call reads them for the first time.
+   */
+  async planUsageReport(): Promise<PlanUsageReport> {
+    if (this.driverList().some((d) => d.planUsage && !this.planUsage.isFresh(d.id, POLL_MS))) await this.planUsage.refresh();
+    return this.planUsage.report();
+  }
+
+  /** A compact run holds the saved session: messages and ticket actions wait until it ends. */
+  private notCompacting(t: Ticket, what: string) {
+    if (!t.compacting) return;
+    throw conflict(`The session is compacting: ${t.key} can't be ${what} until it finishes (cancel the run to stop it)`);
+  }
+
+  /**
+   * What the human does with the ticket's saved session from the context gauge (DESIGN.md "Context
+   * gauge"). It takes effect on the ticket's next run. Refused while a run is going, which is still
+   * writing the session back.
+   */
+  async sessionAction(key: string, body: SessionActionBody): Promise<Ticket> {
+    if (!body || typeof body !== "object") throw badRequest("body is required");
+    if (body.action !== "compact" && body.action !== "new") throw badRequest('action must be "compact" or "new"');
+    const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "given a session action (it has no agent yet)");
+    if (ticket.busy) throw conflict(ticket.compacting ? `The session is compacting` : `${ticket.key} has a run going: its session can change once the run ends (cancel it to change it now)`);
+    const session = this.store.sessions.get(ticket.sessionId)!;
+    const state = this.store.sessions.getDriverState(session.id);
+    const context = this.store.sessions.getContext(session.id);
+    const stateDriver = this.store.sessions.stateDriver(session.id);
+    const driver = stateDriver ? this.drivers.get(stateDriver) : undefined;
+    if (body.action === "new") {
+      if (driver && driver.sessionActions?.newSession === false) throw badRequest(`${driver.name} can't start a new session`);
+      if (state == null && !context) return ticket; // nothing saved: it already starts fresh
+      this.newSession(session.id);
+      const size = context && !context.estimated ? ` (${tokensLabel(context.input + context.cacheRead + context.cacheWrite)} tokens)` : "";
+      this.addActivityLine(ticket, "system", "human", `Session cleared${size}; the next run starts fresh`);
+      this.touchTicket(ticket.id);
+      return this.store.tickets.get(ticket.id)!;
+    }
+    if (state == null || !driver) throw conflict(`${ticket.key} has no saved session to compact`);
+    if (!driver.sessionActions?.compact || !driver.compact) throw badRequest(`${driver.name} can't compact a session`);
+    const run = this.store.runs.create({ sessionId: session.id, kind: "compact", driver: driver.id, prompt: "/compact" });
+    this.bus.emit({ kind: "run.upserted", run });
+    this.touchSession(session.id);
+    this.queue.enqueue({ runId: run.id, sessionId: session.id, kind: "compact" });
+    return this.store.tickets.get(ticket.id)!;
+  }
+
   /** A complete run is queued or running for the ticket. */
   private completing(t: Ticket): boolean {
     if (this.startingComplete.has(t.id)) return true;
@@ -4359,6 +4424,7 @@ ${numberLines(r.body)}`;
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
       cwd: null,
       sessionEpoch: this.sessionEpochs.get(session.id) ?? 0,
+      modelCalls: 0,
     };
     this.active.set(run.id, active);
     let error: string | null;
@@ -4396,6 +4462,8 @@ ${numberLines(r.body)}`;
     );
     this.touchSession(session.id);
     if (this.stopping) return;
+    // A run just used some of the plan: read the gauges again.
+    if (driver?.planUsage && run.kind !== "compact") void this.planUsage.refresh(driver.id, true).catch(() => {});
     // Before afterRun, like a message queued during the run: pending work holds off auto-submit.
     // Cancelling drops them with the rest of the session's queue.
     if (status !== "cancelled") {
@@ -4438,7 +4506,27 @@ ${numberLines(r.body)}`;
     const cwd = workdir ?? sessionCwd ?? project?.path ?? this.paths.home;
     if (!driver) error = `Unknown driver: ${run.driver}`;
     else if (!existsSync(cwd)) error = `Working directory does not exist: ${cwd}`;
-    else {
+    else if (run.kind === "compact") {
+      try {
+        if (!driver.compact) throw new Error(`${driver.name} can't compact a session`);
+        const req: RunRequest = {
+          runId: run.id,
+          kind: run.kind,
+          prompt: run.prompt,
+          systemPrompt: "",
+          cwd,
+          model,
+          state: this.store.sessions.getDriverState(session.id, run.driver),
+          tools: [],
+          toolContext: { runId: run.id, runKind: run.kind, session, ticket, cwd, ops: this.opsFacade, browser: this.browser, signal: controller.signal },
+          mcp: { url: "", headers: {} },
+          signal: controller.signal,
+        };
+        error = await this.consume(driver.compact(req), active, controller.signal);
+      } catch (err) {
+        if (!controller.signal.aborted) error = errMsg(err);
+      }
+    } else {
       const ctx: ToolContext = {
         runId: run.id,
         runKind: run.kind,
@@ -4632,6 +4720,28 @@ ${numberLines(r.body)}`;
         this.bus.emit({ kind: "run.upserted", run: active.run });
         return null;
       }
+      case "call": {
+        // The gauge follows the conversation the next run resumes: a review or complete run starts
+        // fresh, a compact run's own calls aren't it, and a run from before a session change no
+        // longer is. Every call is kept either way.
+        const first = active.modelCalls++ === 0;
+        const at = this.now();
+        this.store.sessions.addCall(run.sessionId, run.id, ev.call, at);
+        if (!FRESH_RUN_KINDS.has(run.kind) && run.kind !== "compact" && active.sessionEpoch === (this.sessionEpochs.get(run.sessionId) ?? 0)) {
+          this.store.sessions.setContext(run.sessionId, applyCall(this.store.sessions.getContext(run.sessionId), ev.call, at, first));
+          const ticketId = this.store.sessions.get(run.sessionId)?.ticketId;
+          if (ticketId) this.touchTicket(ticketId);
+        }
+        return null;
+      }
+      case "rate_limit": {
+        const driver = this.drivers.get(run.driver);
+        if (driver?.planUsage) this.planUsage.noteRateLimit(driver, ev);
+        return null;
+      }
+      case "compacted":
+        active.compacted = { before: ev.before, after: ev.after };
+        return null;
       case "status":
         this.appendStatus(run.sessionId, run.id, ev.text);
         return null;
@@ -4654,6 +4764,24 @@ ${numberLines(r.body)}`;
     return null;
   }
 
+  /** A compact run ended: record the new size on the gauge and say what happened in Activity. */
+  private afterCompact(ticket: Ticket, run: Run, active: ActiveRun, error: string | null) {
+    if (run.status === "succeeded") {
+      const prev = this.store.sessions.getContext(ticket.sessionId);
+      const before = active.compacted?.before ?? (prev ? prev.input + prev.cacheRead + prev.cacheWrite : undefined);
+      const after = active.compacted?.after;
+      if (after !== undefined && active.sessionEpoch === (this.sessionEpochs.get(ticket.sessionId) ?? 0)) {
+        this.store.sessions.setContext(ticket.sessionId, compactedContext(prev, after, this.now()));
+      }
+      const sizes = after === undefined ? "" : `: ${before === undefined ? "" : `${tokensLabel(before)} → `}${tokensLabel(after)} tokens`;
+      this.addActivityLine(ticket, "system", "system", `Session compacted${sizes}`);
+    } else if (run.status === "failed") {
+      this.addActivityLine(ticket, "failed", "system", `Compacting the session failed: ${error ?? "no error reported"}`);
+    }
+    this.touchTicket(ticket.id);
+    this.kickScheduler();
+  }
+
   private async afterRun(run: Run, active: ActiveRun, error: string | null) {
     const session = this.store.sessions.get(run.sessionId);
     if (!session) return;
@@ -4667,6 +4795,7 @@ ${numberLines(r.body)}`;
     }
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (!ticket) return;
+    if (run.kind === "compact") return this.afterCompact(ticket, run, active, error);
     if (run.kind === "plan" && run.status !== "succeeded") {
       this.dropPlanApproval(ticket.id, run.status === "failed" ? "Planning run failed; work not started" : "Plan approval cleared: run cancelled; work not started");
     }
@@ -4889,6 +5018,13 @@ ${numberLines(r.body)}`;
     const t = this.store.tickets.get(id);
     if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
   }
+}
+
+/** "482k", "1.2M", "850": a token count as the gauge writes it. */
+export function tokensLabel(n: number): string {
+  if (n >= 1_000_000) return `${(Math.round(n / 100_000) / 10).toString()}M`;
+  if (n >= 1000) return `${Math.round(n / 1000)}k`;
+  return String(n);
 }
 
 export { HarnessError };

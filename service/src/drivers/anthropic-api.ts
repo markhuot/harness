@@ -110,6 +110,7 @@ export class AnthropicApiDriver implements Driver {
   readonly description = "Calls the Claude Messages API directly with an API key, using the harness's own file and shell tools.";
   readonly hasBuiltinTools = false;
   readonly supportsSteering = true;
+  readonly sessionActions = { compact: false, newSession: true };
 
   constructor(private readonly opts: AnthropicApiDriverOptions) {}
 
@@ -241,6 +242,7 @@ export class AnthropicApiDriver implements Driver {
       const u = message.usage;
       inputTokens += (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
       outputTokens += u.output_tokens ?? 0;
+      yield { type: "call", call: { input: u.input_tokens ?? 0, cacheRead: u.cache_read_input_tokens ?? 0, cacheWrite: u.cache_creation_input_tokens ?? 0, output: u.output_tokens ?? 0 } };
 
       // An empty assistant turn (e.g. a refusal before any output) would make the stored
       // history invalid for the next request.

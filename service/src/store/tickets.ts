@@ -4,6 +4,7 @@ import { isCompletionAction, resolvePhaseChoice } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
 import { bool, fromJson, int, newId, now, toJson } from "./util";
+import { toContextUsage, type StoredContext } from "../orchestrator/context-usage";
 
 interface TicketRow {
   id: string;
@@ -54,6 +55,8 @@ interface TicketRow {
   completed_at: number | null;
   busy: number;
   completing: number;
+  compacting?: number;
+  context?: string | null;
   child_count: number;
 }
 
@@ -92,9 +95,11 @@ export function canonicalJson(value: unknown): string {
 
 const BUSY = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.status IN ('queued','running')) AS busy`;
 const COMPLETING = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.kind = 'complete' AND r.status IN ('queued','running')) AS completing`;
+const COMPACTING = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.kind = 'compact' AND r.status IN ('queued','running')) AS compacting`;
+const CONTEXT = `(SELECT s.context FROM sessions s WHERE s.id = t.session_id) AS context`;
 const CHILD_COUNT = `(SELECT COUNT(*) FROM tickets c WHERE c.parent_id = t.id) AS child_count`;
 /** Columns computed per row on top of `t.*`. */
-const DERIVED = `${BUSY}, ${COMPLETING}, ${CHILD_COUNT}`;
+const DERIVED = `${BUSY}, ${COMPLETING}, ${COMPACTING}, ${CONTEXT}, ${CHILD_COUNT}`;
 const SELECT = `SELECT t.*, ${DERIVED} FROM tickets t`;
 
 type SqlParams = Record<string, string | number | null>;
@@ -287,6 +292,8 @@ export class TicketRepo {
       permissionMode: (r.permission_mode as PermissionMode | null) ?? null,
       busy: bool(r.busy),
       completing: bool(r.completing ?? 0),
+      compacting: bool(r.compacting ?? 0),
+      context: toContextUsage(fromJson<StoredContext | null>(r.context ?? null, null)),
       childCount: r.child_count ?? 0,
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),

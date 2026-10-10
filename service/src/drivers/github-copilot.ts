@@ -17,9 +17,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DriverInfo, ModelInfo, PermissionMode, Settings, ToolResultContent } from "@harness/shared";
+import type { DriverInfo, ModelInfo, PermissionMode, PlanWindow, Settings, ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
-import { ModelListError, withRunContext, type Driver, type DriverEvent, type RunGrants, type RunRequest } from "./types";
+import { ModelListError, PlanUsageError, withRunContext, type Driver, type DriverEvent, type RunGrants, type RunRequest } from "./types";
 
 export const COPILOT_MCP_SERVER = "harness";
 const MCP_PREFIX = `${COPILOT_MCP_SERVER}-`;
@@ -29,6 +29,10 @@ export interface CopilotState {
 }
 
 export interface GitHubCopilotDriverOptions {
+  /** Plan usage's HTTP client (tests) */
+  fetch?: typeof fetch;
+  /** The GitHub token for plan usage when Settings has none (default: `gh auth token`) */
+  ghToken?: () => Promise<string | null>;
   settings: () => Settings;
   /** Explicit binary (tests); otherwise HARNESS_COPILOT_BIN, `which copilot`, common install paths */
   bin?: string;
@@ -56,9 +60,99 @@ export function resolveCopilotBin(env: Record<string, string | undefined> = proc
   return candidates.find((p) => existsSync(p)) ?? candidates[0]!;
 }
 
+/**
+ * The monthly premium-request quota from GET /copilot_internal/user (undocumented). An account
+ * with no quota to run out of (unlimited, or billed by tokens with no entitlement) has no window:
+ * null. `now` finds the start of the month the quota resets at the end of.
+ */
+export function parseCopilotQuota(body: unknown): PlanWindow | null {
+  const o = (body && typeof body === "object" ? body : {}) as Record<string, any>;
+  const q = o.quota_snapshots?.premium_interactions;
+  if (!q || q.unlimited === true || typeof q.percent_remaining !== "number" || !(typeof q.entitlement === "number" && q.entitlement > 0)) return null;
+  const reset = typeof o.quota_reset_date_utc === "string" ? Date.parse(o.quota_reset_date_utc) : typeof o.quota_reset_date === "string" ? Date.parse(`${o.quota_reset_date}T00:00:00Z`) : NaN;
+  if (!Number.isFinite(reset)) return null;
+  const end = new Date(reset);
+  const start = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 1, end.getUTCDate());
+  return { id: "monthly", label: "Premium requests", usedPercent: Math.max(0, 100 - q.percent_remaining), resetsAt: reset, windowSeconds: Math.round((reset - start) / 1000) };
+}
+
 /** Copilot's config folder: $COPILOT_HOME, else ~/.copilot. */
 export function copilotHome(env: Record<string, string | undefined>): string {
   return env.COPILOT_HOME || join(env.HOME || homedir(), ".copilot");
+}
+
+/** A session's event log: $COPILOT_HOME/session-state/<id>/events.jsonl. */
+export function copilotEventsFile(env: Record<string, string | undefined>, sessionId: string): string {
+  return join(copilotHome(env), "session-state", sessionId, "events.jsonl");
+}
+
+type CopilotCall = { input: number; cacheRead: number; cacheWrite: number; output: number };
+
+/**
+ * The model calls the CLI recorded for the session's own agent (verified against copilot 1.0.94):
+ * each is a `session.usage_record` line in events.jsonl, which the CLI writes to disk but doesn't
+ * print in `--output-format json`. `inputTokens` counts everything sent, cache included. A
+ * sub-agent's calls carry an agentId and aren't the conversation. Returns [] when the file or the
+ * records aren't there (an older CLI).
+ */
+export function readCopilotCalls(file: string): { id: string; call: CopilotCall }[] {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return [];
+  }
+  const out: { id: string; call: CopilotCall }[] = [];
+  for (const line of text.split("\n")) {
+    if (!line.includes('"session.usage_record"')) continue;
+    try {
+      const rec = JSON.parse(line);
+      const u = rec?.data?.usage;
+      if (rec.type !== "session.usage_record" || rec.agentId || !u || typeof u.inputTokens !== "number") continue;
+      const cacheRead = typeof u.cacheReadTokens === "number" ? u.cacheReadTokens : 0;
+      const cacheWrite = typeof u.cacheWriteTokens === "number" ? u.cacheWriteTokens : 0;
+      const id = String(u.apiCallId ?? u.accounting?.usageId ?? rec.id);
+      out.push({ id, call: { input: Math.max(0, u.inputTokens - cacheRead - cacheWrite), cacheRead, cacheWrite, output: typeof u.outputTokens === "number" ? u.outputTokens : 0 } });
+    } catch {
+      /* a line that's still being written */
+    }
+  }
+  return out;
+}
+
+/**
+ * The conversation's size counted from its words, for a CLI whose log has no usage records: the
+ * words of the messages, reasoning, tool calls and results in events.jsonl at about 0.75 words per
+ * token. It leaves out the CLI's own system prompt and tool schemas, so it reads low. null when
+ * there's no log.
+ */
+export function estimateCopilotTokens(file: string): number | null {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+  const countWords = (v: unknown): number => {
+    if (typeof v === "string") return v.split(/\s+/).filter(Boolean).length;
+    if (Array.isArray(v)) return v.reduce((n: number, x) => n + countWords(x), 0);
+    if (v && typeof v === "object") return Object.values(v).reduce((n: number, x) => n + countWords(x), 0);
+    return 0;
+  };
+  let words = 0;
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    try {
+      const rec = JSON.parse(line);
+      const d = rec?.data;
+      if (rec.agentId || !d) continue;
+      if (rec.type === "user.message" || rec.type === "assistant.message") words += countWords(d.content) + countWords(d.toolRequests) + countWords(d.reasoningText);
+      else if (rec.type === "tool.execution_complete") words += countWords(d.result);
+    } catch {
+      /* skip */
+    }
+  }
+  return words ? Math.round(words / 0.75) : null;
 }
 
 /** The token env vars the CLI reads, in its order of precedence. */
@@ -365,6 +459,7 @@ export class GitHubCopilotDriver implements Driver {
   readonly hasBuiltinTools = true;
   readonly subagentTool = "Copilot's `task` tool with the `explore` agent type";
   readonly supportsSteering = false;
+  readonly sessionActions = { compact: false, newSession: true };
 
   /**
    * The last run that couldn't sign in, and the stored token it ran with. info() reports the driver
@@ -374,6 +469,26 @@ export class GitHubCopilotDriver implements Driver {
   private authFailure: { message: string; token: string | null } | null = null;
 
   constructor(private readonly opts: GitHubCopilotDriverOptions) {}
+
+  /** The month's premium-request quota, when this account has one to run out of. */
+  async planUsage(): Promise<PlanWindow[] | null> {
+    const token = this.opts.settings().copilotGithubToken || (await (this.opts.ghToken ?? ghAuthToken)());
+    if (!token) throw new PlanUsageError("Sign in to GitHub Copilot to see plan usage");
+    let res: Response;
+    try {
+      res = await (this.opts.fetch ?? fetch)("https://api.github.com/copilot_internal/user", {
+        headers: { Authorization: `token ${token}`, Accept: "application/json", "User-Agent": "harness" },
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch (err) {
+      throw new PlanUsageError(`Couldn't reach GitHub: ${err instanceof Error ? err.message : String(err)}`, true);
+    }
+    if (res.status === 401 || res.status === 403 || res.status === 404) throw new PlanUsageError("Sign in to GitHub Copilot to see plan usage");
+    if (res.status === 429 || res.status >= 500) throw new PlanUsageError(`GitHub answered ${res.status}`, true);
+    if (!res.ok) throw new PlanUsageError(`GitHub answered ${res.status}`);
+    const window = parseCopilotQuota(await res.json());
+    return window ? [window] : null;
+  }
 
   private cliEnv(): Record<string, string> {
     return copilotEnv(this.env, this.opts.settings());
@@ -511,6 +626,17 @@ export class GitHubCopilotDriver implements Driver {
     })().catch(() => {});
 
     const parser = new CopilotJsonParser(mode);
+    // The CLI logs each model call's tokens to the session's events.jsonl, not to stdout: report
+    // the ones this run added after each turn and once more at the end.
+    const eventsFile = copilotEventsFile(this.env, sessionId);
+    const seenCalls = new Set(readCopilotCalls(eventsFile).map((c) => c.id));
+    let reported = 0;
+    const newCalls = (): DriverEvent[] => {
+      const fresh = readCopilotCalls(eventsFile).filter((c) => !seenCalls.has(c.id));
+      for (const c of fresh) seenCalls.add(c.id);
+      reported += fresh.length;
+      return fresh.map((c) => ({ type: "call" as const, call: c.call }));
+    };
     try {
       for await (const line of readLines(proc.stdout)) {
         let msg: any;
@@ -520,6 +646,12 @@ export class GitHubCopilotDriver implements Driver {
           continue;
         }
         for (const ev of parser.handle(msg)) yield ev;
+        if (msg?.type === "assistant.turn_end") for (const ev of newCalls()) yield ev;
+      }
+      for (const ev of newCalls()) yield ev;
+      if (!reported && parser.result) {
+        const tokens = estimateCopilotTokens(eventsFile);
+        if (tokens) yield { type: "call", call: { input: tokens, cacheRead: 0, cacheWrite: 0, output: 0, estimated: true } };
       }
       const exitCode = await proc.exited;
       await stderrDone;
@@ -537,5 +669,17 @@ export class GitHubCopilotDriver implements Driver {
       req.signal.removeEventListener("abort", stopTree);
       if (proc.exitCode === null) proc.kill("SIGTERM");
     }
+  }
+}
+
+async function ghAuthToken(): Promise<string | null> {
+  try {
+    const proc = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "ignore" });
+    const timer = setTimeout(() => proc.kill(), 10_000);
+    const out = (await new Response(proc.stdout).text()).trim();
+    clearTimeout(timer);
+    return out || null;
+  } catch {
+    return null;
   }
 }

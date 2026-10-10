@@ -137,6 +137,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
 
   return {
     websocket,
+    connected: () => sockets.size,
     newData: (): WsData => ({ id: randomUUID(), subs: new Map(), off: null }),
     /** Close every open socket (token rotation: they authenticated with the old token). */
     closeAll(code = 4001, reason = "token rotated") {

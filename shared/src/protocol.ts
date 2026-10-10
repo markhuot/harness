@@ -146,6 +146,46 @@ export type TicketKind = "task" | "conductor";
 export const COMPLETION_ACTIONS = ["merge", "pr", "cleanup", "custom"] as const;
 export type CompletionAction = (typeof COMPLETION_ACTIONS)[number];
 
+/**
+ * One ticket's resumable conversation, as of the last model call recorded for it: the last call's
+ * input split into what it read from the prompt cache and what it sent fresh (uncached input or
+ * written to the cache). The total is `input + cacheRead + cacheWrite`.
+ */
+export interface ContextUsage {
+  /** Uncached input tokens of the last call */
+  input: number;
+  /** Tokens the last call read from the prompt cache */
+  cacheRead: number;
+  /** Tokens the last call wrote to the prompt cache */
+  cacheWrite: number;
+  output: number;
+  /** The session's first call's total input: the fixed prefix every run starts with */
+  prefix: number;
+  /** When the last call was recorded (ms) */
+  at: number;
+  /** An estimate from the conversation's word count (drivers that report no tokens): no cached/fresh split */
+  estimated: boolean;
+  /** Cache misses in the session: calls that re-wrote the conversation into an expired cache */
+  misses: number;
+  /** Tokens those misses wrote */
+  missTokens: number;
+}
+
+/** The context size of a ContextUsage: the last call's whole input. */
+export function contextTokens(c: Pick<ContextUsage, "input" | "cacheRead" | "cacheWrite">): number {
+  return c.input + c.cacheRead + c.cacheWrite;
+}
+
+/** Settings.contextGaugeLimit's default and bounds (tokens). */
+export const DEFAULT_CONTEXT_GAUGE_LIMIT = 250_000;
+export const MIN_CONTEXT_GAUGE_LIMIT = 10_000;
+export const MAX_CONTEXT_GAUGE_LIMIT = 2_000_000;
+
+/** POST /tickets/:key/session: what to do with the ticket's saved session (takes effect on its next run). */
+export interface SessionActionBody {
+  action: "compact" | "new";
+}
+
 export interface Ticket {
   id: string;
   /** Jira-style key: native (NYTIMES-3) or mirrored from an external system (FOO-123) */
@@ -310,6 +350,17 @@ export interface Ticket {
   /** True while any agent run for this ticket is queued or running */
   busy: boolean;
   /**
+   * True while a compact run for this ticket is queued or running (DESIGN.md "Context gauge"):
+   * messages and ticket actions are refused until it ends. Optional so older payloads type-check.
+   */
+  compacting?: boolean;
+  /**
+   * The size of the conversation the ticket's next resumed run re-reads (DESIGN.md "Context
+   * gauge"); null when the ticket has no resumable session (new, or about to start fresh).
+   * Optional so older services and fixtures type-check.
+   */
+  context?: ContextUsage | null;
+  /**
    * True while a complete run for this ticket is queued or running. Its agent may be merging,
    * resolving conflicts or removing the worktree meanwhile. Optional so older payloads type-check.
    */
@@ -427,7 +478,7 @@ export interface Session {
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
 /** chat: a human message to a blocked, review or done ticket, answered by its agent with the work tools (the agent moves the ticket itself). */
-export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat";
+export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat" | "compact";
 
 /**
  * The run phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor and chat
@@ -828,6 +879,12 @@ export interface DriverInfo {
   detail: string;
   /** Whether POST /drivers/:id/login is supported */
   supportsLogin: boolean;
+  /**
+   * What the driver can do with a ticket's saved session (POST /tickets/:key/session); clients hide
+   * the rest. Optional: absent means neither. `reportsContextUsage` false: no gauge numbers at all.
+   */
+  sessionActions?: { compact: boolean; newSession: boolean };
+  reportsContextUsage?: boolean;
 }
 
 /** A model a driver can run with (GET /drivers/:id/models). */
@@ -866,6 +923,11 @@ export interface Settings {
    */
   defaultDriver: string;
   maxConcurrentRuns: number;
+  /**
+   * Where the ticket header's context gauge reads "full" (tokens, 10k–2M, default 250k). Optional
+   * so clients tolerate an older service.
+   */
+  contextGaugeLimit?: number;
   /** Default permission mode (projects and tickets may override it). Default "auto". */
   permissionMode: PermissionMode;
   /** Who judges actions in auto mode for drivers without their own permission system */
@@ -1115,7 +1177,9 @@ export type HarnessEvent =
   | { kind: "browser.frame"; sessionId: string; tabId?: number; data: string; width: number; height: number; viewerId?: string }
   | { kind: "browser.state"; sessionId: string; state: BrowserState; viewerId?: string }
   /** The service's code on disk changed since it started (or changed back) */
-  | { kind: "service.status"; status: ServiceStatus };
+  | { kind: "service.status"; status: ServiceStatus }
+  /** Plan usage (GET /usage) was fetched again */
+  | { kind: "usage.updated"; usage: PlanUsageReport };
 
 /**
  * Whether the service runs the code on disk. `stale`: the checkout changed since it started; it
@@ -1842,3 +1906,39 @@ export type PluginFrameMessage =
   | { type: "harness:ready" }
   | { type: "harness:openExternal"; url: string }
   | { type: "harness:navigate"; ticketKey: string };
+
+// ---------------------------------------------------------------------------
+// Plan usage (DESIGN.md "Plan usage")
+// ---------------------------------------------------------------------------
+
+export const PLAN_WINDOW_IDS = ["five_hour", "seven_day", "seven_day_opus", "seven_day_sonnet", "monthly"] as const;
+export type PlanWindowId = (typeof PLAN_WINDOW_IDS)[number];
+
+/** One usage window of a driver's plan: Claude's 5-hour or weekly limit, Copilot's monthly quota. */
+export interface PlanWindow {
+  id: PlanWindowId;
+  label: string;
+  /** 0–100 (may pass 100 only for a quota that allows overage) */
+  usedPercent: number;
+  /** When the window resets (ms) */
+  resetsAt: number;
+  /** The window's length (s), so clients compute how far through it we are: 1 − (resetsAt − now) ÷ windowSeconds */
+  windowSeconds: number;
+}
+
+export interface DriverPlanUsage {
+  driver: string;
+  name: string;
+  windows: PlanWindow[];
+  /** From the CLI's rate_limit_event when the percentages can't be read: how close the account is */
+  status: "ok" | "near_limit" | "limited" | null;
+  /** Set when the percentages couldn't be read ("Sign in to Claude Code to see plan usage") */
+  error: string | null;
+  /** When it was fetched (ms) */
+  fetchedAt: number;
+}
+
+/** GET /usage and the usage.updated event: one entry per driver that reports plan usage. */
+export interface PlanUsageReport {
+  drivers: DriverPlanUsage[];
+}

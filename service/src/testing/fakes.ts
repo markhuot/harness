@@ -203,6 +203,23 @@ export class FakeDriver implements Driver {
   commitsWork = false;
   /** Optional per-run override */
   script: ((req: RunRequest) => AsyncIterable<DriverEvent>) | null = null;
+  /** What the driver says it can do with a saved session (null: nothing) */
+  sessionActions: { compact: boolean; newSession: boolean } | undefined = { compact: true, newSession: true };
+  /** The requests compact() got */
+  compactRequests: RunRequest[] = [];
+  /** compact() waits for this before it reports (resolve it to let the compaction finish) */
+  compactGate: Promise<void> | null = null;
+  /** compact() throws this */
+  compactError: string | null = null;
+  /** What compact() reports */
+  compactResult: { before?: number; after?: number } = { before: 482_000, after: 61_000 };
+
+  async *compact(req: RunRequest): AsyncIterable<DriverEvent> {
+    this.compactRequests.push(req);
+    if (this.compactGate) await this.compactGate;
+    if (this.compactError) throw new Error(this.compactError);
+    yield { type: "compacted", ...this.compactResult };
+  }
 
   constructor(id = "fake") {
     this.id = id;

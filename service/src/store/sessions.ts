@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Session, SessionKind, TriageStatus } from "@harness/shared";
 import { bool, fromJson, newId, now, toJson } from "./util";
+import type { CallUsage, StoredContext } from "../orchestrator/context-usage";
 
 interface SessionRow {
   id: string;
@@ -134,9 +135,53 @@ export class SessionRepo {
 
   /** Save (or clear, with null) the driver conversation, recording which driver wrote it. */
   setDriverState(id: string, state: unknown, driver: string | null = null) {
+    // The gauge shows the conversation the next run resumes, so clearing it clears the gauge too.
     this.db
-      .query("UPDATE sessions SET driver_state = $state, driver_state_driver = $driver, updated_at = $t WHERE id = $id")
+      .query("UPDATE sessions SET driver_state = $state, driver_state_driver = $driver, context = CASE WHEN $state IS NULL THEN NULL ELSE context END, updated_at = $t WHERE id = $id")
       .run({ id, state: toJson(state), driver: state == null ? null : driver, t: now() });
+  }
+
+  /** The driver that wrote the saved conversation (null: none saved). */
+  stateDriver(id: string): string | null {
+    const r = this.db.query("SELECT driver_state, driver_state_driver, driver FROM sessions WHERE id = $id").get({ id }) as
+      | { driver_state: string | null; driver_state_driver: string | null; driver: string }
+      | null;
+    return r?.driver_state ? (r.driver_state_driver ?? r.driver) : null;
+  }
+
+  /** The gauge numbers of the saved conversation (null: fresh). */
+  getContext(id: string): StoredContext | null {
+    const r = this.db.query("SELECT context FROM sessions WHERE id = $id").get({ id }) as { context: string | null } | null;
+    return fromJson<StoredContext | null>(r?.context, null);
+  }
+
+  setContext(id: string, context: StoredContext | null) {
+    this.db.query("UPDATE sessions SET context = $context WHERE id = $id").run({ id, context: toJson(context) });
+  }
+
+  /** Keeps a model call a run made. */
+  addCall(sessionId: string, runId: string, call: CallUsage, at: number = now()) {
+    this.db
+      .query(
+        `INSERT INTO driver_calls (session_id, run_id, at, input, cache_read, cache_write, output, estimated)
+         VALUES ($sessionId, $runId, $at, $input, $cacheRead, $cacheWrite, $output, $estimated)`,
+      )
+      .run({ sessionId, runId, at, input: call.input, cacheRead: call.cacheRead, cacheWrite: call.cacheWrite, output: call.output, estimated: call.estimated ? 1 : 0 });
+  }
+
+  /** The calls recorded for a session, oldest first. */
+  listCalls(sessionId: string): (CallUsage & { runId: string; at: number })[] {
+    return (
+      this.db.query("SELECT run_id, at, input, cache_read, cache_write, output, estimated FROM driver_calls WHERE session_id = $sessionId ORDER BY id").all({ sessionId }) as {
+        run_id: string;
+        at: number;
+        input: number;
+        cache_read: number;
+        cache_write: number;
+        output: number;
+        estimated: number;
+      }[]
+    ).map((r) => ({ runId: r.run_id, at: r.at, input: r.input, cacheRead: r.cache_read, cacheWrite: r.cache_write, output: r.output, estimated: !!r.estimated }));
   }
 
   getMeta<T>(id: string): T | null {
@@ -150,6 +195,7 @@ export class SessionRepo {
       this.db.query("DELETE FROM subagents WHERE session_id = $id").run({ id });
       this.db.query("DELETE FROM activity WHERE session_id = $id").run({ id });
       this.db.query("DELETE FROM runs WHERE session_id = $id").run({ id });
+      this.db.query("DELETE FROM driver_calls WHERE session_id = $id").run({ id });
       this.db.query("DELETE FROM sessions WHERE id = $id").run({ id });
     })();
   }

@@ -4,10 +4,10 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
+import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, PlanWindow, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
-import { withRunContext, type Driver, type DriverEvent, type RunGrants, type RunImage, type RunRequest } from "./types";
+import { PlanUsageError, withRunContext, type Driver, type DriverEvent, type RunGrants, type RunImage, type RunRequest } from "./types";
 
 export const MCP_SERVER_NAME = "harness";
 const MCP_PREFIX = `mcp__${MCP_SERVER_NAME}__`;
@@ -41,6 +41,10 @@ export interface ClaudeCodeDriverOptions {
    * process under it are stopped.
    */
   exitGraceMs?: number;
+  /** Plan usage's HTTP client (tests) */
+  fetch?: typeof fetch;
+  /** Plan usage's login tokens, in place of the Keychain and credentials file (tests) */
+  loginTokens?: () => Promise<string[]>;
 }
 
 const DEFAULT_EXIT_GRACE_MS = 15_000;
@@ -339,6 +343,60 @@ export function buildClaudeArgs(
   return args;
 }
 
+const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+
+const WINDOWS: { key: string; id: PlanWindow["id"]; label: string; seconds: number }[] = [
+  { key: "five_hour", id: "five_hour", label: "5-hour", seconds: 5 * 3600 },
+  { key: "seven_day", id: "seven_day", label: "Weekly", seconds: 7 * 86400 },
+  { key: "seven_day_opus", id: "seven_day_opus", label: "Weekly · Opus", seconds: 7 * 86400 },
+  { key: "seven_day_sonnet", id: "seven_day_sonnet", label: "Weekly · Sonnet", seconds: 7 * 86400 },
+];
+
+/** The usage endpoint's windows (`{ five_hour: { utilization: 0–100, resets_at } | null, … }`); the ones the account has. */
+export function parseClaudeUsage(body: unknown): PlanWindow[] {
+  const o = (body && typeof body === "object" ? body : {}) as Record<string, any>;
+  const out: PlanWindow[] = [];
+  for (const w of WINDOWS) {
+    const v = o[w.key];
+    const used = typeof v?.utilization === "number" ? v.utilization : null;
+    const resetsAt = typeof v?.resets_at === "string" ? Date.parse(v.resets_at) : NaN;
+    if (used === null || !Number.isFinite(resetsAt)) continue;
+    out.push({ id: w.id, label: w.label, usedPercent: used, resetsAt, windowSeconds: w.seconds });
+  }
+  if (!out.length) throw new PlanUsageError("Claude's usage endpoint reported no windows for this account");
+  return out;
+}
+
+/** The access tokens of the login the CLI keeps: the macOS Keychain item, then ~/.claude/.credentials.json. */
+async function claudeLoginTokens(env: Record<string, string | undefined>): Promise<string[]> {
+  const out: string[] = [];
+  const take = (text: string) => {
+    try {
+      const t = JSON.parse(text)?.claudeAiOauth?.accessToken;
+      if (typeof t === "string" && t) out.push(t);
+    } catch {
+      /* not the credentials JSON */
+    }
+  };
+  if (process.platform === "darwin") {
+    try {
+      const proc = Bun.spawn(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"], { stdout: "pipe", stderr: "ignore" });
+      const timer = setTimeout(() => proc.kill(), 10_000);
+      take(await new Response(proc.stdout).text());
+      clearTimeout(timer);
+    } catch {
+      /* no keychain item */
+    }
+  }
+  try {
+    const file = Bun.file(join(claudeConfigDir(env), ".credentials.json"));
+    if (await file.exists()) take(await file.text());
+  } catch {
+    /* unreadable */
+  }
+  return out;
+}
+
 function summarizeInput(input: unknown, max = 160): string {
   const o = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const pick = ["command", "file_path", "path", "url", "pattern"].find((k) => typeof o[k] === "string" && o[k]);
@@ -483,6 +541,8 @@ export class StreamJsonParser {
     this.costBase = baseline;
   }
 
+  /** Message ids whose usage was reported already */
+  private callIds = new Set<string>();
   /** The session's cumulative cost at the last result (starts as the resumed session's). */
   private costBase: { sessionId: string; costUsd: number } | null;
 
@@ -548,7 +608,26 @@ export class StreamJsonParser {
     const from = subagentId ? { subagentId } : {};
 
     switch (msg.type) {
+      case "rate_limit_event": {
+        const info = msg.rate_limit_info;
+        if (info && typeof info === "object") {
+          const windows: { id: "five_hour" | "seven_day"; used: number | null; resetsAt: number }[] = [];
+          for (const id of ["five_hour", "seven_day"] as const) {
+            const w = info.unifiedWindows?.[id];
+            if (w && typeof w.resetsAt === "number") windows.push({ id, used: typeof w.utilization === "number" ? w.utilization : null, resetsAt: w.resetsAt * 1000 });
+          }
+          if (!windows.length && (info.rateLimitType === "five_hour" || info.rateLimitType === "seven_day") && typeof info.resetsAt === "number") {
+            windows.push({ id: info.rateLimitType, used: null, resetsAt: info.resetsAt * 1000 });
+          }
+          events.push({ type: "rate_limit", status: str(info.status) ?? "allowed", windows });
+        }
+        break;
+      }
       case "system":
+        if (msg.subtype === "compact_boundary") {
+          const m = msg.compact_metadata;
+          events.push({ type: "compacted", before: typeof m?.pre_tokens === "number" ? m.pre_tokens : undefined, after: typeof m?.post_tokens === "number" ? m.post_tokens : undefined });
+        }
         if (msg.subtype === "task_started" && typeof msg.task_id === "string") {
           this.runningTasks.set(msg.task_id, str(msg.description) ?? msg.task_id);
           if (typeof msg.tool_use_id === "string") {
@@ -621,6 +700,15 @@ export class StreamJsonParser {
         break;
       }
       case "assistant": {
+        // One model call's usage (the message's content blocks arrive as separate events, each
+        // repeating it): the gauge counts the session's own agent only, once per message.
+        const messageId = str(msg.message?.id);
+        const u = msg.message?.usage;
+        if (!subagentId && messageId && u && typeof u === "object" && !this.callIds.has(messageId) && str(msg.message?.model) !== "<synthetic>") {
+          this.callIds.add(messageId);
+          const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+          events.push({ type: "call", call: { input: n(u.input_tokens), cacheRead: n(u.cache_read_input_tokens), cacheWrite: n(u.cache_creation_input_tokens), output: n(u.output_tokens) } });
+        }
         // A sub-agent's replies name the model that wrote them; the CLI's own messages (an API
         // error, an interrupt) say "<synthetic>".
         const model = str(msg.message?.model);
@@ -776,6 +864,7 @@ export class ClaudeCodeDriver implements Driver {
   readonly subagentTool = "Claude Code's `Agent` tool (`Task` in older versions) with the `Explore` subagent type";
   readonly usesPermissionPromptTool = true;
   readonly supportsSteering = true;
+  readonly sessionActions = { compact: true, newSession: true };
 
   /**
    * The CLI message of the last run that couldn't sign in, and the stored token it ran with. info()
@@ -878,6 +967,103 @@ export class ClaudeCodeDriver implements Driver {
     return url
       ? { url, message: "Open the URL to finish logging in to Claude. The harness picks up the login automatically." }
       : { url: null, message: "claude auth login did not print a login URL. Run `claude auth login --claudeai` in a terminal." };
+  }
+
+  /**
+   * Compact the saved conversation in place: `claude -p /compact --resume <id>` summarizes it and
+   * keeps the same session id, so the saved state stays valid (only its cost moves). Reports the
+   * conversation's size before and after from the CLI's compact boundary.
+   */
+  async *compact(req: RunRequest): AsyncGenerator<DriverEvent> {
+    const state = req.state as Partial<ClaudeCodeState> | null;
+    const resume = typeof state?.sessionId === "string" && state.sessionId ? state.sessionId : null;
+    if (!resume) throw new Error("This ticket has no saved Claude Code session to compact");
+    try {
+      carrySession(claudeConfigDir(this.env), resume, req.cwd);
+    } catch {
+      // --resume reports a missing session below.
+    }
+    const settings = this.opts.settings();
+    const args = ["-p", "/compact", "--output-format", "stream-json", "--verbose", "--resume", resume];
+    if (req.model) args.push("--model", req.model);
+    const proc = Bun.spawn([this.bin(), ...args], { cwd: req.cwd, stdin: "ignore", stdout: "pipe", stderr: "pipe", env: claudeRunEnv(this.env, settings) });
+    const onAbort = () => {
+      const pids = [proc.pid, ...descendantPids(proc.pid)];
+      signalAll(pids, "SIGTERM");
+    };
+    req.signal.addEventListener("abort", onAbort, { once: true });
+    let stderr = "";
+    const stderrDone = (async () => {
+      const decoder = new TextDecoder();
+      for await (const chunk of proc.stderr as unknown as AsyncIterable<Uint8Array>) {
+        stderr += decoder.decode(chunk, { stream: true });
+        if (stderr.length > 32_000) stderr = stderr.slice(-16_000);
+      }
+    })().catch(() => {});
+    const priorCost = typeof state?.costUsd === "number" ? state.costUsd : 0;
+    const parser = new StreamJsonParser({ sessionId: resume, costUsd: priorCost }, null, realCwd(req.cwd));
+    let compacted = false;
+    try {
+      for await (const line of readLines(proc.stdout)) {
+        let msg: any;
+        try {
+          msg = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        for (const ev of parser.handle(msg)) {
+          if (ev.type === "compacted") compacted = true;
+          // The compact run's own calls and usage aren't the conversation the gauge shows.
+          if (ev.type === "call" || ev.type === "text" || ev.type === "thinking") continue;
+          yield ev;
+        }
+      }
+      const exitCode = await proc.exited;
+      await stderrDone;
+      if (req.signal.aborted) throw abortError();
+      if (parser.result?.isError || (!parser.result && exitCode !== 0)) {
+        const tail = stderr.trim().split("\n").filter((l) => !/extra certs/i.test(l)).slice(-5).join("\n");
+        throw new Error(this.runFailure(parser.result?.message || `claude exited with code ${exitCode}${tail ? `: ${tail}` : ""}`, settings));
+      }
+      if (!compacted) throw new Error("Claude Code didn't compact the session (no compact boundary reported)");
+    } finally {
+      req.signal.removeEventListener("abort", onAbort);
+      if (proc.exitCode === null) proc.kill("SIGTERM");
+    }
+  }
+
+  /**
+   * The account's 5-hour and weekly usage, from the endpoint Claude Code's /usage screen reads
+   * (undocumented; it needs the account's OAuth token, so a stored `claude setup-token` token is
+   * tried first, then the login the CLI keeps in the Keychain or ~/.claude/.credentials.json).
+   */
+  async planUsage(): Promise<PlanWindow[] | null> {
+    const tokens = [this.token(), ...(await (this.opts.loginTokens ?? (() => claudeLoginTokens(this.env)))())].filter((t): t is string => !!t);
+    if (!tokens.length) throw new PlanUsageError("Sign in to Claude Code to see plan usage");
+    let lastError: PlanUsageError | null = null;
+    for (const token of [...new Set(tokens)]) {
+      try {
+        const res = await (this.opts.fetch ?? fetch)(CLAUDE_USAGE_URL, {
+          headers: { Authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20", "User-Agent": "claude-code/2.1.294", Accept: "application/json" },
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (res.status === 401 || res.status === 403) {
+          lastError = new PlanUsageError("Sign in to Claude Code to see plan usage");
+          continue;
+        }
+        if (res.status === 429 || res.status >= 500) throw new PlanUsageError(`Claude's usage endpoint answered ${res.status}`, true);
+        if (!res.ok) throw new PlanUsageError(`Claude's usage endpoint answered ${res.status}`);
+        return parseClaudeUsage(await res.json());
+      } catch (err) {
+        if (err instanceof PlanUsageError) {
+          if (err.transient) throw err;
+          lastError = err;
+          continue;
+        }
+        throw new PlanUsageError(`Couldn't reach Claude's usage endpoint: ${err instanceof Error ? err.message : String(err)}`, true);
+      }
+    }
+    throw lastError ?? new PlanUsageError("Sign in to Claude Code to see plan usage");
   }
 
   async *run(req: RunRequest): AsyncGenerator<DriverEvent> {

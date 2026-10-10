@@ -317,6 +317,8 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
         },
         o,
       );
+    case "compact":
+      return ""; // a compact run sends no instructions
     case "triage":
       return renderPrompt("system.triage", { lookupTools: triageLookupTools() }, o);
     case "chat": {

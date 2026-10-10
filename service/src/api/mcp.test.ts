@@ -173,7 +173,7 @@ const searchTools = async (query: string) => (await rpc("tools/call", { name: "t
 describe("stubs and tool_search", () => {
   test("tools/list for each run kind: core tools in full, tool_search, every other tool in the run as a stub", async () => {
     const SPEC = ["read_spec", "edit_spec", "update_spec"];
-    const core: Record<RunKind, string[]> = {
+    const core: Record<Exclude<RunKind, "compact">, string[]> = {
       plan: ["post_note", ...SPEC, "update_notes", "permission_prompt"],
       work: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
       review: ["post_note", "read_spec", "edit_spec", "review_decision", "permission_prompt"],
@@ -182,7 +182,7 @@ describe("stubs and tool_search", () => {
       triage: ["dispatch_ticket", "decline_work", "permission_prompt"],
       chat: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
     };
-    for (const kind of Object.keys(core) as RunKind[]) {
+    for (const kind of Object.keys(core) as Exclude<RunKind, "compact">[]) {
       const allowed = toolsForRun(kind, claudeCode);
       const listed = await listFor(kind, allowed);
       const rest = allowed.filter((t) => !core[kind].includes(t.name));

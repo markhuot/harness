@@ -48,7 +48,7 @@ const bare = { hasBuiltinTools: false };
 const names = (kind: RunKind, driver: { hasBuiltinTools: boolean; usesPermissionPromptTool?: boolean }) => toolsForRun(kind, driver).map((t) => t.name);
 
 describe("toolsForRun", () => {
-  const harnessByKind: Record<RunKind, string[]> = {
+  const harnessByKind: Record<Exclude<RunKind, "compact">, string[]> = {
     // update_ticket edits only the plan run's own ticket (the orchestrator checks).
     plan: ["post_note", ...SPEC, "update_notes", "update_ticket", ...BOARD, ...CONFIG_READ, ...BROWSER],
     work: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
@@ -59,7 +59,7 @@ describe("toolsForRun", () => {
     // A chat (a message to a blocked, review or done task ticket) gets the work run's tools.
     chat: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "update_branch", ...BOARD, ...BOARD_WRITE, ...CONDUCTOR, ...CONFIG_READ, ...CONFIG_WRITE, ...BROWSER],
   };
-  const nativeByKind: Record<RunKind, string[]> = {
+  const nativeByKind: Record<Exclude<RunKind, "compact">, string[]> = {
     plan: NATIVE_READ,
     work: NATIVE_FULL,
     review: NATIVE_READ,
@@ -69,7 +69,7 @@ describe("toolsForRun", () => {
     chat: NATIVE_FULL,
   };
 
-  for (const kind of Object.keys(harnessByKind) as RunKind[]) {
+  for (const kind of Object.keys(harnessByKind) as Exclude<RunKind, "compact">[]) {
     test(`${kind}: drivers with built-in tools get only harness tools`, () => {
       expect(names(kind, builtin)).toEqual(harnessByKind[kind]);
       expect(toolsForRun(kind, builtin).every((t) => t.group === "harness")).toBe(true);

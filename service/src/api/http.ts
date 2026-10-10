@@ -52,6 +52,8 @@ export interface HttpHandler {
   websocket: ReturnType<typeof createWsHandlers>["websocket"];
   /** Close every open WebSocket (after a token rotation). */
   closeSockets(): void;
+  /** How many WebSocket clients are connected (plan usage polls only while someone watches). */
+  connectedClients(): number;
 }
 
 type Params = Record<string, string>;
@@ -263,6 +265,8 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   });
   add("POST", "/tickets/:key/reopen", async ({ params, body }) => o.reopenTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/complete", async ({ params, body }) => o.completeTicket(params.key!, (await body()) ?? {}));
+  add("POST", "/tickets/:key/session", async ({ params, body }) => o.sessionAction(params.key!, await body()));
+  add("GET", "/usage", () => o.planUsageReport());
   add("POST", "/tickets/:key/cancel", ({ params }) => o.cancelTicket(params.key!));
   add("POST", "/tickets/:key/agent-review", ({ params }) => o.rerunAgentReview(params.key!));
   add("POST", "/tickets/:key/approval", async ({ params, body }) => o.answerApproval(params.key!, (await body()) ?? {}));
@@ -475,6 +479,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
   return {
     websocket: ws.websocket,
     closeSockets: () => ws.closeAll(),
+    connectedClients: () => ws.connected(),
     async fetch(req, server) {
       if (opts.network?.isRetired(server)) {
         return new Response(JSON.stringify({ error: "The service no longer listens on this address" }), { status: 503, headers: { "content-type": "application/json", connection: "close" } });
