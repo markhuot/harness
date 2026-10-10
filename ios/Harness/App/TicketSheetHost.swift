@@ -311,17 +311,23 @@ private struct SheetFlickTracker: UIViewRepresentable {
         /// How far the sheet has to go to reach the bottom of the screen, from where it was when the
         /// drag began (`.large`, when it's presented).
         private var travel: CGFloat = 0
+        /// Where the sheet's top edge was when the drag began.
+        private var startTop: CGFloat = 0
 
         @objc private func panned(_ pan: UIPanGestureRecognizer) {
             switch pan.state {
             case .began:
                 if let container = pan.view, let top = presentedController?.presentationController?.presentedView?.frame.minY {
                     travel = container.bounds.height - top
+                    startTop = top
                 }
                 flick.began()
             case .ended:
                 // UIKit's own velocity, from the touches' timestamps rather than when this runs.
-                flick.ended(velocity: pan.velocity(in: pan.view).y, distance: pan.translation(in: pan.view).y,
+                // How far the sheet moved, not the finger: the pan also sees drags on the ticket's own
+                // scroll views, which never move it.
+                let top = presentedController?.presentationController?.presentedView?.frame.minY ?? startTop
+                flick.ended(velocity: pan.velocity(in: pan.view).y, distance: top - startTop,
                             travel: travel, apply: onRelease)
             case .cancelled, .failed: flick.cancelled()
             default: break

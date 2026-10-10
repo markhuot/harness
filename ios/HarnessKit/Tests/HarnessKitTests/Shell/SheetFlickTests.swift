@@ -46,6 +46,25 @@ import Testing
         return applied
     }
 
+    @Test func aFastReleaseThatNeverMovedTheSheetDecidesNothing() {
+        // The ticket's own content scrolled: a fast fling back up isn't a dismiss.
+        let f = SheetFlick()
+        f.began()
+        #expect(release(f, velocity: 3000, distance: 0) == [])
+        #expect(release(f, velocity: 3000, distance: -10) == [])
+        #expect(!f.isDragging)
+        // Nothing is left over for a later settle to confirm.
+        #expect(settle(f).outcomes == [.dock])
+    }
+
+    @Test func aNoMoveReleaseLetsAWaitingSettleDock() {
+        let f = SheetFlick()
+        f.began()
+        let a = settle(f)
+        release(f, velocity: 3000, distance: 0)
+        #expect(a.outcomes == [.dock])
+    }
+
     @Test func theReleaseIsAppliedTheMomentTheFingerLifts() {
         let f = SheetFlick()
         f.began()

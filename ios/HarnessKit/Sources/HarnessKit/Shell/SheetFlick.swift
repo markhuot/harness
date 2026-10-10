@@ -45,9 +45,15 @@ import Foundation
         waiting = nil
     }
 
-    /// Let go: decides now, tells `apply`, and tells a settle that came first.
+    /// Let go: decides now, tells `apply`, and tells a settle that came first. `distance` is how far
+    /// the sheet itself moved, not the finger: a drag that never moved it (it scrolled the ticket's
+    /// content, say) decides nothing, whatever its speed, and returns nil.
     @discardableResult
-    public func ended(velocity: Double, distance: Double, travel: Double, apply: (Outcome) -> Void) -> Outcome {
+    public func ended(velocity: Double, distance: Double, travel: Double, apply: (Outcome) -> Void) -> Outcome? {
+        guard distance > 0 else {
+            cancelled()
+            return nil
+        }
         isDragging = false
         let outcome = Self.outcome(velocity: velocity, distance: distance, travel: travel)
         released = outcome
