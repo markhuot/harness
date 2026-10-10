@@ -8,7 +8,7 @@
 
 import { conductorManagedReason, managingConductor, type Ticket } from "@harness/shared";
 import { autoStartWaitingOn, startLabel, startState, type DepState } from "@harness/shared/state";
-import { landMenu, type LandChoice, type LandMenu } from "./approveMenu";
+import { landCommands, landMenu, type LandChoice, type LandMenu } from "./approveMenu";
 
 export type TicketActionId = "start" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "delete";
 
@@ -73,6 +73,33 @@ export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketA
   more.push({ id: "delete", label: "Delete ticket", enabled: !compacting, destructive: true });
 
   return { primary, more, enabled: [...primary, ...more].filter((a) => a.enabled) };
+}
+
+/** One ⌘K palette command: the action it runs, and for an Approve way the choice. */
+export interface PaletteEntry {
+  label: string;
+  action: TicketAction;
+  choice?: LandChoice;
+}
+
+/**
+ * The palette's ticket-action commands, from the same list the buttons and the card menu read:
+ * one per enabled action in the set, keyed by command id. Approve is the primary way to land, then
+ * one command per other way (merge, pull request, clean up, custom) and "take no action".
+ */
+export function paletteEntries(set: TicketActionSet): Record<string, PaletteEntry> {
+  const out: Record<string, PaletteEntry> = {};
+  for (const a of set.enabled) {
+    if (a.id !== "approve" || !a.land) {
+      out[`ticket.${a.id}`] = { label: a.label, action: a };
+      continue;
+    }
+    const commands = landCommands(a.land);
+    out["ticket.approve"] = { label: commands.primary, action: a, choice: a.land.primary };
+    for (const [kind, c] of Object.entries(commands.others)) out[`ticket.land.${kind}`] = { label: c.label, action: a, choice: c };
+    out["ticket.approveNoAction"] = { label: a.land.noAction.label, action: a, choice: a.land.noAction };
+  }
+  return out;
 }
 
 /** A native context-menu entry: what the main process's menu takes (main/types.ts `ContextMenuItem`). */

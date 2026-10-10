@@ -89,8 +89,9 @@ struct TicketDetailHero: View {
         if !compact {
             // While the session compacts the service refuses ticket actions; Cancel run in More stays.
             FlowLayout(spacing: 8) {
-                let set = TicketActions.set(for: ticket, project: project, parent: parent, deps: state.dependencyStates(ticket), settingsBaseBranch: state.settings?.baseBranch)
-                Group { buttons(set, parent: parent) }.disabled(ticket.compacting == true)
+                let deps = state.dependencyStates(ticket)
+                let set = TicketActions.set(for: ticket, project: project, parent: parent, deps: deps, settingsBaseBranch: state.settings?.baseBranch)
+                Group { buttons(set, deps: deps, parent: parent) }.disabled(ticket.compacting == true)
                 moreMenu(set)
             }
         }
@@ -198,11 +199,11 @@ struct TicketDetailHero: View {
 
     /// The status action, Approve and the like come from the shared list (`TicketActions`, also the
     /// board card's menu); the disabled stand-ins for a state with no action of its own are drawn here.
-    @ViewBuilder private func buttons(_ set: TicketActionSet, parent: Ticket?) -> some View {
+    @ViewBuilder private func buttons(_ set: TicketActionSet, deps: [DepState], parent: Ticket?) -> some View {
         // Started while its dependencies were open: the service starts it once they're done, so
         // Start is off (it would skip the wait and run it now).
-        let waiting = Conductor.autoStartWaitingOn(ticket, store.state.dependencyStates(ticket))
-        let startMode = Conductor.startState(ticket, store.state.dependencyStates(ticket))
+        let waiting = Conductor.autoStartWaitingOn(ticket, deps)
+        let startMode = Conductor.startState(ticket, deps)
         if startMode == .approved {
             HButton("Starts after planning", icon: "clock", variant: .primary, small: true, fullWidth: false,
                     accessibilityLabel: Conductor.approvedTitle) {}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
 import {
@@ -9,7 +9,6 @@ import {
   autoStartTitle,
   APPROVED_TITLE,
   autoStartWaitingOn,
-  startLabel,
   startState,
   restartsAt,
   restartTitle,
@@ -46,8 +45,8 @@ import { ContextGauge } from "../components/ContextGauge";
 import { COMPACTING_PLACEHOLDER } from "../state/contextGauge";
 import { DriverBadge, KindBadge, MenuButton, MOD, ReviewMark, StatusDot, StatusPill, TicketKey } from "../components/bits";
 import { LandButton } from "../components/LandButton";
-import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
-import { ticketActions, type TicketAction, type TicketActionId } from "../state/ticketActions";
+import { landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
+import { paletteEntries, ticketActions, type TicketAction, type TicketActionId } from "../state/ticketActions";
 import { useTicketActionRunner } from "../components/TicketActionHost";
 import { Transcript } from "./Transcript";
 import { BrowserView, type BrowserTear } from "./BrowserView";
@@ -719,40 +718,29 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
   const managedReason = conductor && conductorManagedReason(conductor);
   const run = (a: Pick<TicketAction, "id" | "land">) => runner.run(ticket, a, { onDeleted });
   const choose = (c: LandChoice) => runner.choose(ticket, c);
-  const start = () => run({ id: "start" });
-  const approve = () => choose(land.primary);
-  const approveNoAction = () => choose(land.noAction);
-  const rerunReview = () => run({ id: "rerunReview" });
-  const cancelRun = () => run({ id: "cancelRun" });
-  const markDone = () => run({ id: "markDone" });
-  const remove = () => run({ id: "delete" });
-  const canStart = set.primary.some((a) => a.id === "start");
+  const palette = paletteEntries(set);
+  const fromPalette = (id: string) => {
+    const e = palette[id];
+    return e && { label: e.label, run: () => (e.choice ? choose(e.choice) : run(e.action)) };
+  };
   const copyKey = () => void navigator.clipboard.writeText(k);
   const external = ticket.externalRef?.url;
-  const reviewing = ticket.status === "review";
-  const canApprove = reviewing && ticket.humanReview !== "approved";
-  // The Approve split button as the palette names it.
-  const landing = !conductor && canApprove && landCommands(land);
-  const landChoice = (action: CompletionAction) => {
-    const c = landing && landing.others[action];
-    return c && { label: c.label, run: () => choose(c) };
-  };
   useCommands(owner, {
-    "ticket.start": canStart && { label: startLabel(startMode), run: start },
-    "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
-    "ticket.land.merge": landChoice("merge"),
-    "ticket.land.pr": landChoice("pr"),
-    "ticket.land.cleanup": landChoice("cleanup"),
-    "ticket.land.custom": landChoice("custom"),
-    "ticket.requestChanges": canApprove && (() => run({ id: "requestChanges" })),
-    "ticket.approveNoAction": reviewing && !conductor && { label: land.noAction.label, run: approveNoAction },
-    "ticket.rerunReview": reviewing && !ticket.busy && { label: ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review", run: rerunReview },
-    "ticket.cancelRun": ticket.busy && cancelRun,
-    "ticket.markDone": ticket.status !== "done" && markDone,
-    "ticket.reopen": ticket.status === "done" && (() => run({ id: "reopen" })),
+    "ticket.start": fromPalette("ticket.start"),
+    "ticket.approve": fromPalette("ticket.approve"),
+    "ticket.land.merge": fromPalette("ticket.land.merge"),
+    "ticket.land.pr": fromPalette("ticket.land.pr"),
+    "ticket.land.cleanup": fromPalette("ticket.land.cleanup"),
+    "ticket.land.custom": fromPalette("ticket.land.custom"),
+    "ticket.requestChanges": fromPalette("ticket.requestChanges"),
+    "ticket.approveNoAction": fromPalette("ticket.approveNoAction"),
+    "ticket.rerunReview": fromPalette("ticket.rerunReview"),
+    "ticket.cancelRun": fromPalette("ticket.cancelRun"),
+    "ticket.markDone": fromPalette("ticket.markDone"),
+    "ticket.reopen": fromPalette("ticket.reopen"),
     "ticket.copyKey": copyKey,
     "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
-    "ticket.delete": () => void remove(),
+    "ticket.delete": fromPalette("ticket.delete"),
   });
 
   return { k, label, parent, project, set, land, conductor, managedReason, startMode, waitingToStart, choose, run, modals: runner.modals };

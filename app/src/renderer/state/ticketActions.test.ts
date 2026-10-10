@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Ticket } from "@harness/shared";
-import { actionMenuItems, pickedAction, ticketActions, type TicketActionContext } from "./ticketActions";
+import { actionMenuItems, paletteEntries, pickedAction, ticketActions, type TicketActionContext } from "./ticketActions";
 
 const gh = { isGit: true, pullRequestHost: "github.com" } as const;
 const t = (over: Partial<Ticket>): Ticket => ({ id: "t1", key: "K-1", status: "planning", busy: false, humanReview: "pending", agentReview: "pending", draft: false, dependsOn: [], autoStart: false, ...over }) as Ticket;
@@ -82,5 +82,32 @@ describe("the card's menu", () => {
     expect(pickedAction(review, null)).toBeNull();
     expect(pickedAction(review, "action:start")).toBeNull();
     expect(pickedAction(review, "action:approve:99")).toBeNull();
+  });
+});
+
+describe("the palette's commands", () => {
+  const ids = (ticket: Ticket, c: Partial<TicketActionContext> = {}) => Object.keys(paletteEntries(ticketActions(ticket, ctx(c)))).sort();
+
+  test("a review ticket offers the ways to approve but not Move to done", () => {
+    const got = ids(t({ status: "review" }));
+    expect(got).toContain("ticket.approve");
+    expect(got).toContain("ticket.land.pr"); // merge is the primary, so it has no command of its own
+    expect(got).toContain("ticket.approveNoAction");
+    expect(got).not.toContain("ticket.markDone");
+  });
+
+  test("a compacting ticket offers only Cancel run", () => {
+    expect(ids(t({ status: "review", compacting: true, busy: true }))).toEqual(["ticket.cancelRun"]);
+  });
+
+  test("an approve choice carries its land choice, and a plain action carries none", () => {
+    const e = paletteEntries(ticketActions(t({ status: "review" }), ctx()));
+    expect(e["ticket.land.custom"]!.choice).toMatchObject({ action: "custom" });
+    expect(e["ticket.approveNoAction"]!.choice).toMatchObject({ kind: "none" });
+    expect(e["ticket.requestChanges"]!.choice).toBeUndefined();
+  });
+
+  test("a draft offers no ticket actions", () => {
+    expect(ids(t({ draft: true }))).toEqual([]);
   });
 });

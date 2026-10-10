@@ -62,6 +62,7 @@ try {
     const notes = await until("Request changes (picked) opens the notes dialog", () => js<string | null>(`document.querySelector(".modal textarea")?.getAttribute("placeholder") ?? null`));
     check("picking Request changes opens the notes dialog on the board, without opening the ticket", notes === "What should the agent change?" && (await js<string>(`location.hash`)) === "#/board/all", String(notes));
     // A native menu can't be captured; the dialog its Request changes opens, over the board, can.
+    await Bun.sleep(600);
     if (shots) await screenshot(join(shots, "mac-card-menu-request-changes.png"));
     await clickText(".modal-foot button", "Cancel");
     await until("dialog closed", async () => !(await exists(".modal")));
