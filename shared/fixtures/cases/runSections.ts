@@ -1,7 +1,7 @@
 // Run sections and run headers (shared/src/state/runSections.ts) for HarnessKit's State/RunSections.swift.
 import type { DriverInfo, ModelInfo, Run, TranscriptContent, TranscriptEntry } from "../../src/protocol";
 import { groupTranscript } from "../../src/state/format";
-import { itemRun, modelLabel, runHeader, splitRunSections } from "../../src/state/runSections";
+import { itemRun, runHeader, splitRunSections } from "../../src/state/runSections";
 import { cases } from "../case";
 
 const entry = (id: string, runId: string | null, content: TranscriptContent, createdAt: number): TranscriptEntry => ({
@@ -41,22 +41,6 @@ export const runSectionCases = cases(
     "an interleaved run id starts another section": [text("1", "a", 1), text("2", "b", 2), text("3", "a", 3)],
   },
 );
-
-export const modelLabelCases = cases((id: string | null) => modelLabel(id), {
-  "current id": "claude-opus-5-5",
-  "dated id": "claude-haiku-4-5-20251001",
-  "no minor": "claude-sonnet-4-20250514",
-  "older order": "claude-3-5-sonnet-20241022",
-  "older order, no minor": "claude-3-opus-20240229",
-  alias: "haiku",
-  "1M suffix": "claude-opus-5-5[1m]",
-  "alias with 1M": "sonnet[1m]",
-  "unknown id": "gpt-5.1-codex",
-  "unknown with digits": "claude-opus-5-5-preview",
-  empty: "",
-  "only spaces": "   ",
-  null: null,
-});
 
 const DRIVERS: DriverInfo[] = [{ id: "acme", name: "Acme Agent" } as DriverInfo];
 const MODELS: ModelInfo[] = [

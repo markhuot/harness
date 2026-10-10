@@ -5,6 +5,7 @@
 import { PHASE_LABELS, runPhase } from "../phases";
 import type { DriverInfo, ModelInfo, Run } from "../protocol";
 import { driverLabel, type TranscriptItem } from "./format";
+import { subagentModelLabel } from "./subagents";
 
 /** What a row says about its run, for splitting. null for rows that belong to no run (streaming text, "Working…"). */
 export interface RowRun {
@@ -60,27 +61,6 @@ export function splitRunSections<T>(rows: T[], at: (row: T) => RowRun | null): R
   return sections;
 }
 
-/**
- * A model id as a readable name: "claude-opus-5-5" → "Opus 5.5", "claude-haiku-4-5-20251001" →
- * "Haiku 4.5", "claude-3-5-sonnet-20241022" → "Sonnet 3.5", "haiku" → "Haiku", a "[1m]" suffix → "… 1M".
- * Any other id shows as is.
- */
-export function modelLabel(model: string | null | undefined): string | null {
-  const id = (model ?? "").trim();
-  if (!id) return null;
-  const long = /\[1m\]$/i.test(id);
-  const base = long ? id.slice(0, -4) : id;
-  const suffix = long ? " 1M" : "";
-  const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
-  const version = (major: string, minor?: string) => (minor ? `${major}.${minor}` : major);
-  let m = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(base);
-  if (m) return `${cap(m[1]!)} ${version(m[2]!, m[3])}${suffix}`;
-  m = /^claude-(\d+)(?:-(\d{1,2}))?-([a-z]+)(?:-\d{8})?$/.exec(base);
-  if (m) return `${cap(m[3]!)} ${version(m[1]!, m[2])}${suffix}`;
-  if (/^[a-z]+$/.test(base)) return `${cap(base)}${suffix}`;
-  return id;
-}
-
 export interface RunHeader {
   /** "Work • Claude Code, Opus 5.5" */
   title: string;
@@ -107,7 +87,7 @@ export function runHeader(
   }
   const parts = `${phaseOrKindLabel(run.kind)} • ${driverLabel(run.driver, ctx.drivers)}`;
   const listed = ctx.models?.find((m) => m.id === run.model)?.name;
-  const model = run.model ? (listed ?? modelLabel(run.model)) : ctx.models?.find((m) => m.default)?.name;
+  const model = run.model ? (listed ?? subagentModelLabel(run.model)) : ctx.models?.find((m) => m.default)?.name;
   return { title: model ? `${parts}, ${model}` : parts, at: run.startedAt || run.createdAt || ctx.firstAt || null };
 }
 

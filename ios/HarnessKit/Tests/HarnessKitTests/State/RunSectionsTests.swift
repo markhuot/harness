@@ -37,11 +37,6 @@ struct RunSectionsTests {
         #expect(got == c.output)
     }
 
-    @Test(arguments: Fixture.cases("runSections", "modelLabelCases", input: String?.self, output: String?.self))
-    func modelLabel(_ c: Fixture.Case<String?, String?>) {
-        #expect(Subagents.modelLabel(c.input) == c.output)
-    }
-
     @Test(arguments: Fixture.cases("runSections", "runHeaderCases", input: HeaderInput.self, output: HeaderOutput.self))
     func header(_ c: Fixture.Case<HeaderInput, HeaderOutput>) {
         let drivers = c.input.drivers?.map {

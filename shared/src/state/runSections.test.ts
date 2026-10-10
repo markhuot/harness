@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptEntry } from "../protocol";
 import { groupTranscript } from "./format";
-import { itemRun, modelLabel, runHeader, runStartedText, splitRunSections } from "./runSections";
+import { itemRun, runHeader, runStartedText, splitRunSections } from "./runSections";
 
 const e = (id: string, runId: string | null, text: string, createdAt: number, type: "text" | "status" = "text"): TranscriptEntry => ({
   id,
@@ -61,16 +61,6 @@ describe("splitRunSections", () => {
   });
 });
 
-describe("modelLabel", () => {
-  test("ids become names", () => {
-    expect(modelLabel("claude-opus-5-5")).toBe("Opus 5.5");
-    expect(modelLabel("claude-sonnet-4-20250514")).toBe("Sonnet 4");
-    expect(modelLabel("claude-3-5-sonnet-20241022")).toBe("Sonnet 3.5");
-    expect(modelLabel("opus[1m]")).toBe("Opus 1M");
-    expect(modelLabel("gpt-5")).toBe("gpt-5");
-    expect(modelLabel("  ")).toBeNull();
-  });
-});
 
 describe("runHeader", () => {
   const run = { id: "r", sessionId: "s", kind: "work", status: "succeeded", driver: "claude-code", prompt: "", error: null, createdAt: 1, startedAt: 2, endedAt: 3, model: "claude-opus-5-5" } as const;
