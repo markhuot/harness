@@ -143,7 +143,7 @@ instead of showing a stale bar.
 **Planning → In progress → Blocked → Review → Done.**
 
 - Humans own Planning and Blocked, agents own In progress, and Review is shared.
-- **New session** (⌘N) opens a draft next to the board. **Start session** (⌘↩) skips planning,
+- **New session** (⌘N) opens a draft in a new pane on the window's far right, about 70em wide. **Start session** (⌘↩) skips planning,
   and **Plan first** (⇧⌘↩) has an agent turn your request into a spec with a plan for you to
   approve. A draft is saved as you type and waits in Planning until you start it, and closing it
   asks whether to keep it.

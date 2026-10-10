@@ -1474,26 +1474,59 @@ describe("paneInDirection (⌥⌘arrows / ⌃hjkl)", () => {
 describe("New session panes (compose)", () => {
   const C = (id: string): PaneLeaf => ({ type: "leaf", id: `c-${id}`, content: { kind: "compose", id } });
 
-  test("every open adds another New session pane, docked right of the focused pane like a terminal", () => {
-    const one = valid(openCompose(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1")));
-    const two = valid(openCompose(one));
+  const composeLabel = /^\+n\d+$/;
+  const lastLabel = (s: PaneState) => label((s.root as PaneSplit).children.at(-1) as PaneLeaf);
+
+  test("lands on the far right, full height, wherever focus is", () => {
+    for (const focus of ["A-1", "A-2", "B"]) {
+      const s = valid(openCompose(st(row("r", [B, T("A-1"), T("A-2")]), focus), undefined, 2000));
+      expect(lastLabel(s)).toMatch(composeLabel);
+      expect(findLeaf(s.root, s.focusedId!)!.content.kind).toBe("compose");
+    }
+    const stacked = valid(openCompose(st(row("r", [B, col("c", [T("A-1"), T("A-2")])]), "A-2"), undefined, 2000));
+    expect(shape(stacked.root)).toMatch(/^row\[board [\d.]+, col\[A-1 0\.5, A-2 0\.5\] [\d.]+, \+n\d+ [\d.]+\]$/);
+  });
+
+  test("is 70em (910px) wide when the workspace has room, the others shrinking in proportion", () => {
+    const wide = valid(openCompose(st(row("r", [B, T("A-1")], [0.6, 0.4])), undefined, 1820));
+    expect(shape(wide.root)).toMatch(/^row\[board 0\.3, A-1 0\.2, \+n\d+ 0\.5\]$/);
+    const wider = valid(openCompose(st(row("r", [B, T("A-1")], [0.6, 0.4])), undefined, 2730));
+    expect(shape(wider.root)).toMatch(/^row\[board 0\.4, A-1 0\.267, \+n\d+ 0\.333\]$/);
+  });
+
+  test("in a narrow window it takes what the others' minimums leave, never under its own minimum", () => {
+    const start = st(row("r", [B, T("A-1"), T("A-2")]), "A-1");
+    const some = valid(openCompose(start, undefined, 1500)) as PaneState;
+    const share = (some.root as PaneSplit).sizes.at(-1)!;
+    expect(share * 1500).toBeCloseTo(1500 - (320 + 360 + 360), 5);
+    const tiny = valid(openCompose(start, undefined, 1000));
+    expect((tiny.root as PaneSplit).sizes.at(-1)! * 1000).toBeCloseTo(360, 5);
+  });
+
+  test("a column root is wrapped in a row so the pane keeps the full height", () => {
+    const s = valid(openCompose(st(col("c", [B, T("A-1")]), "A-1"), undefined, 2000));
+    expect(shape(s.root)).toMatch(/^row\[col\[board 0\.5, A-1 0\.5\] [\d.]+, \+n\d+ 0\.455\]$/);
+  });
+
+  test("without a width it takes an equal share of the row", () => {
+    const s = valid(openCompose(st(row("r", [B, T("A-1")]), "B")));
+    expect(shape(s.root)).toMatch(/^row\[board 0\.333, A-1 0\.333, \+n\d+ 0\.333\]$/);
+  });
+
+  test("every open adds another New session pane at the right edge", () => {
+    const one = openCompose(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), undefined, 2000);
+    const two = valid(openCompose(one, undefined, 2000));
     const composes = leaves(two.root).filter((l) => l.content.kind === "compose");
     expect(composes.length).toBe(2);
     expect(new Set(composes.map((l) => (l.content as { id: string }).id)).size).toBe(2);
-    // The first split the ticket pane; the second split the first (it was focused).
-    expect(shape(two.root)).toMatch(/^row\[board 0\.6, A-1 0\.2, \+n\d+ 0\.1, \+n\d+ 0\.1\]$/);
     expect(findLeaf(two.root, two.focusedId!)!.content).toEqual(composes[1]!.content);
-  });
-
-  test("with nothing focused it docks beside the board, which keeps its share", () => {
-    const s = valid(openCompose(defaultPanes("B")));
-    expect(shape(s.root)).toMatch(/^row\[board 0\.6, \+n\d+ 0\.4\]$/);
+    expect((two.root as PaneSplit).children.slice(-2).map((c) => (c as PaneLeaf).content.kind)).toEqual(["compose", "compose"]);
   });
 
   test("the same content twice focuses the open pane instead of opening another", () => {
     const content = newComposeContent("proj-1");
-    const once = openCompose(defaultPanes("B"), null, content);
-    const again = openCompose({ ...once, focusedId: "B" }, null, content);
+    const once = openCompose(defaultPanes("B"), content, 2000);
+    const again = openCompose({ ...once, focusedId: "B" }, content, 2000);
     expect(leaves(again.root).length).toBe(2);
     expect(again.focusedId).toBe(composeLeafById(once.root, content.id)!.id);
     expect(content.projectId).toBe("proj-1");

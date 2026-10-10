@@ -127,6 +127,23 @@ try {
     `${JSON.stringify(start)} → ${JSON.stringify(after)}`,
   );
   if (shots) await screenshot(join(shots, "resize-reordered.png"));
+
+  // 5. ⌘N opens New session on the far right at 70em (910px), whichever pane is focused.
+  // Wide enough for the 910px pane beside three others' minimums (the sidebar takes part of the window).
+  await cdp("Emulation.setDeviceMetricsOverride", { width: 2800, height: 1000, deviceScaleFactor: 1, mobile: false });
+  await Bun.sleep(300);
+  await setPanes(layout([0.25, 0.5, 0.25]));
+  await js(`document.querySelector('.pane[data-pane-id="a"]')?.focus()`);
+  await key("n", "KeyN", 78, 4);
+  await until("compose pane", () => js<boolean>(`document.querySelectorAll(".pane").length === 4`), 10000);
+  await Bun.sleep(300);
+  const withCompose = await js<{ cls: string; w: number; right: number }[]>(`[...document.querySelectorAll(".pane")].map(p => { const r = p.getBoundingClientRect(); return { cls: p.className, w: r.width, right: r.right }; })`);
+  const last = withCompose.at(-1)!;
+  const workspaceRight = await js<number>(`document.querySelector(".pane-workspace").getBoundingClientRect().right`);
+  check("⌘N from a middle pane adds the New session pane last", last.cls.includes("pane-compose") || (await js<boolean>(`!!document.querySelector('.pane:last-child [data-testid="draft-pane"], .pane:last-child .pane-compose')`)), JSON.stringify(withCompose));
+  check("…on the workspace's right edge", near(last.right, workspaceRight, 2), `${last.right} vs ${workspaceRight}`);
+  check("…70em (910px) wide", near(last.w, 910, 2), `${last.w}`);
+  if (shots) await screenshot(join(shots, "compose-right-edge.png"));
 } catch (e) {
   check("run", false, (e as Error).message);
 } finally {

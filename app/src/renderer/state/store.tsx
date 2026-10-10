@@ -510,7 +510,9 @@ export function StoreProvider({
     (projectId: string | null = null) => {
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
-      updatePanes(scope, (s) => openComposePane(s, null, newComposeContent(projectId)));
+      // The share is a plain fraction of the workspace as it is now; it doesn't track later resizes.
+      const width = document.querySelector<HTMLElement>(".pane-workspace")?.clientWidth || window.innerWidth;
+      updatePanes(scope, (s) => openComposePane(s, newComposeContent(projectId), width));
       if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate],

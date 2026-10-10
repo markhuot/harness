@@ -3281,7 +3281,7 @@ Settings, project settings, or on the board route the pane workspace.
   and scrolls. Menus are styled with `menuClassName` rather than by descendant selectors.
 - **New session panes.** ⌘N, the sidebar's New session, the palette, a project's "New session
   here" and `#/compose` open a **compose** pane (`{ kind: "compose", id }` in `state/panes.ts`,
-  never persisted) on the right of the focused pane, one more each time. It holds a local blank
+  never persisted) on the far right of the workspace, full height, wherever focus is, one more each time. It is a fixed 70em (`COMPOSE_WIDTH_PX`, 910px at the 13px body text) wide, or what the other panes' minimums leave in a narrow window; the store reads the workspace's width once when it opens, so the stored size is an ordinary fraction. It holds a local blank
   draft (`blankDraftTicket`); the first change that makes it non-empty creates the draft ticket and
   swaps the leaf to that ticket in place, keeping its id and size. From then on it's a ticket
   pane: `TicketDetail` renders the draft editor while `ticket.draft` is set, and the ticket's tabs

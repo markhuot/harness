@@ -621,15 +621,39 @@ export function newComposeContent(projectId: string | null = null): ComposeConte
   return { kind: "compose", id: `n${++composeCounter}`, ...(projectId ? { projectId } : {}) };
 }
 
+/** A New session pane's width: 70em at the app's 13px body text, fixed now rather than following the font or window. */
+export const COMPOSE_WIDTH_PX = 70 * 13;
+
 /**
- * Open a New session pane beside `fromLeafId`, else the focused pane, else the board, exactly
- * where openTerminal puts a terminal. Every call opens another one (several drafts can be written
- * at once); `content` defaults to a fresh one.
+ * Open a New session pane on the far right of the workspace, running its full height (the root
+ * row's new last child; a root that isn't a row is wrapped in one), wherever focus is. With the
+ * workspace's width (`workspaceWidth`, px) it is COMPOSE_WIDTH_PX wide, or whatever the other panes
+ * leave past their minimums in a narrow window (never under its own minimum); the others shrink in
+ * proportion. Without a width it takes an equal share of the row. Every call opens another one
+ * (several drafts can be written at once); `content` defaults to a fresh one. An open one is focused.
  */
-export function openCompose(state: PaneState, fromLeafId: string | null = null, content: ComposeContent = newComposeContent()): PaneState {
+export function openCompose(state: PaneState, content: ComposeContent = newComposeContent(), workspaceWidth?: number): PaneState {
   const existing = composeLeafById(state.root, content.id);
   if (existing) return focusPane(state, existing.id);
-  return dock(state, null, splitTarget(state, fromLeafId), "right", content);
+  const { root } = state;
+  const taken = allIds(root);
+  const leaf: PaneLeaf = { type: "leaf", id: freshId(taken), content };
+  const isRow = root.type === "split" && root.dir === "row";
+  const children = isRow ? root.children : [root];
+  const sizes = isRow ? root.sizes : [1];
+  let share = 1 / (children.length + 1);
+  if (workspaceWidth && workspaceWidth > 0) {
+    const px = Math.max(PANE_MIN_WIDTH.compose, Math.min(COMPOSE_WIDTH_PX, workspaceWidth - minSize(root, "row")));
+    share = Math.min(px / workspaceWidth, 0.9);
+  }
+  const next: PaneSplit = {
+    type: "split",
+    id: isRow ? root.id : freshId(taken),
+    dir: "row",
+    children: [...children, leaf],
+    sizes: [...sizes.map((x) => x * (1 - share)), share],
+  };
+  return normalize({ root: next, focusedId: leaf.id, zoomedId: null });
 }
 
 /**
