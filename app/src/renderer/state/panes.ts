@@ -568,19 +568,30 @@ export function openTicketInNewSplit(state: PaneState, key: string): PaneState {
  */
 export function openTicketAtRightEdge(state: PaneState, key: string): PaneState {
   if (ticketLeafByKey(state.root, key)) return openTicket(state, key);
+  return appendAtRightEdge(state, { kind: "ticket", ticketKey: key, tab: "spec" }, (root, count) =>
+    root.type === "leaf" && root.content.kind === "board" ? 1 - BOARD_SHARE : 1 / (count + 1),
+  );
+}
+
+/**
+ * Append a pane showing `content` as the root row's new last child (a root that isn't a row is
+ * wrapped in one), focused and full height. `share` picks the fraction of the row it takes, given
+ * the current root and its child count; the others shrink in proportion.
+ */
+function appendAtRightEdge(state: PaneState, content: PaneContent, share: (root: PaneState["root"], count: number) => number): PaneState {
   const { root } = state;
   const taken = allIds(root);
-  const leaf: PaneLeaf = { type: "leaf", id: freshId(taken), content: { kind: "ticket", ticketKey: key, tab: "spec" } };
+  const leaf: PaneLeaf = { type: "leaf", id: freshId(taken), content };
   const isRow = root.type === "split" && root.dir === "row";
   const children = isRow ? root.children : [root];
   const sizes = isRow ? root.sizes : [1];
-  const share = root.type === "leaf" && root.content.kind === "board" ? 1 - BOARD_SHARE : 1 / (children.length + 1);
+  const s = share(root, children.length);
   const next: PaneSplit = {
     type: "split",
     id: isRow ? root.id : freshId(taken),
     dir: "row",
     children: [...children, leaf],
-    sizes: [...sizes.map((s) => s * (1 - share)), share],
+    sizes: [...sizes.map((x) => x * (1 - s)), s],
   };
   return normalize({ root: next, focusedId: leaf.id, zoomedId: null });
 }
@@ -635,25 +646,11 @@ export const COMPOSE_WIDTH_PX = 70 * 13;
 export function openCompose(state: PaneState, content: ComposeContent = newComposeContent(), workspaceWidth?: number): PaneState {
   const existing = composeLeafById(state.root, content.id);
   if (existing) return focusPane(state, existing.id);
-  const { root } = state;
-  const taken = allIds(root);
-  const leaf: PaneLeaf = { type: "leaf", id: freshId(taken), content };
-  const isRow = root.type === "split" && root.dir === "row";
-  const children = isRow ? root.children : [root];
-  const sizes = isRow ? root.sizes : [1];
-  let share = 1 / (children.length + 1);
-  if (workspaceWidth && workspaceWidth > 0) {
+  return appendAtRightEdge(state, content, (root, count) => {
+    if (!workspaceWidth || workspaceWidth <= 0) return 1 / (count + 1);
     const px = Math.max(PANE_MIN_WIDTH.compose, Math.min(COMPOSE_WIDTH_PX, workspaceWidth - minSize(root, "row")));
-    share = Math.min(px / workspaceWidth, 0.9);
-  }
-  const next: PaneSplit = {
-    type: "split",
-    id: isRow ? root.id : freshId(taken),
-    dir: "row",
-    children: [...children, leaf],
-    sizes: [...sizes.map((x) => x * (1 - share)), share],
-  };
-  return normalize({ root: next, focusedId: leaf.id, zoomedId: null });
+    return Math.min(px / workspaceWidth, 0.9);
+  });
 }
 
 /**

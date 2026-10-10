@@ -138,9 +138,9 @@ try {
   await until("compose pane", () => js<boolean>(`document.querySelectorAll(".pane").length === 4`), 10000);
   await Bun.sleep(300);
   const withCompose = await js<{ cls: string; w: number; right: number }[]>(`[...document.querySelectorAll(".pane")].map(p => { const r = p.getBoundingClientRect(); return { cls: p.className, w: r.width, right: r.right }; })`);
-  const last = withCompose.at(-1)!;
+  const last = withCompose.reduce((a, b) => (b.right > a.right ? b : a));
   const workspaceRight = await js<number>(`document.querySelector(".pane-workspace").getBoundingClientRect().right`);
-  check("⌘N from a middle pane adds the New session pane last", last.cls.includes("pane-compose") || (await js<boolean>(`!!document.querySelector('.pane:last-child [data-testid="draft-pane"], .pane:last-child .pane-compose')`)), JSON.stringify(withCompose));
+  check("⌘N from a middle pane adds the New session pane last", last.cls.includes("pane-compose"), JSON.stringify(withCompose));
   check("…on the workspace's right edge", near(last.right, workspaceRight, 2), `${last.right} vs ${workspaceRight}`);
   check("…70em (910px) wide", near(last.w, 910, 2), `${last.w}`);
   if (shots) await screenshot(join(shots, "compose-right-edge.png"));
