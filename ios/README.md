@@ -168,6 +168,7 @@ bun ios/Tools/sim-check.ts --no-build --shot='harness://ticket/{headings}?tab=sp
 It builds with `build.ts sim` (skip with `--no-build`), installs
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to
 `ios/build/screens/` (`--ipad`: `ios/build/screens-ipad/`). `--udid` still names a specific
-existing simulator. The header of `sim-check.ts` lists every mode.
+existing simulator. `--ipad` runs on `harness-shared-ipad` (an iPad Pro 11-inch), which stays booted between
+runs like `harness-shared`, so an iPad run skips creating and installing on a fresh simulator. The header of `sim-check.ts` lists every mode.
 
 When the ticket is done, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.

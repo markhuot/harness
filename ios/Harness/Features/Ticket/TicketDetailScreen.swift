@@ -134,7 +134,8 @@ private struct TicketDetailBody: View {
     /// Where the composer starts and the tab's page ends, on screen: the pages run on under the
     /// composer's glass, so their content gets the overlap as a bottom inset instead.
     @State private var composerTop: CGFloat = 0
-    @State private var pageBottom: CGFloat = 0
+    /// The page's bottom edge as last measured, with the pager's slide in it.
+    @State private var pageMaxY: CGFloat = 0
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
     /// pager, so a page redrawing under it can't take it down.
     @State private var annotating: AnnotationRequest?
@@ -233,16 +234,16 @@ private struct TicketDetailBody: View {
             ForEach(pages, id: \.self) { page in
                 let t = page == strip ? shown : page
                 pageBody(t, strip: page, tornOff: tornOff)
-                    .modifier(HeroRoom(hero: hero, overlap: max(0, pageBottom - composerTop)))
+                    .modifier(HeroRoom(hero: hero, overlap: max(0, pageMaxY - hero.distance - composerTop)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
-                    // The frame includes PagerSlide's offset, so it's taken back to the layout's
-                    // (the hero's height off). Readings while a slide is under way are skipped.
+                    // The frame includes PagerSlide's offset, so the layout's bottom is the reading
+                    // less the hero's distance, taken where it's used: a reading skipped while a
+                    // slide is under way is never taken again, since the frame doesn't change after.
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
-                        guard page == strip, !hero.sliding else { return }
-                        let laidOut = y - hero.distance
-                        if pageBottom != laidOut { pageBottom = laidOut }
+                        guard page == strip, pageMaxY != y else { return }
+                        pageMaxY = y
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .background { PagerYieldsToBackSwipe(hero: hero) }

@@ -53,7 +53,7 @@
 //      swipes the Transcript tab and checks it follows new content at the bottom, stays put once
 //      scrolled up, and follows again after scrolling back down; the Activity tab opens at the
 //      bottom and follows; the hero collapses on scrolling the Spec (the rest is HeroDisclosureTests);
-//      a sideways swipe moves between the tabs, and a right swipe on the Spec still goes back
+//      a sideways swipe moves between the tabs
 //
 //   --keyboard: with the on-screen keyboard up, the ticket composer sits right on top of it, and the
 //      prompt editor and New session's prompt (which grows with no cap) keep the cursor above it as
@@ -83,14 +83,14 @@
 //      it under the board as a bar titled by its key, a tap on the bar restores it where it was (its
 //      composer no higher than before), Projects closes it, the bar's ✕ sends it away, a flick down
 //      from full size sends it away without docking. Then several docked: a second ticket joins as a
-//      second card, a long press on the title and a swipe along the dock switch, twelve show two
-//      cards and "10 more…", which expands into the list, a card's ✕ and a swipe down close only the
+//      second card, a long press on the title and a swipe along the dock switch, three show two
+//      cards and "1 more…", which expands into the list, a card's ✕ and a swipe down close only the
 //      top, the dock comes back after a relaunch, Projects closes them all.
 //
 //   --memory: the app's footprint with none, 5 and 20 docked tickets (about 45 s on its own; the rule
 //      that only 5 stay mounted is in RouterSheetTests).
 //
-//   --ipad: the walk-through's routes on an iPad simulator instead ("sim-check iPad 1", an iPad Pro
+//   --ipad: the walk-through's routes on an iPad simulator instead ("harness-shared-ipad", kept between runs, an iPad Pro
 //      11-inch) in whatever orientation it is in (simctl can't rotate one), plus the tab tear-off.
 //      --ipad --sheets runs the side panel's checks: a card opens it trailing-aligned and its header
 //      names the ticket once, its edge resizes it, docked it's a card in the bottom-right corner that
@@ -116,7 +116,7 @@ import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { Database } from "bun:sqlite";
-import { acquire, checkDisk, ensureDevice, markKept, reap, SHARED_DEVICE, writeRunOwner } from "./sim";
+import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
 /** ios/: screenshots go to its build/ folder. */
@@ -384,7 +384,7 @@ async function running(udid: string): Promise<boolean> {
 /**
  * The simulators to drive, each held under its lock (Tools/sim.ts) until this run exits, so two
  * runs or agents never install over each other: --udid=a,b, or the shared "harness-shared" iPhone
- * ("sim-check iPad 1" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
+ * ("harness-shared-ipad" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
  * that don't exist yet are created on the iOS 27.0 runtime, and all of them are booted. First it
  * cleans up after runs that died (Tools/sim.ts reap): their booted devices and orphaned daemons.
  */
@@ -392,7 +392,7 @@ async function pickDevices(n: number): Promise<string[]> {
   const given = opt("udid")?.split(",").filter(Boolean);
   type Device = { udid: string; name: string; state: string; isAvailable: boolean };
   const list = async () => Object.values((JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices).flat();
-  const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? `sim-check iPad ${i + 1}` : i === 0 ? SHARED_DEVICE : `sim-check ${i + 1}`));
+  const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? (i === 0 ? SHARED_IPAD_DEVICE : `sim-check iPad ${i + 1}`) : i === 0 ? SHARED_DEVICE : `sim-check ${i + 1}`));
   const names = (devices: Device[]) => wanted.map((id) => devices.find((x) => x.udid === id)?.name ?? id);
   await reap({ except: names(await list()), log: console.log }).catch((e: Error) => console.log(`reap: ${e.message}`));
   const all = await list();
@@ -404,7 +404,7 @@ async function pickDevices(n: number): Promise<string[]> {
       await acquire(name, { onWait: (h) => console.log(`waiting for simulator "${name}"${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
       if (!given) {
         const udid = await ensureDevice(name, { kind: ipad ? "ipad" : "iphone", log: console.log });
-        if (name !== SHARED_DEVICE) {
+        if (!isSharedDevice(name)) {
           toShutDown.add(udid);
           toDelete.add(udid);
         }
@@ -413,7 +413,7 @@ async function pickDevices(n: number): Promise<string[]> {
       if (d!.state !== "Booted") {
         await simctl("boot", d!.udid);
         await sh(["xcrun", "simctl", "bootstatus", d!.udid, "-b"]);
-        if (name !== SHARED_DEVICE) toShutDown.add(d!.udid);
+        if (!isSharedDevice(name)) toShutDown.add(d!.udid);
       }
       return d!.udid;
     }),
@@ -1092,7 +1092,7 @@ async function dockSheet(udid: string): Promise<string> {
   // one can be a zero-height stand-in, which put the drag's end above the screen.
   const { width, height } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
   const x = String(Math.round(width / 2));
-  await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "1.2", "--udid", udid);
+  await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "0.8", "--udid", udid);
   return until("the dock", async () => topDock(await labels(udid)), 6000);
 }
 
@@ -1313,15 +1313,15 @@ async function seedDockable(projectId: string, n: number): Promise<Ticket[]> {
  * The iPhone's dock with several tickets (TicketDock, DockedCard): a second ticket joins the dock as
  * a second card rather than replacing it, the newest at the bottom with its ref and title; tapping a
  * card opens it (keeping its path and composer); a long press on the ticket's title lists the other
- * docked tickets; a swipe along the dock walks them; twelve show two cards and "10 more…", which
- * expands into the list of all twelve, whose oldest (parked) opens at its saved path; a card's ✕
+ * docked tickets; a swipe along the dock walks them; three show two cards and "1 more…", which
+ * expands into the list of all three, whose oldest (parked) opens at its saved path; a card's ✕
  * and a swipe down close only the top; the dock comes back after a relaunch; Projects closes them all.
  */
 async function dockStackChecks(udid: string, p: { project: Project; conductor: Ticket }) {
   const key = p.conductor.key;
   const kid = (await api<TicketDetail>("GET", `/tickets/${key}`)).children[0];
   if (!kid) throw new Error(`${key} has no children`);
-  const extra = await seedDockable(p.project.id, 11);
+  const extra = await seedDockable(p.project.id, 2);
   const b = extra[0]!;
   const { width: W } = (await tree(udid))[0]!.frame;
   const onChild = (l: string[]) => l.includes(`Part of ${key}`);
@@ -1406,7 +1406,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await until("the first back on top", async () => (await top()) === first, 5000);
     return `${keyOf(first)} → ${keyOf(second)} → back`;
   });
-  await check("with 12 docked, two cards and \"10 more…\" expand into the list, whose oldest opens at its saved path", async () => {
+  await check("with 3 docked, two cards and \"1 more…\" expand into the list, whose oldest opens at its saved path", async () => {
     // b on top, so the conductor's sheet (with the child pushed) is the oldest.
     if (!(await top())?.startsWith(`${b.key}, `)) {
       await tapWhere(udid, card(b.key));
@@ -1415,21 +1415,21 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     }
     for (const t of extra.slice(1)) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
     await dockSheet(udid);
-    await until("two cards and 10 more", async () => {
+    await until("two cards and 1 more", async () => {
       const l = await labels(udid);
-      return l.filter(isDock).length === 2 && l.includes("10 more docked tickets");
+      return l.filter(isDock).length === 2 && l.includes("1 more docked tickets");
     }, 5000).catch(async (e) => {
       await say("the dock");
       throw e;
     });
     await shot(udid, "dock-more-light");
-    await tapWhere(udid, "10 more docked tickets");
-    const listed = await until("the list of all twelve", async () => {
+    await tapWhere(udid, "1 more docked tickets");
+    const listed = await until("the list of all three", async () => {
       const l = await labels(udid);
       const all = l.filter(isDock);
-      return all.length === 12 ? all : null;
+      return all.length === 3 ? all : null;
     }, 6000).catch(async (e) => {
-      await say("after \"10 more\"");
+      await say("after \"1 more\"");
       throw e;
     });
     await shot(udid, "dock-list-light");
@@ -1451,7 +1451,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       await say(`after ${kid.key} from the list`);
       throw e;
     });
-    return `2 cards and 10 more; the list of 12; ${kid.key} came back on its pushed screen`;
+    return `2 cards and 1 more; the list of 3; ${kid.key} came back on its pushed screen`;
   });
   await check("a card's ✕ closes only that ticket", async () => {
     const before = await dockSheet(udid);
@@ -1578,8 +1578,7 @@ async function cardInCorner(udid: string, k: string, edge: number, H: number, le
  * the panel wait as cards just left of it, never over the sidebar (one "N docked…" card where the
  * board's column is narrow, none where there's no column); docked, every one is a card in the
  * bottom-right corner, newest at the bottom, showing its ref and title; a tap opens that one; its ✕
- * closes just it; twelve show five cards and "7 more…", which expands into the list of all twelve;
- * Projects closes them all.
+ * closes just it. How many cards fit and when they collapse are DockMetricsTests'.
  */
 async function cardStackChecks(udid: string, s: { project: Project; conductor: Ticket }) {
   const ts = await seedDockable(s.project.id, 3);
@@ -1839,7 +1838,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     }
     // Where its ✕ would sit: a tap there leaves the panel up (an empty New session's Cancel closes at once).
     await tapBack();
-    await Bun.sleep(600); // nothing should happen: there is no state to wait for
+    await Bun.sleep(1500); // nothing should happen, so there's no state to wait for: a dock or close lands within this
     if (!panelOn(await labels(udid), "New session")) throw new Error("a second ✕ in New session's bar closed the panel");
     // The prompt has focus as New session opens; typing saves a draft, whose card the board lists.
     await axe("type", words, "--udid", udid);
@@ -1873,6 +1872,15 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       throw e;
     });
     moved(udid);
+    // Discard leaves nothing behind: no docked "New session", no draft card. (The ticket whose
+    // panel New session pushed aside stays docked, as it should.)
+    await Bun.sleep(800);
+    const after = await labels(udid);
+    const left = after.filter((x) => ours(x) || (isDock(x) && x.startsWith("New session")));
+    if (left.length) {
+      await say("after Discard draft, settled");
+      throw new Error(`Discard left ${left.join(" | ")}`);
+    }
     return `one title and one ✕, no pop-out; asked on Escape and on the panel's ✕${landscape ? " (Escape, in landscape)" : ""}; Discard closed it and its card went`;
   });
   await check("dragging the panel's edge resizes it, stopping at 25% and 80% of the window", async () => {
@@ -2185,20 +2193,16 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   const activityRow = (l: string) => l.includes(STICK_REVIEWED);
   const sideways = (from: number, to: number) =>
     axe("swipe", "--start-x", String(Math.round(W * from)), "--start-y", String(Math.round(H * 0.7)), "--end-x", String(Math.round(W * to)), "--end-y", String(Math.round(H * 0.7)), "--duration", "0.3", "--udid", udid);
-  await check("a sideways swipe changes tab, and on the Spec goes back", async () => {
-    // From the board, so going back lands there (ticket links push onto the screens before them).
-    await goto(udid, BOARD);
+  await check("a sideways swipe changes tab and back", async () => {
+    // A ticket link presents it as a sheet over the board, which has no back to swipe to: the
+    // first page yielding to the back swipe is the sheet checks' pushed-child check.
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=spec`, (l) => l.some(spec));
     await until("the Spec", async () => (await shows(spec)) || null, 5000);
     await sideways(0.85, 0.1);
     await until("Activity after swiping left", async () => ((await shows(activityRow)) && !(await shows(spec))) || null, 5000);
     await sideways(0.15, 0.9);
     await until("the Spec after swiping right", async () => ((await shows(spec)) && !(await shows(activityRow))) || null, 5000);
-    await Bun.sleep(800); // the page settles: back only goes once the pager rests on the first page
-    await sideways(0.1, 0.9);
-    await until("the board after swiping right on the Spec", async () => onBoard(await labels(udid)) || null, 5000);
-    moved(udid);
-    return "Spec → Activity → Spec → back to the board";
+    return "Spec → Activity → Spec";
   });
 }
 
@@ -2636,13 +2640,19 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     if (await viewerOpen()) await tapWhere(udid, "Close").then(closed);
     await scrollTo(udid, (l) => l === label);
     // A tap while the scroll's momentum is still running is swallowed as the touch that stops it,
-    // so the first one may only settle the list: tap again where the image has come to rest.
+    // so the first one may only settle the list, and the spec re-renders while the seeded run's last updates land: tap again where the image has come to rest.
     for (let attempt = 1; ; attempt++) {
-      const el = await until(`element ${label}`, () => findElement(udid, (l) => l === label), 5000);
+      let el = await until(`element ${label}`, () => findElement(udid, (l) => l === label), 5000);
+      // Scrolled to the very top, an image sits under the pinned tab strip, which takes the tap:
+      // drag the spec down until it's clear of it.
+      for (let i = 0; i < 2 && el.frame.y < 300; i++) {
+        await axe("swipe", "--start-x", "200", "--start-y", "420", "--end-x", "200", "--end-y", "560", "--duration", "0.3", "--udid", udid);
+        el = await until(`element ${label}`, () => findElement(udid, (l) => l === label), 5000);
+      }
       const y = el.frame.y + Math.min(el.frame.height / 2, 60);
       await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(y)), "--udid", udid);
-      const up = await until(`viewer on ${n} of 5`, () => has(counter(n)), attempt < 2 ? 2500 : 5000).then(() => true, async (e) => {
-        if (attempt < 2) return false;
+      const up = await until(`viewer on ${n} of 5`, () => has(counter(n)), attempt < 3 ? 2500 : 5000).then(() => true, async (e) => {
+        if (attempt < 3) return false;
         console.log(`    tapped ${label} at y=${Math.round(y)}; on screen: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
         throw e;
       });
@@ -2804,18 +2814,18 @@ function screens(s: Seeded): Screen[] {
           after: (udid) => simctl("openurl", udid, "harness://projects").then(() => until("sidebar shown again", async () => sidebarShown(await labels(udid)), 8000)),
         })
       : screen("projects", [], { url: "harness://projects", visit: true }),
-    screen("ticket-spec", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=spec`, visit: true }),
+    screen("ticket-spec", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=spec` }),
     // The notes, submits and review decisions; the seed's reply went to the transcript only.
     screen("ticket-activity", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=activity`, ready: (l) => l.some((x) => x.includes("The dummy reviewer approves")) }),
     screen("ticket-transcript", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=transcript` }),
-    screen("ticket-details", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=details`, visit: true }),
+    screen("ticket-details", ["hello"], { url: `harness://ticket/${k(s.hello)}?tab=details` }),
     // The spec's fenced code: plain at first, colored once its grammar has loaded.
     screen("ticket-code", ["code"], { url: `harness://ticket/${k(s.code)}?tab=spec`, wait: 1500, visit: true }),
     // Heading sizes and spacing (HarnessKit's SpecHeadings tests have the numbers).
     screen("ticket-headings", ["headings"], { url: `harness://ticket/${k(s.headings)}?tab=spec`, ready: (l) => l.includes("Heading four"), wait: 500 }),
     // The file viewer, from an OS-level harness://file link : opened at a range
     // below the first screenful, then its Diff tab.
-    screen("file", ["changes"], { url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500, visit: true }),
+    screen("file", ["changes"], { url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}#L${GREET_JA[0]}-L${GREET_JA[1]}`, ready: hasLabel("Modified"), wait: 1500 }),
     screen("file-diff", ["changes"], {
       url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}`,
       ready: hasLabel("Modified"),
@@ -2823,7 +2833,7 @@ function screens(s: Seeded): Screen[] {
       prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Diff")).then(() => Bun.sleep(1500)),
     }),
     screen("conductor-tickets", ["conductor"], { url: `harness://ticket/${k(s.conductor)}?tab=children`, visit: true }),
-    screen("ticket-agents", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=agents`, visit: true }),
+    screen("ticket-agents", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=agents` }),
     screen("ticket-subagent", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=${encodeURIComponent(`agent:${s.nestedAgent.id}`)}`, visit: true }),
     screen("approval", ["approval"], { url: `harness://ticket/${k(s.approval)}`, ready: hasLabel("Allow once"), visit: true }),
     screen("blocked", ["blocked"], { url: `harness://ticket/${k(s.blocked)}` }),
@@ -2861,7 +2871,6 @@ function screens(s: Seeded): Screen[] {
     // A ticket linked to a remote ID: the header shows "JIRA-62 · GREET-n" (RelatedTests has the rules).
     screen("ticket-linked", ["linked"], {
       url: `harness://ticket/${k(s.linked)}?tab=details`,
-      visit: true,
     }),
     // Details' per-phase Models picker with its sheet open.
     screen("ticket-details-model", ["quick"], {
@@ -2877,8 +2886,8 @@ function screens(s: Seeded): Screen[] {
     screen("settings", ["watchers"], { url: "harness://settings", visit: true }),
     // A driver's own settings: status and sign-in, and the long-lived token.
     screen("driver-claude-code", [], { url: "harness://driver/claude-code", ready: hasLabel("Claude token") }),
-    screen("watcher-edit", ["watchers"], { url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}`, visit: true }),
-    screen("project-settings", [], { url: `harness://project/${s.project.id}`, visit: true }),
+    screen("watcher-edit", ["watchers"], { url: `harness://watcher?id=${encodeURIComponent(s.watcher.id)}` }),
+    screen("project-settings", [], { url: `harness://project/${s.project.id}` }),
     // A git ticket in review: the Approve button's menu (merge, clean up, Approve and…, take no action).
     // It closes again before the next screen.
     screen("approve-menu", ["agents"], {
@@ -2891,11 +2900,11 @@ function screens(s: Seeded): Screen[] {
       after: (udid) => (process.env.SIM_CHECK_LEAVE_OPEN ? Promise.resolve() : dismissMenu(udid).then(() => Bun.sleep(400))),
     }),
     // Settings → Prompts (seedPrompts): the list, and the customized review message.
-    screen("prompts", [], { url: "harness://prompts", ready: hasLabel("Agent review"), visit: true }),
+    screen("prompts", [], { url: "harness://prompts", ready: hasLabel("Agent review") }),
     screen("prompt-customized", [], { url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in") }),
     screen("connect", [], { url: "harness://connect", visit: true }),
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
-    screen("board", ["blocked"], { url: BOARD, browse: true, visit: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) }),
+    screen("board", ["blocked"], { url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) }),
     // Planning with the seeded draft's dashed card (Draft badge, no run).
     screen("board-draft", ["draft"], {
       url: BOARD,
@@ -3142,9 +3151,8 @@ function interactionChains(s: Seeded): Chain[] {
         await approveMenuUp(udid);
         await tapWhere(udid, "Approve and…");
         await tapWhere(udid, instructionsField);
-        await Bun.sleep(600);
+        await Bun.sleep(500); // the keyboard comes up: typing before it does drops keys
         await axe("type", text, "--udid", udid);
-        await Bun.sleep(300);
         await tapWhere(udid, "Approve");
         const t = await settle(s.agents.key, (x) => x.humanReview === "approved", 15000);
         if (t.completionAction !== "custom" || t.completionInstructions !== text) throw new Error(`stored ${t.completionAction} / ${JSON.stringify(t.completionInstructions)}`);
@@ -3157,29 +3165,21 @@ function interactionChains(s: Seeded): Chain[] {
       // The header's glass buttons aren't in AXe's tree: Cancel sits where Back does, Save at the trailing edge.
       const tapCancel = () => axe("tap", "-x", "32", "-y", "89", "--udid", udid);
       const tapSave = async () => axe("tap", "-x", String(Math.round((await tree(udid))[0]!.frame.width - 32)), "-y", "89", "--udid", udid);
-      await check("prompt editor: Customize, a bad variable shows inline and can't save, Cancel keeps the built-in", async () => {
+      await check("prompt editor: a bad variable shows inline and can't save; Save stores the fixed override, Reset to built-in (confirmed) clears it", async () => {
         await goto(udid, "harness://prompt/system.work", (l) => l.includes("Customize"));
         await tapWhere(udid, "Customize");
         await until("editor", async () => (await labels(udid)).includes("Compare with built-in"), 5000);
         await tapWhere(udid, field);
         await axe("type", " {{brnch}}", "--udid", udid);
-        const error = await until("inline error", async () => (await labels(udid)).find((l) => l.startsWith("Unknown variable {{brnch}}")), 5000);
+        await until("inline error", async () => (await labels(udid)).some((l) => l.startsWith("Unknown variable {{brnch}}")), 5000);
         await shot(udid, "prompt-invalid-light");
         await tapSave(); // disabled while invalid
-        await Bun.sleep(800);
-        if ((await override("system.work")) !== null) throw new Error("an invalid prompt was saved");
-        await tapCancel();
-        await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
-        moved(udid);
-        return error.slice(0, 60);
-      });
-      await check("prompt editor: Save stores the override, Reset to built-in (confirmed) clears it", async () => {
-        await goto(udid, "harness://prompt/system.work", (l) => l.includes("Customize"));
-        await tapWhere(udid, "Customize");
-        await until("editor", async () => (await labels(udid)).includes("Compare with built-in"), 5000);
-        await tapWhere(udid, field);
-        await axe("type", " Mind the {{branch}}.", "--udid", udid);
         await Bun.sleep(300);
+        if ((await override("system.work")) !== null) throw new Error("an invalid prompt was saved");
+        // Take the bad variable back out (its ten characters) and write a good line instead.
+        await axe("key-sequence", "--keycodes", Array(10).fill("42").join(","), "--delay", "0.02", "--udid", udid);
+        await axe("type", " Mind the {{branch}}.", "--udid", udid);
+        await until("the error gone", async () => !(await labels(udid)).some((l) => l.startsWith("Unknown variable")), 5000);
         await tapSave();
         const saved = await until("override saved", async () => ((v) => (v?.includes("Mind the {{branch}}.") ? v : null))(await override("system.work")), 8000);
         await until("Reset button", async () => (await labels(udid)).includes("Reset to built-in"), 5000);

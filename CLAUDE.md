@@ -40,8 +40,9 @@ one simulator and one runtime.
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer`. Never download or install
   another runtime (`xcodebuild -downloadPlatform`, `xcrun simctl runtime add`, Xcode's Components
   settings, and so on). Each one takes about 8 GB. If 27.0 is missing, block and ask.
-- Never create a simulator of your own. Use the shared one, `harness-shared` (an iPhone 18 Pro on
-  iOS 27.0), through `bun run sim` (`ios/Tools/sim.ts`). `bun run sim ensure` creates it the
+- Never create a simulator of your own. Use the shared ones, `harness-shared` (an iPhone 18 Pro on
+  iOS 27.0) and, for `sim-check --ipad`, `harness-shared-ipad` (an iPad Pro 11-inch, kept booted
+  between runs so each iPad run skips creating and installing on a fresh one), through `bun run sim` (`ios/Tools/sim.ts`). `bun run sim ensure` creates it the
   first time, boots it and prints its UDID. Don't use, shut down, or delete simulators that
   someone else owns (`harness-HARNESS-*`, `sim-check *`).
 - Run everything that touches the simulator (install, launch, screenshots, AXe taps, sim-check,

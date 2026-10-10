@@ -22,6 +22,9 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export const SHARED_DEVICE = "harness-shared";
+/** The iPad sim-check runs on with --ipad: kept (booted) between runs like SHARED_DEVICE, since creating and installing on a fresh one cost 50–80 s of every run. */
+export const SHARED_IPAD_DEVICE = "harness-shared-ipad";
+export const isSharedDevice = (name: string) => name === SHARED_DEVICE || name === SHARED_IPAD_DEVICE;
 /** The only iOS runtime simulators run on. */
 export const IOS_RUNTIME = "27.0";
 export const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
@@ -285,7 +288,7 @@ async function findDevice(name: string, run: Simctl = simctl): Promise<Device | 
 // behind: booted iOS devices and orphaned daemons that keep loading the Mac. `reap` finds what such
 // runs left and cleans it up; sim-check and with-lock run it before they start.
 
-/** sim-check's own devices ("sim-check 2", "sim-check iPad 1", …). harness-shared is never reaped. */
+/** sim-check's own devices ("sim-check 2", …). harness-shared and harness-shared-ipad are never reaped. */
 export const SIM_CHECK_DEVICE = /^sim-check /;
 export const HOME_PREFIX = "harness-sim-home-";
 export const PROJECTS_PREFIX = "harness-sim-projects-";

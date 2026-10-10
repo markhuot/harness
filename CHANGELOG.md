@@ -30,7 +30,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- sim-check, the simulator check for the iPhone and iPad apps, is much faster again and no longer takes screenshots while it validates. The default run opens each route to confirm the app survives it and runs only the real-tap checks (gestures, sheets, keyboard, relaunch); logic that unit tests already cover (routing, counts, request bodies, approve and start flows) was removed from it. Screenshots are opt-in for people working on Harness: `--screens` shoots the whole catalog, `--only=<name>` shoots one screen or runs one check, and `--shot='harness://ticket/{headings}?tab=spec'` takes a one-off light and dark pair of any route. A run seeds only the tickets its selection needs, a step that leaves a menu or sheet open is reset instead of stalling the steps after it, each check has a 90 s cap, and the slow memory check is `--memory`. Agents are told to validate the area they changed and shoot only the screens they touched.
+- sim-check, the simulator check for the iPhone and iPad apps, is much faster again and no longer takes screenshots while it validates. The default run opens each route to confirm the app survives it and runs only the real-tap checks (gestures, sheets, keyboard, relaunch); logic that unit tests already cover (routing, counts, request bodies, approve and start flows) was removed from it. Screenshots are opt-in for people working on Harness: `--screens` shoots the whole catalog, `--only=<name>` shoots one screen or runs one check, and `--shot='harness://ticket/{headings}?tab=spec'` takes a one-off light and dark pair of any route. A run seeds only the tickets its selection needs, a step that leaves a menu or sheet open is reset instead of stalling the steps after it, each check has a 90 s cap, and the slow memory check is `--memory`. Agents are told to validate the area they changed and shoot only the screens they touched. `--ipad` runs on a kept `harness-shared-ipad` simulator instead of creating one each run (the default run takes about 2 minutes, `--sheets` and `--ipad --sheets` about 90 s, `--ipad` about 30 s).
 - Heading sizes and spacing in specs, and the dock's gap and "N more docked tickets" label, now live in HarnessKit with their own tests instead of being measured from the simulator.
 - Agents are held to a higher bar before they hand work over, whichever model runs them. A Work run
   adds tests for what it changes, runs the tests and typecheck, confirms a new worktree has its
@@ -47,6 +47,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone, the last row of a ticket's Transcript and Activity is no longer clipped under the message box when the list is scrolled to the bottom. The page's bottom inset was measured only while the header wasn't sliding, so a tab opened with the header collapsed kept an inset of zero.
 - Headings in a spec (and other markdown) on Mac and iPhone/iPad now have a full size scale, so
   `#`, `##`, `###` and `####` each look different (H2 and H3 used to be the same size). A heading
   right after another heading no longer gets the large gap above it; only a heading after other
