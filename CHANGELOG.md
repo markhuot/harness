@@ -11,6 +11,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- `bun run --cwd app ticket-header` drives a Mac ticket pane against a real service and checks the
+  title bar, the hero's key row and the ··· menu in each state, with screenshots. The iPhone and iPad
+  sim-check also check the new header, the ··· menu and flinging the panel's top edge.
 - A ticket's Runs list on Mac and iPhone/iPad is easier to read. Each run shows its status, kind and
   prompt (or error), with how long it ran (counting up live while it runs, or how long it has waited
   in the queue) and, on a line below, when it started, its token count (the input/output split on
@@ -32,6 +35,28 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - sim-check, the simulator check for the iPhone and iPad apps, is much faster again and no longer takes screenshots while it validates. The default run opens each route to confirm the app survives it and runs only the real-tap checks (gestures, sheets, keyboard, relaunch); logic that unit tests already cover (routing, counts, request bodies, approve and start flows) was removed from it. Screenshots are opt-in for people working on Harness: `--screens` shoots the whole catalog, `--only=<name>` shoots one screen or runs one check, and `--shot='harness://ticket/{headings}?tab=spec'` takes a one-off light and dark pair of any route. A run seeds only the tickets its selection needs, a step that leaves a menu or sheet open is reset instead of stalling the steps after it, each check has a 90 s cap, and the slow memory check is `--memory`. Agents are told to validate the area they changed and shoot only the screens they touched. `--ipad` runs on a kept `harness-shared-ipad` simulator instead of creating one each run (the default run takes about 2 minutes, `--sheets` and `--ipad --sheets` about 90 s, `--ipad` about 30 s).
 - Heading sizes and spacing in specs, and the dock's gap and "N more docked tickets" label, now live in HarnessKit with their own tests instead of being measured from the simulator.
+- On iPhone and iPad, a ticket you opened from another one (a child, a parent, a link) now has its
+  Back button on the same row as its title, with the "Part of" line above the title beside it,
+  instead of in a navigation bar over them; swiping back still works. In the iPad side panel, the
+  title, its chevron and the dock, pop-out and close buttons are all centered on one line.
+- On iPhone, a ticket's collapsed title row has twice the space above and below it, and its text
+  lines up with the left edge of the Spec tab's label beneath it.
+- "Re-run agent review" (or "Run agent review" when it was skipped) moved from the action row into
+  the ··· menu on Mac, iPhone and iPad. A ticket that's in progress now shows a disabled "Working…"
+  button before the ···, so its action row isn't empty.
+- A ticket's header is shorter on Mac and iPhone/iPad, and the ticket's title now leads it. On
+  iPhone the sheet starts with the title right under the drag indicator, with no navigation bar and
+  no HARNESS-123 title (a ticket pushed inside the sheet keeps its Back button and has no title). On
+  iPad the side panel starts with the title, wrapping before the dock, pop-out and close buttons,
+  which float over its corner; you can still fling the panel's top edge to dock it. On Mac the pane's
+  title bar shows the title (truncated with an ellipsis in a narrow pane) beside its pop-out,
+  maximize and close buttons. Below it, the ticket's first row is now `[HAR] HARNESS-123 <status>`
+  followed by the existing badges, on iPhone, iPad and Mac.
+- The less common actions moved into one secondary **···** button at the end of the ticket's action
+  row, always shown (collapsing the hero on iPhone and iPad hides it with the other actions). It
+  offers Move to done (renamed from Mark done, and only where it applied before), Cancel run while a
+  run is busy (it no longer has a red button of its own), and Delete ticket, which still asks first.
+  The ⌘K palette's Mark done command is now called Move to done.
 - Agents are held to a higher bar before they hand work over, whichever model runs them. A Work run
   adds tests for what it changes, runs the tests and typecheck, confirms a new worktree has its
   dependencies installed, embeds screenshots in Status for visible changes, and blocks to ask rather
@@ -58,6 +83,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Removed
 
+- The ticket header's overflow menus are gone: the (···) menu on iPhone and iPad, and the More menu
+  in a Mac ticket pane's title bar. Copy key, Open in New Window, Open <remote ID>, Open pull request
+  (the PR badge in the hero still opens it) and the Mac's Move pane rows no longer appear in a ticket.
+  Copy key is still in a board card's long-press menu on iPhone and iPad and in the Mac's ⌘K
+  palette, a Mac pane still moves by its drag grip, and a pinned iPad window's **Return to ticket** is
+  now a plain button.
 - Setting a ticket's status to In progress through the API (`PATCH /tickets/:key`) or an agent's
   `move_ticket` no longer starts it, and is refused. Use Start (`POST /tickets/:key/start`,
   `start_ticket`), or Re-open for a done ticket. Moves to Planning, Blocked, Review and Done work

@@ -168,7 +168,7 @@ private struct TicketDetailBody: View {
             // (HeroSlide, PagerSlide), sliding as it collapses or expands. No layout changes, so a
             // collapse mid-scroll re-lays out no tab body. The hero's state is read only in the hero
             // and the modifiers, so a toggle doesn't re-render this body either.
-            TicketDetailHero(ticket: ticket, disclosure: hero, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket, disclosure: hero, maxHeight: height * 0.45, navigable: true)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
             // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
             // up under the bar, the strip's background would slide down over the hero.
@@ -389,13 +389,8 @@ private struct TicketPinnedHeader: ViewModifier {
                     .accessibilityAddTraits(.isHeader)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Return to ticket", systemImage: "arrow.down.right.and.arrow.up.left") {
-                            WindowDirectory.shared.returnToTicket(value)
-                        }
-                        Button("Copy key", systemImage: "number") { UIPasteboard.general.string = ticket.key }
-                    } label: {
-                        Label("More", systemImage: "ellipsis.circle")
+                    Button("Return to ticket", systemImage: "arrow.down.right.and.arrow.up.left") {
+                        WindowDirectory.shared.returnToTicket(value)
                     }
                 }
             }
@@ -481,95 +476,46 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
     }
 }
 
-/// The navigation bar: the key (the remote ID first when linked) and the More menu.
+/// The navigation bar: the ticket's key stays as its navigation title (the app switcher, VoiceOver),
+/// but the bar itself is hidden. The hero draws the title and, for a pushed ticket, the Back button
+/// beside it. The More menu is in the hero too. Swipe-back keeps working (PopGestureRestorer).
 private struct TicketDetailHeader: ViewModifier {
     let ticket: Ticket
 
-    @Environment(BoardStore.self) private var store
-    @Environment(Router.self) private var router
-    @Environment(Actions.self) private var actions
-    @Environment(\.palette) private var c
-    @Environment(\.openURL) private var openURL
-    @Environment(\.supportsMultipleWindows) private var multipleWindows
-    @Environment(\.inTicketPanel) private var inTicketPanel
-    @State private var confirm: Confirmation?
-
     func body(content: Content) -> some View {
-        let label = Keys.keyLabel(ticket)
-        // The iPad panel's title bar already names the ticket on top: no second key under it. The
-        // title stays for the Back button of whatever's pushed above.
-        let titledByPanel = inTicketPanel && (router.ticketSheet ?? router.dock)?.topTicketKey == ticket.key
         content
-            .navigationTitle(label)
+            .navigationTitle(Keys.keyLabel(ticket))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    if titledByPanel {
-                        // Something in the slot, so the system doesn't draw the title there.
-                        Color.clear.frame(width: 1, height: 1).accessibilityHidden(true)
-                    } else if Keys.secondaryKey(ticket) != nil {
-                        TicketKeyLabel(ticket: ticket, size: 17, color: c.text).fontWeight(.semibold)
-                    } else {
-                        Text(label).font(.mono(17, weight: .semibold)).foregroundStyle(c.text)
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) { menu(label) }
-            }
-            .confirmation($confirm)
+            .toolbar(.hidden, for: .navigationBar)
+            .background(PopGestureRestorer())
     }
+}
 
-    private func menu(_ label: String) -> some View {
-        let key = ticket.key
-        let api = store.api
-        return Menu {
-            Button("Copy key", systemImage: "number") { UIPasteboard.general.string = key }
-            // iPad: not in the window that's already this ticket's own.
-            if multipleWindows && !isWindowRoot(key) {
-                Button("Open in New Window", systemImage: "macwindow.badge.plus") {
-                    WindowDirectory.shared.openTicket(TicketWindowValue(key: key, tab: nil), from: nil)
-                }
+/// A hidden navigation bar turns the edge swipe-back off; this puts it back for the stack the
+/// screen is in.
+private struct PopGestureRestorer: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> UIViewController { Restorer() }
+    func updateUIViewController(_ vc: UIViewController, context: Context) {}
+
+    private final class Restorer: UIViewController {
+        /// The pop gesture's delegate: the edge swipe goes whenever there's a screen to go back to.
+        private final class Allow: NSObject, UIGestureRecognizerDelegate {
+            func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+                ((g.view?.next as? UINavigationController)?.viewControllers.count ?? 0) > 1
             }
-            if let ref = ticket.externalRef, let url = ref.url.flatMap(URL.init(string:)) {
-                Button("Open \(ref.key)", systemImage: "arrow.up.right.square") { openURL(url) }
-            }
-            if ticket.busy {
-                Button("Cancel run", systemImage: "stop.circle", role: .destructive) {
-                    guard let api else { return }
-                    actions.perform { _ = try await api.cancelTicket(key) }
-                }
-            }
-            if let url = ticket.pullRequestUrl.optional.flatMap(URL.init(string:)) {
-                Button("Open pull request", systemImage: "arrow.triangle.pull") { openURL(url) }
-            }
-            // In review, the Approve menu's "Approve and take no action" does this (and records the approval).
-            if TicketDetailLogic.offersMarkDone(ticket) {
-                Button("Mark done", systemImage: "checkmark.circle") {
-                    guard let api else { return }
-                    actions.perform { _ = try await api.completeTicket(key, CompleteBody(skipAgent: true)) }
-                }
-            }
-            Button("Delete ticket", systemImage: "trash", role: .destructive) {
-                confirm = Confirmation(title: "Delete \(label)?", message: "Its transcript, spec history and activity are removed too.", action: "Delete") {
-                    guard let api else { return }
-                    Task {
-                        if await actions.run({ try await api.deleteTicket(key) }) != nil { pop(key) }
-                    }
-                }
-            }
-        } label: {
-            Label("More", systemImage: "ellipsis.circle")
         }
-    }
+        private static let allow = Allow()
 
-    /// This screen is the root of a ticket window.
-    private func isWindowRoot(_ key: String) -> Bool {
-        router.scope == .ticket && TicketWindowValue(route: router.root)?.key == key
-    }
+        private func restore() {
+            guard let nav = navigationController else { return }
+            for pop in [nav.interactivePopGestureRecognizer, nav.interactiveContentPopGestureRecognizer] {
+                pop?.delegate = Self.allow
+                pop?.isEnabled = true
+            }
+        }
 
-    /// Back off the deleted ticket's screen.
-    private func pop(_ key: String) {
-        let state = store.state
-        router.removeTicket { $0.uppercased() == key.uppercased() || state.ticketByKey($0) == nil }
+        override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); restore() }
+        override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); restore() }
     }
 }
 

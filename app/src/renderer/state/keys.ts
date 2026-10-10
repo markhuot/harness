@@ -120,7 +120,7 @@ export const COMMANDS: CommandSpec[] = [
       ["ticket.requestChanges", "Request changes…", ["Reject", "Send back"]],
       ["ticket.rerunReview", "Re-run agent review", ["Rerun agent review", "Run agent review"]],
       ["ticket.cancelRun", "Cancel run", ["Stop run", "Stop agent"]],
-      ["ticket.markDone", "Mark done", ["Close ticket"]],
+      ["ticket.markDone", "Move to done", ["Close ticket"]],
       ["ticket.reopen", "Re-open…", ["Reopen ticket", "Re-open ticket"]],
       ["ticket.copyKey", "Copy ticket key"],
       ["ticket.openExternal", "Open in source tracker"],

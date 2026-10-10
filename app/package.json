@@ -18,6 +18,7 @@
     "real": "bun run build && bun scripts/real-service.ts",
     "changes": "bun run build && bun scripts/changes.ts",
     "spec-activity": "bun run build && bun scripts/spec-activity.ts",
+    "ticket-header": "bun run build && bun scripts/ticket-header.ts",
     "browser-tabs": "bun run build && bun scripts/browser-tabs.ts",
     "spec-headings": "bun run build && bun scripts/spec-headings-check.ts",
     "browser-size": "bun run build && bun scripts/browser-size-check.ts",

@@ -60,7 +60,7 @@ import { ParentCrumb } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { useBoardScope, useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
-import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
+import { PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { dragProps, tabContextMenu } from "../components/paneDrag";
 import { ComposerReturnBar, TornMark, TornPlaceholder } from "../components/TornOff";
 import { formatRoute } from "../state/route";
@@ -526,7 +526,7 @@ function DetailHeader({
   const { state } = useStore();
   const openTicket = useOpenTicket();
   const popout = usePopout();
-  const { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals } = useTicketActions(
+  const { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, remove, setChanges, setReopening, modals } = useTicketActions(
     owner,
     ticket,
     onClose,
@@ -539,42 +539,10 @@ function DetailHeader({
     <div className="detail-head">
       <div className="view-header detail-titlebar">
         <PaneGrip paneId={paneId} chip={k} label={label} title={ticket.title} />
-        <span className="detail-key selectable" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} · ticket ${k}` : undefined}>
-          <TicketKey ticket={ticket} />
+        <span className="detail-title selectable" title={`${ticket.title || "Untitled"} · ${label}`} data-testid="detail-title">
+          {ticket.title || "Untitled"}
         </span>
-        <StatusPill status={ticket.status} />
-        <ModelBadge ticket={ticket} />
         <div className="grow" />
-        <MenuButton
-          trigger={(toggle) => (
-            <button className="btn btn-ghost btn-icon" onClick={toggle} title="More">
-              <Icon name="more" />
-            </button>
-          )}
-        >
-          {(close) => (
-            <>
-              <button onClick={() => (close(), copyKey())}>
-                <Icon name="hash" /> Copy key
-              </button>
-              {ticket.externalRef?.url && (
-                <button onClick={() => (close(), void window.harness?.openExternal(ticket.externalRef!.url!))}>
-                  <Icon name="external" /> Open {ticket.externalRef.key}
-                </button>
-              )}
-              {ticket.status !== "done" && ticket.status !== "review" && (
-                <button onClick={() => (close(), void markDone())}>
-                  <Icon name="check" /> Mark done
-                </button>
-              )}
-              <hr />
-              <MovePaneItems paneId={paneId} onDone={close} />
-              <button className="danger" onClick={() => (close(), void remove())}>
-                <Icon name="trash" /> Delete ticket
-              </button>
-            </>
-          )}
-        </MenuButton>
         <PaneWindowButton paneId={paneId} />
         {!popout && (
           <button
@@ -595,9 +563,13 @@ function DetailHeader({
 
       <div className="detail-hero">
         {parent && <ParentCrumb parent={parent} onOpen={(key) => openTicket(key, "children")} />}
-        <h1 className="detail-title selectable">{ticket.title || "Untitled"}</h1>
         <div className="detail-meta">
           {project && <ProjectKey project={project} />}
+          <span className="detail-key selectable" data-testid="detail-key" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} · ticket ${k}` : undefined}>
+            <TicketKey ticket={ticket} />
+          </span>
+          <StatusPill status={ticket.status} />
+          <ModelBadge ticket={ticket} />
           {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
           <KindBadge ticket={ticket} childCount={children.length} />
           {ticket.branch && (
@@ -657,23 +629,49 @@ function DetailHeader({
               <Icon name="edit" /> Request changes
             </button>
           )}
-          {ticket.status === "review" && (
-            <>
-              <button className="btn btn-ghost" disabled={ticket.busy} onClick={rerunReview}>
-                <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
-              </button>
-            </>
+          {/* A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty. */}
+          {ticket.status === "in_progress" && (
+            <button className="btn" data-testid="working" disabled>
+              <Icon name="clock" /> Working…
+            </button>
           )}
           {ticket.status === "done" && (
             <button className="btn" onClick={() => setReopening(true)}>
               <Icon name="refresh" /> Re-open
             </button>
           )}
-          {ticket.busy && (
-            <button className="btn btn-ghost btn-danger" onClick={cancelRun}>
-              <Icon name="stop" /> Cancel run
-            </button>
-          )}
+          {/* Always there: Delete always applies. */}
+          <MenuButton
+            align="left"
+            trigger={(toggle, open) => (
+              <button className="btn btn-icon" aria-haspopup="menu" aria-expanded={open} aria-label="More" title="More" data-testid="ticket-more" onClick={toggle}>
+                <Icon name="more" />
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                {ticket.status === "review" && (
+                  <button role="menuitem" disabled={ticket.busy} onClick={() => (close(), void rerunReview())}>
+                    <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
+                  </button>
+                )}
+                {ticket.status !== "done" && ticket.status !== "review" && (
+                  <button role="menuitem" onClick={() => (close(), void markDone())}>
+                    <Icon name="check" /> Move to done
+                  </button>
+                )}
+                {ticket.busy && (
+                  <button role="menuitem" onClick={() => (close(), void cancelRun())}>
+                    <Icon name="stop" /> Cancel run
+                  </button>
+                )}
+                <button role="menuitem" className="danger" onClick={() => (close(), void remove())}>
+                  <Icon name="trash" /> Delete ticket
+                </button>
+              </>
+            )}
+          </MenuButton>
         </div>
       </div>
       {modals}
@@ -776,7 +774,7 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
       )}
     </>
   );
-  return { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, copyKey, remove, setChanges, setReopening, modals };
+  return { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, remove, setChanges, setReopening, modals };
 }
 
 /**

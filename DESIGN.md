@@ -2976,7 +2976,7 @@ Settings, project settings, or on the board route the pane workspace.
   composer can be torn off into a pane of its own: a `ticketTab` leaf, `tab` being a `TicketTab`
   or the reserved `"composer"`, and `browserTab` pinning a Browser pane to one browser tab.
   `views/TicketTabPane.tsx` renders it with a slim header (grip, key, the tab's name, a pinned
-  page's title; More has Return to ticket and the Move pane rows) and no strip. Its body is the
+  page's title; More has Return to ticket and the Move pane rows, unlike the full ticket pane, whose title bar has no menu) and no strip. Its body is the
   ticket pane's own (`TicketTabBody`, `MessageComposer`), with the same handlers, so it's fully
   working, and it registers the ticket's actions (`useTicketActions`) and carries
   `data-pane-ticket`, so the palette's ticket commands, j/k/Space/g/G and `i` (the ticket's one
@@ -3030,9 +3030,10 @@ Settings, project settings, or on the board route the pane workspace.
   (`splitTarget`), and it skips a pane already showing that ticket. The board's cards take a
   keyboard cursor (see Keyboard below), and Enter opens the one it's on. ⇧⌘Enter opens it in a
   new pane instead (`openTicketInNewSplit`): it splits the pane Enter would have replaced 50/50,
-  so [board, A] becomes [board, A, B], and with no ticket pane beside the board it acts like Enter. A ticket pane's More menu has a Move pane section with a row for each other
-  pane (the board, then each open ticket). Each row has ← → ↑ ↓ buttons that call `movePane`,
-  so you can re-dock a pane from the keyboard, since the grip itself is pointer-only.
+  so [board, A] becomes [board, A, B], and with no ticket pane beside the board it acts like Enter. A tab pane's, terminal's, file's and draft's More menu has a Move pane section with a row for
+  each other pane (the board, then each open ticket). Each row has ← → ↑ ↓ buttons that call
+  `movePane`, so you can re-dock a pane from the keyboard. The ticket pane's title bar has no menu,
+  so there the grip is the only way to move it.
 - **Dividers.** Each boundary between split children is a `role=separator`: drag it (previewed
   straight onto the DOM, committed once on release), arrow keys (Shift for bigger steps),
   Home/End, double-click to make the panes equal. A drag or key moves every sibling on each side
@@ -3086,7 +3087,7 @@ Settings, project settings, or on the board route the pane workspace.
     other key (hjkl, Enter, g/G, `/`, `?`, `i`, 1–9, ⌃hjkl, Escape) only moves you around. Those
     keys fire only outside text fields, the canvas, terminals and overlays (a modal, a menu, the
     palette), and they never change a ticket. Actions (Start work, Approve, Approve and take no
-    action, Request changes, Re-run review, Cancel run, Mark done, Re-open, Copy key,
+    action, Request changes, Re-run review, Cancel run, Move to done, Re-open, Copy key,
     Delete) have no keys at all. `keys.test.ts` fails if one gets a bare key. They're reached from their buttons and from
     the ⌘K palette.
   - *Areas.* An element that owns commands carries `data-keys-scope` (`board`, `ticket`, `list`,
@@ -3183,9 +3184,9 @@ Settings, project settings, or on the board route the pane workspace.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a
-  container query when its pane is narrow. A ticket pane's titlebar does the same. It hides the
-  model badge below 460 px and the status pill below 380 px, then the key truncates and the row
-  clips, so its buttons never run into the next pane. The titlebar is the container, not the pane:
+  container query when its pane is narrow. A ticket pane's titlebar holds the grip, the ticket's title
+  and the pane buttons; the title truncates with an ellipsis and the row clips as a last resort, so
+  its buttons never run into the next pane. The key, status and model sit in the hero below. The titlebar is the container, not the pane:
   a container is the containing block for fixed descendants, which would trap modals inside the
   pane.
 - **Menus.** `MenuButton` (`components/bits.tsx`) renders its menu in a portal with fixed

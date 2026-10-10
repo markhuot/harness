@@ -505,15 +505,17 @@ cover as usual. The host puts the content in `TicketSidePanel`, which slides in 
 trailing edge over the split view with no dimming, so the board and sidebar to its left stay
 live. It's resizable from its leading edge between 25% and 80% of the window
 (`TicketPanelWidth`: 800pt until the person drags it, then their fraction of the window, kept
-as the `ticketPanelWidth` pref and re-clamped on rotation). Its title bar names the ticket on
-top and has dock, pop-out and close; that ticket's screen leaves its key out of the navigation
-bar (`\.inTicketPanel` in TicketDetailHeader), which keeps Back and the titles of screens pushed
-above it. New session in the panel likewise drops its own title and Cancel ✕, keeping Plan first
+as the `ticketPanelWidth` pref and re-clamped on rotation). It has no bar of its own: the
+dock, pop-out and close buttons float over its top trailing corner, and the root ticket's hero
+title starts at the top, wrapping before them (`\.ticketPanelTitleInset`). The root ticket's
+screen hides its navigation bar (`TicketDetailHeader`), as does every ticket; a pushed ticket's
+hero draws Back (`ticket-back`) beside its title, only when `isPresented` says there's a screen
+under it. New session in the panel likewise drops its own title and Cancel ✕, keeping Plan first
 and Start session. While it's on top it hands its `cancel()` to the panel through
 `TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
 or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
 registered they just dismiss. Docking, pop-out and a card's ✕ don't ask, and the draft is
-saved as whenever the screen goes. A rightward fling on the title bar docks it and Esc closes it.
+saved as whenever the screen goes. A rightward fling on the panel's top edge or its button corner docks it and Esc closes it.
 Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
 and every docked ticket waits as a glass-capsule `DockedCard` in `DockedCardStack`, the same
 cards as the iPhone's, in the board's
@@ -588,7 +590,7 @@ is) to the store, never a single window's.
 - **Opening a ticket window.** A card tap or ticket link opens the ticket side panel (see iPad
   layout), never a window. A ticket window opens on request: the panel's pop-out button
   (`router.popOutSheet()`, which hands the sheet's top ticket to `onOpenTicket` and dismisses the
-  sheet), and "Open in New Window" in the card's menu, the ticket's More menu or a tab's menu.
+  sheet), and "Open in New Window" in the card's menu or a tab's menu (the ticket's own screen has no opener).
   `WindowDirectory.mainActive` sets each main Router's `onOpenTicket` only when
   `UIApplication.shared.supportsMultipleScenes`, so `canPopOutSheet` is false on iPhone; the
   panel also hides pop-out without `supportsMultipleWindows`.
@@ -612,7 +614,7 @@ is) to the store, never a single window's.
   line (the approval card still shows), then only that tab's body (`TicketTabBody`, the same view
   the pager uses, so everything works as in the ticket), or only the composer. No tab strip,
   pager or composer otherwise; a pinned browser tab has no chip strip or New tab button, and
-  shows "This tab was closed" when its tab goes. Its More menu has Return to ticket.
+  shows "This tab was closed" when its tab goes. Its toolbar has a Return to ticket button.
   Windows are unique by `TicketWindowValue.identity`: (key) for a full window, (key, tab,
   browserTab) for a pinned one. `openTicket` looks a pinned window up among
   `UIApplication.openSessions` by the value each saves in its session's `userInfo`. A drag spawns
@@ -665,11 +667,10 @@ back. AXe can't drive a drag (its touch events don't move), so drag-to-window is
 geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
 the panel trailing-aligned at TicketPanelWidth's default with the board still showing and its title
 bar no higher than the sidebar button (both keep the top safe area). The panel's labels name its
-ticket once: the title bar, not the ticket's navigation bar too (AXe does list a navigation bar's
-key, as in a ticket window). Dragging the handle to either edge stops at 25% and 80%, then sim-check
+ticket once: in the hero's title, with no navigation bar above any ticket and no `ticket-back` button on the root. Dragging the handle to either edge stops at 25% and 80%, then sim-check
 drags it back to the default, since the width is a pref that outlives the run. A child link inside
-pushes, and a different board card opens its ticket over it, at the root. AXe's tree leaves out the glass
-Back button, so sim-check taps where it sits: after a push that goes back to the parent, and at the
+pushes, and a different board card opens its ticket over it, at the root. sim-check taps where the hero's
+Back button sits: after a push that goes back to the parent, and at the
 root it leaves the panel where it was. The dock button leaves the "KEY, title, docked" card in the
 bottom-right corner, and a tap on it restores the pushed child, Back and all. A card's ✕ closes
 just its ticket (sim-check closes the board card's and the conductor's one at a time), New session opens in the panel with one title and one ✕ and no
@@ -1078,7 +1079,7 @@ native-pattern difference, not a missing feature.
 | Search: the board's always-visible field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen | done |
 | Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, project group rows (HARNESS-269: `folder` icon and open count, alphabetical, under All projects), rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
-| Header menu: Copy key, Open external, Cancel run, Open PR, Mark done, Delete | screens/TicketDetail | TicketDetailScreen | done |
+| Hero More (…): Move to done, Cancel run, Delete (no header menu, title at the top of the sheet) | screens/TicketDetail | TicketDetailScreen | done |
 | Hero: crumb, title (compact on plugin/sub-agent, gone on Browser but for an approval card), badges incl. model name and PR | screens/TicketDetail | TicketDetailHero | done |
 | Start work (Approve plan while a planning run goes, then a disabled Starts after planning: `Conductor.startState`), Approve (+ menu incl. clean up), Request changes, Complete (+ menu), agent review, Re-open, Cancel run | screens/TicketDetail, lib/approve, shared/completion | TicketDetailHero, TicketDetailSheets, HarnessKit Approve/Completion/TicketDetailLogic | done |
 | Conductor-managed children: Approve/Complete disabled with the reason; on-base tickets offer no merge/PR | screens/TicketDetail (HARNESS-155/160) | TicketDetailHero, Completion.managingConductor/worksOnBase | done |

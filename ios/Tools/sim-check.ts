@@ -1168,6 +1168,10 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     }
     await until("the children", async () => onConductor(await labels(udid)), 8000);
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is showing under the presented sheet");
+    // The Tickets tab collapses the hero, and a collapsed hero hides its actions, the […] too; with no
+    // navigation bar, the hero's title is the top of the sheet.
+    const rootLabels = await labels(udid);
+    if (rootLabels.includes("More")) throw new Error("the collapsed hero still shows its More menu");
     await shot(udid, "sheet-presented-light");
     // The composer's bar is as far from the screen's bottom as from its side, as on a pushed ticket:
     // a sheet doesn't keep the home indicator's inset, so the window's figure would sit it too low.
@@ -1184,7 +1188,18 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       await say("after the child tap");
       throw e;
     });
+    // The expanded hero: the […] after its actions, and nothing in a navigation bar but Back (no
+    // title, no menu, no Copy key).
+    const childLabels = await labels(udid);
+    if (!childLabels.includes("More")) throw new Error(`no More menu in the child's hero: ${childLabels.slice(0, 30).join(" | ")}`);
+    if (childLabels.includes("Copy key") || childLabels.includes("Open in New Window")) throw new Error("the old header menu's items are showing");
     await shot(udid, "sheet-child-light");
+    await tapWhere(udid, "More");
+    const menu = await until("the More menu", async () => ((l) => (l.includes("Delete ticket") ? l : null))(await labels(udid)), 5000);
+    if (!menu.includes("Move to done") && !menu.includes("Cancel run") && !menu.includes("Delete ticket")) throw new Error(menu.join(" | "));
+    await shot(udid, "sheet-child-more-light");
+    await axe("tap", "-x", String(Math.round(W * 0.5)), "-y", String(Math.round(H * 0.9)), "--udid", udid); // dismiss the menu
+    await until("the menu gone", async () => !(await labels(udid)).includes("Delete ticket"), 5000);
     // The first page's rightward swipe goes to the back swipe (PagerYieldsToBackSwipe).
     await Bun.sleep(800); // back only goes once the pager rests on the first page
     const y = String(Math.round(H * 0.7));
@@ -1723,12 +1738,12 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     const { leading } = await panelFraction(udid);
     const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
     if (!close) throw new Error("no close button in the panel");
-    return { x: leading + 29, y: close.frame.y + close.frame.height / 2 + 58 };
+    return { x: leading + 29, y: close.frame.y + close.frame.height / 2 };
   };
   /**
-   * Taps where the panel's navigation bar keeps Back: AXe's tree leaves out the glass header items,
-   * so a push shows by where the tap goes. It sits 29pt in from the panel's leading edge, 58pt
-   * below the title bar's buttons.
+   * Taps where a pushed ticket's hero draws Back, 29pt in from the panel's leading edge and level
+   * with the panel's floating buttons (it's also the `ticket-back` button, but a tap by position
+   * shows at the root that nothing is there).
    */
   const tapBack = async () => {
     const { x, y } = await backPoint();
@@ -1737,8 +1752,17 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
   };
   /** The panel's ticket screen went back to `k`: Back was there. */
   const backTo = async (k: string) => {
-    await tapBack();
-    await until(`Back to ${k}`, async () => panelOn(await labels(udid), k), 6000).catch(async (e) => {
+    // A tap during the restore animation can miss, so tap again until the pushed ticket's Back is gone.
+    await until(`Back to ${k}`, async () => {
+      const back = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-back");
+      if (panelOn(await labels(udid), k) && !back) return true;
+      if (back) {
+        await axe("tap", "-x", String(Math.round(back.frame.x + back.frame.width / 2)), "-y", String(Math.round(back.frame.y + back.frame.height / 2)), "--udid", udid);
+        moved(udid);
+      } else await tapBack();
+      await Bun.sleep(800);
+      return false;
+    }, 12000, 0).catch(async (e) => {
       await say("after a tap on Back");
       throw e;
     });
@@ -1807,10 +1831,14 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     // Below the status bar: no higher than the split view's own top bar, which keeps the safe area.
     const toggle = await findElement(udid, (l) => l === "Hide Sidebar" || l === "Show Sidebar");
     if (toggle && close.frame.y < toggle.frame.y - 4) throw new Error(`the title bar's buttons start at y=${Math.round(close.frame.y)}, above the sidebar button (y=${Math.round(toggle.frame.y)})`);
-    // The header names its ticket once: the title bar's ("KEY" or "KEY, <subtitle>"); the ticket's own navigation bar leaves its key out.
+    // The hero names the ticket: its key label when expanded, its title row when collapsed (a conductor
+    // opens on Tickets). The root ticket has no navigation bar, and no title bar above the hero.
     const inPanel = (await nodes(udid)).filter((n) => n.frame.x >= leading && n.AXLabel);
-    const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
-    if (named.length !== 1) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
+    const title = s.conductor.title;
+    const named = inPanel.filter((n) => n.AXLabel === key || n.AXLabel === title || n.AXLabel!.startsWith(`${key},`) || n.AXLabel!.startsWith(`${key} ·`));
+    // An expanded hero shows both its title and, in the badge row, the key: still the hero alone.
+    const bar = named.filter((n) => n.frame.y < 60 && n.AXLabel !== title && n.AXLabel !== key);
+    if (named.length < 1 || named.length > 2 || bar.length) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
     await shootBoth(udid, "panel-default");
     await appearance(udid, "light");
     return `${key} at ${pct(fraction)} (${Math.round(W - leading)} of ${W} pt), header "${named[0]!.AXLabel}"`;
@@ -1930,6 +1958,36 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     }, 8000);
     await backTo(key);
     return `${p.frame.x}+${p.frame.width} of ${W}, y ${Math.round(mid)} of ${H}; restored on ${kid.key}, Back to ${key}`;
+  });
+  await check("flinging the panel's top edge to the right docks it, and its card restores it at its root", async () => {
+    // The fling lives on a thin strip along the panel's top and the buttons' corner (no title bar).
+    const { leading, W } = await panelFraction(udid);
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
+    if (!close) throw new Error("no close button in the panel");
+    const y = String(Math.round(close.frame.y - 4 + 6));
+    const from = Math.round(leading + (W - leading) * 0.3);
+    await axe("swipe", "--start-x", String(from), "--start-y", y, "--end-x", String(Math.round(W - 10)), "--end-y", y, "--duration", "0.3", "--udid", udid);
+    moved(udid);
+    const pill = await until("the card", async () => {
+      const n = await findElement(udid, isDock);
+      return n && !(await labels(udid)).includes(RESIZE) ? n : null;
+    }, 6000).catch(async (e) => {
+      await say("after the fling");
+      throw e;
+    });
+    await Bun.sleep(700);
+    const p = (await findElement(udid, isDock)) ?? pill;
+    await axe("tap", "-x", String(Math.round(p.frame.x + p.frame.width / 2)), "-y", String(Math.round(p.frame.y + p.frame.height / 2)), "--udid", udid);
+    moved(udid);
+    await until("the panel back", async () => {
+      const l = await labels(udid);
+      return panelOn(l, key) && !l.some(isDock);
+    }, 8000);
+    // At the root there's no Back: no `ticket-back` button (once the docking check's pop has settled).
+    await until(`${key} at its root, with no Back`, async () => !(await nodes(udid)).some((n) => n.AXUniqueId === "ticket-back"), 5000).catch(async () => {
+      throw new Error(`the root ticket ${key} draws a Back button: ${JSON.stringify((await nodes(udid)).filter((n) => n.AXUniqueId === "ticket-back" || /^Close/.test(n.AXLabel ?? "")).map((n) => [n.AXUniqueId, n.AXLabel, n.frame]))}`);
+    });
+    return `docked as "${p.AXLabel}" and restored`;
   });
   await check("a card's ✕ closes just its ticket without opening it", async () => {
     // The conductor's panel docks as a card, then another ticket's panel docks over it: two cards.
@@ -2345,7 +2403,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await shot(udid, "keyboard-new-session-row-idle");
     const y = Math.round(start.frame.y + start.frame.height - 10);
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width / 2)), "-y", String(y), "--udid", udid);
-    await until("keyboard up", keyboardTop, 5000).catch(() => {
+    await until("keyboard up", keyboardTop, 5000).catch(async () => {
       throw new Error(`a tap at y=${y} (the field's top is ${Math.round(start.frame.y)}) left the keyboard down`);
     });
     await shot(udid, "keyboard-new-session-row");

@@ -9,12 +9,12 @@ import SwiftUI
 ///
 /// `widthFraction` is nil until the person drags the edge (until then 800pt, clamped, is used);
 /// the app binds it to the `ticketPanelWidth` pref to keep it across launches. Dragging the leading
-/// handle resizes it; flinging the title bar right docks it (it slides off the edge first, then
+/// handle resizes it; flinging the top edge or the buttons' corner right docks it (it slides off the edge first, then
 /// `onDock` runs); Escape on a hardware keyboard closes it. `docked` keeps it mounted (drafts,
 /// scroll, the nav path) but off the trailing edge, inert, while the docked cards stand in for it.
 struct TicketSidePanel<Content: View>: View {
+    /// The ticket's name, for the buttons' accessibility labels (the hero names it on screen).
     let title: String
-    var subtitle: String? = nil
     /// Whether the pop-out (own window) button shows.
     var canPopOut = true
     /// Off the edge and inert, for the docked cards.
@@ -55,12 +55,13 @@ struct TicketSidePanel<Content: View>: View {
     }
 
     private func panel(width: CGFloat, window: CGFloat) -> some View {
-        VStack(spacing: 0) {
-            titleBar(width: width)
-            Rectangle().fill(c.border).frame(height: 1)
-            content()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        // No bar of its own: the ticket's hero title starts at the top (clear of the buttons by
+        // `ticketPanelTitleInset`), and the buttons float over its trailing corner.
+        content()
+            .environment(\.ticketPanelTitleInset, Self.buttonSize * (canPopOut ? 3 : 2) + 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .top) { flingStrip(width: width) }
+            .overlay(alignment: .topTrailing) { buttons(width: width) }
         .background(c.bg)
         .clipShape(Self.shape)
         .shadow(color: .black.opacity(c.isDark ? 0.45 : 0.16), radius: 18, x: -4)
@@ -69,25 +70,10 @@ struct TicketSidePanel<Content: View>: View {
         .accessibilityIdentifier("ticket-panel")
     }
 
-    // MARK: Title bar
+    // MARK: Buttons
 
-    private func titleBar(width: CGFloat) -> some View {
-        HStack(spacing: 4) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(c.text)
-                    .lineLimit(1)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(c.text3)
-                        .lineLimit(1)
-                }
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
+    private func buttons(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
             barButton("pip.enter", label: "Dock \(title)", id: "ticket-panel-dock", action: onDock)
             if canPopOut {
                 barButton("macwindow.badge.plus", label: "Open \(title) in a new window", id: "ticket-panel-popout", action: onPopOut)
@@ -96,13 +82,20 @@ struct TicketSidePanel<Content: View>: View {
                 // Escape on a hardware keyboard closes the panel, focused or not.
                 .keyboardShortcut(docked ? nil : .cancelAction)
         }
-        .padding(.leading, 20)
         .padding(.trailing, 8)
-        .frame(height: Self.titleBarHeight)
+        .padding(.top, 4)
         .contentShape(.rect)
-        // The fling lives on the title bar alone, so it never fights horizontal scrolling in the
-        // ticket's content.
         .gesture(fling(width: width))
+    }
+
+    /// A thin strip along the panel's top edge that takes the fling. It's the hero's top padding,
+    /// not its content, so the fling never fights horizontal scrolling or the title's taps.
+    private func flingStrip(width: CGFloat) -> some View {
+        Color.clear
+            .frame(height: Self.flingStripHeight)
+            .contentShape(.rect)
+            .gesture(fling(width: width))
+            .accessibilityHidden(true)
     }
 
     private func barButton(_ symbol: String, label: String, id: String, action: @escaping () -> Void) -> some View {
@@ -110,7 +103,7 @@ struct TicketSidePanel<Content: View>: View {
             Image(systemName: symbol)
                 .font(.body.weight(.medium))
                 .foregroundStyle(c.text2)
-                .frame(width: 40, height: 40)
+                .frame(width: Self.buttonSize, height: Self.buttonSize)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -119,7 +112,7 @@ struct TicketSidePanel<Content: View>: View {
         .accessibilityIdentifier(id)
     }
 
-    /// A rightward drag moves the panel with the finger; past `flingDistance` (or a throw whose
+    /// A rightward drag from the top edge or the buttons' corner moves the panel with the finger; past `flingDistance` (or a throw whose
     /// predicted end gets there) it carries on off the edge and docks, otherwise it springs back.
     private func fling(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .global)
@@ -141,7 +134,7 @@ struct TicketSidePanel<Content: View>: View {
             }
     }
 
-    /// Whether a title bar drag that ended at `translation` (with the system's predicted end)
+    /// Whether a fling that ended at `translation` (with the system's predicted end)
     /// docks a panel `width` wide: a third of the panel or 160pt dragged, whichever is less, or a
     /// throw predicted to carry half the panel.
     static func shouldDock(translation: CGFloat, predicted: CGFloat, width: CGFloat) -> Bool {
@@ -189,7 +182,11 @@ struct TicketSidePanel<Content: View>: View {
         UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 16, style: .continuous)
     }
 
-    private static var titleBarHeight: CGFloat { 52 }
+    static var buttonSize: CGFloat { 40 }
+    /// The room the floating buttons need above a screen with toolbar items of its own.
+    static var buttonRowHeight: CGFloat { buttonSize + 12 }
+    /// The top edge that flings the panel (the hero's top padding).
+    private static var flingStripHeight: CGFloat { 14 }
     /// The handle's touch target, centred on the panel's leading edge.
     private static var handleWidth: CGFloat { 24 }
     /// Extra travel past the edge so the shadow leaves the screen with the panel.
@@ -245,6 +242,8 @@ struct TicketPanelHost: View {
                             ForEach(router.liveSheets) { s in
                                 let isTop = s.id == sheet.id
                                 TicketSheetContent(sheet: s)
+                                    // Anything but a ticket's hero on top keeps clear of the floating buttons.
+                                    .padding(.top, Self.topIsTicket(s) ? 0 : TicketSidePanel<EmptyView>.buttonRowHeight)
                                     .environment(\.inTicketPanel, true)
                                     .environment(closers.closer(s.id))
                                     .opacity(isTop ? 1 : 0)
@@ -279,6 +278,17 @@ struct TicketPanelHost: View {
         }
         .onChange(of: sheet?.id) { resignFirstResponder() }
         .onDisappear { dockInset?.cards = 0 }
+    }
+
+    /// A ticket is the screen on top of `sheet`: its hero (or a pushed ticket's Back button) is level
+    /// with the panel's buttons, which float over it; any other screen (New session, a file) has
+    /// toolbar items of its own up there.
+    private static func topIsTicket(_ sheet: TicketSheet) -> Bool {
+        if let route = sheet.path.last {
+            if case .ticket = route { return true }
+            return false
+        }
+        return sheet.rootKey != nil
     }
 
     /// The person's width, kept in prefs; nil until they first drag the panel's edge.
@@ -335,7 +345,7 @@ struct TicketPanelHost: View {
     @Previewable @State var fraction: Double? = nil
     ZStack {
         Color.gray.opacity(0.2).ignoresSafeArea()
-        TicketSidePanel(title: "HARNESS-365", subtitle: "iPad side panel", widthFraction: $fraction,
+        TicketSidePanel(title: "HARNESS-365", widthFraction: $fraction,
                         onDock: {}, onPopOut: {}, onClose: {}) {
             List(0..<30) { Text("Row \($0)") }
         }
