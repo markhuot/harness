@@ -242,6 +242,8 @@ interface ActiveRun {
   mcpToken: string | null;
   /** The agent called block during this run */
   blocked: boolean;
+  /** The agent called return_to_planning: when the run ends, a Plan run starts (afterRun) */
+  replanned: { reason: string; startAfterPlan: boolean } | null;
   /**
    * Calls a permission system inside the driver denied without asking (permission_denied) and
    * the agent didn't then run successfully in the same run
@@ -1709,10 +1711,7 @@ export class Orchestrator {
     // ends (schedule()). The ticket stays in planning with the plan run undisturbed.
     if (ticket.status === "planning" && ticket.busy) {
       if (ticket.startAfterPlan) return ticket; // already approved
-      const approved = this.store.tickets.update(ticket.id, { startAfterPlan: true, startAfterPlanBy: by === "agent" ? "agent" : "human" })!;
-      this.touchTicket(approved.id);
-      this.addActivityLine(approved, "system", by, "Plan approved; work starts when planning finishes");
-      return this.store.tickets.get(ticket.id)!;
+      return this.approvePlan(ticket, by);
     }
     // A planning ticket with open dependencies is queued, not started: it stays in planning with
     // autoStart on, and the scheduler starts it once they're done (as `start` does on create).
@@ -1725,6 +1724,14 @@ export class Orchestrator {
     }
     await this.begin(ticket, this.prompts().workStartPrompt(ticket), {}, undefined, [], by);
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** Approve the plan a planning run is writing: work starts when the run ends (schedule()). */
+  private approvePlan(ticket: Ticket, by: ActivityAuthor): Ticket {
+    const approved = this.store.tickets.update(ticket.id, { startAfterPlan: true, startAfterPlanBy: by === "agent" ? "agent" : "human" })!;
+    this.touchTicket(approved.id);
+    this.addActivityLine(approved, "system", by, "Plan approved; work starts when planning finishes");
+    return approved;
   }
 
   /** Withdraw a plan approval (the run was cancelled, failed or is answering a message), saying why. */
@@ -2697,6 +2704,49 @@ ${numberLines(r.body)}`;
     this.addActivityLine(t, "reopened", "agent", why || "Re-opened to pick the work back up", this.moveMeta(t, "in_progress"));
     this.transition(t, "in_progress", { ...dir, agentReview: "pending", humanReview: "pending", blockedReason: null, reviewRejections: 0 }, `Re-opened by the agent${why ? `: ${why}` : ""}`, undefined, { keepSession: true });
     return dir.workdir === ctx.cwd ? "" : dir.workdir;
+  }
+
+  /**
+   * The agent sends its own ticket back to planning (return_to_planning). The ticket moves now,
+   * with both reviews reset and any agent review stopped; the Plan run is queued when the calling
+   * run ends (queueReplan), on the Plan model in a fresh conversation, so the scheduler can't
+   * start work in between.
+   */
+  async returnToPlanning(ctx: ToolContext, reason: string, startAfterPlan: boolean): Promise<void> {
+    const t = this.ctxTicket(ctx);
+    if (ctx.runKind !== "work" && ctx.runKind !== "conductor" && ctx.runKind !== "chat") throw new Error("return_to_planning is only available in work, conductor and chat runs");
+    if (t.pendingApproval) throw new Error(`${t.key} is waiting on a human to answer a tool approval (${t.pendingApproval.toolName}); only they can move it.`);
+    if (t.status === "planning") throw new Error(`${t.key} is already in planning.`);
+    this.notCompleting(t, "sent back to planning");
+    const why = typeof reason === "string" ? reason.trim() : "";
+    if (!why) throw new Error("reason is empty: say what the human asked for and what's wrong with the current approach");
+    if (t.status === "review") await this.cancelReviewRuns(t.sessionId);
+    const from = t.status;
+    this.autoRetries.delete(t.id);
+    this.transition(
+      t,
+      "planning",
+      { agentReview: "pending", humanReview: "pending", blockedReason: null, pendingApproval: null, reviewRejections: 0, autoStart: false },
+      `Moved back to planning by the agent: ${why}`,
+      why,
+      { by: "agent", line: `Moved back to planning by the agent: ${why}` },
+    );
+    // Leaving Blocked would keep the conversation; the Plan run starts a new one.
+    if (from === "blocked") this.newSession(t.sessionId);
+    const a = this.ctxActive(ctx);
+    if (a) a.replanned = { reason: why, startAfterPlan };
+    else this.queueReplan(t.id, why, "", startAfterPlan); // tool called outside the tracked run
+  }
+
+  /**
+   * Queue the Plan run after return_to_planning. The run is queued before the approval is set, so
+   * the ticket is busy whenever the scheduler could see the approval.
+   */
+  private queueReplan(ticketId: string, reason: string, humanMessage: string, startAfterPlan: boolean) {
+    const t = this.store.tickets.get(ticketId);
+    if (!t || t.status !== "planning") return;
+    this.enqueueRun(t.sessionId, "plan", this.prompts().replanPrompt(t, reason, humanMessage, startAfterPlan));
+    if (startAfterPlan) this.approvePlan(t, "agent");
   }
 
   /**
@@ -4416,6 +4466,7 @@ ${numberLines(r.body)}`;
       lastText: null,
       mcpToken: null,
       blocked: false,
+      replanned: null,
       denials: [],
       calls: new Map(),
       appliedGrants: new Set(),
@@ -4803,6 +4854,11 @@ ${numberLines(r.body)}`;
       if (run.kind === "complete") this.completionStopped(run.sessionId, "cancelled");
       return;
     }
+    // The agent sent the ticket back to planning: the Plan run follows, whether or not this run ended cleanly.
+    if (active.replanned) {
+      this.queueReplan(ticket.id, active.replanned.reason, run.kind === "chat" ? run.prompt : "", active.replanned.startAfterPlan);
+      return;
+    }
     if (ticket.pendingApproval) return; // waiting on a human; never auto-submit / complete / re-block
     if (run.status === "succeeded" && this.surfaceDenial(ticket, run, active)) return;
     if (run.status === "failed") {
@@ -4918,6 +4974,7 @@ ${numberLines(r.body)}`;
       block: (c, q) => this.block(c, q),
       unblock: (c, n) => this.unblock(c, n),
       resumeWork: (c, n) => this.resumeWork(c, n),
+      returnToPlanning: (c, r, s) => this.returnToPlanning(c, r, s),
       submitForReview: (c, n, up, skips) => this.submitForReview(c, n, up, skips),
       updateBranch: (c, i) => this.updateBranch_(c, i),
       reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),

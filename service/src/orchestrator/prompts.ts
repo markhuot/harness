@@ -637,6 +637,15 @@ export function reopenPrompt(ticket: Ticket, notes: string, base?: string, overr
   );
 }
 
+/** The Plan run's first message after an agent called return_to_planning. */
+export function replanPrompt(ticket: Ticket, reason: string, humanMessage: string, startAfterPlan: boolean, overrides?: PromptOverrides | null): string {
+  return renderPrompt(
+    "run.replan",
+    { ticket: ticketLabel(ticket), reason: reason.trim(), humanMessage: humanMessage.trim(), specRevision: String(ticket.specRevision ?? 1), branch: ticket.branch ?? "", startAfterPlan },
+    overrides,
+  );
+}
+
 export function triagePrompt(
   input: {
     source: string;
@@ -681,6 +690,7 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
     conductorUpdatePrompt: (changes: Parameters<typeof conductorUpdatePrompt>[0]) => conductorUpdatePrompt(changes, overrides),
     changesRequestedPrompt: (notes: string, by: "agent" | "human" | "conductor", specRevision?: number) => changesRequestedPrompt(notes, by, specRevision, overrides),
     reopenPrompt: (ticket: Ticket, notes: string, base?: string) => reopenPrompt(ticket, notes, base, overrides),
+    replanPrompt: (ticket: Ticket, reason: string, humanMessage: string, startAfterPlan: boolean) => replanPrompt(ticket, reason, humanMessage, startAfterPlan, overrides),
     triagePrompt: (input: Parameters<typeof triagePrompt>[0]) => triagePrompt(input, overrides),
   };
 }

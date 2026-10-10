@@ -158,11 +158,16 @@ export interface RecordedCall {
  *
  * work directives: `/block <q>`, `/fail <msg>`, `/hold` (wait for release()/abort),
  * `/nosubmit` (end without submitting → auto-submit), `/throw <msg>`.
- * chat directives: `/resume` (before a `/hold`), `/unblock`, then `/submit`, `/block <q>` or `/ask`; `/tool` and `/hold` as in work.
+ * chat directives: `/resume` (before a `/hold`), `/unblock`, then `/submit`, `/block <q>`, `/replan` or `/ask`; `/tool` and `/hold` as in work.
+ * `/replan` (work and chat) calls return_to_planning("needs a new approach"); `/replan-auto` also passes start_after_plan;
+ * `/replan-fail` does both and puts `/fail` in the reason, which fails the Plan run that carries it.
  * Steering (only with supportsSteering): after a /hold (work, plan and chat runs) the run takes the
  * messages sent meanwhile and answers each with `Steered: <text>`; `/deaf` never takes them in.
  * review: request_changes while `rejectsLeft > 0` or the prompt contains [dummy:reject].
  */
+const replanReason = (p: string) => `needs a new approach${p.includes("/replan-fail") ? " /fail plan broke" : ""}`;
+const wantsAutoReplan = (p: string) => p.includes("/replan-auto") || p.includes("/replan-fail");
+
 /** A commit in `cwd` (FakeDriver.commitsWork), when it's a git checkout. */
 async function commitWork(cwd: string, runId: string) {
   if ((await git(["rev-parse", "--is-inside-work-tree"], cwd)).code !== 0) return;
@@ -358,6 +363,7 @@ export class FakeDriver implements Driver {
         }
         const block = /\/block (.+)/.exec(p);
         if (block) return void (await ops.block(ctx, block[1]!));
+        if (p.includes("/replan")) return void (await ops.returnToPlanning(ctx, replanReason(p), wantsAutoReplan(p)));
         const fail = /\/fail (.+)/.exec(p);
         if (fail) {
           yield { type: "error", message: fail[1]! };
@@ -434,7 +440,10 @@ export class FakeDriver implements Driver {
           if (refused) yield { type: "text", text: `Refused: ${refused}` };
         }
         const block = /\/block (.+)/.exec(said);
-        if (block) {
+        if (said.includes("/replan")) {
+          const refused = await attempt(() => ops.returnToPlanning(ctx, replanReason(said), wantsAutoReplan(said)));
+          if (refused) yield { type: "text", text: `Refused: ${refused}` };
+        } else if (block) {
           const refused = await attempt(() => ops.block(ctx, block[1]!));
           if (refused) yield { type: "text", text: `Refused: ${refused}` };
         } else if (said.includes("/submit")) {

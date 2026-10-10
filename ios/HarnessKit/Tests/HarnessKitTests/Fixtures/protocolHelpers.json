@@ -61,6 +61,7 @@
       "run.conductor_update",
       "run.changes_requested",
       "run.reopen",
+      "run.replan",
       "run.triage"
     ],
     "RENAMED_PROMPT_IDS": {

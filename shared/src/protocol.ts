@@ -1049,6 +1049,7 @@ export const PROMPT_IDS = [
   "run.conductor_update",
   "run.changes_requested",
   "run.reopen",
+  "run.replan",
   "run.triage",
 ] as const;
 export type PromptId = (typeof PROMPT_IDS)[number];

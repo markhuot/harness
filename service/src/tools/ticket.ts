@@ -147,6 +147,23 @@ export const resumeWork = defineTool<{ note?: string }>({
   },
 });
 
+export const returnToPlanning = defineTool<{ reason: string; start_after_plan?: boolean }>({
+  name: "return_to_planning",
+  description:
+    "Send your own ticket back to Planning so the planning model redrafts the spec, then work starts again from the new plan. Use it only when the human asks to re-plan or rethink the approach, or when you find the approved plan won't work and the human agrees. It works from In progress, Blocked, Review and Done, ends this run (call it last: save the spec, your notes and any commits first) and starts a Plan run on the Plan phase's model in a fresh conversation, which doesn't see this chat. Say in `reason` what the human asked for and what the current approach got wrong. Without start_after_plan the ticket waits in Planning for the human to press Start; Start resumes in the same worktree. Set start_after_plan true only when the human said they don't need to review the new plan: work then starts on its own as soon as the Plan run ends. Refused for a ticket already in Planning and for other tickets (use move_ticket).",
+  inputSchema: schema(
+    {
+      reason: { type: "string", minLength: 1, description: "What the human asked for and what's wrong with the current approach, written for a planner that hasn't seen this conversation. Shown in Activity and sent to the Plan run." },
+      start_after_plan: { type: "boolean", description: "Approve the re-plan up front: work starts when the Plan run ends, with no human review of the new plan. Only when the human said they don't need to review it." },
+    },
+    ["reason"],
+  ),
+  async run({ reason, start_after_plan }, ctx) {
+    await ctx.ops.returnToPlanning(ctx, reason, !!start_after_plan);
+    return `Ticket moved to planning; a Plan run on the planning model starts when this run ends${start_after_plan ? ", and work starts on its own once the new plan is saved" : ", and the human presses Start when they approve the new plan"}. Stop here: make no more changes.`;
+  },
+});
+
 const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:

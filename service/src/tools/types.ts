@@ -293,6 +293,12 @@ export interface HarnessOps {
    */
   resumeWork(ctx: ToolContext, note?: string): Promise<string>;
   /**
+   * The agent sends its own ticket back to planning (from in progress, blocked, review or done).
+   * The run ends after this and a Plan run on the Plan model redrafts the spec; `startAfterPlan`
+   * approves that re-plan up front. Throws for a ticket already in planning.
+   */
+  returnToPlanning(ctx: ToolContext, reason: string, startAfterPlan: boolean): Promise<void>;
+  /**
    * Work is finished: move to review with a note on this round. `specIsUpToDate` must be true (the
    * spec was brought up to date in an earlier call), else it throws and the ticket stays put. The
    * skips are stored on the ticket first (turning one on is refused when the other review is
