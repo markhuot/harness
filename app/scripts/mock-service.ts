@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
-import { applyLegacySettings, BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, legacySettingsFields, legacyWork, mergePhaseModels, resolvePhaseChoice, type BrowserSize } from "@harness/shared";
+import { applyLegacySettings, contextTokens, BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, legacySettingsFields, legacyWork, mergePhaseModels, resolvePhaseChoice, type BrowserSize } from "@harness/shared";
 import type {
   ActivityAuthor,
   ActivityEntry,
@@ -244,6 +244,8 @@ const drivers: DriverInfo[] = [
     authenticated: true,
     detail: "mark@happycog.com · Happy Cog (team)",
     supportsLogin: true,
+    sessionActions: { compact: true, newSession: true },
+    reportsContextUsage: true,
   },
   {
     id: "anthropic-api",
@@ -253,6 +255,19 @@ const drivers: DriverInfo[] = [
     authenticated: false,
     detail: "No API key configured",
     supportsLogin: false,
+    sessionActions: { compact: false, newSession: true },
+    reportsContextUsage: true,
+  },
+  {
+    id: "github-copilot",
+    name: "GitHub Copilot",
+    description: "Wraps the copilot CLI",
+    available: true,
+    authenticated: true,
+    detail: "markhuot",
+    supportsLogin: false,
+    sessionActions: { compact: false, newSession: true },
+    reportsContextUsage: true,
   },
   {
     id: "dummy",
@@ -515,6 +530,9 @@ function makeSession(key: string, kind: Session["kind"], ticketId: string | null
 
 interface SeedTicket {
   project: Project;
+  /** The context gauge's usage (Ticket.context) and whether a compact run is going (Ticket.compacting) */
+  context?: Ticket["context"];
+  compacting?: boolean;
   model?: string | null;
   key?: string;
   title: string;
@@ -589,6 +607,8 @@ function seedTicket(s: SeedTicket): Ticket {
     allowedTools: s.allowedTools ?? [],
     messageDraft: s.messageDraft ? { text: s.messageDraft, attachments: [], origin: null, updatedAt: createdAt + 60_000 } : null,
     model: s.model ?? null,
+    ...(s.context !== undefined ? { context: s.context } : {}),
+    ...(s.compacting ? { compacting: true } : {}),
     agentNotes: s.agentNotes ?? null,
     position: tickets.size,
     completedAt: s.status === "done" ? createdAt + 60_000 : null,
@@ -1195,6 +1215,19 @@ function seed() {
     live: { state: "stopped", since: now() - 3 * 86400_000, nextRunAt: null, failures: 0 },
   };
   watchers.set(sentry.id, sentry);
+  // The context gauge in each state (app/scripts/context-gauge-check.ts): normal, over the limit with
+  // cache misses, compacting, a github-copilot estimate, and a fresh session.
+  const gauge = (key: string, title: string, o: Partial<SeedTicket>) =>
+    seedTicket({ project: hx, key, title, spec: "A ticket for the context gauge.", status: "review", driver: "claude-code", ageMin: 30, ...o });
+  const usage = (o: Partial<NonNullable<Ticket["context"]>>): NonNullable<Ticket["context"]> => ({
+    input: 1000, cacheRead: 61_000, cacheWrite: 20_000, output: 800, prefix: 50_000, at: now() - 60_000, estimated: false, misses: 0, missTokens: 0, ...o,
+  });
+  gauge("HARNESS-901", "Gauge: normal", { context: usage({}) });
+  gauge("HARNESS-902", "Gauge: over the limit with misses", { context: usage({ input: 2000, cacheRead: 150_000, cacheWrite: 168_000, misses: 3, missTokens: 377_000 }) });
+  gauge("HARNESS-903", "Gauge: compacting", { status: "in_progress", busy: true, compacting: true, context: usage({ cacheRead: 150_000 }) });
+  gauge("HARNESS-904", "Gauge: github-copilot estimate", { driver: "github-copilot", context: usage({ input: 82_000, cacheRead: 0, cacheWrite: 0, prefix: 0, estimated: true }) });
+  gauge("HARNESS-905", "Gauge: new session", { context: null });
+  gauge("HARNESS-906", "Gauge: run going", { status: "in_progress", busy: true, context: usage({ misses: 1, missTokens: 40_000 }) });
 }
 seed();
 
@@ -1900,6 +1933,20 @@ async function route(req: Request, url: URL): Promise<Response> {
             completeRun(t, t.completionInstructions ?? "");
           }
           return ok(t);
+        case "session": {
+          // POST /tickets/:key/session { action }: refused while a run (or a compact) is going.
+          if (t.compacting) throw new HttpError(409, "The session is compacting");
+          if (t.busy) throw new HttpError(409, "A run is going; the session can change when it ends");
+          if (body.action === "new") {
+            const before = t.context ? contextTokens(t.context) : 0;
+            t.context = null;
+            appendEntry(t.sessionId, null, "system", { type: "status", text: `Session cleared (${before} tokens); the next run starts fresh` });
+          } else if (body.action === "compact") {
+            if (t.context) t.context = { ...t.context, input: 500, cacheRead: 40_000, cacheWrite: 6_000, misses: 0, missTokens: 0 };
+          } else throw new HttpError(400, "action must be compact or new");
+          upsertTicket(t);
+          return ok(t);
+        }
         case "cancel": {
           const r = activeRun(t.sessionId);
           if (r) finishRun(r, "cancelled");

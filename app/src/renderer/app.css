@@ -2166,3 +2166,157 @@ button.prompt-attachment-row-main:disabled {
   color: var(--text);
   border-color: var(--border-strong);
 }
+
+/* Context gauge (components/ContextGauge.tsx) */
+fieldset.actions {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.context-gauge-wrap {
+  display: inline-flex;
+}
+.context-gauge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 7px 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.context-gauge:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.context-gauge[data-over] {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 45%, var(--border));
+}
+.gauge-dial {
+  position: relative;
+  display: inline-flex;
+  width: 30px;
+  height: 19px;
+}
+.gauge-dial svg path {
+  fill: none;
+  stroke-width: 4.5;
+}
+.gauge-track {
+  stroke: var(--bg-active);
+}
+.gauge-zone {
+  stroke: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.gauge-cached {
+  stroke: #64748b;
+}
+.gauge-fresh {
+  stroke: var(--amber);
+}
+.gauge-dial[data-over] .gauge-cached,
+.gauge-dial[data-over] .gauge-fresh {
+  stroke: var(--red);
+}
+.gauge-dial[data-empty] .gauge-needle {
+  opacity: 0.5;
+}
+.gauge-prefix {
+  stroke: var(--text);
+  stroke-width: 1.5;
+  opacity: 0.75;
+}
+.gauge-needle {
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.gauge-hub {
+  fill: var(--text);
+}
+.gauge-spinner {
+  position: absolute;
+  left: 9px;
+  bottom: 0;
+}
+.gauge-miss {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  height: 14px;
+  padding: 0 5px;
+  border-radius: 7px;
+  background: var(--amber);
+  color: #1b1300;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+}
+.gauge-menu {
+  min-width: 260px;
+  max-width: 340px;
+}
+.gauge-menu-head,
+.gauge-miss-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.gauge-menu-head > span:first-child,
+.gauge-miss-text > span:first-child {
+  flex: 1;
+}
+.gauge-miss-row {
+  padding: 2px 0 4px;
+  color: var(--amber);
+}
+.gauge-miss-row .gauge-miss-text {
+  color: var(--amber);
+}
+.gauge-menu .gauge-info-btn {
+  width: auto;
+  padding: 2px;
+  flex: none;
+  color: var(--text-3);
+}
+.gauge-info {
+  flex: 0 0 100%;
+  margin: 0;
+  padding: 4px 8px 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+  white-space: normal;
+}
+.gauge-menu .gauge-link {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  color: var(--accent);
+  font-size: 11.5px;
+}
+.gauge-hint {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.gauge-limit-error {
+  margin: 6px 0 0;
+  color: var(--red);
+  font-size: 12px;
+}
+.composer-compacting {
+  align-self: center;
+  margin: 0 6px;
+}
