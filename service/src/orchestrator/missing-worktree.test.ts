@@ -163,6 +163,7 @@ describe("a failed completion", () => {
     const [kid] = h.store.tickets.list({ parentId: parent.id });
     const child = h.get(kid!);
     expect(h.runsOf(child, "complete")).toHaveLength(2);
+    expect(child.blockedReason).toBeNull();
     expect(child.status).toBe("done");
     const entries = h.activity(child);
     expect(entries.some((e) => e.kind === "failed" && e.body === "Completion failed: driver crashed")).toBe(true);

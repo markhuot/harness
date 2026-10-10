@@ -536,6 +536,8 @@ export class Orchestrator {
   private baseFallback = new Map<string, string>();
   /** Tickets whose complete run is about to be enqueued (enqueueComplete); they count as completing */
   private startingComplete = new Set<string>();
+  /** The ticket branch's tip when a merge completion started, by ticket id: the run deletes the branch, so this is what must be in the base afterwards. */
+  private mergeTips = new Map<string, string>();
 
   constructor(opts: OrchestratorOptions) {
     this.modelCatalog = new ModelCatalog(opts.modelCatalog);
@@ -2140,6 +2142,11 @@ export class Orchestrator {
       if (action !== t.completionAction) t = this.store.tickets.update(t.id, { completionAction: action })!;
       // A head recorded by an earlier pr completion is stale now: this one records its own.
       if (t.pullRequestHead) t = this.store.tickets.update(t.id, { pullRequestHead: null })!;
+      this.mergeTips.delete(t.id);
+      if (action === "merge") {
+        const tip = await this.mergeTip(t);
+        if (tip) this.mergeTips.set(t.id, tip);
+      }
       this.enqueueRun(t.sessionId, "complete", this.completePromptFor(t, t.completionInstructions ?? undefined), this.completeLock(t));
     } finally {
       this.startingComplete.delete(ticket.id);
@@ -2162,6 +2169,29 @@ export class Orchestrator {
     const branch = t.branch ?? branchForKey(t.key);
     if (project && branch === branchForKey(t.key) && (await branchExists(project.path, branch))) left.push(`the branch ${branch}`);
     return left;
+  }
+
+  /** The commit a merge completion has to land: the branch's tip, or the worktree's HEAD when the branch is gone. */
+  private async mergeTip(t: Ticket): Promise<string | null> {
+    const project = this.store.projects.get(t.projectId);
+    const branch = t.branch ?? branchForKey(t.key);
+    const spots: Array<[string, string]> = [];
+    if (project) spots.push([project.path, `refs/heads/${branch}`]);
+    if (t.workdir && existsSync(t.workdir)) spots.push([t.workdir, "HEAD"]);
+    for (const [cwd, ref] of spots) {
+      const r = await git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], cwd);
+      if (r.code === 0 && r.stdout) return r.stdout;
+    }
+    return null;
+  }
+
+  /** Whether `sha` is reachable from the local base branch in the project's main checkout, or true when that can't be told. */
+  private async mergeLanded(t: Ticket, sha: string): Promise<boolean> {
+    const project = this.store.projects.get(t.projectId);
+    if (!project || !existsSync(project.path)) return true;
+    const base = this.baseBranchFor(t).branch;
+    const r = await git(["merge-base", "--is-ancestor", sha, base], project.path);
+    return r.code === 0;
   }
 
   private completeLock(t: Ticket): string | undefined {
@@ -4907,7 +4937,19 @@ ${numberLines(r.body)}`;
         if (active.submitted || active.blocked || ticket.status === "in_progress") this.finishWork(ticket, run, active);
         break;
       case "complete":
-        if (ticket.status === "done") break;
+        // done: the human marked it so meanwhile. blocked: the agent called block, which already reset the approvals.
+        if (ticket.status === "done" || ticket.status === "blocked") break;
+        if ((ticket.completionAction ?? "merge") === "merge" && run.status === "succeeded") {
+          const sha = this.mergeTips.get(ticket.id);
+          this.mergeTips.delete(ticket.id);
+          if (sha && !(await this.mergeLanded(ticket, sha))) {
+            const base = this.baseBranchFor(ticket).branch;
+            const reason = `Completion ended but \`${ticket.branch ?? branchForKey(ticket.key)}\` isn't merged into \`${base}\`. Check the last Activity note, then answer to have the agent finish the merge.`;
+            this.addActivity(ticket, "blocked", "system", reason, { question: reason, ...this.moveMeta(ticket, "blocked") });
+            this.transition(ticket, "blocked", { blockedReason: reason, agentReview: "pending", humanReview: "pending" }, "Blocked: merge didn't land");
+            break;
+          }
+        }
         if (ticket.completionAction === "pr" && !active.pullRequest) {
           // The PR completion's whole result is the pull request: without one, the work hasn't landed.
           const reason = "Completion ended without opening a pull request. Check the last Activity note for what went wrong (gh login, push access), then message the agent; once it's back in review, approve it again.";

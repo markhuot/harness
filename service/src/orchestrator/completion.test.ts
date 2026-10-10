@@ -181,6 +181,45 @@ describe("choosing at approval", () => {
   });
 });
 
+describe("merge completions that can't finish", () => {
+  test("a completion that calls block ends in Blocked with its question, never done, and the approvals reset", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    h.orch.humanReview(t.key, { decision: "approve", action: "merge", instructions: "[block-merge]" });
+    await h.orch.idle();
+    expect(h.get(t)).toMatchObject({ status: "blocked", blockedReason: "Which side of the conflict should win?", agentReview: "pending", humanReview: "pending" });
+    expect(await h.git("branch", "--list", t.branch!)).not.toBe("");
+  });
+
+  test("a completion that ends with its branch unmerged blocks with the merge reason", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    h.orch.humanReview(t.key, { decision: "approve", action: "merge", instructions: "[no-merge]" });
+    await h.orch.idle();
+    expect(h.get(t).status).toBe("blocked");
+    expect(h.get(t).blockedReason).toBe(`Completion ended but \`${t.branch}\` isn't merged into \`main\`. Check the last Activity note, then answer to have the agent finish the merge.`);
+    expect(h.get(t)).toMatchObject({ agentReview: "pending", humanReview: "pending" });
+  });
+
+  test("a branch that was merged and deleted still counts as landed", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    h.orch.humanReview(t.key, { decision: "approve", action: "merge" });
+    await h.orch.idle();
+    expect(h.get(t).status).toBe("done");
+    expect(await h.git("branch", "--list", t.branch!)).toBe("");
+    expect(await h.git("log", "--format=%s", "main")).toContain("fake work");
+  });
+
+  test("a custom completion that merges nothing isn't checked", async () => {
+    const h = await setup();
+    const t = await h.inReview();
+    h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "Tag it" });
+    await h.orch.idle();
+    expect(h.get(t).status).toBe("done");
+  });
+});
+
 describe("pull request completions", () => {
   test("a pr completion that records no pull request blocks instead of finishing", async () => {
     const h = await setup();
@@ -202,6 +241,8 @@ describe("pull request completions", () => {
         } catch (err) {
           refused = (err as Error).message;
         }
+        // The merge itself, since this script stands in for the whole completion.
+        await runGit(["merge", "-q", "--no-edit", req.toolContext.ticket!.branch!], h.repo);
       }
     };
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });

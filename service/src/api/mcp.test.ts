@@ -177,7 +177,7 @@ describe("stubs and tool_search", () => {
       plan: ["post_note", ...SPEC, "update_notes", "permission_prompt"],
       work: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
       review: ["post_note", "read_spec", "edit_spec", "review_decision", "permission_prompt"],
-      complete: ["post_note", ...SPEC, "record_pull_request", "permission_prompt"],
+      complete: ["post_note", ...SPEC, "block", "record_pull_request", "permission_prompt"],
       conductor: ["post_note", ...SPEC, "update_notes", "unblock", "resume_work", "submit_for_review", "permission_prompt"],
       triage: ["dispatch_ticket", "decline_work", "permission_prompt"],
       chat: ["post_note", ...SPEC, "update_notes", "block", "unblock", "resume_work", "submit_for_review", "permission_prompt"],

@@ -177,6 +177,26 @@ async function commitWork(cwd: string, runId: string) {
   await git([...env, "commit", "-q", "-m", `fake work ${runId}`], cwd);
 }
 
+/**
+ * What a merge completion does when the agent follows its prompt: merge the ticket's branch into
+ * its base branch (the one the prompt names), in the worktree that has the base checked out, then delete the branch. A
+ * non-git project, a ticket without a branch and the branch being the base itself leave nothing to merge.
+ */
+async function mergeTicketBranch(cwd: string, branch: string, baseBranch: string | null | undefined) {
+  if (!branch || (await git(["rev-parse", "--is-inside-work-tree"], cwd)).code !== 0) return;
+  const list = (await git(["worktree", "list", "--porcelain"], cwd)).stdout.split("\n\n").map((block) => {
+    const lines = block.split("\n");
+    return { path: lines[0]?.replace("worktree ", "") ?? "", branch: lines.find((l) => l.startsWith("branch "))?.replace("branch refs/heads/", "") };
+  });
+  const base = baseBranch ?? list[0]?.branch;
+  const target = list.find((w) => w.branch === base);
+  if (!base || base === branch || !target) return;
+  const env = ["-c", "user.name=fake", "-c", "user.email=fake@fake"];
+  await git([...env, "merge", "--no-edit", branch], target.path);
+  await git(["worktree", "remove", "--force", cwd], target.path);
+  await git(["branch", "-D", branch], target.path);
+}
+
 export class FakeDriver implements Driver {
   id: string;
   name = "Fake";
@@ -461,6 +481,15 @@ export class FakeDriver implements Driver {
         if (ctx.ticket?.completionAction === "pr" && !p.includes("[no-pr]")) {
           const head = (await git(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
           await ops.recordPullRequest(ctx, `https://github.com/acme/web/pull/${ctx.ticket.key.split("-").pop()}`, head);
+        }
+        // A merge completion merges, unless its instructions say [no-merge] (it ends having done nothing)
+        // or [block-merge] (it asks the human instead).
+        if (!ctx.ticket?.completionAction || ctx.ticket.completionAction === "merge") {
+          if (p.includes("[block-merge]")) {
+            await ops.block(ctx, "Which side of the conflict should win?");
+            return;
+          }
+          if (!p.includes("[no-merge]") && ctx.ticket?.branch) await mergeTicketBranch(req.cwd, ctx.ticket.branch, /base branch `([^`]+)`/.exec(p)?.[1]);
         }
         await ops.postNote(ctx, "Completed.");
         return;
