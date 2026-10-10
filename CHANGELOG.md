@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261010.2258](https://github.com/markhuot/harness/releases/tag/app-20261010.2258) - 2026-10-10
+
 ### Added
 
 - A ticket's Transcript opens each run with a header on Mac, iPhone and iPad: the phase, driver and model on the left and the start time on the right, like "Work • Claude Code, Opus 5.5". It stays pinned at the top while that run's messages scroll under it, and the next run's header pushes it off. It replaces the centered "Run started (…)" line. Your own messages sit between runs with no header above them.
