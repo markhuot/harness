@@ -30,6 +30,9 @@ struct BoardScreen: View {
     @State private var visible: Set<TicketStatus> = []
     /// The side-by-side column at the leading edge (their scroll position, when they overflow).
     @State private var leading: TicketStatus?
+    /// Runs the cards' menu actions; the board presents what they ask for (a context menu can't
+    /// present a sheet), once for every card.
+    @State private var ticketActions = TicketActionRunner()
 
     private var layout: BoardScreenRules.Layout { sizeClass == .regular ? .columns : .pager }
 
@@ -51,6 +54,8 @@ struct BoardScreen: View {
             if layout == .pager { pager(ctx) } else { columns(ctx) }
         }
         .background(c.bg)
+        .environment(ticketActions)
+        .modifier(TicketActionHost(runner: ticketActions))
         // ⌘F focuses the search field; the field is its own button, so this one isn't drawn.
         .background {
             Button("Search") { searchFocused = true }

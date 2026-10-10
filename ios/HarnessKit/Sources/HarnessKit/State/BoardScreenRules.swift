@@ -2,7 +2,7 @@ import Foundation
 
 // The board screen's decisions that don't need a screen (the board, its cards and the Projects
 // sheet): which column a first visit lands on, where search results jump, how the iPad's
-// side-by-side columns are sized, when Done tops itself up, what a card's menu offers, what
+// side-by-side columns are sized, when Done tops itself up, what a card's menu offers (the ticket's actions and Copy key), what
 // VoiceOver reads for a card, and the Projects sheet's open counts.
 
 public enum BoardScreenRules {
@@ -70,15 +70,20 @@ public enum BoardScreenRules {
     /// One entry in a card's context menu, in menu order.
     public enum CardMenuItem: Equatable, Sendable {
         case discardDraft
+        /// One of the ticket's actions (TicketActions): the same ones its screen offers now.
+        case ticket(TicketAction)
         case openParent(key: String)
         case copyKey
     }
 
-    /// A card's menu: a draft offers Discard and Copy key; any other card its parent and Copy key.
-    /// It never moves a card: only agents move tickets between columns.
-    public static func cardMenu(_ t: Ticket, parent: Ticket?) -> [CardMenuItem] {
+    /// A card's menu: a draft offers Discard and Copy key; any other card the actions its ticket
+    /// screen offers right now (the enabled ones: Start work, Approve, Request changes, Re-open,
+    /// then the More menu's), its parent and Copy key. It never moves a card by itself: the actions
+    /// ask the service, and agents do the moving.
+    public static func cardMenu(_ t: Ticket, parent: Ticket?, project: Project? = nil, deps: [DepState] = [], settingsBaseBranch: String? = nil) -> [CardMenuItem] {
         if t.draft == true { return [.discardDraft, .copyKey] }
-        var out: [CardMenuItem] = []
+        var out = TicketActions.set(for: t, project: project, parent: parent, deps: deps, settingsBaseBranch: settingsBaseBranch)
+            .enabledActions.map(CardMenuItem.ticket)
         if let parent { out.append(.openParent(key: parent.key)) }
         out.append(.copyKey)
         return out

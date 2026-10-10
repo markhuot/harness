@@ -88,8 +88,17 @@ struct BoardScreenRulesTests {
 
     @Test func menuOpensTheParentWhenThereIsOne() {
         let parent = Self.t("p", .inProgress)
-        #expect(BoardScreenRules.cardMenu(Self.t("a", .review, parentId: "p"), parent: parent) == [.openParent(key: "K-p"), .copyKey])
-        #expect(BoardScreenRules.cardMenu(Self.t("a", .review), parent: nil) == [.copyKey])
+        let menu = BoardScreenRules.cardMenu(Self.t("a", .inProgress, parentId: "p"), parent: parent)
+        #expect(Array(menu.suffix(2)) == [.openParent(key: "K-p"), .copyKey])
+        #expect(BoardScreenRules.cardMenu(Self.t("a", .inProgress), parent: nil).last == .copyKey)
+    }
+
+    @Test func menuListsTheTicketsActionsBeforeCopyKey() {
+        let review = BoardScreenRules.cardMenu(Self.t("a", .review), parent: nil)
+        let titles = review.compactMap { if case let .ticket(a) = $0 { a.title } else { nil } }
+        #expect(titles == ["Approve and clean up", "Request changes", "Re-run agent review", "Delete ticket"])
+        #expect(review.last == .copyKey)
+        #expect(BoardScreenRules.cardMenu(Self.t("a", .planning), parent: nil).first == .ticket(.start(approvePlan: false)))
     }
 
     @Test func menuTitleNamesTheCardAndCutsAt90() {

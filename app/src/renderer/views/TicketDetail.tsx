@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type CompletionAction, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
 import {
@@ -9,7 +9,6 @@ import {
   autoStartTitle,
   APPROVED_TITLE,
   autoStartWaitingOn,
-  startLabel,
   startState,
   restartsAt,
   restartTitle,
@@ -38,15 +37,17 @@ import {
   type TicketTab,
 } from "@harness/shared/state";
 import type { PluginTab as PluginTabRef } from "@harness/shared";
-import { Icon, isIconName } from "../components/Icon";
+import { Icon, isIconName, type IconName } from "../components/Icon";
 import { FileLinkScope, SpecAttachmentsScope } from "../components/Markdown";
 import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator";
 import { ModelBadge } from "../components/ModelSelect";
 import { ContextGauge } from "../components/ContextGauge";
 import { COMPACTING_PLACEHOLDER } from "../state/contextGauge";
-import { DriverBadge, KindBadge, MenuButton, MOD, Modal, ReviewMark, StatusDot, StatusPill, TicketKey } from "../components/bits";
-import { LandButton, LandSheet, type LandSheetState } from "../components/LandButton";
-import { landCommands, landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
+import { DriverBadge, KindBadge, MenuButton, MOD, ReviewMark, StatusDot, StatusPill, TicketKey } from "../components/bits";
+import { LandButton } from "../components/LandButton";
+import { landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
+import { paletteEntries, ticketActions, type TicketAction, type TicketActionId } from "../state/ticketActions";
+import { useTicketActionRunner } from "../components/TicketActionHost";
 import { Transcript } from "./Transcript";
 import { BrowserView, type BrowserTear } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
@@ -528,7 +529,7 @@ function DetailHeader({
   const { state } = useStore();
   const openTicket = useOpenTicket();
   const popout = usePopout();
-  const { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, remove, setChanges, setReopening, modals } = useTicketActions(
+  const { k, label, parent, project, set, land, conductor, managedReason, startMode, waitingToStart, choose, run, modals } = useTicketActions(
     owner,
     ticket,
     onClose,
@@ -605,11 +606,11 @@ function DetailHeader({
         {/* A fieldset, so a compacting session disables the row's buttons at once. More sits outside it: Cancel run stops a compact. */}
         <div className="actions">
         <fieldset disabled={!!ticket.compacting} data-testid="ticket-actions">
-          {canStart && (
-            <button className="btn btn-primary" onClick={start}>
-              <Icon name="play" /> {startLabel(startMode)}
+          {set.primary.filter((a) => a.id === "start").map((a) => (
+            <button key={a.id} className="btn btn-primary" disabled={!a.enabled} onClick={() => run(a)}>
+              <Icon name="play" /> {a.label}
             </button>
-          )}
+          ))}
           {startMode === "approved" && (
             <button className="btn btn-primary" data-testid="plan-approved" disabled title={APPROVED_TITLE}>
               <Icon name="clock" /> Starts after planning
@@ -626,25 +627,25 @@ function DetailHeader({
             </button>
           )}
           {/* A conductor's child keeps its (turned off) Approve once approved: the conductor lands it. */}
-          {ticket.status === "review" && (ticket.humanReview !== "approved" || conductor) && (
-            <LandButton menu={land} locked={!!conductor} title={managedReason || undefined} onChoose={choose} />
-          )}
-          {ticket.status === "review" && ticket.humanReview !== "approved" && (
-            <button className="btn" onClick={() => setChanges(true)}>
-              <Icon name="edit" /> Request changes
+          {set.primary.filter((a) => a.id === "approve" && a.land).map((a) => (
+            <LandButton key={a.id} menu={a.land!} locked={!a.enabled} title={managedReason || undefined} onChoose={choose} />
+          ))}
+          {set.primary.filter((a) => a.id === "requestChanges").map((a) => (
+            <button key={a.id} className="btn" disabled={!a.enabled} onClick={() => run(a)}>
+              <Icon name="edit" /> {a.label}
             </button>
-          )}
+          ))}
           {/* A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty. */}
           {ticket.status === "in_progress" && (
             <button className="btn" data-testid="working" disabled>
               <Icon name="clock" /> Working…
             </button>
           )}
-          {ticket.status === "done" && (
-            <button className="btn" onClick={() => setReopening(true)}>
-              <Icon name="refresh" /> Re-open
+          {set.primary.filter((a) => a.id === "reopen").map((a) => (
+            <button key={a.id} className="btn" disabled={!a.enabled} onClick={() => run(a)}>
+              <Icon name="refresh" /> {a.label}
             </button>
-          )}
+          ))}
         </fieldset>
           {/* Always there: Delete always applies. */}
           <MenuButton
@@ -657,24 +658,11 @@ function DetailHeader({
           >
             {(close) => (
               <>
-                {ticket.status === "review" && (
-                  <button role="menuitem" disabled={ticket.busy || !!ticket.compacting} onClick={() => (close(), void rerunReview())}>
-                    <Icon name="refresh" /> {ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review"}
+                {set.more.map((a) => (
+                  <button key={a.id} role="menuitem" className={a.id === "delete" ? "danger" : undefined} disabled={!a.enabled} onClick={() => (close(), run(a))}>
+                    <Icon name={MORE_ICONS[a.id]} /> {a.label}
                   </button>
-                )}
-                {ticket.status !== "done" && ticket.status !== "review" && (
-                  <button role="menuitem" disabled={!!ticket.compacting} onClick={() => (close(), void markDone())}>
-                    <Icon name="check" /> Move to done
-                  </button>
-                )}
-                {ticket.busy && (
-                  <button role="menuitem" onClick={() => (close(), void cancelRun())}>
-                    <Icon name="stop" /> Cancel run
-                  </button>
-                )}
-                <button role="menuitem" className="danger" onClick={() => (close(), void remove())}>
-                  <Icon name="trash" /> Delete ticket
-                </button>
+                ))}
               </>
             )}
           </MenuButton>
@@ -685,6 +673,18 @@ function DetailHeader({
   );
 }
 
+/** The More menu's icons. */
+const MORE_ICONS: Record<TicketActionId, IconName> = {
+  start: "play",
+  approve: "check",
+  requestChanges: "edit",
+  reopen: "refresh",
+  rerunReview: "refresh",
+  markDone: "check",
+  cancelRun: "stop",
+  delete: "trash",
+};
+
 /**
  * A ticket's actions (Start work, Approve and the ways to land, Request changes, Cancel run…), as
  * the palette's "Actions" commands of the command area `owner` and as functions for buttons. The
@@ -692,95 +692,58 @@ function DetailHeader({
  * `modals` (Request changes, Re-open, the land sheet) goes in the caller's render.
  */
 export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () => void) {
-  const { state, client } = useStore();
-  const act = useAction();
-  const [changes, setChanges] = useState(false);
-  const [reopening, setReopening] = useState(false);
-  const [sheet, setSheet] = useState<LandSheetState | null>(null);
+  const { state } = useStore();
+  const runner = useTicketActionRunner();
   const parent = ticket.parentId ? state.tickets[ticket.parentId] : undefined;
   const project = state.projects[ticket.projectId];
   const k = ticket.key;
   // What confirms and toasts call it: "MH-62 · MH-124" for a linked ticket (its remote ID first).
   const label = keyLabel(ticket);
-  const onClose = onDeleted;
 
-  const remove = async () => {
-    if (!confirm(`Delete ${label}? Its transcript, spec history and activity are removed too.`)) return;
-    const ok = await act(() => client.deleteTicket(k), `${label} deleted`);
-    if (ok) onClose();
-  };
-  // Each action the buttons offer, when it applies to the ticket as it is now. The buttons and the
-  // ⌘K palette (these are its "Actions" commands) run the same functions.
-  const start = () => act(() => client.startTicket(k));
-  // Started while its dependencies were open: it starts on its own once they're done, so there's
-  // nothing to start (Start would skip the wait and run it now).
-  const waitingToStart = autoStartWaitingOn(ticket, dependencyStates(state, ticket));
-  // Start work when nothing runs, Approve plan while a planning run does (the work starts when it ends).
-  const startMode = startState(ticket, dependencyStates(state, ticket));
-  const canStart = startMode === "start" || startMode === "approve";
+  // Started while its dependencies were open: it starts on its own once they're done, so
+  // there's nothing to start (Start would skip the wait and run it now).
+  const deps = dependencyStates(state, ticket);
+  const waitingToStart = autoStartWaitingOn(ticket, deps);
+  const startMode = startState(ticket, deps);
   // How the approved work lands: the Approve split button (state/approveMenu.ts). Approving lands
   // it once both reviews pass; there's no separate Complete step.
   // The base branch decides whether merge and pr apply: a ticket on its base branch only cleans up.
   const base = resolveBaseBranch(ticket, project, state.settings, parent).branch;
   const land = landMenu(ticket, project, parent, base);
+  // Each action the buttons and the board card's menu offer, when it applies to the ticket as it is
+  // now (state/ticketActions.ts). The ⌘K palette's "Actions" commands run the same functions.
+  const set = ticketActions(ticket, { project, parent, base, deps });
   // A child's conductor acts as its human reviewer and lands it, so its Approve is off.
   const conductor = managingConductor(ticket, parent);
   const managedReason = conductor && conductorManagedReason(conductor);
-  const approveWith = (action: CompletionAction, instructions?: string) => act(() => client.humanReview(k, { decision: "approve", action, ...(instructions ? { instructions } : {}) }), "Approved");
-  const approveNoAction = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} approved, no action taken`);
-  const choose = (c: LandChoice) => {
-    if (c.kind === "none") return void approveNoAction();
-    if (c.kind === "sheet") return setSheet({ action: c.action, required: c.required });
-    void approveWith(c.action);
+  const run = (a: Pick<TicketAction, "id" | "land">) => runner.run(ticket, a, { onDeleted });
+  const choose = (c: LandChoice) => runner.choose(ticket, c);
+  const palette = paletteEntries(set);
+  const fromPalette = (id: string) => {
+    const e = palette[id];
+    return e && { label: e.label, run: () => (e.choice ? choose(e.choice) : run(e.action)) };
   };
-  const approve = () => choose(land.primary);
-  const rerunReview = () => act(() => client.rerunAgentReview(k), "Agent review queued");
-  const cancelRun = () => act(() => client.cancelTicket(k), "Run cancelled");
-  const markDone = () => act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
   const copyKey = () => void navigator.clipboard.writeText(k);
   const external = ticket.externalRef?.url;
-  const reviewing = ticket.status === "review";
-  const canApprove = reviewing && ticket.humanReview !== "approved";
-  // The Approve split button as the palette names it.
-  const landing = !conductor && canApprove && landCommands(land);
-  const landChoice = (action: CompletionAction) => {
-    const c = landing && landing.others[action];
-    return c && { label: c.label, run: () => choose(c) };
-  };
   useCommands(owner, {
-    "ticket.start": canStart && { label: startLabel(startMode), run: start },
-    "ticket.approve": canApprove && landing && { label: landing.primary, run: approve },
-    "ticket.land.merge": landChoice("merge"),
-    "ticket.land.pr": landChoice("pr"),
-    "ticket.land.cleanup": landChoice("cleanup"),
-    "ticket.land.custom": landChoice("custom"),
-    "ticket.requestChanges": canApprove && (() => setChanges(true)),
-    "ticket.approveNoAction": reviewing && !conductor && { label: land.noAction.label, run: approveNoAction },
-    "ticket.rerunReview": reviewing && !ticket.busy && { label: ticket.agentReview === "skipped" ? "Run agent review" : "Re-run agent review", run: rerunReview },
-    "ticket.cancelRun": ticket.busy && cancelRun,
-    "ticket.markDone": ticket.status !== "done" && markDone,
-    "ticket.reopen": ticket.status === "done" && (() => setReopening(true)),
+    "ticket.start": fromPalette("ticket.start"),
+    "ticket.approve": fromPalette("ticket.approve"),
+    "ticket.land.merge": fromPalette("ticket.land.merge"),
+    "ticket.land.pr": fromPalette("ticket.land.pr"),
+    "ticket.land.cleanup": fromPalette("ticket.land.cleanup"),
+    "ticket.land.custom": fromPalette("ticket.land.custom"),
+    "ticket.requestChanges": fromPalette("ticket.requestChanges"),
+    "ticket.approveNoAction": fromPalette("ticket.approveNoAction"),
+    "ticket.rerunReview": fromPalette("ticket.rerunReview"),
+    "ticket.cancelRun": fromPalette("ticket.cancelRun"),
+    "ticket.markDone": fromPalette("ticket.markDone"),
+    "ticket.reopen": fromPalette("ticket.reopen"),
     "ticket.copyKey": copyKey,
     "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
-    "ticket.delete": () => void remove(),
+    "ticket.delete": fromPalette("ticket.delete"),
   });
 
-  const modals = (
-    <>
-      {changes && <RequestChangesModal ticket={ticket} onClose={() => setChanges(false)} />}
-      {reopening && <RequestChangesModal reopen ticket={ticket} onClose={() => setReopening(false)} />}
-      {sheet && (
-        <LandSheet
-          key={sheet.action}
-          ticket={ticket}
-          sheet={sheet}
-          onSubmit={(instructions) => approveWith(sheet.action, instructions)}
-          onClose={() => setSheet(null)}
-        />
-      )}
-    </>
-  );
-  return { k, label, parent, project, land, conductor, managedReason, start, startMode, canStart, waitingToStart, choose, rerunReview, cancelRun, markDone, remove, setChanges, setReopening, modals };
+  return { k, label, parent, project, set, land, conductor, managedReason, startMode, waitingToStart, choose, run, modals: runner.modals };
 }
 
 /**
@@ -826,53 +789,6 @@ function RemoteIdPane({ paneId, owner, matches, onClose }: { paneId: string; own
         )}
       </div>
     </aside>
-  );
-}
-
-/** Notes for the agent that send the ticket back to In progress: request changes (review) or re-open (done). */
-function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Ticket; onClose: () => void; reopen?: boolean }) {
-  const { client } = useStore();
-  const act = useAction();
-  const [notes, setNotes] = useState("");
-  const submit = async () => {
-    if (!notes.trim()) return;
-    const ok = reopen
-      ? await act(() => client.reopenTicket(ticket.key, { notes }), "Re-opened")
-      : await act(() => client.humanReview(ticket.key, { decision: "request_changes", notes }), "Changes requested");
-    if (ok) onClose();
-  };
-  return (
-    <Modal onClose={onClose}>
-      <div className="modal-head">
-        <strong>{reopen ? "Re-open" : "Request changes"}</strong>
-        <span className="muted mono">{keyLabel(ticket)}</span>
-      </div>
-      <div className="modal-body">
-        <textarea
-          autoFocus
-          className="textarea"
-          rows={6}
-          placeholder={reopen ? "What should the agent do now?" : "What should the agent change?"}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && void submit()}
-        />
-        <div className="field-hint" style={{ marginTop: 6 }}>
-          {reopen
-            ? "The ticket moves from Done back to In progress and the agent gets your notes. If its worktree was removed, it's recreated."
-            : "The ticket moves back to In progress and the agent gets your notes."}
-        </div>
-      </div>
-      <div className="modal-foot">
-        <div className="grow" />
-        <button className="btn btn-ghost" onClick={onClose}>
-          Cancel
-        </button>
-        <button className="btn btn-primary" disabled={!notes.trim()} onClick={submit}>
-          Send to agent <span className="kbd">{MOD}↩</span>
-        </button>
-      </div>
-    </Modal>
   );
 }
 

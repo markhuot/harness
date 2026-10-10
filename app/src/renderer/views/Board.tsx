@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { isConductor, keyLabel, TICKET_STATUSES, type Ticket } from "@harness/shared";
+import { isConductor, keyLabel, resolveBaseBranch, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import {
   autoStartTitle,
@@ -39,6 +39,8 @@ import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { ProjectKey } from "../components/ProjectKey";
 import { focusedTicket, leaves, openTicket, openTicketAtRightEdge, openTicketInNewSplit, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
+import { useTicketActionRunner } from "../components/TicketActionHost";
+import { ticketActions, type pickedAction } from "../state/ticketActions";
 import { usePane, usePaneScope } from "../components/paneContext";
 import { keysArea, runCommand, useCommands } from "../components/commands";
 import { focusPaneBy } from "../components/paneFocus";
@@ -61,6 +63,11 @@ export function BoardPane() {
     },
     [act, client],
   );
+  // The dialogs a card's action opens (notes, instructions) belong to the board, once for every card.
+  const actionRunner = useTicketActionRunner();
+  const runnerRef = useRef(actionRunner);
+  runnerRef.current = actionRunner;
+  const runAction = useCallback((t: Ticket, { action, choice }: ActionPick) => runnerRef.current.run(t, action, { choice }), []);
   const [filter, setFilter] = useState("");
   const [hideChildren, toggleHideChildren] = useHideChildren();
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
@@ -281,6 +288,7 @@ export function BoardPane() {
                     onHoverConductor={setHoverConductor}
                     onOpen={openCard}
                     onDiscard={discardDraft}
+                    onAction={runAction}
                   />
                 ))}
                 {tickets.length === 0 && !(status === "done" && paging?.nextCursor) && (
@@ -294,6 +302,7 @@ export function BoardPane() {
           );
         })}
       </div>
+      {actionRunner.modals}
     </div>
   );
 }
@@ -340,6 +349,9 @@ function LoadMore({ loading, error, onLoad }: { loading: boolean; error: string 
   );
 }
 
+/** What the right-click menu picked: an action, and for Approve the way to approve. */
+type ActionPick = NonNullable<ReturnType<typeof pickedAction>>;
+
 // Cards re-render only when their own inputs change (the store updates many times a second
 // while text streams).
 const TicketCard = memo(function TicketCard({
@@ -352,6 +364,7 @@ const TicketCard = memo(function TicketCard({
   related,
   onHoverConductor,
   onDiscard,
+  onAction,
 }: {
   ticket: Ticket;
   state: State;
@@ -365,6 +378,8 @@ const TicketCard = memo(function TicketCard({
   onHoverConductor: (id: string | null) => void;
   /** Discard a draft (its card's delete) */
   onDiscard: (t: Ticket) => void;
+  /** Run one of the ticket's actions, picked from the right-click menu */
+  onAction: (t: Ticket, picked: ActionPick) => void;
 }) {
   const deps = dependencyStates(state, t);
   const children = isConductor(t) ? childrenOf(state, t.id) : [];
@@ -394,7 +409,13 @@ const TicketCard = memo(function TicketCard({
       onClick={(e) => onOpen(t.key, e.metaKey)}
       // Drag onto a half of the board or an open ticket to open it in a split there, or out of the window to open it in one.
       {...dragProps({ kind: "ticket", ticketKey: t.key }, { chip: keyLabel(t), title: t.title }, scope)}
-      onContextMenu={(e) => void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined)}
+      onContextMenu={(e) =>
+        void ticketContextMenu(e, scope, t.key, () => onOpen(t.key), null, draft ? discard : undefined, scope, {
+          // The ticket's own actions, as its pane offers them now (a draft has none).
+          list: ticketActions(t, { project, parent, base: resolveBaseBranch(t, project, state.settings, parent).branch, deps }).enabled,
+          run: (picked) => onAction(t, picked),
+        })
+      }
       role="button"
       aria-label={`${draft ? "Draft " : ""}${keyLabel(t)} ${t.title || "Untitled"}${messageDrafted ? ", a message is drafted" : ""}`}
       tabIndex={isCursor ? 0 : -1}
