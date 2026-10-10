@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A ticket's Transcript opens each run with a header on Mac, iPhone and iPad: the phase, driver and model on the left and the start time on the right, like "Work • Claude Code, Opus 5.5". It stays pinned at the top while that run's messages scroll under it, and the next run's header pushes it off. It replaces the centered "Run started (…)" line. Your own messages sit between runs with no header above them.
 - An agent can send its own ticket back to Planning when you ask it to re-plan or rethink the approach (a new `return_to_planning` tool, available while it works or answers your message in a chat). Its run ends and a Planning run on your Plan model redrafts the spec, in a fresh conversation that gets the agent's reason and your message. Press Start to resume in the same worktree on your Work model. If you say you don't need to review the new plan, the agent can approve it up front: the card shows "Starts after planning" and work resumes on the Work model as soon as the Plan run ends. Without that, a child ticket that waits on dependencies no longer starts on its own after the re-plan.
 
 ### Fixed
@@ -19,6 +20,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Dividers in the Transcript ("Run finished", "Waiting for a background task", "Moved to review" and the rest) now read left to right: the text on the left, a rule filling the gap, and the time on the right. Long text wraps and the time stays on the right.
 - Completion runs can now ask you something. If a merge hits a conflict that needs a decision, or `gh` isn't logged in, or cleanup would lose commits, the agent calls `block` and the ticket moves to Blocked with its question, instead of finishing as Done. Your answer starts new work, and the ticket goes through Review again.
 - On iPhone and iPad, a ticket's header is less crowded. The context gauge moves to the end of the row with the ticket key, so the title can run the full width. The project, status and Conductor pills are gone; a colored status dot now leads the title instead (VoiceOver still reads the status). On iPhone, the expanded title sits 25pt below the top, clear of the sheet's rounded corner, and the space under the header is 14pt, down from 28pt when collapsed.
 
