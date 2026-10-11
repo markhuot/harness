@@ -32,11 +32,15 @@ export class PresenceRegistry {
     this.bySocket.delete(socketId);
   }
 
+  /** The visible clients that have this ticket on screen. */
+  holders(ticketKey: string): Presence[] {
+    const key = ticketKey.toUpperCase();
+    return [...this.bySocket.values()].filter((p) => p.visible && p.tickets.includes(key));
+  }
+
   /** Whether a visible client has this ticket on screen. */
   isOnScreen(ticketKey: string): boolean {
-    const key = ticketKey.toUpperCase();
-    for (const p of this.bySocket.values()) if (p.visible && p.tickets.includes(key)) return true;
-    return false;
+    return this.holders(ticketKey).length > 0;
   }
 
   all(): Presence[] {

@@ -7,6 +7,12 @@ import { stampTheme } from "./theme";
 const bridge: HarnessBridge = {
   getConnection: () => ipcRenderer.invoke("harness:getConnection"),
   deviceId: () => ipcRenderer.invoke("harness:deviceId"),
+  isAway: () => ipcRenderer.invoke("harness:isAway"),
+  onAwayChange: (cb) => {
+    const listener = (_e: IpcRendererEvent, away: boolean) => cb(away);
+    ipcRenderer.on("away", listener);
+    return () => ipcRenderer.removeListener("away", listener);
+  },
   retryService: () => ipcRenderer.invoke("harness:retryService"),
   onConnection: (cb) => {
     const listener = (_e: IpcRendererEvent, conn: ConnectionResult) => cb(conn);

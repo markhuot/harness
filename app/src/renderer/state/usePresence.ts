@@ -54,6 +54,34 @@ function useVisible(): boolean {
   return visible;
 }
 
+/** Whether the person is away from the Mac (locked, asleep, idle); always false outside Electron. */
+function useAway(): boolean {
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const bridge = window.harness;
+    if (!bridge?.onAwayChange) return;
+    let live = true;
+    const off = bridge.onAwayChange(setAway);
+    bridge.isAway().then(
+      (v) => live && setAway(v),
+      () => {},
+    );
+    return () => {
+      live = false;
+      off();
+    };
+  }, []);
+  return away;
+}
+
+/**
+ * What this window reports. Chromium keeps `visibilityState` "visible" while the display sleeps, so
+ * an away person reports nothing on screen however the window looks.
+ */
+export function reportedPresence(visible: boolean, away: boolean, tickets: string[]): { visible: boolean; tickets: string[] } {
+  return away ? { visible: false, tickets: [] } : { visible, tickets };
+}
+
 function useHideChildrenSetting(): boolean {
   const [hide, setHide] = useState(() => readHideChildren());
   useEffect(() => {
@@ -83,18 +111,22 @@ function panesFor(route: Route) {
 export function usePresence(socket: HarnessSocket, state: State, route: Route, boardScope: string) {
   const deviceId = useDeviceId();
   const visible = useVisible();
+  const away = useAway();
   const hideChildren = useHideChildrenSetting();
   const paneStore = usePaneStore();
   const latest = useRef({ state, route, boardScope });
   latest.current = { state, route, boardScope };
+  const lastAway = useRef(false);
   useEffect(() => {
     if (!deviceId) return;
     const send = () => {
       const { state, route, boardScope } = latest.current;
       const tickets = presenceTickets({ route, state, boardScope, panes: panesFor(route), hideChildren });
-      socket.setPresence({ deviceId, platform: "mac", visible, tickets });
+      socket.setPresence({ deviceId, platform: "mac", ...reportedPresence(visible, away, tickets) });
     };
-    const t = setTimeout(send, 100);
+    // Going away or coming back is sent at once; other changes are lightly debounced.
+    const t = setTimeout(send, away === lastAway.current ? 100 : 0);
+    lastAway.current = away;
     return () => clearTimeout(t);
-  }, [socket, deviceId, visible, hideChildren, paneStore, state.tickets, state.search, state.donePaging, state.projects, route, boardScope]);
+  }, [socket, deviceId, visible, away, hideChildren, paneStore, state.tickets, state.search, state.donePaging, state.projects, route, boardScope]);
 }

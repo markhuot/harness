@@ -120,6 +120,7 @@ describe("notifications end to end", () => {
     // The run did write agent activity (so the silence is the presence's doing).
     expect(h.orchestrator.activity(b.key).filter((e) => e.author !== "human" && e.createdAt >= before).length).toBeGreaterThan(0);
     expect(apns.posts.filter((p) => (p.body as { ticketKey?: string }).ticketKey === b.key)).toEqual([]);
+    expect((await client.notificationStatus()).presence).toEqual([{ deviceId: "ios-1", platform: "ios", visible: true, tickets: [b.key] }]);
 
     // The app went to the background: it notifies again.
     s.setPresence({ deviceId: "ios-1", platform: "ios", visible: false, tickets: [b.key] });
@@ -128,6 +129,7 @@ describe("notifications end to end", () => {
     await until(() => h.notifications["opts"].presence.isOnScreen(b.key));
     s.close();
     await until(() => !h.notifications["opts"].presence.isOnScreen(b.key));
+    expect((await client.notificationStatus()).presence).toEqual([]);
   });
 
   test("a malformed presence is answered with an error and changes nothing", async () => {

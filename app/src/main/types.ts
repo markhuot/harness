@@ -138,6 +138,9 @@ export interface HarnessBridge {
   getConnection(): Promise<ConnectionResult>;
   /** This install's stable id (a UUID kept in userData): the device presence and pushes are for. */
   deviceId(): Promise<string>;
+  /** Whether the person is away (screen locked, system asleep or idle): windows then report no presence. */
+  isAway(): Promise<boolean>;
+  onAwayChange(cb: (away: boolean) => void): () => void;
   retryService(): Promise<ConnectionResult>;
   /** The main process replaced the connection (a deferred service reload settled, or a restart). */
   onConnection(cb: (conn: ConnectionResult) => void): () => void;

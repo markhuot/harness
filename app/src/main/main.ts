@@ -2,7 +2,7 @@
 // Agents run in the service, which is the app's child unless Settings → Service → Start at login
 // handed it to launchd: then quitting the app leaves them running.
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, pushNotifications, screen, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, pushNotifications, screen, shell, type MenuItemConstructorOptions } from "electron";
 import { execFile, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
@@ -11,6 +11,7 @@ import { HarnessClient } from "@harness/shared";
 import { apnsEnvironment, loadDeviceId, PushRegistrar, ticketKeyFromDelivered, ticketKeyFromPush, ticketRoute } from "./push";
 import { routeForLink, WIDGET_RELOAD_HELPER, widgetGroupDir, widgetHost, WidgetReloader, writeWidgetHost } from "./widgets";
 import { nodePtySpawn } from "./pty";
+import { AwayState } from "./awayState";
 import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
 import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
@@ -559,6 +560,7 @@ function buildMenu() {
 
 ipcMain.handle("harness:getConnection", () => getConnection());
 ipcMain.handle("harness:deviceId", () => deviceId());
+ipcMain.handle("harness:isAway", () => awayState.away);
 ipcMain.on("harness:widgetsChanged", (_e, signature: unknown) => {
   if (typeof signature === "string") widgetReloader.changed(signature);
 });
@@ -666,6 +668,7 @@ ipcMain.handle("harness:popout:list", () => [...popouts.keys()]);
 const broadcast = (channel: string, ...args: unknown[]) => {
   for (const w of BrowserWindow.getAllWindows()) if (!w.webContents.isDestroyed()) w.webContents.send(channel, ...args);
 };
+const awayState = new AwayState({ monitor: powerMonitor, onChange: (away) => broadcast("away", away) });
 let terminalManager: TerminalManager | null = null;
 const terminals = () =>
   (terminalManager ??= new TerminalManager({
@@ -684,6 +687,11 @@ ipcMain.handle("harness:terminal:list", () => terminalManager?.list() ?? []);
 
 applyTheme();
 nativeTheme.on("updated", broadcastTheme);
+
+// Presence goes quiet while the person is away (locked, asleep, idle): Chromium reports a window on
+// a sleeping display as still visible, which would hold back every push.
+app.whenReady().then(() => awayState.start());
+app.on("will-quit", () => awayState.stop());
 
 // harness:// links (the desktop widget's tickets; Info.plist registers the scheme in packaged
 // builds). One that arrives before the window exists opens it at that route.

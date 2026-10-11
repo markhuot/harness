@@ -112,6 +112,8 @@ export interface NotificationStatus {
   keyDir: string;
   keys: ApnsKeyStatus[];
   devices: Device[];
+  /** One entry per connected socket: what the service holds back pushes for right now */
+  presence: Presence[];
 }
 
 /** POST /notifications/test: how many devices it went to, and per-device results. */

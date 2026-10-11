@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The service log (`service.log`) now records every push decision: the ticket, the event, and whether it was sent or skipped and why. When a Mac or iPhone was showing the ticket, the line names the device that held the push back, so a missing push can be explained from the log.
+- `GET /notifications` also lists who is connected right now: each client's device id, platform, whether it is visible and the tickets it shows.
+
+### Fixed
+
+- Pushes no longer go missing while the Mac app is open and the Mac is away. The Mac app used to count a sleeping display as "on screen" and silenced pushes for every ticket on its board; it now reports nothing on screen while the screen is locked, the Mac is asleep, or you've been idle for a minute, and reports again as soon as you're back.
+
 ## [app-20261011.1314](https://github.com/markhuot/harness/releases/tag/app-20261011.1314) - 2026-10-11
 
 ### Added

@@ -38,7 +38,8 @@ function setup(opts: { keys?: ("sandbox" | "production")[]; settings?: Partial<N
   const apns = new FakeApns();
   const events: HarnessEvent[] = [];
   h.bus.on((e) => events.push(e));
-  const svc = new NotificationService({ store: h.store, bus: h.bus, settings: () => settings, presence, apns });
+  const logs: string[] = [];
+  const svc = new NotificationService({ store: h.store, bus: h.bus, settings: () => settings, presence, apns, log: (m) => logs.push(m) });
   svc.start();
   svc.registerDevice({ id: "mac-1", platform: "mac", name: "Mark's Mac", apnsToken: PROD_TOKEN, environment: "production" });
   svc.registerDevice({ id: "ios-1", platform: "ios", name: "Mark's iPhone", apnsToken: SANDBOX_TOKEN, environment: "sandbox" });
@@ -59,7 +60,7 @@ function setup(opts: { keys?: ("sandbox" | "production")[]; settings?: Partial<N
     await svc.idle();
     return entry;
   };
-  return { ...h, project, settings, presence, apns, svc, events, ticket, write, keyDir };
+  return { ...h, project, settings, presence, apns, svc, events, ticket, write, keyDir, logs };
 }
 
 describe("skipReason", () => {
@@ -146,6 +147,58 @@ describe("NotificationService", () => {
     const status = h.svc.status();
     expect(status.keys.find((k) => k.environment === "sandbox")).toMatchObject({ keyId: null, path: null, lastResult: null });
     expect(status.keys.find((k) => k.environment === "production")).toMatchObject({ keyId: "D2RG5FFJC5", lastResult: { ok: true, status: 200 } });
+  });
+
+  describe("decision log", () => {
+    const decisions = (h: ReturnType<typeof setup>, key: string) => h.logs.filter((l) => l.includes(`notifications: ${key} `));
+
+    test("a send is logged with the ticket and event", async () => {
+      const h = setup();
+      const t = await h.ticket("Login");
+      h.logs.length = 0;
+      await h.write(t, "note", "agent");
+      expect(h.apns.sent.length).toBe(2);
+      expect(decisions(h, t.key)).toEqual([`notifications: ${t.key} note: sent`]);
+    });
+
+    test("an on_screen skip names the clients that held it", async () => {
+      const h = setup();
+      const t = await h.ticket("Login");
+      h.presence.set("s1", { deviceId: "mac-1", platform: "mac", visible: true, tickets: [t.key, "OTHER-1"] });
+      h.presence.set("s2", { deviceId: "ios-1", platform: "ios", visible: false, tickets: [t.key] });
+      h.logs.length = 0;
+      await h.write(t, "note", "agent");
+      expect(h.apns.sent).toEqual([]);
+      // Only the visible client held it; the hidden iPhone is not named.
+      expect(decisions(h, t.key)).toEqual([`notifications: ${t.key} note: skipped on_screen, held by mac-1 (mac, ${t.key},OTHER-1)`]);
+    });
+
+    test("other skips log their reason", async () => {
+      const h = setup();
+      const t = await h.ticket("Login");
+      h.logs.length = 0;
+      await h.write(t, "approved", "human");
+      h.settings.enabled = false;
+      await h.write(t, "note", "agent");
+      expect(decisions(h, t.key)).toEqual([`notifications: ${t.key} approved: skipped human`, `notifications: ${t.key} note: skipped disabled`]);
+    });
+
+    test("an entry without a ticket logs no_ticket", async () => {
+      const h = setup();
+      const t = await h.ticket("Login");
+      h.logs.length = 0;
+      const entry = h.store.activity.add({ sessionId: t.sessionId, ticketId: null, kind: "note", author: "agent", body: "x", meta: {} });
+      h.bus.emit({ kind: "activity.added", entry });
+      await h.svc.idle();
+      expect(h.logs).toEqual(["notifications: - note: skipped no_ticket"]);
+    });
+  });
+
+  test("status lists the connected clients' presence", () => {
+    const h = setup();
+    expect(h.svc.status().presence).toEqual([]);
+    h.presence.set("s1", { deviceId: "mac-1", platform: "mac", visible: false, tickets: [] });
+    expect(h.svc.status().presence).toEqual([{ deviceId: "mac-1", platform: "mac", visible: false, tickets: [] }]);
   });
 
   test("human-authored entries never notify, even with nothing on screen", async () => {

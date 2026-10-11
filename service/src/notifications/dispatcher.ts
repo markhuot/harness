@@ -135,7 +135,18 @@ export class NotificationService {
   /** Decide at write time; a notification that's gone out is never taken back. */
   onActivity(entry: ActivityEntry) {
     const ticket = entry.ticketId ? this.opts.store.tickets.get(entry.ticketId) : null;
-    if (skipReason(entry, ticket, this.settings, (key) => this.opts.presence.isOnScreen(key))) return;
+    const reason = skipReason(entry, ticket, this.settings, (key) => this.opts.presence.isOnScreen(key));
+    const label = `notifications: ${ticket?.key ?? entry.ticketId ?? "-"} ${entry.kind}`;
+    if (reason === "on_screen") {
+      const holders = this.opts.presence.holders(ticket!.key).map((p) => `${p.deviceId} (${p.platform}, ${p.tickets.join(",")})`);
+      this.opts.log?.(`${label}: skipped on_screen, held by ${holders.join("; ")}`);
+      return;
+    }
+    if (reason) {
+      this.opts.log?.(`${label}: skipped ${reason}`);
+      return;
+    }
+    this.opts.log?.(`${label}: sent`);
     this.track(this.deliver(pushPayload(entry, ticket!)));
   }
 
@@ -188,6 +199,7 @@ export class NotificationService {
         lastResult: this.lastResult.get(environment) ?? null,
       })),
       devices: this.opts.store.devices.list().map(publicDevice),
+      presence: this.opts.presence.all(),
     };
   }
 
