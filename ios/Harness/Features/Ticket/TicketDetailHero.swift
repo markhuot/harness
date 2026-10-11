@@ -165,12 +165,10 @@ struct TicketDetailHero: View {
             // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
             // they are, so the title, its chevron and the buttons share one middle.
             .padding(.trailing, inTicketPanel ? panelInset : 0)
-            // Collapsed, the title gets double the margin above, and its text lines up with the
-            // Spec tab's label under it (the strip's 8pt inset plus the tab's 10). Expanded gets 5pt
-            // more above, clear of the sheet's rounded corner. Net of the hero's own 10pt and the
-            // -10 below, the inner values are the spacing. The hero's 14pt bottom padding is the
-            // space below, so the title adds none.
-            .padding(.leading, hasBack ? 0 : compact ? 4 : 14)
+            // Both states use 14pt to align with the Spec tab's 14pt padding. Expanded gets 5pt
+            // more above, clear of the sheet's rounded corner. The hero's 14pt horizontal padding
+            // is the space on both sides, so the title adds none extra.
+            .padding(.leading, hasBack ? 0 : 14)
             .padding(.trailing, 14)
             .padding(.top, inTicketPanel ? 10 : compact ? 20 : 25)
             .padding(.bottom, compact ? 10 : 5)
