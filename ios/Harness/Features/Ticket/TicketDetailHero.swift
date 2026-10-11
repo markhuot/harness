@@ -148,18 +148,25 @@ struct TicketDetailHero: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         // The whole header row takes the tap, its padding included, not just the text and chevron.
         return Button(action: toggle) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                // The status, as on a docked ticket's card, in the title's first line.
-                StatusDot(status: ticket.status, size: 10)
-                text
-                Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
+            VStack(alignment: .leading, spacing: compact ? 0 : 6) {
+                if !compact {
+                    HStack(spacing: 4) {
+                        StatusDot(status: ticket.status, size: 10)
+                        Text(statusLabel(ticket.status))
+                            .font(.scaled(size: 14, weight: .semibold))
+                            .foregroundStyle(c.text)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    text
+                    Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
+                }
             }
             // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
             // they are, so the title, its chevron and the buttons share one middle.
             .padding(.trailing, inTicketPanel ? panelInset : 0)
             // Collapsed, the title gets double the margin above, and its text lines up with the
-            // Spec tab's label under it (the strip's 8pt inset plus the tab's 10): the 10pt dot and
-            // its 4pt gap hang in the margin to the left, so leading is 18 - 14. Expanded gets 5pt
+            // Spec tab's label under it (the strip's 8pt inset plus the tab's 10). Expanded gets 5pt
             // more above, clear of the sheet's rounded corner. Net of the hero's own 10pt and the
             // -10 below, the inner values are the spacing. The hero's 14pt bottom padding is the
             // space below, so the title adds none.
