@@ -3391,7 +3391,7 @@ function screens(s: Seeded): Screen[] {
       seconds: 7,
       prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Models, ")).then(() => until("model sheet", async () => (await labels(udid)).includes("Search models"), 5000)),
       // The sheet is a Modal, which the next screen's deep link would leave on top.
-      after: (udid) => tapWhere(udid, "Cancel").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000)),
+      after: (udid) => tapWhere(udid, "Done").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000)),
     }),
     screen("inbox", ["watchers"], { url: "harness://inbox", visit: true }),
     // Settings: Drivers, with the per-phase Models picker under them. A scrolled part of it is one
@@ -3749,8 +3749,13 @@ function interactionChains(s: Seeded): Chain[] {
           await shot(udid, "model-pick-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
+        // The Adviser column is a phase like the others: it saves under its own key.
+        await tapWhere(udid, (l) => l.startsWith("Adviser, ") && l.endsWith("Dummy Slow"));
+        await settle(s.branchPlan.key, (x) => x.phaseModels?.adviser?.driver === "dummy" && x.phaseModels.adviser.model === "dummy-slow", 8000);
         await closeModels();
         await openModels();
+        await tapWhere(udid, (l) => l === "Adviser, Defaults");
+        await settle(s.branchPlan.key, (x) => !x.phaseModels?.adviser, 8000);
         await tapWhere(udid, (l) => l === "Work, Defaults");
         const cleared = await settle(s.branchPlan.key, (x) => !x.phaseModels?.work, 8000);
         await closeModels();

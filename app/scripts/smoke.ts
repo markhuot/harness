@@ -848,6 +848,7 @@ try {
   await comboPick("Haiku 4.5", "adviser", "claude-code");
   const savedAdviser = await until("adviser model", async () => (await api<{ phaseModels: Record<string, { driver: string; model: string | null }> }>("GET", "/settings")).phaseModels.adviser?.model === "haiku");
   check("the Adviser column saves the app's adviser model", savedAdviser);
+  await screenshot("/tmp/harness-433-mac-adviser-picker.png");
   await comboPick("Default", "adviser", "claude-code");
   await until("adviser back on the default", async () => { const pm = (await api<{ phaseModels: Record<string, { model: string | null }> }>("GET", "/settings")).phaseModels; return pm.adviser?.model == null; });
   await comboClose();
