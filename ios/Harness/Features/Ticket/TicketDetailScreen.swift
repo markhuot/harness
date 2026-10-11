@@ -117,9 +117,12 @@ struct TicketDetailScreen: View {
     }
 }
 
-/// The page's bottom as last read, kept while the sheet moves; a plain class, so a reading doesn't
+/// The page's bottom and the composer's top as last read, kept while the sheet moves; a plain class, so a reading doesn't
 /// update the view.
-private final class PageSettling { var latest: CGFloat = 0 }
+private final class PageSettling {
+    var pageMaxY: CGFloat = 0
+    var composerTop: CGFloat = 0
+}
 
 /// The loaded ticket: header, hero, tabs and composer.
 private struct TicketDetailBody: View {
@@ -134,14 +137,13 @@ private struct TicketDetailBody: View {
     /// Bumped to focus the composer's field (an annotated image just joined the message).
     @State private var focusComposer = 0
     @State private var uploader = PromptAttachmentUploader()
-    /// Where the composer starts and the tab's page ends, in the body's own coordinates (bodySpace):
-    /// the pages run on under the composer's glass, so their content gets the overlap as a bottom
-    /// inset instead. Not on screen, so sliding the sheet (a drag, the iPad panel's fling) moves
-    /// neither.
+    /// Where the composer starts and the tab's page ends, on screen: the pages run on under the
+    /// composer's glass, so their content gets the overlap as a bottom inset instead. Both only
+    /// take a reading while the sheet is at rest (readPageMaxY).
     @State private var composerTop: CGFloat = 0
     /// The page's bottom edge as last measured, with the pager's slide in it.
     @State private var pageMaxY: CGFloat = 0
-    /// The latest reading, which becomes `pageMaxY` once the sheet is at rest (readPageMaxY).
+    /// The latest readings, which become `pageMaxY` and `composerTop` once the sheet is at rest.
     @State private var settling = PageSettling()
     @Environment(\.sheetResting) private var sheetResting
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
@@ -211,15 +213,16 @@ private struct TicketDetailBody: View {
                     }
                 }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.bodySpace)).minY } action: { composerTop = $0 }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { readComposerTop($0) }
         }
         // ⇧⌘] and ⇧⌘[ step through the tabs, round the ends, as on the desktop.
         // ⇧⌘] and ⇧⌘[ (the window's WindowShortcuts) step this screen's tabs while it's the one showing.
         .onAppear { shortcutTargets?.addTabStepper(relay) { [relay] in relay.step($0) } }
         .onDisappear { shortcutTargets?.removeTabStepper(relay) }
-        .coordinateSpace(.named(Self.bodySpace))
         .onChange(of: sheetResting) { _, resting in
-            if resting, settling.latest != 0 { pageMaxY = settling.latest }
+            guard resting else { return }
+            if settling.pageMaxY != 0 { pageMaxY = settling.pageMaxY }
+            if settling.composerTop != 0 { composerTop = settling.composerTop }
         }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
@@ -227,16 +230,18 @@ private struct TicketDetailBody: View {
         .annotator($annotating)
     }
 
-    /// The ticket body's coordinate space, for the composer's top and the page's bottom.
-    private static let bodySpace = "ticketBody"
-
-    /// Takes the page's bottom while the sheet is at rest. While the system moves the sheet (a
-    /// drag, its spring back) the pager's bottom swings by the distance moved, which would grow the
-    /// pages' bottom padding, and so their content, on every frame; the last reading is taken once
-    /// it's back (the `onChange` of `sheetResting`).
+    /// Take the page's bottom and the composer's top while the sheet is at rest. While the system
+    /// moves the sheet (a drag, its spring back) both swing by the distance moved, which would grow
+    /// the pages' bottom padding, and so their content, on every frame; the last readings are taken
+    /// once it's back (the `onChange` of `sheetResting`).
     private func readPageMaxY(_ y: CGFloat) {
-        settling.latest = y
+        settling.pageMaxY = y
         if sheetResting, pageMaxY != y { pageMaxY = y }
+    }
+
+    private func readComposerTop(_ y: CGFloat) {
+        settling.composerTop = y
+        if sheetResting, composerTop != y { composerTop = y }
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the
@@ -264,7 +269,7 @@ private struct TicketDetailBody: View {
                     // The frame includes PagerSlide's offset, so the layout's bottom is the reading
                     // less the hero's distance, taken where it's used: a reading skipped while a
                     // slide is under way is never taken again, since the frame doesn't change after.
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.bodySpace)).maxY } action: { y in
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
                         guard page == strip else { return }
                         readPageMaxY(y)
                     }

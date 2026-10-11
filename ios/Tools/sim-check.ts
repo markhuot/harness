@@ -1521,7 +1521,12 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const talker = await api<Ticket>("POST", "/tickets", { projectId: p.project.id, spec: stickText(0, 14), driver: "dummy", start: true });
     await settle(talker.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
     for (let n = 1; n <= 4; n++) await sayStick(talker.key, n);
-    return rigid("sheet-drag-transcript", `harness://ticket/${encodeURIComponent(talker.key)}?tab=transcript`, () => until("the transcript", async () => (await labels(udid)).some((l) => l.startsWith("Run finished (")), 10000));
+    const said = await rigid("sheet-drag-transcript", `harness://ticket/${encodeURIComponent(talker.key)}?tab=transcript`, () => until("the transcript", async () => (await labels(udid)).some((l) => l.startsWith("Run finished (")), 10000));
+    // Closed again, or a swipe away later on would bring it back docked.
+    await dock();
+    await tapWhere(udid, `Close ${talker.key}`);
+    await until("its dock gone", async () => !(await labels(udid)).some((l) => isDock(l) && l.startsWith(talker.key)), 4000);
+    return said;
   });
   await check("a slow drag on the Spec tab moves the ticket as one piece", () =>
     rigid("sheet-drag-spec", `harness://ticket/${encodeURIComponent(kid.key)}?tab=spec`, () => until("the spec", async () => onChild(await labels(udid)), 8000)));
