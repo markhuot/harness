@@ -425,6 +425,8 @@ describe("cleanup completions", () => {
       if (req.kind !== "complete") return;
       const head = (await runGit(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
       recorded = await req.toolContext.ops.recordPullRequest(req.toolContext, url, head);
+      // Recording a link the ticket already has leaves its list as it was.
+      await req.toolContext.ops.recordPullRequest(req.toolContext, url, head);
       await h.git("worktree", "remove", req.toolContext.ticket!.workdir!);
       await h.git("branch", "-D", "harness/web-1");
     };
