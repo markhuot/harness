@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The Agent notes on a ticket's Details tab start collapsed, on the Mac and on iPhone and iPad. Click or tap "Agent notes" to open them and again to close them; a ticket with no notes still shows no field. For people working on Harness, `app/scripts/agent-notes-check.ts` covers the Mac toggle and a sim-check `agent-notes` chain covers the iPhone one, so a change that opens the notes by default fails them.
 - On iPhone and iPad, the ticket detail sheet now shows the status indicator (colored dot and label) on its own line above the title when expanded, pushing the title down. When collapsed, the status indicator is hidden and only the truncated title shows.
 
 ### Fixed
