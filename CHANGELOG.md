@@ -13,6 +13,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The service log (`service.log`) now records every push decision: the ticket, the event, and whether it was sent or skipped and why. When a Mac or iPhone was showing the ticket, the line names the device that held the push back, so a missing push can be explained from the log.
 - `GET /notifications` also lists who is connected right now: each client's device id, platform, whether it is visible and the tickets it shows.
+- A ticket can have several pull requests. Agents set the list with `update_ticket`'s `pull_request_urls` (including their own ticket during a work run, for a pull request they opened outside the completion), and a completion's `record_pull_request` adds to it instead of replacing it. Each pull request shows its title, fetched from GitHub with `gh`: the Mac and web app's Details tab has a "Pull requests" row to add, remove and refresh them, the iPhone and iPad Details tab has the same, and the ticket shows one "PR #n" badge per link, with the title as its tooltip. `get_ticket` and `list_tickets` return each pull request's URL and title. A title stays empty when `gh` is missing, not logged in to the host, or the link isn't a pull request; refresh tries again.
 
 ### Changed
 

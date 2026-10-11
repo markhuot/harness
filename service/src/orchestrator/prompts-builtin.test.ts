@@ -40,6 +40,7 @@ function ticket(patch: Partial<Ticket> = {}): Ticket {
   return {
     id: "t1",
     key: "NYT-3",
+    pullRequests: [],
     projectId: "p1",
     kind: "task",
     title: "Add  dark\nmode",
@@ -130,13 +131,22 @@ const GHE = { host: "ghe.acme.com", remote: "upstream", repo: "ghe.acme.com/web/
 const COMPLETION_VARIANTS: Record<string, Record<string, { t?: Partial<Ticket>; pullRequest?: BranchContext["pullRequest"]; pushRemote?: string | null; instructions?: string }>> = {
   pr: {
     github: { pullRequest: GH },
-    "enterprise, existing pull request": { pullRequest: GHE, t: { pullRequestUrl: "https://ghe.acme.com/web/site/pull/7" }, instructions: "Add the design label." },
+    "enterprise, existing pull requests": {
+      pullRequest: GHE,
+      t: {
+        pullRequests: [
+          { url: "https://ghe.acme.com/web/site/pull/7", title: "Split the secrets out of checkout" },
+          { url: "https://ghe.acme.com/web/site/pull/8", title: null },
+        ],
+      },
+      instructions: "Add the design label.",
+    },
   },
   cleanup: {
     "no instructions": {},
     instructions: { t: { completionInstructions: "Also prune the remote branch." }, instructions: "Also prune the remote branch." },
     "a remote": { pushRemote: "origin" },
-    "a remote, existing pull request": { pushRemote: "upstream", t: { pullRequestUrl: "https://github.com/nytimes/web/pull/12" } },
+    "a remote, existing pull request": { pushRemote: "upstream", t: { pullRequests: [{ url: "https://github.com/nytimes/web/pull/12", title: "Address the form" }] } },
   },
   custom: {
     instructions: { t: { completionInstructions: "Cherry-pick onto release-2.4." }, instructions: "Cherry-pick onto release-2.4." },
@@ -332,7 +342,7 @@ describe("built-in run prompts", () => {
     }
   }
   test("reopenPrompt · with a pull request", () => {
-    const t = ticket({ branch: "harness/nyt-3", status: "done", pullRequestUrl: "https://github.com/nytimes/web/pull/12" });
+    const t = ticket({ branch: "harness/nyt-3", status: "done", pullRequests: [{ url: "https://github.com/nytimes/web/pull/12", title: "Address the form" }] });
     expect(reopenPrompt(t, "Address the review comments.", "main")).toMatchSnapshot();
   });
 

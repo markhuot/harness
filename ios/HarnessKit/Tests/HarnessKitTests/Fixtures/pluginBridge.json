@@ -863,7 +863,12 @@
               "skipHumanReview": true,
               "completionAction": "pr",
               "completionInstructions": "Squash before opening the PR",
-              "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+              "pullRequests": [
+                {
+                  "url": "https://github.com/nytimes/app/pull/812",
+                  "title": "Split the secrets out of checkout"
+                }
+              ],
               "draft": false,
               "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
               "busy": true,
@@ -910,6 +915,7 @@
             "op": "sendTicket",
             "ticket": {
               "id": "tkt_2",
+              "pullRequests": [],
               "key": "HELLO-2",
               "projectId": "prj_00a1",
               "kind": "task",
@@ -1000,7 +1006,12 @@
               "skipHumanReview": true,
               "completionAction": "pr",
               "completionInstructions": "Squash before opening the PR",
-              "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+              "pullRequests": [
+                {
+                  "url": "https://github.com/nytimes/app/pull/812",
+                  "title": "Split the secrets out of checkout"
+                }
+              ],
               "draft": false,
               "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
               "busy": true,
@@ -1119,7 +1130,12 @@
                     "skipHumanReview": true,
                     "completionAction": "pr",
                     "completionInstructions": "Squash before opening the PR",
-                    "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+                    "pullRequests": [
+                      {
+                        "url": "https://github.com/nytimes/app/pull/812",
+                        "title": "Split the secrets out of checkout"
+                      }
+                    ],
                     "draft": false,
                     "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
                     "busy": true,

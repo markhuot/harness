@@ -13,8 +13,8 @@ import { fakeContext, fakeSession } from "../tools/fakes";
 import { toolsForRun } from "../tools";
 import type { ToolContext, ToolResult } from "../tools/types";
 
-async function setup() {
-  const h = makeOrchestrator({ tools: toolsForRun });
+async function setup(opts: { fetchPullRequestTitle?: (url: string) => Promise<string | null> } = {}) {
+  const h = makeOrchestrator({ tools: toolsForRun, ...opts });
   const project = (key: string) => {
     const dir = join(h.home, "proj", key.toLowerCase());
     mkdirSync(dir, { recursive: true });
@@ -515,6 +515,98 @@ describe("update, move, start, cancel, reopen", () => {
     const r = await h.orch.ops.reopenTicket(h.ctx("work", me), t.key, "the footer is broken");
     expect(r.status).toBe("in_progress");
     expect(h.store.activity.listBySession(t.sessionId).at(-1)).toMatchObject({ kind: "reopened", body: "the footer is broken" });
+  });
+});
+
+describe("pull requests (pull_request_urls, titles)", () => {
+  const tools = [updateTicketTool];
+  const A = "https://github.com/acme/web/pull/1";
+  const B = "https://github.com/acme/web/pull/2";
+
+  test("update_ticket sets the whole list in order, drops duplicates, and [] clears it", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const t = await h.make("t");
+    const set = (input: Record<string, unknown>) => executeTool(tools, "update_ticket", { key: t.key, ...input }, h.ctx("work", me));
+    expect((await set({ pull_request_urls: [` ${A} `, B, A] })).isError).toBeFalsy();
+    expect(h.get(t).pullRequests.map((pr) => pr.url)).toEqual([A, B]);
+    expect(text(await set({ pull_request_urls: ["ftp://x/1"] }))).toContain("Not a pull request link: ftp://x/1");
+    expect(h.get(t).pullRequests.map((pr) => pr.url)).toEqual([A, B]);
+    expect((await set({ pull_request_urls: [] })).isError).toBeFalsy();
+    expect(h.get(t).pullRequests).toEqual([]);
+  });
+
+  test("a work run edits its own ticket's pull requests alone; another field on its own ticket is still refused", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const own = await executeTool(tools, "update_ticket", { key: me.key, pull_request_urls: [A] }, h.ctx("work", me));
+    expect(own.isError).toBeFalsy();
+    expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
+    const refused = await executeTool(tools, "update_ticket", { key: me.key, title: "Renamed", pull_request_urls: [B] }, h.ctx("work", me));
+    expect(text(refused)).toContain("your own ticket");
+    expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
+  });
+
+  test("each added link's title is fetched in the background; a failed fetch leaves its title empty", async () => {
+    const h = await setup({
+      fetchPullRequestTitle: async (url) => {
+        if (url === B) throw new Error("gh: not logged in");
+        return "Split the secrets";
+      },
+    });
+    const t = await h.make("t");
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [A, B] });
+    await h.orch.idle();
+    expect(h.get(t).pullRequests).toEqual([
+      { url: A, title: "Split the secrets" },
+      { url: B, title: null },
+    ]);
+  });
+
+  test("a title that arrives after its link was removed doesn't bring the link back", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const h = await setup({
+      fetchPullRequestTitle: async () => {
+        await gate;
+        return "Late title";
+      },
+    });
+    const t = await h.make("t");
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [A] });
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [] });
+    release();
+    await h.orch.idle();
+    expect(h.get(t).pullRequests).toEqual([]);
+  });
+
+  test("refresh fetches every title again", async () => {
+    let calls = 0;
+    const h = await setup({ fetchPullRequestTitle: async (url) => `Title ${++calls} for ${url.split("/").pop()}` });
+    const t = await h.make("t");
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [A, B] });
+    await h.orch.idle();
+    expect(calls).toBe(2);
+    h.orch.refreshPullRequestTitles(t.key);
+    await h.orch.idle();
+    expect(calls).toBe(4);
+    expect(h.get(t).pullRequests.map((pr) => pr.title)).toEqual(["Title 3 for 1", "Title 4 for 2"]);
+  });
+
+  test("on start, a link whose title was never checked is fetched once", async () => {
+    const fetched: string[] = [];
+    const h = await setup({
+      fetchPullRequestTitle: async (url) => {
+        fetched.push(url);
+        return "Backfilled";
+      },
+    });
+    const t = await h.make("t");
+    h.store.tickets.setPullRequestUrls(t.id, [A]);
+    h.orch.start();
+    await h.orch.idle();
+    expect(fetched).toEqual([A]);
+    expect(h.get(t).pullRequests).toEqual([{ url: A, title: "Backfilled" }]);
   });
 });
 

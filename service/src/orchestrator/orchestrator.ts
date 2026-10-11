@@ -4,6 +4,7 @@
 import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
+import { fetchPullRequestTitle, PULL_REQUEST_URL } from "../pull-requests";
 import type {
   Subagent,
   PhaseModels,
@@ -231,6 +232,8 @@ export interface OrchestratorOptions {
   reconcileIntervalMs?: number;
   /** The clock for usage-limit restarts (default Date.now) */
   now?: () => number;
+  /** A pull request's title from GitHub, or null (default: gh pr view; tests stub it) */
+  fetchPullRequestTitle?: (url: string) => Promise<string | null>;
 }
 
 interface ActiveRun {
@@ -522,6 +525,7 @@ export class Orchestrator {
   /** Fires at the earliest blocked ticket's resumeAt (armResume) */
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
   private now: () => number;
+  private fetchTitle: (url: string) => Promise<string | null>;
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -573,6 +577,7 @@ export class Orchestrator {
     });
     this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     this.now = opts.now ?? Date.now;
+    this.fetchTitle = opts.fetchPullRequestTitle ?? fetchPullRequestTitle;
     this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now());
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
@@ -597,6 +602,7 @@ export class Orchestrator {
   /** Recover from a previous process and start watchers. */
   start() {
     this.warnStaleOverrides();
+    this.backfillPullRequestTitles();
     const stale = this.recoverStaleRuns();
     if (stale) this.log(`marked ${stale} stale run(s) from a previous process as failed; nothing re-enqueued`);
     try {
@@ -1581,6 +1587,7 @@ export class Orchestrator {
       throw badRequest("Work doesn't start by setting the status: use POST /tickets/:key/start to start it, or POST /tickets/:key/reopen to re-open a done ticket");
     }
     const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket.externalRef, body.externalRef) : undefined;
+    const pullRequestUrls = body.pullRequestUrls !== undefined ? this.validPullRequestUrls(body.pullRequestUrls) : undefined;
     // The spec first: a conflict refuses the whole PATCH before anything else changed.
     if (spec !== undefined) {
       if (ticket.draft) {
@@ -1600,6 +1607,20 @@ export class Orchestrator {
       const after = externalRef?.key ?? null;
       if (after !== before) this.appendStatus(ticket.sessionId, null, after ? `Linked to ${after}` : `Unlinked from ${before}`);
       this.touchSession(ticket.sessionId);
+    }
+    if (pullRequestUrls !== undefined) {
+      const change = this.store.tickets.setPullRequestUrls(ticket.id, pullRequestUrls)!;
+      ticket = change.ticket;
+      this.touchTicket(ticket.id);
+      if (change.added.length || change.removed.length) {
+        const parts = [
+          change.added.length ? `Added ${change.added.join(", ")}` : "",
+          change.removed.length ? `Removed ${change.removed.join(", ")}` : "",
+        ].filter(Boolean);
+        this.appendStatus(ticket.sessionId, null, `Pull requests: ${parts.join("; ")}`);
+        this.touchSession(ticket.sessionId);
+      }
+      this.fetchPullRequestTitles(ticket.id, change.added);
     }
     if (Object.keys(patch).length) {
       ticket = this.store.tickets.update(ticket.id, patch)!;
@@ -1626,6 +1647,58 @@ export class Orchestrator {
     }
     if (patch.dependsOn) this.kickScheduler();
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * Fetch the titles of pull requests that were never checked (the migration's links, and links
+   * saved while gh was unavailable are not retried here: refresh does that).
+   */
+  private backfillPullRequestTitles() {
+    const byTicket = new Map<string, string[]>();
+    for (const { id, url } of this.store.tickets.unfetchedPullRequestUrls()) {
+      byTicket.set(id, [...(byTicket.get(id) ?? []), url]);
+    }
+    for (const [id, urls] of byTicket) this.fetchPullRequestTitles(id, urls);
+  }
+
+  /**
+   * Look up these links' titles in the background (saving never waits on GitHub), then write them
+   * onto the links still in the list and tell the apps. idle() waits for it.
+   */
+  private fetchPullRequestTitles(ticketId: string, urls: string[]) {
+    if (!urls.length) return;
+    const job = (async () => {
+      const titles = new Map<string, string | null>();
+      for (const url of urls) titles.set(url, await this.fetchTitle(url).catch(() => null));
+      const ticket = this.store.tickets.applyPullRequestTitles(ticketId, titles, this.now());
+      if (ticket) this.bus.emit({ kind: "ticket.upserted", ticket });
+    })().catch((err) => this.log(`pull request titles for ${ticketId} failed: ${errMsg(err)}`));
+    this.background.add(job);
+    void job.finally(() => this.background.delete(job));
+  }
+
+  /** Fetch every pull request title on the ticket again (POST /tickets/:key/pull-requests/refresh). */
+  refreshPullRequestTitles(key: string): Ticket {
+    const ticket = this.requireTicket(key);
+    this.fetchPullRequestTitles(ticket.id, ticket.pullRequests.map((pr) => pr.url));
+    return ticket;
+  }
+
+  /**
+   * A PATCH's pullRequestUrls: each must be an http(s) link. Trimmed, duplicates dropped, order
+   * kept. Titles aren't accepted; the service fetches them.
+   */
+  private validPullRequestUrls(value: unknown): string[] {
+    if (!Array.isArray(value) || value.some((url) => typeof url !== "string")) {
+      throw badRequest("pullRequestUrls must be a list of pull request URLs");
+    }
+    const out: string[] = [];
+    for (const raw of value as string[]) {
+      const url = raw.trim();
+      if (!PULL_REQUEST_URL.test(url)) throw badRequest(`Not a pull request link: ${raw} (it must start with http:// or https://)`);
+      if (!out.includes(url)) out.push(url);
+    }
+    return out;
   }
 
   /**
@@ -3163,15 +3236,26 @@ ${numberLines(r.body)}`;
     );
   }
 
+  /**
+   * A work run's own ticket, when its only field is pullRequestUrls: the one edit a work run makes
+   * to its own card (it adds the pull requests it opened outside the completion run). Anything
+   * else on its own ticket is refused by boardTarget.
+   */
+  private ownWorkPullRequests(ctx: ToolContext, key: string, fields: string[]): Ticket | null {
+    if (ctx.runKind !== "work" || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
+    const own = this.ctxTicket(ctx);
+    return own.key === String(key).trim().toUpperCase() ? own : null;
+  }
+
   async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
     // A planning agent sets up its own ticket from the spec (dependencies, branch, reviews, mode...)
     // before the human presses Start, which approves the plan and those settings together. It edits
     // nothing else, and has full access to its own card.
-    const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : null;
+    const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
+    const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : this.ownWorkPullRequests(ctx, key, fields);
     const { actor, target } = own ? { actor: own, target: own } : this.boardTarget(ctx, key, "update_ticket");
     // Editing a looser ticket (its spec, dependencies, driver...) would get it to act for the caller
     // under looser permissions. The one edit allowed on it is tightening its mode, alone.
-    const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
     if (!own && !(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
     const body: UpdateTicketBody = {};
     if (input.title !== undefined) {
@@ -3194,6 +3278,7 @@ ${numberLines(r.body)}`;
     if (input.model !== undefined) body.model = input.model;
     if (input.phaseModels !== undefined) body.phaseModels = input.phaseModels;
     if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
+    if (input.pullRequestUrls !== undefined) body.pullRequestUrls = input.pullRequestUrls;
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
     if (input.remoteId !== undefined || input.remoteUrl !== undefined) body.externalRef = this.toolExternalRef(target, input.remoteId, input.remoteUrl);
@@ -3358,7 +3443,7 @@ ${numberLines(r.body)}`;
    */
   async recordPullRequest(ctx: ToolContext, url: string, head: string): Promise<string> {
     const t = this.ctxTicket(ctx);
-    const pushesToPullRequest = t.completionAction === "pr" || (t.completionAction === "cleanup" && !!t.pullRequestUrl);
+    const pushesToPullRequest = t.completionAction === "pr" || (t.completionAction === "cleanup" && t.pullRequests.length > 0);
     if (ctx.runKind !== "complete" || !pushesToPullRequest) {
       throw new Error("record_pull_request is only for completion runs that open a pull request");
     }
@@ -3369,8 +3454,12 @@ ${numberLines(r.body)}`;
     const repo = [t.workdir, this.store.projects.get(t.projectId)?.path].find((d): d is string => !!d && existsSync(d));
     const resolved = repo ? await git(["rev-parse", "--verify", "--quiet", `${h}^{commit}`], repo) : null;
     if (!resolved || resolved.code !== 0 || !resolved.stdout) throw new Error(`head ${h} isn't a commit in this ticket's repository`);
-    const updated = this.store.tickets.update(t.id, { pullRequestUrl: u, pullRequestHead: resolved.stdout })!;
+    // Appends the link (a link the ticket already has keeps its place); its title is fetched below.
+    const urls = t.pullRequests.map((pr) => pr.url);
+    const change = this.store.tickets.setPullRequestUrls(t.id, urls.includes(u) ? urls : [...urls, u])!;
+    const updated = this.store.tickets.update(t.id, { pullRequestHead: resolved.stdout })!;
     this.bus.emit({ kind: "ticket.upserted", ticket: updated });
+    this.fetchPullRequestTitles(t.id, change.added);
     this.appendStatus(t.sessionId, ctx.runId, `Pull request: ${u}`);
     const a = this.ctxActive(ctx);
     if (a) a.pullRequest = true;

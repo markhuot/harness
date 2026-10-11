@@ -418,7 +418,8 @@ describe("cleanup completions", () => {
     const h = await setup();
     const t = await h.inReview();
     const url = "https://github.com/acme/web/pull/1";
-    h.store.tickets.update(t.id, { pullRequestUrl: url });
+    const earlier = "https://github.com/acme/web/pull/0";
+    h.store.tickets.setPullRequestUrls(t.id, [earlier]);
     let recorded = "";
     h.driver.script = async function* (req) {
       if (req.kind !== "complete") return;
@@ -431,11 +432,12 @@ describe("cleanup completions", () => {
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
     const run = h.completes()[0]!;
-    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup", pullRequestUrl: url, pullRequestHead: head });
+    // record_pull_request appends its link to the ticket's list, after the one it already had.
+    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup", pullRequests: [{ url: earlier, title: null }, { url, title: null }], pullRequestHead: head });
     expect(recorded).toContain(url);
     expect(run.runContext).toContain("## This run: completion (clean up)");
     expect(run.runContext).toContain("push -u origin harness/web-1`");
-    expect(run.runContext).toContain(`record_pull_request\` { url: "${url}", head }`);
+    expect(run.runContext).toContain("(`gh pr view harness/web-1 --json url`): call `record_pull_request` { url, head }");
     expect(run.prompt).toContain("Push `harness/web-1` to origin");
   });
 

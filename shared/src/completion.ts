@@ -5,7 +5,7 @@ import { parentLandingBranch } from "./branches";
 import { COMPLETION_ACTIONS, type CompletionAction, type Project, type Ticket } from "./protocol";
 
 type ProjectLike = Pick<Project, "isGit" | "completionAction" | "completionActions" | "pullRequestHost">;
-type TicketLike = Pick<Ticket, "completionAction" | "pullRequestUrl" | "hasChanges"> & { baseBranch?: string | null; branch?: string | null };
+type TicketLike = Pick<Ticket, "completionAction" | "hasChanges"> & { pullRequests?: Ticket["pullRequests"]; baseBranch?: string | null; branch?: string | null };
 type ParentLike = { branch?: string | null; status?: string } | null | undefined;
 
 /**
@@ -99,7 +99,7 @@ export function completionOptions(ticket: TicketLike | null | undefined, project
   const projectDefault = projectCompletionDefault(project);
   let defaultAction = actions.includes(projectDefault) ? projectDefault : actions[0] ?? "custom";
   if (earlier && actions.includes(earlier)) defaultAction = earlier;
-  else if (ticket?.pullRequestUrl && actions.includes("cleanup")) defaultAction = "cleanup";
+  else if (ticket?.pullRequests?.length && actions.includes("cleanup")) defaultAction = "cleanup";
   return { actions, defaultAction, parentBranch: null };
 }
 

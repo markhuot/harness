@@ -450,6 +450,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -523,7 +524,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -618,7 +624,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -707,7 +718,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -757,6 +773,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -830,7 +847,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -880,6 +902,7 @@
       "input": {
         "ticket": {
           "id": "tkt_3",
+          "pullRequests": [],
           "key": "SCRATCH-3",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -913,7 +936,6 @@
           "skipHumanReview": false,
           "completionAction": null,
           "completionInstructions": null,
-          "pullRequestUrl": null,
           "draft": true,
           "messageDraft": null,
           "promptAttachments": [
@@ -955,6 +977,7 @@
         },
         "parent": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -989,6 +1012,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -1125,7 +1149,12 @@
         "skipHumanReview": true,
         "completionAction": "pr",
         "completionInstructions": "Squash before opening the PR",
-        "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+        "pullRequests": [
+          {
+            "url": "https://github.com/nytimes/app/pull/812",
+            "title": "Split the secrets out of checkout"
+          }
+        ],
         "draft": false,
         "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
         "busy": true,
@@ -1173,6 +1202,7 @@
       "name": "plain ticket",
       "input": {
         "id": "tkt_2",
+        "pullRequests": [],
         "key": "SCRATCH-2",
         "projectId": "prj_00a1",
         "kind": "task",
@@ -1205,6 +1235,7 @@
       "name": "requested branch only",
       "input": {
         "id": "tkt_2",
+        "pullRequests": [],
         "key": "SCRATCH-2",
         "projectId": "prj_00a1",
         "kind": "task",
@@ -1238,6 +1269,7 @@
       "name": "explicit null requested branch",
       "input": {
         "id": "tkt_3",
+        "pullRequests": [],
         "key": "SCRATCH-3",
         "projectId": "prj_00a1",
         "kind": "task",
@@ -1271,7 +1303,6 @@
         "skipHumanReview": false,
         "completionAction": null,
         "completionInstructions": null,
-        "pullRequestUrl": null,
         "draft": true,
         "messageDraft": null,
         "promptAttachments": [
@@ -1589,7 +1620,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -1716,6 +1752,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -1827,6 +1864,7 @@
       "input": {
         "ticket": {
           "id": "tkt_3",
+          "pullRequests": [],
           "key": "SCRATCH-3",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -1860,7 +1898,6 @@
           "skipHumanReview": false,
           "completionAction": null,
           "completionInstructions": null,
-          "pullRequestUrl": null,
           "draft": true,
           "messageDraft": null,
           "promptAttachments": [
@@ -1970,6 +2007,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -2032,6 +2070,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -2178,7 +2217,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -2231,6 +2275,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -2377,7 +2422,12 @@
           "skipHumanReview": true,
           "completionAction": "pr",
           "completionInstructions": "Squash before opening the PR",
-          "pullRequestUrl": "https://github.com/nytimes/app/pull/812",
+          "pullRequests": [
+            {
+              "url": "https://github.com/nytimes/app/pull/812",
+              "title": "Split the secrets out of checkout"
+            }
+          ],
           "draft": false,
           "blockedReason": "Should HarnessEvent decode unknown kinds or drop them?",
           "busy": true,
@@ -2430,6 +2480,7 @@
       "input": {
         "ticket": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",
@@ -2516,6 +2567,7 @@
         },
         "parent": {
           "id": "tkt_2",
+          "pullRequests": [],
           "key": "SCRATCH-2",
           "projectId": "prj_00a1",
           "kind": "task",

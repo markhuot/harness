@@ -83,6 +83,7 @@ function ticket(patch: Partial<Ticket> = {}): Ticket {
   return {
     id: "t1",
     key: "NYT-3",
+    pullRequests: [],
     projectId: "p1",
     kind: "task",
     title: "Add dark mode",
@@ -483,16 +484,19 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(run).not.toContain("Merge branch");
   });
 
-  test("a pr completion of a ticket that already has a pull request updates it; an Enterprise host is named as gh knows it", () => {
+  test("a pr completion of a ticket with pull requests lists each with its title and updates the branch's; an Enterprise host is named as gh knows it", () => {
     const url = "https://ghe.acme.com/web/site/pull/7";
-    const t = ticket({ ...worktree, completionAction: "pr", pullRequestUrl: url });
+    const other = "https://ghe.acme.com/web/site/pull/3";
+    const t = ticket({ ...worktree, completionAction: "pr", pullRequests: [{ url: other, title: "md6 secrets" }, { url, title: null }] });
     const b = { ...prBranches, pullRequest: { host: "ghe.acme.com", remote: "upstream", repo: "ghe.acme.com/web/site" } };
     const text = sys("complete", t, { branches: b });
-    expect(text).toContain(`This ticket already opened ${url}`);
+    expect(text).toContain(`This ticket already has these pull requests:\n- ${other} (md6 secrets)\n- ${url}\nThe one for \`harness/nyt-3\` is \`gh pr view harness/nyt-3 --repo ghe.acme.com/web/site --json url,state\``);
     expect(text).toContain("gh auth status --hostname ghe.acme.com");
     expect(text).toContain("push -u upstream harness/nyt-3");
     expect(text).toContain("--repo ghe.acme.com/web/site");
-    expect(completePrompt(t, undefined, b, project)).toContain(`update its pull request ${url}`);
+    const run = completePrompt(t, undefined, b, project);
+    expect(run).toContain(`Its pull requests are:\n- ${other} (md6 secrets)\n- ${url}\n`);
+    expect(run).toContain("update the one for it (`gh pr view harness/nyt-3 --json url`)");
   });
 
   test("a pr completion on the base branch itself, or without a branch, stops instead of pushing", () => {
@@ -530,8 +534,8 @@ describe("systemPrompt context and kind-specific rules", () => {
 
   test("re-opening a ticket with a pull request points at the pull request's review", () => {
     const url = "https://github.com/nytimes/web/pull/12";
-    const text = reopenPrompt(ticket({ ...worktree, pullRequestUrl: url }), "Address the review comments", "main");
-    expect(text).toContain(`is in the pull request ${url}`);
+    const text = reopenPrompt(ticket({ ...worktree, pullRequests: [{ url, title: "Address the form" }] }), "Address the review comments", "main");
+    expect(text).toContain(`is in these pull requests:\n- ${url} (Address the form)\n`);
     expect(text).toContain("the new commits go to the same pull request");
     expect(text).not.toContain("probably merged");
   });

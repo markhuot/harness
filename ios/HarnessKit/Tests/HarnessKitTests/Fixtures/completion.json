@@ -13,7 +13,12 @@
       "input": {
         "ticket": {
           "completionAction": "custom",
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -28,7 +33,12 @@
       "input": {
         "ticket": {
           "completionAction": null,
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -43,7 +53,12 @@
       "input": {
         "ticket": {
           "completionAction": "pr",
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -57,7 +72,7 @@
       "input": {
         "ticket": {
           "completionAction": null,
-          "pullRequestUrl": null
+          "pullRequests": []
         },
         "project": {
           "isGit": true,
@@ -72,7 +87,12 @@
       "input": {
         "ticket": {
           "completionAction": "pr",
-          "pullRequestUrl": "x"
+          "pullRequests": [
+            {
+              "url": "x",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -86,7 +106,12 @@
       "name": "an open PR without a PR host",
       "input": {
         "ticket": {
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -99,7 +124,12 @@
       "name": "an open PR, project default custom",
       "input": {
         "ticket": {
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -113,7 +143,12 @@
       "name": "an open PR when the service offers no cleanup",
       "input": {
         "ticket": {
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -127,10 +162,10 @@
       "output": "Approve and merge"
     },
     {
-      "name": "an empty pull request url is falsy",
+      "name": "no pull requests is falsy",
       "input": {
         "ticket": {
-          "pullRequestUrl": ""
+          "pullRequests": []
         },
         "project": {
           "isGit": true,
@@ -138,6 +173,29 @@
         }
       },
       "output": "Approve and merge"
+    },
+    {
+      "name": "several pull requests, titled or not, preselect cleanup",
+      "input": {
+        "ticket": {
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": "md6 secrets"
+            },
+            {
+              "url": "https://github.com/a/b/pull/2",
+              "title": null
+            }
+          ]
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": "Approve and clean up"
     },
     {
       "name": "child of a parent on a branch only merges",
@@ -456,7 +514,12 @@
       "input": {
         "ticket": {
           "completionAction": "cleanup",
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -516,7 +579,12 @@
       "input": {
         "ticket": {
           "branch": null,
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -571,7 +639,12 @@
         "ticket": {
           "branch": "harness/web-2",
           "hasChanges": false,
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -649,7 +722,12 @@
       "input": {
         "ticket": {
           "completionAction": "custom",
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -673,7 +751,12 @@
       "input": {
         "ticket": {
           "completionAction": null,
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -697,7 +780,12 @@
       "input": {
         "ticket": {
           "completionAction": "pr",
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -720,7 +808,7 @@
       "input": {
         "ticket": {
           "completionAction": null,
-          "pullRequestUrl": null
+          "pullRequests": []
         },
         "project": {
           "isGit": true,
@@ -744,7 +832,12 @@
       "input": {
         "ticket": {
           "completionAction": "pr",
-          "pullRequestUrl": "x"
+          "pullRequests": [
+            {
+              "url": "x",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -766,7 +859,12 @@
       "name": "an open PR without a PR host",
       "input": {
         "ticket": {
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -787,7 +885,12 @@
       "name": "an open PR, project default custom",
       "input": {
         "ticket": {
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -810,7 +913,12 @@
       "name": "an open PR when the service offers no cleanup",
       "input": {
         "ticket": {
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -831,10 +939,10 @@
       }
     },
     {
-      "name": "an empty pull request url is falsy",
+      "name": "no pull requests is falsy",
       "input": {
         "ticket": {
-          "pullRequestUrl": ""
+          "pullRequests": []
         },
         "project": {
           "isGit": true,
@@ -849,6 +957,38 @@
           "custom"
         ],
         "defaultAction": "merge",
+        "parentBranch": null
+      }
+    },
+    {
+      "name": "several pull requests, titled or not, preselect cleanup",
+      "input": {
+        "ticket": {
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": "md6 secrets"
+            },
+            {
+              "url": "https://github.com/a/b/pull/2",
+              "title": null
+            }
+          ]
+        },
+        "project": {
+          "isGit": true,
+          "pullRequestHost": "github.com",
+          "completionAction": "merge"
+        }
+      },
+      "output": {
+        "actions": [
+          "merge",
+          "pr",
+          "cleanup",
+          "custom"
+        ],
+        "defaultAction": "cleanup",
         "parentBranch": null
       }
     },
@@ -1320,7 +1460,12 @@
       "input": {
         "ticket": {
           "completionAction": "cleanup",
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -1407,7 +1552,12 @@
       "input": {
         "ticket": {
           "branch": null,
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,
@@ -1491,7 +1641,12 @@
         "ticket": {
           "branch": "harness/web-2",
           "hasChanges": false,
-          "pullRequestUrl": "https://github.com/a/b/pull/1"
+          "pullRequests": [
+            {
+              "url": "https://github.com/a/b/pull/1",
+              "title": null
+            }
+          ]
         },
         "project": {
           "isGit": true,

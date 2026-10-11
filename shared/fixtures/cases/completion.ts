@@ -17,7 +17,7 @@ import type { CompletionAction } from "../../src/protocol";
 import { cases } from "../case";
 
 type ProjectIn = { isGit?: boolean; completionAction?: CompletionAction; completionActions?: CompletionAction[]; pullRequestHost?: string | null } | null;
-type TicketIn = { completionAction?: CompletionAction | null; pullRequestUrl?: string | null; baseBranch?: string | null; branch?: string | null; hasChanges?: boolean | null } | null;
+type TicketIn = { completionAction?: CompletionAction | null; pullRequests?: { url: string; title: string | null }[]; baseBranch?: string | null; branch?: string | null; hasChanges?: boolean | null } | null;
 type ParentIn = { branch?: string | null; status?: string } | null;
 
 const git = { isGit: true, pullRequestHost: null } as const;
@@ -76,15 +76,16 @@ interface OptionsIn {
 
 const optionInputs: Record<string, OptionsIn> = {
   "nothing at all": { ticket: null, project: null },
-  "earlier custom beats an open PR": { ticket: { completionAction: "custom", pullRequestUrl: "https://github.com/a/b/pull/1" }, project: { ...gh, completionAction: "merge" } },
-  "an open PR preselects cleanup": { ticket: { completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, project: { ...gh, completionAction: "merge" } },
-  "an earlier pr the project still offers beats an open PR": { ticket: { completionAction: "pr", pullRequestUrl: "https://github.com/a/b/pull/1" }, project: gh },
-  "no earlier choice: the project default": { ticket: { completionAction: null, pullRequestUrl: null }, project: { ...gh, completionAction: "merge" } },
-  "an earlier pr the project no longer offers doesn't stick": { ticket: { completionAction: "pr", pullRequestUrl: "x" }, project: { ...git, completionAction: "merge" } },
-  "an open PR without a PR host": { ticket: { pullRequestUrl: "https://github.com/a/b/pull/1" }, project: git },
-  "an open PR, project default custom": { ticket: { pullRequestUrl: "https://github.com/a/b/pull/1" }, project: { ...gh, completionAction: "custom" } },
-  "an open PR when the service offers no cleanup": { ticket: { pullRequestUrl: "https://github.com/a/b/pull/1" }, project: { ...gh, completionActions: ["merge", "pr"] } },
-  "an empty pull request url is falsy": { ticket: { pullRequestUrl: "" }, project: gh },
+  "earlier custom beats an open PR": { ticket: { completionAction: "custom", pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: { ...gh, completionAction: "merge" } },
+  "an open PR preselects cleanup": { ticket: { completionAction: null, pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: { ...gh, completionAction: "merge" } },
+  "an earlier pr the project still offers beats an open PR": { ticket: { completionAction: "pr", pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: gh },
+  "no earlier choice: the project default": { ticket: { completionAction: null, pullRequests: [] }, project: { ...gh, completionAction: "merge" } },
+  "an earlier pr the project no longer offers doesn't stick": { ticket: { completionAction: "pr", pullRequests: [{ url: "x", title: null }] }, project: { ...git, completionAction: "merge" } },
+  "an open PR without a PR host": { ticket: { pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: git },
+  "an open PR, project default custom": { ticket: { pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: { ...gh, completionAction: "custom" } },
+  "an open PR when the service offers no cleanup": { ticket: { pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: { ...gh, completionActions: ["merge", "pr"] } },
+  "no pull requests is falsy": { ticket: { pullRequests: [] }, project: gh },
+  "several pull requests, titled or not, preselect cleanup": { ticket: { pullRequests: [{ url: "https://github.com/a/b/pull/1", title: "md6 secrets" }, { url: "https://github.com/a/b/pull/2", title: null }] }, project: { ...gh, completionAction: "merge" } },
   "child of a parent on a branch only merges": { ticket: { completionAction: "pr" }, project: { ...gh, completionAction: "pr" }, parent: { branch: "harness/web-1" } },
   "child of a parent in review still merges into its branch": { ticket: {}, project: gh, parent: { branch: "harness/web-1", status: "review" } },
   "parent without a branch changes nothing": { ticket: null, project: gh, parent: { branch: null } },
@@ -106,15 +107,15 @@ const optionInputs: Record<string, OptionsIn> = {
   "an empty branch is never on base": { ticket: { branch: "" }, project: gh, base: "" },
   "no base known": { ticket: { branch: "x" }, project: gh, base: null },
   "a child on its parent's branch ignores base": { ticket: { branch: "harness/web-1" }, project: gh, parent: { branch: "harness/web-1" }, base: "harness/web-1" },
-  "earlier cleanup sticks": { ticket: { completionAction: "cleanup", pullRequestUrl: "https://github.com/a/b/pull/1" }, project: gh },
+  "earlier cleanup sticks": { ticket: { completionAction: "cleanup", pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: gh },
   "on base, only merge and pr offered": { ticket: { branch: "x" }, project: { ...gh, completionActions: ["merge", "pr"] }, base: "x" },
   "no branch of its own: no merge or pr": { ticket: { branch: null }, project: { ...gh, completionAction: "merge" } },
   "no branch of its own with an earlier merge: clean up": { ticket: { branch: null, completionAction: "merge" }, project: git },
-  "no branch of its own with an open PR": { ticket: { branch: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, project: gh },
+  "no branch of its own with an open PR": { ticket: { branch: null, pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: gh },
   "no branch of its own outside git": { ticket: { branch: null }, project: plain },
   "a branch left out changes nothing": { ticket: {}, project: { ...gh, completionAction: "merge" } },
   "no changes to land: no merge or pr": { ticket: { branch: "harness/web-2", hasChanges: false }, project: { ...gh, completionAction: "merge" } },
-  "no changes to land, project default pr, open PR": { ticket: { branch: "harness/web-2", hasChanges: false, pullRequestUrl: "https://github.com/a/b/pull/1" }, project: { ...gh, completionAction: "pr" } },
+  "no changes to land, project default pr, open PR": { ticket: { branch: "harness/web-2", hasChanges: false, pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, project: { ...gh, completionAction: "pr" } },
   "changes to land keep every choice": { ticket: { branch: "harness/web-2", hasChanges: true }, project: gh },
   "not checked yet keeps every choice": { ticket: { branch: "harness/web-2", hasChanges: null }, project: gh },
   "a child on its parent's branch with no changes still merges": { ticket: { branch: "harness/web-2", hasChanges: false }, project: gh, parent: { branch: "harness/web-1" } },

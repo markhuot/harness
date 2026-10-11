@@ -30,6 +30,7 @@ import {
 
 const tk = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   id,
+  pullRequests: [],
   key: id.toUpperCase(),
   projectId: "p1",
   kind: "task",

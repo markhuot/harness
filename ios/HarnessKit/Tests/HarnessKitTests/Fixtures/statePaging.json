@@ -12,6 +12,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -50,6 +51,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -79,6 +81,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -108,6 +111,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -137,6 +141,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -166,6 +171,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -246,6 +252,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -275,6 +282,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -304,6 +312,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -333,6 +342,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -362,6 +372,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -391,6 +402,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -463,6 +475,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -501,6 +514,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -530,6 +544,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -559,6 +574,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -588,6 +604,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -617,6 +634,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -656,6 +674,7 @@
               "detail": {
                 "ticket": {
                   "id": "d3",
+                  "pullRequests": [],
                   "key": "D3",
                   "projectId": "p1",
                   "kind": "task",
@@ -733,6 +752,7 @@
                 "tickets": [
                   {
                     "id": "d6",
+                    "pullRequests": [],
                     "key": "D6",
                     "projectId": "p1",
                     "kind": "task",
@@ -762,6 +782,7 @@
                   },
                   {
                     "id": "d5",
+                    "pullRequests": [],
                     "key": "D5",
                     "projectId": "p1",
                     "kind": "task",
@@ -791,6 +812,7 @@
                   },
                   {
                     "id": "d4",
+                    "pullRequests": [],
                     "key": "D4",
                     "projectId": "p1",
                     "kind": "task",
@@ -820,6 +842,7 @@
                   },
                   {
                     "id": "d3",
+                    "pullRequests": [],
                     "key": "D3",
                     "projectId": "p1",
                     "kind": "task",
@@ -849,6 +872,7 @@
                   },
                   {
                     "id": "d2",
+                    "pullRequests": [],
                     "key": "D2",
                     "projectId": "p1",
                     "kind": "task",
@@ -932,6 +956,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -961,6 +986,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -990,6 +1016,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -1019,6 +1046,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -1048,6 +1076,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -1077,6 +1106,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -1106,6 +1136,7 @@
               },
               "d3": {
                 "id": "d3",
+                "pullRequests": [],
                 "key": "D3",
                 "projectId": "p1",
                 "kind": "task",
@@ -1135,6 +1166,7 @@
               },
               "d6": {
                 "id": "d6",
+                "pullRequests": [],
                 "key": "D6",
                 "projectId": "p1",
                 "kind": "task",
@@ -1164,6 +1196,7 @@
               },
               "d5": {
                 "id": "d5",
+                "pullRequests": [],
                 "key": "D5",
                 "projectId": "p1",
                 "kind": "task",
@@ -1193,6 +1226,7 @@
               },
               "d4": {
                 "id": "d4",
+                "pullRequests": [],
                 "key": "D4",
                 "projectId": "p1",
                 "kind": "task",
@@ -1222,6 +1256,7 @@
               },
               "d2": {
                 "id": "d2",
+                "pullRequests": [],
                 "key": "D2",
                 "projectId": "p1",
                 "kind": "task",
@@ -1313,6 +1348,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -1351,6 +1387,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -1380,6 +1417,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -1409,6 +1447,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -1438,6 +1477,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -1467,6 +1507,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -1525,6 +1566,7 @@
                 "tickets": [
                   {
                     "id": "d7",
+                    "pullRequests": [],
                     "key": "D7",
                     "projectId": "p1",
                     "kind": "task",
@@ -1554,6 +1596,7 @@
                   },
                   {
                     "id": "d6",
+                    "pullRequests": [],
                     "key": "D6",
                     "projectId": "p1",
                     "kind": "task",
@@ -1583,6 +1626,7 @@
                   },
                   {
                     "id": "d5",
+                    "pullRequests": [],
                     "key": "D5",
                     "projectId": "p1",
                     "kind": "task",
@@ -1612,6 +1656,7 @@
                   },
                   {
                     "id": "d4",
+                    "pullRequests": [],
                     "key": "D4",
                     "projectId": "p1",
                     "kind": "task",
@@ -1641,6 +1686,7 @@
                   },
                   {
                     "id": "d3",
+                    "pullRequests": [],
                     "key": "D3",
                     "projectId": "p1",
                     "kind": "task",
@@ -1704,6 +1750,7 @@
                 "tickets": [
                   {
                     "id": "d1",
+                    "pullRequests": [],
                     "key": "D1",
                     "projectId": "p1",
                     "kind": "task",
@@ -1733,6 +1780,7 @@
                   },
                   {
                     "id": "d0",
+                    "pullRequests": [],
                     "key": "D0",
                     "projectId": "p1",
                     "kind": "task",
@@ -1817,6 +1865,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -1846,6 +1895,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -1875,6 +1925,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -1904,6 +1955,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -1933,6 +1985,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -1962,6 +2015,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -1991,6 +2045,7 @@
               },
               "d6": {
                 "id": "d6",
+                "pullRequests": [],
                 "key": "D6",
                 "projectId": "p1",
                 "kind": "task",
@@ -2020,6 +2075,7 @@
               },
               "d5": {
                 "id": "d5",
+                "pullRequests": [],
                 "key": "D5",
                 "projectId": "p1",
                 "kind": "task",
@@ -2049,6 +2105,7 @@
               },
               "d4": {
                 "id": "d4",
+                "pullRequests": [],
                 "key": "D4",
                 "projectId": "p1",
                 "kind": "task",
@@ -2078,6 +2135,7 @@
               },
               "d3": {
                 "id": "d3",
+                "pullRequests": [],
                 "key": "D3",
                 "projectId": "p1",
                 "kind": "task",
@@ -2107,6 +2165,7 @@
               },
               "d1": {
                 "id": "d1",
+                "pullRequests": [],
                 "key": "D1",
                 "projectId": "p1",
                 "kind": "task",
@@ -2136,6 +2195,7 @@
               },
               "d0": {
                 "id": "d0",
+                "pullRequests": [],
                 "key": "D0",
                 "projectId": "p1",
                 "kind": "task",
@@ -2208,6 +2268,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -2246,6 +2307,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -2275,6 +2337,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -2304,6 +2367,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -2333,6 +2397,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -2362,6 +2427,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -2402,6 +2468,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "w1",
+                  "pullRequests": [],
                   "key": "W1",
                   "projectId": "p1",
                   "kind": "task",
@@ -2471,6 +2538,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "w1",
+                  "pullRequests": [],
                   "key": "W1",
                   "projectId": "p1",
                   "kind": "task",
@@ -2539,6 +2607,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -2568,6 +2637,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -2597,6 +2667,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -2626,6 +2697,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -2655,6 +2727,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -2684,6 +2757,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -2756,6 +2830,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -2794,6 +2869,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -2823,6 +2899,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -2852,6 +2929,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -2881,6 +2959,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -2910,6 +2989,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -2950,6 +3030,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "d2",
+                  "pullRequests": [],
                   "key": "D2",
                   "projectId": "p1",
                   "kind": "task",
@@ -2999,6 +3080,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "x1",
+                  "pullRequests": [],
                   "key": "X1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3048,6 +3130,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "x2",
+                  "pullRequests": [],
                   "key": "X2",
                   "projectId": "p1",
                   "kind": "task",
@@ -3097,6 +3180,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "d1",
+                  "pullRequests": [],
                   "key": "D1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3146,6 +3230,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "n1",
+                  "pullRequests": [],
                   "key": "N1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3195,6 +3280,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "n2",
+                  "pullRequests": [],
                   "key": "N2",
                   "projectId": "p1",
                   "kind": "task",
@@ -3244,6 +3330,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "other",
+                  "pullRequests": [],
                   "key": "OTHER",
                   "projectId": "p2",
                   "kind": "task",
@@ -3291,6 +3378,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3320,6 +3408,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -3349,6 +3438,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -3378,6 +3468,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -3407,6 +3498,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -3436,6 +3528,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -3465,6 +3558,7 @@
               },
               "d2": {
                 "id": "d2",
+                "pullRequests": [],
                 "key": "D2",
                 "projectId": "p1",
                 "kind": "task",
@@ -3494,6 +3588,7 @@
               },
               "x1": {
                 "id": "x1",
+                "pullRequests": [],
                 "key": "X1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3523,6 +3618,7 @@
               },
               "x2": {
                 "id": "x2",
+                "pullRequests": [],
                 "key": "X2",
                 "projectId": "p1",
                 "kind": "task",
@@ -3552,6 +3648,7 @@
               },
               "d1": {
                 "id": "d1",
+                "pullRequests": [],
                 "key": "D1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3581,6 +3678,7 @@
               },
               "n1": {
                 "id": "n1",
+                "pullRequests": [],
                 "key": "N1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3610,6 +3708,7 @@
               },
               "n2": {
                 "id": "n2",
+                "pullRequests": [],
                 "key": "N2",
                 "projectId": "p1",
                 "kind": "task",
@@ -3639,6 +3738,7 @@
               },
               "other": {
                 "id": "other",
+                "pullRequests": [],
                 "key": "OTHER",
                 "projectId": "p2",
                 "kind": "task",
@@ -3729,6 +3829,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "x",
+                  "pullRequests": [],
                   "key": "X",
                   "projectId": "p1",
                   "kind": "task",
@@ -3776,6 +3877,7 @@
             "tickets": {
               "x": {
                 "id": "x",
+                "pullRequests": [],
                 "key": "X",
                 "projectId": "p1",
                 "kind": "task",
@@ -3866,6 +3968,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "old",
+                  "pullRequests": [],
                   "key": "OLD",
                   "projectId": "p1",
                   "kind": "task",
@@ -3913,6 +4016,7 @@
             "tickets": {
               "old": {
                 "id": "old",
+                "pullRequests": [],
                 "key": "OLD",
                 "projectId": "p1",
                 "kind": "task",
@@ -3985,6 +4089,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -4023,6 +4128,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -4052,6 +4158,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -4081,6 +4188,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -4110,6 +4218,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -4139,6 +4248,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -4184,6 +4294,7 @@
                 "tickets": [
                   {
                     "id": "d11",
+                    "pullRequests": [],
                     "key": "D11",
                     "projectId": "p1",
                     "kind": "task",
@@ -4213,6 +4324,7 @@
                   },
                   {
                     "id": "d10",
+                    "pullRequests": [],
                     "key": "D10",
                     "projectId": "p1",
                     "kind": "task",
@@ -4242,6 +4354,7 @@
                   },
                   {
                     "id": "d9",
+                    "pullRequests": [],
                     "key": "D9",
                     "projectId": "p1",
                     "kind": "task",
@@ -4271,6 +4384,7 @@
                   },
                   {
                     "id": "d8",
+                    "pullRequests": [],
                     "key": "D8",
                     "projectId": "p1",
                     "kind": "task",
@@ -4300,6 +4414,7 @@
                   },
                   {
                     "id": "d7",
+                    "pullRequests": [],
                     "key": "D7",
                     "projectId": "p1",
                     "kind": "task",
@@ -4329,6 +4444,7 @@
                   },
                   {
                     "id": "o1",
+                    "pullRequests": [],
                     "key": "O1",
                     "projectId": "p2",
                     "kind": "task",
@@ -4442,6 +4558,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -4471,6 +4588,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -4500,6 +4618,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -4529,6 +4648,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -4558,6 +4678,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -4587,6 +4708,7 @@
               },
               "o1": {
                 "id": "o1",
+                "pullRequests": [],
                 "key": "O1",
                 "projectId": "p2",
                 "kind": "task",
@@ -4687,6 +4809,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -4725,6 +4848,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -4754,6 +4878,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -4783,6 +4908,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -4812,6 +4938,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -4841,6 +4968,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -4913,6 +5041,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -4942,6 +5071,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -4971,6 +5101,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -5000,6 +5131,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -5029,6 +5161,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -5058,6 +5191,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -5130,6 +5264,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -5168,6 +5303,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -5197,6 +5333,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -5226,6 +5363,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -5255,6 +5393,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -5284,6 +5423,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -5337,6 +5477,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -5366,6 +5507,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -5395,6 +5537,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -5424,6 +5567,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -5453,6 +5597,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -5482,6 +5627,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -5557,6 +5703,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -5595,6 +5742,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -5624,6 +5772,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -5653,6 +5802,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -5682,6 +5832,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -5711,6 +5862,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -5757,6 +5909,7 @@
                 "tickets": [
                   {
                     "id": "late",
+                    "pullRequests": [],
                     "key": "LATE",
                     "projectId": "p1",
                     "kind": "task",
@@ -5799,6 +5952,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -5828,6 +5982,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -5857,6 +6012,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -5886,6 +6042,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -5915,6 +6072,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -5944,6 +6102,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -6016,6 +6175,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -6054,6 +6214,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -6083,6 +6244,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -6112,6 +6274,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -6141,6 +6304,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -6170,6 +6334,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -6210,6 +6375,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "d4",
+                  "pullRequests": [],
                   "key": "D4",
                   "projectId": "p1",
                   "kind": "task",
@@ -6246,6 +6412,7 @@
                 "tickets": [
                   {
                     "id": "d6",
+                    "pullRequests": [],
                     "key": "D6",
                     "projectId": "p1",
                     "kind": "task",
@@ -6275,6 +6442,7 @@
                   },
                   {
                     "id": "d5",
+                    "pullRequests": [],
                     "key": "D5",
                     "projectId": "p1",
                     "kind": "task",
@@ -6304,6 +6472,7 @@
                   },
                   {
                     "id": "d4",
+                    "pullRequests": [],
                     "key": "D4",
                     "projectId": "p1",
                     "kind": "task",
@@ -6333,6 +6502,7 @@
                   },
                   {
                     "id": "d3",
+                    "pullRequests": [],
                     "key": "D3",
                     "projectId": "p1",
                     "kind": "task",
@@ -6362,6 +6532,7 @@
                   },
                   {
                     "id": "d2",
+                    "pullRequests": [],
                     "key": "D2",
                     "projectId": "p1",
                     "kind": "task",
@@ -6404,6 +6575,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -6433,6 +6605,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -6462,6 +6635,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -6491,6 +6665,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -6520,6 +6695,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -6549,6 +6725,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -6578,6 +6755,7 @@
               },
               "d4": {
                 "id": "d4",
+                "pullRequests": [],
                 "key": "D4",
                 "projectId": "p1",
                 "kind": "task",
@@ -6607,6 +6785,7 @@
               },
               "d6": {
                 "id": "d6",
+                "pullRequests": [],
                 "key": "D6",
                 "projectId": "p1",
                 "kind": "task",
@@ -6636,6 +6815,7 @@
               },
               "d5": {
                 "id": "d5",
+                "pullRequests": [],
                 "key": "D5",
                 "projectId": "p1",
                 "kind": "task",
@@ -6665,6 +6845,7 @@
               },
               "d3": {
                 "id": "d3",
+                "pullRequests": [],
                 "key": "D3",
                 "projectId": "p1",
                 "kind": "task",
@@ -6694,6 +6875,7 @@
               },
               "d2": {
                 "id": "d2",
+                "pullRequests": [],
                 "key": "D2",
                 "projectId": "p1",
                 "kind": "task",
@@ -6766,6 +6948,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -6804,6 +6987,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -6833,6 +7017,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -6862,6 +7047,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -6891,6 +7077,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -6920,6 +7107,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -6959,6 +7147,7 @@
               "tickets": [
                 {
                   "id": "d0",
+                  "pullRequests": [],
                   "key": "D0",
                   "projectId": "p1",
                   "kind": "task",
@@ -6988,6 +7177,7 @@
                 },
                 {
                   "id": "d1",
+                  "pullRequests": [],
                   "key": "D1",
                   "projectId": "p1",
                   "kind": "task",
@@ -7017,6 +7207,7 @@
                 },
                 {
                   "id": "d2",
+                  "pullRequests": [],
                   "key": "D2",
                   "projectId": "p1",
                   "kind": "task",
@@ -7046,6 +7237,7 @@
                 },
                 {
                   "id": "d3",
+                  "pullRequests": [],
                   "key": "D3",
                   "projectId": "p1",
                   "kind": "task",
@@ -7075,6 +7267,7 @@
                 },
                 {
                   "id": "d4",
+                  "pullRequests": [],
                   "key": "D4",
                   "projectId": "p1",
                   "kind": "task",
@@ -7104,6 +7297,7 @@
                 },
                 {
                   "id": "d5",
+                  "pullRequests": [],
                   "key": "D5",
                   "projectId": "p1",
                   "kind": "task",
@@ -7133,6 +7327,7 @@
                 },
                 {
                   "id": "d6",
+                  "pullRequests": [],
                   "key": "D6",
                   "projectId": "p1",
                   "kind": "task",
@@ -7162,6 +7357,7 @@
                 },
                 {
                   "id": "d7",
+                  "pullRequests": [],
                   "key": "D7",
                   "projectId": "p1",
                   "kind": "task",
@@ -7191,6 +7387,7 @@
                 },
                 {
                   "id": "d8",
+                  "pullRequests": [],
                   "key": "D8",
                   "projectId": "p1",
                   "kind": "task",
@@ -7220,6 +7417,7 @@
                 },
                 {
                   "id": "d9",
+                  "pullRequests": [],
                   "key": "D9",
                   "projectId": "p1",
                   "kind": "task",
@@ -7249,6 +7447,7 @@
                 },
                 {
                   "id": "d10",
+                  "pullRequests": [],
                   "key": "D10",
                   "projectId": "p1",
                   "kind": "task",
@@ -7278,6 +7477,7 @@
                 },
                 {
                   "id": "d11",
+                  "pullRequests": [],
                   "key": "D11",
                   "projectId": "p1",
                   "kind": "task",
@@ -7351,6 +7551,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -7380,6 +7581,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -7409,6 +7611,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -7438,6 +7641,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -7467,6 +7671,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -7496,6 +7701,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -7525,6 +7731,7 @@
               },
               "d0": {
                 "id": "d0",
+                "pullRequests": [],
                 "key": "D0",
                 "projectId": "p1",
                 "kind": "task",
@@ -7554,6 +7761,7 @@
               },
               "d1": {
                 "id": "d1",
+                "pullRequests": [],
                 "key": "D1",
                 "projectId": "p1",
                 "kind": "task",
@@ -7583,6 +7791,7 @@
               },
               "d2": {
                 "id": "d2",
+                "pullRequests": [],
                 "key": "D2",
                 "projectId": "p1",
                 "kind": "task",
@@ -7612,6 +7821,7 @@
               },
               "d3": {
                 "id": "d3",
+                "pullRequests": [],
                 "key": "D3",
                 "projectId": "p1",
                 "kind": "task",
@@ -7641,6 +7851,7 @@
               },
               "d4": {
                 "id": "d4",
+                "pullRequests": [],
                 "key": "D4",
                 "projectId": "p1",
                 "kind": "task",
@@ -7670,6 +7881,7 @@
               },
               "d5": {
                 "id": "d5",
+                "pullRequests": [],
                 "key": "D5",
                 "projectId": "p1",
                 "kind": "task",
@@ -7699,6 +7911,7 @@
               },
               "d6": {
                 "id": "d6",
+                "pullRequests": [],
                 "key": "D6",
                 "projectId": "p1",
                 "kind": "task",
@@ -7771,6 +7984,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -7800,6 +8014,7 @@
                   },
                   {
                     "id": "d0",
+                    "pullRequests": [],
                     "key": "D0",
                     "projectId": "p1",
                     "kind": "task",
@@ -7829,6 +8044,7 @@
                   },
                   {
                     "id": "d1",
+                    "pullRequests": [],
                     "key": "D1",
                     "projectId": "p1",
                     "kind": "task",
@@ -7858,6 +8074,7 @@
                   },
                   {
                     "id": "d2",
+                    "pullRequests": [],
                     "key": "D2",
                     "projectId": "p1",
                     "kind": "task",
@@ -7921,6 +8138,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -7950,6 +8168,7 @@
               },
               "d0": {
                 "id": "d0",
+                "pullRequests": [],
                 "key": "D0",
                 "projectId": "p1",
                 "kind": "task",
@@ -7979,6 +8198,7 @@
               },
               "d1": {
                 "id": "d1",
+                "pullRequests": [],
                 "key": "D1",
                 "projectId": "p1",
                 "kind": "task",
@@ -8008,6 +8228,7 @@
               },
               "d2": {
                 "id": "d2",
+                "pullRequests": [],
                 "key": "D2",
                 "projectId": "p1",
                 "kind": "task",
@@ -8071,6 +8292,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -8109,6 +8331,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -8138,6 +8361,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -8167,6 +8391,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -8196,6 +8421,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -8225,6 +8451,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -8295,6 +8522,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -8324,6 +8552,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -8353,6 +8582,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -8382,6 +8612,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -8411,6 +8642,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -8440,6 +8672,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -8527,6 +8760,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -8556,6 +8790,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -8585,6 +8820,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -8614,6 +8850,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -8643,6 +8880,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -8672,6 +8910,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -8813,6 +9052,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -8842,6 +9082,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -8871,6 +9112,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -8900,6 +9142,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -8929,6 +9172,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -8958,6 +9202,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -9038,6 +9283,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -9076,6 +9322,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -9105,6 +9352,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -9134,6 +9382,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -9163,6 +9412,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -9192,6 +9442,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -9245,6 +9496,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -9274,6 +9526,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -9303,6 +9556,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -9332,6 +9586,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -9361,6 +9616,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -9390,6 +9646,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -9470,6 +9727,7 @@
                     "tickets": [
                       {
                         "id": "u1",
+                        "pullRequests": [],
                         "key": "U1",
                         "projectId": "p1",
                         "kind": "task",
@@ -9498,6 +9756,7 @@
                       },
                       {
                         "id": "u2",
+                        "pullRequests": [],
                         "key": "U2",
                         "projectId": "p1",
                         "kind": "task",
@@ -9552,6 +9811,7 @@
             "tickets": {
               "u1": {
                 "id": "u1",
+                "pullRequests": [],
                 "key": "U1",
                 "projectId": "p1",
                 "kind": "task",
@@ -9580,6 +9840,7 @@
               },
               "u2": {
                 "id": "u2",
+                "pullRequests": [],
                 "key": "U2",
                 "projectId": "p1",
                 "kind": "task",
@@ -9660,6 +9921,7 @@
                     "tickets": [
                       {
                         "id": "b",
+                        "pullRequests": [],
                         "key": "B",
                         "projectId": "p1",
                         "kind": "task",
@@ -9689,6 +9951,7 @@
                       },
                       {
                         "id": "a",
+                        "pullRequests": [],
                         "key": "A",
                         "projectId": "p1",
                         "kind": "task",
@@ -9718,6 +9981,7 @@
                       },
                       {
                         "id": "c",
+                        "pullRequests": [],
                         "key": "C",
                         "projectId": "p1",
                         "kind": "task",
@@ -9773,6 +10037,7 @@
             "tickets": {
               "b": {
                 "id": "b",
+                "pullRequests": [],
                 "key": "B",
                 "projectId": "p1",
                 "kind": "task",
@@ -9802,6 +10067,7 @@
               },
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -9831,6 +10097,7 @@
               },
               "c": {
                 "id": "c",
+                "pullRequests": [],
                 "key": "C",
                 "projectId": "p1",
                 "kind": "task",
@@ -9973,6 +10240,7 @@
                 "tickets": [
                   {
                     "id": "gw1",
+                    "pullRequests": [],
                     "key": "GW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -10002,6 +10270,7 @@
                   },
                   {
                     "id": "gw2",
+                    "pullRequests": [],
                     "key": "GW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -10031,6 +10300,7 @@
                   },
                   {
                     "id": "gh1",
+                    "pullRequests": [],
                     "key": "GH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -10060,6 +10330,7 @@
                   },
                   {
                     "id": "gn1",
+                    "pullRequests": [],
                     "key": "GN1",
                     "projectId": "n1",
                     "kind": "task",
@@ -10089,6 +10360,7 @@
                   },
                   {
                     "id": "dh1",
+                    "pullRequests": [],
                     "key": "DH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -10127,6 +10399,7 @@
                     "tickets": [
                       {
                         "id": "dw1",
+                        "pullRequests": [],
                         "key": "DW1",
                         "projectId": "w1",
                         "kind": "task",
@@ -10156,6 +10429,7 @@
                       },
                       {
                         "id": "dw2",
+                        "pullRequests": [],
                         "key": "DW2",
                         "projectId": "w2",
                         "kind": "task",
@@ -10404,6 +10678,7 @@
             "tickets": {
               "gw1": {
                 "id": "gw1",
+                "pullRequests": [],
                 "key": "GW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -10433,6 +10708,7 @@
               },
               "gw2": {
                 "id": "gw2",
+                "pullRequests": [],
                 "key": "GW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -10462,6 +10738,7 @@
               },
               "gh1": {
                 "id": "gh1",
+                "pullRequests": [],
                 "key": "GH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -10491,6 +10768,7 @@
               },
               "gn1": {
                 "id": "gn1",
+                "pullRequests": [],
                 "key": "GN1",
                 "projectId": "n1",
                 "kind": "task",
@@ -10520,6 +10798,7 @@
               },
               "dh1": {
                 "id": "dh1",
+                "pullRequests": [],
                 "key": "DH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -10549,6 +10828,7 @@
               },
               "dw1": {
                 "id": "dw1",
+                "pullRequests": [],
                 "key": "DW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -10578,6 +10858,7 @@
               },
               "dw2": {
                 "id": "dw2",
+                "pullRequests": [],
                 "key": "DW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -10718,6 +10999,7 @@
                 "tickets": [
                   {
                     "id": "gw1",
+                    "pullRequests": [],
                     "key": "GW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -10747,6 +11029,7 @@
                   },
                   {
                     "id": "gw2",
+                    "pullRequests": [],
                     "key": "GW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -10776,6 +11059,7 @@
                   },
                   {
                     "id": "gh1",
+                    "pullRequests": [],
                     "key": "GH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -10805,6 +11089,7 @@
                   },
                   {
                     "id": "gn1",
+                    "pullRequests": [],
                     "key": "GN1",
                     "projectId": "n1",
                     "kind": "task",
@@ -10834,6 +11119,7 @@
                   },
                   {
                     "id": "dh1",
+                    "pullRequests": [],
                     "key": "DH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -10872,6 +11158,7 @@
                     "tickets": [
                       {
                         "id": "dw1",
+                        "pullRequests": [],
                         "key": "DW1",
                         "projectId": "w1",
                         "kind": "task",
@@ -10901,6 +11188,7 @@
                       },
                       {
                         "id": "dw2",
+                        "pullRequests": [],
                         "key": "DW2",
                         "projectId": "w2",
                         "kind": "task",
@@ -10973,6 +11261,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "gw1",
+                  "pullRequests": [],
                   "key": "GW1",
                   "projectId": "w1",
                   "kind": "task",
@@ -11041,6 +11330,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "gn1",
+                  "pullRequests": [],
                   "key": "GN1",
                   "projectId": "n1",
                   "kind": "task",
@@ -11164,6 +11454,7 @@
             "tickets": {
               "gw1": {
                 "id": "gw1",
+                "pullRequests": [],
                 "key": "GW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -11193,6 +11484,7 @@
               },
               "gw2": {
                 "id": "gw2",
+                "pullRequests": [],
                 "key": "GW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -11222,6 +11514,7 @@
               },
               "gh1": {
                 "id": "gh1",
+                "pullRequests": [],
                 "key": "GH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -11251,6 +11544,7 @@
               },
               "gn1": {
                 "id": "gn1",
+                "pullRequests": [],
                 "key": "GN1",
                 "projectId": "n1",
                 "kind": "task",
@@ -11280,6 +11574,7 @@
               },
               "dh1": {
                 "id": "dh1",
+                "pullRequests": [],
                 "key": "DH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -11309,6 +11604,7 @@
               },
               "dw1": {
                 "id": "dw1",
+                "pullRequests": [],
                 "key": "DW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -11338,6 +11634,7 @@
               },
               "dw2": {
                 "id": "dw2",
+                "pullRequests": [],
                 "key": "DW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -11486,6 +11783,7 @@
                 "tickets": [
                   {
                     "id": "gw1",
+                    "pullRequests": [],
                     "key": "GW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -11515,6 +11813,7 @@
                   },
                   {
                     "id": "gw2",
+                    "pullRequests": [],
                     "key": "GW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -11544,6 +11843,7 @@
                   },
                   {
                     "id": "gh1",
+                    "pullRequests": [],
                     "key": "GH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -11573,6 +11873,7 @@
                   },
                   {
                     "id": "gn1",
+                    "pullRequests": [],
                     "key": "GN1",
                     "projectId": "n1",
                     "kind": "task",
@@ -11602,6 +11903,7 @@
                   },
                   {
                     "id": "dh1",
+                    "pullRequests": [],
                     "key": "DH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -11640,6 +11942,7 @@
                     "tickets": [
                       {
                         "id": "dw1",
+                        "pullRequests": [],
                         "key": "DW1",
                         "projectId": "w1",
                         "kind": "task",
@@ -11669,6 +11972,7 @@
                       },
                       {
                         "id": "dw2",
+                        "pullRequests": [],
                         "key": "DW2",
                         "projectId": "w2",
                         "kind": "task",
@@ -11765,6 +12069,7 @@
                 "tickets": [
                   {
                     "id": "gw2",
+                    "pullRequests": [],
                     "key": "GW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -11794,6 +12099,7 @@
                   },
                   {
                     "id": "far",
+                    "pullRequests": [],
                     "key": "FAR",
                     "projectId": "w1",
                     "kind": "task",
@@ -11930,6 +12236,7 @@
             "tickets": {
               "gw1": {
                 "id": "gw1",
+                "pullRequests": [],
                 "key": "GW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -11959,6 +12266,7 @@
               },
               "gw2": {
                 "id": "gw2",
+                "pullRequests": [],
                 "key": "GW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -11988,6 +12296,7 @@
               },
               "gh1": {
                 "id": "gh1",
+                "pullRequests": [],
                 "key": "GH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -12017,6 +12326,7 @@
               },
               "gn1": {
                 "id": "gn1",
+                "pullRequests": [],
                 "key": "GN1",
                 "projectId": "n1",
                 "kind": "task",
@@ -12046,6 +12356,7 @@
               },
               "dh1": {
                 "id": "dh1",
+                "pullRequests": [],
                 "key": "DH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -12075,6 +12386,7 @@
               },
               "dw1": {
                 "id": "dw1",
+                "pullRequests": [],
                 "key": "DW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -12104,6 +12416,7 @@
               },
               "dw2": {
                 "id": "dw2",
+                "pullRequests": [],
                 "key": "DW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -12133,6 +12446,7 @@
               },
               "far": {
                 "id": "far",
+                "pullRequests": [],
                 "key": "FAR",
                 "projectId": "w1",
                 "kind": "task",
@@ -12284,6 +12598,7 @@
                 "tickets": [
                   {
                     "id": "gw1",
+                    "pullRequests": [],
                     "key": "GW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -12313,6 +12628,7 @@
                   },
                   {
                     "id": "gw2",
+                    "pullRequests": [],
                     "key": "GW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -12342,6 +12658,7 @@
                   },
                   {
                     "id": "gh1",
+                    "pullRequests": [],
                     "key": "GH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -12371,6 +12688,7 @@
                   },
                   {
                     "id": "gn1",
+                    "pullRequests": [],
                     "key": "GN1",
                     "projectId": "n1",
                     "kind": "task",
@@ -12400,6 +12718,7 @@
                   },
                   {
                     "id": "dh1",
+                    "pullRequests": [],
                     "key": "DH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -12438,6 +12757,7 @@
                     "tickets": [
                       {
                         "id": "dw1",
+                        "pullRequests": [],
                         "key": "DW1",
                         "projectId": "w1",
                         "kind": "task",
@@ -12467,6 +12787,7 @@
                       },
                       {
                         "id": "dw2",
+                        "pullRequests": [],
                         "key": "DW2",
                         "projectId": "w2",
                         "kind": "task",
@@ -12729,6 +13050,7 @@
             "tickets": {
               "gw1": {
                 "id": "gw1",
+                "pullRequests": [],
                 "key": "GW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -12758,6 +13080,7 @@
               },
               "gw2": {
                 "id": "gw2",
+                "pullRequests": [],
                 "key": "GW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -12787,6 +13110,7 @@
               },
               "gh1": {
                 "id": "gh1",
+                "pullRequests": [],
                 "key": "GH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -12816,6 +13140,7 @@
               },
               "gn1": {
                 "id": "gn1",
+                "pullRequests": [],
                 "key": "GN1",
                 "projectId": "n1",
                 "kind": "task",
@@ -12845,6 +13170,7 @@
               },
               "dh1": {
                 "id": "dh1",
+                "pullRequests": [],
                 "key": "DH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -12874,6 +13200,7 @@
               },
               "dw1": {
                 "id": "dw1",
+                "pullRequests": [],
                 "key": "DW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -12903,6 +13230,7 @@
               },
               "dw2": {
                 "id": "dw2",
+                "pullRequests": [],
                 "key": "DW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -12978,6 +13306,7 @@
                 "tickets": [
                   {
                     "id": "dw1",
+                    "pullRequests": [],
                     "key": "DW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -13007,6 +13336,7 @@
                   },
                   {
                     "id": "dw2",
+                    "pullRequests": [],
                     "key": "DW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -13108,6 +13438,7 @@
                 "tickets": [
                   {
                     "id": "dw1",
+                    "pullRequests": [],
                     "key": "DW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -13137,6 +13468,7 @@
                   },
                   {
                     "id": "dw2",
+                    "pullRequests": [],
                     "key": "DW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -13304,6 +13636,7 @@
             "tickets": {
               "gw1": {
                 "id": "gw1",
+                "pullRequests": [],
                 "key": "GW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -13333,6 +13666,7 @@
               },
               "gw2": {
                 "id": "gw2",
+                "pullRequests": [],
                 "key": "GW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -13362,6 +13696,7 @@
               },
               "gh1": {
                 "id": "gh1",
+                "pullRequests": [],
                 "key": "GH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -13391,6 +13726,7 @@
               },
               "gn1": {
                 "id": "gn1",
+                "pullRequests": [],
                 "key": "GN1",
                 "projectId": "n1",
                 "kind": "task",
@@ -13420,6 +13756,7 @@
               },
               "dh1": {
                 "id": "dh1",
+                "pullRequests": [],
                 "key": "DH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -13449,6 +13786,7 @@
               },
               "dw1": {
                 "id": "dw1",
+                "pullRequests": [],
                 "key": "DW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -13478,6 +13816,7 @@
               },
               "dw2": {
                 "id": "dw2",
+                "pullRequests": [],
                 "key": "DW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -13618,6 +13957,7 @@
                 "tickets": [
                   {
                     "id": "gw1",
+                    "pullRequests": [],
                     "key": "GW1",
                     "projectId": "w1",
                     "kind": "task",
@@ -13647,6 +13987,7 @@
                   },
                   {
                     "id": "gw2",
+                    "pullRequests": [],
                     "key": "GW2",
                     "projectId": "w2",
                     "kind": "task",
@@ -13676,6 +14017,7 @@
                   },
                   {
                     "id": "gh1",
+                    "pullRequests": [],
                     "key": "GH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -13705,6 +14047,7 @@
                   },
                   {
                     "id": "gn1",
+                    "pullRequests": [],
                     "key": "GN1",
                     "projectId": "n1",
                     "kind": "task",
@@ -13734,6 +14077,7 @@
                   },
                   {
                     "id": "dh1",
+                    "pullRequests": [],
                     "key": "DH1",
                     "projectId": "h1",
                     "kind": "task",
@@ -13772,6 +14116,7 @@
                     "tickets": [
                       {
                         "id": "dw1",
+                        "pullRequests": [],
                         "key": "DW1",
                         "projectId": "w1",
                         "kind": "task",
@@ -13801,6 +14146,7 @@
                       },
                       {
                         "id": "dw2",
+                        "pullRequests": [],
                         "key": "DW2",
                         "projectId": "w2",
                         "kind": "task",
@@ -14006,6 +14352,7 @@
             "tickets": {
               "gw1": {
                 "id": "gw1",
+                "pullRequests": [],
                 "key": "GW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -14035,6 +14382,7 @@
               },
               "gw2": {
                 "id": "gw2",
+                "pullRequests": [],
                 "key": "GW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -14064,6 +14412,7 @@
               },
               "gh1": {
                 "id": "gh1",
+                "pullRequests": [],
                 "key": "GH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -14093,6 +14442,7 @@
               },
               "gn1": {
                 "id": "gn1",
+                "pullRequests": [],
                 "key": "GN1",
                 "projectId": "n1",
                 "kind": "task",
@@ -14122,6 +14472,7 @@
               },
               "dh1": {
                 "id": "dh1",
+                "pullRequests": [],
                 "key": "DH1",
                 "projectId": "h1",
                 "kind": "task",
@@ -14151,6 +14502,7 @@
               },
               "dw1": {
                 "id": "dw1",
+                "pullRequests": [],
                 "key": "DW1",
                 "projectId": "w1",
                 "kind": "task",
@@ -14180,6 +14532,7 @@
               },
               "dw2": {
                 "id": "dw2",
+                "pullRequests": [],
                 "key": "DW2",
                 "projectId": "w2",
                 "kind": "task",
@@ -14247,6 +14600,7 @@
       "input": {
         "ticket": {
           "id": "r1",
+          "pullRequests": [],
           "key": "NEW-4",
           "projectId": "p1",
           "kind": "task",
@@ -14286,6 +14640,7 @@
       "input": {
         "ticket": {
           "id": "r1",
+          "pullRequests": [],
           "key": "NEW-4",
           "projectId": "p1",
           "kind": "task",
@@ -14322,6 +14677,7 @@
       "input": {
         "ticket": {
           "id": "r1",
+          "pullRequests": [],
           "key": "NEW-4",
           "projectId": "p1",
           "kind": "task",
@@ -14361,6 +14717,7 @@
       "input": {
         "ticket": {
           "id": "r1",
+          "pullRequests": [],
           "key": "MH-124",
           "projectId": "p1",
           "kind": "task",
@@ -14402,6 +14759,7 @@
       "input": {
         "ticket": {
           "id": "r2",
+          "pullRequests": [],
           "key": "MH-124",
           "projectId": "p1",
           "kind": "task",
@@ -14438,6 +14796,7 @@
       "input": {
         "ticket": {
           "id": "r3",
+          "pullRequests": [],
           "key": "R3",
           "projectId": "p1",
           "kind": "task",
@@ -14474,6 +14833,7 @@
       "input": {
         "ticket": {
           "id": "r4",
+          "pullRequests": [],
           "key": "R4",
           "projectId": "p1",
           "kind": "task",
@@ -14510,6 +14870,7 @@
       "input": {
         "ticket": {
           "id": "r5",
+          "pullRequests": [],
           "key": "R5",
           "projectId": "p1",
           "kind": "task",
@@ -14546,6 +14907,7 @@
       "input": {
         "ticket": {
           "id": "r6",
+          "pullRequests": [],
           "key": "R6",
           "projectId": "p1",
           "kind": "task",
@@ -14582,6 +14944,7 @@
       "input": {
         "ticket": {
           "id": "r7",
+          "pullRequests": [],
           "key": "R7",
           "projectId": "p1",
           "kind": "task",
@@ -14618,6 +14981,7 @@
       "input": {
         "ticket": {
           "id": "r8",
+          "pullRequests": [],
           "key": "R8",
           "projectId": "p1",
           "kind": "task",
@@ -14663,6 +15027,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -14692,6 +15057,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -14721,6 +15087,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -14759,6 +15126,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -14788,6 +15156,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -14817,6 +15186,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -14846,6 +15216,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -14875,6 +15246,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -14954,6 +15326,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -14983,6 +15356,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -15012,6 +15386,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -15041,6 +15416,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -15070,6 +15446,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -15099,6 +15476,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -15128,6 +15506,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -15157,6 +15536,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -15233,6 +15613,7 @@
                 "tickets": [
                   {
                     "id": "far",
+                    "pullRequests": [],
                     "key": "FAR",
                     "projectId": "p1",
                     "kind": "task",
@@ -15262,6 +15643,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -15335,6 +15717,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -15364,6 +15747,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -15393,6 +15777,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -15422,6 +15807,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -15451,6 +15837,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -15480,6 +15867,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -15509,6 +15897,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -15538,6 +15927,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -15567,6 +15957,7 @@
               },
               "far": {
                 "id": "far",
+                "pullRequests": [],
                 "key": "FAR",
                 "projectId": "p1",
                 "kind": "task",
@@ -15650,6 +16041,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -15679,6 +16071,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -15708,6 +16101,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -15746,6 +16140,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -15775,6 +16170,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -15804,6 +16200,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -15833,6 +16230,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -15862,6 +16260,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -15919,6 +16318,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -15961,6 +16361,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -15990,6 +16391,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -16019,6 +16421,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -16048,6 +16451,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -16077,6 +16481,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -16106,6 +16511,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -16135,6 +16541,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -16164,6 +16571,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -16240,6 +16648,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -16282,6 +16691,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -16311,6 +16721,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -16340,6 +16751,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -16369,6 +16781,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -16398,6 +16811,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -16427,6 +16841,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -16456,6 +16871,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -16485,6 +16901,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -16561,6 +16978,7 @@
                 "tickets": [
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -16603,6 +17021,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -16632,6 +17051,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -16661,6 +17081,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -16690,6 +17111,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -16719,6 +17141,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -16748,6 +17171,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -16777,6 +17201,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -16806,6 +17231,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -16888,6 +17314,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -16917,6 +17344,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -16946,6 +17374,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -16984,6 +17413,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -17013,6 +17443,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -17042,6 +17473,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -17071,6 +17503,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -17100,6 +17533,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -17147,6 +17581,7 @@
                 "tickets": [
                   {
                     "id": "d0",
+                    "pullRequests": [],
                     "key": "D0",
                     "projectId": "p1",
                     "kind": "task",
@@ -17176,6 +17611,7 @@
                   },
                   {
                     "id": "d1",
+                    "pullRequests": [],
                     "key": "D1",
                     "projectId": "p1",
                     "kind": "task",
@@ -17268,6 +17704,7 @@
                 "tickets": [
                   {
                     "id": "d1",
+                    "pullRequests": [],
                     "key": "D1",
                     "projectId": "p1",
                     "kind": "task",
@@ -17297,6 +17734,7 @@
                   },
                   {
                     "id": "d2",
+                    "pullRequests": [],
                     "key": "D2",
                     "projectId": "p1",
                     "kind": "task",
@@ -17370,6 +17808,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -17399,6 +17838,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -17428,6 +17868,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -17457,6 +17898,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -17486,6 +17928,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -17515,6 +17958,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -17544,6 +17988,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -17573,6 +18018,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -17602,6 +18048,7 @@
               },
               "d0": {
                 "id": "d0",
+                "pullRequests": [],
                 "key": "D0",
                 "projectId": "p1",
                 "kind": "task",
@@ -17631,6 +18078,7 @@
               },
               "d1": {
                 "id": "d1",
+                "pullRequests": [],
                 "key": "D1",
                 "projectId": "p1",
                 "kind": "task",
@@ -17660,6 +18108,7 @@
               },
               "d2": {
                 "id": "d2",
+                "pullRequests": [],
                 "key": "D2",
                 "projectId": "p1",
                 "kind": "task",
@@ -17744,6 +18193,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -17773,6 +18223,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -17802,6 +18253,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -17840,6 +18292,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -17869,6 +18322,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -17898,6 +18352,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -17927,6 +18382,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -17956,6 +18412,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -18003,6 +18460,7 @@
                 "tickets": [
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -18047,6 +18505,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "w2",
+                  "pullRequests": [],
                   "key": "W2",
                   "projectId": "p1",
                   "kind": "task",
@@ -18133,6 +18592,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -18162,6 +18622,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -18191,6 +18652,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -18220,6 +18682,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -18249,6 +18712,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -18278,6 +18742,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -18307,6 +18772,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -18389,6 +18855,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -18418,6 +18885,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -18447,6 +18915,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -18485,6 +18954,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -18514,6 +18984,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -18543,6 +19014,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -18572,6 +19044,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -18601,6 +19074,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -18648,6 +19122,7 @@
                 "tickets": [
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -18693,6 +19168,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -18731,6 +19207,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -18760,6 +19237,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -18789,6 +19267,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -18818,6 +19297,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -18847,6 +19327,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -18917,6 +19398,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -18946,6 +19428,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -18975,6 +19458,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -19004,6 +19488,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -19033,6 +19518,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -19062,6 +19548,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -19181,6 +19668,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -19210,6 +19698,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -19239,6 +19728,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -19268,6 +19758,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -19297,6 +19788,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -19326,6 +19818,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -19398,6 +19891,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -19427,6 +19921,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -19456,6 +19951,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -19494,6 +19990,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -19523,6 +20020,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -19552,6 +20050,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -19581,6 +20080,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -19610,6 +20110,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -19657,6 +20158,7 @@
                 "tickets": [
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -19704,6 +20206,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -19733,6 +20236,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -19762,6 +20266,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -19791,6 +20296,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -19820,6 +20326,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -19849,6 +20356,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -19878,6 +20386,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -19907,6 +20416,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -20013,6 +20523,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -20042,6 +20553,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -20071,6 +20583,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -20100,6 +20613,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -20129,6 +20643,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -20158,6 +20673,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -20187,6 +20703,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -20216,6 +20733,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -20296,6 +20814,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -20325,6 +20844,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -20354,6 +20874,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -20392,6 +20913,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -20421,6 +20943,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -20450,6 +20973,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -20479,6 +21003,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -20508,6 +21033,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -20555,6 +21081,7 @@
                 "tickets": [
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -20597,6 +21124,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -20626,6 +21154,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -20655,6 +21184,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -20684,6 +21214,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -20713,6 +21244,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -20742,6 +21274,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -20771,6 +21304,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -20800,6 +21334,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -20880,6 +21415,7 @@
                 "tickets": [
                   {
                     "id": "w1",
+                    "pullRequests": [],
                     "key": "W1",
                     "projectId": "p1",
                     "kind": "task",
@@ -20909,6 +21445,7 @@
                   },
                   {
                     "id": "c1",
+                    "pullRequests": [],
                     "key": "C1",
                     "projectId": "p1",
                     "kind": "task",
@@ -20938,6 +21475,7 @@
                   },
                   {
                     "id": "w2",
+                    "pullRequests": [],
                     "key": "W2",
                     "projectId": "p1",
                     "kind": "task",
@@ -20976,6 +21514,7 @@
                     "tickets": [
                       {
                         "id": "d11",
+                        "pullRequests": [],
                         "key": "D11",
                         "projectId": "p1",
                         "kind": "task",
@@ -21005,6 +21544,7 @@
                       },
                       {
                         "id": "d10",
+                        "pullRequests": [],
                         "key": "D10",
                         "projectId": "p1",
                         "kind": "task",
@@ -21034,6 +21574,7 @@
                       },
                       {
                         "id": "d9",
+                        "pullRequests": [],
                         "key": "D9",
                         "projectId": "p1",
                         "kind": "task",
@@ -21063,6 +21604,7 @@
                       },
                       {
                         "id": "d8",
+                        "pullRequests": [],
                         "key": "D8",
                         "projectId": "p1",
                         "kind": "task",
@@ -21092,6 +21634,7 @@
                       },
                       {
                         "id": "d7",
+                        "pullRequests": [],
                         "key": "D7",
                         "projectId": "p1",
                         "kind": "task",
@@ -21158,6 +21701,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -21187,6 +21731,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -21216,6 +21761,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -21245,6 +21791,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -21274,6 +21821,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -21303,6 +21851,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -21332,6 +21881,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -21361,6 +21911,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -21443,6 +21994,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -21472,6 +22024,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -21501,6 +22054,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -21530,6 +22084,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -21559,6 +22114,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -21588,6 +22144,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -21617,6 +22174,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -21646,6 +22204,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -21734,6 +22293,7 @@
             "tickets": {
               "w1": {
                 "id": "w1",
+                "pullRequests": [],
                 "key": "W1",
                 "projectId": "p1",
                 "kind": "task",
@@ -21763,6 +22323,7 @@
               },
               "c1": {
                 "id": "c1",
+                "pullRequests": [],
                 "key": "C1",
                 "projectId": "p1",
                 "kind": "task",
@@ -21792,6 +22353,7 @@
               },
               "w2": {
                 "id": "w2",
+                "pullRequests": [],
                 "key": "W2",
                 "projectId": "p1",
                 "kind": "task",
@@ -21821,6 +22383,7 @@
               },
               "d11": {
                 "id": "d11",
+                "pullRequests": [],
                 "key": "D11",
                 "projectId": "p1",
                 "kind": "task",
@@ -21850,6 +22413,7 @@
               },
               "d10": {
                 "id": "d10",
+                "pullRequests": [],
                 "key": "D10",
                 "projectId": "p1",
                 "kind": "task",
@@ -21879,6 +22443,7 @@
               },
               "d9": {
                 "id": "d9",
+                "pullRequests": [],
                 "key": "D9",
                 "projectId": "p1",
                 "kind": "task",
@@ -21908,6 +22473,7 @@
               },
               "d8": {
                 "id": "d8",
+                "pullRequests": [],
                 "key": "D8",
                 "projectId": "p1",
                 "kind": "task",
@@ -21937,6 +22503,7 @@
               },
               "d7": {
                 "id": "d7",
+                "pullRequests": [],
                 "key": "D7",
                 "projectId": "p1",
                 "kind": "task",
@@ -22017,6 +22584,7 @@
                 "tickets": [
                   {
                     "id": "r1",
+                    "pullRequests": [],
                     "key": "NEW-4",
                     "projectId": "p1",
                     "kind": "task",
@@ -22056,6 +22624,7 @@
               "detail": {
                 "ticket": {
                   "id": "r1",
+                  "pullRequests": [],
                   "key": "NEW-4",
                   "projectId": "p1",
                   "kind": "task",
@@ -22167,6 +22736,7 @@
             "tickets": {
               "r1": {
                 "id": "r1",
+                "pullRequests": [],
                 "key": "NEW-4",
                 "projectId": "p1",
                 "kind": "task",
@@ -22350,6 +22920,7 @@
                 "tickets": [
                   {
                     "id": "a",
+                    "pullRequests": [],
                     "key": "A",
                     "projectId": "p1",
                     "kind": "task",
@@ -22444,6 +23015,7 @@
               "detail": {
                 "ticket": {
                   "id": "d5",
+                  "pullRequests": [],
                   "key": "D5",
                   "projectId": "p1",
                   "kind": "task",
@@ -22555,6 +23127,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -22588,6 +23161,7 @@
               },
               "d5": {
                 "id": "d5",
+                "pullRequests": [],
                 "key": "D5",
                 "projectId": "p1",
                 "kind": "task",
@@ -22680,6 +23254,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -22740,6 +23315,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -22805,6 +23381,7 @@
                 "tickets": [
                   {
                     "id": "a",
+                    "pullRequests": [],
                     "key": "A",
                     "projectId": "p1",
                     "kind": "task",
@@ -22867,6 +23444,7 @@
               "detail": {
                 "ticket": {
                   "id": "r",
+                  "pullRequests": [],
                   "key": "NEW-7",
                   "projectId": "p1",
                   "kind": "task",
@@ -22953,6 +23531,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -22984,6 +23563,7 @@
               },
               "r": {
                 "id": "r",
+                "pullRequests": [],
                 "key": "NEW-7",
                 "projectId": "p1",
                 "kind": "task",
@@ -23242,6 +23822,7 @@
                 "tickets": [
                   {
                     "id": "cond",
+                    "pullRequests": [],
                     "key": "COND",
                     "projectId": "p1",
                     "kind": "conductor",
@@ -23271,6 +23852,7 @@
                   },
                   {
                     "id": "k1",
+                    "pullRequests": [],
                     "key": "K1",
                     "projectId": "p1",
                     "kind": "task",
@@ -23331,6 +23913,7 @@
               "detail": {
                 "ticket": {
                   "id": "cond",
+                  "pullRequests": [],
                   "key": "COND",
                   "projectId": "p1",
                   "kind": "conductor",
@@ -23378,6 +23961,7 @@
                 "children": [
                   {
                     "id": "k1",
+                    "pullRequests": [],
                     "key": "K1",
                     "projectId": "p1",
                     "kind": "task",
@@ -23407,6 +23991,7 @@
                   },
                   {
                     "id": "k2",
+                    "pullRequests": [],
                     "key": "K2",
                     "projectId": "p1",
                     "kind": "task",
@@ -23436,6 +24021,7 @@
                   },
                   {
                     "id": "k3",
+                    "pullRequests": [],
                     "key": "K3",
                     "projectId": "p1",
                     "kind": "task",
@@ -23502,6 +24088,7 @@
             "tickets": {
               "cond": {
                 "id": "cond",
+                "pullRequests": [],
                 "key": "COND",
                 "projectId": "p1",
                 "kind": "conductor",
@@ -23531,6 +24118,7 @@
               },
               "k1": {
                 "id": "k1",
+                "pullRequests": [],
                 "key": "K1",
                 "projectId": "p1",
                 "kind": "task",
@@ -23560,6 +24148,7 @@
               },
               "k2": {
                 "id": "k2",
+                "pullRequests": [],
                 "key": "K2",
                 "projectId": "p1",
                 "kind": "task",
@@ -23589,6 +24178,7 @@
               },
               "k3": {
                 "id": "k3",
+                "pullRequests": [],
                 "key": "K3",
                 "projectId": "p1",
                 "kind": "task",
@@ -23682,6 +24272,7 @@
                 "tickets": [
                   {
                     "id": "task",
+                    "pullRequests": [],
                     "key": "TASK",
                     "projectId": "p1",
                     "kind": "task",
@@ -23741,6 +24332,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "task",
+                  "pullRequests": [],
                   "key": "TASK",
                   "projectId": "p1",
                   "kind": "task",
@@ -23789,6 +24381,7 @@
               "detail": {
                 "ticket": {
                   "id": "task",
+                  "pullRequests": [],
                   "key": "TASK",
                   "projectId": "p1",
                   "kind": "task",
@@ -23837,6 +24430,7 @@
                 "children": [
                   {
                     "id": "k1",
+                    "pullRequests": [],
                     "key": "K1",
                     "projectId": "p1",
                     "kind": "task",
@@ -23882,6 +24476,7 @@
             "tickets": {
               "task": {
                 "id": "task",
+                "pullRequests": [],
                 "key": "TASK",
                 "projectId": "p1",
                 "kind": "task",
@@ -23912,6 +24507,7 @@
               },
               "k1": {
                 "id": "k1",
+                "pullRequests": [],
                 "key": "K1",
                 "projectId": "p1",
                 "kind": "task",
@@ -24005,6 +24601,7 @@
                 "tickets": [
                   {
                     "id": "base",
+                    "pullRequests": [],
                     "key": "B-1",
                     "projectId": "p1",
                     "kind": "task",
@@ -24034,6 +24631,7 @@
                   },
                   {
                     "id": "l",
+                    "pullRequests": [],
                     "key": "L-1",
                     "projectId": "p1",
                     "kind": "task",
@@ -24101,6 +24699,7 @@
               "detail": {
                 "ticket": {
                   "id": "base",
+                  "pullRequests": [],
                   "key": "B-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -24187,6 +24786,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "l",
+                  "pullRequests": [],
                   "key": "L-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -24238,6 +24838,7 @@
             "tickets": {
               "base": {
                 "id": "base",
+                "pullRequests": [],
                 "key": "B-1",
                 "projectId": "p1",
                 "kind": "task",
@@ -24267,6 +24868,7 @@
               },
               "l": {
                 "id": "l",
+                "pullRequests": [],
                 "key": "L-1",
                 "projectId": "p1",
                 "kind": "task",
@@ -24362,6 +24964,7 @@
                 "tickets": [
                   {
                     "id": "base",
+                    "pullRequests": [],
                     "key": "B-1",
                     "projectId": "p1",
                     "kind": "task",
@@ -24391,6 +24994,7 @@
                   },
                   {
                     "id": "x10",
+                    "pullRequests": [],
                     "key": "X-10",
                     "projectId": "p1",
                     "kind": "task",
@@ -24422,6 +25026,7 @@
                   },
                   {
                     "id": "x9",
+                    "pullRequests": [],
                     "key": "X-9",
                     "projectId": "p1",
                     "kind": "task",
@@ -24453,6 +25058,7 @@
                   },
                   {
                     "id": "a2",
+                    "pullRequests": [],
                     "key": "A-2",
                     "projectId": "p1",
                     "kind": "task",
@@ -24527,6 +25133,7 @@
             "tickets": {
               "base": {
                 "id": "base",
+                "pullRequests": [],
                 "key": "B-1",
                 "projectId": "p1",
                 "kind": "task",
@@ -24556,6 +25163,7 @@
               },
               "x10": {
                 "id": "x10",
+                "pullRequests": [],
                 "key": "X-10",
                 "projectId": "p1",
                 "kind": "task",
@@ -24587,6 +25195,7 @@
               },
               "x9": {
                 "id": "x9",
+                "pullRequests": [],
                 "key": "X-9",
                 "projectId": "p1",
                 "kind": "task",
@@ -24618,6 +25227,7 @@
               },
               "a2": {
                 "id": "a2",
+                "pullRequests": [],
                 "key": "A-2",
                 "projectId": "p1",
                 "kind": "task",
@@ -24692,6 +25302,7 @@
                 "tickets": [
                   {
                     "id": "kid",
+                    "pullRequests": [],
                     "key": "KID",
                     "projectId": "p1",
                     "kind": "task",
@@ -24752,6 +25363,7 @@
               "detail": {
                 "ticket": {
                   "id": "kid",
+                  "pullRequests": [],
                   "key": "KID",
                   "projectId": "p1",
                   "kind": "task",
@@ -24799,6 +25411,7 @@
                 "children": [],
                 "parent": {
                   "id": "cond",
+                  "pullRequests": [],
                   "key": "COND",
                   "projectId": "p1",
                   "kind": "conductor",
@@ -24845,6 +25458,7 @@
             "tickets": {
               "kid": {
                 "id": "kid",
+                "pullRequests": [],
                 "key": "KID",
                 "projectId": "p1",
                 "kind": "task",
@@ -24874,6 +25488,7 @@
               },
               "cond": {
                 "id": "cond",
+                "pullRequests": [],
                 "key": "COND",
                 "projectId": "p1",
                 "kind": "conductor",
@@ -24973,6 +25588,7 @@
                     "tickets": [
                       {
                         "id": "a",
+                        "pullRequests": [],
                         "key": "A",
                         "projectId": "p1",
                         "kind": "task",
@@ -25002,6 +25618,7 @@
                       },
                       {
                         "id": "b",
+                        "pullRequests": [],
                         "key": "B",
                         "projectId": "p1",
                         "kind": "task",
@@ -25056,6 +25673,7 @@
                     "tickets": [
                       {
                         "id": "z",
+                        "pullRequests": [],
                         "key": "Z",
                         "projectId": "p1",
                         "kind": "task",
@@ -25085,6 +25703,7 @@
                       },
                       {
                         "id": "a",
+                        "pullRequests": [],
                         "key": "A",
                         "projectId": "p1",
                         "kind": "task",
@@ -25128,6 +25747,7 @@
             "tickets": {
               "z": {
                 "id": "z",
+                "pullRequests": [],
                 "key": "Z",
                 "projectId": "p1",
                 "kind": "task",
@@ -25157,6 +25777,7 @@
               },
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -25224,6 +25845,7 @@
                 "tickets": [
                   {
                     "id": "old",
+                    "pullRequests": [],
                     "key": "OLD",
                     "projectId": "p1",
                     "kind": "task",
@@ -25267,6 +25889,7 @@
             "tickets": {
               "z": {
                 "id": "z",
+                "pullRequests": [],
                 "key": "Z",
                 "projectId": "p1",
                 "kind": "task",
@@ -25296,6 +25919,7 @@
               },
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -25363,6 +25987,7 @@
                 "tickets": [
                   {
                     "id": "y",
+                    "pullRequests": [],
                     "key": "Y",
                     "projectId": "p1",
                     "kind": "task",
@@ -25406,6 +26031,7 @@
             "tickets": {
               "z": {
                 "id": "z",
+                "pullRequests": [],
                 "key": "Z",
                 "projectId": "p1",
                 "kind": "task",
@@ -25435,6 +26061,7 @@
               },
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -25464,6 +26091,7 @@
               },
               "y": {
                 "id": "y",
+                "pullRequests": [],
                 "key": "Y",
                 "projectId": "p1",
                 "kind": "task",
@@ -25544,6 +26172,7 @@
                     "tickets": [
                       {
                         "id": "a",
+                        "pullRequests": [],
                         "key": "A",
                         "projectId": "p1",
                         "kind": "task",
@@ -25585,6 +26214,7 @@
                 "tickets": [
                   {
                     "id": "x",
+                    "pullRequests": [],
                     "key": "X",
                     "projectId": "p1",
                     "kind": "task",
@@ -25628,6 +26258,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -25695,6 +26326,7 @@
                 "tickets": [
                   {
                     "id": "y",
+                    "pullRequests": [],
                     "key": "Y",
                     "projectId": "p1",
                     "kind": "task",
@@ -25736,6 +26368,7 @@
                 "tickets": [
                   {
                     "id": "w",
+                    "pullRequests": [],
                     "key": "W",
                     "projectId": "p1",
                     "kind": "task",
@@ -25779,6 +26412,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -25808,6 +26442,7 @@
               },
               "y": {
                 "id": "y",
+                "pullRequests": [],
                 "key": "Y",
                 "projectId": "p1",
                 "kind": "task",
@@ -25837,6 +26472,7 @@
               },
               "w": {
                 "id": "w",
+                "pullRequests": [],
                 "key": "W",
                 "projectId": "p1",
                 "kind": "task",

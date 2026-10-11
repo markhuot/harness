@@ -746,6 +746,15 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX driver_calls_session ON driver_calls(session_id, id);
   `,
+  // 42: tickets.pull_requests, the ticket's list of pull requests as JSON: [{ url, title,
+  //     titleCheckedAt }] (DESIGN.md "Pull requests"). The one link pull_request_url held becomes a
+  //     one-item list with no title; the service fetches it on start. pull_request_url is no longer
+  //     read or written.
+  `
+  ALTER TABLE tickets ADD COLUMN pull_requests TEXT NOT NULL DEFAULT '[]';
+  UPDATE tickets SET pull_requests = json_array(json_object('url', pull_request_url, 'title', NULL, 'titleCheckedAt', NULL))
+    WHERE pull_request_url IS NOT NULL AND trim(pull_request_url) <> '';
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

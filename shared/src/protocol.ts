@@ -294,8 +294,15 @@ export interface Ticket {
   /** The approver's instructions for the completion run, kept with `completionAction`. */
   completionInstructions?: string | null;
   /**
-   * The pull request a "pr" completion opened (the agent records it with record_pull_request).
-   * Later approvals of the ticket default to "pr", so they update the same pull request.
+   * The ticket's pull requests, in the order they were added. Agents set them with update_ticket
+   * (or record_pull_request in a completion), humans on the Details tab. Every link is equal; a
+   * ticket with any link defaults its approval to cleanup. A title is fetched from GitHub and is
+   * null until then (or when it can't be fetched).
+   */
+  pullRequests: PullRequestLink[];
+  /**
+   * The most recently added pull request's URL, kept on the wire for app builds from before
+   * `pullRequests`. Read-only: set the list instead.
    */
   pullRequestUrl?: string | null;
   /**
@@ -443,6 +450,15 @@ export interface RelatedTicket {
   projectId: string;
   /** The remote ID it carries */
   externalKey: string;
+}
+
+/**
+ * One of a ticket's pull requests. The title comes from GitHub (`gh pr view`), so it can't be set
+ * by hand; it's null until fetched, or when it can't be fetched.
+ */
+export interface PullRequestLink {
+  url: string;
+  title: string | null;
 }
 
 /**
@@ -1623,6 +1639,12 @@ export interface UpdateTicketBody {
   position?: number;
   /** Link the ticket to a remote ID by hand (source "manual"), or null to unlink it */
   externalRef?: ExternalRefInput | null;
+  /**
+   * The ticket's pull request URLs, replacing the list (like dependsOn). [] clears it. Titles are
+   * never accepted: the service fetches them for each URL it adds. Duplicates are dropped and the
+   * order kept.
+   */
+  pullRequestUrls?: string[];
   /** Drafts only (409 otherwise): what the ticket is, fixed once it launches */
   kind?: TicketKind;
   /** Drafts only (409 otherwise): Ticket.useWorktree, fixed once it launches */
