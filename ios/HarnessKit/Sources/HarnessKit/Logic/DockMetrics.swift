@@ -3,8 +3,8 @@ import Foundation
 /// The dock's measurements and labels (TicketDock, DockedCardStack): what sim-check's dock checks
 /// used to recompute from the screen.
 public enum DockMetrics {
-    /// One docked card's height.
-    public static let height: CGFloat = 64
+    /// One docked card's height: the ✕'s 44pt tap target with 4pt above and below.
+    public static let height: CGFloat = 52
     /// The gap between stacked cards.
     public static let spacing: CGFloat = 8
     /// How far the board's bottom bar sits above the docked cards, the same on every phone.

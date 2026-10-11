@@ -40,6 +40,13 @@ struct TicketSheetHost: View {
     /// is laid out again (a header that resizes, a transcript that snaps back to its bottom).
     /// Without one yet, the live size.
     @State private var fullSize: CGSize?
+    /// How much the system shrinks the docked sheet from the width it lays it out at to the width it
+    /// floats at. The sheet (not just the card in it) comes out that much smaller, so its dock detent
+    /// is that much taller, for the sheet to show one card's height like the cards above it.
+    @State private var dockScale: CGFloat = 1
+    /// The height the sheet is drawn at, on screen.
+    @State private var drawnHeight: CGFloat = 0
+    private var dockDetent: PresentationDetent { .height(TicketDock.height / dockScale) }
 
     var body: some View {
         let current = router.ticketSheet ?? router.dock
@@ -68,6 +75,15 @@ struct TicketSheetHost: View {
                     TicketDock(sheet: sheet)
                         .frame(height: geo.size.height)
                         .zIndex(2)
+                    // The sheet's height as drawn, after the system's shrink (the card undoes its
+                    // own), for sim-check.
+                    Color.clear
+                        .frame(height: geo.size.height)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).height } action: { drawnHeight = $0 }
+                        .allowsHitTesting(false)
+                        .accessibilityElement()
+                        .accessibilityIdentifier("ticket-dock-sheet")
+                        .accessibilityValue(String(Int(drawnHeight.rounded())))
                 }
             }
             // Behind the keyboard too, so its rounded corners show the sheet's background, not the
@@ -96,6 +112,11 @@ struct TicketSheetHost: View {
             // where it rests: a sheet under a finger (from `.large`, or the dock dragged up or
             // away) would move the board's bar and clearance with it every frame. Let go, the
             // system lays it out where it's headed.
+            .onGeometryChange(for: CGFloat.self) { g in
+                docked && g.size.width > 0 ? min(1, max(0.5, g.frame(in: .global).width / g.size.width)) : 0
+            } action: { s in
+                if s > 0, !flick.isDragging, abs(s - dockScale) > 0.005 { dockScale = s }
+            }
             .onGeometryChange(for: CGRect?.self) { g in docked ? g.frame(in: .global) : nil } action: { f in
                 guard let f, !flick.isDragging else { return }
                 dockInset.sides = f.minX
@@ -112,9 +133,10 @@ struct TicketSheetHost: View {
         // Switching tickets mustn't leave the keyboard up for the one now hidden.
         .onChange(of: current?.id) { resignFirstResponder() }
         .onChange(of: router.ticketSheetState, initial: true) { _, s in if s != .gone { lastDocked = s == .docked } }
-        .presentationDetents([TicketDock.detent, .large], selection: detent)
-        .presentationBackgroundInteraction(.enabled(upThrough: TicketDock.detent))
-        .presentationDragIndicator(.visible)
+        .presentationDetents([dockDetent, .large], selection: detent)
+        .presentationBackgroundInteraction(.enabled(upThrough: dockDetent))
+        // Docked it opens with a tap, not a drag: no grabber.
+        .presentationDragIndicator(router.ticketSheetState == .docked ? .hidden : .visible)
         .sheet(item: Binding(get: { router.sheet }, set: { router.sheet = $0 })) { sheet in
             SheetHost(sheet: sheet)
                 .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }
@@ -143,13 +165,13 @@ struct TicketSheetHost: View {
         Binding(get: {
                     _ = restoreEpoch
                     return switch router.ticketSheetState {
-                    case .gone: lastDocked ? TicketDock.detent : .large
-                    case .docked: TicketDock.detent
+                    case .gone: lastDocked ? dockDetent : .large
+                    case .docked: dockDetent
                     case .presented: .large
                     }
                 },
                 set: { new in
-                    guard new == TicketDock.detent else { return router.restoreDock() }
+                    guard new == dockDetent else { return router.restoreDock() }
                     guard router.ticketSheetState == .presented else { return router.dockSheet() }
                     flick.settled { carry(out: $0) }
                 })
@@ -405,10 +427,10 @@ extension View {
 struct TicketDock: View {
     let sheet: TicketSheet
     @Environment(Router.self) private var router
+    @State private var scale: CGFloat = 1
 
     /// The sheet's height while docked: one card's.
     static let height = DockedCardMetrics.height
-    static let detent = PresentationDetent.height(height)
     /// How far the board's bottom bar sits above the docked cards, the same on every phone.
     static let barGap = DockMetrics.barGap
 
@@ -423,10 +445,20 @@ struct TicketDock: View {
     }
 
     var body: some View {
-        DockedCard(sheet: sheet, glass: false, open: { router.restoreDock() }, close: { router.dismissSheet() })
-            .frame(maxHeight: .infinity, alignment: .top)
-            .accessibilityAction(named: "Next docked ticket") { TicketDock.step(router, .next) }
-            .accessibilityAction(named: "Previous docked ticket") { TicketDock.step(router, .previous) }
+        GeometryReader { g in
+            DockedCard(sheet: sheet, glass: false, open: { router.restoreDock() }, close: { router.dismissSheet() })
+                .frame(width: g.size.width * scale, height: DockedCardMetrics.height)
+                .scaleEffect(1 / scale, anchor: .topLeading)
+                .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
+        }
+        // The system lays the docked sheet out at the screen's width and shrinks it to its floating
+        // width. Laid out as is, the card would come out smaller than the ones above it (smaller
+        // text, a shorter pill): lay it out at the width it shows and undo the shrink.
+        .onGeometryChange(for: CGFloat.self) { g in
+            g.size.width > 0 ? min(1, max(0.5, g.frame(in: .global).width / g.size.width)) : 1
+        } action: { scale = $0 }
+        .accessibilityAction(named: "Next docked ticket") { TicketDock.step(router, .next) }
+        .accessibilityAction(named: "Previous docked ticket") { TicketDock.step(router, .previous) }
     }
 
     /// The next or previous docked ticket on top: a swipe along the dock (SheetFlickTracker) or

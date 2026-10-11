@@ -451,7 +451,7 @@ Opening a parked one mounts it fresh at its saved path, and the live sheet used 
 parks.
 
 Docked tickets show as custom minimized cards rather than system menus (App/DockedTickets.swift).
-A `DockedCard` is its own fully rounded glass capsule, 64pt tall like the single docked sheet
+A `DockedCard` is its own fully rounded glass capsule, 52pt tall like the single docked sheet
 (`DockedCardMetrics`, 8pt between cards), with a status dot (`StatusDot`, the board's colors: green
 done, red blocked; a pencil for New session), the ref whole and the title truncated into the rest
 (`DockedTicketLabel`), and an ✕ that closes just that ticket; a tap anywhere else opens it. It's one accessibility element,
@@ -486,7 +486,7 @@ tickets swaps the content in place without presenting it again. Swiping the shee
 dismissing it) calls `dismissSheet()`; with tickets left, the generation goes up and a new system
 sheet comes up docked with the next. TicketSheetHost presents pickers, the watcher form and covers
 over itself; the board's bottom bar and `DockClearance` make room for the docked sheet. Docked, the
-sheet (`TicketDock`) is the top ticket's card on the system sheet's own glass, 64pt as the single
+sheet (`TicketDock`) is the top ticket's card on the system sheet's own glass, 52pt as the single
 dock always was. The other docked tickets stack above it in the main window (`DockedCardsAbove`,
 an overlay on the compact sections): glass capsules as wide as the docked sheet and 8pt above it,
 laid out from where the sheet floats (`DockedSheetInset`), up to two cards in all with the sheet's,
