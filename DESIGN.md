@@ -410,7 +410,8 @@ must state the outcome on its own ("Approved, with three open questions in the s
 all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (an open
 question for the human, a follow-up) under the spec's Open questions; `update_spec` is refused, and
 the Goal, Plan and Status stay the author's. `get_ticket` has the full Activity and each
-attachment's path.
+attachment's path. When the run's model differs from the Adviser phase's (see "Per-phase
+choices"), the reviewer verifies first, then asks an adviser subagent whether the code is sound.
 
 ### Skipping the agent review
 
@@ -1500,8 +1501,8 @@ change invalidates. `GET /drivers` does not include models (listing can spawn th
 - **dummy**: `dummy-fast` (default) and `dummy-slow` (10× the per-word delay, ≥ 50 ms); any other
   model fails the run.
 
-**Per-phase choices.** Each run phase (`PHASES`: `plan`, `work`, `review`, `complete`; conductor
-and chat runs use `work`) has its own driver + model choice, `PhaseChoice { driver, model | null }`
+**Per-phase choices.** Each phase (`PHASES`: `plan`, `work`, `review`, `adviser`, `complete`;
+conductor and chat runs use `work`) has its own driver + model choice, `PhaseChoice { driver, model | null }`
 (`null` = the driver's default), held in `phaseModels` on app settings, each project and each
 ticket (`shared/src/phases.ts`). A phase resolves on its own, most specific first: ticket →
 project → settings; a level without a choice for that phase inherits. Settings always resolve
@@ -1526,9 +1527,31 @@ ticket-level override therefore shows on its runs. Triage runs (no phase) and ru
 have no default and always show both. The default is resolved when the list is drawn, so a later
 settings change can add or drop chips on old runs; the stored driver and model stay accurate.
 
-Out of the box only **Complete** has a choice: Haiku on the default driver (`haiku` on
-claude-code, `claude-haiku-5-5` on anthropic-api), seeded once by migration 38 with `INSERT OR
-IGNORE`, so a user's later clear sticks. PATCH bodies and tools merge `phaseModels` /
+A new install starts on tiers (`builtinPhaseModels`): Sonnet plans, works and reviews, **Opus**
+advises and **Haiku** completes (`sonnet` / `opus` / `haiku` on claude-code, `claude-sonnet-5-5` /
+`claude-opus-5-5` / `claude-haiku-5-5` on anthropic-api), seeded once by migration 38 with `INSERT
+OR IGNORE`, so a user's later clear sticks. A database that already has saved model settings
+(`defaultDriver`, `defaultModels` or `reviewModels`) only gets Complete, so nobody's choices change.
+
+**The Adviser phase.** Adviser isn't a run kind: no run maps to it (`runPhase` never returns it),
+and planning and review runs only read it. When all three hold, the run's system prompt gets an
+adviser block (`Orchestrator.adviserInfo`, `adviserFor` in `shared/src/phases.ts`): the run's
+driver launches subagents on another model (`Driver.adviserTool`, claude-code only), the Adviser
+phase resolves to that same driver, and its model is named and differs from the run's own.
+Otherwise the run gets the single-tier prompt: the model set to Opus everywhere, the
+anthropic-api and Copilot drivers, or an adviser on another driver. The block tells the agent
+which model to pass the `Agent` tool and when to escalate. There is no size gate and nothing on
+the service checks that the adviser ran; the prompt says to escalate by default and skip only a
+change clearly limited to UI or copy. In **review** the adviser comes after verification (tests,
+typecheck, the spec, screenshots, the changelog entry) and never on a diff that is about to
+change; it judges soundness from a small brief and returns a numbered list with file, line and
+severity, which the reviewer passes to `review_decision { adviser_findings }` verbatim. They are
+appended to the notes under an `### Adviser review` heading, so they reach Activity and the
+author unedited. In **planning** the planner consults the adviser on the first draft and later
+only when feedback changes the approach (planning runs resume one conversation, so the prompt
+states both rules); its advice is folded into the plan or recorded under Open questions. Claude
+Code runs the planning and review runs with `Agent` and `Task` in `--allowedTools`, so
+`dontAsk` (read-only) mode and the review's missing approver don't deny the launch. PATCH bodies and tools merge `phaseModels` /
 `phase_models` per phase (`null` clears one); validation checks phase names, known drivers and
 model ids. Migration 38 also turned the old choices into phases: the settings, project and ticket
 driver + model became that level's Plan/Work/Review choice, `settings.reviewModels` the settings'

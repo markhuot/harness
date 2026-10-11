@@ -9,7 +9,20 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- A new **Adviser** model setting sits next to Planning, Work, Review and Complete, in the Mac and iPhone/iPad model pickers for Settings, a project and a ticket (and in the `update_settings` tool). Planning and review runs on Claude Code launch an adviser subagent on that model when it differs from the run's own: a planner consults it on the first draft and when your feedback changes the approach, and a reviewer consults it after the tests pass and the spec is met, unless the change is clearly UI or copy only. The reviewer passes the adviser's findings to `review_decision` unedited, and they show in the review's Activity entry under "Adviser review"; the planner folds the advice into the spec or lists what it rejected under Open questions.
+
+### Changed
+
+- New installs run Planning, Work and Review on Sonnet, the Adviser on Opus and Complete on Haiku, so the cheaper model does the bulk of the work and Opus is billed only for the judgment calls. Models you already chose are left alone.
+- Planning and review runs on Claude Code may launch subagents in every permission mode, including read-only, so the adviser can be reached.
+- The Mac model picker is a little wider to fit its fifth column.
+
 ### Fixed
+
+- The Mac check's mock service now pins the driver and model a new ticket asks for, as the real one does, so the "Defaults puts the ticket back" check passes again.
+- The iPhone models-picker check closes the sheet with Done (it looked for a Cancel button that isn't there).
 
 - Dragging the ticket sheet down on iPhone no longer makes the ticket shift under your finger. The header, tab strip and transcript now move down together as one piece, and a long transcript stays where it was instead of snapping back to its bottom. The header no longer scrolls on its own: it is as tall as its content.
 - The iPhone checks (`sim-check --sheets`) now record a slow drag on the Transcript and Spec tabs and fail if the ticket changes shape while the sheet moves.
