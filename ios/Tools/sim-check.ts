@@ -1098,6 +1098,11 @@ async function seed(needs: Set<SeedName>) {
   seedContext(gaugeMiss, { input: 4000, cacheRead: 60000, cacheWrite: 36000, misses: 3, missTokens: 377000 });
   seedContext(gaugeCompact, { input: 3000, cacheRead: 150000, cacheWrite: 20000 });
   seedContext(gaugeCopilot, { input: 82000, cacheRead: 0, cacheWrite: 0, estimated: true });
+  // A ticket with agent notes for the Details tab: its agent sets them with update_notes (the dummy
+  // driver's /tools directive), and the notes start collapsed there.
+  const noted = await make("noted", () =>
+    create(project.id, `Greet by name\n/tools ${JSON.stringify([{ name: "update_notes", input: { notes: "## Where things live\n- `src/app.ts`: `main(name)` builds the greeting\n\n## Verify\n- `bun src/app.ts Ada` prints `Hello, Ada`" } }])}`, { skipAgentReview: true }),
+  );
   ticketsCreated();
 
   // The watchers and the Inbox item don't depend on the tickets: set them up while those run.
@@ -1148,6 +1153,7 @@ async function seed(needs: Set<SeedName>) {
     when("fileLink", fileLink?.key, (t) => t.status === "review" && !t.busy && !!t.workdir),
     when("linked", linked?.key, (t) => t.status === "planning" && !t.busy),
     when("linked", linkedStage?.key, (t) => t.status === "planning" && !t.busy),
+    when("noted", noted?.key, (t) => !t.busy && !!t.agentNotes),
     // Then a `/agents 2` turn: its Agents & tasks list mixes both kinds, for the filter.
     want("tasks")
       ? settle(tasks.key, (t) => t.status === "review" && !t.busy)
@@ -1171,7 +1177,7 @@ async function seed(needs: Set<SeedName>) {
   }
   const nestedAgent = want("agents") ? (await api<TicketDetail>("GET", `/tickets/${agents.key}`)).subagents!.find((s) => s.parentId)! : (undefined as unknown as NonNullable<TicketDetail["subagents"]>[number]);
   const [, watcher] = (await watchers) as unknown as [unknown, Watcher];
-  const seeded = { gauge, gaugeOver, gaugeMiss, gaugeCompact, gaugeCopilot, gaugeNew, project, other, hello, changes, conductor, browse, browsed, approval, blocked, plan, branchPlan, quick, draft, watcher, agents, nestedAgent, tasks, tables, code, headings, fileLink, linked, linkedStage };
+  const seeded = { gauge, gaugeOver, gaugeMiss, gaugeCompact, gaugeCopilot, gaugeNew, project, other, hello, changes, conductor, browse, browsed, approval, blocked, plan, branchPlan, quick, draft, watcher, agents, nestedAgent, tasks, tables, code, headings, fileLink, linked, linkedStage, noted };
   // Every entry builds its link from the seed, selected or not: a ticket nobody asked for reads as a
   // stand-in ("UNSEEDED"), which only an entry that forgot to declare it in `needs` would ever open.
   const names = new Set<string>([...SEED_NAMES, "nestedAgent", "watcher"]);
@@ -3612,6 +3618,22 @@ function interactionChains(s: Seeded): Chain[] {
     // --sheets owns these (the iPhone's ticket sheet and the dock), and they run here only when named.
     chain("sheet-checks", ["conductor"], 40, (udid) => sheetChecks(udid, s), true),
     chain("dock-stack", ["conductor"], 70, (udid) => dockStackChecks(udid, s), true),
+    chain("agent-notes", ["noted"], 10, async (udid) => {
+      await check("ticket details: agent notes start collapsed, and a tap on the header opens and closes them", async () => {
+        await goto(udid, `harness://ticket/${k(s.noted)}?tab=details`, (l) => l.includes("Agent notes"));
+        const body = async () => (await labels(udid)).some((l) => l.includes("Where things live"));
+        const open = async () => (await nodes(udid)).some((n) => n.AXUniqueId === "agent-notes");
+        if ((await body()) || (await open())) throw new Error("the agent notes are open before any tap");
+        await tapWhere(udid, "Agent notes");
+        await until("agent notes open", async () => (await body()) && (await open()), 5000).catch(async () => {
+          await shot(udid, "agent-notes-failed");
+          throw new Error(`the tap did not open the agent notes; on screen: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
+        });
+        await tapWhere(udid, "Agent notes");
+        await until("agent notes closed", async () => !(await body()) && !(await open()), 5000);
+        return "collapsed; opens and closes on a tap";
+      });
+    }),
     chain("wide-tables", ["tables"], 4, async (udid) => {
       await check("a spec with wide tables leaves the replies after it on screen", async () => {
         const last = (l: string) => l.startsWith("Run finished (review)");

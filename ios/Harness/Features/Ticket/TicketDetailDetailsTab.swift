@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-/// The Details tab: the title and spec, the agents' notes (read-only, when there are any), the
+/// The Details tab: the title and spec, the agents' notes (read-only, collapsed until opened, when there are any), the
 /// settings rows
 /// (TicketSettingsForm), then what it blocks, where it works, its remote ID and the tickets sharing
 /// it, granted tools, auto-start, timestamps and its runs. A spec save names the revision the edit
@@ -19,6 +19,8 @@ struct TicketDetailDetailsTab: View {
     /// The 409 a save got, while its alert is up
     @State private var conflict: SpecConflict?
     @State private var saving = false
+    /// The agents' notes start collapsed; the header opens them
+    @State private var notesExpanded = false
     @FocusState private var editingSpec: Bool
 
     var body: some View {
@@ -55,13 +57,28 @@ struct TicketDetailDetailsTab: View {
             .listRowBackground(c.bgElev)
             if let notes = ticket.agentNotes.optional, !notes.isEmpty {
                 Section {
-                    MarkdownView(text: notes, size: 14.5)
-                        .textSelection(.enabled)
-                        .accessibilityIdentifier("agent-notes")
-                } header: {
-                    Text("Agent notes")
+                    Button {
+                        withAnimation(.snappy) { notesExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Icon(notesExpanded ? "chevronDown" : "chevronRight", size: 12).foregroundStyle(c.text3)
+                            Text("Agent notes")
+                            Spacer()
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("agent-notes-toggle")
+                    .accessibilityValue(notesExpanded ? "Expanded" : "Collapsed")
+                    if notesExpanded {
+                        MarkdownView(text: notes, size: 14.5)
+                            .textSelection(.enabled)
+                            .accessibilityIdentifier("agent-notes")
+                    }
                 } footer: {
-                    Text("What the ticket's agents keep for the next run (update_notes). Read-only.")
+                    if notesExpanded {
+                        Text("What the ticket's agents keep for the next run (update_notes). Read-only.")
+                    }
                 }
                 .listRowBackground(c.bgElev)
             }
