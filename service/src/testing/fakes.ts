@@ -210,6 +210,11 @@ export class FakeDriver implements Driver {
   running = 0;
   maxRunning = 0;
   rejectsLeft = 0;
+  /** Sub-agent support the system prompt and the adviser rule key off (unset: none) */
+  subagentTool?: string;
+  adviserTool?: string;
+  /** The findings a review run passes to review_decision as the adviser's */
+  adviserFindings: string | undefined = undefined;
   /** Last tool requested via /tool, re-requested when a prompt says "Retry it now" */
   lastTool: { name: string; input: unknown } | null = null;
   approvals: { name: string; behavior: string }[] = [];
@@ -417,9 +422,9 @@ export class FakeDriver implements Driver {
         }
         if (this.rejectsLeft > 0 || p.includes("[dummy:reject]")) {
           if (this.rejectsLeft > 0) this.rejectsLeft--;
-          await ops.reviewDecision(ctx, "request_changes", "Please fix X");
+          await ops.reviewDecision(ctx, "request_changes", "Please fix X", this.adviserFindings);
         } else {
-          await ops.reviewDecision(ctx, "approve", "LGTM");
+          await ops.reviewDecision(ctx, "approve", "LGTM", this.adviserFindings);
         }
         return;
       }

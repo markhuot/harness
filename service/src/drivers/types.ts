@@ -177,6 +177,12 @@ export interface Driver {
    */
   subagentTool?: string;
   /**
+   * How a planning or review run launches its adviser: a subagent on another model, as prompt text
+   * (e.g. "Claude Code's `Agent` tool with the `general-purpose` subagent type"). Unset: the driver
+   * can't launch one, and its runs never get the adviser.
+   */
+  adviserTool?: string;
+  /**
    * True if the driver answers tool-permission prompts through the harness
    * `permission_prompt` tool (claude-code's --permission-prompt-tool). toolsForRun adds it.
    */

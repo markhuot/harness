@@ -314,7 +314,7 @@ export interface HarnessOps {
 
   // --- review runs ---
   /** Record the agent review decision. */
-  reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void>;
+  reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string, adviserFindings?: string): Promise<void>;
 
   // --- board (read) ---
   // Every run kind (plan, work, review, complete, conductor, triage) may read the whole board.

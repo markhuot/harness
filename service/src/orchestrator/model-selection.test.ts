@@ -42,15 +42,22 @@ describe("settings migration (claudeModel / anthropicModel → defaultModels →
     expect(s.maxConcurrentRuns).toBe(2);
   });
 
+  test("saved model settings keep their choice and get no built-in adviser", () => {
+    const s = resolveSettings(new Store(v2Db({ claudeModel: '"opus"' })).settings.all());
+    expect(s.phaseModels!.work).toEqual({ driver: "claude-code", model: "opus" });
+    expect(s.phaseModels!.adviser).toBeUndefined();
+  });
+
   test("a null claudeModel is dropped, not stored as a model", () => {
     const s = resolveSettings(new Store(v2Db({ claudeModel: "null", anthropicModel: '"claude-sonnet-5"' })).settings.all());
     expect(s.defaultModels).toEqual({});
     expect(s.phaseModels!.work).toEqual({ driver: "claude-code", model: null });
   });
 
-  test("no legacy values → only the built-in Complete choice; tickets and projects get the new columns", () => {
+  test("no legacy values (a fresh install) → the built-in tiers; tickets and projects get the new columns", () => {
     const db = v2Db({});
-    expect(resolveSettings(new Store(db).settings.all()).phaseModels).toEqual({ complete: { driver: "claude-code", model: "haiku" } });
+    const cc = (model: string) => ({ driver: "claude-code", model });
+    expect(resolveSettings(new Store(db).settings.all()).phaseModels).toEqual({ plan: cc("sonnet"), work: cc("sonnet"), review: cc("sonnet"), adviser: cc("opus"), complete: cc("haiku") });
     const cols = (t: string) => (db.query(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
     expect(cols("tickets")).toContain("phase_models");
     expect(cols("projects")).toContain("phase_models");

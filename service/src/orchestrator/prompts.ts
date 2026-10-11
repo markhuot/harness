@@ -53,6 +53,10 @@ export interface PromptInfo {
   builtinTools?: boolean;
   /** The driver's sub-agent tool for exploring (Driver.subagentTool); unset → no explore rule */
   subagentTool?: string;
+  /** The model a planning or review run launches as its adviser subagent; unset when the adviser doesn't apply (see adviserFor) */
+  adviserModel?: string;
+  /** How the run launches that subagent (Driver.adviserTool) */
+  adviserTool?: string;
   /** Base branch and worktree ownership. Omitted: resolved from the ticket and project alone, worktree owned. */
   branches?: BranchContext;
   /** The user's prompt overrides (settings.prompts). Omitted: the built-in prompts. */
@@ -201,11 +205,17 @@ function triageLookupTools(): string {
   return lookup.join(" or ");
 }
 
+/** The adviser block's variables: on only when the run has a model for it and a driver tool to launch it with. */
+function adviserVars(info: PromptInfo) {
+  const on = !!info.adviserModel && !!info.adviserTool;
+  return { adviser: on, adviserModel: on ? info.adviserModel! : "", adviserTool: on ? info.adviserTool! : "" };
+}
+
 function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
   const { kind, ticket, project } = info;
   switch (kind) {
     case "plan":
-      return renderPrompt("system.plan", {}, o);
+      return renderPrompt("system.plan", adviserVars(info), o);
     case "work": {
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
       return renderPrompt(
@@ -222,7 +232,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
     }
     case "review": {
       const v = branchVars(ticket, branchesOf(ticket, project, info.branches));
-      return renderPrompt("system.review", { branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase }, o);
+      return renderPrompt("system.review", { branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase, ...adviserVars(info) }, o);
     }
     case "complete": {
       const b = branchesOf(ticket, project, info.branches);

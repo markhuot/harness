@@ -147,6 +147,22 @@ describe("buildClaudeArgs", () => {
     expect(argValue(args, "--permission-mode")).toBe("plan");
     // Plan mode blocks writes, but the harness server's tools (update_spec, post_note) still run.
     expect(argValue(args, "--allowedTools")).toBe("mcp__harness");
+    // ...and the adviser subagent can be launched.
+    expect(args.slice(args.indexOf("--allowedTools") + 1, args.indexOf("--permission-mode"))).toEqual(["mcp__harness", "Agent", "Task"]);
+  });
+
+  test("planning and review runs can launch the adviser under every permission mode; work runs get no subagent rule", () => {
+    const allowed = (kind: RunKind, permissionMode: "auto" | "ask" | "read_only") => {
+      const args = buildClaudeArgs({ ...req, kind, permissionMode }, { ...baseSettings, permissionMode }, null);
+      return args.slice(args.indexOf("--allowedTools") + 1, args.indexOf("--permission-mode"));
+    };
+    for (const mode of ["auto", "ask", "read_only"] as const) {
+      expect(allowed("review", mode)).toEqual(["mcp__harness", "Agent", "Task"]);
+      expect(allowed("plan", mode)).toEqual(["mcp__harness", "Agent", "Task"]);
+      expect(allowed("work", mode)).toEqual(["mcp__harness"]);
+    }
+    const readOnly = buildClaudeArgs({ ...req, kind: "review", permissionMode: "read_only" }, baseSettings, null);
+    expect(argValue(readOnly, "--permission-mode")).toBe("dontAsk");
   });
 
   test("model and resume are passed only when set", () => {

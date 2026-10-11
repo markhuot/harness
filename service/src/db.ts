@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
-import { builtinCompleteChoice, FALLBACK_DRIVER } from "@harness/shared";
+import { builtinCompleteChoice, builtinPhaseModels, FALLBACK_DRIVER } from "@harness/shared";
 import { attachmentPath, describeFile } from "./attachments";
 import { isUploadPath } from "./attachment-lists";
 
@@ -769,7 +769,9 @@ export const MIGRATION_CODE: Record<number, (db: Database, paths: Required<Migra
  * on the default models map's entry for its driver) and the review model (reviewModels). A ticket
  * on the driver it would inherit with no model of its own keeps no choice. Complete stays
  * inherited everywhere except settings, which get Haiku 5.5 on their driver: seeded here once, so
- * clearing it later sticks. The old settings keys are removed; the old columns stay, unread.
+ * clearing it later sticks. A database with no saved model settings (a fresh install) also gets
+ * Sonnet for Planning, Work and Review and Opus for the Adviser (builtinPhaseModels). The old
+ * settings keys are removed; the old columns stay, unread.
  */
 function convertPhaseModels(db: Database) {
   const parse = <T>(text: string | null | undefined, fallback: T): T => {
@@ -802,6 +804,11 @@ function convertPhaseModels(db: Database) {
   const settings: Record<string, Choice> = {};
   if (stored.has("defaultDriver") || stored.has("defaultModels") || stored.has("reviewModels")) {
     Object.assign(settings, levelChoices({ driver: settingsDriver, model: settingsModels[settingsDriver] || null }));
+  }
+  // A fresh install (no saved model settings) starts on the built-in tiers: Sonnet plans, works and
+  // reviews, Opus advises, Haiku completes. Saved choices are never replaced.
+  if (!stored.has("defaultDriver") && !stored.has("defaultModels") && !stored.has("reviewModels")) {
+    Object.assign(settings, builtinPhaseModels(settingsDriver));
   }
   const complete = builtinCompleteChoice(settingsDriver);
   if (complete) settings.complete = complete;

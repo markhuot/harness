@@ -296,6 +296,58 @@ describe("systemPrompt context and kind-specific rules", () => {
     expect(text).toContain("`harness/nyt-3`");
   });
 
+  describe("the adviser", () => {
+    const adviser = { adviserModel: "opus", adviserTool: "Claude Code's `Agent` tool with the `general-purpose` subagent type" };
+    // The repo's own top-level directories: prompts are shared by every project, so none may leak in.
+    const REPO_DIRS = /\b(service|shared|app|ios|plugins|release)\//;
+
+    test("a review run without one keeps today's prompt", () => {
+      const text = sys("review", ticket(worktree));
+      expect(text).not.toContain("adviser");
+      expect(text).not.toContain("Adviser");
+      expect(text).toContain("6. Call `review_decision` exactly once");
+    });
+
+    test("a review run with one verifies first, names the model and the escalation rule, and relays findings verbatim", () => {
+      const text = sys("review", ticket(worktree), adviser);
+      expect(text).toContain('passing model "opus"');
+      expect(text).toContain("Claude Code's `Agent` tool");
+      expect(text).toContain('call `review_decision` with "request_changes". Never launch the adviser on a diff that is about to change');
+      expect(text).toContain("The default is to escalate");
+      expect(text).toContain("clearly limited to UI or copy");
+      expect(text).toContain("`adviser_findings`");
+      expect(text).toContain("verbatim");
+      expect(text).toContain("7. Call `review_decision` exactly once");
+      expect(text).not.toMatch(REPO_DIRS);
+    });
+
+    test("an adviser model without a tool to launch it is ignored", () => {
+      expect(sys("review", ticket(worktree), { adviserModel: "opus" })).not.toContain("adviser");
+    });
+
+    test("a plan run with one consults it on the first draft and only on approach-changing feedback", () => {
+      const text = sys("plan", ticket(), adviser);
+      expect(text).toContain('passing model "opus"');
+      expect(text).toContain("On the first draft, before you save it");
+      expect(text).toContain("answers an open question");
+      expect(text).toContain("Consult the adviser again only when the feedback changes the approach");
+      expect(text).toContain("Put anything you reject, or can't settle, under Open questions");
+      expect(text).toContain("5. Call `update_spec`");
+      expect(text).not.toMatch(REPO_DIRS);
+    });
+
+    test("a plan run without one keeps today's prompt", () => {
+      const text = sys("plan", ticket());
+      expect(text).not.toContain("adviser");
+      expect(text).toContain("3. When the request asks for ticket settings");
+      expect(text).toContain("4. Call `update_spec`");
+    });
+
+    test("only planning and review runs see it", () => {
+      expect(sys("work", ticket(worktree), adviser)).not.toContain("adviser");
+    });
+  });
+
   test("review runs treat missing tests, screenshots and admitted skips as grounds for request_changes", () => {
     const text = sys("review", ticket(worktree));
     expect(text).toMatch(/Run the relevant tests and the typecheck yourself/);

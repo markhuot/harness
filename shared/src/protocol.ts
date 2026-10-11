@@ -481,10 +481,11 @@ export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat" | "compact";
 
 /**
- * The run phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor and chat
- * runs use the work choice; triage runs follow their watcher.
+ * The phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor and chat
+ * runs use the work choice; triage runs follow their watcher. The adviser isn't a run kind: planning
+ * and review runs launch it as a subagent with that phase's model.
  */
-export const PHASES = ["plan", "work", "review", "complete"] as const;
+export const PHASES = ["plan", "work", "review", "adviser", "complete"] as const;
 export type Phase = (typeof PHASES)[number];
 
 /** A phase's driver and model. model null → the driver's own default model. */

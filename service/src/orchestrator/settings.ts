@@ -327,7 +327,7 @@ export function mergeModelMap(current: Record<string, string | null>, patch: Rec
 }
 
 /**
- * { phase: { driver, model } | null }. Phases must be plan / work / review / complete, drivers known
+ * { phase: { driver, model } | null }. Phases must be plan / work / review / adviser / complete, drivers known
  * when the list is given (clearing a phase is always fine), and models valid ids (null / "" → the
  * driver's default).
  */

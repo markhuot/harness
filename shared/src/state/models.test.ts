@@ -297,7 +297,7 @@ describe("the phase matrix", () => {
     expect(m.inheritNames).toBeNull();
     expect(m.groups.map((g) => g.driver)).toEqual(["claude-code", "codex"]);
     expect(m.groups[0]!.rows.map((r) => r.label)).toEqual(["Default (Opus 5.5)", "Opus 5.5", "Haiku 5.5"]);
-    expect(m.selected).toEqual({ plan: encodeChoice({ driver: "claude-code", model: null }), work: encodeChoice({ driver: "claude-code", model: "opus" }), review: encodeChoice({ driver: "claude-code", model: null }), complete: encodeChoice({ driver: "claude-code", model: "haiku" }) });
+    expect(m.selected).toEqual({ plan: encodeChoice({ driver: "claude-code", model: null }), work: encodeChoice({ driver: "claude-code", model: "opus" }), review: encodeChoice({ driver: "claude-code", model: null }), adviser: encodeChoice({ driver: "claude-code", model: null }), complete: encodeChoice({ driver: "claude-code", model: "haiku" }) });
     expect(m.summary).toBe("Opus 5.5 · Complete: Haiku 5.5");
   });
 
@@ -305,16 +305,16 @@ describe("the phase matrix", () => {
     const inherited = inheritedPhaseModels("ticket", null, settings)!;
     const m = phaseMatrix(drivers, models, { work: { driver: "codex", model: "luna" } }, inherited);
     expect(m.inherit?.label).toBe("Defaults");
-    expect(m.inheritNames).toEqual({ plan: "Opus 5.5", work: "Opus 5.5", review: "Opus 5.5", complete: "Haiku 5.5" });
+    expect(m.inheritNames).toEqual({ plan: "Opus 5.5", work: "Opus 5.5", review: "Opus 5.5", adviser: "Opus 5.5", complete: "Haiku 5.5" });
     expect(m.selected.plan).toBe("");
     expect(m.selected.work).toBe(encodeChoice({ driver: "codex", model: "luna" }));
     expect(m.summary).toBe("Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5");
   });
 
   test("defaults spanning several drivers name each phase's driver; an unknown model id shows as is", () => {
-    const mixed = { plan: { driver: "codex", model: "luna" }, work: { driver: "claude-code", model: "opus" }, review: { driver: "claude-code", model: "gpt-9" }, complete: { driver: "claude-code", model: null } };
+    const mixed = { plan: { driver: "codex", model: "luna" }, work: { driver: "claude-code", model: "opus" }, review: { driver: "claude-code", model: "gpt-9" }, adviser: { driver: "claude-code", model: null }, complete: { driver: "claude-code", model: null } };
     const m = phaseMatrix(drivers, models, {}, mixed);
-    expect(m.inheritNames).toEqual({ plan: "Codex · Luna", work: "Claude Code · Opus 5.5", review: "Claude Code · gpt-9", complete: "Claude Code · Opus 5.5" });
+    expect(m.inheritNames).toEqual({ plan: "Codex · Luna", work: "Claude Code · Opus 5.5", review: "Claude Code · gpt-9", adviser: "Claude Code · Opus 5.5", complete: "Claude Code · Opus 5.5" });
     expect(m.summary).toBe("Claude Code · Opus 5.5 · Planning: Codex · Luna · Review: Claude Code · gpt-9");
   });
 
@@ -335,6 +335,6 @@ describe("the phase matrix", () => {
 
   test("one driver everywhere: the summary leaves driver names out; identical phases fold into Work", () => {
     const one = { driver: "claude-code", model: "opus" };
-    expect(phaseSummary({ plan: one, work: one, review: one, complete: { driver: "claude-code", model: "haiku" } }, models)).toBe("Opus 5.5 · Complete: Haiku 5.5");
+    expect(phaseSummary({ plan: one, work: one, review: one, adviser: one, complete: { driver: "claude-code", model: "haiku" } }, models)).toBe("Opus 5.5 · Complete: Haiku 5.5");
   });
 });

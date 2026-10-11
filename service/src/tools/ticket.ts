@@ -221,7 +221,7 @@ export const updateBranch = defineTool<{ branch?: string; base_branch?: string }
   },
 });
 
-export const reviewDecision = defineTool<{ decision: "approve" | "request_changes"; notes: string }>({
+export const reviewDecision = defineTool<{ decision: "approve" | "request_changes"; notes: string; adviser_findings?: string }>({
   name: "review_decision",
   description:
     "Record your review verdict on the ticket's work. \"approve\" if the change does what the ticket asks and is correct; \"request_changes\" sends the ticket back to the implementing agent with your notes. Notes should be specific and actionable (file, problem, expected fix). Call exactly once, as your final action.",
@@ -233,11 +233,16 @@ export const reviewDecision = defineTool<{ decision: "approve" | "request_change
         description:
           'Review notes for this round. Activity shows only the first line, and the human may never open the rest, so the first line MUST say the outcome on its own (e.g. "Approved, with three open questions in the spec." or "Changes requested: two bugs in the retry path."). Put the detail on the lines after it: each problem with file, line and the expected fix when requesting changes; what you confirmed and any nits when approving.',
       },
+      adviser_findings: {
+        type: "string",
+        description:
+          "Only when you launched an adviser subagent: its findings, pasted verbatim and unedited (its numbered list with file, line and severity). They appear in the review's Activity entry under an \"Adviser review\" heading, so a finding you disagree with stays visible; say why in the notes. Omit it when you skipped the adviser.",
+      },
     },
     ["decision", "notes"],
   ),
-  async run({ decision, notes }, ctx) {
-    await ctx.ops.reviewDecision(ctx, decision, notes);
+  async run({ decision, notes, adviser_findings }, ctx) {
+    await ctx.ops.reviewDecision(ctx, decision, notes, adviser_findings);
     return decision === "approve"
       ? "Review recorded: approved. Stop here."
       : "Review recorded: changes requested. The ticket goes back to the implementer. Stop here.";

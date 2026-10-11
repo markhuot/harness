@@ -290,6 +290,10 @@ export function planGrants(
 
 const CLASSIFIER_DENIAL = /denied by the Claude Code auto mode classifier\.?\s*(?:Reason:\s*([^\n]*?)(?:\.\s+If you|\n|$))?/i;
 
+/** The runs that launch an adviser subagent (Driver.adviserTool), and the tools that launch it. */
+const ADVISER_RUNS: RunKind[] = ["plan", "review"];
+const ADVISER_TOOLS = ["Agent", "Task"];
+
 export function buildClaudeArgs(
   req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & {
     model?: string | null;
@@ -326,6 +330,9 @@ export function buildClaudeArgs(
     // stay inside it (the flag is variadic; the next --flag ends the list).
     "--allowedTools",
     `mcp__${MCP_SERVER_NAME}`,
+    // Planning and review runs launch the adviser as a subagent; read-only mode (dontAsk) would
+    // otherwise deny the launch, and a review run has nobody to approve it.
+    ...(ADVISER_RUNS.includes(req.kind) ? ADVISER_TOOLS : []),
     ...rules,
     "--permission-mode",
     permissionMode,
@@ -861,6 +868,7 @@ export class ClaudeCodeDriver implements Driver {
   readonly name = "Claude Code";
   readonly description = "Runs the claude CLI with your Claude login (team plan). Harness tools are provided over MCP.";
   readonly hasBuiltinTools = true;
+  readonly adviserTool = "Claude Code's `Agent` tool with the `general-purpose` subagent type";
   readonly subagentTool = "Claude Code's `Agent` tool (`Task` in older versions) with the `Explore` subagent type";
   readonly usesPermissionPromptTool = true;
   readonly supportsSteering = true;

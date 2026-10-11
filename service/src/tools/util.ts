@@ -258,8 +258,8 @@ export function phaseModelsProp(description: string) {
   };
   return {
     type: "object",
-    properties: { plan: choice, work: choice, review: choice, complete: choice },
-    description: `${description} Phases: plan (the planning run), work (work, chat and conductor runs), review (the agent reviewer), complete (the run that lands the work). Each is {"driver", "model"}; null clears it so it inherits. Phases you omit keep their choice.`,
+    properties: { plan: choice, work: choice, review: choice, adviser: choice, complete: choice },
+    description: `${description} Phases: plan (the planning run), work (work, chat and conductor runs), review (the agent reviewer), adviser (the model of the subagent that planning and review runs launch for the judgment calls; not a run of its own), complete (the run that lands the work). Each is {"driver", "model"}; null clears it so it inherits. Phases you omit keep their choice.`,
   };
 }
 

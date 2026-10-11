@@ -82,6 +82,7 @@ import {
   TICKET_STATUSES,
   watcherDriver,
   watcherModel,
+  adviserFor,
   applyLegacyProject,
   mergePhaseModels,
   resolvePhaseChoice,
@@ -2817,7 +2818,7 @@ ${numberLines(r.body)}`;
     else this.enqueueReview(this.store.tickets.get(t.id)!); // tool called outside the tracked run
   }
 
-  async reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string): Promise<void> {
+  async reviewDecision(ctx: ToolContext, decision: "approve" | "request_changes", notes: string, adviserFindings?: string): Promise<void> {
     const t = this.ctxTicket(ctx);
     if (ctx.runKind !== "review") throw new Error("review_decision is only available in review runs");
     if (t.status !== "review") throw new Error(`${t.key} is no longer in review`);
@@ -2828,7 +2829,9 @@ ${numberLines(r.body)}`;
     if (a) a.decided = true;
     // The round and the commit it judged, so the next review can look at just what changed since.
     const meta: ActivityMeta = { by: "agent", round: this.reviewRounds(t).length + 1, commit: t.workdir ? await headCommit(t.workdir) : null };
-    const text = notes?.trim() ?? "";
+    // The adviser's findings go under their own heading, exactly as the reviewer received them.
+    const findings = adviserFindings?.trim();
+    const text = [notes?.trim() ?? "", findings ? `### Adviser review\n${findings}` : ""].filter(Boolean).join("\n\n");
     if (decision === "approve") {
       const u = this.store.tickets.update(t.id, { agentReview: "approved" })!;
       this.touchSession(u.sessionId);
@@ -4454,6 +4457,17 @@ ${numberLines(r.body)}`;
     return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
   }
 
+  /**
+   * The adviser a planning or review run launches as a subagent (see adviserFor): its model and how
+   * the driver launches it, or nothing when the run keeps the single-tier prompt.
+   */
+  private adviserInfo(run: Run, model: string | null, driver: Driver, ticket: Ticket | null, project: Project | null): { adviserModel?: string; adviserTool?: string } {
+    if ((run.kind !== "plan" && run.kind !== "review") || !ticket || !driver.adviserTool) return {};
+    const choice = resolvePhaseChoice("adviser", { ticket: ticket.phaseModels, project: project?.phaseModels, settings: this.settings().phaseModels });
+    const adviser = adviserFor({ driver: run.driver, model }, choice, !!driver.subagentTool);
+    return adviser ? { adviserModel: adviser, adviserTool: driver.adviserTool } : {};
+  }
+
   /** The driver a run of this kind goes to: its phase's (see resolveRunChoice); a standalone session keeps its own. */
   private runDriver(kind: RunKind, session: Session, ticket: Ticket | null): string {
     if (!ticket || kind === "triage") return session.driver;
@@ -4647,6 +4661,7 @@ ${numberLines(r.body)}`;
           children,
           builtinTools: driver.hasBuiltinTools,
           subagentTool: driver.subagentTool,
+          ...this.adviserInfo(run, model, driver, ticket, project),
           branches: ticket ? this.branchContext(ticket, project) : undefined,
           activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
         };
@@ -5019,7 +5034,7 @@ ${numberLines(r.body)}`;
       returnToPlanning: (c, r, s) => this.returnToPlanning(c, r, s),
       submitForReview: (c, n, up, skips) => this.submitForReview(c, n, up, skips),
       updateBranch: (c, i) => this.updateBranch_(c, i),
-      reviewDecision: (c, d, n) => this.reviewDecision(c, d, n),
+      reviewDecision: (c, d, n, f) => this.reviewDecision(c, d, n, f),
       // --- board (read) ---
       listTickets: (c, f) => this.listTickets_(c, f),
       getTicket: (c, k, o) => this.getTicket_(c, k, o),

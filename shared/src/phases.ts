@@ -5,7 +5,7 @@
 
 import { PHASES, type Phase, type PhaseChoice, type PhaseModels, type PhaseModelsPatch, type RunKind } from "./protocol";
 
-export const PHASE_LABELS: Record<Phase, string> = { plan: "Planning", work: "Work", review: "Review", complete: "Complete" };
+export const PHASE_LABELS: Record<Phase, string> = { plan: "Planning", work: "Work", review: "Review", adviser: "Adviser", complete: "Complete" };
 
 /** The driver settings use when they don't choose a Work driver. */
 export const FALLBACK_DRIVER = "claude-code";
@@ -20,6 +20,40 @@ export const HAIKU_MODELS: Readonly<Record<string, string>> = { "claude-code": "
 export function builtinCompleteChoice(driver: string): PhaseChoice | null {
   const model = HAIKU_MODELS[driver];
   return model ? { driver, model } : null;
+}
+
+/** Sonnet 5.5 and Opus 5.5 per driver: the built-in Planning/Work/Review and Adviser models of a new install. */
+export const SONNET_MODELS: Readonly<Record<string, string>> = { "claude-code": "sonnet", "anthropic-api": "claude-sonnet-5-5" };
+export const OPUS_MODELS: Readonly<Record<string, string>> = { "claude-code": "opus", "anthropic-api": "claude-opus-5-5" };
+
+/**
+ * The choices a new install starts with on its driver (null: the driver has no tiers to pick from):
+ * Sonnet plans, works and reviews, Opus advises, Haiku completes. Only a fresh install gets them;
+ * choices already saved are never replaced.
+ */
+export function builtinPhaseModels(driver: string): PhaseModels | null {
+  const sonnet = SONNET_MODELS[driver];
+  const opus = OPUS_MODELS[driver];
+  const haiku = HAIKU_MODELS[driver];
+  if (!sonnet || !opus || !haiku) return null;
+  return {
+    plan: { driver, model: sonnet },
+    work: { driver, model: sonnet },
+    review: { driver, model: sonnet },
+    adviser: { driver, model: opus },
+    complete: { driver, model: haiku },
+  };
+}
+
+/**
+ * Whether a planning or review run launches an adviser subagent, and with which model. All three
+ * must hold: the run's driver has subagents, the Adviser phase resolves to that same driver, and
+ * the adviser's model is one the settings name and differs from the run's own. Otherwise null, and
+ * the run keeps the single-tier prompt.
+ */
+export function adviserFor(run: { driver: string; model: string | null }, adviser: PhaseChoice, driverHasSubagents: boolean): string | null {
+  if (!driverHasSubagents || adviser.driver !== run.driver || !adviser.model) return null;
+  return adviser.model === run.model ? null : adviser.model;
 }
 
 /** The phase a run kind's driver and model come from (null: triage, which follows its watcher). */
@@ -129,7 +163,7 @@ export function legacySettingsFields(pm: PhaseModels | null | undefined): { defa
 /**
  * Apply legacy settings fields to the app's choices:
  * - defaultDriver (with defaultModels' entry for it) sets Planning, Work and Review. A Complete
- *   choice on another driver moves to the new driver's Haiku, or is cleared when it has none, so an
+ *   or Adviser choice on another driver moves to the new driver's Haiku, or is cleared when it has none, so an
  *   older client switching drivers doesn't leave completion runs on the old one.
  * - defaultModels alone sets the three phases' model when it names the Work driver.
  * - reviewModels sets Review (its entry for the Work driver first); null puts Review back on Work.
@@ -149,6 +183,11 @@ export function applyLegacySettings(
       const builtin = builtinCompleteChoice(driver);
       if (builtin) out.complete = builtin;
       else delete out.complete;
+    }
+    if (out.adviser && out.adviser.driver !== driver) {
+      const opus = OPUS_MODELS[driver];
+      if (opus) out.adviser = { driver, model: opus };
+      else delete out.adviser;
     }
   } else if (curWork.driver in models) {
     out = withLegacyChoice(out, { driver: curWork.driver, model: models[curWork.driver] || null });

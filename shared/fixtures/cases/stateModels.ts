@@ -395,7 +395,7 @@ export const phaseMatrixCases = cases(
     },
     "defaults span several drivers": {
       value: {},
-      inherited: { plan: { driver: "codex", model: "luna" }, work: { driver: "claude-code", model: "opus" }, review: { driver: "claude-code", model: "unlisted-1" }, complete: { driver: "claude-code", model: null } },
+      inherited: { plan: { driver: "codex", model: "luna" }, work: { driver: "claude-code", model: "opus" }, review: { driver: "claude-code", model: "unlisted-1" }, adviser: { driver: "claude-code", model: "opus" }, complete: { driver: "claude-code", model: null } },
     },
     "type-ahead by model name": { value: null, inherited: null, query: "hai" },
     "type-ahead by driver": { value: null, inherited: null, query: "codex" },
