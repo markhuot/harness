@@ -405,6 +405,7 @@ extension View {
 struct TicketDock: View {
     let sheet: TicketSheet
     @Environment(Router.self) private var router
+    @State private var scale: CGFloat = 1
 
     /// The sheet's height while docked: one card's.
     static let height = DockedCardMetrics.height
@@ -423,10 +424,20 @@ struct TicketDock: View {
     }
 
     var body: some View {
-        DockedCard(sheet: sheet, glass: false, open: { router.restoreDock() }, close: { router.dismissSheet() })
-            .frame(maxHeight: .infinity, alignment: .top)
-            .accessibilityAction(named: "Next docked ticket") { TicketDock.step(router, .next) }
-            .accessibilityAction(named: "Previous docked ticket") { TicketDock.step(router, .previous) }
+        GeometryReader { g in
+            DockedCard(sheet: sheet, glass: false, open: { router.restoreDock() }, close: { router.dismissSheet() })
+                .frame(width: g.size.width * scale, height: DockedCardMetrics.height)
+                .scaleEffect(1 / scale, anchor: .topLeading)
+                .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
+        }
+        // The system lays the docked sheet out at the screen's width and shrinks it to its floating
+        // width. Laid out as is, the card would come out smaller than the ones above it (smaller
+        // text, a shorter pill): lay it out at the width it shows and undo the shrink.
+        .onGeometryChange(for: CGFloat.self) { g in
+            g.size.width > 0 ? min(1, max(0.5, g.frame(in: .global).width / g.size.width)) : 1
+        } action: { scale = $0 }
+        .accessibilityAction(named: "Next docked ticket") { TicketDock.step(router, .next) }
+        .accessibilityAction(named: "Previous docked ticket") { TicketDock.step(router, .previous) }
     }
 
     /// The next or previous docked ticket on top: a swipe along the dock (SheetFlickTracker) or

@@ -1666,6 +1666,10 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const cards = (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
     if (cards.length !== 2 || !card(kid.key)(cards[0]!.AXLabel!)) throw new Error(`the cards read ${cards.map((n) => `"${n.AXLabel}"`).join(", ")}`);
     if (cards[1]!.frame.y <= cards[0]!.frame.y) throw new Error("the newest card isn't at the bottom");
+    // The bottom card sits in the system's docked sheet, the others in the main window: all the
+    // same size, so their text is too.
+    const [hTop, hBottom] = [cards[0]!.frame.height, cards[1]!.frame.height];
+    if (Math.abs(hTop - hBottom) > 1) throw new Error(`the cards differ in height: ${hTop} over ${hBottom}`);
     // The board's bottom bar rides above the whole stack: the topmost card, or "N more…" over it.
     const more = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-more");
     const dockTop = Math.min(cards[0]!.frame.y, more?.frame.y ?? Infinity);
