@@ -825,6 +825,26 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   overflow: auto;
   user-select: text;
 }
+/* The Agent notes label on the Details tab: a disclosure button that opens the notes */
+.agent-notes-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.agent-notes-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
 
 /* Activity tab: a compact timeline, one look per kind */
 .activity {

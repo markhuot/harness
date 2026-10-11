@@ -28,6 +28,8 @@ export function TicketDetails({
   /** The save was refused because the spec moved on (409): what it is now */
   const [conflict, setConflict] = useState<SpecConflict | null>(null);
   const [saving, setSaving] = useState(false);
+  /** The agents' notes start collapsed; expansion lasts as long as this view is open */
+  const [notesOpen, setNotesOpen] = useState(false);
 
   // Follow server-side changes unless the user is mid-edit.
   useEffect(() => {
@@ -159,9 +161,16 @@ export function TicketDetails({
       </div>
       {ticket.agentNotes && (
         <div className="field" data-testid="agent-notes">
-          <label>Agent notes</label>
-          <Markdown className="agent-notes" text={ticket.agentNotes} />
-          <span className="field-hint">What the ticket's agents keep for the next run (update_notes). Read-only.</span>
+          <button type="button" className="agent-notes-toggle" aria-expanded={notesOpen} onClick={() => setNotesOpen(!notesOpen)}>
+            <Icon name={notesOpen ? "chevronDown" : "chevronRight"} size={12} />
+            Agent notes
+          </button>
+          {notesOpen && (
+            <>
+              <Markdown className="agent-notes" text={ticket.agentNotes} />
+              <span className="field-hint">What the ticket's agents keep for the next run (update_notes). Read-only.</span>
+            </>
+          )}
         </div>
       )}
 
