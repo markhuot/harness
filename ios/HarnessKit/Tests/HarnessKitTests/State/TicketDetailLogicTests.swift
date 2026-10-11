@@ -34,9 +34,6 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.pullRequestNumber("https://x/pull/new/pull/9") == "9")
         #expect(TicketDetailLogic.pullRequestBadge("https://github.com/o/r/pull/42") == "PR #42")
         #expect(TicketDetailLogic.pullRequestBadge("https://example.com/review") == "Pull request")
-        #expect(TicketDetailLogic.pullRequestShort("https://github.com/o/r/pull/42") == "github.com/o/r/pull/42")
-        #expect(TicketDetailLogic.pullRequestShort("http://h/pull/1") == "h/pull/1")
-        #expect(TicketDetailLogic.pullRequestShort("ftp://h/pull/1") == "ftp://h/pull/1")
     }
 
     @Test("a pull request row names its title, or says it has none")

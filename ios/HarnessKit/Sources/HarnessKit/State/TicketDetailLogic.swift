@@ -33,14 +33,6 @@ public enum TicketDetailLogic {
         pullRequestNumber(url).map { "PR #\($0)" } ?? "Pull request"
     }
 
-    /// The Details row's link text: the URL without its scheme (`/^https?:\/\//`).
-    public static func pullRequestShort(_ url: String) -> String {
-        for scheme in ["https://", "http://"] where url.unicodeScalars.starts(with: scheme.unicodeScalars) {
-            return String(String.UnicodeScalarView(url.unicodeScalars.dropFirst(scheme.unicodeScalars.count)))
-        }
-        return url
-    }
-
     /// The pull request's title when it has one (trimmed; "" counts as none), else nil.
     public static func pullRequestTitle(_ link: PullRequestLink) -> String? {
         let title = link.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
