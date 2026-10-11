@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- On iPhone, the bottom docked ticket card is the same height and text size as the cards stacked above it (it had been drawn about 14% smaller). sim-check's docked-stack check now fails if the cards differ in height.
+- On iPhone, the bottom docked ticket card is the same height and text size as the cards stacked above it (it had been drawn about 14% smaller, card and sheet both), and the docked sheet no longer shows a drag grabber, since a docked card opens with a tap. sim-check's docked-stack check now fails if the cards differ in height.
 - Dragging the ticket sheet down on iPhone no longer makes the ticket shift under your finger. The header, tab strip and transcript now move down together as one piece, and a long transcript stays where it was instead of snapping back to its bottom. The header no longer scrolls on its own: it is as tall as its content.
 - The iPhone checks (`sim-check --sheets`) now record a slow drag on the Transcript and Spec tabs and fail if the ticket changes shape while the sheet moves.
 
