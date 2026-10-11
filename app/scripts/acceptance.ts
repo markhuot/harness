@@ -91,7 +91,7 @@ try {
   // The driver's Default row, in every phase column, so the whole ticket runs on it.
   const optionFor = (phase: string) => `[...document.querySelectorAll(".phase-combo-row")].find(r => r.dataset.row === ${JSON.stringify(driver)} + "\u0001")?.querySelector("[role=radio][data-phase=${phase}]")`;
   await until(`driver option ${driver}`, () => js<boolean>(`!!${optionFor("work")}`));
-  for (const phase of ["plan", "work", "review", "complete"]) {
+  for (const phase of ["plan", "work", "review", "adviser", "complete"]) {
     await js(`${optionFor(phase)}.click()`);
     await Bun.sleep(100);
   }

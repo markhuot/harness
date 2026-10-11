@@ -16,7 +16,7 @@ import "./model-combobox.css";
 
 type Line = { kind: "heading"; driver: string; label: string } | { kind: "row"; row: PhaseRow } | { kind: "help"; names: Record<Phase, string> };
 
-/** The width a name has for itself in a phase column (64px less 2px of air a side). */
+/** The width a name has for itself in a phase column (64px less 2px of air a side; five phase columns). */
 const HELP_COLUMN_WIDTH = 60;
 const HELP_FONT = "11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
 let measureCtx: CanvasRenderingContext2D | null | undefined;
@@ -234,7 +234,7 @@ export function PhaseModelSelect({
             style={{
               left: place?.left ?? 0,
               top: place?.top ?? 0,
-              width: Math.max(460, Math.min(560, triggerWidth)),
+              width: Math.max(520, Math.min(600, triggerWidth)),
               maxHeight: place?.maxHeight ?? undefined,
               visibility: place ? undefined : "hidden",
             }}

@@ -665,7 +665,7 @@ try {
     ccRows.join(","),
   );
   const defaultsHelp = await js<string>(`document.querySelector("[data-testid=phase-defaults-help] [role=gridcell]")?.getAttribute("aria-label") ?? ""`);
-  check("the Defaults row names what each phase inherits right under it", /^Defaults: Planning .+, Work .+, Review .+, Complete .+$/.test(defaultsHelp), defaultsHelp);
+  check("the Defaults row names what each phase inherits right under it", /^Defaults: Planning .+, Work .+, Review .+, Adviser .+, Complete .+$/.test(defaultsHelp), defaultsHelp);
   check("the picker sets the Work phase's driver + model in one go", await comboPick("Dummy Slow"));
   const modeOpts = await js<string[]>(`[...document.querySelectorAll('${inPane(printId, "[data-testid=permission-mode] option")}')].map(o => o.textContent)`);
   check("the draft offers the permission modes, inheriting by default", modeOpts.join(",") === "Default (Auto),Auto,Ask,Read only", modeOpts.join(","));
@@ -845,6 +845,11 @@ try {
   const savedReview = await until("review model", async () => (await api<{ reviewModels: Record<string, string | null> }>("GET", "/settings")).reviewModels["claude-code"] === "haiku");
   check("the Review column saves the app's review model", savedReview);
   await comboPick("Default", "review", "claude-code");
+  await comboPick("Haiku 4.5", "adviser", "claude-code");
+  const savedAdviser = await until("adviser model", async () => (await api<{ phaseModels: Record<string, { driver: string; model: string | null }> }>("GET", "/settings")).phaseModels.adviser?.model === "haiku");
+  check("the Adviser column saves the app's adviser model", savedAdviser);
+  await comboPick("Default", "adviser", "claude-code");
+  await until("adviser back on the default", async () => { const pm = (await api<{ phaseModels: Record<string, { model: string | null }> }>("GET", "/settings")).phaseModels; return pm.adviser?.model == null; });
   await comboClose();
   await js(`document.querySelector('[data-driver-row="claude-code"]').click()`);
   await until("claude code settings", () => exists("[data-testid=driver-settings-claude-code]"));

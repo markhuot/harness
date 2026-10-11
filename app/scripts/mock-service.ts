@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
-import { applyLegacySettings, contextTokens, BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, legacySettingsFields, legacyWork, mergePhaseModels, resolvePhaseChoice, type BrowserSize } from "@harness/shared";
+import { applyLegacySettings, contextTokens, BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, legacySettingsFields, legacyWork, mergePhaseModels, resolvePhaseChoice, ticketLegacyChoice, type BrowserSize } from "@harness/shared";
 import type {
   ActivityAuthor,
   ActivityEntry,
@@ -1531,7 +1531,12 @@ function createTicket(body: Record<string, any>): Ticket {
     pendingApproval: null,
     allowedTools: [],
     model: typeof body.model === "string" && body.model ? body.model : null,
-    ...(body.phaseModels ? { phaseModels: mergePhaseModels({}, body.phaseModels) } : {}),
+    // The legacy driver (+ model) shorthand pins Planning, Work and Review, as the service does.
+    ...(body.phaseModels
+      ? { phaseModels: mergePhaseModels({}, body.phaseModels) }
+      : body.driver
+        ? { phaseModels: ticketLegacyChoice({}, { driver: body.driver, model: typeof body.model === "string" && body.model ? body.model : null }, resolvePhaseChoice("work", { project: project.phaseModels, settings: settings.phaseModels })) }
+        : {}),
     position: tickets.size,
     createdAt: now(),
     updatedAt: now(),
