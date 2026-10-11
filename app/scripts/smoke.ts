@@ -503,6 +503,26 @@ try {
     await js(`location.hash = "#/board/all/ticket/NYTIMES-5"`);
     const link = await until("PR link", () => js<string>(`document.querySelector("[data-testid=pr-link]")?.textContent ?? ""`).then((t) => t && t));
     check("the ticket shows its pull request next to the branch", link === "PR #318", link);
+    const badges = await js<{ count: number; tooltip: string | null }>(`({ count: document.querySelectorAll("[data-testid=pr-link]").length, tooltip: document.querySelector("[data-testid=pr-link]")?.getAttribute("title") ?? null })`);
+    check("the ticket has a badge per pull request, titled with the first one's title", badges.count === 2 && badges.tooltip === "Split the secrets out of checkout", JSON.stringify(badges));
+    // The Details tab's Pull requests row: an invalid link is refused inline, a valid one is added
+    // and its title arrives, and the new row is removed again.
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-5/details"`);
+    await until("pull requests row", () => exists("[data-testid=pull-request-input]"));
+    const setInput = (sel: string, value: string) => `(() => { const el = document.querySelector(${JSON.stringify(sel)}); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); })()`;
+    await js(setInput("[data-testid=pull-request-input]", "nope"));
+    await js(`document.querySelector("[data-testid=pull-request-add]").click()`);
+    const invalidError = await until("invalid link error", () => js<string>(`document.querySelector("[data-testid=pull-request-error]")?.textContent ?? ""`).then((t) => t || undefined));
+    check("an invalid pull request link is refused inline", invalidError.includes("must start with http"), invalidError);
+    await js(setInput("[data-testid=pull-request-input]", "https://github.com/markhuot/nytimes/pull/320"));
+    await js(`document.querySelector("[data-testid=pull-request-add]").click()`);
+    const titled = await until("pull request 320 titled", () => js<number>(`[...document.querySelectorAll("[data-testid=pull-request-title]")].filter((e) => e.textContent === "Mock pull request 320").length`).then((n) => n || undefined));
+    check("adding a pull request shows its title", titled === 1);
+    await js(`document.querySelector('[aria-label="Remove PR #320"]').click()`);
+    const removed = await until("pull request 320 removed", () => js<number>(`document.querySelectorAll("[data-testid=pull-request-item]").length`).then((n) => (n === 2 ? n : undefined)));
+    check("removing a pull request drops its row", removed === 2);
+    await js(`location.hash = "#/board/all/ticket/NYTIMES-5"`);
+    await until("NYTIMES-5 header again", () => exists("[data-testid=pr-link]"));
     await js(`location.hash = "#/board/all/ticket/NYTIMES-1"`);
     await until("NYTIMES-1 header", () => js<boolean>(`document.querySelector(".detail-key")?.textContent === "NYTIMES-1"`));
     const workingMore = await moreItems();

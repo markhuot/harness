@@ -579,17 +579,18 @@ function DetailHeader({
               {ticket.branch}
             </span>
           )}
-          {ticket.pullRequestUrl && (
+          {ticket.pullRequests.map((pr) => (
             <button
+              key={pr.url}
               className="badge badge-outline pr-badge"
               data-testid="pr-link"
-              title={`Open ${ticket.pullRequestUrl}`}
-              onClick={() => void window.harness?.openExternal(ticket.pullRequestUrl!)}
+              title={pr.title ?? `Open ${pr.url}`}
+              onClick={() => void window.harness?.openExternal(pr.url)}
             >
               <Icon name="external" />
-              {pullRequestLabel(ticket.pullRequestUrl)}
+              {pullRequestLabel(pr.url)}
             </button>
-          )}
+          ))}
           {ticket.status === "review" && (
             <>
               <ReviewMark who="agent" state={ticket.agentReview} />

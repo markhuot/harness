@@ -6,7 +6,7 @@
 // can change, is ticketSettingsRows's call (@harness/shared/state).
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { BranchInfo, ExternalRefInput, Project, Ticket, UpdateTicketBody } from "@harness/shared";
+import type { BranchInfo, ExternalRefInput, Project, PullRequestLink, Ticket, UpdateTicketBody } from "@harness/shared";
 import { inheritedPhaseModels, isTicketKey, plannedBranch, resolveBaseBranch, resolvePermissionMode } from "@harness/shared";
 import {
   checkoutBranch,
@@ -31,6 +31,7 @@ import { Icon } from "./Icon";
 import { useOpenTicket, usePaneScope } from "./paneContext";
 import { openTicket as openTicketPane, updatePanes } from "../state/panes";
 import { remoteIdCheck } from "../state/remoteIds";
+import { pullRequestLabel } from "../state/approveMenu";
 
 const BRANCH_LIMIT = 200;
 
@@ -79,6 +80,8 @@ export function TicketSettings({
   project,
   onPatch,
   onRemoteId,
+  onPullRequests,
+  onRefreshPullRequests,
   children,
 }: {
   ticket: Ticket;
@@ -89,6 +92,12 @@ export function TicketSettings({
    * rejecting with its error. Without it (a draft), there's no Remote ID row.
    */
   onRemoteId?: (ref: ExternalRefInput | null) => Promise<unknown>;
+  /**
+   * Replace the ticket's pull request URLs with this list, resolving once saved. Without it (a
+   * draft), there's no Pull requests row; onRefreshPullRequests fetches the titles again.
+   */
+  onPullRequests?: (urls: string[]) => Promise<unknown>;
+  onRefreshPullRequests?: () => Promise<unknown>;
   /** More rows after these, in the same list (Details' read-only rows) */
   children?: ReactNode;
 }) {
@@ -193,6 +202,7 @@ export function TicketSettings({
       )}
       <DependsOn ticket={ticket} editable={editable} onPatch={onPatch} />
       {onRemoteId && <RemoteId ticket={ticket} onSave={onRemoteId} />}
+      {onPullRequests && onRefreshPullRequests && <PullRequests ticket={ticket} onSave={onPullRequests} onRefresh={onRefreshPullRequests} />}
       {children}
     </dl>
   );
@@ -251,6 +261,97 @@ function DependsOn({ ticket, editable, onPatch }: { ticket: Ticket; editable: bo
               ))}
             </div>
           )
+        )}
+      </dd>
+    </>
+  );
+}
+
+/**
+ * The Pull requests row: each link with its title (GitHub's, fetched by the service: a title can't
+ * be typed) and a remove button, an input to add a link, and one refresh for every title. The
+ * links are all equal; the list is saved whole, in order.
+ */
+function PullRequests({ ticket, onSave, onRefresh }: { ticket: Ticket; onSave: (urls: string[]) => Promise<unknown>; onRefresh: () => Promise<unknown> }) {
+  const { toast } = useStore();
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const list = ticket.pullRequests;
+  const run = async (task: () => Promise<unknown>, done: string): Promise<boolean> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await task();
+      toast(done, "info");
+      return true;
+    } catch (e) {
+      setError((e as Error).message || String(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const add = async () => {
+    const next = url.trim();
+    if (!/^https?:\/\/\S+$/.test(next)) return setError("The link must start with http:// or https://");
+    if (list.some((pr) => pr.url === next)) return setError("That pull request is already on this ticket");
+    if (await run(() => onSave([...list.map((pr) => pr.url), next]), `Added ${pullRequestLabel(next)} to ${ticket.key}`)) setUrl("");
+  };
+  const remove = (pr: PullRequestLink) => run(() => onSave(list.filter((p) => p.url !== pr.url).map((p) => p.url)), `Removed ${pullRequestLabel(pr.url)} from ${ticket.key}`);
+  const refresh = () => run(onRefresh, `Refreshed the pull request titles on ${ticket.key}`);
+  const enter = (e: React.KeyboardEvent) => e.key === "Enter" && (e.preventDefault(), void add());
+  return (
+    <>
+      <dt>Pull requests</dt>
+      <dd className="pull-requests-row" data-testid="pull-requests">
+        {list.length > 0 && (
+          <ul className="pull-request-list">
+            {list.map((pr) => (
+              <li key={pr.url} className="row pull-request-item" data-testid="pull-request-item">
+                <span className="mono">{pullRequestLabel(pr.url)}</span>
+                <span className="pull-request-title" data-testid="pull-request-title" title={pr.url}>
+                  {pr.title ?? "No title"}
+                </span>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  data-testid="pull-request-remove"
+                  aria-label={`Remove ${pullRequestLabel(pr.url)}`}
+                  disabled={busy}
+                  onClick={() => void remove(pr)}
+                >
+                  <Icon name="x" size={11} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="row pull-requests-add">
+          <input
+            className="input mono pull-request-input"
+            aria-label="Pull request link"
+            data-testid="pull-request-input"
+            placeholder="https://github.com/owner/repo/pull/1"
+            value={url}
+            disabled={busy}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={enter}
+          />
+          <button className="btn btn-sm btn-primary" data-testid="pull-request-add" disabled={busy || !url.trim()} onClick={() => void add()}>
+            Add
+          </button>
+          {list.length > 0 && (
+            <button className="btn btn-sm btn-ghost" data-testid="pull-request-refresh" disabled={busy} onClick={() => void refresh()} title="Fetch every title again from GitHub">
+              <Icon name="refresh" size={11} /> Refresh titles
+            </button>
+          )}
+        </div>
+        {error ? (
+          <span className="field-hint" data-testid="pull-request-error" style={{ color: "var(--red)" }}>
+            {error}
+          </span>
+        ) : (
+          <span className="field-hint">{list.length ? "Shown on the ticket. Titles come from GitHub." : "Pull requests this ticket opened or works on. Titles come from GitHub."}</span>
         )}
       </dd>
     </>

@@ -171,6 +171,8 @@ export function TicketDetails({
         project={project}
         onPatch={(patch) => void act(() => client.updateTicket(ticket.key, patch))}
         onRemoteId={(externalRef) => client.updateTicket(ticket.key, { externalRef })}
+        onPullRequests={(pullRequestUrls) => client.updateTicket(ticket.key, { pullRequestUrls })}
+        onRefreshPullRequests={() => client.refreshPullRequests(ticket.key)}
       >
         {dependents.length > 0 && (
           <>

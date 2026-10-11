@@ -4,7 +4,7 @@ import { landCommands, landMenu, pullRequestLabel } from "./approveMenu";
 const gh = { isGit: true, pullRequestHost: "github.com" } as const;
 const git = { isGit: true, pullRequestHost: null } as const;
 const plain = { isGit: false, pullRequestHost: null } as const;
-const fresh = { completionAction: null, pullRequestUrl: null };
+const fresh = { completionAction: null, pullRequests: [] };
 
 describe("landMenu", () => {
   test("a gh project offers merge, PR, clean up and Approve and…, with merge preselected and run directly", () => {
@@ -26,11 +26,11 @@ describe("landMenu", () => {
   });
 
   test("a ticket with a pull request open preselects clean up, which pushes to it", () => {
-    expect(landMenu({ completionAction: null, pullRequestUrl: "https://github.com/a/b/pull/1" }, gh).primary).toMatchObject({ action: "cleanup", label: "Approve and clean up" });
+    expect(landMenu({ completionAction: null, pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] }, gh).primary).toMatchObject({ action: "cleanup", label: "Approve and clean up" });
   });
 
   test("the choice an earlier approval stored stays preselected (a completion that was stopped)", () => {
-    expect(landMenu({ completionAction: "cleanup", pullRequestUrl: null }, gh).primary).toEqual({ kind: "run", action: "cleanup", label: "Approve and clean up" });
+    expect(landMenu({ completionAction: "cleanup", pullRequests: [] }, gh).primary).toEqual({ kind: "run", action: "cleanup", label: "Approve and clean up" });
   });
 
   test("a ticket on its base branch (an existing PR head) drops merge and PR and preselects clean up", () => {
@@ -50,7 +50,7 @@ describe("landMenu", () => {
   });
 
   test("a child on its parent's branch only merges: the project's pr default and the other actions drop out", () => {
-    const m = landMenu({ completionAction: "pr", pullRequestUrl: null }, gh, { branch: "harness/web-1" });
+    const m = landMenu({ completionAction: "pr", pullRequests: [] }, gh, { branch: "harness/web-1" });
     expect(m.primary).toEqual({ kind: "run", action: "merge", label: "Approve and merge" });
     expect(m.items.map((i) => i.kind !== "none" && i.action)).toEqual(["merge"]);
   });
@@ -66,7 +66,7 @@ describe("landCommands (the palette's split-button commands)", () => {
   });
 
   test("with the PR preselected, merge stays in the palette and the PR choice goes", () => {
-    const c = landCommands(landMenu({ completionAction: "pr", pullRequestUrl: null }, gh));
+    const c = landCommands(landMenu({ completionAction: "pr", pullRequests: [] }, gh));
     expect(c.primary).toBe("Approve and open PR");
     expect(actions(c.others)).toEqual(["merge:Approve and merge", "cleanup:Approve and clean up", "custom:Approve and…"]);
   });
