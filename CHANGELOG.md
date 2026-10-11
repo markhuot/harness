@@ -9,10 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Docked ticket cards on iPhone and iPad are 12pt shorter (52pt, 4pt less above and below their text), with the sides unchanged, so the dock takes less of the board.
+
 ### Fixed
 
 - On iPhone, the bottom docked ticket card is the same height and text size as the cards stacked above it (it had been drawn about 14% smaller, card and sheet both), and the docked sheet no longer shows a drag grabber, since a docked card opens with a tap. sim-check's docked-stack check now fails if the cards differ in height.
 - Dragging the ticket sheet down on iPhone no longer makes the ticket shift under your finger. The header, tab strip and transcript now move down together as one piece, and a long transcript stays where it was instead of snapping back to its bottom. The header no longer scrolls on its own: it is as tall as its content.
+- The iPhone checks (`sim-check --sheets`) now measure the docked sheet's own height against the card above it and fail if its grabber is showing, so the bottom docked card can't shrink again unnoticed.
 - The iPhone checks (`sim-check --sheets`) now record a slow drag on the Transcript and Spec tabs and fail if the ticket changes shape while the sheet moves.
 
 ## [app-20261010.2258](https://github.com/markhuot/harness/releases/tag/app-20261010.2258) - 2026-10-10

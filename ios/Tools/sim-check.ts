@@ -1670,6 +1670,15 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     // same size, so their text is too.
     const [hTop, hBottom] = [cards[0]!.frame.height, cards[1]!.frame.height];
     if (Math.abs(hTop - hBottom) > 1) throw new Error(`the cards differ in height: ${hTop} over ${hBottom}`);
+    // The card frames above are drawn at the card's own undone scale, so they pass even when the
+    // sheet around the bottom card is shorter: measure the sheet itself (a probe on its root reports the height it's drawn at).
+    const all = await nodes(udid);
+    const sheetProbe = all.find((n) => n.AXUniqueId === "ticket-dock-sheet");
+    if (!sheetProbe) throw new Error("no ticket-dock-sheet element: can't measure the docked sheet");
+    const drawn = Number(sheetProbe.AXValue);
+    if (!(Math.abs(drawn - hTop) <= 1)) throw new Error(`the docked sheet is drawn ${sheetProbe.AXValue}pt tall, the card above it ${hTop}pt`);
+    // Docked it opens with a tap, not a drag: no grabber.
+    if (all.some((n) => n.AXLabel === "Sheet Grabber")) throw new Error("the docked sheet still shows its grabber");
     // The board's bottom bar rides above the whole stack: the topmost card, or "N more…" over it.
     const more = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-more");
     const dockTop = Math.min(cards[0]!.frame.y, more?.frame.y ?? Infinity);

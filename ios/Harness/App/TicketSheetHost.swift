@@ -44,6 +44,8 @@ struct TicketSheetHost: View {
     /// floats at. The sheet (not just the card in it) comes out that much smaller, so its dock detent
     /// is that much taller, for the sheet to show one card's height like the cards above it.
     @State private var dockScale: CGFloat = 1
+    /// The height the sheet is drawn at, on screen.
+    @State private var drawnHeight: CGFloat = 0
     private var dockDetent: PresentationDetent { .height(TicketDock.height / dockScale) }
 
     var body: some View {
@@ -73,6 +75,15 @@ struct TicketSheetHost: View {
                     TicketDock(sheet: sheet)
                         .frame(height: geo.size.height)
                         .zIndex(2)
+                    // The sheet's height as drawn, after the system's shrink (the card undoes its
+                    // own), for sim-check.
+                    Color.clear
+                        .frame(height: geo.size.height)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).height } action: { drawnHeight = $0 }
+                        .allowsHitTesting(false)
+                        .accessibilityElement()
+                        .accessibilityIdentifier("ticket-dock-sheet")
+                        .accessibilityValue(String(Int(drawnHeight.rounded())))
                 }
             }
             // Behind the keyboard too, so its rounded corners show the sheet's background, not the

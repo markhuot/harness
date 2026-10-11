@@ -6,9 +6,9 @@ import Testing
 struct DockMetricsTests {
     @Test func aStackIsItsCardsAndTheGapsBetween() {
         #expect(DockMetrics.stackHeight(rows: 0) == 0)
-        #expect(DockMetrics.stackHeight(rows: 1) == CGFloat(64))
-        #expect(DockMetrics.stackHeight(rows: 2) == CGFloat(136))
-        #expect(DockMetrics.stackHeight(rows: 5) == CGFloat(352))
+        #expect(DockMetrics.stackHeight(rows: 1) == CGFloat(52))
+        #expect(DockMetrics.stackHeight(rows: 2) == CGFloat(112))
+        #expect(DockMetrics.stackHeight(rows: 5) == CGFloat(292))
     }
 
     @Test func theOverflowCardCountsWhatItHides() {
@@ -30,10 +30,10 @@ struct DockMetricsTests {
     }
 
     @Test func rowsFittingLeavesTheCornerMarginAboveAndBelow() {
-        // 16 + 16 of margin, then 64pt cards 8pt apart: one row needs 96, two need 168.
-        #expect(DockMetrics.rowsFitting(height: 96) == 1)
-        #expect(DockMetrics.rowsFitting(height: 167) == 1)
-        #expect(DockMetrics.rowsFitting(height: 168) == 2)
+        // 16 + 16 of margin, then 52pt cards 8pt apart: one row needs 84, two need 144.
+        #expect(DockMetrics.rowsFitting(height: 84) == 1)
+        #expect(DockMetrics.rowsFitting(height: 143) == 1)
+        #expect(DockMetrics.rowsFitting(height: 144) == 2)
         #expect(DockMetrics.rowsFitting(height: 10) == 1)
     }
 }
