@@ -77,7 +77,7 @@ private struct PhaseModelSheet: View {
     @Environment(\.palette) private var c
     @Environment(\.dismiss) private var dismiss
 
-    static let columnWidth: CGFloat = 58
+    static let columnWidth: CGFloat = 52
 
     var body: some View {
         let groups = Models.filterPhaseGroups(matrix.groups, query)
@@ -120,7 +120,7 @@ private struct PhaseModelSheet: View {
         })
     }
 
-    /// Planning, Work, Review, Complete over the radio columns.
+    /// Planning, Work, Review, Adviser, Complete over the radio columns.
     private var columnHeadings: some View {
         HStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -179,7 +179,7 @@ private struct DefaultsHelp: View {
     /// The footer's type size at the current Dynamic Type setting, for measuring the names.
     @ScaledMetric(relativeTo: .body) private var size: CGFloat = 10.5
 
-    /// Whether every name fits the 58pt column (less a point of air) at the current text size.
+    /// Whether every name fits its column (less a point of air) at the current text size.
     private var fitsColumns: Bool {
         let font = UIFont.systemFont(ofSize: size)
         return Phase.allCases.allSatisfy { p in

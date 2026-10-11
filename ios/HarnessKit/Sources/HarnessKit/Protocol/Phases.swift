@@ -4,9 +4,9 @@ import Foundation
 // and model chosen per run phase (DESIGN.md "Model selection"). Conductor and chat runs use the
 // work choice; triage runs follow their watcher.
 
-/// The run phases a driver + model is chosen for, in `PHASES` order.
+/// The phases a driver + model is chosen for, in `PHASES` order.
 public enum Phase: String, Codable, Sendable, CaseIterable, Hashable {
-    case plan, work, review, complete
+    case plan, work, review, adviser, complete
 
     /// `PHASE_LABELS`: the column heading and summary prefix.
     public var label: String {
@@ -14,6 +14,7 @@ public enum Phase: String, Codable, Sendable, CaseIterable, Hashable {
         case .plan: "Planning"
         case .work: "Work"
         case .review: "Review"
+        case .adviser: "Adviser"
         case .complete: "Complete"
         }
     }
@@ -36,12 +37,14 @@ public struct PhaseModels: Codable, Sendable, Equatable, Hashable {
     public var plan: PhaseChoice?
     public var work: PhaseChoice?
     public var review: PhaseChoice?
+    public var adviser: PhaseChoice?
     public var complete: PhaseChoice?
 
-    public init(plan: PhaseChoice? = nil, work: PhaseChoice? = nil, review: PhaseChoice? = nil, complete: PhaseChoice? = nil) {
+    public init(plan: PhaseChoice? = nil, work: PhaseChoice? = nil, review: PhaseChoice? = nil, adviser: PhaseChoice? = nil, complete: PhaseChoice? = nil) {
         self.plan = plan
         self.work = work
         self.review = review
+        self.adviser = adviser
         self.complete = complete
     }
 
@@ -51,6 +54,7 @@ public struct PhaseModels: Codable, Sendable, Equatable, Hashable {
             case .plan: plan
             case .work: work
             case .review: review
+            case .adviser: adviser
             case .complete: complete
             }
         }
@@ -59,6 +63,7 @@ public struct PhaseModels: Codable, Sendable, Equatable, Hashable {
             case .plan: plan = newValue
             case .work: work = newValue
             case .review: review = newValue
+            case .adviser: adviser = newValue
             case .complete: complete = newValue
             }
         }
@@ -74,12 +79,14 @@ public struct PhaseModelsPatch: Codable, Sendable, Equatable, Hashable {
     public var plan: Patch<PhaseChoice>
     public var work: Patch<PhaseChoice>
     public var review: Patch<PhaseChoice>
+    public var adviser: Patch<PhaseChoice>
     public var complete: Patch<PhaseChoice>
 
-    public init(plan: Patch<PhaseChoice> = .absent, work: Patch<PhaseChoice> = .absent, review: Patch<PhaseChoice> = .absent, complete: Patch<PhaseChoice> = .absent) {
+    public init(plan: Patch<PhaseChoice> = .absent, work: Patch<PhaseChoice> = .absent, review: Patch<PhaseChoice> = .absent, adviser: Patch<PhaseChoice> = .absent, complete: Patch<PhaseChoice> = .absent) {
         self.plan = plan
         self.work = work
         self.review = review
+        self.adviser = adviser
         self.complete = complete
     }
 
@@ -95,6 +102,7 @@ public struct PhaseModelsPatch: Codable, Sendable, Equatable, Hashable {
             case .plan: plan
             case .work: work
             case .review: review
+            case .adviser: adviser
             case .complete: complete
             }
         }
@@ -103,6 +111,7 @@ public struct PhaseModelsPatch: Codable, Sendable, Equatable, Hashable {
             case .plan: plan = newValue
             case .work: work = newValue
             case .review: review = newValue
+            case .adviser: adviser = newValue
             case .complete: complete = newValue
             }
         }
@@ -117,18 +126,20 @@ public struct PerPhase<T> {
     public var plan: T
     public var work: T
     public var review: T
+    public var adviser: T
     public var complete: T
 
-    public init(plan: T, work: T, review: T, complete: T) {
+    public init(plan: T, work: T, review: T, adviser: T, complete: T) {
         self.plan = plan
         self.work = work
         self.review = review
+        self.adviser = adviser
         self.complete = complete
     }
 
     /// `Object.fromEntries(PHASES.map((p) => [p, make(p)]))`.
     public init(_ make: (Phase) throws -> T) rethrows {
-        self.init(plan: try make(.plan), work: try make(.work), review: try make(.review), complete: try make(.complete))
+        self.init(plan: try make(.plan), work: try make(.work), review: try make(.review), adviser: try make(.adviser), complete: try make(.complete))
     }
 
     public subscript(_ phase: Phase) -> T {
@@ -137,6 +148,7 @@ public struct PerPhase<T> {
             case .plan: plan
             case .work: work
             case .review: review
+            case .adviser: adviser
             case .complete: complete
             }
         }
@@ -145,6 +157,7 @@ public struct PerPhase<T> {
             case .plan: plan = newValue
             case .work: work = newValue
             case .review: review = newValue
+            case .adviser: adviser = newValue
             case .complete: complete = newValue
             }
         }

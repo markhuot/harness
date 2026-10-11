@@ -6427,6 +6427,7 @@
           "plan": "claude-code\u0001",
           "work": "claude-code\u0001opus",
           "review": "claude-code\u0001",
+          "adviser": "claude-code\u0001",
           "complete": "claude-code\u0001haiku"
         },
         "effective": {
@@ -6439,6 +6440,10 @@
             "model": "opus"
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },
@@ -6514,6 +6519,7 @@
           "plan": "claude-code\u0001",
           "work": "claude-code\u0001",
           "review": "claude-code\u0001",
+          "adviser": "claude-code\u0001",
           "complete": "claude-code\u0001"
         },
         "effective": {
@@ -6526,6 +6532,10 @@
             "model": null
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },
@@ -6555,6 +6565,10 @@
             "driver": "claude-code",
             "model": null
           },
+          "adviser": {
+            "driver": "claude-code",
+            "model": null
+          },
           "complete": {
             "driver": "claude-code",
             "model": "haiku"
@@ -6572,6 +6586,7 @@
           "plan": "Opus 5.5",
           "work": "Opus 5.5",
           "review": "Opus 5.5",
+          "adviser": "Opus 5.5",
           "complete": "Haiku 5.5"
         },
         "groups": [
@@ -6628,6 +6643,7 @@
           "plan": "",
           "work": "",
           "review": "",
+          "adviser": "",
           "complete": ""
         },
         "effective": {
@@ -6640,6 +6656,10 @@
             "model": "opus"
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },
@@ -6674,6 +6694,10 @@
             "driver": "claude-code",
             "model": null
           },
+          "adviser": {
+            "driver": "claude-code",
+            "model": null
+          },
           "complete": {
             "driver": "claude-code",
             "model": "haiku"
@@ -6691,6 +6715,7 @@
           "plan": "Opus 5.5",
           "work": "Opus 5.5",
           "review": "Opus 5.5",
+          "adviser": "Opus 5.5",
           "complete": "Haiku 5.5"
         },
         "groups": [
@@ -6771,6 +6796,7 @@
           "plan": "",
           "work": "codex\u0001luna",
           "review": "",
+          "adviser": "",
           "complete": ""
         },
         "effective": {
@@ -6786,12 +6812,16 @@
             "driver": "claude-code",
             "model": null
           },
+          "adviser": {
+            "driver": "claude-code",
+            "model": null
+          },
           "complete": {
             "driver": "claude-code",
             "model": "haiku"
           }
         },
-        "summary": "Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5",
+        "summary": "Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Adviser: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5",
         "filtered": null
       }
     },
@@ -6821,6 +6851,10 @@
             "driver": "claude-code",
             "model": null
           },
+          "adviser": {
+            "driver": "claude-code",
+            "model": null
+          },
           "complete": {
             "driver": "claude-code",
             "model": "haiku"
@@ -6838,6 +6872,7 @@
           "plan": "Opus 5.5",
           "work": "Opus 5.5",
           "review": "Opus 5.5",
+          "adviser": "Opus 5.5",
           "complete": "Haiku 5.5"
         },
         "groups": [
@@ -6927,6 +6962,7 @@
           "plan": "claude-code\u0001custom-1",
           "work": "",
           "review": "gone\u0001x-1",
+          "adviser": "",
           "complete": ""
         },
         "effective": {
@@ -6941,6 +6977,10 @@
           "review": {
             "driver": "gone",
             "model": "x-1"
+          },
+          "adviser": {
+            "driver": "claude-code",
+            "model": null
           },
           "complete": {
             "driver": "claude-code",
@@ -6968,6 +7008,10 @@
             "driver": "claude-code",
             "model": "unlisted-1"
           },
+          "adviser": {
+            "driver": "claude-code",
+            "model": "opus"
+          },
           "complete": {
             "driver": "claude-code",
             "model": null
@@ -6985,6 +7029,7 @@
           "plan": "Codex · Luna",
           "work": "Claude Code · Opus 5.5",
           "review": "Claude Code · unlisted-1",
+          "adviser": "Claude Code · Opus 5.5",
           "complete": "Claude Code · Opus 5.5"
         },
         "groups": [
@@ -7041,6 +7086,7 @@
           "plan": "",
           "work": "",
           "review": "",
+          "adviser": "",
           "complete": ""
         },
         "effective": {
@@ -7055,6 +7101,10 @@
           "review": {
             "driver": "claude-code",
             "model": "unlisted-1"
+          },
+          "adviser": {
+            "driver": "claude-code",
+            "model": "opus"
           },
           "complete": {
             "driver": "claude-code",
@@ -7129,6 +7179,7 @@
           "plan": "claude-code\u0001",
           "work": "claude-code\u0001",
           "review": "claude-code\u0001",
+          "adviser": "claude-code\u0001",
           "complete": "claude-code\u0001"
         },
         "effective": {
@@ -7141,6 +7192,10 @@
             "model": null
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },
@@ -7233,6 +7288,7 @@
           "plan": "claude-code\u0001",
           "work": "claude-code\u0001",
           "review": "claude-code\u0001",
+          "adviser": "claude-code\u0001",
           "complete": "claude-code\u0001"
         },
         "effective": {
@@ -7245,6 +7301,10 @@
             "model": null
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },
@@ -7321,6 +7381,7 @@
           "plan": "claude-code\u0001",
           "work": "claude-code\u0001",
           "review": "claude-code\u0001",
+          "adviser": "claude-code\u0001",
           "complete": "claude-code\u0001"
         },
         "effective": {
@@ -7333,6 +7394,10 @@
             "model": null
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },
@@ -7409,6 +7474,7 @@
           "plan": "claude-code\u0001",
           "work": "claude-code\u0001",
           "review": "claude-code\u0001",
+          "adviser": "claude-code\u0001",
           "complete": "claude-code\u0001"
         },
         "effective": {
@@ -7421,6 +7487,10 @@
             "model": null
           },
           "review": {
+            "driver": "claude-code",
+            "model": null
+          },
+          "adviser": {
             "driver": "claude-code",
             "model": null
           },

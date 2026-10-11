@@ -533,6 +533,23 @@ struct PhaseModelsTests {
         #expect(Phases.samePhaseChoice(nil, nil))
     }
 
+    @Test func adviserResolvesLikeEveryPhaseAndPatchesPerPhase() throws {
+        // Unset at settings: the Work driver with its default model, like Planning and Review.
+        let settings = PhaseModels(work: PhaseChoice(driver: "codex", model: "luna"))
+        #expect(Phases.settingsPhaseChoice(settings, .adviser) == PhaseChoice(driver: "codex", model: nil))
+        // Ticket → project → settings.
+        let project = PhaseModels(adviser: PhaseChoice(driver: "claude-code", model: "opus"))
+        let ticket = PhaseModels(adviser: PhaseChoice(driver: "claude-code", model: "haiku"))
+        #expect(Phases.resolvePhaseChoice(.adviser, ticket: ticket, project: project, settings: settings) == PhaseChoice(driver: "claude-code", model: "haiku"))
+        #expect(Phases.resolvePhaseChoice(.adviser, project: project, settings: settings) == PhaseChoice(driver: "claude-code", model: "opus"))
+        // The new phase sits between Review and Complete, and travels under its own key.
+        #expect(Phase.allCases == [.plan, .work, .review, .adviser, .complete])
+        let body = UpdateTicketBody(phaseModels: PhaseModelsPatch(adviser: .value(PhaseChoice(driver: "claude-code", model: "opus"))))
+        #expect(try modelsJSON(body) == .object(["phaseModels": .object(["adviser": .object(["driver": .string("claude-code"), "model": .string("opus")])])]))
+        let cleared = Phases.mergePhaseModels(project, PhaseModelsPatch(adviser: .null))
+        #expect(cleared.isEmpty)
+    }
+
     @Test func patchEncodesNullToClearAndOmitsTheRest() throws {
         let body = UpdateTicketBody(phaseModels: PhaseModelsPatch(plan: .null, work: .value(PhaseChoice(driver: "codex", model: nil))))
         #expect(try modelsJSON(body) == .object(["phaseModels": .object(["plan": .null, "work": .object(["driver": .string("codex"), "model": .null])])]))
