@@ -221,6 +221,23 @@ struct HarnessClientRequestTests {
         #expect(try bodyJSON(r) == json(#"{"title":"New","model":null,"branch":"feat/x"}"#))
     }
 
+    @Test func patchSendsThePullRequestListAsAWhole() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        _ = try await client(t).updateTicket("NY-1", UpdateTicketBody(pullRequestUrls: ["https://github.com/o/r/pull/1"]))
+        let r = try #require(t.last)
+        #expect(r.method == "PATCH")
+        #expect(try bodyJSON(r) == json(#"{"pullRequestUrls":["https://github.com/o/r/pull/1"]}"#))
+    }
+
+    @Test func refreshPullRequestsPostsToItsRoute() async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        _ = try await client(t).refreshPullRequests("NY-1")
+        let r = try #require(t.last)
+        #expect(r.method == "POST")
+        #expect(path(t) == "/tickets/NY-1/pull-requests/refresh")
+        #expect(r.body == nil)
+    }
+
     @Test func updateSettingsAndProjectArePatches() async throws {
         let settings = FakeTransport(status: 200, body: try envelope(protocolSample("PublicSettings")))
         _ = try await client(settings).updateSettings(SettingsPatch(watcherDriver: .null, prompts: ["run.work": nil]))

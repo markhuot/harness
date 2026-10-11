@@ -187,6 +187,11 @@ public final class HarnessClient: Sendable {
         try await request("PATCH", "/tickets/\(key)", body: body)
     }
 
+    /// Fetches every pull request's title again; returns the ticket with the refreshed list.
+    public func refreshPullRequests(_ key: String) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/pull-requests/refresh")
+    }
+
     public func deleteTicket(_ key: String) async throws -> OkResponse {
         try await request("DELETE", "/tickets/\(key)")
     }

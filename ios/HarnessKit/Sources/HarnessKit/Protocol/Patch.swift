@@ -96,6 +96,30 @@ extension Nullable: Encodable where Wrapped: Encodable {
     }
 }
 
+/// An array the service always sends, which older services may leave out: a missing key or `null`
+/// decodes as [] (the `Nullable` pattern, for lists). Reads as a plain array.
+@propertyWrapper
+public struct DefaultEmpty<Element> {
+    public var wrappedValue: [Element]
+    public init(wrappedValue: [Element]) { self.wrappedValue = wrappedValue }
+}
+
+extension DefaultEmpty: Sendable where Element: Sendable {}
+extension DefaultEmpty: Equatable where Element: Equatable {}
+
+extension DefaultEmpty: Decodable where Element: Decodable {
+    public init(from decoder: any Decoder) throws {
+        wrappedValue = try decoder.singleValueContainer().decode([Element].self)
+    }
+}
+
+extension DefaultEmpty: Encodable where Element: Encodable {
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(wrappedValue)
+    }
+}
+
 extension KeyedEncodingContainer {
     /// Omits `.absent`, writes `null` for `.null`.
     public mutating func encode<W: Encodable>(_ patch: Patch<W>, forKey key: Key) throws {
@@ -118,6 +142,11 @@ extension KeyedDecodingContainer {
     /// A missing key or `null` is `nil`.
     public func decode<W: Decodable>(_ type: Nullable<W>.Type, forKey key: Key) throws -> Nullable<W> {
         Nullable(wrappedValue: try decodeIfPresent(W.self, forKey: key))
+    }
+
+    /// A missing key or `null` is `[]`.
+    public func decode<E: Decodable>(_ type: DefaultEmpty<E>.Type, forKey key: Key) throws -> DefaultEmpty<E> {
+        DefaultEmpty(wrappedValue: try decodeIfPresent([E].self, forKey: key) ?? [])
     }
 }
 

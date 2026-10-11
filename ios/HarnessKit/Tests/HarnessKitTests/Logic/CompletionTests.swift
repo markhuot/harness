@@ -112,7 +112,7 @@ struct CompletionTests {
         #expect(Completion.completionOptions(ticket: child, project: project, parent: parent) == Completion.Options(actions: [.merge], defaultAction: .merge, parentBranch: "harness/p-1"))
         var opened = child
         opened.branch = "harness/p-2"
-        opened.pullRequestUrl = .value("https://github.com/o/r/pull/1")
+        opened.pullRequests = [PullRequestLink(url: "https://github.com/o/r/pull/1")]
         var mergeProject = project
         mergeProject.completionAction = .merge
         #expect(Completion.completionOptions(ticket: opened, project: mergeProject).defaultAction == .cleanup)

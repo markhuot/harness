@@ -39,6 +39,24 @@ struct TicketDetailLogicTests {
         #expect(TicketDetailLogic.pullRequestShort("ftp://h/pull/1") == "ftp://h/pull/1")
     }
 
+    @Test("a pull request row names its title, or says it has none")
+    func pullRequestRows() {
+        let titled = PullRequestLink(url: "https://github.com/o/r/pull/42", title: "  Split the secrets  ")
+        let untitled = PullRequestLink(url: "https://github.com/o/r/pull/7", title: "   ")
+        #expect(TicketDetailLogic.pullRequestSubtitle(titled) == "Split the secrets")
+        #expect(TicketDetailLogic.pullRequestSubtitle(untitled) == "No title")
+        #expect(TicketDetailLogic.pullRequestAccessibilityLabel(titled) == "Pull request #42: Split the secrets")
+        #expect(TicketDetailLogic.pullRequestAccessibilityLabel(untitled) == "Pull request #7")
+        #expect(TicketDetailLogic.pullRequestAccessibilityLabel(PullRequestLink(url: "https://example.com/review", title: "Look")) == "Pull request: Look")
+    }
+
+    @Test("the More menu names a pull request by its title, else by its number")
+    func pullRequestMenuTitles() {
+        #expect(TicketDetailLogic.pullRequestMenuTitle(PullRequestLink(url: "https://github.com/o/r/pull/42", title: "Split the secrets")) == "Split the secrets")
+        #expect(TicketDetailLogic.pullRequestMenuTitle(PullRequestLink(url: "https://github.com/o/r/pull/42", title: nil)) == "Open pull request #42")
+        #expect(TicketDetailLogic.pullRequestMenuTitle(PullRequestLink(url: "https://example.com/review", title: nil)) == "Open pull request")
+    }
+
     @Test("the Approve button says why it's disabled on a conductor-managed ticket")
     func approveLabel() {
         let reason = Completion.conductorManagedReason(conductorKey: "WEB-1")

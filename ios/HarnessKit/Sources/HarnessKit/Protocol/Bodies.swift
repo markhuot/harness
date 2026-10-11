@@ -228,6 +228,9 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var position: Double?
     /// Link the ticket to a remote ID by hand (source "manual"), or null to unlink it
     public var externalRef: Patch<ExternalRefInput>
+    /// The whole list of pull request links, in order (Ticket.pullRequests). [] clears it. Titles
+    /// aren't sent: the service fetches them after a link is added.
+    public var pullRequestUrls: [String]?
     /// Drafts only (409 otherwise): what the ticket is, fixed once it launches
     public var kind: TicketKind?
     /// Drafts only (409 otherwise): Ticket.useWorktree, fixed once it launches
@@ -244,6 +247,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         model: Patch<String> = .absent, phaseModels: PhaseModelsPatch? = nil, permissionMode: Patch<PermissionMode> = .absent,
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
+        pullRequestUrls: [String]? = nil,
         kind: TicketKind? = nil, useWorktree: Patch<Bool> = .absent, projectId: String? = nil,
         promptAttachments: [AttachmentInput]? = nil
     ) {
@@ -263,6 +267,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         self.dependsOn = dependsOn
         self.position = position
         self.externalRef = externalRef
+        self.pullRequestUrls = pullRequestUrls
         self.kind = kind
         self.useWorktree = useWorktree
         self.projectId = projectId
