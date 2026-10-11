@@ -308,7 +308,7 @@ describe("the phase matrix", () => {
     expect(m.inheritNames).toEqual({ plan: "Opus 5.5", work: "Opus 5.5", review: "Opus 5.5", adviser: "Opus 5.5", complete: "Haiku 5.5" });
     expect(m.selected.plan).toBe("");
     expect(m.selected.work).toBe(encodeChoice({ driver: "codex", model: "luna" }));
-    expect(m.summary).toBe("Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5");
+    expect(m.summary).toBe("Codex · Luna · Planning: Claude Code · Opus 5.5 · Review: Claude Code · Opus 5.5 · Adviser: Claude Code · Opus 5.5 · Complete: Claude Code · Haiku 5.5");
   });
 
   test("defaults spanning several drivers name each phase's driver; an unknown model id shows as is", () => {

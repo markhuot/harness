@@ -58,7 +58,7 @@ describe("tool catalogue", () => {
     expect(props("browser_run_stop")).toEqual(["job"]);
     expect(props("edit_file")).toEqual(["new_string", "old_string", "path", "replace_all"]);
     expect(props("bash")).toEqual(["command", "timeout_ms"]);
-    expect(props("review_decision")).toEqual(["decision", "notes"]);
+    expect(props("review_decision")).toEqual(["adviser_findings", "decision", "notes"]);
     expect(props("submit_for_review")).toEqual(["note", "skip_agent_review", "skip_human_review", "spec_is_up_to_date"]);
     expect(props("post_note")).toEqual(["note"]);
     expect(props("read_spec")).toEqual(["revision"]);

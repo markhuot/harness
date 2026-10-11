@@ -226,9 +226,9 @@ describe("human grants → --allowedTools rules", () => {
 
   test("plan and read-only runs ignore grants", () => {
     const grants = { tools: ["Bash"], once: [{ toolName: "Bash", input: { command: "ls" } }] };
-    for (const req of [{ ...base, kind: "plan" as const, grants }, { ...base, permissionMode: "read_only" as const, grants }]) {
-      expect(allowedTools(buildClaudeArgs(req, settings, null))).toEqual(["mcp__harness"]);
-    }
+    // Neither takes the grants; a plan run still gets the subagent tools for its adviser.
+    expect(allowedTools(buildClaudeArgs({ ...base, kind: "plan" as const, grants }, settings, null))).toEqual(["mcp__harness", "Agent", "Task"]);
+    expect(allowedTools(buildClaudeArgs({ ...base, permissionMode: "read_only" as const, grants }, settings, null))).toEqual(["mcp__harness"]);
   });
 });
 

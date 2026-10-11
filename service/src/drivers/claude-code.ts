@@ -4,7 +4,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, PlanWindow, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
+import type { CommandMatch, DriverInfo, ModelInfo, PermissionMode, PlanWindow, RunKind, Settings, SubagentKind, SubagentStatus, ToolResultContent } from "@harness/shared";
 import { descendantPids, signalAll } from "../process-tree";
 import { parseClaudeCommands, queryClaudeInitialize, queryClaudeModels } from "./claude-code-models";
 import { PlanUsageError, withRunContext, type Driver, type DriverEvent, type RunGrants, type RunImage, type RunRequest } from "./types";
