@@ -34,6 +34,12 @@ struct TicketSheetHost: View {
     /// Bumped when a release sends the sheet back to `.large` after the system aimed for the dock:
     /// the detent binding reads it, so SwiftUI reads the selection again and pushes `.large`.
     @State private var restoreEpoch = 0
+    /// The sheet's size at `.large`, as last measured at rest. The tickets lay out at it, so a
+    /// drag, which has the system shrink the sheet from the top (and, a few points as it lets go of
+    /// the screen's edges, from the sides), only slides them, clipped by the sheet: nothing inside
+    /// is laid out again (a header that resizes, a transcript that snaps back to its bottom).
+    /// Without one yet, the live size.
+    @State private var fullSize: CGSize?
 
     var body: some View {
         let current = router.ticketSheet ?? router.dock
@@ -43,11 +49,14 @@ struct TicketSheetHost: View {
         GeometryReader { geo in
             // By height rather than state, so the card takes over as the sheet settles at the dock.
             let docked = geo.size.height < TicketDock.height + 60
+            let resting = fullSize.map { abs($0.width - geo.size.width) < 1 && abs($0.height - geo.size.height) < 1 } ?? true
             ZStack(alignment: .top) {
                 ForEach(mounted) { s in
                     let isTop = s.id == sheet?.id
                     let shown = isTop && !docked
                     stack(s)
+                        .environment(\.sheetResting, resting)
+                        .frame(width: (fullSize ?? geo.size).width, height: (fullSize ?? geo.size).height, alignment: .top)
                         .opacity(shown ? 1 : 0)
                         .allowsHitTesting(shown)
                         .accessibilityHidden(!shown)
@@ -64,6 +73,21 @@ struct TicketSheetHost: View {
             // Behind the keyboard too, so its rounded corners show the sheet's background, not the
             // system sheet's. Docked, the sheet keeps the system's glass: it is the top card.
             .background { if !docked { c.bg.ignoresSafeArea() } }
+            // Rotation or a resized window is a far bigger change in width than the sheet's insets
+            // at a drag: measure again from the live size.
+            .onChange(of: geo.size.width) { _, w in
+                if !docked, let f = fullSize, abs(w - f.width) > 40 { fullSize = nil }
+            }
+            // At rest only, like the dock's position: the first reading once there is one, then
+            // whatever the size settles at (the system's spring back from a drag passes through
+            // every size between).
+            .task(id: geo.size) {
+                guard !docked, !flick.isDragging else { return }
+                if fullSize == nil { fullSize = geo.size }
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled, !docked, !flick.isDragging else { return }
+                fullSize = geo.size
+            }
             .onChange(of: docked) { _, docked in
                 // A docked New session mustn't keep the keyboard up over the board.
                 if docked { resignFirstResponder() }
@@ -206,6 +230,10 @@ extension EnvironmentValues {
     /// Inside the iPad's ticket panel (TicketPanelHost), whose buttons float over the top trailing
     /// corner and whose root ticket has no navigation bar (TicketDetailHeader).
     @Entry var inTicketPanel = false
+    /// False while the iPhone's ticket sheet isn't at its resting size (the system shrinks it
+    /// under a finger, and springs it back): measurements that depend on where the ticket's edges
+    /// are (TicketDetailBody's bottom room) wait for it to rest.
+    @Entry var sheetResting = true
     /// How far the panel's buttons reach in from the trailing edge: the root ticket's hero title
     /// wraps before them. 0 outside the panel.
     @Entry var ticketPanelTitleInset: CGFloat = 0

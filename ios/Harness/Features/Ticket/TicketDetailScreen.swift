@@ -117,6 +117,10 @@ struct TicketDetailScreen: View {
     }
 }
 
+/// The page's bottom as last read, kept while the sheet moves; a plain class, so a reading doesn't
+/// update the view.
+private final class PageSettling { var latest: CGFloat = 0 }
+
 /// The loaded ticket: header, hero, tabs and composer.
 private struct TicketDetailBody: View {
     let ticket: Ticket
@@ -127,15 +131,19 @@ private struct TicketDetailBody: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
-    @State private var height: CGFloat = 800
     /// Bumped to focus the composer's field (an annotated image just joined the message).
     @State private var focusComposer = 0
     @State private var uploader = PromptAttachmentUploader()
-    /// Where the composer starts and the tab's page ends, on screen: the pages run on under the
-    /// composer's glass, so their content gets the overlap as a bottom inset instead.
+    /// Where the composer starts and the tab's page ends, in the body's own coordinates (bodySpace):
+    /// the pages run on under the composer's glass, so their content gets the overlap as a bottom
+    /// inset instead. Not on screen, so sliding the sheet (a drag, the iPad panel's fling) moves
+    /// neither.
     @State private var composerTop: CGFloat = 0
     /// The page's bottom edge as last measured, with the pager's slide in it.
     @State private var pageMaxY: CGFloat = 0
+    /// The latest reading, which becomes `pageMaxY` once the sheet is at rest (readPageMaxY).
+    @State private var settling = PageSettling()
+    @Environment(\.sheetResting) private var sheetResting
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
     /// pager, so a page redrawing under it can't take it down.
     @State private var annotating: AnnotationRequest?
@@ -168,7 +176,7 @@ private struct TicketDetailBody: View {
             // (HeroSlide, PagerSlide), sliding as it collapses or expands. No layout changes, so a
             // collapse mid-scroll re-lays out no tab body. The hero's state is read only in the hero
             // and the modifiers, so a toggle doesn't re-render this body either.
-            TicketDetailHero(ticket: ticket, disclosure: hero, maxHeight: height * 0.45, navigable: true)
+            TicketDetailHero(ticket: ticket, disclosure: hero, navigable: true)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { hero.measured($0) }
             // Opaque, so they cover the hero as they slide over it. Not into the safe area: running
             // up under the bar, the strip's background would slide down over the hero.
@@ -191,7 +199,6 @@ private struct TicketDetailBody: View {
             guard let api = store.api, let detail = try? await api.getTicket(ticket.key), !Task.isCancelled else { return }
             specAttachments = detail.attachments
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Group {
                 // Torn off into a window of its own: one line to bring it back instead.
@@ -204,16 +211,32 @@ private struct TicketDetailBody: View {
                     }
                 }
             }
-            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { composerTop = $0 }
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.bodySpace)).minY } action: { composerTop = $0 }
         }
         // ⇧⌘] and ⇧⌘[ step through the tabs, round the ends, as on the desktop.
         // ⇧⌘] and ⇧⌘[ (the window's WindowShortcuts) step this screen's tabs while it's the one showing.
         .onAppear { shortcutTargets?.addTabStepper(relay) { [relay] in relay.step($0) } }
         .onDisappear { shortcutTargets?.removeTabStepper(relay) }
+        .coordinateSpace(.named(Self.bodySpace))
+        .onChange(of: sheetResting) { _, resting in
+            if resting, settling.latest != 0 { pageMaxY = settling.latest }
+        }
         .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
         .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketDetailHeader(ticket: ticket))
         .annotator($annotating)
+    }
+
+    /// The ticket body's coordinate space, for the composer's top and the page's bottom.
+    private static let bodySpace = "ticketBody"
+
+    /// Takes the page's bottom while the sheet is at rest. While the system moves the sheet (a
+    /// drag, its spring back) the pager's bottom swings by the distance moved, which would grow the
+    /// pages' bottom padding, and so their content, on every frame; the last reading is taken once
+    /// it's back (the `onChange` of `sheetResting`).
+    private func readPageMaxY(_ y: CGFloat) {
+        settling.latest = y
+        if sheetResting, pageMaxY != y { pageMaxY = y }
     }
 
     /// The tab bodies side by side in strip order, a page each: a sideways swipe moves to the
@@ -241,9 +264,9 @@ private struct TicketDetailBody: View {
                     // The frame includes PagerSlide's offset, so the layout's bottom is the reading
                     // less the hero's distance, taken where it's used: a reading skipped while a
                     // slide is under way is never taken again, since the frame doesn't change after.
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { y in
-                        guard page == strip, pageMaxY != y else { return }
-                        pageMaxY = y
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(Self.bodySpace)).maxY } action: { y in
+                        guard page == strip else { return }
+                        readPageMaxY(y)
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .background { PagerYieldsToBackSwipe(hero: hero) }
@@ -324,7 +347,6 @@ private struct TicketPinnedBody: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
-    @State private var height: CGFloat = 800
     /// A sub-agent or task the pinned Agents & tasks tab opened.
     @State private var agentTab: TicketTab?
     @State private var uploader = PromptAttachmentUploader()
@@ -336,7 +358,7 @@ private struct TicketPinnedBody: View {
         let outgoing = draft.attachments
         let attachTarget: (any PromptAttachmentTarget)? = isComposer && TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         VStack(spacing: 0) {
-            TicketDetailHero(ticket: ticket, maxHeight: height * 0.45)
+            TicketDetailHero(ticket: ticket)
             if isComposer {
                 Spacer(minLength: 0)
             } else {
@@ -350,7 +372,6 @@ private struct TicketPinnedBody: View {
                     })
             }
         }
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isComposer {
                 // `.transcript`: a send has no tab to move to here.

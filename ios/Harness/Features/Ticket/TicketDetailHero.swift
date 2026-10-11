@@ -2,14 +2,13 @@ import HarnessKit
 import SwiftUI
 
 /// The top of the ticket screen: the "Part of" crumb, the title, badges,
-/// the approval card and the actions for the ticket's state. It scrolls on its own, up to
-/// `maxHeight`. Collapsed, it shrinks to the title on one line with a chevron that expands it (an
+/// the approval card and the actions for the ticket's state. A plain stack, as tall as its content
+/// (it doesn't scroll, so a drag on the sheet has nothing in it to lay out). Collapsed, it shrinks to the title on one line with a chevron that expands it (an
 /// approval card waiting on the human still shows). `disclosure` is the ticket screen's, shared by
 /// every tab (HeroDisclosure); without one (a pinned window) it starts collapsed and keeps its own.
 struct TicketDetailHero: View {
     let ticket: Ticket
     var disclosure: TicketDetailHeroCollapse?
-    let maxHeight: CGFloat
     /// The screen's navigation bar is hidden, so the hero draws the Back button itself, level with
     /// the title, when there's something to go back to.
     var navigable = false
@@ -24,7 +23,6 @@ struct TicketDetailHero: View {
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
     @State private var localExpanded = false
-    @State private var contentHeight: CGFloat = 0
     /// Runs the actions and hosts what they ask for (the notes and instructions sheets, the delete confirmation).
     @State private var runner = TicketActionRunner()
 
@@ -40,18 +38,14 @@ struct TicketDetailHero: View {
 
     var body: some View {
         let compact = !expanded
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                content(compact: compact)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        VStack(alignment: .leading, spacing: 10) {
+            content(compact: compact)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .frame(height: min(contentHeight, maxHeight))
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
         .modifier(TicketActionHost(runner: runner))
     }

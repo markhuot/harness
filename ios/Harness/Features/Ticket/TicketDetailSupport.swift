@@ -150,8 +150,21 @@ struct HeroRoom: ViewModifier {
     let hero: TicketDetailHeroCollapse
     let overlap: CGFloat
 
+    @Environment(\.sheetResting) private var resting
+    /// How far the system's bottom inset on this page has moved from where it was when the sheet
+    /// last rested. Dragged, the iPhone's sheet comes off the screen's edge and UIKit gives its
+    /// pages an inset (the home indicator's, easing out again as it goes down), which a scroll
+    /// view adds to its content: the transcript would shift under the finger. The padding gives
+    /// that much back while the sheet is off its resting place; at rest the system's own is right.
+    @State private var restInset: CGFloat = 0
+    @State private var drift: CGFloat = 0
+
     func body(content: Content) -> some View {
-        content.safeAreaPadding(.bottom, overlap + hero.distance)
+        content
+            .safeAreaPadding(.bottom, overlap + hero.distance - (resting ? 0 : drift))
+            .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { inset in
+                if resting { restInset = inset } else { drift = inset - restInset }
+            }
     }
 }
 

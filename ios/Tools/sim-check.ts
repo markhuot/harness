@@ -579,7 +579,13 @@ const shot = async (udid: string, name: string, evidence = false) => {
  * Records the screen (to `<name>.mp4` beside the shots) while fn runs, and returns each frame's
  * top half shrunk to 16×8 gray: enough to see something flash by between two accessibility reads.
  */
-async function recordFrames(udid: string, name: string, fn: () => Promise<unknown>): Promise<Uint8Array[]> {
+async function recordFrames(
+  udid: string,
+  name: string,
+  fn: () => Promise<unknown>,
+  // What each frame is boiled down to: `vf` is ffmpeg's filter, `bytes` the size it leaves.
+  { vf = "crop=iw:ih/2:0:0,scale=16:8,format=gray", bytes = 128 } = {},
+): Promise<Uint8Array[]> {
   const video = join(shots, `${name}.mp4`);
   const rec = Bun.spawn(["xcrun", "simctl", "io", udid, "recordVideo", "--force", video], { stdout: "ignore", stderr: "pipe" });
   const reader = rec.stderr.getReader();
@@ -597,11 +603,11 @@ async function recordFrames(udid: string, name: string, fn: () => Promise<unknow
     rec.kill("SIGINT");
     await rec.exited;
   }
-  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", video, "-vf", "crop=iw:ih/2:0:0,scale=16:8,format=gray", "-fps_mode", "passthrough", "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", video, "-vf", vf, "-fps_mode", "passthrough", "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
   const raw = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
   if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
   const frames: Uint8Array[] = [];
-  for (let i = 0; i + 128 <= raw.length; i += 128) frames.push(raw.subarray(i, i + 128));
+  for (let i = 0; i + bytes <= raw.length; i += bytes) frames.push(raw.subarray(i, i + bytes));
   if (!frames.length) throw new Error(`no frames in ${video}`);
   return frames;
 }
@@ -620,6 +626,61 @@ async function inkIn(udid: string, r: { x: number; y: number; width: number; hei
   rmSync(file, { force: true });
   const median = [...px].sort((a, b) => a - b)[px.length >> 1]!;
   return px.filter((v) => Math.abs(v - median) > 64).length;
+}
+
+/**
+ * How far the content strays from a rigid move, over a slow drag's frames (full-screen gray, `w`×`h`).
+ * The system moves the sheet down and scales it a few percent as it comes off the screen's edges,
+ * so a frame is matched to the first by a shift and a scale: the first frame's rows from `top` for
+ * `len` rows have an ink profile (how much each row differs from its own median: text lines, bars),
+ * and the frame's profile, sampled where those rows would have gone, should follow it. Returns the
+ * worst frame's best correlation (1 is a perfect match; a header that resizes or a transcript
+ * that snaps to its bottom puts lines where the first frame had none).
+ */
+function rigidWorst(frames: Uint8Array[], w: number, h: number, top = 60, len = 110) {
+  const profile = (f: Uint8Array) => {
+    const out = new Float64Array(h);
+    for (let y = 0; y < h; y++) {
+      const row = Array.from(f.subarray(y * w, (y + 1) * w)).sort((a, b) => a - b);
+      const m = row[w >> 1]!;
+      out[y] = row.reduce((s, v) => s + Math.abs(v - m), 0) / w;
+    }
+    return out;
+  };
+  const at = (p: Float64Array, y: number) => {
+    const i = Math.floor(y);
+    const f = y - i;
+    return p[i]! * (1 - f) + p[Math.min(i + 1, h - 1)]! * f;
+  };
+  const first = profile(frames[0]!);
+  const ref = Array.from({ length: len }, (_, i) => first[top + i]!);
+  const mean = ref.reduce((s, v) => s + v, 0) / len;
+  const refDev = ref.map((v) => v - mean);
+  const refNorm = Math.sqrt(refDev.reduce((s, v) => s + v * v, 0));
+  const worst = { frame: 0, corr: 1, scale: 1, shift: 0 };
+  frames.forEach((f, k) => {
+    const p = profile(f);
+    let best = -1;
+    let bs = 1;
+    let bt = 0;
+    for (let sc = 0.88; sc <= 1.0201; sc += 0.005) {
+      for (let t = 0; top * sc + t + len * sc < h - 1; t += 0.5) {
+        const got = ref.map((_, i) => at(p, t + (top + i) * sc));
+        const gm = got.reduce((s, v) => s + v, 0) / len;
+        let dot = 0;
+        let gn = 0;
+        for (let i = 0; i < len; i++) {
+          const d = got[i]! - gm;
+          dot += d * refDev[i]!;
+          gn += d * d;
+        }
+        const corr = dot / (Math.sqrt(gn) * refNorm || 1);
+        if (corr > best) [best, bs, bt] = [corr, sc, t];
+      }
+    }
+    if (best < worst.corr) Object.assign(worst, { frame: k, corr: best, scale: bs, shift: bt });
+  });
+  return worst;
 }
 
 /** The mean difference between two recordFrames frames, 0–255. */
@@ -1428,6 +1489,42 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await until("the child", async () => onChild(await labels(udid)), 8000);
     return `closed, the board held still (${frames.length} frames, top half changed by at most ${moved.toFixed(1)})`;
   });
+  // The ticket sheet is one rigid piece while a finger drags it: the system shrinks the sheet from
+  // the top, and the ticket inside must only slide with it, never lay out again (a header that
+  // resizes, a transcript that snaps back to its bottom). Each frame of a slow drag, held down
+  // part of the way, must match the first frame's content moved down and scaled a little.
+  const RIGID_MATCH = 0.9;
+  const rigid = async (name: string, link: string, ready: () => Promise<unknown>) => {
+    await goto(udid, link);
+    await ready();
+    await Bun.sleep(600);
+    const w = 196;
+    const h = Math.round((w * H) / W);
+    const frames = await recordFrames(
+      udid,
+      name,
+      async () => {
+        const x = String(Math.round(W / 2));
+        await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(90 + 0.35 * (H - 70))), "--duration", "2", "--udid", udid);
+        await Bun.sleep(1200); // the spring back
+      },
+      { vf: `scale=${w}:${h},format=gray`, bytes: w * h },
+    );
+    const worst = rigidWorst(frames, w, h);
+    const said = `worst frame ${worst.frame} of ${frames.length} matches the first at ${worst.corr.toFixed(3)} (scale ${worst.scale.toFixed(3)}, down ${Math.round(worst.shift * 2)}pt)`;
+    if (worst.corr < RIGID_MATCH) throw new Error(`the ticket changed shape mid-drag: ${said}`);
+    return `the content only moved and scaled: ${said}`;
+  };
+  await check("a slow drag on the transcript moves the ticket as one piece", async () => {
+    // A ticket with a transcript taller than the screen, which opens stuck to the bottom. Made
+    // here rather than with the seed: its card would change the board the checks above tap.
+    const talker = await api<Ticket>("POST", "/tickets", { projectId: p.project.id, spec: stickText(0, 14), driver: "dummy", start: true });
+    await settle(talker.key, (t) => t.status === "review" && !t.busy && reviewPassed(t.agentReview));
+    for (let n = 1; n <= 4; n++) await sayStick(talker.key, n);
+    return rigid("sheet-drag-transcript", `harness://ticket/${encodeURIComponent(talker.key)}?tab=transcript`, () => until("the transcript", async () => (await labels(udid)).some((l) => l.startsWith("Run finished (")), 10000));
+  });
+  await check("a slow drag on the Spec tab moves the ticket as one piece", () =>
+    rigid("sheet-drag-spec", `harness://ticket/${encodeURIComponent(kid.key)}?tab=spec`, () => until("the spec", async () => onChild(await labels(udid)), 8000)));
   await check("a slow drag that stops short of 60% of the way down springs back to full size", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
