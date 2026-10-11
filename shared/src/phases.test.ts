@@ -104,6 +104,10 @@ describe("phases", () => {
     test("not on the run's own model", () => {
       expect(adviserFor({ driver: "claude-code", model: "opus" }, cc("opus"), true)).toBeNull();
     });
+    test("not when the run is on the driver's default and the adviser is that model", () => {
+      expect(adviserFor({ driver: "claude-code", model: null }, cc("opus"), true)).toBeNull();
+      expect(adviserFor({ driver: "claude-code", model: null }, cc("sonnet"), true)).toBe("sonnet");
+    });
     test("not when the driver has no subagents", () => {
       expect(adviserFor({ driver: "anthropic-api", model: "claude-sonnet-5-5" }, api("claude-opus-5-5"), false)).toBeNull();
     });

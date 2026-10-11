@@ -23,7 +23,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The Mac check's mock service now pins the driver and model a new ticket asks for, as the real one does, so the "Defaults puts the ticket back" check passes again.
 - The iPhone models-picker check closes the sheet with Done (it looked for a Cancel button that isn't there).
-
 - Dragging the ticket sheet down on iPhone no longer makes the ticket shift under your finger. The header, tab strip and transcript now move down together as one piece, and a long transcript stays where it was instead of snapping back to its bottom. The header no longer scrolls on its own: it is as tall as its content.
 - The iPhone checks (`sim-check --sheets`) now record a slow drag on the Transcript and Spec tabs and fail if the ticket changes shape while the sheet moves.
 

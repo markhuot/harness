@@ -48,13 +48,19 @@ export function builtinPhaseModels(driver: string): PhaseModels | null {
 /**
  * Whether a planning or review run launches an adviser subagent, and with which model. All three
  * must hold: the run's driver has subagents, the Adviser phase resolves to that same driver, and
- * the adviser's model is one the settings name and differs from the run's own. Otherwise null, and
- * the run keeps the single-tier prompt.
+ * the adviser's model is one the settings name and differs from the run's own (a run on the
+ * driver's default model counts as that model, so Default plus an Opus adviser is two Opus tiers).
+ * Otherwise null, and the run keeps the single-tier prompt, so the agent is never told to launch a
+ * subagent on its own model.
  */
 export function adviserFor(run: { driver: string; model: string | null }, adviser: PhaseChoice, driverHasSubagents: boolean): string | null {
   if (!driverHasSubagents || adviser.driver !== run.driver || !adviser.model) return null;
-  return adviser.model === run.model ? null : adviser.model;
+  const runModel = run.model ?? DEFAULT_RUN_MODELS[run.driver] ?? null;
+  return adviser.model === runModel ? null : adviser.model;
 }
+
+/** What a run with no model chosen runs on, per driver, when it's one of the models named above (Claude Code's default is Opus). */
+const DEFAULT_RUN_MODELS: Readonly<Record<string, string>> = { "claude-code": "opus" };
 
 /** The phase a run kind's driver and model come from (null: triage, which follows its watcher). */
 export function runPhase(kind: RunKind): Phase | null {
@@ -163,8 +169,9 @@ export function legacySettingsFields(pm: PhaseModels | null | undefined): { defa
 /**
  * Apply legacy settings fields to the app's choices:
  * - defaultDriver (with defaultModels' entry for it) sets Planning, Work and Review. A Complete
- *   or Adviser choice on another driver moves to the new driver's Haiku, or is cleared when it has none, so an
- *   older client switching drivers doesn't leave completion runs on the old one.
+ *   choice on another driver moves to the new driver's Haiku, and an Adviser choice to its Opus (either
+ *   is cleared when the driver has none), so an older client switching drivers doesn't leave those
+ *   phases on the old one.
  * - defaultModels alone sets the three phases' model when it names the Work driver.
  * - reviewModels sets Review (its entry for the Work driver first); null puts Review back on Work.
  */
