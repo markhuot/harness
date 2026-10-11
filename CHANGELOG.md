@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261011.1314](https://github.com/markhuot/harness/releases/tag/app-20261011.1314) - 2026-10-11
+
 ### Added
 
 - A new **Adviser** model setting sits next to Planning, Work, Review and Complete, in the Mac and iPhone/iPad model pickers for Settings, a project and a ticket (and in the `update_settings` tool). Planning and review runs on Claude Code launch an adviser subagent on that model when it differs from the run's own: a planner consults it on the first draft and when your feedback changes the approach, and a reviewer consults it after the tests pass and the spec is met, unless the change is clearly UI or copy only. The reviewer passes the adviser's findings to `review_decision` unedited, and they show in the review's Activity entry under "Adviser review"; the planner folds the advice into the spec or lists what it rejected under Open questions.
