@@ -4006,6 +4006,30 @@ function interactionChains(s: Seeded): Chain[] {
         return `${GREETINGS_PATH}, ${range}`;
       });
     }),
+    chain("file-edit", ["fileLink"], 25, async (udid) => {
+      await check("the file editor edits, shows the unsaved dot and writes the file with Save", async () => {
+        const dot = async () => (await labels(udid)).includes("Unsaved changes");
+        await goto(udid, `harness://file/${GREETINGS_PATH}?ticket=${k(s.fileLink)}`, (l) => l.includes(GREETINGS_PATH));
+        await until("the editor", async () => (await nodes(udid)).some((n) => n.AXUniqueId === "file-editor"), 10000);
+        // The page starts after the screen does: tap into it until a keystroke takes.
+        const typed = "EDITED_BY_SIM_CHECK";
+        await until("a keystroke in the editor marks the file unsaved", async () => {
+          if (await dot()) return true;
+          await axe("tap", "-x", "200", "-y", "500", "--udid", udid);
+          await axe("type", typed, "--udid", udid);
+          await Bun.sleep(600);
+          return dot();
+        }, 20000, 1000);
+        await shot(udid, "file-edit-dirty-light");
+        const wd = (await api<Ticket>("GET", `/tickets/${s.fileLink.key}`)).workdir!;
+        const onDisk = () => readFileSync(join(wd, GREETINGS_PATH), "utf8");
+        if (onDisk().includes(typed)) throw new Error("the edit reached the disk before Save");
+        await tapWhere(udid, "Save");
+        await until("the unsaved dot gone", async () => !(await dot()), 8000);
+        if (!onDisk().includes(typed)) throw new Error("Save didn't write the edit to the file");
+        return "typed, unsaved dot, Save wrote the file";
+      });
+    }),
   ];
 }
 
