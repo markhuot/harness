@@ -241,6 +241,7 @@ struct TicketPanelHost: View {
                                     // Anything but a ticket's hero on top keeps clear of the floating buttons.
                                     .padding(.top, Self.topIsTicket(s) ? 0 : TicketSidePanel<EmptyView>.buttonRowHeight)
                                     .environment(\.inTicketPanel, true)
+                                    .environment(\.sheetFront, isTop && !docked)
                                     .environment(closers.closer(s.id))
                                     .opacity(isTop ? 1 : 0)
                                     .allowsHitTesting(isTop)

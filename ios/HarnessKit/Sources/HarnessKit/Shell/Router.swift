@@ -20,6 +20,12 @@ import Observation
 /// sheet, so it joins the dock on top instead of stacking on the sheet. Sheets replace each other;
 /// the scanner covers whatever is up.
 ///
+/// Files dock like tickets: a file opened from a link or the file picker (`push(.file)`, main scope)
+/// is a sheet of its own (`TicketSheet.Root.file`), next to the tickets in the dock; opening one
+/// that's already docked brings it forward instead of adding a copy (the same path in the same
+/// ticket or project; the first link's lines stay). A ticket opened from a file's "Open ticket"
+/// is a card of its own too. In a ticket window a file still pushes on the stack.
+///
 /// Ticket sheets (main scope, compact and regular width alike): tickets and New session open in a
 /// `TicketSheet` over the sections (iPhone) or beside them (iPad, `sheetIsBesideBoard`) instead of
 /// on a section's stack. A size-class change keeps them as they are. The router keeps a list of
@@ -180,8 +186,14 @@ public final class Router {
     /// Main scope: push on the presented ticket sheet, or open a ticket in one, else push on the
     /// selected tab's stack. Ticket scope: push on its stack.
     public func push(_ route: Route) {
-        if scope == .main, var s = ticketSheet {
-            if case let .ticket(key, tab) = route, case .newSession = s.root {
+        // A file is its own card in the dock (main scope), never a step inside another sheet.
+        if scope == .main, case let .file(params) = route {
+            presentTicketSheet(.file(params))
+        } else if scope == .main, var s = ticketSheet {
+            if case let .ticket(key, tab) = route, s.isFile {
+                // A ticket opened from a file (its "Open ticket") is a card of its own.
+                presentTicketSheet(.ticket(key: key, tab: tab))
+            } else if case let .ticket(key, tab) = route, case .newSession = s.root {
                 // A ticket opened from New session takes its place, unless another sheet shows it.
                 if sheets.dropFirst().contains(where: { $0.shows(.ticket(key: key, tab: tab)) || $0.rootKey == key }) {
                     presentTicketSheet(.ticket(key: key, tab: tab))
@@ -533,11 +545,13 @@ private struct LossyList<Element: Decodable>: Decodable {
 }
 
 /// One of the main window's ticket sheets (`Router.dockedSheets`; the top is `Router.ticketSheet`
-/// or `Router.dock`): a ticket with the screens pushed above it, or New session.
+/// or `Router.dock`): a ticket with the screens pushed above it, a file, or New session.
 public struct TicketSheet: Hashable, Sendable, Identifiable {
     public enum Root: Hashable, Sendable, Codable {
         case ticket(key: String, tab: TicketTab?)
         case newSession(projectId: String?, key: String?)
+        /// A file, in the editor: a card of its own next to the tickets.
+        case file(FileRouteParams)
     }
 
     /// Stays the same while the sheet docks, restores, switches, or changes content in place.
@@ -567,8 +581,21 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         return nil
     }
 
-    /// The plain name (accessibility, the panel's title): the top ticket's key, or "New session".
-    public var title: String { topTicketKey ?? "New session" }
+    /// The file this sheet shows at its root; nil for a ticket or New session.
+    public var file: FileRouteParams? {
+        if case let .file(params) = root { return params }
+        return nil
+    }
+
+    public var isFile: Bool { file != nil }
+
+    /// The plain name (accessibility, the panel's title): the top ticket's key, a file's name, or
+    /// "New session".
+    public var title: String {
+        if let key = topTicketKey { return key }
+        if let file { return FileViewerRules.fileName(file.path) }
+        return "New session"
+    }
 
     /// The screen on top is `key`'s ticket.
     func showsOnTop(_ key: String) -> Bool {
@@ -598,6 +625,8 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         switch root {
         case let .ticket(key, _): topTicketKey == key
         case .newSession: self.root == root
+        case let .file(params):
+            if case let .file(mine) = self.root { mine.sameFile(as: params) } else { false }
         }
     }
 }

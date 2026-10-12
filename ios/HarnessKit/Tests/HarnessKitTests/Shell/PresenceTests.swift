@@ -44,7 +44,7 @@ struct PresenceTests {
         let r = Router()
         r.push(t("A-1"))
         #expect(shown(r) == ["A-1"])
-        r.push(.file(FileRouteParams(path: "a.ts", ticket: "A-1")))
+        r.push(.prompts)
         #expect(shown(r) == ["A-1"])
         r.push(t("A-2"))
         #expect(shown(r) == ["A-2"])

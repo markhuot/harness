@@ -365,7 +365,7 @@ feature needs something new here, add to it without changing what's there.
   | `harness://board` (`/search` is an alias), `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
   | `harness://ticket/<key>[?tab=spec\|activity\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped, and an old `summaries` opens spec; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
   | `harness://inbox/<sessionId>` | push TriageScreen |
-  | `harness://file/<path>?ticket=\|project=#Lx-Ly` | push FileViewerScreen (FileViewer.fileRoute(forURL:), anchor kept) |
+  | `harness://file/<path>?ticket=\|project=#Lx-Ly` | a file card in the dock (TicketSheet.Root.file; a ticket window pushes FileViewerScreen) (FileViewer.fileRoute(forURL:), anchor kept) |
   | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>`, `/extensions` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen, ExtensionSettingsScreen |
   | `harness://projects[?from=search]` | Projects sheet (0.6 / large detents); on iPad (regular width), shows the sidebar column |
   | `harness://new[?projectId=\|key=]`, `/watcher[?id=]`, `/connect` | New session, Watcher, Connect sheets |

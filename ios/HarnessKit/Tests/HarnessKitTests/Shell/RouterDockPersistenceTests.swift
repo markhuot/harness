@@ -12,6 +12,7 @@ struct RouterDockPersistenceTests {
         let r = Router()
         r.openTicket(key: "A-1", tab: .spec)
         r.push(t("A-2", .transcript))
+        r.push(.prompts)
         r.push(.file(FileRouteParams(path: "a.ts", ticket: "A-2", start: "3")))
         r.present(.newSession(projectId: "p1", key: nil))
         r.openTicket(key: "B-1", tab: nil)
@@ -26,9 +27,37 @@ struct RouterDockPersistenceTests {
         #expect(back.dockedSheets.map(\.path) == r.dockedSheets.map(\.path))
         #expect(back.dock?.title == "B-1")
         // Fresh ids, still unique, and new sheets don't collide with them.
-        #expect(Set(back.dockedSheets.map(\.id)).count == 3)
-        back.openTicket(key: "C-1", tab: nil)
         #expect(Set(back.dockedSheets.map(\.id)).count == 4)
+        back.openTicket(key: "C-1", tab: nil)
+        #expect(Set(back.dockedSheets.map(\.id)).count == 5)
+    }
+
+    @Test func aPayloadFromBeforeFilesDockedDecodesAsTicketsAndNewSessions() {
+        // Exactly what builds before file sheets wrote: no "file" root anywhere.
+        let json = """
+        [{"root":{"ticket":{"key":"A-1","tab":"spec"}},"path":[{"file":{"_0":{"path":"a.ts","ticket":"A-1"}}}]},
+         {"root":{"newSession":{"projectId":"p1"}},"path":[]}]
+        """
+        let r = Router()
+        r.restorePersistedDock(json)
+        #expect(r.dockedSheets.map(\.root) == [.ticket(key: "A-1", tab: .spec), .newSession(projectId: "p1", key: nil)])
+        #expect(r.dockedSheets.map(\.isFile) == [false, false])
+        // An old file pushed on a ticket's path still decodes there.
+        #expect(r.dockedSheets.first?.path == [.file(FileRouteParams(path: "a.ts", ticket: "A-1"))])
+    }
+
+    @Test func aDockedFileSurvivesARelaunch() {
+        let r = Router()
+        r.openTicket(key: "A-1", tab: nil)
+        r.push(.file(FileRouteParams(path: "src/a.ts", ticket: "A-1", start: "3", end: "9")))
+        let defaults = MemoryChangesDefaults()
+        r.savePersistedDock(to: defaults)
+        let back = Router()
+        back.restorePersistedDock(from: defaults)
+        #expect(back.dockedSheets.map(\.root) == r.dockedSheets.map(\.root))
+        #expect(back.dock?.file?.path == "src/a.ts")
+        #expect(back.dock?.title == "a.ts")
+        #expect(back.ticketSheetState == .docked)
     }
 
     @Test func anEmptyDockSavesNothingAndRestoresNothing() {

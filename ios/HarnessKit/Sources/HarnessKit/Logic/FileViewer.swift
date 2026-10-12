@@ -34,6 +34,12 @@ public struct FileRouteParams: Codable, Equatable, Hashable, Sendable {
         self.start = start
         self.end = end
     }
+
+    /// The same file in the same ticket or project, whatever lines the link marks: what makes two
+    /// links one docked file card.
+    public func sameFile(as other: FileRouteParams) -> Bool {
+        path == other.path && ticket == other.ticket && project == other.project
+    }
 }
 
 /// The folder a viewer path resolves in.

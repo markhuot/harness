@@ -33,8 +33,8 @@ struct RouterSheetTests {
         let r = sheeted()
         r.push(t("C-1"))
         r.push(t("C-2"))
-        r.push(.file(FileRouteParams(path: "a.ts", ticket: "C-2")))
-        #expect(r.ticketSheet?.path == [t("C-2"), .file(FileRouteParams(path: "a.ts", ticket: "C-2"))])
+        r.push(.prompts)
+        #expect(r.ticketSheet?.path == [t("C-2"), .prompts])
         #expect(r.path(.board).isEmpty)
         // A ticket link while sheeted pushes there too, and leaves the sheet up.
         r.open(.push(t("C-3")))
@@ -131,9 +131,9 @@ struct RouterSheetTests {
         #expect(r.dock?.title == "HARNESS-42")
         r.restoreDock()
         r.push(t("HARNESS-43"))
-        r.push(.file(FileRouteParams(path: "a.ts", ticket: "HARNESS-43")))
+        r.push(.prompts)
         r.dockSheet()
-        // A file above the child: the child is still the ticket on top.
+        // A screen above the child: the child is still the ticket on top.
         #expect(r.dock?.title == "HARNESS-43")
         r.restoreDock()
         r.setTicketSheetPath([])
@@ -513,13 +513,100 @@ struct RouterSheetTests {
         #expect(n.sheet == nil)
     }
 
+    // MARK: File sheets
+
+    private func file(_ path: String, ticket: String? = "A-1", start: String? = nil) -> FileRouteParams {
+        FileRouteParams(path: path, ticket: ticket, start: start)
+    }
+
+    @Test func aFileOpensAsItsOwnSheetNextToTheTickets() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.open(.push(.file(file("a.ts"))))
+        #expect(r.dockedSheets.count == 2)
+        #expect(r.ticketSheet?.root == .file(file("a.ts")))
+        #expect(r.ticketSheet?.path.isEmpty == true)
+        #expect(r.dockedSheets.last?.path.isEmpty == true && r.dockedSheets.last?.rootKey == "A-1")
+        #expect(r.ticketSheet?.title == "a.ts")
+        #expect(r.ticketSheet?.topTicket == nil)
+        // From a docked or gone sheet it opens too, presented, never on a tab's stack.
+        r.dockSheet()
+        r.open(.push(.file(file("b.ts"))))
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.title == "b.ts")
+        r.dismissAllSheets()
+        r.push(.file(file("c.ts")))
+        #expect(r.dockedSheets.map(\.title) == ["c.ts"] && r.path(.board).isEmpty)
+    }
+
+    @Test func openingADockedFileAgainFocusesItWithoutDuplicating() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.push(.file(file("a.ts", start: "3")))
+        r.push(t("B-1"))
+        r.push(.file(file("a.ts", start: "40")))
+        #expect(r.dockedSheets.count == 3)
+        #expect(r.ticketSheet?.title == "a.ts")
+        // The first link's lines stay, so the open editor isn't torn down (it may hold edits).
+        #expect(r.ticketSheet?.file?.start == "3")
+        // Another file, or the same path in another ticket, is a different card.
+        r.push(.file(file("a.ts", ticket: "B-1")))
+        r.push(.file(file("z.ts")))
+        #expect(r.dockedSheets.count == 5)
+    }
+
+    @Test func swipingStepsThroughFilesAndTicketsTogether() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.push(.file(file("a.ts")))
+        r.push(t("B-1"))
+        #expect(r.dockedSheets.map(\.title) == ["B-1", "a.ts", "A-1"])
+        r.dockSheet()
+        r.activateAdjacentSheet(.next)
+        #expect(r.dock?.file?.path == "a.ts" && r.ticketSheetState == .docked)
+        r.activateAdjacentSheet(.next)
+        #expect(r.dock?.title == "A-1")
+        r.activateAdjacentSheet(.previous)
+        #expect(r.dock?.title == "a.ts")
+        r.activateSheet(id: r.dockedSheets.last!.id)
+        #expect(r.dock?.title == "B-1")
+    }
+
+    @Test func closingAFileCardKeepsTheOthersAndDocksTheNext() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.push(.file(file("a.ts")))
+        #expect(r.ticketSheetState == .presented)
+        r.dismissSheet()
+        #expect(r.dockedSheets.map(\.title) == ["A-1"] && r.ticketSheetState == .docked)
+        r.push(.file(file("a.ts")))
+        let id = r.ticketSheet!.id
+        r.push(t("B-1"))
+        r.closeSheet(id: id)
+        #expect(r.dockedSheets.map(\.title) == ["B-1", "A-1"])
+    }
+
+    @Test func aTicketOpenedFromAFileIsACardOfItsOwn() {
+        let r = sheeted()
+        r.push(.file(file("a.ts", ticket: "A-1")))
+        r.push(t("A-1"))
+        #expect(r.dockedSheets.count == 2)
+        #expect(r.ticketSheet?.root == .ticket(key: "A-1", tab: nil))
+        #expect(r.dockedSheets.last?.isFile == true && r.dockedSheets.last?.path.isEmpty == true)
+    }
+
+    @Test func aTicketWindowStillPushesFilesOnItsStack() {
+        let w = Router(ticket: t("A-1"))
+        w.push(.file(file("a.ts")))
+        #expect(w.path(.board) == [.file(file("a.ts"))] && w.dockedSheets.isEmpty)
+    }
+
     // MARK: Tickets opened from outside the sheet (the board beside the iPad's panel)
 
     @Test func aTicketFromOutsideJoinsTheDockOverThePresentedSheet() {
         let r = sheeted()
         r.push(t("C-1"))
         r.push(t("C-2"))
-        r.push(.file(FileRouteParams(path: "a.ts", ticket: "C-2")))
+        r.push(.prompts)
         let id = r.ticketSheet!.id
         r.openTicket(key: "D-1", tab: .activity)
         #expect(r.ticketSheet?.root == .ticket(key: "D-1", tab: .activity))

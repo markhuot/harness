@@ -33,6 +33,9 @@ struct FileViewerScreen: View {
 
 private enum FileViewerTab { case file, diff }
 
+/// Identifies this screen to the panel's close button (TicketPanelCloser).
+private final class PanelOwner {}
+
 private struct FileViewerContent: View {
     let root: FileRoot
     let path: String
@@ -43,6 +46,14 @@ private struct FileViewerContent: View {
     @Environment(\.palette) private var c
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var phase
+    /// False while another docked sheet is on top (or the sheet is minimized): this editor is
+    /// mounted but out of sight, which is it losing focus.
+    @Environment(\.sheetFront) private var front
+    /// The iPad panel's close button and Escape, which close this file's card while it's on top there.
+    @Environment(TicketPanelCloser.self) private var panelCloser: TicketPanelCloser?
+    @State private var onScreen = PanelOwner()
+    /// The dialog is for closing the whole card (the panel's ✕) rather than going back a screen.
+    @State private var closingCard = false
     @State private var session: FileEditorSession?
     @State private var tab = FileViewerTab.file
     @State private var askingToLeave = false
@@ -98,7 +109,7 @@ private struct FileViewerContent: View {
         .toolbar {
             if guarded {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { askingToLeave = true } label: { Label("Back", systemImage: "chevron.left") }
+                    Button { closingCard = false; askingToLeave = true } label: { Label("Back", systemImage: "chevron.left") }
                 }
             }
             ToolbarItem(placement: .principal) { title(shownPath) }
@@ -107,12 +118,12 @@ private struct FileViewerContent: View {
         .confirmationDialog("Save changes to \(FileViewerRules.fileName(shownPath))?", isPresented: $askingToLeave, titleVisibility: .visible) {
             Button("Save") {
                 Task {
-                    if await session?.save() == true { dismiss() }
+                    if await session?.save() == true { leave() }
                 }
             }
             Button("Discard changes", role: .destructive) {
                 session?.discard()
-                dismiss()
+                leave()
             }
             Button("Keep editing", role: .cancel) {}
         } message: {
@@ -127,6 +138,19 @@ private struct FileViewerContent: View {
             session = s
             await s.start()
         }
+        .onChange(of: front, initial: true) { _, front in
+            if front {
+                // The panel's ✕ and Escape: a dirty file with Save on blur off asks first.
+                panelCloser?.take(onScreen) {
+                    if guarded { closingCard = true; askingToLeave = true } else { router.dismissSheet() }
+                }
+            } else {
+                panelCloser?.release(onScreen)
+                // Another card came to the front: the editor loses focus like it does on blur.
+                session?.fileHost.resignFocus()
+                session?.didBackground()
+            }
+        }
         .onChange(of: tab) { _, _ in
             // The editor under the other tab loses focus: its blur saves (Save on blur) and the keyboard goes down.
             session?.fileHost.resignFocus()
@@ -140,8 +164,14 @@ private struct FileViewerContent: View {
             }
         }
         .onDisappear {
+            panelCloser?.release(onScreen)
             session?.didLeave()
         }
+    }
+
+    /// After Save or Discard: closes the card (the panel's ✕) or pops back a screen.
+    private func leave() {
+        if closingCard { router.dismissSheet() } else { dismiss() }
     }
 
     private var subtitle: String {

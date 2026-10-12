@@ -63,6 +63,7 @@ struct TicketSheetHost: View {
                     let shown = isTop && !docked
                     stack(s)
                         .environment(\.sheetResting, resting)
+                        .environment(\.sheetFront, shown)
                         .frame(width: (fullSize ?? geo.size).width, height: (fullSize ?? geo.size).height, alignment: .top)
                         .opacity(shown ? 1 : 0)
                         .allowsHitTesting(shown)
@@ -241,6 +242,7 @@ struct TicketSheetContent: View {
         switch sheet.root {
         case let .ticket(key, tab): RouteScreen(route: .ticket(key: key, tab: tab))
         case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
+        case let .file(params): FileViewerScreen(params: params)
         }
     }
 }
@@ -256,6 +258,9 @@ extension EnvironmentValues {
     /// under a finger, and springs it back): measurements that depend on where the ticket's edges
     /// are (TicketDetailBody's bottom room) wait for it to rest.
     @Entry var sheetResting = true
+    /// False while a docked sheet is mounted behind the top one (or minimized to its card): hidden,
+    /// it has lost focus, which a file's editor saves for (Save on blur).
+    @Entry var sheetFront = true
     /// How far the panel's buttons reach in from the trailing edge: the root ticket's hero title
     /// wraps before them. 0 outside the panel.
     @Entry var ticketPanelTitleInset: CGFloat = 0

@@ -1262,6 +1262,9 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
 }
 
 /** --sheets: a conductor with two children, not started, on a project of its own. */
+/** A file in the sheets project, for the docked file card. */
+const DOCK_FILE = "notes.ts";
+
 async function seedSheets() {
   mkdirSync(join(scratch, "sheets"), { recursive: true });
   const project = await api<Project>("POST", "/projects", { path: join(scratch, "sheets"), name: "sheets", key: "SHEET", defaultDriver: "dummy" });
@@ -1271,6 +1274,7 @@ async function seedSheets() {
   const long = Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1}: enough words here to wrap onto a second line of the spec on a phone's width.`).join("\n\n");
   await create(`Dock the sheet under the board\n\n${long}`, { parentId: conductor.id });
   await create("Swipe the sheet away", { parentId: conductor.id });
+  writeFileSync(join(scratch, "sheets", DOCK_FILE), "export const notes = [\"dock me\"];\n");
   return { project, conductor };
 }
 
@@ -1840,6 +1844,83 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await goto(udid, BOARD);
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
     return "all closed";
+  });
+}
+
+/**
+ * A file docks like a ticket (`TicketSheet.Root.file`): opened from a link it is its own card next
+ * to the ticket's, a swipe along the dock (iPhone) or a tap on the card (iPad's corner stack)
+ * switches between them, opening it again focuses the card it has, and its ✕ closes only it.
+ */
+async function fileDockChecks(udid: string, p: { project: Project; conductor: Ticket }, ipad: boolean) {
+  const key = p.conductor.key;
+  const link = `harness://file/${DOCK_FILE}?project=${encodeURIComponent(p.project.id)}`;
+  const { width: W } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
+  const editorUp = async () => (await nodes(udid)).some((n) => n.AXUniqueId === "file-editor");
+  const fileCard = (l: string) => l.startsWith(`${DOCK_FILE}, `) && isDock(l);
+  const ticketCard = (l: string) => l.startsWith(`${key}, `) && isDock(l);
+  const count = async () => dockCount(await labels(udid));
+  const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
+
+  await check("a file opened from a link is its own card next to the ticket's", async () => {
+    await goto(udid, BOARD);
+    await undock(udid);
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`, (l) => l.some((x) => x.includes("Part of") || x.includes(key)));
+    await goto(udid, link);
+    await until("the editor", editorUp, 12000);
+    if (ipad) {
+      await until("the ticket as a card and the file in the panel", async () => {
+        const l = await labels(udid);
+        return l.some(ticketCard) && l.includes(`Close ${DOCK_FILE}`);
+      }, 8000).catch(async (e) => {
+        await say("after the file link");
+        throw e;
+      });
+      await shot(udid, "file-dock-ipad-light");
+    } else {
+      const label = await dockSheet(udid);
+      if (!label.startsWith(`${DOCK_FILE}, `)) throw new Error(`the bottom card reads "${label}"`);
+      if ((await count()) !== 2) throw new Error(`${await count()} docked, expected the file and the ticket`);
+      await shot(udid, "file-dock-light");
+    }
+    return `${DOCK_FILE} and ${key} docked`;
+  });
+  await check(ipad ? "tapping the ticket's card and the file's card switches between them" : "a swipe along the dock walks from the file to the ticket and back", async () => {
+    if (ipad) {
+      await tapWhere(udid, ticketCard);
+      await until("the ticket in the panel", async () => (await labels(udid)).includes(`Close ${key}`), 8000);
+      await tapWhere(udid, fileCard);
+      await until("the file in the panel", async () => (await labels(udid)).includes(`Close ${DOCK_FILE}`) && (await editorUp()), 8000);
+      return "ticket ↔ file";
+    }
+    const first = (await labels(udid)).filter(isDock).at(-1)!;
+    const bar = (await findElement(udid, (l) => l === first))!;
+    const y = String(Math.round(bar.frame.y + bar.frame.height / 2));
+    const swipe = (from: number, to: number) =>
+      axe("swipe", "--start-x", String(Math.round(from)), "--start-y", y, "--end-x", String(Math.round(to)), "--end-y", y, "--duration", "0.25", "--udid", udid);
+    await swipe(W * 0.6, W * 0.1);
+    await until("the ticket on top", async () => ((await labels(udid)).filter(isDock).at(-1) ?? "").startsWith(`${key}, `), 5000).catch(async (e) => {
+      await say("after a swipe left");
+      throw e;
+    });
+    await swipe(W * 0.15, W * 0.65);
+    await until("the file back on top", async () => ((await labels(udid)).filter(isDock).at(-1) ?? "").startsWith(`${DOCK_FILE}, `), 5000);
+    return "file → ticket → file";
+  });
+  await check("opening the docked file again focuses it instead of adding a card", async () => {
+    await goto(udid, link);
+    await until("the editor", editorUp, 12000);
+    if (!ipad) await dockSheet(udid);
+    if ((await count()) !== 2) throw new Error(`${await count()} docked after a second open, expected 2`);
+    return "still two";
+  });
+  await check("a file card's ✕ closes only it", async () => {
+    await tapWhere(udid, `Close ${DOCK_FILE}`);
+    await until("only the ticket left", async () => {
+      const l = await labels(udid);
+      return !l.some(fileCard) && !l.includes(`Close ${DOCK_FILE}`);
+    }, 8000);
+    return "the file closed, the ticket stays";
   });
 }
 
@@ -4185,9 +4266,11 @@ try {
       if (ipad) {
         await panelChecks(udid, sheeted);
         await cardStackChecks(udid, sheeted);
+        await fileDockChecks(udid, sheeted, true);
       } else {
         await sheetChecks(udid, sheeted, "Planning");
         await dockStackChecks(udid, sheeted);
+        await fileDockChecks(udid, sheeted, false);
       }
     });
   if (sheeted && memoryOnly) await timed("mode: memory", () => memoryChecks(udid, sheeted));

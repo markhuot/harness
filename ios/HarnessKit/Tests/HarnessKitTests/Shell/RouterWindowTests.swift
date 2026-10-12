@@ -42,7 +42,7 @@ struct RouterWindowTests {
         // A child pushed above the root, with a file above it: the child, on its tab.
         r.push(t("A-1"))
         r.push(t("A-2", .transcript))
-        r.push(.file(FileRouteParams(path: "a.ts", ticket: "A-2")))
+        r.push(.prompts)
         r.popOutSheet()
         #expect(opened().last == t("A-2", .transcript))
         #expect(r.ticketSheetState == .gone)

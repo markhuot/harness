@@ -15,9 +15,21 @@ struct DockedTicketText: Equatable {
     /// The ticket's status; nil for New session or a ticket the board doesn't have yet.
     var status: TicketStatus?
     var isNewSession = false
+    var isFile = false
 
     @MainActor init(_ sheet: TicketSheet, state: BoardState?) {
-        if let key = sheet.topTicketKey {
+        if let file = sheet.file {
+            // A file: its name, and the ticket or project it's in.
+            ref = FileViewerRules.fileName(file.path)
+            isFile = true
+            if let key = file.ticket {
+                title = key
+            } else if let id = file.project {
+                title = state?.projects[id]?.name
+            } else {
+                title = nil
+            }
+        } else if let key = sheet.topTicketKey {
             let ticket = state?.ticketByKey(key)
             ref = ticket.map { Keys.displayKey($0) } ?? key
             title = ticket?.title
@@ -120,7 +132,12 @@ struct DockedCard: View {
     static let closeInset = DockMetrics.closeInset
 
     @ViewBuilder private func statusIcon(_ text: DockedTicketText) -> some View {
-        if text.isNewSession {
+        if text.isFile {
+            Image(systemName: "doc.text")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(c.text2)
+                .frame(width: 14)
+        } else if text.isNewSession {
             Image(systemName: "square.and.pencil")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(c.accent)
@@ -350,7 +367,7 @@ struct DockedTicketsKeeper: ViewModifier {
         switch sheet.root {
         case let .ticket(key, _): out.append(key)
         case let .newSession(_, key?): out.append(key)
-        case .newSession: break
+        case .newSession, .file: break
         }
         if let top = sheet.topTicketKey, !out.contains(top) { out.append(top) }
         return out
