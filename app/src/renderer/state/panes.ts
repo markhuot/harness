@@ -664,9 +664,10 @@ export function openCompose(state: PaneState, content: ComposeContent = newCompo
  * (`fromLeafId`, else the focused pane, else the board: splitTarget) is itself a file pane (the
  * palette's file browser over one), that pane shows the new file; when it has a file pane right after it
  * in a row, that pane shows the new file, so following links from a transcript doesn't stack up a
- * pane per file; failing that, a new pane docks on its right.
+ * pane per file; failing that, a new pane opens on the workspace's far right at the fixed width
+ * (COMPOSE_WIDTH_PX, as New session and terminals do: see openCompose), wherever focus is.
  */
-export function openFile(state: PaneState, content: FileContent, fromLeafId: string | null = null): PaneState {
+export function openFile(state: PaneState, content: FileContent, fromLeafId: string | null = null, workspaceWidth?: number): PaneState {
   const existing = fileLeafByKey(state.root, fileKey(content));
   if (existing && existing.content.kind === "file") {
     const tab = content.tab ?? (content.startLine ? "file" : existing.content.tab);
@@ -684,7 +685,7 @@ export function openFile(state: PaneState, content: FileContent, fromLeafId: str
   if (beside?.type === "leaf" && beside.content.kind === "file") {
     return normalize({ root: setLeafContent(state.root, beside.id, clean), focusedId: beside.id, zoomedId: zoomFor(state, beside.id) });
   }
-  return dock(state, null, from, "right", clean);
+  return appendAtRightEdge(state, clean, (root, count) => fixedWidthShare(root, count, workspaceWidth, PANE_MIN_WIDTH.file));
 }
 
 /** Just `c`'s line range, with an endLine only when it's a real range after startLine. */

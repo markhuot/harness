@@ -108,6 +108,8 @@ try {
   check("lines 10–20 are highlighted (and only those)", opened.selected.length === 11 && Math.min(...opened.selected) === 10 && Math.max(...opened.selected) === 20, JSON.stringify(opened.selected));
   const order = await js<string[]>(`[...document.querySelectorAll(".pane")].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(p => p.dataset.testid)`);
   check("the file pane docks right of the ticket", order.join(",") === "pane-board,pane-ticket,pane-file", order.join(","));
+  const fileRight = await js<number[]>(`[document.querySelector('[data-testid="pane-file"]').getBoundingClientRect().right, document.querySelector(".pane-workspace").getBoundingClientRect().right]`);
+  check("…on the workspace's right edge", Math.abs(fileRight[0]! - fileRight[1]!) <= 2, fileRight.join(" vs "));
   check("line 10 is in view", opened.top >= 0 && opened.top < opened.height, `top=${opened.top} height=${opened.height}`);
   check("syntax colored (pierre tokens)", await js<boolean>(`(() => { const d = document.querySelector('[data-testid="file-body"] diffs-container')?.shadowRoot; return !!d && [...d.querySelectorAll('[data-line] span[style]')].length > 20; })()`));
   check("modified badge", (await js<string>(`document.querySelector('[data-testid="file-git-state"]')?.textContent ?? ""`)) === "modified");

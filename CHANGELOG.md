@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On the Mac, a file you open from a link or the palette's file browser now gets a new pane on the far right of the window, running its full height at the same fixed width (about 70em) as New session and terminals, wherever focus is, instead of splitting the pane you opened it from. A file already open, or a file pane next to where you opened it, still shows the new file in place. For people working on Harness, New session, terminals and files now share one placement path (`appendAtRightEdge` with `fixedWidthShare`), covered by unit tests in `panes.test.ts` and by `file-pane-check.ts`.
+
 ### Fixed
 
 - On the Mac, dragging an open pane now previews the drop on the pane under the pointer, where it is on screen, instead of on the layout as if the dragged pane had already left. The box is the size the pane will have: half of the pane, 40% of the board, or, when you reorder a pane within its own row or column, the dragged pane's own width or height. For people working on Harness, `pane-resize-check` holds a drag and checks the preview's position and size.

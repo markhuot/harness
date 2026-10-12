@@ -1634,10 +1634,22 @@ describe("file panes", () => {
   const file = (path: string, extra: Partial<FileContent> = {}, root: FileContent["root"] = { ticketKey: "A-1" }): FileContent => ({ kind: "file", root, path, ...extra });
   const F = (id: string, c: FileContent): PaneLeaf => ({ type: "leaf", id, content: c });
 
-  test("opening from a ticket pane docks the file on its right and focuses it", () => {
-    const s = valid(openFile(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), file("src/app.ts", { startLine: 10, endLine: 20 }), "A-1"));
-    expect(shape(s.root)).toBe("row[board 0.6, A-1 0.2, @src/app.ts:10-20 0.2]");
+  test("a new file pane opens at the far right, 70em (910px) wide, and is focused", () => {
+    const s = valid(openFile(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), file("src/app.ts", { startLine: 10, endLine: 20 }), "A-1", 1820));
+    expect(shape(s.root)).toBe("row[board 0.3, A-1 0.2, @src/app.ts:10-20 0.5]");
     expect(focusedLabel(s)).toBe("@src/app.ts:10-20");
+  });
+
+  test("a new file pane goes to the far right wherever focus is, and takes an equal share without a width", () => {
+    const s0 = st(row("r", [B, T("A-1"), T("A-2")], [0.4, 0.3, 0.3]), "A-1");
+    expect(shape(valid(openFile(s0, file("a.ts"), "A-1", 1820)).root)).toBe("row[board 0.229, A-1 0.171, A-2 0.171, @a.ts 0.429]");
+    expect(shape(valid(openFile(s0, file("a.ts"), "A-1")).root)).toBe("row[board 0.3, A-1 0.225, A-2 0.225, @a.ts 0.25]");
+  });
+
+  test("a new file pane in a narrow window is held at its minimum, not 910px", () => {
+    const s = valid(openFile(st(row("r", [B, T("A-1")], [0.6, 0.4]), "A-1"), file("a.ts"), "A-1", 1000));
+    const last = shape(s.root);
+    expect(last).toContain("@a.ts 0.36");
   });
 
   test("the same file (root + path) reuses its pane and moves it to the new lines", () => {
@@ -1678,8 +1690,8 @@ describe("file panes", () => {
 
   test("a file pane elsewhere (not right after the source) doesn't get replaced", () => {
     const s0 = st(row("r", [B, F("f", file("a.ts")), T("A-1")], [0.4, 0.3, 0.3]), "A-1");
-    const s = valid(openFile(s0, file("b.ts"), "A-1"));
-    expect(shape(s.root)).toBe("row[board 0.4, @a.ts 0.3, A-1 0.15, @b.ts 0.15]");
+    const s = valid(openFile(s0, file("b.ts"), "A-1", 1820));
+    expect(shape(s.root)).toBe("row[board 0.229, @a.ts 0.171, A-1 0.171, @b.ts 0.429]");
   });
 
   test("bad line numbers are dropped, and an end before the start isn't a range", () => {

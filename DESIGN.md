@@ -3092,7 +3092,8 @@ Settings, project settings, or on the board route the pane workspace.
   `state/panes.ts` focuses the pane already showing that file and moves it to the link's lines
   (switching to the File tab), else shows it in the pane it's opened from when that's a file pane
   (the palette's file browser over one), else reuses a file pane just right of that pane, else
-  docks a new one on its right. `FileViewer.tsx` (loaded lazily) draws the file with
+  appends a new one as the far-right, full-height pane (`appendAtRightEdge`, 70em wide through the
+  same `fixedWidthShare` as New session and terminals, floor 360px), wherever focus is. `FileViewer.tsx` (loaded lazily) draws the file with
   @pierre/diffs' `File`: the syntax theme, line numbers, `startLine..endLine` as its selected
   lines, scrolled into view on open and when a link moves the pane (not when you pick lines in
   the gutter, which updates the pane's range in place with `setFileView`). A file with
@@ -3287,8 +3288,8 @@ Settings, project settings, or on the board route the pane workspace.
     focused has no root, and says so. It searches with `ticketFiles`/`projectFiles` and
     `{ ignored: true, kind: "file" }` after 150 ms, keeps the server's order, marks matches
     with `matchLabel`, and tags the matches the server says are ignored. `parseFileQuery` splits `path:12`, `path:12-20` or `path#L12-L20` off the
-    query, and Enter opens the file at those lines through the store's `openFile`, beside the
-    pane the palette was opened over. An empty query lists that root's recently opened files
+    query, and Enter opens the file at those lines through the store's `openFile` (a new file pane
+    opens on the far right, like New session). An empty query lists that root's recently opened files
     (`harness.palette.recentFiles`, kept apart from the commands' recents). Without a prefix, a
     query that reads as a path (`looksLikePath`) adds up to five files after the commands and
     tickets. `scripts/palette-files-check.ts` drives it against the real service.

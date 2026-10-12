@@ -525,10 +525,10 @@ export function StoreProvider({
     (link, from = {}) => {
       const content = fileContentFor(link, from);
       if (!content) return toast(`Can't tell which project ${link.path} is in.`, "error");
-      if (from.paneId && from.scope) return updatePanes(from.scope, (s) => openFilePane(s, content, from.paneId));
+      if (from.paneId && from.scope) return updatePanes(from.scope, (s) => openFilePane(s, content, from.paneId, workspaceWidth()));
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
-      updatePanes(scope, (s) => openFilePane(s, content));
+      updatePanes(scope, (s) => openFilePane(s, content, null, workspaceWidth()));
       if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate, toast],
