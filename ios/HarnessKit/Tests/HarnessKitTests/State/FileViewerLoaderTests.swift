@@ -11,6 +11,14 @@ import Testing
         let diffs = Mutex<[Deferred<FileDiff>]>([])
         let calls = Mutex<[String]>([])
 
+        func writeTicketFile(_ key: String, path: String, contents: String) async throws -> FileWriteResult {
+            FileWriteResult(path: path, size: contents.utf8.count)
+        }
+
+        func writeProjectFile(_ id: String, path: String, contents: String) async throws -> FileWriteResult {
+            FileWriteResult(path: path, size: contents.utf8.count)
+        }
+
         func ticketFile(_ key: String, path: String) async throws -> FileView { try await nextFile("ticketFile \(key) \(path)") }
         func projectFile(_ id: String, path: String) async throws -> FileView { try await nextFile("projectFile \(id) \(path)") }
         func ticketFileDiff(_ key: String, path: String) async throws -> FileDiff { try await nextDiff("ticketFileDiff \(key) \(path)") }

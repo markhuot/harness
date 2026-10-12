@@ -59,11 +59,6 @@ public struct FileErrorCopy: Equatable, Sendable {
 }
 
 public enum FileViewerRules {
-    /// Lines are laid out this many characters wide at most; longer ones are clipped.
-    public static let maxColumns = 400
-    /// Characters of a long file tokenized at once (the highlighter's cap is 60 000).
-    public static let windowChars = 40_000
-
     /// The header title: the path's last segment (`path.split("/").filter(Boolean).pop() ?? path`).
     public static func fileName(_ path: String) -> String {
         path.split(separator: "/", omittingEmptySubsequences: true).last.map(String.init) ?? path
@@ -75,11 +70,6 @@ public enum FileViewerRules {
         case let .ticket(key): key
         case .project: projectName ?? "Project"
         }
-    }
-
-    /// Tabs as 4 spaces, as the viewer draws them.
-    public static func expandTabs(_ s: String) -> String {
-        s.contains("\t") ? s.replacingOccurrences(of: "\t", with: "    ") : s
     }
 
     /// A line's drawn width in characters: UTF-16 units after tabs expand.
@@ -161,42 +151,6 @@ public enum FileViewerRules {
         }
         return FileLinks.formatFileLink(link)
     }
-}
-
-/// Which lines of a long file have colors, as windows of it are highlighted around what's on screen
-/// (FileBody's center / highlightWindow / colored map). Colored lines pile up, so scrolling back
-/// never goes plain again; `reset()` drops them when the syntax theme changes.
-public struct FileHighlightWindows<Colors> {
-    public let lengths: [Int]
-    public let maxChars: Int
-    /// The window to highlight now: [from, to) line indexes
-    public private(set) var window: Range<Int>
-    public private(set) var colored: [Int: Colors] = [:]
-
-    /// `center` is 0-based: the range's first line, or 0.
-    public init(lengths: [Int], center: Int, maxChars: Int = FileViewerRules.windowChars) {
-        self.lengths = lengths
-        self.maxChars = maxChars
-        window = FileViewer.highlightWindow(lengths: lengths, center: center, maxChars: maxChars)
-    }
-
-    /// The rows on screen changed. When some fall outside the window, it moves to center on them
-    /// (`Math.round((first + last) / 2)`); returns whether it moved.
-    @discardableResult
-    public mutating func visible(first: Int, last: Int) -> Bool {
-        guard first < window.lowerBound || last >= window.upperBound else { return false }
-        let next = FileViewer.highlightWindow(lengths: lengths, center: (first + last + 1) / 2, maxChars: maxChars)
-        guard next != window else { return false }
-        window = next
-        return true
-    }
-
-    /// A highlight of `lines[from ..< from + colors.count]` landed.
-    public mutating func land(_ colors: [Colors], from: Int) {
-        for (i, c) in colors.enumerated() where from + i < lengths.count { colored[from + i] = c }
-    }
-
-    public mutating func reset() { colored = [:] }
 }
 
 /// A file's text as the viewer lists it: its lines, each line's drawn width, and the widest.

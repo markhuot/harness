@@ -181,41 +181,6 @@ public enum FileViewer {
         return lines
     }
 
-    /// The row to open at for a range starting on `start` (1-based): a few lines above it for context.
-    public static func initialScrollIndex(start: Int?, total: Int, context: Int = 3) -> Int {
-        guard let start, start != 0, total > 0 else { return 0 }
-        return max(0, min(total - 1, start - 1 - context))
-    }
-
-    /// Which lines of a long file to syntax highlight: tokenizing is expensive and a highlighter
-    /// caps a block's size, so a big file is colored a window at a time. The window grows from
-    /// `center` (0-based) one line either way, alternately, while its text (newlines included)
-    /// fits in `maxChars`; a line that alone is over budget still makes a window of one.
-    public static func highlightWindow(lengths: [Int], center: Int, maxChars: Int) -> Range<Int> {
-        let n = lengths.count
-        if n == 0 { return 0..<0 }
-        func size(_ i: Int) -> Int { lengths[i] + 1 }
-        let mid = max(0, min(n - 1, center))
-        var from = mid
-        var to = mid + 1
-        var used = size(mid)
-        var grew = true
-        while grew {
-            grew = false
-            if to < n && used + size(to) <= maxChars {
-                used += size(to)
-                to += 1
-                grew = true
-            }
-            if from > 0 && used + size(from - 1) <= maxChars {
-                from -= 1
-                used += size(from)
-                grew = true
-            }
-        }
-        return from..<to
-    }
-
     /// A one-file unified patch (GET …/file/diff) as rows to draw: hunk headers and code lines,
     /// each code line numbered on the side(s) it's on. File headers (`diff --git`, `index`,
     /// `---`/`+++`) and `\ No newline at end of file` markers are left out; so is everything when

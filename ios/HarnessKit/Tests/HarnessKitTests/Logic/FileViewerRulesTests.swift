@@ -29,7 +29,6 @@ import Testing
         #expect(FileViewerRules.drawnLength("\tab") == 6)
         #expect(FileViewerRules.drawnLength("😀") == 2)
         #expect(FileViewerRules.drawnLength("") == 0)
-        #expect(FileViewerRules.expandTabs("\ta\t") == "    a    ")
     }
 
     @Test func untrackedWinsOverModified() {
@@ -111,57 +110,5 @@ import Testing
         #expect(t.lengths == [1, 6, 1])
         #expect(t.longest == 6)
         #expect(FileText("").longest == 0)
-    }
-}
-
-@Suite struct FileHighlightWindowsTests {
-    /// 100 lines of 9 characters: 10 with their newline, so a 100-char budget fits 10 lines.
-    static let lengths = Array(repeating: 9, count: 100)
-
-    @Test func opensAroundTheCenter() {
-        let w = FileHighlightWindows<String>(lengths: Self.lengths, center: 50, maxChars: 100)
-        // It grows down first, so an even budget leans one line below the center.
-        #expect(w.window == 46..<56)
-    }
-
-    @Test func scrollingInsideTheWindowDoesNotMoveIt() {
-        var w = FileHighlightWindows<String>(lengths: Self.lengths, center: 50, maxChars: 100)
-        let moved46_55 = w.visible(first: 46, last: 55)
-        #expect(!moved46_55)
-        #expect(w.window == 46..<56)
-    }
-
-    @Test func scrollingPastAnEdgeRecentersOnTheVisibleRows() {
-        var w = FileHighlightWindows<String>(lengths: Self.lengths, center: 50, maxChars: 100)
-        // `last` at the window's end (exclusive) is outside it.
-        let moved50_56 = w.visible(first: 50, last: 56)
-        #expect(moved50_56)
-        // Math.round(53) = 53 → 10 lines around 53.
-        #expect(w.window == 49..<59)
-        // Math.round(42.5) = 43, not 42.
-        let moved40_45 = w.visible(first: 40, last: 45)
-        #expect(moved40_45)
-        #expect(w.window == 39..<49)
-    }
-
-    @Test func coloredLinesPileUpUntilReset() {
-        var w = FileHighlightWindows<String>(lengths: Self.lengths, center: 0, maxChars: 100)
-        w.land(["a", "b"], from: 0)
-        w.land(["c"], from: 90)
-        #expect(w.colored == [0: "a", 1: "b", 90: "c"])
-        // A later landing over the same line replaces it; lines past the end are dropped.
-        w.land(["B", "x", "y"], from: 98)
-        w.land(["b2"], from: 1)
-        #expect(w.colored[1] == "b2" && w.colored[98] == "B" && w.colored[99] == "x" && w.colored[100] == nil)
-        w.reset()
-        #expect(w.colored.isEmpty)
-    }
-
-    @Test func anEmptyFileHasAnEmptyWindow() {
-        var w = FileHighlightWindows<String>(lengths: [], center: 5)
-        #expect(w.window.isEmpty)
-        let moved0_0 = w.visible(first: 0, last: 0)
-        #expect(!moved0_0)
-        #expect(w.window.isEmpty)
     }
 }

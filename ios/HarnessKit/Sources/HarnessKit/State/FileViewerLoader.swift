@@ -19,6 +19,8 @@ public protocol FileViewerClient: Sendable {
     func projectFile(_ id: String, path: String) async throws -> FileView
     func ticketFileDiff(_ key: String, path: String) async throws -> FileDiff
     func projectFileDiff(_ id: String, path: String) async throws -> FileDiff
+    func writeTicketFile(_ key: String, path: String, contents: String) async throws -> FileWriteResult
+    func writeProjectFile(_ id: String, path: String, contents: String) async throws -> FileWriteResult
 }
 
 extension HarnessClient: FileViewerClient {}

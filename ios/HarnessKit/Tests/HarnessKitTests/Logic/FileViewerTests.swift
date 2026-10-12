@@ -31,18 +31,6 @@ struct RouterParamsInput: Decodable, Sendable {
     }
 }
 
-struct InitialScrollInput: Decodable, Sendable {
-    let start: Int?
-    let total: Int
-    let context: Int?
-}
-
-struct HighlightWindowInput: Decodable, Sendable {
-    let lengths: [Int]
-    let center: Int
-    let maxChars: Int
-}
-
 @Suite("FileViewer")
 struct FileViewerTests {
     @Test(arguments: Fixture.cases("fileViewer", "fileRouteForCases", input: FileRouteForInput.self, output: FileRouteParams?.self))
@@ -90,19 +78,6 @@ struct FileViewerTests {
     func fileLines(_ c: Fixture.Case<String, [String]>) {
         let got = FileViewer.fileLines(c.input)
         #expect(got.count == c.output.count && zip(got, c.output).allSatisfy { sameScalars($0, $1) }, "\(got)")
-    }
-
-    @Test(arguments: Fixture.cases("fileViewer", "initialScrollIndexCases", input: InitialScrollInput.self, output: Int.self))
-    func initialScrollIndex(_ c: Fixture.Case<InitialScrollInput, Int>) {
-        let got = c.input.context.map { FileViewer.initialScrollIndex(start: c.input.start, total: c.input.total, context: $0) }
-            ?? FileViewer.initialScrollIndex(start: c.input.start, total: c.input.total)
-        #expect(got == c.output)
-    }
-
-    @Test(arguments: Fixture.cases("fileViewer", "highlightWindowCases", input: HighlightWindowInput.self, output: [Int].self))
-    func highlightWindow(_ c: Fixture.Case<HighlightWindowInput, [Int]>) {
-        let got = FileViewer.highlightWindow(lengths: c.input.lengths, center: c.input.center, maxChars: c.input.maxChars)
-        #expect([got.lowerBound, got.upperBound] == c.output)
     }
 
     @Test(arguments: Fixture.cases("fileViewer", "patchRowsCases", input: String.self, output: [PatchRow].self))
