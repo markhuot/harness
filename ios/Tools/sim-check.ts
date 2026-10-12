@@ -3991,11 +3991,18 @@ function interactionChains(s: Seeded): Chain[] {
           await shot(udid, "file-link-tap-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).join(" | ")}`);
         });
-        await Bun.sleep(1200);
-        await shot(udid, "file-link-tap-light");
         // Its folder is the ticket's worktree (main's commit): the file is there, clean, and it has no Diff tab.
         if (l.includes("Modified") || l.some((x) => x.startsWith("Diff"))) throw new Error("a clean file shows as modified");
-        if (!l.some((x) => x.startsWith(`export function greetingFor`))) throw new Error("the linked lines aren't on screen");
+        // The code is CodeMirror in a web view, which AXe can't see into: the editor's accessibility
+        // value is the text of the first linked line the page scrolled to and marked (the page
+        // starts after the screen does, so wait for it).
+        const marked = await until("the linked line marked in the editor", async () => {
+          const v = (await nodes(udid)).find((n) => n.AXUniqueId === "file-editor")?.AXValue;
+          return v ? v : null;
+        }, 10000).catch(() => "");
+        await Bun.sleep(600);
+        await shot(udid, "file-link-tap-light");
+        if (!marked.startsWith("export function greetingFor")) throw new Error(`the linked lines aren't marked in the editor: ${JSON.stringify(marked)}`);
         return `${GREETINGS_PATH}, ${range}`;
       });
     }),

@@ -65,6 +65,7 @@ final class FileEditorSession {
         fileHost.send(.open(
             contents: model.latest ?? contents, language: language, theme: theme, range: range,
             readOnly: !editable, saved: model.saved))
+        if range != nil { Task { await fileHost.readRevealedLine() } }
     }
 
     private func openDiff() {

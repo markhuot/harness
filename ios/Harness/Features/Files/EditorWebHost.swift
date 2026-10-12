@@ -19,6 +19,10 @@ final class EditorWebHost: NSObject {
     /// carries everything the page needs.
     private(set) var ready = false
 
+    /// The text of the first marked (linked) line once the page has scrolled to it. sim-check reads it
+    /// through the editor's accessibility value, since a web view's page isn't in the AX tree.
+    private(set) var revealedLine: String?
+
     @ObservationIgnored let webView: EditorWebView
     /// The page is (re)ready: send `open` or `diff` now.
     @ObservationIgnored var onReady: () -> Void = {}
@@ -69,6 +73,12 @@ final class EditorWebHost: NSObject {
     func send(_ command: FileEditorCommand) {
         guard ready else { return }
         webView.evaluateJavaScript(command.script, completionHandler: nil)
+    }
+
+    /// Reads which line the page marked for a linked range, after it has had time to scroll there.
+    func readRevealedLine() async {
+        try? await Task.sleep(for: .milliseconds(500))
+        revealedLine = await evaluate("(document.querySelector('.cm-revealed-line') || {}).textContent || ''")
     }
 
     func tearDown() {

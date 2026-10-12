@@ -8,8 +8,15 @@
 <style>
   html, body { margin: 0; height: 100%; background: transparent; -webkit-text-size-adjust: 100%; }
   body { overflow: hidden; -webkit-touch-callout: none; }
-  .cm-editor { height: 100%; }
-  .cm-scroller { overflow: auto; -webkit-overflow-scrolling: touch; }
+  /* The page scrolls, not an inner scroller: UIKit then sees the web view's own scroll view, so a
+     sheet drags down from the top of the file and the keyboard insets it natively. */
+  html, body { height: auto; min-height: 100%; }
+  body { overflow: visible; }
+  .cm-editor, .cm-mergeView { height: auto !important; }
+  .cm-scroller { overflow: visible !important; }
+  .cm-mergeView { overflow: visible !important; }
+  /* The merge view's two panes are each half the width: each scrolls its long lines sideways. */
+  .cm-mergeView .cm-scroller { overflow-x: auto !important; overflow-y: hidden !important; }
 </style>
 </head>
 <body>

@@ -332,6 +332,17 @@ private struct EditorSurface: View {
                 .opacity(host.ready ? 1 : 0)
             if !host.ready { Spinner() }
         }
+        .overlay {
+            // The editor's page isn't in the accessibility tree: this reads out the linked line it scrolled to.
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityLabel("Editor")
+                .accessibilityValue(host.revealedLine ?? "")
+                .accessibilityIdentifier("file-editor")
+                // A new identity per value: SwiftUI otherwise leaves the accessibility tree on the first one.
+                .id(host.revealedLine ?? "")
+        }
         // The web view insets itself for the keyboard and keeps the caret in view.
         .ignoresSafeArea(.keyboard)
         .ignoresSafeArea(.container, edges: .bottom)
