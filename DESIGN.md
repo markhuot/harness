@@ -3112,13 +3112,20 @@ Settings, project settings, or on the board route the pane workspace.
   (switching to the File tab), else shows it in the pane it's opened from when that's a file pane
   (the palette's file browser over one), else reuses a file pane just right of that pane, else
   appends a new one as the far-right, full-height pane (`appendAtRightEdge`, 70em wide through the
-  same `fixedWidthShare` as New session and terminals, floor 360px), wherever focus is. `FileViewer.tsx` (loaded lazily) draws the file with
-  @pierre/diffs' `File`: the syntax theme, line numbers, `startLine..endLine` as its selected
-  lines, scrolled into view on open and when a link moves the pane (not when you pick lines in
-  the gutter, which updates the pane's range in place with `setFileView`). A file with
-  uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, a
-  `MultiFileDiff` of HEAD against the working tree (a `PatchDiff` of git's patch when a side is
-  binary or too big), with the Changes tab's `lineDiffType` and hunk separators. Contents and diff
+  same `fixedWidthShare` as New session and terminals, floor 360px), wherever focus is. `FileViewer.tsx` (loaded lazily) draws the file in the
+  CodeMirror editor from `editor/` (`createEditor`): its colors are the CSS variables on `<html>`, so
+  a theme change recolors it live (only light vs dark is passed down), and `startLine..endLine`
+  is highlighted and scrolled into view on open and when a link moves the pane, leaving no
+  selection. The editor is editable: Save (header button, Cmd+S) writes through
+  `writeTicketFile` / `writeProjectFile`, and a dot in the header marks unsaved edits. With the
+  `saveOnBlur` setting (Settings → General) it also saves when the editor or the window loses
+  focus, and when the pane closes or another file replaces it; without it, closing registers a
+  closer (`draftClose.ts`) that asks to save, then to discard, and replacing the file asks too.
+  A refetch (window focus) swaps a clean editor's text silently and leaves one with edits alone,
+  and a fetch sent before the last save is ignored. A truncated read is read-only. A file with
+  uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, the merge view
+  (`createDiffEditor`, side by side, read-only) of HEAD against the working tree (git's patch as
+  plain text when a side is binary or too big). Contents and diff
   refetch on window focus, reconnect, the ticket's workdir or branch changing, and the refresh
   button. File panes persist with the rest of the tree, follow a ticket rename, and close when
   their ticket is deleted. `scripts/file-pane-check.ts` drives the whole flow against the real

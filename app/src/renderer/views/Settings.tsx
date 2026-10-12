@@ -186,6 +186,9 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
             }}
           />
         </Row>
+        <Row title="Save files on blur" sub="The file viewer saves your edits when the editor, the pane or the app loses focus, and when a pane with edits closes. Off, you save with ⌘S or the Save button.">
+          <Switch checked={settings.saveOnBlur ?? false} ariaLabel="Save files on blur" onChange={(v) => void save({ saveOnBlur: v })} />
+        </Row>
         <Row title="Base branch" sub="New ticket branches start from it, and finished tickets merge into it.">
           <DraftInput className="input mono" value={settings.baseBranch ?? DEFAULT_BASE_BRANCH} placeholder={DEFAULT_BASE_BRANCH} onCommit={(v) => void save({ baseBranch: v.trim() || DEFAULT_BASE_BRANCH })} />
         </Row>

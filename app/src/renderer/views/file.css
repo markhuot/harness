@@ -1,5 +1,6 @@
-/* File panes (views/FilePane.tsx). The header matches a terminal's; the body scrolls the code,
-   which @pierre/diffs draws on the pane's background (FileViewer.tsx's SURFACE). */
+/* File panes (views/FilePane.tsx). The header matches a terminal's; the body holds the CodeMirror
+   editor or merge view (FileViewer.tsx), which scroll themselves and take their colors from the
+   theme variables on <html>. */
 
 .file-pane {
   display: flex;
@@ -53,8 +54,13 @@
   border-radius: 50%;
   background: var(--amber);
 }
-.file-diff-style button {
-  font-size: 11.5px;
+/* Unsaved edits */
+.file-dirty {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amber);
 }
 .file-body {
   position: relative;
@@ -62,21 +68,34 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   background: var(--bg);
   border-top: 1px solid var(--border);
-  --diffs-font-family: var(--mono);
-  --diffs-font-size: 12px;
-  --diffs-line-height: 1.55;
 }
 .file-tabs + .file-body {
   border-top: 0;
 }
-.file-body > diffs-container {
-  flex: none;
-  padding: 6px 0 24px;
+.file-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.file-editor > .cm-editor {
+  height: 100%;
+}
+/* The merge view scrolls both sides together in its own box. */
+.file-diff {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.file-diff > .cm-mergeView {
+  height: 100%;
+  overflow: auto;
 }
 .file-plain {
+  flex: 1;
+  overflow: auto;
   margin: 0;
   padding: 6px 12px 24px;
   font-family: var(--mono);

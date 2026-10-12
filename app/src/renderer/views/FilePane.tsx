@@ -1,15 +1,19 @@
-// A file pane: one project or ticket file in full (views/FileViewer.tsx draws it with @pierre/diffs),
-// opened from a file link in chat (components/Markdown.tsx) or the store's openFile. The linked
-// lines are highlighted and scrolled into view, on open and whenever a link moves the pane to
-// other lines; clicking or dragging line numbers picks lines too (without scrolling), so Copy link
-// gives a link to exactly what's highlighted.
+// A file pane: one project or ticket file in full, editable (views/FileViewer.tsx draws it with the
+// CodeMirror editor in editor/), opened from a file link in chat (components/Markdown.tsx) or the
+// store's openFile. The linked lines are highlighted and scrolled into view, on open and whenever a
+// link moves the pane to other lines. Copy link gives a link to the selected lines, else the linked ones.
 //
-// A file with uncommitted changes (git.dirty, or untracked in a repo) gets a Diff tab against HEAD.
-// Contents and diff are refetched on window focus, on a reconnect (epoch), when the ticket's
-// worktree or branch changes, and with the refresh button; what's on screen stays until the new
-// copy arrives.
+// Save (the header button, Cmd+S) writes the file through the service. With the "Save on blur"
+// setting the editor also saves when it loses focus, the window loses focus, or the pane closes or
+// shows another file; without it, closing or replacing a pane with unsaved edits asks first.
+//
+// A file with uncommitted changes (git.dirty, or untracked in a repo) gets a Diff tab against HEAD
+// in the merge view. Contents and diff are refetched on window focus, on a reconnect (epoch), when
+// the ticket's worktree or branch changes, and with the refresh button; what's on screen stays until
+// the new copy arrives, and a clean editor takes it silently while one with edits keeps them.
 
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import type { EditorHandle } from "@harness/editor";
 import { formatFileLink, type FileDiff, type FileView } from "@harness/shared";
 import { ticketByKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -17,18 +21,20 @@ import { MenuButton } from "../components/bits";
 import { usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
+import { requestClosePane, registerDraftCloser } from "../components/draftClose";
 import { closePane, fileRootTicket, paneLabel, setFileView, toggleZoom, updatePanes, type FileContent, type FileTab } from "../state/panes";
+import { focusPaneBy } from "../components/paneFocus";
 import { useStore } from "../state/store";
 import "./file.css";
 
 const viewer = () => import("./FileViewer");
-const fileCode = retryableLazy(() => viewer().then((m) => m.FileCode));
+const fileEditor = retryableLazy(() => viewer().then((m) => m.FileEditor));
 const fileChanges = retryableLazy(() => viewer().then((m) => m.FileChanges));
-const FileCode = fileCode.Component;
+const FileEditor = fileEditor.Component;
 const FileChanges = fileChanges.Component;
 
 type Failure = { status: number; message: string };
-type Fetched<T> = { data: T | null; error: Failure | null; loading: boolean };
+type Fetched<T> = { data: T | null; error: Failure | null; loading: boolean; /** When the request that produced `data` was sent */ at?: number };
 
 const failureOf = (e: unknown): Failure => ({ status: (e as { status?: number }).status ?? 0, message: (e as Error).message || String(e) });
 
@@ -39,7 +45,7 @@ export function formatSize(bytes: number): string {
 }
 
 export function FilePane({ paneId, content, zoomed }: { paneId: string; content: FileContent; zoomed: boolean }) {
-  const { client, state, epoch } = useStore();
+  const { client, state, epoch, toast } = useStore();
   const scope = usePaneScope();
   const { path } = content;
   const ticketKey = fileRootTicket(content);
@@ -60,9 +66,10 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   useEffect(() => {
     let live = true;
     setFile((f) => ({ ...f, loading: true }));
+    const at = Date.now();
     const req = ticketKey ? client.ticketFile(ticketKey, path) : client.projectFile(projectId!, path);
     req.then(
-      (data) => live && setFile({ data, error: null, loading: false }),
+      (data) => live && setFile({ data, error: null, loading: false, at }),
       (e) => live && setFile({ data: null, error: failureOf(e), loading: false }),
     );
     return () => void (live = false);
@@ -85,51 +92,118 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
     );
     return () => void (live = false);
   }, [client, rootKey, path, tab, view]);
-  const [diffStyle, setDiffStyle] = useState<"unified" | "split">("unified");
 
   // --- lines ---------------------------------------------------------------------------------
   const selected = content.startLine ? { start: content.startLine, end: content.endLine ?? content.startLine } : null;
-  const bodyRef = useRef<HTMLDivElement>(null);
-  // The range to bring into view once the code has rendered it: set when a link (or opening the
-  // pane) asks for lines, not when the user picks them in the gutter.
-  const pendingScroll = useRef<{ start: number; end: number } | null>(selected);
-  const picked = useRef<string | null>(null);
-  const rangeKey = selected ? `${selected.start}-${selected.end}` : "";
-  const scrollToPending = useCallback(() => {
-    const want = pendingScroll.current;
-    const scroller = bodyRef.current;
-    if (!want || !scroller) return;
-    if (scrollToLines(scroller, want.start, want.end)) pendingScroll.current = null;
-  }, []);
-  useLayoutEffect(() => {
-    if (picked.current === rangeKey) return void (picked.current = null);
-    pendingScroll.current = selected;
-    scrollToPending();
-  }, [rangeKey, path]);
-  const shownRange = useRef(rangeKey);
-  shownRange.current = rangeKey;
-  const onSelect = useCallback(
-    (r: { start: number; end: number } | null) => {
-      const key = r ? `${r.start}-${r.end}` : "";
-      // pierre reports the selection it was given too (a link moving the pane): only a change is a pick.
-      if (key === shownRange.current) return;
-      picked.current = key;
-      updatePanes(scope, (s) => setFileView(s, paneId, { lines: r ? { startLine: r.start, endLine: r.end } : null }));
+
+  // --- editing -------------------------------------------------------------------------------
+  const saveOnBlur = !!state.settings?.saveOnBlur;
+  const saveOnBlurRef = useRef(saveOnBlur);
+  saveOnBlurRef.current = saveOnBlur;
+  const handle = useRef<EditorHandle | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  /** When the last save finished: a fetch sent before it may predate the edits and must not replace them. */
+  const savedAt = useRef(0);
+  /** Set when the user chose to throw the edits away, so closing doesn't save or ask again. */
+  const discarded = useRef(false);
+  const writing = useRef<Promise<unknown>>(Promise.resolve());
+  const writeFile = useCallback(
+    (file: { ticketKey: string | null; projectId: string | null; path: string }, contents: string) =>
+      file.ticketKey ? client.writeTicketFile(file.ticketKey, file.path, contents) : client.writeProjectFile(file.projectId!, file.path, contents),
+    [client],
+  );
+  const target = { ticketKey, projectId, path: view?.path ?? path };
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  /** Writes the editor's text, one write at a time; true when it's on disk (or there was nothing to write). */
+  const save = useCallback((): Promise<boolean> => {
+    const h = handle.current;
+    if (!h || !h.isDirty()) return Promise.resolve(true);
+    const contents = h.getContents();
+    const file = targetRef.current;
+    const run = writing.current.then(async () => {
+      setSaving(true);
+      try {
+        await writeFile(file, contents);
+        savedAt.current = Date.now();
+        h.markSaved(contents);
+        // The git badge and Diff tab follow what's now on disk.
+        setBump((n) => n + 1);
+        return true;
+      } catch (e) {
+        toast(`Couldn't save ${file.path}: ${(e as Error).message}`, "error");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    });
+    writing.current = run;
+    return run;
+  }, [writeFile, toast]);
+  const saveIfOnBlur = useCallback(() => {
+    if (saveOnBlurRef.current) void save();
+  }, [save]);
+  useEffect(() => {
+    addEventListener("blur", saveIfOnBlur);
+    return () => removeEventListener("blur", saveIfOnBlur);
+  }, [saveIfOnBlur]);
+  // A fetched copy replaces a clean editor's text silently; one with edits keeps them (last write wins).
+  useEffect(() => {
+    const h = handle.current;
+    if (!h || file.at === undefined || file.at < savedAt.current || view?.contents == null || view.truncated) return;
+    if (!h.isDirty() && h.getContents() !== view.contents) h.setContents(view.contents);
+  }, [view]);
+  /** The editor is going away: keep its edits (save, or ask) unless they were discarded. */
+  const onDispose = useCallback(
+    (last: { contents: string; dirty: boolean }) => {
+      setDirty(false);
+      if (!last.dirty || discarded.current) return;
+      const file = targetRef.current;
+      const write = () => void writeFile(file, last.contents).catch((e) => toast(`Couldn't save ${file.path}: ${(e as Error).message}`, "error"));
+      if (saveOnBlurRef.current || confirm(`Save changes to ${file.path}?`)) write();
+    },
+    [writeFile, toast],
+  );
+  const selectedLines = (): { startLine: number; endLine?: number } | null => {
+    const sel = handle.current?.view.state.selection.main;
+    if (!sel || sel.empty) return null;
+    const doc = handle.current!.view.state.doc;
+    const startLine = doc.lineAt(sel.from).number;
+    const endLine = doc.lineAt(sel.to).number;
+    return endLine > startLine ? { startLine, endLine } : { startLine };
+  };
+
+  // --- actions -------------------------------------------------------------------------------
+  const doClose = useCallback(
+    (keyboard: boolean) => {
+      discarded.current = true; // whatever it held was dealt with just now
+      if (keyboard) focusPaneBy(scope, (s) => closePane(s, paneId));
+      else updatePanes(scope, (s) => closePane(s, paneId));
     },
     [scope, paneId],
   );
-  // --- actions -------------------------------------------------------------------------------
-  const close = () => updatePanes(scope, (s) => closePane(s, paneId));
+  // Closing with unsaved edits saves them (save on blur) or asks; every way of closing comes through here.
+  const requestClose = (keyboard: boolean) => {
+    if (!handle.current?.isDirty()) return doClose(keyboard);
+    const label = targetRef.current.path;
+    if (saveOnBlurRef.current || confirm(`Save changes to ${label} before closing?`)) return void save().then((ok) => ok && doClose(keyboard));
+    if (confirm(`Discard your unsaved changes to ${label}?`)) doClose(keyboard);
+  };
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
+  useEffect(() => registerDraftCloser(paneId, (keyboard) => requestCloseRef.current(keyboard)), [paneId]);
+  const close = () => requestClosePane(scope, paneId);
   const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
   // A pop-out window holds just this pane: nothing to maximize over.
   const popout = usePopout();
   const setTab = (t: FileTab) => {
-    if (t === "file" && selected) pendingScroll.current = selected;
     updatePanes(scope, (s) => setFileView(s, paneId, { tab: t }));
   };
   const shownPath = view?.path ?? path;
   const absolute = view ? `${view.root.replace(/\/+$/, "")}/${view.path}` : null;
-  const link = formatFileLink({ path: shownPath, startLine: content.startLine, endLine: content.endLine, ...(ticketKey ? { ticketKey } : { projectId: projectId! }) });
+  const linkLines = (): { startLine?: number; endLine?: number } => selectedLines() ?? { startLine: content.startLine, endLine: content.endLine };
+  const link = (lines = linkLines()) => formatFileLink({ path: shownPath, ...lines, ...(ticketKey ? { ticketKey } : { projectId: projectId! }) });
   const name = paneLabel(content);
   const dir = shownPath.includes("/") ? shownPath.slice(0, shownPath.lastIndexOf("/") + 1) : "";
   const where = ticketKey ?? project?.name ?? projectId ?? "";
@@ -157,11 +231,19 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
             ignored
           </span>
         )}
+        {dirty && (
+          <span className="file-dirty" data-testid="file-dirty" title="Unsaved changes" aria-label="Unsaved changes" />
+        )}
         <div className="grow" />
         {where && (
           <span className="file-root truncate" title={view?.root ?? undefined}>
             {where}
           </span>
+        )}
+        {tab === "file" && view && !view.binary && view.contents !== null && (
+          <button className="btn btn-sm" data-testid="file-save" disabled={!dirty || saving} onClick={() => void save()} title="Save (⌘S)">
+            {saving ? "Saving…" : "Save"}
+          </button>
         )}
         <button className="btn btn-ghost btn-icon" data-testid="file-refresh" onClick={() => setBump((n) => n + 1)} title="Reload from disk" aria-label="Reload from disk">
           <Icon name="refresh" />
@@ -178,8 +260,8 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
               <button onClick={() => (closeMenu(), void navigator.clipboard.writeText(shownPath))}>
                 <Icon name="copy" /> Copy path
               </button>
-              <button onClick={() => (closeMenu(), void navigator.clipboard.writeText(link))} title={link}>
-                <Icon name="link" /> Copy link{content.startLine ? " to lines" : ""}
+              <button onClick={() => (closeMenu(), void navigator.clipboard.writeText(link()))} title={link()}>
+                <Icon name="link" /> Copy link{linkLines().startLine ? " to lines" : ""}
               </button>
               {absolute && window.harness && (
                 <button onClick={() => (closeMenu(), void window.harness!.revealInFinder(absolute))}>
@@ -219,19 +301,9 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
               {t === "diff" && <span className="file-dirty-dot" title="Uncommitted changes" />}
             </button>
           ))}
-          <div className="grow" />
-          {tab === "diff" && (
-            <div className="segmented file-diff-style" role="group" aria-label="Diff layout">
-              {(["unified", "split"] as const).map((s) => (
-                <button key={s} className={diffStyle === s ? "on" : ""} aria-pressed={diffStyle === s} onClick={() => setDiffStyle(s)}>
-                  {s === "unified" ? "Unified" : "Split"}
-                </button>
-              ))}
-            </div>
-          )}
         </nav>
       )}
-      <div ref={bodyRef} className="file-body selectable" data-testid="file-body" data-tab={tab}>
+      <div className="file-body selectable" data-testid="file-body" data-tab={tab}>
         {file.error ? (
           <FileProblem icon="alert" title={file.error.status === 404 ? `${shownPath} not found` : `Couldn't open ${shownPath}`} detail={file.error.status === 404 ? `There's no such file in ${where || "this project"}.` : file.error.message} />
         ) : !view ? (
@@ -252,7 +324,7 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
           ) : (
             <ChunkBoundary lazies={[fileChanges]} fallback={viewerFailed}>
               <Suspense fallback={null}>
-                <FileChanges name={view.path} diff={diff.data} diffStyle={diffStyle} />
+                <FileChanges name={view.path} diff={diff.data} />
               </Suspense>
             </ChunkBoundary>
           )
@@ -262,10 +334,21 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
           <FileProblem icon="fileText" title="This file is too large to show" detail={`${formatSize(view.size)}; the viewer shows files up to 2 MB.`} />
         ) : (
           <>
-            {view.truncated && <div className="file-note">The file grew while it was read; this is only its start.</div>}
-            <ChunkBoundary lazies={[fileCode]} fallback={viewerFailed}>
+            {view.truncated && <div className="file-note">The file grew while it was read; this is only its start, so it can't be edited.</div>}
+            <ChunkBoundary lazies={[fileEditor]} fallback={viewerFailed}>
               <Suspense fallback={null}>
-                <FileCode name={view.path} contents={view.contents} selected={selected} onSelect={onSelect} onRendered={scrollToPending} />
+                <FileEditor
+                  key={`${view.root}\u0000${view.path}`}
+                  name={view.path}
+                  contents={view.contents}
+                  range={selected}
+                  readOnly={view.truncated}
+                  onHandle={(h) => (handle.current = h)}
+                  onDirty={setDirty}
+                  onSave={() => void save()}
+                  onBlur={saveIfOnBlur}
+                  onDispose={onDispose}
+                />
               </Suspense>
             </ChunkBoundary>
           </>
@@ -309,22 +392,3 @@ function FileProblem({
  * anyway. The panes are stored, so this one comes back.
  */
 const viewerFailed = () => <FileProblem icon="alert" title="Couldn't show this file" detail="The file viewer didn't load." retryLabel="Reload window" onRetry={() => location.reload()} />;
-
-/**
- * Scroll `scroller` so lines `start`..`end` of the rendered file sit in view: the whole range
- * centred when it fits, else its first line a little below the top. False while those lines
- * aren't rendered yet (the code is still loading), so the caller tries again after the next render.
- */
-function scrollToLines(scroller: HTMLElement, start: number, end: number): boolean {
-  const host = scroller.querySelector("diffs-container");
-  const doc = host?.shadowRoot ?? host;
-  const first = doc?.querySelector<HTMLElement>(`[data-line="${start}"]`);
-  if (!first) return false;
-  const last = doc!.querySelector<HTMLElement>(`[data-line="${end}"]`) ?? first;
-  const box = scroller.getBoundingClientRect();
-  const top = first.getBoundingClientRect().top - box.top + scroller.scrollTop;
-  const height = last.getBoundingClientRect().bottom - first.getBoundingClientRect().top;
-  const offset = height < box.height * 0.8 ? (box.height - height) / 2 : Math.min(48, box.height / 4);
-  scroller.scrollTop = Math.max(0, top - offset);
-  return true;
-}

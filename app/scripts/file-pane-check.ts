@@ -1,7 +1,8 @@
 // File panes end to end in the built app, against the REAL service (throwaway HARNESS_HOME) and a
 // throwaway git project: a file link in a ticket's spec opens the file beside the ticket, scrolled
-// to and highlighting its lines; another range reuses the pane; a dirty file has a Diff tab drawn by
-// @pierre/diffs, a clean one doesn't; a gitignored file opens; and the pane survives a reload.
+// to and highlighting its lines; another range reuses the pane; a dirty file has a Diff tab in the
+// merge view, a clean one doesn't; the editor edits and saves (Cmd+S, the button, save on blur) and
+// never drops unsaved edits; it follows theme changes; and the pane survives a reload.
 //
 //   bun run build && bun scripts/file-pane-check.ts [--shots=<dir>] [--theme=dark]
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -62,27 +63,55 @@ try {
   ].join(" ");
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec, driver: "dummy", start: false });
 
-  app = await launchApp({ baseUrl: base, token, theme, env: {} });
+  // Not forced (HARNESS_THEME would pin it): the theme step flips it live.
+  app = await launchApp({ baseUrl: base, token, env: {} });
   const { js, exists, go } = app;
   await until("sidebar shows the project", () => js<boolean>(`document.querySelector(".sidebar")?.textContent.includes("files")`), 10000);
+  await js(`harness.setTheme({ preference: ${JSON.stringify(theme)} })`);
+  await until("theme applied", () => js<boolean>(`document.documentElement.dataset.theme === ${JSON.stringify(theme)}`), 5000);
+  await go("#/settings");
+  check("the Settings toggle exists", !!(await until("settings", () => js<boolean>(`!!document.querySelector('[aria-label="Save files on blur"]')`), 10000).catch(() => false)));
+  check("it starts off", (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur !== true);
+  await js(`document.querySelector('[aria-label="Save files on blur"]').click()`);
+  const flipped = await until("the toggle saves the setting", async () => (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur === true, 5000).catch(() => false);
+  check("flipping the toggle sets saveOnBlur on the service", !!flipped);
+  await api("PATCH", "/settings", { saveOnBlur: false });
   await go(`#/board/${project.id}/ticket/${ticket.key}`);
   await until("the spec's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000); // the dummy plan run may repeat them
 
   const clickLink = (text: string) =>
     js<boolean>(`(() => { const a = [...document.querySelectorAll('.pane-ticket [data-testid="file-link"]')].find(e => e.textContent.includes(${JSON.stringify(text)})); a?.click(); return !!a; })()`);
-  /** Lines pierre marks selected in the file pane, and where line `n` sits relative to the scroller. */
+  /** The editor's state: the lines marked as the linked range, whether there is a selection, and where line `n` sits in the scroller. */
   const fileState = (n: number) =>
-    js<{ selected: number[]; top: number; height: number; panes: number } | null>(`(() => {
-      const body = document.querySelector('[data-testid="file-body"]');
-      const host = body?.querySelector("diffs-container");
-      const doc = host?.shadowRoot;
-      if (!doc) return null;
-      const sel = [...doc.querySelectorAll('[data-selected-line][data-line]')].map(e => Number(e.dataset.line));
-      const el = doc.querySelector('[data-line="${n}"]');
-      if (!el) return null;
-      const b = body.getBoundingClientRect();
-      return { selected: [...new Set(sel)], top: el.getBoundingClientRect().top - b.top, height: b.height, panes: document.querySelectorAll('[data-testid="pane-file"]').length };
+    js<{ revealed: string[]; empty: boolean; top: number; height: number; panes: number; doc: string } | null>(`(() => {
+      const view = document.querySelector('[data-testid="file-editor"] .cm-content')?.cmTile?.root?.view;
+      if (!view) return null;
+      const revealed = [...document.querySelectorAll('.cm-revealed-line')].map(e => e.textContent);
+      let top = -1e9, height = 0;
+      const el = [...document.querySelectorAll('.cm-line')].find(e => e.textContent.includes("value${n} =") || e.textContent.includes('"row ${n}"'));
+      const sc = document.querySelector('[data-testid="file-editor"] .cm-scroller');
+      if (el && sc) { const b = sc.getBoundingClientRect(); top = el.getBoundingClientRect().top - b.top; height = b.height; }
+      return { revealed, empty: view.state.selection.main.empty, top, height, panes: document.querySelectorAll('[data-testid="pane-file"]').length, doc: view.state.doc.toString() };
     })()`);
+  const editorDoc = () => js<string>(`document.querySelector('[data-testid="file-editor"] .cm-content')?.cmTile?.root?.view.state.doc.toString() ?? ""`);
+  /** Real typing: focus the editor with the cursor at the very start, then insert text like the keyboard would. */
+  const typeInEditor = async (text: string) => {
+    await js(`(() => { const v = document.querySelector('[data-testid="file-editor"] .cm-content').cmTile.root.view; v.focus(); v.dispatch({ selection: { anchor: 0 } }); })()`);
+    await app!.cdp("Input.insertText", { text });
+  };
+  const onDisk = (file: string) => readFileSync(join(projectDir, file), "utf8");
+  const dirty = () => exists('[data-testid="file-dirty"]');
+  const settings = (body: object) => api("PATCH", "/settings", body);
+  // confirm() dialogs: answer each with the next queued choice, recording what was asked.
+  const asked: string[] = [];
+  const answers: boolean[] = [];
+  await app.cdp("Page.enable");
+  app.on((method, p) => {
+    if (method === "Page.javascriptDialogOpening") {
+      asked.push(p.message);
+      void app!.cdp("Page.handleJavaScriptDialog", { accept: answers.shift() ?? false });
+    }
+  });
 
   // 0. The viewer's chunk failing to load shows an error in the pane (the rest of the workspace
   // stays up), and Reload window brings the pane back with the viewer once it's reachable.
@@ -95,124 +124,186 @@ try {
   await app.cdp("Network.setBlockedURLs", { urls: [] });
   check("the error offers Reload window", (await js<string>(`document.querySelector('[data-testid="file-retry"]')?.textContent ?? ""`)).includes("Reload window"));
   await js(`document.querySelector('[data-testid="file-retry"]').click()`);
-  check("reloading restores the pane with the viewer", !!(await until("viewer after reload", () => js<boolean>(`!!document.querySelector('[data-testid="file-body"] diffs-container')`), 15000).catch(() => false)));
+  check("reloading restores the pane with the editor", !!(await until("editor after reload", () => js<boolean>(`!!document.querySelector('[data-testid="file-editor"] .cm-editor')`), 15000).catch(() => false)));
   await until("spec links after reload", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000);
 
-  // 1. A ranged link opens the file beside the ticket, highlighted and scrolled to.
+  // 1. A ranged link opens the file beside the ticket, highlighted and scrolled to, with no selection.
   check("clicked app.ts:10-20", await clickLink("app.ts:10-20"));
-  const opened = await until("file pane shows lines 10-20 selected", async () => {
+  const opened = await until("file pane highlights lines 10-20", async () => {
     const s = await fileState(10);
-    return s && s.selected.includes(10) && s.selected.includes(20) && s;
+    return s && s.revealed.length === 11 && s;
   }, 10000);
   check("opens one file pane", opened.panes === 1);
-  check("lines 10–20 are highlighted (and only those)", opened.selected.length === 11 && Math.min(...opened.selected) === 10 && Math.max(...opened.selected) === 20, JSON.stringify(opened.selected));
+  check("lines 10–20 are highlighted (and only those)", opened.revealed[0]!.includes("value10 =") && opened.revealed[10]!.includes("value20 ="), JSON.stringify(opened.revealed));
+  check("no selection is left", opened.empty);
   const order = await js<string[]>(`[...document.querySelectorAll(".pane")].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(p => p.dataset.testid)`);
   check("the file pane docks right of the ticket", order.join(",") === "pane-board,pane-ticket,pane-file", order.join(","));
   const fileRight = await js<number[]>(`[document.querySelector('[data-testid="pane-file"]').getBoundingClientRect().right, document.querySelector(".pane-workspace").getBoundingClientRect().right]`);
   check("…on the workspace's right edge", Math.abs(fileRight[0]! - fileRight[1]!) <= 2, fileRight.join(" vs "));
   check("line 10 is in view", opened.top >= 0 && opened.top < opened.height, `top=${opened.top} height=${opened.height}`);
-  check("syntax colored (pierre tokens)", await js<boolean>(`(() => { const d = document.querySelector('[data-testid="file-body"] diffs-container')?.shadowRoot; return !!d && [...d.querySelectorAll('[data-line] span[style]')].length > 20; })()`));
+  check("syntax colored", await js<boolean>(`document.querySelectorAll('[data-testid="file-editor"] .cm-line span[class]').length > 20`));
   check("modified badge", (await js<string>(`document.querySelector('[data-testid="file-git-state"]')?.textContent ?? ""`)) === "modified");
   check("Diff tab offered for a dirty file", await exists('.file-tabs [data-tab="diff"]'));
+  check("Save is disabled while clean, with no dirty marker", (await js<boolean>(`document.querySelector('[data-testid="file-save"]').disabled`)) && !(await dirty()));
   await shot("file-pane-range");
 
   // 2. Another range of the same file reuses the pane and scrolls there.
   check("clicked the tail link", await clickLink("the tail"));
-  const tail = await until("lines 100-104 selected", async () => {
+  const tail = await until("lines 100-104 highlighted", async () => {
     const s = await fileState(100);
-    return s && s.selected.includes(100) && !s.selected.includes(10) && s;
+    return s && s.revealed.length === 5 && s;
   });
   check("still one file pane", tail.panes === 1);
   check("line 100 scrolled into view", tail.top >= 0 && tail.top < tail.height, `top=${tail.top}`);
+  check("still no selection", tail.empty);
 
-  // 2b. Clicking a line number picks that line (a real mouse click), without scrolling away.
-  const num = await js<{ x: number; y: number; scroll: number } | null>(`(() => {
-    const body = document.querySelector('[data-testid="file-body"]');
-    const el = body.querySelector("diffs-container").shadowRoot.querySelector('[data-column-number="102"]');
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, scroll: body.scrollTop };
-  })()`);
-  if (num) {
-    for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
-      await app.cdp("Input.dispatchMouseEvent", { type, x: num.x, y: num.y, button: "left", buttons: type === "mousePressed" ? 1 : 0, clickCount: 1 });
-    const picked = await until("line 102 picked", async () => {
-      const s = await fileState(102);
-      return s && s.selected.length === 1 && s.selected[0] === 102 && s;
-    }).catch(() => null);
-    check("clicking a line number selects that line", !!picked, JSON.stringify(picked?.selected));
-    const stored = await js<string>(`localStorage.getItem("harness.panes") ?? ""`);
-    check("the picked line is kept with the pane", stored.includes('"startLine":102') && !stored.includes('"endLine":104'));
-    check("picking a line doesn't scroll", Math.abs((await js<number>(`document.querySelector('[data-testid="file-body"]').scrollTop`)) - num.scroll) < 2);
-  } else check("line number 102 rendered", false);
+  // 3. Editing: typing marks the pane dirty, Cmd+S writes the file (and only then).
+  const before = onDisk("src/app.ts");
+  await typeInEditor("// edited\n");
+  await until("dirty marker", dirty, 5000);
+  check("typing enables Save", !(await js<boolean>(`document.querySelector('[data-testid="file-save"]').disabled`)));
+  check("typing alone doesn't touch the file", onDisk("src/app.ts") === before);
+  await app.key("s", "KeyS", 83, 4);
+  await until("saved", async () => !(await dirty()), 5000);
+  check("Cmd+S writes the edit to disk", onDisk("src/app.ts") === "// edited\n" + before, onDisk("src/app.ts").slice(0, 40));
+  check("Save is disabled again", await js<boolean>(`document.querySelector('[data-testid="file-save"]').disabled`));
+  await shot("file-pane-edited");
+  await typeInEditor("// by button\n");
+  await until("dirty again", dirty, 5000);
+  await js(`document.querySelector('[data-testid="file-save"]').click()`);
+  await until("saved by the button", async () => !(await dirty()), 5000);
+  check("the Save button writes too", onDisk("src/app.ts").startsWith("// by button\n// edited\n"));
 
-  // 3. The Diff tab renders the working-tree diff with pierre.
+  // 4. An unsaved edit survives the app regaining focus (and what's on disk doesn't replace it); a
+  // clean editor takes the disk's copy silently.
+  await typeInEditor("// unsaved\n");
+  await until("dirty", dirty, 5000);
+  writeFileSync(join(projectDir, "src/app.ts"), "// from outside\n" + onDisk("src/app.ts"));
+  await js(`window.dispatchEvent(new Event("focus"))`);
+  await Bun.sleep(800);
+  check("focus keeps a dirty editor's edits", (await editorDoc()).startsWith("// unsaved\n"));
+  await app.key("s", "KeyS", 83, 4); // last write wins
+  await until("saved", async () => !(await dirty()), 5000);
+  check("saving over a newer disk copy wins", onDisk("src/app.ts").startsWith("// unsaved\n"));
+  writeFileSync(join(projectDir, "src/app.ts"), "// reloaded\n" + onDisk("src/app.ts"));
+  await js(`window.dispatchEvent(new Event("focus"))`);
+  await until("clean editor reloads", async () => (await editorDoc()).startsWith("// reloaded\n"), 5000);
+  check("a silent reload isn't an edit", !(await dirty()));
+
+  // 5. Save on blur (Settings → General): the editor losing focus saves, and so does the app.
+  await settings({ saveOnBlur: true });
+  await until("setting reaches the app", () => js<boolean>(`!!document.querySelector('[data-testid="file-editor"]')`), 5000);
+  await Bun.sleep(500);
+  await typeInEditor("// blur one\n");
+  await js(`document.querySelector('[data-testid="file-editor"] .cm-content').blur()`);
+  await until("saved on editor blur", async () => onDisk("src/app.ts").startsWith("// blur one\n"), 5000).catch(() => {});
+  check("the editor losing focus saves", onDisk("src/app.ts").startsWith("// blur one\n"));
+  await typeInEditor("// blur two\n");
+  await js(`window.dispatchEvent(new Event("blur"))`);
+  await until("saved on app blur", async () => onDisk("src/app.ts").startsWith("// blur two\n"), 5000).catch(() => {});
+  check("the app losing focus saves", onDisk("src/app.ts").startsWith("// blur two\n"));
+
+  // 5b. With save on blur, closing the pane saves what it held; so does another file replacing it.
+  await typeInEditor("// closing\n");
+  await js(`document.querySelector('[data-testid="pane-file"] [data-testid="pane-close"]').click()`);
+  await until("pane closed", () => js<boolean>(`!document.querySelector('[data-testid="pane-file"]')`), 5000);
+  await until("close saved", async () => onDisk("src/app.ts").startsWith("// closing\n"), 5000).catch(() => {});
+  check("closing a dirty pane saves with save on blur", onDisk("src/app.ts").startsWith("// closing\n") && asked.length === 0, asked.join("|"));
+  check("clicked the tail link again", await clickLink("the tail"));
+  await until("editor back", async () => (await fileState(100))?.revealed.length === 5);
+  await typeInEditor("// swapped\n");
+  check("clicked long.ts:150-152", await clickLink("long.ts:150-152"));
+  await until("long.ts shown", () => js<boolean>(`document.querySelector(".file-name")?.textContent === "long.ts" && !!document.querySelector('.cm-content')?.textContent.includes("row 150")`), 10000);
+  await until("swap saved", async () => onDisk("src/app.ts").startsWith("// swapped\n"), 5000).catch(() => {});
+  check("another file replacing a dirty pane saves it", onDisk("src/app.ts").startsWith("// swapped\n"));
+  const long = await fileState(150);
+  check("the replacement scrolls to its range", !!long && long.top >= 0 && long.top < long.height && long.revealed.length === 3, JSON.stringify(long && { ...long, doc: "" }));
+  check("it replaced the pane", long?.panes === 1);
+  await settings({ saveOnBlur: false });
+  await Bun.sleep(500);
+
+  // 5c. Without it, closing a dirty pane asks: Cancel twice keeps it open and dirty; Save writes and closes; Discard throws away.
+  await typeInEditor("// asked\n");
+  const longBefore = onDisk("src/long.ts");
+  asked.length = 0;
+  answers.push(false, false);
+  await js(`document.querySelector('[data-testid="pane-file"] [data-testid="pane-close"]').click()`);
+  await until("two questions", async () => asked.length >= 2, 5000).catch(() => {});
+  check("closing a dirty pane asks to save, then to discard", asked.length === 2 && asked[0]!.includes("Save changes") && asked[1]!.includes("Discard"), asked.join("|"));
+  check("declining both keeps the pane and its edits", (await exists('[data-testid="pane-file"]')) && (await dirty()) && (await editorDoc()).startsWith("// asked\n"));
+  check("nothing was written meanwhile", onDisk("src/long.ts") === longBefore);
+  asked.length = 0;
+  answers.push(false, true);
+  await js(`document.querySelector('[data-testid="pane-file"] [data-testid="pane-close"]').click()`);
+  await until("discarded and closed", () => js<boolean>(`!document.querySelector('[data-testid="pane-file"]')`), 5000);
+  check("Discard closes without writing", onDisk("src/long.ts") === longBefore);
+  check("clicked long.ts again", await clickLink("long.ts:150-152"));
+  await until("long.ts back", async () => !!(await fileState(150)));
+  await typeInEditor("// kept\n");
+  asked.length = 0;
+  answers.push(true);
+  await js(`document.querySelector('[data-testid="pane-file"] [data-testid="pane-close"]').click()`);
+  await until("saved and closed", () => js<boolean>(`!document.querySelector('[data-testid="pane-file"]')`), 5000);
+  check("Save writes, then closes", onDisk("src/long.ts") === "// kept\n" + longBefore);
+
+  // 6. The Diff tab is the merge view: the original beside the working copy.
+  check("clicked app.ts:10-20 for the diff", await clickLink("app.ts:10-20"));
+  await until("app.ts editor", async () => (await fileState(10))?.revealed.length === 11);
   await js(`document.querySelector('.file-tabs [data-tab="diff"]').click()`);
   const diff = await until("diff renders", () =>
-    js<{ adds: number; dels: number } | null>(`(() => {
-      const d = document.querySelector('[data-testid="file-body"][data-tab="diff"] diffs-container')?.shadowRoot;
-      if (!d) return null;
-      const adds = d.querySelectorAll('[data-line-type="change-addition"]').length, dels = d.querySelectorAll('[data-line-type="change-deletion"]').length;
-      return adds && dels ? { adds, dels } : null;
+    js<{ adds: number; dels: number; sides: number; readOnly: boolean } | null>(`(() => {
+      const v = document.querySelector('[data-testid="file-diff"] .cm-mergeView');
+      if (!v) return null;
+      const adds = v.querySelectorAll('.cm-merge-b .cm-changedLine').length, dels = v.querySelectorAll('.cm-merge-a .cm-changedLine').length;
+      return adds && dels ? { adds, dels, sides: v.querySelectorAll('.cm-editor').length, readOnly: ![...v.querySelectorAll('.cm-content')].some(c => c.isContentEditable) } : null;
     })()`), 10000);
-  check("diff shows additions and deletions", diff.adds >= 4 && diff.dels >= 1, JSON.stringify(diff));
+  check("diff shows additions on the right and deletions on the left", diff.adds >= 1 && diff.dels >= 1 && diff.sides === 2, JSON.stringify(diff));
+  check("the diff is read-only", diff.readOnly);
+  check("no pierre left in the pane", !(await exists("diffs-container")));
   await shot("file-pane-diff");
 
-  // 3b. Another file replaces app.ts beside the ticket. Its header must never sit over app.ts's
-  // text or diff, and it scrolls to its own range. A MutationObserver watches every frame.
-  await js(`(() => {
-    window.__staleFile = [];
-    const look = () => {
-      const pane = document.querySelector(".file-pane");
-      if (pane?.querySelector(".file-name")?.textContent !== "long.ts") return; // what the header says, not data-file
-      const d = pane.querySelector('[data-testid="file-body"] diffs-container')?.shadowRoot;
-      const text = (d?.textContent ?? "") + (pane.querySelector(".file-plain")?.textContent ?? "");
-      if (text.includes("export const value")) window.__staleFile.push(text.slice(0, 80));
-    };
-    window.__staleObs = new MutationObserver(look);
-    window.__staleObs.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
-  })()`);
-  check("clicked long.ts:150-152", await clickLink("long.ts:150-152"));
-  const long = await until("long.ts shows 150-152 selected", async () => {
-    const s = await fileState(150);
-    return s && s.selected.includes(150) && s.selected.includes(152) && s;
+  // 6b. Theme: the editor follows the app's variables live, with no reload.
+  const bg = () => js<string[]>(`[getComputedStyle(document.querySelector('[data-testid="file-diff"] .cm-editor')).backgroundColor, getComputedStyle(document.documentElement).getPropertyValue("--bg").trim(), document.documentElement.dataset.theme]`);
+  const [bg1, var1, app1] = await bg();
+  await js(`harness.setTheme({ preference: ${JSON.stringify(theme === "dark" ? "light" : "dark")} })`);
+  const [bg2, var2, app2] = await until("theme switched", async () => {
+    const r = await bg();
+    return r[2] !== app1 && r;
   }, 10000);
-  const stale = await js<string[]>(`(window.__staleObs.disconnect(), window.__staleFile)`);
-  check("B's header never shows A's contents or diff", stale.length === 0, stale.slice(0, 2).join(" | "));
-  check("B opens on the File tab", await js<boolean>(`document.querySelector('[data-testid="file-body"]').dataset.tab === "file"`));
-  check("B replaced A (still one file pane)", long.panes === 1);
-  check("B scrolls to its range", long.top >= 0 && long.top < long.height, `top=${long.top} height=${long.height}`);
-  check("B's range is exactly 150-152", long.selected.length === 3, JSON.stringify(long.selected));
+  check("the app theme changed", app1 !== app2 && var1 !== var2, `${var1} -> ${var2}`);
+  check("the editor's background follows the theme variable", bg1 !== bg2, `${bg1} -> ${bg2}`);
+  await shot("file-pane-diff-switched");
+  await js(`harness.setTheme({ preference: ${JSON.stringify(theme)} })`);
+  await until("theme restored", async () => (await bg())[2] === app1, 10000);
 
-  // 4. A clean file: no Diff tab; the link replaces the file pane beside the ticket.
+  // 7. A clean file: no Diff tab; the link replaces the file pane beside the ticket.
   check("clicked clean.ts", await clickLink("clean.ts"));
   await until("clean.ts shown", () => js<boolean>(`document.querySelector(".file-pane")?.dataset.file === "src/clean.ts"`));
-  await until("clean.ts loaded", () => js<boolean>(`!!document.querySelector('[data-testid="file-body"] diffs-container')`));
+  await until("clean.ts loaded", () => js<boolean>(`!!document.querySelector('[data-testid="file-editor"] .cm-editor')`));
   check("clean file: no Diff tab", !(await exists(".file-tabs")));
   check("clean file: no git badge", !(await exists('[data-testid="file-git-state"]')));
+  check("clean.ts#L2 highlights line 2", (await fileState(2))?.revealed.length === 1);
   check("still one file pane (replaced beside the ticket)", (await js<number>(`document.querySelectorAll('[data-testid="pane-file"]').length`)) === 1);
 
-  // 5. A gitignored file opens, marked ignored.
+  // 8. A gitignored file opens, marked ignored, and a missing one says so.
   check("clicked debug.log", await clickLink("debug.log"));
   await until("debug.log opens", () => js<boolean>(`document.querySelector(".file-pane")?.dataset.file === "debug.log" && !!document.querySelector('[data-testid="file-ignored"]')`));
-  check("ignored file shows its contents", await until("contents", () => js<boolean>(`(document.querySelector('[data-testid="file-body"] diffs-container')?.shadowRoot?.textContent ?? document.querySelector(".file-plain")?.textContent ?? "").includes("ignored by git")`)));
-
-  // 6. A missing file says so.
+  check("ignored file shows its contents", await until("contents", async () => (await editorDoc()).includes("ignored by git")));
   check("clicked the missing link", await clickLink("a missing one"));
   const problem = await until("missing file message", () => js<string>(`document.querySelector('[data-testid="file-problem"]')?.textContent ?? ""`));
   check("missing file: not found", problem.includes("not found"), problem);
 
-  // 7. Persisted: reload and the pane is back (on app.ts with its range).
+  // 9. Persisted: reload and the pane is back (on app.ts with its range).
   check("clicked app.ts:10-20 again", await clickLink("app.ts:10-20"));
   await until("app.ts back", () => js<boolean>(`document.querySelector(".file-pane")?.dataset.file === "src/app.ts"`));
   await js(`location.reload()`);
   const back = await until("file pane restored after reload", async () => {
     const s = await fileState(10);
-    return s && s.selected.includes(10) && s;
+    return s && s.revealed.length === 11 && s;
   }, 15000);
-  check("restored after reload with its range", back.selected.length === 11, JSON.stringify(back.selected));
+  check("restored after reload with its range", back.revealed.length === 11, JSON.stringify(back.revealed));
 
-  // 8. Escape closes the focused file pane.
+  // 10. Escape closes the focused file pane (clean, so without asking).
   await js(`document.querySelector('[data-testid="pane-file"]').dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
   await app.key("Escape", "Escape", 27);
   await until("Escape closed it", () => js<boolean>(`!document.querySelector('[data-testid="pane-file"]')`));
