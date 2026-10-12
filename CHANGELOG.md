@@ -17,10 +17,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Recording a pull request the ticket already lists moves it to the end of the list, so the Changes tab's commit and the card's PR badge name the same pull request. The completion and reopen prompts quote each pull request title on one line, cut at 120 characters, so a long or odd title on GitHub can't change what the agent is told.
+- For the people working on Harness: the pull request title lookup and refresh now have tests for failed lookups, retries on start, the four-lookup limit and repeated refreshes.
 - On iPhone and iPad, the ticket detail sheet now shows the status indicator (colored dot and label) on its own line above the title when expanded, pushing the title down. When collapsed, the status indicator is hidden and only the truncated title shows.
 
 ### Fixed
 
+- A ticket's pull request title is no longer erased when a refresh can't reach GitHub: the title already shown stays until a lookup answers. A lookup that couldn't run (`gh` missing, timed out) leaves its pull request untitled until the next start retries it, instead of showing no title for good.
+- A pull request URL with stray spaces is saved trimmed, so it matches the same link typed without them and doesn't show up twice.
+- A pull request title that arrives while an older copy of the ticket is on its way to the board is no longer replaced by that copy, so the badge keeps its title.
+- An agent in a work run can name its own ticket by an earlier key (after a project rename) when it edits the ticket's pull requests.
 - Pushes no longer go missing while the Mac app is open and the Mac is away. The Mac app used to count a sleeping display as "on screen" and silenced pushes for every ticket on its board; it now reports nothing on screen while the screen is locked, the Mac is asleep, or you've been idle for a minute, and reports again as soon as you're back.
 
 ## [app-20261011.1314](https://github.com/markhuot/harness/releases/tag/app-20261011.1314) - 2026-10-11

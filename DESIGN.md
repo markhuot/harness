@@ -739,18 +739,25 @@ stored title of each URL that stays and refuses anything that isn't an http(s) l
 `update_ticket` (`pull_request_urls`), and by the Details tab's "Pull requests" row (web and iOS).
 Activity gets one line when links are added or removed. Titles are never accepted from a caller.
 Storage: `tickets.pull_requests` is JSON `[{ url, title, titleCheckedAt }]`; migration 42 turned the
-old single `pull_request_url` into a one-item list with no title.
+old single `pull_request_url` (trimmed) into a one-item list with no title.
 
 **Titles.** The service fetches a title with `gh pr view <url> --json title` (through the subprocess
 helper, with its timeout and the service's PATH), in the background after a link is saved, so saving
-never waits on GitHub. A fetch that finishes writes the title only onto links still in the list, so a
-link removed meanwhile stays removed. A title is empty when gh is missing, isn't logged in to the
-host, or the URL isn't a pull request; the Details tab's refresh (`POST /tickets/:key/pull-requests/refresh`)
-fetches every title again. On start, links whose title was never checked (`titleCheckedAt` null) are
-fetched once. The apps show "PR #n" per link, with the title as its tooltip (or label, on iOS).
+never waits on GitHub. At most four lookups run at once across all tickets, and a refresh that's still
+running starts nothing new. A fetch that finishes writes the title only onto links still in the list, so a
+link removed meanwhile stays removed. When gh answers without a title (not logged in to the host, or the
+URL isn't a pull request), the link is stamped as checked and any title it already had stays. When gh
+can't run (missing, spawn failed, timed out), the link stays unchecked: the next start retries it. Every
+title write bumps `updated_at`, so a board snapshot taken before it can't replace the titled copy. The
+Details tab's refresh (`POST /tickets/:key/pull-requests/refresh`) fetches every title again. On start,
+links whose title was never checked (`titleCheckedAt` null) are fetched. The apps show "PR #n" per link,
+with the title as its tooltip (or label, on iOS). Prompts carry a title as one line, cut at 120
+characters and quoted, since anyone can set a PR's title on a public repo.
 
 `record_pull_request` (complete runs only; refused unless the completion is a `pr` one, or a `cleanup`
-of a ticket that has pull requests) appends its link to `Ticket.pullRequests` if new, and sets `Ticket.pullRequestHead`: the
+of a ticket that has pull requests) appends its link to `Ticket.pullRequests` if new, or moves a link
+the ticket already has to the end, so the last link is the one `pullRequestHead` pins and the read-only
+`pullRequestUrl` names. It fetches the title of its link and of any link still untitled, and sets `Ticket.pullRequestHead`: the
 `head` the agent pushed, which must be a hash (not a ref) of a commit the repo has and is stored in
 full. The git plugin pins that commit as the ticket's Changes ("Pinned diffs"). Queueing a
 completion clears the head, so each completion records its own. A `pr` complete run that ends
@@ -906,7 +913,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `reopen_ticket` | work, conductor | `{ key, notes }` → `reopenTicket` |
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
-| `record_pull_request` | complete | `{ url, head }`: the pull request a `pr` completion opened or updated, or a `cleanup` of a ticket with pull requests pushed to. The link is appended to `Ticket.pullRequests` if the ticket doesn't have it (its title is fetched), and the hash of the commit it pushed is `Ticket.pullRequestHead`, pinned as the ticket's Changes; refused in any other completion |
+| `record_pull_request` | complete | `{ url, head }`: the pull request a `pr` completion opened or updated, or a `cleanup` of a ticket with pull requests pushed to. The link is appended to `Ticket.pullRequests` (or moved to its end if the ticket already has it), and any link still untitled is fetched, and the hash of the commit it pushed is `Ticket.pullRequestHead`, pinned as the ticket's Changes; refused in any other completion |
 | `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, spec, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
 | `decline_work` | triage | `{ reason, title? }` |
 | `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
