@@ -20,6 +20,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Recording a pull request the ticket already lists moves it to the end of the list, so the Changes tab's commit and the card's PR badge name the same pull request. The completion and reopen prompts quote each pull request title on one line, cut at 120 characters, so a long or odd title on GitHub can't change what the agent is told.
 - For the people working on Harness: the pull request title lookup and refresh now have tests for failed lookups, retries on start, the four-lookup limit and repeated refreshes.
 - On iPhone and iPad, the ticket detail sheet now shows the status indicator (colored dot and label) on its own line above the title when expanded, pushing the title down. When collapsed, the status indicator is hidden and only the truncated title shows.
+- On the Mac, the ticket's "Pull requests" row keeps each pull request on one line: the "PR #n" label, then its title cut with an ellipsis when the panel is narrow (the full title and URL are in the tooltip), then its remove button. The add field, Refresh titles and the hint below it stay on one line too.
 
 ### Fixed
 

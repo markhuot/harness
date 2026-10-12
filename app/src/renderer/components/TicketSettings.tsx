@@ -310,7 +310,7 @@ function PullRequests({ ticket, onSave, onRefresh }: { ticket: Ticket; onSave: (
             {list.map((pr) => (
               <li key={pr.url} className="row pull-request-item" data-testid="pull-request-item">
                 <span className="mono">{pullRequestLabel(pr.url)}</span>
-                <span className="pull-request-title" data-testid="pull-request-title" title={pr.url}>
+                <span className="pull-request-title" data-testid="pull-request-title" title={pr.title ? `${pr.title} (${pr.url})` : pr.url}>
                   {pr.title ?? "No title"}
                 </span>
                 <button
@@ -341,17 +341,17 @@ function PullRequests({ ticket, onSave, onRefresh }: { ticket: Ticket; onSave: (
             Add
           </button>
           {list.length > 0 && (
-            <button className="btn btn-sm btn-ghost" data-testid="pull-request-refresh" disabled={busy} onClick={() => void refresh()} title="Fetch every title again from GitHub">
-              <Icon name="refresh" size={11} /> Refresh titles
+            <button className="btn btn-sm btn-ghost" data-testid="pull-request-refresh" aria-label="Refresh titles" disabled={busy} onClick={() => void refresh()} title="Refresh titles: fetch every title again from GitHub">
+              <Icon name="refresh" size={11} />
             </button>
           )}
         </div>
         {error ? (
-          <span className="field-hint" data-testid="pull-request-error" style={{ color: "var(--red)" }}>
+          <span className="field-hint pull-requests-hint" data-testid="pull-request-error" title={error} style={{ color: "var(--red)" }}>
             {error}
           </span>
         ) : (
-          <span className="field-hint">{list.length ? "Shown on the ticket. Titles come from GitHub." : "Pull requests this ticket opened or works on. Titles come from GitHub."}</span>
+          <span className="field-hint pull-requests-hint">{list.length ? "Shown on the ticket. Titles come from GitHub." : "Pull requests this ticket opened or works on. Titles come from GitHub."}</span>
         )}
       </dd>
     </>
