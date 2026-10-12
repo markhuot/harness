@@ -49,6 +49,18 @@ struct HarnessClientURLTests {
         #expect(path(t) == "/tickets/NY-1/files?q=ab&limit=7")
     }
 
+    @Test func fileWritesArePutsWithPathAndContentsInTheBody() async throws {
+        let t = FakeTransport(status: 200, body: #"{"data":{"path":"a.txt","size":3}}"#)
+        let r = try await client(t).writeTicketFile("NY-1", path: "a.txt", contents: "x\r\n")
+        #expect(r == FileWriteResult(path: "a.txt", size: 3))
+        #expect(t.last!.method == "PUT")
+        #expect(path(t) == "/tickets/NY-1/file")
+        _ = try await client(t).writeProjectFile("prj_1", path: "a.txt", contents: "")
+        #expect(path(t) == "/projects/prj_1/file")
+        let sent = try JSONDecoder().decode(WriteFileRequest.self, from: t.last!.body!)
+        #expect(sent == WriteFileRequest(path: "a.txt", contents: ""))
+    }
+
     @Test func emptyQueryValuesAreDropped() async throws {
         let t = FakeTransport()
         _ = try await client(t).projectCommands("prj_1", q: "co", driver: "", limit: 3)

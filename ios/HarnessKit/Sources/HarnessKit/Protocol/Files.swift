@@ -91,6 +91,29 @@ public struct FileDiff: Codable, Sendable, Equatable {
     }
 }
 
+/// Body of PUT /projects/:id/file and PUT /tickets/:key/file: the editor's text replaces the file.
+public struct WriteFileRequest: Codable, Sendable, Equatable {
+    public var path: String
+    public var contents: String
+
+    public init(path: String, contents: String) {
+        self.path = path
+        self.contents = contents
+    }
+}
+
+/// The answer to a file write: the saved path (relative to the root) and the bytes now on disk.
+/// The file keeps its BOM, line endings, trailing newline and mode; the last write wins.
+public struct FileWriteResult: Codable, Sendable, Equatable {
+    public var path: String
+    public var size: Int
+
+    public init(path: String, size: Int) {
+        self.path = path
+        self.size = size
+    }
+}
+
 /// Options for the /files search. `ignored` also indexes node_modules; `kind` keeps one kind.
 public struct FileSearchOptions: Codable, Sendable, Equatable {
     public var limit: Int?

@@ -2781,6 +2781,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -2986,6 +2987,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "anthropic-api",
           "defaultModels": {
@@ -3106,6 +3108,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -3311,6 +3314,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -3416,6 +3420,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -3589,6 +3594,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "anthropic-api",
           "defaultModels": {
@@ -3693,6 +3699,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -3866,6 +3873,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -3982,6 +3990,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -4181,6 +4190,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "anthropic-api",
           "defaultModels": {
@@ -4298,6 +4308,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -4497,6 +4508,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {
@@ -4588,6 +4600,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "auto",
           "classifier": "claude-cli",
           "defaultModels": {

@@ -17,6 +17,14 @@ struct PatchAndOpenEnumTests {
         #expect(try json(SettingsPatch()) == "{}")
     }
 
+    @Test func saveOnBlurIsOptionalOnBothSidesOfAnOlderService() throws {
+        #expect(try json(SettingsPatch(saveOnBlur: false)) == #"{"saveOnBlur":false}"#)
+        let old = #"{"defaultDriver":"claude-code","maxConcurrentRuns":4,"permissionMode":"auto","classifier":"claude-cli","defaultModels":{},"reviewModels":{},"anthropicApiKeySet":false}"#
+        #expect(try JSONDecoder().decode(PublicSettings.self, from: Data(old.utf8)).saveOnBlur == nil)
+        let new = old.dropLast() + #","saveOnBlur":true}"#
+        #expect(try JSONDecoder().decode(PublicSettings.self, from: Data(new.utf8)).saveOnBlur == true)
+    }
+
     @Test func nullPatchIsSentAsNull() throws {
         #expect(try json(UpdateTicketBody(model: .null, externalRef: .null)) == #"{"externalRef":null,"model":null}"#)
         #expect(try json(SettingsPatch(anthropicApiKey: .null)) == #"{"anthropicApiKey":null}"#)

@@ -671,6 +671,7 @@ const settings: P.Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
   contextGaugeLimit: 250_000,
+  saveOnBlur: true,
   permissionMode: "auto",
   classifier: "claude-cli",
   defaultModels: { "claude-code": "opus", "anthropic-api": null },
@@ -865,6 +866,13 @@ export const FileDiff: P.FileDiff[] = [
   { path: "src/index.ts", patch: "@@ -1 +1 @@\n-export const x = 0;\n+export const x = 1;\n", oldContents: "export const x = 0;\n", newContents: "export const x = 1;\n", tooLarge: false },
   { path: "new.txt", patch: "", oldContents: null, newContents: null, tooLarge: true },
 ];
+
+export const WriteFileRequest: P.WriteFileRequest[] = [
+  { path: "src/index.ts", contents: "export const x = 2;\n" },
+  { path: "notes/empty.txt", contents: "" },
+];
+
+export const FileWriteResult: P.FileWriteResult[] = [{ path: "src/index.ts", size: 20 }];
 
 export const FileSearchOptions: P.FileSearchOptions[] = [{ limit: 20, ignored: true, kind: "dir" }, { kind: "file" }, {}];
 

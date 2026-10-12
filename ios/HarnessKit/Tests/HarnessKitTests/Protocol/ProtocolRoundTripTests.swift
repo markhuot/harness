@@ -72,6 +72,8 @@ struct ProtocolRoundTripTests {
         "FileGitState": rt(FileGitState.self),
         "FileView": rt(FileView.self),
         "FileDiff": rt(FileDiff.self),
+        "WriteFileRequest": rt(WriteFileRequest.self),
+        "FileWriteResult": rt(FileWriteResult.self),
         "FileSearchOptions": rt(FileSearchOptions.self),
         "FileMatch": rt(FileMatch.self),
         "CommandMatch": rt(CommandMatch.self),

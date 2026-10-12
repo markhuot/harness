@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The service can now save files the file viewer shows: `PUT /projects/:id/file` and `PUT /tickets/:key/file` take `{path, contents}` and replace the file, last write wins. The file keeps its BOM, CRLF line endings, trailing newline and mode, and the write is atomic. Paths stay inside the project or ticket folder, `.git` is refused, and binary, too-large (over 2 MiB) or NUL-containing text is rejected. Settings also gain a synced `saveOnBlur` switch (off by default) for editors to read, and the Swift and TypeScript clients can call both. The bearer token now also grants file writes. The Mac and iPhone editors that use this come in follow-up changes.
+
 ### Changed
 
 - On the Mac, a file you open from a link or the palette's file browser now gets a new pane on the far right of the window, running its full height at the same fixed width (about 70em) as New session and terminals, wherever focus is, instead of splitting the pane you opened it from. A file already open, or a file pane next to where you opened it, still shows the new file in place. For people working on Harness, New session, terminals and files now share one placement path (`appendAtRightEdge` with `fixedWidthShare`), covered by unit tests in `panes.test.ts` and by `file-pane-check.ts`.

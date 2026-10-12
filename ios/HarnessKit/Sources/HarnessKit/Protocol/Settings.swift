@@ -14,6 +14,8 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Where the ticket header's context gauge reads "full" (tokens, 10k–2M, default 250k). nil from an
     /// older service; `contextLimit` reads the default then.
     public var contextGaugeLimit: Int?
+    /// The file editor saves when it loses focus. nil from an older service (read it as false).
+    public var saveOnBlur: Bool?
     /// Default permission mode (projects and tickets may override it). Default "auto".
     public var permissionMode: PermissionMode
     /// Who judges actions in auto mode for drivers without their own permission system
@@ -68,9 +70,10 @@ public struct Settings: Codable, Sendable, Equatable {
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
-        notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil
+        notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil
     ) {
         self.contextGaugeLimit = contextGaugeLimit
+        self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns
@@ -108,6 +111,8 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     /// Where the ticket header's context gauge reads "full" (tokens, 10k–2M, default 250k). nil from an
     /// older service; `contextLimit` reads the default then.
     public var contextGaugeLimit: Int?
+    /// The file editor saves when it loses focus. nil from an older service (read it as false).
+    public var saveOnBlur: Bool?
     public var permissionMode: PermissionMode
     public var classifier: ClassifierBackend
     public var defaultModels: [String: String?]
@@ -135,9 +140,10 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
-        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil
+        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil
     ) {
         self.contextGaugeLimit = contextGaugeLimit
+        self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
         self.defaultDriver = defaultDriver
         self.maxConcurrentRuns = maxConcurrentRuns

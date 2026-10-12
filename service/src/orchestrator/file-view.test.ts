@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parsePatchFiles } from "@pierre/diffs";
 import { tempHome } from "../testing/fakes";
-import { MAX_VIEW_BYTES, readFileDiff, readFileView, resolveFile } from "./file-view";
+import { MAX_VIEW_BYTES, readFileDiff, readFileView, resolveFile, writeFileContents } from "./file-view";
 import { git } from "./worktree";
 
 function tree(files: Record<string, string | Uint8Array>) {
@@ -169,5 +169,126 @@ describe("readFileDiff", () => {
   test("outside a repository is a 409", async () => {
     const root = tree({ "a.txt": "a" });
     expect(await rejects(readFileDiff(root, "a.txt"))).toBe(409);
+  });
+});
+
+describe("writeFileContents", () => {
+  const read = (root: string, rel: string) => readFileSync(join(root, rel));
+
+  test("replaces the contents, last write wins, and reports the bytes written", async () => {
+    const root = tree({ "a.txt": "old\n" });
+    expect(await writeFileContents(root, "a.txt", "héllo\n")).toEqual({ path: "a.txt", size: 7 });
+    expect(read(root, "a.txt").toString()).toBe("héllo\n");
+  });
+
+  test("keeps CRLF line endings when the editor's text came back with bare LFs", async () => {
+    const root = tree({ "a.txt": "one\r\ntwo\r\n" });
+    await writeFileContents(root, "a.txt", "one\ntwo\nthree\n");
+    expect(read(root, "a.txt").toString()).toBe("one\r\ntwo\r\nthree\r\n");
+  });
+
+  test("leaves a CRLF already in the text alone, and never adds CR to an LF file", async () => {
+    const root = tree({ "crlf.txt": "a\r\nb\r\n", "lf.txt": "a\nb\n" });
+    await writeFileContents(root, "crlf.txt", "a\r\nb\r\nc\r\n");
+    await writeFileContents(root, "lf.txt", "a\nb\nc\n");
+    expect(read(root, "crlf.txt").toString()).toBe("a\r\nb\r\nc\r\n");
+    expect(read(root, "lf.txt").toString()).toBe("a\nb\nc\n");
+  });
+
+  test("keeps the BOM the viewer stripped", async () => {
+    const root = tree({ "a.txt": "\uFEFFold\n" });
+    await writeFileContents(root, "a.txt", "new\n");
+    expect([...read(root, "a.txt").subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    expect(read(root, "a.txt").subarray(3).toString()).toBe("new\n");
+    const plain = tree({ "b.txt": "old\n" });
+    await writeFileContents(plain, "b.txt", "new\n");
+    expect(read(plain, "b.txt").toString()).toBe("new\n");
+  });
+
+  test("keeps whether the file ended in a newline", async () => {
+    const root = tree({ "with.txt": "a\n", "without.txt": "a", "crlf.txt": "a\r\n" });
+    await writeFileContents(root, "with.txt", "b");
+    await writeFileContents(root, "without.txt", "b\n");
+    await writeFileContents(root, "crlf.txt", "b");
+    expect(read(root, "with.txt").toString()).toBe("b\n");
+    expect(read(root, "without.txt").toString()).toBe("b");
+    expect(read(root, "crlf.txt").toString()).toBe("b\r\n");
+  });
+
+  test("an empty file or empty text has no newline to keep", async () => {
+    const root = tree({ "empty.txt": "", "a.txt": "a\n" });
+    await writeFileContents(root, "empty.txt", "x\n");
+    await writeFileContents(root, "a.txt", "");
+    expect(read(root, "empty.txt").toString()).toBe("x\n");
+    expect(read(root, "a.txt").toString()).toBe("");
+  });
+
+  test("keeps the file mode and leaves no temp file beside it", async () => {
+    const root = tree({ "run.sh": "#!/bin/sh\n", "ro.txt": "x\n" });
+    chmodSync(join(root, "run.sh"), 0o755);
+    chmodSync(join(root, "ro.txt"), 0o640);
+    await writeFileContents(root, "run.sh", "#!/bin/sh\necho\n");
+    await writeFileContents(root, "ro.txt", "y\n");
+    expect(statSync(join(root, "run.sh")).mode & 0o7777).toBe(0o755);
+    expect(statSync(join(root, "ro.txt")).mode & 0o7777).toBe(0o640);
+    expect(readdirSync(root).sort()).toEqual(["ro.txt", "run.sh"]);
+  });
+
+  test("replaces by rename: the old inode is untouched, so open readers keep a whole file", async () => {
+    const root = tree({ "a.txt": "old\n" });
+    const before = statSync(join(root, "a.txt")).ino;
+    await writeFileContents(root, "a.txt", "new\n");
+    expect(statSync(join(root, "a.txt")).ino).not.toBe(before);
+  });
+
+  test("creates a missing file in an existing folder; 404 when the folder is missing", async () => {
+    const root = tree({ "src/a.ts": "x" });
+    await writeFileContents(root, "src/new.ts", "n\n");
+    expect(read(root, "src/new.ts").toString()).toBe("n\n");
+    expect(await rejects(writeFileContents(root, "nope/new.ts", "n"))).toBe(404);
+  });
+
+  test("writes a symlinked file through to its target inside the root", async () => {
+    const root = tree({ "real.txt": "old\n" });
+    symlinkSync(join(root, "real.txt"), join(root, "link.txt"));
+    await writeFileContents(root, "link.txt", "new\n");
+    expect(read(root, "real.txt").toString()).toBe("new\n");
+    expect(statSync(join(root, "link.txt")).isFile()).toBe(true);
+  });
+
+  test("refuses paths that leave the root, .git, and folders", async () => {
+    const root = tree({ "a.txt": "x", ".git/config": "c", "d/x": "x" });
+    const outside = tree({ "secret.txt": "s" });
+    symlinkSync(outside, join(root, "escape"));
+    symlinkSync(join(outside, "secret.txt"), join(root, "out.txt"));
+    for (const p of ["../x.txt", join(outside, "x.txt"), ".git/config", ".git/new", "d", "", "a.txt/.."]) {
+      expect(await rejects(writeFileContents(root, p, "z"))).toBe(400);
+    }
+    // A symlinked parent, with a target that doesn't exist yet (safeJoin lets that one through).
+    expect(await rejects(writeFileContents(root, "escape/new.txt", "z"))).toBe(400);
+    expect(await rejects(writeFileContents(root, "escape/secret.txt", "z"))).toBe(400);
+    expect(await rejects(writeFileContents(root, "out.txt", "z"))).toBe(400);
+    expect(read(outside, "secret.txt").toString()).toBe("s");
+    expect(readdirSync(outside)).toEqual(["secret.txt"]);
+    expect(read(root, ".git/config").toString()).toBe("c");
+  });
+
+  test("refuses a body that isn't text, has a NUL, or is over the cap (nothing is written)", async () => {
+    const root = tree({ "a.txt": "keep" });
+    expect(await rejects(writeFileContents(root, "a.txt", 5))).toBe(400);
+    expect(await rejects(writeFileContents(root, 5, "x"))).toBe(400);
+    expect(await rejects(writeFileContents(root, "a.txt", "a\0b"))).toBe(400);
+    expect(await rejects(writeFileContents(root, "a.txt", "x".repeat(MAX_VIEW_BYTES + 1)))).toBe(413);
+    expect(read(root, "a.txt").toString()).toBe("keep");
+    // Multi-byte text counts in bytes, not characters.
+    expect(await rejects(writeFileContents(root, "a.txt", "é".repeat(MAX_VIEW_BYTES / 2 + 1)))).toBe(413);
+    await writeFileContents(root, "a.txt", "x".repeat(MAX_VIEW_BYTES));
+  });
+
+  test("refuses to overwrite a binary or too-large file", async () => {
+    const root = tree({ "bin.dat": new Uint8Array([1, 0, 2]), "big.txt": "x".repeat(MAX_VIEW_BYTES + 1) });
+    expect(await rejects(writeFileContents(root, "bin.dat", "text"))).toBe(409);
+    expect(await rejects(writeFileContents(root, "big.txt", "text"))).toBe(409);
+    expect([...read(root, "bin.dat")]).toEqual([1, 0, 2]);
   });
 });

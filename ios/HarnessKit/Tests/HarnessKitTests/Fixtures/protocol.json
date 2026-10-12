@@ -1195,6 +1195,12 @@
       }
     }
   ],
+  "FileWriteResult": [
+    {
+      "path": "src/index.ts",
+      "size": 20
+    }
+  ],
   "HarnessEvent": [
     {
       "kind": "project.upserted",
@@ -1494,6 +1500,7 @@
         "defaultDriver": "claude-code",
         "maxConcurrentRuns": 4,
         "contextGaugeLimit": 250000,
+        "saveOnBlur": true,
         "permissionMode": "auto",
         "classifier": "claude-cli",
         "defaultModels": {
@@ -2507,6 +2514,7 @@
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
       "contextGaugeLimit": 250000,
+      "saveOnBlur": true,
       "permissionMode": "auto",
       "classifier": "claude-cli",
       "defaultModels": {
@@ -2559,6 +2567,7 @@
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
       "contextGaugeLimit": 250000,
+      "saveOnBlur": true,
       "permissionMode": "auto",
       "classifier": "claude-cli",
       "defaultModels": {
@@ -2997,6 +3006,7 @@
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
       "contextGaugeLimit": 250000,
+      "saveOnBlur": true,
       "permissionMode": "auto",
       "classifier": "claude-cli",
       "defaultModels": {
@@ -3049,6 +3059,7 @@
       "defaultDriver": "claude-code",
       "maxConcurrentRuns": 4,
       "contextGaugeLimit": 250000,
+      "saveOnBlur": true,
       "permissionMode": "auto",
       "classifier": "anthropic-api",
       "defaultModels": {
@@ -5078,6 +5089,16 @@
       "failures": 0
     }
   ],
+  "WriteFileRequest": [
+    {
+      "path": "src/index.ts",
+      "contents": "export const x = 2;\n"
+    },
+    {
+      "path": "notes/empty.txt",
+      "contents": ""
+    }
+  ],
   "discriminators": {
     "HarnessEvent": [
       "project.upserted",
@@ -5612,6 +5633,7 @@
           "defaultDriver": "claude-code",
           "maxConcurrentRuns": 4,
           "contextGaugeLimit": 250000,
+          "saveOnBlur": true,
           "permissionMode": "paranoid",
           "classifier": "local-llm",
           "defaultModels": {

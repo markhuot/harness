@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultDriver: "claude-code",
   maxConcurrentRuns: 4,
   contextGaugeLimit: DEFAULT_CONTEXT_GAUGE_LIMIT,
+  saveOnBlur: false,
   permissionMode: "auto",
   classifier: "claude-cli",
   defaultModels: {},
@@ -181,6 +182,10 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (typeof value !== "number" || !Number.isInteger(value) || value < MIN_CONTEXT_GAUGE_LIMIT || value > MAX_CONTEXT_GAUGE_LIMIT)
           throw badRequest(`contextGaugeLimit must be an integer between ${MIN_CONTEXT_GAUGE_LIMIT} and ${MAX_CONTEXT_GAUGE_LIMIT} tokens`);
         out.contextGaugeLimit = value;
+        break;
+      case "saveOnBlur":
+        if (typeof value !== "boolean") throw badRequest("saveOnBlur must be true or false");
+        out.saveOnBlur = value;
         break;
       case "browserIdleTabMinutes":
         if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_BROWSER_IDLE_TAB_MINUTES)
