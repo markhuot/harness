@@ -1864,7 +1864,16 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
 
   await check("a file opened from a link is its own card next to the ticket's", async () => {
     await goto(udid, BOARD);
-    await undock(udid);
+    if (ipad) {
+      // The corner cards and the panel each have a ✕: close them until none is left.
+      for (let i = 0; i < 20 && (await labels(udid)).some((l) => l.startsWith("Close ") && l !== "Close"); i++) {
+        await tapWhere(udid, (l) => l.startsWith("Close ") && l !== "Close");
+        moved(udid);
+        await Bun.sleep(400);
+      }
+    } else {
+      await undock(udid);
+    }
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`, (l) => l.some((x) => x.includes("Part of") || x.includes(key)));
     await goto(udid, link);
     await until("the editor", editorUp, 12000);
@@ -1876,12 +1885,12 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
         await say("after the file link");
         throw e;
       });
-      await shot(udid, "file-dock-ipad-light");
+      await shot(udid, "file-dock-ipad-light", true);
     } else {
       const label = await dockSheet(udid);
       if (!label.startsWith(`${DOCK_FILE}, `)) throw new Error(`the bottom card reads "${label}"`);
       if ((await count()) !== 2) throw new Error(`${await count()} docked, expected the file and the ticket`);
-      await shot(udid, "file-dock-light");
+      await shot(udid, "file-dock-light", true);
     }
     return `${DOCK_FILE} and ${key} docked`;
   });
@@ -1911,8 +1920,10 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     await goto(udid, link);
     await until("the editor", editorUp, 12000);
     if (!ipad) await dockSheet(udid);
-    if ((await count()) !== 2) throw new Error(`${await count()} docked after a second open, expected 2`);
-    return "still two";
+    // The iPad's panel shows the file, so only the ticket is a card there.
+    const expected = ipad ? 1 : 2;
+    if ((await count()) !== expected) throw new Error(`${await count()} docked after a second open, expected ${expected}`);
+    return "no second card";
   });
   await check("a file card's ✕ closes only it", async () => {
     await tapWhere(udid, `Close ${DOCK_FILE}`);
