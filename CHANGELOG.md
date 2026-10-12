@@ -15,6 +15,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On the iPad, a ticket panel with its header collapsed no longer leaves an empty band under the title: the tab strip sits right below it.
+- On the iPad, docking tickets no longer shortens the board (or any other screen). The docked cards sit over it, the board keeps the full screen height, and its last items still scroll clear of the cards.
+- On the iPad, the ticket panel's background now runs up behind the status bar to the top of the screen. The title and buttons stay where they were. For people working on Harness, sim-check's iPad panel checks cover the collapsed header gap and the status bar's colour.
 - On the Mac, dragging an open pane now previews the drop on the pane under the pointer, where it is on screen, instead of on the layout as if the dragged pane had already left. The box is the size the pane will have: half of the pane, 40% of the board, or, when you reorder a pane within its own row or column, the dragged pane's own width or height. For people working on Harness, `pane-resize-check` holds a drag and checks the preview's position and size.
 
 ## [app-20261012.0049](https://github.com/markhuot/harness/releases/tag/app-20261012.0049) - 2026-10-12

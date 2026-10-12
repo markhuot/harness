@@ -402,10 +402,11 @@ private struct DockClearance: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // On the iPad the cards sit over the screen, which keeps its full height: only its
+            // scroll content backs off, so the last items still scroll clear of them.
+            .contentMargins(.bottom, desktop ? (dockInset?.cards ?? 0) : 0, for: .scrollContent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if desktop, let cards = dockInset?.cards, cards > 0 {
-                    Color.clear.frame(height: cards)
-                } else if router.showsDock && !desktop && !keyboard {
+                if !desktop && router.showsDock && !keyboard {
                     // The docked sheet, and the cards stacked above it.
                     Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top)
                         + DockedCardsAbove.height(count: router.dockedSheets.count))

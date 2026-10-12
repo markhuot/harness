@@ -62,9 +62,14 @@ struct TicketSidePanel<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .top) { flingStrip(width: width) }
             .overlay(alignment: .topTrailing) { buttons(width: width) }
-        .background(c.bg)
-        .clipShape(Self.shape)
-        .shadow(color: .black.opacity(c.isDark ? 0.45 : 0.16), radius: 18, x: -4)
+        // The content stays inside the safe area; only the background (and its shadow) runs up
+        // behind the status bar, with the rounded corner at the screen's top edge.
+        .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 16, style: .continuous))
+        .background {
+            Self.shape.fill(c.bg)
+                .shadow(color: .black.opacity(c.isDark ? 0.45 : 0.16), radius: 18, x: -4)
+                .ignoresSafeArea(edges: .top)
+        }
         .overlay(alignment: .leading) { resizeHandle(width: width, window: window) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ticket-panel")

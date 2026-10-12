@@ -628,6 +628,18 @@ async function inkIn(udid: string, r: { x: number; y: number; width: number; hei
   return px.filter((v) => Math.abs(v - median) > 64).length;
 }
 
+/** The median gray (0–255) of `r` (points, on a screen `W` points wide). */
+async function grayIn(udid: string, r: { x: number; y: number; width: number; height: number }, W: number): Promise<number> {
+  const file = join(shots, ".gray.png");
+  await simctl("io", udid, "screenshot", file);
+  const crop = `scale=${W}:-1,crop=${Math.round(r.width)}:${Math.round(r.height)}:${Math.round(r.x)}:${Math.round(r.y)},format=gray`;
+  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", file, "-vf", crop, "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const px = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
+  if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
+  rmSync(file, { force: true });
+  return [...px].sort((a, b) => a - b)[px.length >> 1]!;
+}
+
 /**
  * How far the content strays from a rigid move, over a slow drag's frames (full-screen gray, `w`×`h`).
  * The system moves the sheet down and scales it a few percent as it comes off the screen's edges,
@@ -2159,9 +2171,46 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     // An expanded hero shows both its title and, in the badge row, the key: still the hero alone.
     const bar = named.filter((n) => n.frame.y < 60 && n.AXLabel !== title && n.AXLabel !== key);
     if (named.length < 1 || named.length > 2 || bar.length) throw new Error(`${named.length} labels in the panel name ${key}: ${named.map((n) => `"${n.AXLabel}" at y=${Math.round(n.frame.y)}`).join(", ")}`);
+    // The panel's background runs up behind the status bar: its left part (the clock and battery
+    // sit at the corners' far ends) is the panel's own colour, with the buttons still where they were.
+    const strip = await grayIn(udid, { x: leading + 40, y: 2, width: 120, height: 10 }, W);
+    const body = await grayIn(udid, { x: leading + 40, y: close.frame.y + close.frame.height + 4, width: 120, height: 6 }, W);
+    if (Math.abs(strip - body) > 6) throw new Error(`the status bar above the panel is gray ${strip}, the panel's body ${body}`);
     await shootBoth(udid, "panel-default");
     await appearance(udid, "light");
     return `${key} at ${pct(fraction)} (${Math.round(W - leading)} of ${W} pt), header "${named[0]!.AXLabel}"`;
+  });
+  await check("a collapsed hero sits tight above the tab strip, below the panel's buttons", async () => {
+    const { leading, W } = await panelFraction(udid);
+    const close = await findElement(udid, (l) => l === `Close ${key}`);
+    if (!close) throw new Error("no close button");
+    const buttonsEnd = close.frame.y + close.frame.height;
+    const inPanel = async () => (await nodes(udid)).filter((n) => n.frame.x >= leading && n.frame.x < W && n.AXLabel);
+    const titleOf = async () => (await inPanel()).find((n) => n.frame.x < W && n.AXLabel!.startsWith(`${s.conductor.title}, `) && n.frame.y < 160);
+    const strip = async () => (await inPanel()).filter((n) => ["Spec", "Activity", "Tickets", "Transcript"].includes(n.AXLabel!.split(",")[0]!)).sort((p, q) => p.frame.y - q.frame.y)[0];
+    let t = await titleOf();
+    if (!t) throw new Error(`no title in the panel: ${(await inPanel()).slice(0, 12).map((n) => n.AXLabel).join(" | ")}`);
+    // Toggle by tapping the title until the hero is collapsed (it starts collapsed or expanded by the ticket's state).
+    const start = (await strip())?.frame.y ?? 0;
+    await axe("tap", "-x", String(Math.round(t.frame.x + 20)), "-y", String(Math.round(t.frame.y + t.frame.height / 2)), "--udid", udid);
+    await Bun.sleep(900);
+    const other = (await strip())?.frame.y ?? 0;
+    const collapsedAt = Math.min(start, other);
+    if (other === start) throw new Error(`tapping the title (${t.AXLabel}) didn't move the tab strip (y=${start})`);
+    if (other > start) {
+      // It had been collapsed; it's expanded now. Tap back.
+      t = (await titleOf())!;
+      await axe("tap", "-x", String(Math.round(t.frame.x + 20)), "-y", String(Math.round(t.frame.y + t.frame.height / 2)), "--udid", udid);
+      await Bun.sleep(900);
+    }
+    t = (await titleOf())!;
+    const tabs = (await strip())!;
+    const gap = tabs.frame.y - (t.frame.y + t.frame.height);
+    if (Math.abs(tabs.frame.y - collapsedAt) > 2) throw new Error("the collapsed strip moved");
+    if (gap > 24 || tabs.frame.y < buttonsEnd) throw new Error(`collapsed, the tab strip starts ${Math.round(gap)}pt below the title row (title y=${Math.round(t.frame.y)}+${Math.round(t.frame.height)}, buttons end ${Math.round(buttonsEnd)}, strip y=${Math.round(tabs.frame.y)})`);
+    await shootBoth(udid, "panel-collapsed");
+    await appearance(udid, "light");
+    return `strip ${Math.round(gap)}pt below the title row, ${Math.round(tabs.frame.y - buttonsEnd)}pt below the buttons (W ${W})`;
   });
   await check("New session opens in the side panel with one header; with a draft typed, ✕ and Escape ask Discard or Save", async () => {
     const words = "Throw this panel draft away";
