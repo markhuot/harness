@@ -4006,6 +4006,32 @@ function interactionChains(s: Seeded): Chain[] {
         return `${GREETINGS_PATH}, ${range}`;
       });
     }),
+    chain("save-on-blur", ["watchers"], 40, async (udid) => {
+      await check("Settings → General has a Save on blur switch that saves to the service", async () => {
+        await goto(udid, "harness://settings", (l) => l.includes("Settings"));
+        // The theme pickers are horizontal strips that swallow a swipe starting on them: swipe from the page's headings.
+        const row = (l: string) => l === "Save on blur" || l.startsWith("Save on blur,");
+        for (let i = 0; i < 40; i++) {
+          const el = await findElement(udid, row);
+          if (el && el.frame.y > 140 && el.frame.y < 700) break;
+          await axe("swipe", "--start-x", "200", "--start-y", "520", "--end-x", "200", "--end-y", "170", "--duration", "0.6", "--udid", udid);
+          await Bun.sleep(350);
+        }
+        if (!(await findElement(udid, row))) throw new Error(`no Save on blur row; on screen: ${(await labels(udid)).join(" | ")}`);
+        await shot(udid, "save-on-blur-off-light");
+        const before = (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false;
+        // The row's text and its switch share the label: the switch is the one on the right.
+        const sw = (await nodes(udid)).filter((n) => n.AXLabel === "Save on blur").sort((a, b) => b.frame.x - a.frame.x)[0];
+        if (!sw) throw new Error("no Save on blur switch");
+        await axe("tap", "-x", String(Math.round(sw.frame.x + sw.frame.width / 2)), "-y", String(Math.round(sw.frame.y + sw.frame.height / 2)), "--udid", udid);
+        await Bun.sleep(1000);
+        await shot(udid, "save-on-blur-on-light");
+        const after = await until("the setting flipped on the service", async () => (((await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false) !== before ? true : null), 6000);
+        if (!after) throw new Error("the switch didn't change the setting");
+        await shot(udid, "save-on-blur-on-light");
+        return `${before} → ${!before}`;
+      });
+    }),
     chain("file-edit", ["fileLink"], 25, async (udid) => {
       await check("the file editor edits, shows the unsaved dot and writes the file with Save", async () => {
         const dot = async () => (await labels(udid)).includes("Unsaved changes");
@@ -4021,7 +4047,7 @@ function interactionChains(s: Seeded): Chain[] {
           return dot();
         }, 20000, 1000);
         await shot(udid, "file-edit-dirty-light");
-        const wd = (await api<Ticket>("GET", `/tickets/${s.fileLink.key}`)).workdir!;
+        const wd = (await ticketOf(s.fileLink.key)).workdir!;
         const onDisk = () => readFileSync(join(wd, GREETINGS_PATH), "utf8");
         if (onDisk().includes(typed)) throw new Error("the edit reached the disk before Save");
         await tapWhere(udid, "Save");
