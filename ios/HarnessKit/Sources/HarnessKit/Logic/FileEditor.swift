@@ -30,7 +30,8 @@ public struct FileEditorTheme: Equatable, Sendable {
 /// What the host tells the editor page (editor's `BridgeCommand`).
 public enum FileEditorCommand: Equatable, Sendable {
     /// Opens a fresh editor. `language` is the file's path or name (the editor resolves it).
-    case open(contents: String, language: String, theme: FileEditorTheme, range: ClosedRange<Int>?, readOnly: Bool)
+    /// `saved` is what's on disk when the editor reopens with unsaved edits (it opens dirty).
+    case open(contents: String, language: String, theme: FileEditorTheme, range: ClosedRange<Int>?, readOnly: Bool, saved: String?)
     /// Opens the merge view, the original on the left.
     case diff(original: String, modified: String, language: String, theme: FileEditorTheme)
     case theme(FileEditorTheme)
@@ -40,6 +41,8 @@ public enum FileEditorCommand: Equatable, Sendable {
     /// What `save` handed out is on disk now (nil: the document as it is)
     case markSaved(String?)
     case focus
+    /// The keyboard came up: keep the caret in view
+    case scrollToCursor
     case getContents(id: String)
 
     var json: JSONValue {
@@ -47,12 +50,13 @@ public enum FileEditorCommand: Equatable, Sendable {
             .object(["start": .number(Double(r.lowerBound)), "end": .number(Double(r.upperBound))])
         }
         switch self {
-        case let .open(contents, language, theme, r, readOnly):
+        case let .open(contents, language, theme, r, readOnly, saved):
             var o: [String: JSONValue] = [
                 "type": .string("open"), "contents": .string(contents), "language": .string(language),
                 "theme": theme.json, "readOnly": .bool(readOnly),
             ]
             if let r { o["range"] = range(r) }
+            if let saved, saved != contents { o["saved"] = .string(saved) }
             return .object(o)
         case let .diff(original, modified, language, theme):
             return .object([
@@ -67,6 +71,7 @@ public enum FileEditorCommand: Equatable, Sendable {
             if let s { o["contents"] = .string(s) }
             return .object(o)
         case .focus: return .object(["type": .string("focus")])
+        case .scrollToCursor: return .object(["type": .string("scrollToCursor")])
         case let .getContents(id): return .object(["type": .string("getContents"), "id": .string(id)])
         }
     }

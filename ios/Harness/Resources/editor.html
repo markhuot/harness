@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The file viewer's editor page (editor/src/bridge.ts through the app's EditorWebHost). The theme
+     arrives as CSS variables from the host; these are only the colors of the first paint. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; -webkit-text-size-adjust: 100%; }
+  body { overflow: hidden; -webkit-touch-callout: none; }
+  .cm-editor { height: 100%; }
+  .cm-scroller { overflow: auto; -webkit-overflow-scrolling: touch; }
+</style>
+</head>
+<body>
+<script src="editor.js"></script>
+<script>
+  HarnessEditor.mount(window, function (event) {
+    window.webkit.messageHandlers.editor.postMessage(JSON.stringify(event));
+  });
+</script>
+</body>
+</html>

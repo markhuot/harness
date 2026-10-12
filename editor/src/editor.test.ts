@@ -126,6 +126,32 @@ describe("dirty", () => {
   });
 });
 
+describe("reopened with unsaved edits", () => {
+  test("opens dirty against what's on disk, and typing back to it is clean", () => {
+    const h = make({ contents: "edited", saved: "disk" });
+    expect(h.isDirty()).toBe(true);
+    const events: boolean[] = [];
+    h.onDirty((d) => events.push(d));
+    h.view.dispatch({ changes: { from: 0, to: 6, insert: "disk" } });
+    expect(h.isDirty()).toBe(false);
+    expect(events).toEqual([false]);
+  });
+
+  test("saved equal to the contents is a clean open", () => {
+    expect(make({ contents: "same", saved: "same" }).isDirty()).toBe(false);
+  });
+});
+
+describe("touch keyboard", () => {
+  test("autocorrect, capitalization and spell check are off on the editable content", () => {
+    make();
+    const content = host.querySelector(".cm-content")!;
+    expect(content.getAttribute("autocorrect")).toBe("off");
+    expect(content.getAttribute("autocapitalize")).toBe("off");
+    expect(content.getAttribute("spellcheck")).toBe("false");
+  });
+});
+
 describe("events", () => {
   test("Mod-s fires onSave with the contents", () => {
     const h = make({ contents: "hi" });
@@ -233,6 +259,18 @@ describe("bridge", () => {
     m.receive({ type: "reveal", range: { start: 1 } as never });
     m.receive({ type: "open", contents: 5 as never });
     expect(events.some((e) => e.type === "error")).toBe(true);
+    m.destroy();
+  });
+
+  test("a reopened editor with unsaved edits is dirty, and scrollToCursor is accepted", () => {
+    const events: BridgeEvent[] = [];
+    const m = mount(window, (e) => events.push(e));
+    m.receive({ type: "open", contents: "edited", saved: "disk", language: "a.js" });
+    m.receive({ type: "markSaved" });
+    m.receive({ type: "scrollToCursor" });
+    expect(events.filter((e) => e.type === "error")).toEqual([]);
+    m.receive({ type: "getContents", id: "2" });
+    expect(events.at(-1)).toEqual({ type: "contents", id: "2", contents: "edited" });
     m.destroy();
   });
 

@@ -17,7 +17,7 @@ import Testing
     enum CodecError: Error { case notObject }
 
     @Test func openCarriesTheRangeAndEveryToken() throws {
-        let o = try Self.payload(.open(contents: "a\n\"b\"\u{2028}", language: "src/a.ts", theme: Self.theme, range: 3...9, readOnly: true))
+        let o = try Self.payload(.open(contents: "a\n\"b\"\u{2028}", language: "src/a.ts", theme: Self.theme, range: 3...9, readOnly: true, saved: nil))
         #expect(o["type"] == .string("open"))
         #expect(o["contents"] == .string("a\n\"b\"\u{2028}"))
         #expect(o["language"] == .string("src/a.ts"))
@@ -30,8 +30,16 @@ import Testing
     }
 
     @Test func openWithoutARangeOmitsIt() throws {
-        let o = try Self.payload(.open(contents: "", language: "a", theme: Self.theme, range: nil, readOnly: false))
+        let o = try Self.payload(.open(contents: "", language: "a", theme: Self.theme, range: nil, readOnly: false, saved: nil))
         #expect(o["range"] == nil)
+    }
+
+    @Test func aReopenedEditorCarriesWhatIsOnDisk() throws {
+        let dirty = try Self.payload(.open(contents: "edited", language: "a", theme: Self.theme, range: nil, readOnly: false, saved: "disk"))
+        #expect(dirty["saved"] == .string("disk"))
+        let clean = try Self.payload(.open(contents: "same", language: "a", theme: Self.theme, range: nil, readOnly: false, saved: "same"))
+        #expect(clean["saved"] == nil)
+        #expect(try Self.payload(.scrollToCursor)["type"] == .string("scrollToCursor"))
     }
 
     @Test func lineSeparatorsStayEscapedInTheScript() {

@@ -23,6 +23,8 @@ export interface EditorOptions {
   /** Lines to reveal on open */
   range?: LineRange;
   readOnly?: boolean;
+  /** What's on disk when it differs from `contents`: an editor reopened with unsaved edits opens dirty. */
+  saved?: string;
 }
 
 export interface EditorHandle {
@@ -147,8 +149,8 @@ function themeController(host: () => HTMLElement[], initialDark: boolean, setDar
 export function createEditor(parent: HTMLElement, options: EditorOptions): EditorHandle {
   const initial = normalizeTheme(options.theme);
   const base = baseExtensions(options.language, initial.appearance === "dark");
-  let saved: Text = EditorState.create({ doc: options.contents }).doc;
-  let dirty = false;
+  let saved: Text = EditorState.create({ doc: options.saved ?? options.contents }).doc;
+  let dirty = options.saved !== undefined && options.saved !== options.contents;
   /** True while setContents replaces the document, so a reload isn't reported as an edit. */
   let quiet = false;
   const change = emitter<[string]>();
@@ -177,6 +179,13 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
         highlightActiveLine(),
         revealField,
         ...base.extensions,
+        // Code, not prose: no autocorrect, smart quotes, capitalization or spell check on a touch keyboard.
+        EditorView.contentAttributes.of({
+          autocorrect: "off",
+          autocapitalize: "off",
+          autocomplete: "off",
+          spellcheck: "false",
+        }),
         keymap.of([
           {
             key: "Mod-s",

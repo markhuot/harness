@@ -21,4 +21,10 @@ export async function build(outfile = join(root, "dist/editor.js")) {
   return outfile;
 }
 
-if (import.meta.main) console.log(await build());
+if (import.meta.main) {
+  // `--out <file>` writes the bundle somewhere else (the iOS build puts it in the app's resources).
+  const i = process.argv.indexOf("--out");
+  const out = i >= 0 ? process.argv[i + 1] : undefined;
+  if (i >= 0 && !out) throw new Error("--out needs a file path");
+  console.log(await build(out));
+}

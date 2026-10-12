@@ -12,6 +12,9 @@ public final class FileEditorModel {
     public private(set) var saveError: String?
     /// The newest contents the editor reported (nil until it opens)
     public private(set) var latest: String?
+    /// What's on disk as far as this screen knows: what it loaded, or last wrote. A reopened editor
+    /// (the web view's process died) compares against it to stay dirty.
+    public private(set) var saved: String?
 
     public let root: FileRoot
     public let path: String
@@ -28,6 +31,7 @@ public final class FileEditorModel {
     /// The editor opened (or reloaded clean) with `contents`.
     public func opened(_ contents: String) {
         latest = contents
+        saved = contents
         dirty = false
         saveError = nil
     }
@@ -72,6 +76,7 @@ public final class FileEditorModel {
         }
         guard let written else { return nil }
         saveError = nil
+        saved = written
         // Still dirty when the document moved on while the write was out.
         if let latest { dirty = latest != written }
         return written

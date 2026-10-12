@@ -1,14 +1,13 @@
-import HarnessHighlight
 import HarnessKit
 import SwiftUI
 import UIKit
 
-/// The file a chat link points at (opened from a harness://file/… link in
-/// any markdown): the whole file syntax highlighted with line numbers, opened at and tinting the
-/// linked lines, plus a Diff tab with its uncommitted changes when git says it has some. Lines are
-/// a fixed-row-height list (FileCodeList), so a file of thousands of lines opens straight at its
-/// range; a long file is colored a window at a time around what's on screen
-/// (FileHighlightWindows). The decisions are HarnessKit's FileViewerRules and FileViewerLoader.
+/// The file a chat link points at (opened from a harness://file/… link in any markdown): the file
+/// in a CodeMirror editor (a WKWebView, EditorWebHost) with line numbers, opened at and marking the
+/// linked lines, plus a Diff tab (the editor's merge view) with its uncommitted changes when git
+/// says it has some. The file is editable: Save writes it back, and Save on blur (Settings →
+/// General) writes whenever the editor loses focus. The decisions are HarnessKit's FileViewerRules,
+/// FileEditRules and FileEditorModel; FileEditorSession ties them to the editors.
 struct FileViewerScreen: View {
     let params: FileRouteParams
 
@@ -42,32 +41,47 @@ private struct FileViewerContent: View {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
-    @State private var loader: FileViewerLoader?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var phase
+    @State private var session: FileEditorSession?
     @State private var tab = FileViewerTab.file
+    @State private var askingToLeave = false
+    private var saveOnBlur: Bool { SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) }
 
     var body: some View {
+        let loader = session?.loader
         let view = loader?.file.value
         let shownPath = view?.path ?? path
         let hasDiff = view.map(FileViewerRules.hasDiff) ?? false
         let shown = hasDiff ? tab : .file
+        let dirty = session?.model.dirty ?? false
+        // Dirty with Save on blur off: the back button asks, and swiping back or down can't skip it.
+        let guarded = dirty && !saveOnBlur
         VStack(spacing: 0) {
-            FileInfoBar(path: shownPath, view: view, lineCount: loader?.text?.lines.count, range: range)
+            FileInfoBar(
+                path: shownPath, view: view, lineCount: loader?.text?.lines.count, range: range,
+                editing: shown == .file ? session?.model : nil, canEdit: view.map(FileEditRules.canEdit) ?? false
+            ) { session?.saveNow() }
             if hasDiff, let loader {
                 FileTabsBar(tab: $tab, rows: loader.rows)
             }
             Group {
-                if let loader {
+                if let session, let loader {
                     switch loader.file {
                     case .loading:
                         LoadingScreen()
                     case let .error(e):
                         FileErrorView(copy: FileViewerRules.errorCopy(.file, e, path: path)) { Task { await loader.refresh() } }
                     case let .ok(v):
-                        if shown == .file {
-                            FileBody(view: v, text: loader.text, range: range, refreshing: loader.refreshing) { await loader.refresh() }
-                                .id("\(v.path):\(v.size)")
-                        } else {
-                            FileDiffBody(path: v.path, diff: loader.diff, rows: loader.rows, refreshing: loader.refreshing) { await loader.refresh() }
+                        ZStack {
+                            FileBody(view: v, host: session.fileHost)
+                                .opacity(shown == .file ? 1 : 0)
+                                .allowsHitTesting(shown == .file)
+                            if hasDiff {
+                                FileDiffBody(path: v.path, diff: loader.diff, rows: loader.rows, host: session.diffHost) { await loader.refresh() }
+                                    .opacity(shown == .diff ? 1 : 0)
+                                    .allowsHitTesting(shown == .diff)
+                            }
                         }
                     }
                 } else {
@@ -79,16 +93,50 @@ private struct FileViewerContent: View {
         .background(c.bg)
         .navigationTitle(FileViewerRules.fileName(shownPath))
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(guarded)
+        .interactiveDismissDisabled(guarded)
         .toolbar {
+            if guarded {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { askingToLeave = true } label: { Label("Back", systemImage: "chevron.left") }
+                }
+            }
             ToolbarItem(placement: .principal) { title(shownPath) }
             ToolbarItem(placement: .topBarTrailing) { moreMenu(shownPath) }
         }
+        .confirmationDialog("Save changes to \(FileViewerRules.fileName(shownPath))?", isPresented: $askingToLeave, titleVisibility: .visible) {
+            Button("Save") {
+                Task {
+                    if await session?.save() == true { dismiss() }
+                }
+            }
+            Button("Discard changes", role: .destructive) {
+                session?.discard()
+                dismiss()
+            }
+            Button("Keep editing", role: .cancel) {}
+        } message: {
+            Text("Your edits aren't saved yet.")
+        }
         .task {
-            guard loader == nil else { return }
+            guard session == nil else { return }
             guard let client = store.client as? FileViewerClient else { return }
-            let l = FileViewerLoader(client: client, root: root, path: path)
-            loader = l
-            await l.load()
+            let s = FileEditorSession(
+                client: client, root: root, path: path, range: range, theme: FileEditorTheme(c.theme.pluginInfo),
+                background: UIColor(c.bg), saveOnBlur: { [store] in SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) })
+            session = s
+            await s.start()
+        }
+        .onChange(of: c.theme.pluginInfo) { _, info in session?.setTheme(FileEditorTheme(info), background: UIColor(c.bg)) }
+        .onChange(of: phase) { _, now in
+            switch now {
+            case .active: Task { await session?.didForeground() }
+            case .background: session?.didBackground()
+            default: break
+            }
+        }
+        .onDisappear {
+            session?.didLeave()
         }
     }
 
@@ -134,43 +182,69 @@ private struct FileViewerContent: View {
     }
 }
 
-/// The path (head-truncated, selectable), the git badge and "size · N lines · lines X–Y".
+/// The path (head-truncated, selectable), the git badge and "size · N lines · lines X–Y"; on the file
+/// tab of an editable file, an unsaved dot and the Save button.
 private struct FileInfoBar: View {
     let path: String
     let view: FileView?
     let lineCount: Int?
     let range: ClosedRange<Int>?
+    let editing: FileEditorModel?
+    let canEdit: Bool
+    let save: () -> Void
 
     @Environment(\.palette) private var c
     @Environment(\.displayScale) private var scale
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(path)
-                .font(.mono(12))
-                .foregroundStyle(c.text2)
-                .lineLimit(1)
-                .truncationMode(.head)
-                .textSelection(.enabled)
-            if let view {
-                HStack(spacing: 6) {
-                    switch FileViewerRules.gitBadge(view.git) {
-                    case .untracked: Badge("Untracked", tone: .green)
-                    case .modified: Badge("Modified", tone: .amber)
-                    case nil: EmptyView()
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(path)
+                    .font(.mono(12))
+                    .foregroundStyle(c.text2)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .textSelection(.enabled)
+                if let view {
+                    HStack(spacing: 6) {
+                        switch FileViewerRules.gitBadge(view.git) {
+                        case .untracked: Badge("Untracked", tone: .green)
+                        case .modified: Badge("Modified", tone: .amber)
+                        case nil: EmptyView()
+                        }
+                        if view.git.ignored { Badge("Ignored") }
+                        Text(FileViewerRules.meta(size: view.size, lineCount: lineCount, range: range))
+                            .font(.scaled(size: 12.5))
+                            .foregroundStyle(c.text3)
+                            .lineLimit(1)
                     }
-                    if view.git.ignored { Badge("Ignored") }
-                    Text(FileViewerRules.meta(size: view.size, lineCount: lineCount, range: range))
-                        .font(.scaled(size: 12.5))
-                        .foregroundStyle(c.text3)
-                        .lineLimit(1)
                 }
+            }
+            Spacer(minLength: 0)
+            if let editing, canEdit {
+                editControls(editing)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottom) { c.border.frame(height: 1 / scale) }
+    }
+
+    private func editControls(_ model: FileEditorModel) -> some View {
+        HStack(spacing: 8) {
+            if let status = FileEditRules.statusLabel(saving: model.saving, error: model.saveError) {
+                Text(status)
+                    .font(.scaled(size: 12.5))
+                    .foregroundStyle(model.saving ? c.text3 : c.red)
+                    .lineLimit(1)
+            } else if model.dirty {
+                Circle().fill(c.amber).frame(width: 8, height: 8)
+                    .accessibilityLabel("Unsaved changes")
+            }
+            HButton("Save", small: true, action: save)
+                .disabled(!model.dirty || model.saving)
+        }
     }
 }
 
@@ -244,25 +318,33 @@ private struct FileErrorView: View {
     }
 }
 
-/// Folded into a code list's version, so rows on screen redraw in a new app theme's colors.
-private func paletteSeed(_ c: Palette) -> Int { c.theme.id.hashValue ^ (c.isDark ? 1 : 0) }
 
-/// The whole file: a gutter of line numbers, the linked range tinted with an edge bar and bold
-/// numbers, colored a window at a time.
+/// An editor's web view over the app background, with a spinner until its page is ready.
+private struct EditorSurface: View {
+    let host: EditorWebHost
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        ZStack {
+            c.bg
+            EditorWebViewRepresentable(host: host)
+                .opacity(host.ready ? 1 : 0)
+            if !host.ready { Spinner() }
+        }
+        // The web view insets itself for the keyboard and keeps the caret in view.
+        .ignoresSafeArea(.keyboard)
+        .ignoresSafeArea(.container, edges: .bottom)
+    }
+}
+
+/// The file: the editor (or, for a file it can't show, why not).
 private struct FileBody: View {
     let view: FileView
-    let text: FileText?
-    let range: ClosedRange<Int>?
-    let refreshing: Bool
-    let onRefresh: () async -> Void
+    let host: EditorWebHost
 
     @Environment(\.palette) private var c
     @Environment(\.displayScale) private var scale
-    @State private var windows: FileHighlightWindows<[HighlightSpan]>?
-    /// The last highlight's default text color
-    @State private var fg: String?
-    @State private var version = 0
-    @State private var drawer = FileCodeText()
 
     var body: some View {
         switch FileViewerRules.fileBody(view) {
@@ -270,136 +352,43 @@ private struct FileBody: View {
             EmptyState(icon: "fileText", title: "Too large to show", message: message)
         case let .binary(message):
             EmptyState(icon: "image", title: "Binary file", message: message)
-        case .empty:
-            EmptyState(icon: "fileText", title: "Empty file")
         case let .lines(truncated):
-            VStack(spacing: 0) {
-                if truncated {
-                    Text("The file changed while it was read; this is only its start.")
-                        .font(.scaled(size: 12.5))
-                        .foregroundStyle(c.text3)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .overlay(alignment: .bottom) { c.border.frame(height: 1 / scale) }
-                }
-                if let text { list(text) }
-            }
+            editor(truncated: truncated)
+        case .empty:
+            editor(truncated: false)
         }
     }
 
-    private func list(_ text: FileText) -> some View {
-        let theme = c.syntaxTheme
-        let lang = Diff.langForPath(view.path)
-        let char = FileCodeMetrics.char
-        let gutter = ceil(CGFloat(String(text.lines.count).count) * char) + 20
-        let width = gutter + FileCodeMetrics.pad * 2 + CGFloat(min(FileViewerRules.maxColumns, text.longest)) * char
-        let colors = (
-            fg: fg.flatMap(drawer.color) ?? UIColor(c.text),
-            text3: UIColor(c.text3),
-            accent: UIColor(c.accent),
-            accentSoft: UIColor(c.accentSoft),
-            accentText: UIColor(c.accentText)
-        )
-        let colored = windows?.colored ?? [:]
-        let drawer = drawer
-        let range = range
-        return FileCodeList(
-            count: text.lines.count,
-            contentWidth: width,
-            initialIndex: FileViewer.initialScrollIndex(start: range?.lowerBound, total: text.lines.count),
-            version: version &+ paletteSeed(c),
-            background: UIColor(c.bg),
-            refreshing: refreshing,
-            onRefresh: { Task { await onRefresh() } },
-            onVisible: { first, last in
-                guard let w = windows?.window, first < w.lowerBound || last >= w.upperBound else { return }
-                windows?.visible(first: first, last: last)
-            },
-            row: { i in
-                let on = range?.contains(i + 1) ?? false
-                let code = colored[i].map { drawer.spans($0, fg: colors.fg) } ?? drawer.plain(text.lines[i], color: colors.fg)
-                return FileCodeRow(
-                    columns: [
-                        FileCodeColumn(
-                            text: drawer.plain(String(i + 1), color: on ? colors.accentText : colors.text3, font: on ? FileCodeMetrics.semiboldFont : FileCodeMetrics.font),
-                            width: gutter - 3, alignment: .right, trailing: 12, accessibilityHidden: true
-                        ),
-                        FileCodeColumn(text: code, trailing: FileCodeMetrics.pad, accessibilityValue: "Line \(i + 1)"),
-                    ],
-                    background: on ? colors.accentSoft : nil,
-                    edgeWidth: 3,
-                    edgeColor: on ? colors.accent : nil
-                )
+    private func editor(truncated: Bool) -> some View {
+        VStack(spacing: 0) {
+            if truncated {
+                Text("The file changed while it was read; this is only its start, and it can't be saved.")
+                    .font(.scaled(size: 12.5))
+                    .foregroundStyle(c.text3)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .bottom) { c.border.frame(height: 1 / scale) }
             }
-        )
-        .ignoresSafeArea(.container, edges: .bottom)
-        .onAppear {
-            if windows == nil { windows = FileHighlightWindows(lengths: text.lengths, center: (range?.lowerBound ?? 1) - 1) }
-        }
-        .onChange(of: text) {
-            // New contents at the same path and size: start over around the range.
-            windows = FileHighlightWindows(lengths: text.lengths, center: (range?.lowerBound ?? 1) - 1)
-            version += 1
-        }
-        .onChange(of: theme) {
-            windows?.reset()
-            fg = nil
-            version += 1
-        }
-        .task(id: FileHighlightJob(window: windows?.window, theme: theme, appearance: c.appearance)) {
-            guard let w = windows?.window, !w.isEmpty, let lang else { return }
-            let code = text.lines[w].joined(separator: "\n")
-            let hl = Highlighter.app
-            // Only a bundled language gets a job: an unknown extension stays plain without a job.
-            guard await hl.hasLanguage(lang), !Task.isCancelled else { return }
-            let result: Highlighted?
-            if let hit = hl.cached(code, language: lang, theme: theme, diff: false) {
-                result = hit
-            } else {
-                let job = try? await hl.highlight(code, language: lang, theme: theme, appearance: c.appearance)
-                guard !Task.isCancelled else { return }
-                result = job ?? nil
-            }
-            guard let result, windows?.lengths == text.lengths else { return }
-            windows?.land(result.lines.map(\.spans), from: w.lowerBound)
-            fg = result.fg
-            version += 1
+            EditorSurface(host: host)
         }
     }
 }
 
-private struct FileHighlightJob: Equatable {
-    let window: Range<Int>?
-    let theme: String
-    let appearance: ThemeAppearance
-}
-
-/// The uncommitted changes: old and new line numbers, a sign column and hunk headers, the code in
-/// its syntax colors over the Git tab's add/del tints as full-width rows.
+/// The uncommitted changes: the editor's merge view, the last commit beside the file as it is.
 private struct FileDiffBody: View {
     let path: String
     let diff: FileLoad<FileDiff>?
     let rows: [PatchRow]
-    let refreshing: Bool
-    let onRefresh: () async -> Void
-
-    @Environment(\.palette) private var c
-    @State private var landed: Landed?
-    @State private var version = 0
-    @State private var drawer = FileCodeText()
-
-    private struct Landed {
-        let key: HighlightCache.Key
-        let result: Highlighted?
-    }
+    let host: EditorWebHost
+    let onRetry: () async -> Void
 
     var body: some View {
         switch FileViewerRules.diffBody(diff, rows: rows) {
         case .loading:
             LoadingScreen()
         case let .error(e):
-            FileErrorView(copy: FileViewerRules.errorCopy(.diff, e, path: path)) { Task { await onRefresh() } }
+            FileErrorView(copy: FileViewerRules.errorCopy(.diff, e, path: path)) { Task { await onRetry() } }
         case .tooLarge:
             EmptyState(icon: "branch", title: "Too many changes to show", message: "The diff is over 4 MB.")
         case .noChanges:
@@ -407,82 +396,7 @@ private struct FileDiffBody: View {
         case .binary:
             EmptyState(icon: "image", title: "Binary file changed", message: "Git can't show a line-by-line diff for it.")
         case .rows:
-            list(diff?.value?.patch ?? "")
-        }
-    }
-
-    private func list(_ patch: String) -> some View {
-        // The patch highlighted as a diff: its lines line up with parseDiff's, which PatchRow.source indexes.
-        let key = HighlightCache.Key(code: patch, language: nil, theme: c.syntaxTheme, diff: true)
-        let hl = landed?.key == key ? landed?.result : (Highlighter.app.cached(patch, language: nil, theme: key.theme, diff: true) ?? nil)
-        let git = hl?.git ?? HighlightColors.gitColors(nil, c.appearance)
-        let tints = try? HighlightColors.diffTints(c.tokens.bg, git, c.appearance)
-        let char = FileCodeMetrics.char
-        let most = rows.reduce(0) { max($0, $1.oldLine ?? 0, $1.newLine ?? 0) }
-        let num = ceil(CGFloat(String(most).count) * char) + 10
-        let longest = rows.reduce(0) { max($0, FileViewerRules.drawnLength($1.text)) }
-        let width = num * 2 + char * 2 + FileCodeMetrics.pad * 2 + CGFloat(min(FileViewerRules.maxColumns, longest)) * char
-        let drawer = drawer
-        let colors = (
-            fg: hl.flatMap { drawer.color($0.fg) } ?? UIColor(c.text),
-            text3: UIColor(c.text3),
-            sunken: UIColor(c.bgSunken),
-            added: drawer.color(git.added) ?? UIColor(c.diffAdd),
-            deleted: drawer.color(git.deleted) ?? UIColor(c.diffDel),
-            addTint: tints.flatMap { drawer.color($0.add) },
-            delTint: tints.flatMap { drawer.color($0.del) }
-        )
-        let rows = rows
-        let lines = hl?.lines
-        return FileCodeList(
-            count: rows.count,
-            contentWidth: width,
-            version: version &+ paletteSeed(c),
-            background: UIColor(c.bg),
-            refreshing: refreshing,
-            onRefresh: { Task { await onRefresh() } },
-            row: { i in
-                let r = rows[i]
-                if r.kind == .hunk {
-                    return FileCodeRow(
-                        columns: [FileCodeColumn(text: drawer.plain(r.text, color: colors.text3), leading: FileCodeMetrics.pad)],
-                        background: colors.sunken
-                    )
-                }
-                let code: NSAttributedString = if let spans = lines.flatMap({ r.source < $0.count ? $0[r.source].spans.dropFirst() : nil }) {
-                    drawer.spans(spans, fg: colors.fg)
-                } else {
-                    drawer.plain(r.text, color: colors.fg)
-                }
-                let sign = r.kind == .add ? "+" : r.kind == .del ? "−" : " "
-                let signColor = r.kind == .add ? colors.added : r.kind == .del ? colors.deleted : colors.text3
-                let number = { (n: Int?) in drawer.plain(n.map(String.init) ?? "", color: colors.text3) }
-                return FileCodeRow(
-                    columns: [
-                        FileCodeColumn(text: number(r.oldLine), width: num, alignment: .right, accessibilityHidden: true),
-                        FileCodeColumn(text: number(r.newLine), width: num, alignment: .right, accessibilityHidden: true),
-                        FileCodeColumn(text: drawer.plain(sign, color: signColor), width: char * 2 + 8, alignment: .center, accessibilityHidden: true),
-                        FileCodeColumn(
-                            text: code, trailing: FileCodeMetrics.pad,
-                            accessibilityValue: r.kind == .add ? "Added" : r.kind == .del ? "Removed" : nil
-                        ),
-                    ],
-                    background: r.kind == .add ? colors.addTint : r.kind == .del ? colors.delTint : nil
-                )
-            }
-        )
-        .ignoresSafeArea(.container, edges: .bottom)
-        .task(id: key) {
-            let hl = Highlighter.app
-            if let hit = hl.cached(key.code, language: nil, theme: key.theme, diff: true) {
-                landed = Landed(key: key, result: hit)
-                version += 1
-                return
-            }
-            let job = try? await hl.highlightDiff(key.code, language: nil, theme: key.theme, appearance: c.appearance)
-            guard !Task.isCancelled else { return }
-            landed = Landed(key: key, result: job ?? nil)
-            version += 1
+            EditorSurface(host: host)
         }
     }
 }

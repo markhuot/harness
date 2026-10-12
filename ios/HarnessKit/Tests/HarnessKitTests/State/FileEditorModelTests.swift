@@ -49,6 +49,7 @@ import Testing
         _ = await p.save()
         #expect(client.writes.withLock { $0 } == ["ticket T-1 src/a.ts two", "project p9 src/a.ts three"])
         #expect(!m.dirty && !m.saving && m.saveError == nil)
+        #expect(m.saved == "two")
     }
 
     @Test func aFailedSaveStaysDirtyAndSaysWhy() async {
@@ -58,6 +59,7 @@ import Testing
         m.edited(contents: "two", dirty: true)
         #expect(await m.save() == nil)
         #expect(m.dirty)
+        #expect(m.saved == "one")
         #expect(m.saveError?.contains("Disk full") == true)
         client.failure.withLock { $0 = nil }
         #expect(await m.save() == "two")
@@ -78,6 +80,7 @@ import Testing
         // "two" is on disk; the document moved on.
         #expect(m.dirty)
         #expect(m.latest == "two!")
+        #expect(m.saved == "two")
     }
 
     @Test func savesLandInTheOrderTheyWereAsked() async {
