@@ -69,7 +69,7 @@ struct TaskOutputView: View {
                 .padding(.bottom, 10)
             }
             .ticketStickToBottom()
-            .ticketHeroScroll()
+            .ticketHeroScroll(restores: false)
         }
         .task(id: "\(ticket.sessionId)/\(subagentId)/\(store.epoch)") { await poll() }
     }

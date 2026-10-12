@@ -52,7 +52,7 @@ struct TranscriptView<Header: View>: View {
             .coordinateSpace(name: RunHeaderPins.space)
             .scrollDismissesKeyboard(.interactively)
             .ticketStickToBottom()
-            .ticketHeroScroll()
+            .ticketHeroScroll(restores: false)
             .overlay(alignment: .top) { TranscriptPinnedHeader(pins: pins, headers: headers.map { $0 }) }
         }
         .task(id: "\(sessionId)/\(subagentId ?? "")/\(store.epoch)") { await backfill() }

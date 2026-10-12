@@ -9,7 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPad, the ticket panel's content ignores the horizontal safe area, so dragging the panel toward the trailing edge can't squeeze it into the visible sliver. The iPad sim-check now drags the panel partly off the window and fails if its title reflows.
+
 ### Changed
+
+- On iPhone, swiping the ticket sheet away now always closes the ticket, however fast or far you swipe, with the system's own momentum and dismissal. To dock it, drag the sheet down and hold your finger in the bottom 40% of the screen for about half a second: a "Dock" card appears at the bottom with a haptic, and letting go docks the ticket and slides its card up. VoiceOver has a Dock action on the sheet instead. Docked tickets are cards over the board. Reopening a docked ticket restores its scroll position, composer draft and keyboard.
+- On iPad, dragging the ticket panel by its top edge now closes it only when the drag moved at least 40 points and was headed past the panel's halfway point, carrying your finger's momentum into the slide; a shorter drag springs back. Docking is a hold in the trailing 40% of the screen while dragging, which shows a "Dock" card in the card stack; the panel's dock button and a VoiceOver Dock action still work.
 
 - On the Mac, a file you open from a link or the palette's file browser now gets a new pane on the far right of the window, running its full height at the same fixed width (about 70em) as New session and terminals, wherever focus is, instead of splitting the pane you opened it from. A file already open, or a file pane next to where you opened it, still shows the new file in place. For people working on Harness, New session, terminals and files now share one placement path (`appendAtRightEdge` with `fixedWidthShare`), covered by unit tests in `panes.test.ts` and by `file-pane-check.ts`.
 
@@ -18,6 +25,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On the iPad, a ticket panel with its header collapsed no longer leaves an empty band under the title: the tab strip sits right below it.
 - On the iPad, docking tickets no longer shortens the board (or any other screen). The docked cards sit over it, the board keeps the full screen height, and its last items still scroll clear of the cards.
 - On the iPad, the ticket panel's background now runs up behind the status bar to the top of the screen. The title and buttons stay where they were. For people working on Harness, sim-check's iPad panel checks cover the collapsed header gap and the status bar's colour.
+- Flicking the ticket sheet away on iPhone no longer stutters on release, and a tiny flick no longer closes the iPad ticket panel.
+- Hold-to-dock is sturdier: an interrupted drag on the iPad panel no longer leaves the "Dock" card stuck, a dismissal the system cancels after an armed release still docks, a small flick can't make the panel's spring-back overshoot, and a reopened ticket no longer snaps back a scroll you make right away, raises the keyboard when you come Back from a child ticket, or keeps stale scroll positions for tickets you pushed inside a closed sheet.
 - On the Mac, dragging an open pane now previews the drop on the pane under the pointer, where it is on screen, instead of on the layout as if the dragged pane had already left. The box is the size the pane will have: half of the pane, 40% of the board, or, when you reorder a pane within its own row or column, the dragged pane's own width or height. For people working on Harness, `pane-resize-check` holds a drag and checks the preview's position and size.
 
 ## [app-20261012.0049](https://github.com/markhuot/harness/releases/tag/app-20261012.0049) - 2026-10-12

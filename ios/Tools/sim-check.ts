@@ -1297,15 +1297,27 @@ const dockCount = (l: string[]) => l.filter(isDock).length + Number(l.find((x) =
 const topDock = (l: string[]) => l.filter(isDock).at(-1);
 
 /**
- * Drags the presented ticket sheet by its nav bar to just above the bottom, slowly, so it settles
- * docked. Returns the dock's label.
+ * Docks the presented ticket sheet the way a person does: drags it by its top down to just above the
+ * bottom, slowly enough that the finger spends more than the hold's 0.5 s in the bottom 40% of the
+ * screen (DockArming) with the sheet well away from rest, and lets go there. AXe can't pause mid-drag,
+ * so the slow swipe is the hold: the ghost "Dock" card shows during its last second (`ghost` reads
+ * it then, and `shotName` takes a screenshot of it), and the release docks. Returns the dock's label.
  */
-async function dockSheet(udid: string): Promise<string> {
+async function dockSheet(udid: string, opts: { ghost?: boolean; shotName?: string } = {}): Promise<string> {
   // The screen's size from the tallest top-level element: with New session coming up, the first
   // one can be a zero-height stand-in, which put the drag's end above the screen.
   const { width, height } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
   const x = String(Math.round(width / 2));
-  await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "0.8", "--udid", udid);
+  const drag = axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "3", "--udid", udid);
+  if (opts.ghost || opts.shotName) {
+    await Bun.sleep(2600);
+    if (opts.ghost) {
+      const seen = await until("the ghost dock card", async () => (await labels(udid)).some((l) => l.startsWith("Dock card")), 1500).catch(() => null);
+      if (!seen) throw new Error("holding the sheet low didn't show the ghost dock card");
+    }
+    if (opts.shotName) await shot(udid, opts.shotName);
+  }
+  await drag;
   return until("the dock", async () => topDock(await labels(udid)), 6000);
 }
 
@@ -1431,7 +1443,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child", async () => onChild(await labels(udid)), 8000);
     composerBefore = (await findElement(udid, (x) => x === "Send"))?.frame ?? null;
-    const label = await dock().catch(async (e) => {
+    const label = await dockSheet(udid, { ghost: true, shotName: shotsWanted ? "sheet-dock-ghost" : undefined }).catch(async (e) => {
       await say("after the drag");
       throw e;
     });
@@ -1548,18 +1560,18 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   });
   await check("a slow drag on the Spec tab moves the ticket as one piece", () =>
     rigid("sheet-drag-spec", `harness://ticket/${encodeURIComponent(kid.key)}?tab=spec`, () => until("the spec", async () => onChild(await labels(udid)), 8000)));
-  await check("a slow drag that stops short of 60% of the way down springs back to full size", async () => {
+  await check("a half drag released back shows nothing: the sheet springs back to full size", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
-    // Slow like dockSheet's drag (well under SheetFlick.speed), to about 55% of the way to the
-    // bottom: past the halfway the system itself would dock at, short of SheetFlick.fraction.
+    // Slow, to a quarter of the way down, held there (the drag lets go at its end): the system's
+    // own rule springs it back, and the finger never reached the dock zone, so nothing docks.
     const x = String(Math.round(W / 2));
-    await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(90 + 0.55 * (H - 70))), "--duration", "0.8", "--udid", udid);
+    await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(90 + 0.25 * (H - 70))), "--duration", "0.8", "--udid", udid);
     await Bun.sleep(1200); // the spring back, and a dock if it wrongly came
     const l = await labels(udid);
     if (l.some(isDock)) {
       await say("after the short drag");
-      throw new Error("a drag that stopped at 40% docked the sheet");
+      throw new Error("a short drag docked the sheet");
     }
     if (!onChild(l)) throw new Error("the sheet isn't back at full size on the child");
     if (shotsWanted) await shot(udid, "sheet-spring-back");
@@ -1592,7 +1604,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
     // The app is stopped (SIGSTOP) for a second part-way through the flick, so every touch event
-    // reaches it late; the speed comes from the touches' own timestamps, so it must still dismiss.
+    // reaches it late; the system's momentum comes from the touches' own timestamps, so it must still dismiss.
     const x = String(Math.round(W / 2));
     const pid = await appPid(udid);
     const swipe = axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
@@ -1613,12 +1625,12 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     lastUrl.set(udid, BOARD);
     return "gone, no dock";
   });
-  await check("a flick down from full size sends the sheet away rather than docking it", async () => {
+  await check("a swipe down from full size closes the ticket rather than docking it", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
     // The simulator takes each of AXe's touch points slowly whatever --duration says, so a flick
-    // is long strides (--delta, in pixels) rather than a short duration: dockSheet's drag lets go
-    // near 230pt/s and docks, this one past SheetFlick.speed (600pt/s), near 1100pt/s.
+    // is long strides (--delta, in pixels) rather than a short duration. However fast or far, a swipe
+    // away closes the ticket: only the slow hold in dockSheet docks.
     const x = String(Math.round(W / 2));
     await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
     await until("the sheet gone", async () => {
@@ -1632,6 +1644,42 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     if ((await labels(udid)).some(isDock)) throw new Error("the flick docked the sheet");
     lastUrl.set(udid, BOARD);
     return "gone, no dock";
+  });
+  await check("a ticket docked with the keyboard up reopens from its card at its scroll position with its draft", async () => {
+    // The ticket whose long spec scrolls (the first child). The sheet is torn down on dismissal, so
+    // what comes back is TicketViewMemory's scroll offset and the board store's composer draft. (A
+    // ticket that is closed, not docked, comes back fresh; its draft is the store's.)
+    const link = `harness://ticket/${encodeURIComponent(kid.key)}?tab=spec`;
+    // The spec is one text block starting "Paragraph 1:": its top edge says how far it's scrolled.
+    const specTop = async () => (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Paragraph 1:"))?.frame.y;
+    await goto(udid, link);
+    await until("the long spec", async () => (await specTop()) !== undefined, 8000);
+    await Bun.sleep(600);
+    const start = (await specTop())!;
+    const x = String(Math.round(W / 2));
+    for (let i = 0; i < 3; i++)
+      await axe("swipe", "--start-x", x, "--start-y", String(Math.round(H * 0.7)), "--end-x", x, "--end-y", String(Math.round(H * 0.3)), "--duration", "0.6", "--udid", udid);
+    await Bun.sleep(600);
+    const before = (await specTop())!;
+    if (!(start - before > 100)) throw new Error(`the spec didn't scroll: its top went from ${start} to ${before}`);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await axe("type", "draft kept", "--udid", udid);
+    // With the keyboard up, the hold docks it: the sheet is dismissed and its view torn down.
+    await dockSheet(udid);
+    await until("the sheet gone", async () => (await specTop()) === undefined && onBoard(await labels(udid)), 8000);
+    await tapWhere(udid, isDock);
+    moved(udid);
+    await until("the spec again", async () => (await specTop()) !== undefined, 8000);
+    await Bun.sleep(1500); // the restore keeps trying while the content settles
+    const after = (await specTop())!;
+    // Not to the point: the hero, which is expanded again on the way back, moves the text under it
+    // by about its collapse. Scrolled most of the way it was, rather than back at the top.
+    if (!(start - after > (start - before) * 0.7)) throw new Error(`the spec reopened with its top at ${Math.round(after)}, not near ${Math.round(before)} where it was left (${Math.round(start)} unscrolled)`);
+    const field = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Message the agent")) as (AXNode & { AXValue?: string | null }) | undefined;
+    if (!field?.AXValue?.toLowerCase().includes("draft kept")) throw new Error(`the composer reads "${field?.AXValue ?? ""}", not the draft`);
+    if (shotsWanted) await shot(udid, "sheet-reopened-restored");
+    await goto(udid, BOARD);
+    return `scrolled ${Math.round(start - before)}pt, back at ${Math.round(start - after)}pt; draft kept`;
   });
 }
 
@@ -1657,7 +1705,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   if (!kid) throw new Error(`${key} has no children`);
   const extra = await seedDockable(p.project.id, 2);
   const b = extra[0]!;
-  const { width: W } = (await tree(udid))[0]!.frame;
+  const { width: W, height: H } = (await tree(udid))[0]!.frame;
   const onChild = (l: string[]) => l.includes(`Part of ${key}`);
   const top = async () => topDock(await labels(udid));
   const count = async () => dockCount(await labels(udid));
@@ -1684,18 +1732,11 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const cards = (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
     if (cards.length !== 2 || !card(kid.key)(cards[0]!.AXLabel!)) throw new Error(`the cards read ${cards.map((n) => `"${n.AXLabel}"`).join(", ")}`);
     if (cards[1]!.frame.y <= cards[0]!.frame.y) throw new Error("the newest card isn't at the bottom");
-    // The bottom card sits in the system's docked sheet, the others in the main window: all the
-    // same size, so their text is too.
+    // Every card is an overlay in the main window: all the same size, so their text is too.
     const [hTop, hBottom] = [cards[0]!.frame.height, cards[1]!.frame.height];
     if (Math.abs(hTop - hBottom) > 1) throw new Error(`the cards differ in height: ${hTop} over ${hBottom}`);
-    // The card frames above are drawn at the card's own undone scale, so they pass even when the
-    // sheet around the bottom card is shorter: measure the sheet itself (a probe on its root reports the height it's drawn at).
-    const all = await nodes(udid);
-    const sheetProbe = all.find((n) => n.AXUniqueId === "ticket-dock-sheet");
-    if (!sheetProbe) throw new Error("no ticket-dock-sheet element: can't measure the docked sheet");
-    const drawn = Number(sheetProbe.AXValue);
-    if (!(Math.abs(drawn - hTop) <= 1)) throw new Error(`the docked sheet is drawn ${sheetProbe.AXValue}pt tall, the card above it ${hTop}pt`);
     // Docked it opens with a tap, not a drag: no grabber.
+    const all = await nodes(udid);
     if (all.some((n) => n.AXLabel === "Sheet Grabber")) throw new Error("the docked sheet still shows its grabber");
     // The board's bottom bar rides above the whole stack: the topmost card, or "N more…" over it.
     const more = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-more");
@@ -1810,6 +1851,31 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     }, 6000);
     if ((await count()) !== n - 1) throw new Error(`${await count()} docked after ✕, not ${n - 1}`);
     return `${n} → ${n - 1}`;
+  });
+  await check("a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet", async () => {
+    // Open the top card's ticket, then swipe it away fast: the system dismissal closes it.
+    const before = (await top())!;
+    const n = await count();
+    await tapWhere(udid, card(keyOf(before)));
+    moved(udid);
+    await until("the sheet up", async () => !(await labels(udid)).some(isDock) && (await labels(udid)).includes("Sheet Grabber"), 8000);
+    const x = String(Math.round(W / 2));
+    await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
+    const after = await until("the next card", async () => {
+      const t = await top();
+      return t && t !== before ? t : null;
+    }, 8000).catch(async (e) => {
+      await say("after the swipe away");
+      throw e;
+    });
+    if ((await count()) !== n - 1) throw new Error(`${await count()} docked after the swipe away, not ${n - 1}`);
+    if ((await labels(udid)).includes("Sheet Grabber")) throw new Error("a sheet is showing after the swipe away");
+    // Put the closed ticket back on the dock for the checks that follow.
+    const closed = keyOf(before);
+    await goto(udid, `harness://ticket/${encodeURIComponent(closed)}`, (l) => ticketShown(l, closed) && !l.some(isDock));
+    await dockSheet(udid);
+    if ((await count()) !== n) throw new Error(`${await count()} docked after docking ${closed} again, not ${n}`);
+    return `${keyOf(before)} closed, ${keyOf(after)} docked`;
   });
   await check("a swipe down on the dock closes one and leaves the rest docked", async () => {
     const before = (await top())!;
@@ -2328,7 +2394,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await backTo(key);
     return `${p.frame.x}+${p.frame.width} of ${W}, y ${Math.round(mid)} of ${H}; restored on ${kid.key}, Back to ${key}`;
   });
-  await check("a slow drag along the panel's top edge that stops short of 60% springs back; a fast fling closes the ticket", async () => {
+  await check("a slow drag along the panel's top edge short of halfway, or a 10pt flick, springs back; a fast fling closes the ticket", async () => {
     const { leading, W } = await panelFraction(udid);
     const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
     if (!close) throw new Error("no close button in the panel");
@@ -2341,10 +2407,18 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     const l = await labels(udid);
     if (l.some(isDock) || !panelOn(l, key)) {
       await say("after the short drag");
-      throw new Error("a drag that stopped short of 60% didn't spring back");
+      throw new Error("a drag that stopped short of halfway didn't spring back");
     }
     if (shotsWanted) await shot(udid, "panel-spring-back");
-    // Long strides, past SheetFlick.speed: closes rather than docks.
+    // A tiny fast flick: under the 40pt minimum, so it springs back whatever its speed.
+    await axe("swipe", "--start-x", String(leading + 30), "--start-y", y, "--end-x", String(leading + 40), "--end-y", y, "--duration", "0.05", "--udid", udid);
+    await Bun.sleep(1000);
+    const t = await labels(udid);
+    if (t.some(isDock) || !panelOn(t, key)) {
+      await say("after the 10pt flick");
+      throw new Error("a 10pt flick closed or docked the panel");
+    }
+    // Long strides, well past halfway: closes rather than docks.
     await axe("swipe", "--start-x", String(leading + 30), "--start-y", y, "--end-x", String(leading + 30 + 160), "--end-y", y, "--duration", "0.1", "--delta", "160", "--udid", udid);
     moved(udid);
     await until("the panel closed, not docked", async () => !panelOn(await labels(udid), key), 6000).catch(async (e) => {
@@ -2358,20 +2432,70 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await until("the panel back", async () => panelOn(await labels(udid), key), 8000);
     return "sprang back, then a fast fling closed it";
   });
-  await check("flinging the panel's top edge to the right docks it, and its card restores it at its root", async () => {
+  await check("a panel dragged partly off the window keeps its width: its title doesn't reflow to the visible sliver", async () => {
+    // The resize check left the panel at its 25% floor, where the title wraps whatever happens: widen it first.
+    await dragPanelEdge(udid, 300);
+    const { leading, W } = await panelFraction(udid);
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
+    if (!close) throw new Error("no close button in the panel");
+    const y = String(Math.round(close.frame.y - 4 + 6));
+    /** The panel's leading edge and its title's size, where the title is the widest tall label in the header. */
+    const read = (ns: AXNode[]) => {
+      const handle = ns.find((n) => n.AXLabel === RESIZE);
+      const title = ns
+        .filter((n) => handle && n.AXLabel && n.frame.x > handle.frame.x && n.frame.width > 100 && n.frame.y < 200 && n.frame.height > 40 && !/^(Dock|Open|Close|Resize)/.test(n.AXLabel))
+        .sort((a, b) => b.frame.width - a.frame.width)[0];
+      return handle && title ? { x: handle.frame.x, w: title.frame.width, h: title.frame.height } : null;
+    };
+    const rest = read(await nodes(udid));
+    if (!rest) throw new Error("couldn't read the panel's title at rest");
+    // Slow, and ending short of the dock zone (the trailing 40%) so it can't arm: the panel ends up
+    // about 190 pt off its place, a third of it past the window's edge, then springs back.
+    const drag = axe("swipe", "--start-x", String(Math.round(leading + 20)), "--start-y", y, "--end-x", String(Math.round(W * 0.58)), "--end-y", y, "--duration", "5", "--udid", udid);
+    const seen: NonNullable<ReturnType<typeof read>>[] = [];
+    let shotTaken = false;
+    const started = Date.now();
+    while (Date.now() - started < 4500) {
+      const r = read(await nodes(udid));
+      if (r && r.x >= rest.x + 100) {
+        seen.push(r);
+        if (shotsWanted && !shotTaken) {
+          shotTaken = true;
+          await shot(udid, "panel-drag-width");
+        }
+      }
+    }
+    await drag;
+    await Bun.sleep(1000);
+    if (!seen.length) throw new Error(`the panel's title wasn't readable while it was dragged clear of rest (x ${rest.x})`);
+    const bad = seen.find((r) => Math.abs(r.w - rest.w) > 2 || Math.abs(r.h - rest.h) > 4);
+    if (bad) throw new Error(`the panel's content reflowed mid-drag: title ${rest.w}×${rest.h} at rest, ${bad.w}×${bad.h} with the panel at x ${bad.x} (rest ${rest.x}), ${seen.length} readings`);
+    if (!panelOn(await labels(udid), key)) throw new Error("the slow drag short of halfway didn't spring back");
+    // Narrow again for the hold check after this one, which is timed for the narrow panel.
+    await dragPanelEdge(udid, W - 20);
+    return `title ${rest.w}×${rest.h} held through ${seen.length} readings, up to ${Math.round(Math.max(...seen.map((r) => r.x)) - rest.x)} pt off its place`;
+  });
+  await check("holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root", async () => {
     // The fling lives on a thin strip along the panel's top and the buttons' corner (no title bar).
     const { leading, W } = await panelFraction(udid);
     const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
     if (!close) throw new Error("no close button in the panel");
     const y = String(Math.round(close.frame.y - 4 + 6));
     const from = Math.round(leading + (W - leading) * 0.3);
-    await axe("swipe", "--start-x", String(from), "--start-y", y, "--end-x", String(Math.round(W - 10)), "--end-y", y, "--duration", "0.3", "--udid", udid);
+    // AXe can't pause mid-drag, so the slow swipe is the hold: the finger is in the trailing 40%,
+    // with the panel well clear of rest, for the last couple of seconds of it.
+    const drag = axe("swipe", "--start-x", String(from), "--start-y", y, "--end-x", String(Math.round(W - 10)), "--end-y", y, "--duration", "3", "--udid", udid);
+    await Bun.sleep(2600);
+    const ghost = await until("the ghost dock card", async () => (await labels(udid)).some((l) => l.startsWith("Dock card")), 1500).catch(() => null);
+    if (!ghost) throw new Error("holding the panel in the trailing 40% didn't show the ghost dock card");
+    if (shotsWanted) await shot(udid, "panel-dock-ghost");
+    await drag;
     moved(udid);
     const pill = await until("the card", async () => {
       const n = await findElement(udid, isDock);
       return n && !(await labels(udid)).includes(RESIZE) ? n : null;
     }, 6000).catch(async (e) => {
-      await say("after the fling");
+      await say("after the hold");
       throw e;
     });
     await Bun.sleep(700);

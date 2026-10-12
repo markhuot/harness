@@ -143,7 +143,8 @@ private struct ChangesTabContent: View {
                         }
                     }
                     .refreshable { await model.refresh()?.value }
-                    .ticketHeroScroll()
+                    // The empty state shares the diff list's memory key; only the list restores.
+                    .ticketHeroScroll(restores: false)
                 } else {
                     diffs(changes)
                 }

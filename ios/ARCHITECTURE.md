@@ -480,25 +480,56 @@ restoration drops when the app is swiped away. A restored entry whose root doesn
 dropped, and a path keeps its routes up to the first that doesn't, so a build that adds a route
 never fails a launch. Only the top mounts at launch; the rest stay parked until opened.
 
-At compact width SceneChrome presents the sheets as one system sheet with the dock detent
-(`TicketSheetHost`), keyed by `ticketSheetGeneration` rather than by sheet, so adding or switching
-tickets swaps the content in place without presenting it again. Swiping the sheet away (or UIKit
-dismissing it) calls `dismissSheet()`; with tickets left, the generation goes up and a new system
-sheet comes up docked with the next. TicketSheetHost presents pickers, the watcher form and covers
-over itself; the board's bottom bar and `DockClearance` make room for the docked sheet. Docked, the
-sheet (`TicketDock`) is the top ticket's card on the system sheet's own glass, 52pt as the single
-dock always was. The other docked tickets stack above it in the main window (`DockedCardsAbove`,
-an overlay on the compact sections): glass capsules as wide as the docked sheet and 8pt above it,
-laid out from where the sheet floats (`DockedSheetInset`), up to two cards in all with the sheet's,
-then "N more…" on top. `DockClearance` adds their rows to the sheet's clearance, so the board's
-bottom bar rides above the whole stack. The cards aren't drawn inside the sheet because the system
-sheet keeps its glass rim and shadow even with `presentationBackground(.clear)`, which drew one
-outline around them all. "N more…" expands every ticket but the top into the `DockedCardList` over
-the board, on the backdrop, the sheet's card staying under it; a tap on the backdrop collapses it.
-Dragging the presented sheet down lets go by one rule, `SheetFlick.outcome` (also the iPad panel's): faster than 600 pt/s dismisses (the only gesture that does), a slower drag of 60% of the way or more docks, and a shorter one goes back to `.large`. The pan on the container (`SheetFlickTracker`) decides the moment the finger lifts, from UIKit's own velocity (taken from the touches' timestamps, so a busy main thread can't change it); the system's later detent report only confirms that, so nothing pairs the two by the clock. A horizontal swipe on the docked sheet moves to the next or previous ticket: UIKit swipe
-recognizers on the sheet's container beside the flick pan (`SheetFlickTracker`), enabled only
-while docked with more than one; a SwiftUI gesture on the card kept the sheet's own pan from taking
-a swipe down. VoiceOver has Next and Previous docked ticket actions on the dock. At regular width SceneChrome
+At compact width SceneChrome presents the ticket as one plain `.large` system sheet
+(`TicketSheetHost`) while the Router is `.presented`; the sheet is a view of the Router's state, and
+adding or switching tickets swaps its content in place without presenting it again. The system owns
+the drag, its momentum and the dismissal, and the app never inspects them: when it takes the sheet
+down (a swipe away, the two-finger escape, UIKit dismissing it) the root's binding calls
+`Router.sheetDismissedBySystem(dock: false)` and the ticket closes, however fast or far the swipe
+went. With tickets left, the next stays as the docked card and no sheet comes up. TicketSheetHost
+presents pickers, the watcher form and covers over itself.
+
+Docking is a separate, deliberate gesture: drag the sheet down and hold the finger in the bottom 40%
+of the screen for about 0.5 s while the sheet is more than 80pt from rest. `DockArming`
+(HarnessKit) is the one rule for it, axis-agnostic (the finger's progress along the way out as a
+fraction of the screen, and the displacement) so the phone and the iPad panel can't drift apart; it
+reads no velocity. On the phone `DockHoldRecognizer` is a passive `UIGestureRecognizer` on the
+sheet's container view that never leaves `.possible` (a long-press would time from touch-down,
+hit-testing is cancelled once the system pan takes over, a SwiftUI drag blocks scrolling) and reads
+touches in window coordinates; the sheet's displacement is its presentation layer's frame against
+where it rested, which is also how a thumb resting low during a scroll is told from a drag, since the
+sheet hasn't moved. `DockHold` runs it (a task wakes when a still finger's hold would arm) and fires a
+medium haptic when it arms. Armed, a ghost dock card (`DockGhostCard`, "Dock") shows at the bottom, in
+a hosting view added above the presented view in the container: the sheet covers the window below its
+top edge, and nothing sets a transform on the presented view, since UIKit drives its frame. A release
+while armed latches a timestamped intent that the dismissal binding reads and clears once
+(`takeIntent`), so a programmatic dismissal can't dock; if the system cancels an armed dismissal, an
+upward flick say, `notifyWhenInteractionChanges` docks it anyway. VoiceOver has a "Dock" custom action
+on the sheet and no visible button. This leans on sheet internals (the presentation layer, the
+container view, the transition coordinator): there is no fallback if a release breaks it, and
+`git revert` is the way back.
+
+Docked, the top ticket is a card in the main window, an overlay on the compact sections
+(`DockedCardsOverlay`), over the board: `DockedCard` 52pt tall, 8pt from the sides and from the home
+indicator, with the other docked tickets stacked above it, up to two cards in all, then "N more…" on
+top. It is an overlay rather than a second, docked sheet, which would pop in after the dismissal and
+bring back the glass rim and shadow that led the other cards out of the sheet. The overlay publishes
+where its bottom card sits (`DockedSheetInset`), `DockClearance` adds its rows to the board's bottom
+clearance, and the bottom bar rides above the stack; the keyboard doesn't lift it. "N more…" expands
+every ticket but the top into the `DockedCardList` over the board, on the backdrop; a tap on the
+backdrop collapses it. A tap on the card opens the sheet (hiding the card in the same transaction),
+a horizontal swipe along it (a high-priority SwiftUI drag, or the card's button would keep any drag
+that stays inside it and take its lift as a tap) moves to the next or previous ticket, and a swipe
+down or its ✕ closes it. VoiceOver has Next and Previous docked ticket and Close actions, and focus
+moves to the card after a dismissal. Reduce Motion fades the card and the ghost.
+
+The ticket's view is torn down on dismissal, which docking now does too. Composer drafts are the
+board store's (`BoardStore.messageDraft(for:)`) and the stack's path is the Router's. What the view
+itself held is kept by ticket in `TicketViewMemory`: each tab's scroll offset (`ticketHeroScroll`,
+except the feeds that stick to the bottom, which follow the latest) and whether the composer had the
+keyboard, where a blur within half a second of the composer leaving the screen counts as the
+dismissal's. A ticket that closes for good forgets it.
+At regular width SceneChrome
 presents no ticket sheet at all (a system sheet there is a centered form sheet): DesktopShell
 overlays `TicketPanelHost` (App/TicketSidePanel.swift), and the root presents `sheet` and the
 cover as usual. The host puts the content in `TicketSidePanel`, which slides in from the
@@ -515,7 +546,7 @@ and Start session. While it's on top it hands its `cancel()` to the panel throug
 `TicketPanelCloser` (in the environment, from TicketPanelHost), so the panel's ✕ and Esc ask Save
 or Discard for a typed draft as Cancel does and close an empty one at once; with nothing
 registered they just dismiss. Docking, pop-out and a card's ✕ don't ask, and the draft is
-saved as whenever the screen goes. A rightward drag on the panel's top edge or its button corner moves the panel and lets go by the shared `SheetFlick` rule: faster than 600 pt/s closes the ticket, a slower drag of 60% of the panel's width or more docks it, and a shorter one springs back. Esc closes it too.
+saved as whenever the screen goes. A rightward drag on the panel's top edge or its button corner moves the panel with the finger (iPadOS has no native side sheet, so the panel decides itself, as little as it can). `PanelRelease` closes the ticket when the drag moved at least 40pt and its projected end (`predictedEndTranslation`) passes half the panel's width, else it springs back; either way the slide is a spring seeded with the finger's release velocity, so momentum carries through. Speed and distance never dock: holding the finger in the trailing 40% of the window for about 0.5 s with the panel dragged more than 80pt clear arms the same `DockArming` rule through `DockHold`, the host (`TicketPanelHost`) draws a ghost dock card in the bottom slot of the docked card stack (the cards shift up a row, nothing reserves room; collapsed, it covers the one card), and releasing then slides the panel to the card and docks it. The panel has a VoiceOver "Dock" action and keeps its dock button. Esc closes it too.
 Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
 and every docked ticket waits as a glass-capsule `DockedCard` in `DockedCardStack`, the same
 cards as the iPhone's, in the board's
@@ -536,8 +567,7 @@ the bottom of the desktop's sections so their last cards scroll clear of it. Eac
 (`TicketPanelClosers`), so a hidden New session never takes over the ✕ of the ticket on top. The
 composer measures its bottom gap from the screen's edge in the iPhone sheet (`\.concentricBottomGap`
 0), whose screens ignore the bottom container safe area (`TicketSheetContent(toBottomEdge:)`): the
-system gives the docked sheet the home indicator's inset and keeps it after the sheet grows back,
-which would lift the composer by that much. The panel leaves both unset, so the composer sits on the home indicator's inset or the keyboard.
+sheet runs to the screen's bottom edge, so the composer measures its own gap. The panel leaves both unset, so the composer sits on the home indicator's inset or the keyboard.
 MainTabs sets the Router's `sheetIsBesideBoard` from the size class, so presence counts the board
 while the panel is up. A size-class change hands the same sheet across (same id, path, state and
 draft): the system sheet goes away without a dismissal and the panel picks it up, or the other way
