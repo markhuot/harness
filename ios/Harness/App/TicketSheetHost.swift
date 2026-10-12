@@ -290,7 +290,9 @@ struct DockedCardsOverlay: View {
     private func primary(_ sheet: TicketSheet) -> some View {
         DockedCard(sheet: sheet, open: { TicketDock.open(router) }, close: { withAnimation(.snappy) { router.dismissSheet() } })
             .accessibilityFocused($focused)
-            .simultaneousGesture(
+            // High priority: the card's button would otherwise keep a drag that stays inside it
+            // and take its lift as a tap. A tap never travels the 24pt, so it still reaches the button.
+            .highPriorityGesture(
                 DragGesture(minimumDistance: 24)
                     .onEnded { v in
                         if abs(v.translation.width) > abs(v.translation.height) {

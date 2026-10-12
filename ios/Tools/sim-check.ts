@@ -1822,6 +1822,11 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     });
     if ((await count()) !== n - 1) throw new Error(`${await count()} docked after the swipe away, not ${n - 1}`);
     if ((await labels(udid)).includes("Sheet Grabber")) throw new Error("a sheet is showing after the swipe away");
+    // Put the closed ticket back on the dock for the checks that follow.
+    const closed = keyOf(before);
+    await goto(udid, `harness://ticket/${encodeURIComponent(closed)}`, (l) => ticketShown(l, closed) && !l.some(isDock));
+    await dockSheet(udid);
+    if ((await count()) !== n) throw new Error(`${await count()} docked after docking ${closed} again, not ${n}`);
     return `${keyOf(before)} closed, ${keyOf(after)} docked`;
   });
   await check("a swipe down on the dock closes one and leaves the rest docked", async () => {

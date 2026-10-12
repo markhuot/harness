@@ -218,12 +218,8 @@ struct DockHoldHost: UIViewRepresentable {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             recognizer.view?.removeGestureRecognizer(recognizer)
-            if let ghost {
-                ghost.willMove(toParent: nil)
-                ghost.view.removeFromSuperview()
-                ghost.removeFromParent()
-                self.ghost = nil
-            }
+            ghost?.view.removeFromSuperview()
+            ghost = nil
             guard window != nil, let presented = presentedController,
                   let container = presented.presentationController?.containerView else { return }
             self.container = container
@@ -233,9 +229,9 @@ struct DockHoldHost: UIViewRepresentable {
             host.view.isUserInteractionEnabled = false
             host.view.frame = container.bounds
             host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            presented.addChild(host)
+            // A plain subview, not a child view controller: the container isn't the presented
+            // controller's view, and UIKit rejects the pairing.
             container.addSubview(host.view)
-            host.didMove(toParent: presented)
             ghost = host
             restTop = .infinity
             hold.sample = { [weak self] in self?.reading() }
