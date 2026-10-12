@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
@@ -73,6 +73,38 @@ describe("http api", () => {
     await expect(client.sessionAction(t.key, "fork" as never)).rejects.toMatchObject({ status: 400 });
     expect((await client.updateSettings({ contextGaugeLimit: 300_000 })).contextGaugeLimit).toBe(300_000);
     await expect(client.updateSettings({ contextGaugeLimit: 5 })).rejects.toMatchObject({ status: 400 });
+  });
+
+  test("saveOnBlur: defaults to false, round-trips, and rejects non-booleans", async () => {
+    const { client } = await boot();
+    expect((await client.getSettings()).saveOnBlur).toBe(false);
+    expect((await client.updateSettings({ saveOnBlur: true })).saveOnBlur).toBe(true);
+    expect((await client.getSettings()).saveOnBlur).toBe(true);
+    // An unrelated patch leaves it alone.
+    expect((await client.updateSettings({ maxConcurrentRuns: 3 })).saveOnBlur).toBe(true);
+    await expect(client.updateSettings({ saveOnBlur: "yes" as never })).rejects.toMatchObject({ status: 400 });
+    expect((await client.updateSettings({ saveOnBlur: false })).saveOnBlur).toBe(false);
+  });
+
+  test("PUT /file writes the file the viewer shows, for projects and tickets", async () => {
+    const { client, dir } = await boot();
+    writeFileSync(join(dir, "a.txt"), "\uFEFFone\r\ntwo\r\n");
+    const p = await client.createProject({ path: dir });
+    const t = await client.createTicket({ projectId: p.id, spec: "x", start: false });
+
+    expect(await client.writeProjectFile(p.id, "a.txt", "one\nTWO\n")).toEqual({ path: "a.txt", size: 3 + 5 + 5 });
+    expect(readFileSync(join(dir, "a.txt")).toString()).toBe("\uFEFFone\r\nTWO\r\n");
+    // The ticket has no worktree, so it writes where its file GET reads: the project folder.
+    await client.writeTicketFile(t.key, join(dir, "a.txt"), "three\n");
+    expect((await client.ticketFile(t.key, "a.txt")).contents).toBe("three\r\n");
+
+    await expect(client.writeProjectFile(p.id, "../x", "z")).rejects.toMatchObject({ status: 400 });
+    await expect(client.writeProjectFile(p.id, ".git/config", "z")).rejects.toMatchObject({ status: 400 });
+    await expect(client.writeTicketFile(t.key, "a.txt", "a\0")).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("PUT", `/projects/${p.id}/file`, { path: "a.txt" })).rejects.toMatchObject({ status: 400 });
+    await expect(client.request("PUT", `/projects/${p.id}/file`)).rejects.toMatchObject({ status: 400 });
+    await expect(client.writeProjectFile("nope", "a.txt", "z")).rejects.toMatchObject({ status: 404 });
+    await expect(client.writeTicketFile("NOPE-9", "a.txt", "z")).rejects.toMatchObject({ status: 404 });
   });
 
   test("GET /usage reads each driver's plan, and usage.updated pushes later readings to connected clients", async () => {

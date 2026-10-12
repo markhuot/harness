@@ -1815,6 +1815,7 @@ GET    /projects                 POST /projects            PATCH/DELETE /project
 GET    /projects/:id/files?q=&limit=50&ignored=1&kind=file   GET /tickets/:key/files?…   → FileMatch[] (@-mention autocomplete; ignored/kind for the file browser)
 GET    /projects/:id/commands?q=&driver=&limit=50   GET /tickets/:key/commands?q=&limit=50   → CommandMatch[] (/command autocomplete; see "Slash commands")
 GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (see "File viewer")
+PUT    /projects/:id/file   PUT /tickets/:key/file   {path, contents}   → FileWriteResult (see "File viewer"; last write wins)
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
@@ -2714,6 +2715,23 @@ same folder `/tickets/:key/files` searches (worktree, else session cwd, else pro
   4 MiB comes back empty with `tooLarge`. A root outside any repository is a 409 (the viewer knows
   from `FileView.git.repo` not to ask). Git runs without a shell, with `--literal-pathspecs`,
   the path after `--`, and `GIT_OPTIONAL_LOCKS=0` so it never takes the index lock.
+- **Writes** (`PUT /projects/:id/file`, `PUT /tickets/:key/file`, body `{path, contents}`, answer
+  `FileWriteResult {path, size}`) save the editor's text. Each resolves its root with the helper
+  its GET uses, so it writes the file that was shown, and takes the same paths (`resolveFile`,
+  `safeJoin`, no `.git` in any letter case), plus a real-path check on the parent folder, since
+  `safeJoin` lets a missing target through; a symlink that resolves into `.git` is 400 too. **Last write wins**: no hash, revision or 409 for a changed file, and
+  no activity entry. A symlinked file is written through to its target (inside the root). A
+  missing file is created, but its folder must exist (404). `contents` must be a string without a
+  NUL (400) and at most 2 MiB (413, counted in the bytes that land on disk, after CRs and the BOM); a file
+  on disk that is binary, too large to have been shown, or not valid UTF-8 (saving would corrupt
+  it) is 409; a read-only file or filesystem is 403 and a full disk 507. What the editor's text can't carry is kept from the file on disk:
+  its BOM, CRLF endings (bare LFs in the text become CRLF when most of the file's breaks were
+  CRLF; a mixed file goes to the majority), whether it ends in a newline (the editor can't add or
+  drop the final one), and its mode; hard links, xattrs and ACLs are lost. A created file
+  refreshes the path-search cache. The bytes go to a temp file in the same
+  folder and are renamed over the file, so readers never see half a file.
+  `Settings.saveOnBlur` (optional, default false) is the synced switch for saving when the editor
+  loses focus; the service only stores it.
 
 ## Service updates
 
@@ -2809,7 +2827,8 @@ commands in your projects. Anything beyond `localhost` puts that behind the toke
 plain HTTP. Prefer `tailscale`, where only your tailnet can reach the port and WireGuard encrypts
 the traffic; `any` exposes the port to every network the Mac joins (coffee-shop Wi-Fi included)
 with the token readable by anyone on the path. Rotate the token if a phone is lost or a QR code
-leaks.
+leaks. The same token also grants file writes: `PUT /file` can replace any file under a project
+or ticket folder, not just start agents.
 
 ## Color themes
 

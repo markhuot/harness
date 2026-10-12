@@ -136,6 +136,11 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/projects/\(id)/file\(Query.build([("path", .str(path))]))")
     }
 
+    /// Replace a project file's contents (last write wins).
+    public func writeProjectFile(_ id: String, path: String, contents: String) async throws -> FileWriteResult {
+        try await request("PUT", "/projects/\(id)/file", body: WriteFileRequest(path: path, contents: contents))
+    }
+
     /// A project file's uncommitted changes against HEAD (409 outside a git repository).
     public func projectFileDiff(_ id: String, path: String) async throws -> FileDiff {
         try await request("GET", "/projects/\(id)/file/diff\(Query.build([("path", .str(path))]))")
@@ -269,6 +274,11 @@ public final class HarnessClient: Sendable {
     /// A file where the ticket's agent works (its worktree, else its cwd, else the project folder).
     public func ticketFile(_ key: String, path: String) async throws -> FileView {
         try await request("GET", "/tickets/\(key)/file\(Query.build([("path", .str(path))]))")
+    }
+
+    /// Replace a file where the ticket's agent works (last write wins).
+    public func writeTicketFile(_ key: String, path: String, contents: String) async throws -> FileWriteResult {
+        try await request("PUT", "/tickets/\(key)/file", body: WriteFileRequest(path: path, contents: contents))
     }
 
     /// That file's uncommitted changes against HEAD (409 outside a git repository).

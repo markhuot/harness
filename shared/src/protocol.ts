@@ -945,6 +945,11 @@ export interface Settings {
    * so clients tolerate an older service.
    */
   contextGaugeLimit?: number;
+  /**
+   * The file editor saves when it loses focus, instead of on an explicit save. Default false.
+   * Optional so clients tolerate an older service.
+   */
+  saveOnBlur?: boolean;
   /** Default permission mode (projects and tickets may override it). Default "auto". */
   permissionMode: PermissionMode;
   /** Who judges actions in auto mode for drivers without their own permission system */
@@ -1729,6 +1734,23 @@ export interface FileDiff {
   newContents: string | null;
   /** The patch is over 4 MiB, so `patch` is "" even though the file changed */
   tooLarge: boolean;
+}
+
+/** Body of PUT /projects/:id/file and PUT /tickets/:key/file: the editor's text replaces the file. */
+export interface WriteFileRequest {
+  path: string;
+  contents: string;
+}
+
+/**
+ * The answer to a file write: the saved path (relative to the root, "/"-separated) and the bytes
+ * now on disk. The file keeps its BOM, line endings (a mixed file is written in the majority one),
+ * trailing newline (the editor can't add or drop the final one) and mode; the last write
+ * wins, with no revision check.
+ */
+export interface FileWriteResult {
+  path: string;
+  size: number;
 }
 
 /** Options for the /files search. `ignored` also indexes node_modules; `kind` keeps one kind. */

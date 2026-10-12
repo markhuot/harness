@@ -23,6 +23,7 @@ import type {
   ExternalRef,
   ExternalRefInput,
   FileDiff,
+  FileWriteResult,
   FileMatch,
   CommandMatch,
   FileView,
@@ -146,7 +147,7 @@ import {
   listBranches,
   switchBranch,
 } from "./worktree";
-import { readFileDiff, readFileView } from "./file-view";
+import { readFileDiff, readFileView, writeFileContents } from "./file-view";
 import { attachMentions, searchPaths, type SearchOptions } from "./files";
 import { compactNotes } from "../annotations";
 import { attachmentFile as fileOf, ORPHAN_UPLOAD_AGE_MS, registerFile, removeUploadDirs, resolveAttachments, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../attachment-lists";
@@ -1207,6 +1208,18 @@ export class Orchestrator {
 
   ticketFileDiff(key: string, path: string): Promise<FileDiff> {
     return readFileDiff(this.requireTicketRoot(key), path);
+  }
+
+  /** Save a file in the project folder from the viewer's editor; last write wins. */
+  writeProjectFile(projectId: string, body: unknown): Promise<FileWriteResult> {
+    const { path, contents } = (body ?? {}) as { path?: unknown; contents?: unknown };
+    return writeFileContents(this.projectRoot(projectId), path, contents);
+  }
+
+  /** Save a file where the ticket works (the folder ticketFile reads) from the viewer's editor. */
+  writeTicketFile(key: string, body: unknown): Promise<FileWriteResult> {
+    const { path, contents } = (body ?? {}) as { path?: unknown; contents?: unknown };
+    return writeFileContents(this.requireTicketRoot(key), path, contents);
   }
 
   private projectRoot(projectId: string): string {
