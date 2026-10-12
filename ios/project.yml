@@ -60,6 +60,21 @@ targets:
             exit 1
           fi
           "$BUN" "$SRCROOT/Tools/build-highlighter.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/highlighter.js"
+      # The file editor's CodeMirror bundle (editor/, built by editor/scripts/build.ts) goes in the
+      # same way, beside Resources/editor.html, which loads it (ARCHITECTURE.md § File viewer).
+      - name: Bundle editor
+        basedOnDependencyAnalysis: false
+        showEnvVars: false
+        script: |
+          BUN="$(command -v bun || true)"
+          for c in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
+            if [ -z "$BUN" ] && [ -x "$c" ]; then BUN="$c"; fi
+          done
+          if [ -z "$BUN" ]; then
+            echo "error: bun (https://bun.sh) is needed to bundle the file editor. Install it, then run bun install at the repo root."
+            exit 1
+          fi
+          "$BUN" "$SRCROOT/../editor/scripts/build.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/editor.js"
     info:
       path: Harness/Info.plist
       properties:

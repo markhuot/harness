@@ -19,6 +19,8 @@ public protocol FileViewerClient: Sendable {
     func projectFile(_ id: String, path: String) async throws -> FileView
     func ticketFileDiff(_ key: String, path: String) async throws -> FileDiff
     func projectFileDiff(_ id: String, path: String) async throws -> FileDiff
+    func writeTicketFile(_ key: String, path: String, contents: String) async throws -> FileWriteResult
+    func writeProjectFile(_ id: String, path: String, contents: String) async throws -> FileWriteResult
 }
 
 extension HarnessClient: FileViewerClient {}
@@ -51,7 +53,9 @@ public final class FileViewerLoader {
         self.path = path
     }
 
-    public func load() async {
+    /// `keepingFileOnError`: a reload behind an open editor (after a save, on foreground) that fails
+    /// leaves the file and diff on screen instead of swapping the editor for an error.
+    public func load(keepingFileOnError: Bool = false) async {
         generation += 1
         let gen = generation
         let client = client
@@ -64,6 +68,7 @@ public final class FileViewerLoader {
             result = .error(FileLoadError(error))
         }
         guard gen == generation else { return }
+        if keepingFileOnError, case .error = result, file.value != nil { return }
         if let view = result.value {
             let contents = view.contents
             let next = await Task.detached(priority: .userInitiated) { contents.map(FileText.init) }.value

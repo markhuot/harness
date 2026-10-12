@@ -18,3 +18,17 @@ test("the web view bundle is one IIFE that exposes mount and the editors", async
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30000);
+
+test("--out writes the bundle to the given file", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "editor-build-out-"));
+  try {
+    const out = join(dir, "nested.js");
+    const proc = Bun.spawn(["bun", join(import.meta.dir, "build.ts"), "--out", out], { stdout: "pipe", stderr: "pipe" });
+    expect(await proc.exited).toBe(0);
+    expect(readFileSync(out, "utf8").length).toBeGreaterThan(1000);
+    const bad = Bun.spawn(["bun", join(import.meta.dir, "build.ts"), "--out"], { stdout: "pipe", stderr: "pipe" });
+    expect(await bad.exited).not.toBe(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 60000);

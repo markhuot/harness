@@ -993,22 +993,38 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
 ## File viewer (Features/Files)
 
 - **Decisions live in HarnessKit:** `FileViewerRules` holds the title, subtitle, badges, meta line,
-  Diff counts, body and diff states, error copy and Copy link. `FileHighlightWindows` is the 40k-char
-  window around what's on screen, and the colored lines it piles up. `FileViewerLoader` loads the
-  file, then the diff when git says the file is dirty. It drops stale loads and splits the lines and
-  patch rows off the main actor. All of these have tests.
-- **`FileCodeList`** is a UICollectionView with a fixed-row layout (19 pt rows, one scroll view
-  for both directions, pull to refresh). It opens straight at a row and reports the visible rows.
-  Rows are `FileCodeRow` columns of NSAttributedString. A code label is only as wide as its text,
-  because a UILabel's backing store covers its whole frame. Bump `version` to redraw the rows on
-  screen. Prefetching is off, so no stale cell survives a bump. Line numbers are hidden from AX.
-  The code label's AX label is its text and its value is "Line N", so sim-check can find
-  `export function greetingFor…`.
-- **Scroll benchmark:** in a build with the DEBUG condition, launch with `-fileViewerBench YES`
-  and open a file over 1000 lines. Two seconds later the list scrolls to the bottom at 6000 pt/s,
-  then logs `file-bench: …` (category `file-bench`) with frame times and the cost per cell. On the
-  shared simulator, a 20 001-line TypeScript file logged 3795 frames, every one 16.7 ms, with 0
-  hitches and 61 µs per cell, and colors kept up the whole way.
+  Diff counts, body and diff states, error copy and Copy link. `FileViewerLoader` loads the file,
+  then the diff when git says the file is dirty, dropping stale loads and splitting the lines and
+  patch rows off the main actor. The editor's side is `FileEditor.swift` (`FileEditorCommand` and
+  `FileEditorEvent`, the JSON codec for the web view bridge, and `FileEditRules`: what's editable,
+  when a dirty file saves or asks, when a foreground reloads) and `FileEditorModel` (the unsaved
+  state and the serialized writes: PUT `/tickets/:key/file` or `/projects/:id/file`, last write
+  wins). `SettingsRules.saveOnBlur` reads the setting; an older service reads as off. All of these
+  have tests.
+- **The editor is CodeMirror 6 in a WKWebView** (`editor/` at the repo root, HARNESS-448). The
+  "Bundle editor" pre-build phase in `project.yml` runs `bun editor/scripts/build.ts --out …/editor.js`
+  into the app's resources beside `Resources/editor.html`, which loads it and calls
+  `HarnessEditor.mount(window, post)`. `post` stringifies each event to the `editor` message
+  handler. `EditorWebHost` is the native end (modeled on `PluginWebHost`, with the same weak
+  script-handler proxy): it loads the page from the bundle, drops commands until the page says
+  `ready`, and calls `onReady` each time, so a `webViewWebContentProcessDidTerminate` reload
+  reopens the editor on the unsaved text (`open` carries `saved`, what's on disk, so it comes back
+  dirty). `EditorWebView` forwards Cmd+S from a hardware keyboard (`UIKeyCommand`); the page has
+  autocorrect, capitalization and spell check off. The page scrolls (CSS in editor.html makes
+  CodeMirror's scroller overflow visible), so UIKit sees the web view's own scroll view: a sheet
+  drags down from the top of the file, and the keyboard insets it natively. The theme goes in as
+  `{appearance, tokens}` (`FileEditorTheme`, the same tokens plugin tabs get) and a theme change
+  sends `theme` without reloading.
+- **`FileEditorSession`** owns the loader, the model and two hosts, the file editor and the merge
+  view, so switching tabs never drops edits. Saving: Save in the file bar, Cmd+S, and Save on blur
+  (the editor losing focus, the app backgrounding, the screen leaving). With the setting off, a
+  dirty file's back button asks (Save / Discard / Keep editing) and swipe-back and sheet
+  swipe-down are disabled; a pop that gets past it saves anyway, since edits are never dropped
+  silently. A clean editor silently reloads when the app comes back to the foreground (`setContents`,
+  no undo history); a dirty one keeps its edits.
+- **sim-check:** a web view's page isn't in the accessibility tree, so the editor exposes a
+  `file-editor` element whose value is the text of the first linked line the page marked (the
+  `file-link` chain checks it). The `file-edit` chain types, checks the unsaved dot and Save.
 - File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
   starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
 
@@ -1100,7 +1116,7 @@ native-pattern difference, not a missing feature.
 | Triage item: outcome, Open KEY, transcript, file-link scope | screens/Inbox, app/inbox/[id] | TriageScreen | done |
 | New session: project, kind, prompt (@, /), Options, Start/Plan first, drafts, Cancel choices | screens/NewSession, lib/newSession, lib/draftSync | Features/NewSession/NewSessionScreen, HarnessKit NewSessionEditor/DraftSync | done (Cancel asks with an alert; differs) |
 | Pickers: selects, model, permission, driver+model sheet, per-phase model sheet, branch sheet, project color | ui/selects, ui/DriverModelPicker, ui/BranchPicker, ui/ProjectColor, lib/modelSheet | Features/Pickers/* | done |
-| File viewer: header, menu, File/Diff, ranges, windowed colors, errors, pull to refresh | screens/FileViewer, lib/fileViewer | Features/Files/*, HarnessKit FileViewerRules/FileViewerLoader | done |
+| File viewer: header, menu, File/Diff, ranges, editing and Save, errors | screens/FileViewer, lib/fileViewer | Features/Files/*, HarnessKit FileViewerRules/FileViewerLoader | done |
 | Markdown, code blocks, file links + scope, attachments row and viewer | ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments | Features/Content/* | done (code copies by long-press; differs) |
 | Syntax highlighting | lib/highlight | HarnessHighlight, Highlight/HighlightedText | done |
 | Settings: Macs (Connect, Rename, Forget, Rotate token), network, appearance + themes | screens/Settings, lib/themePicker | Features/Settings/SettingsScreen, SettingsAppearance | done |

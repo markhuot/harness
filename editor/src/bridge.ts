@@ -3,17 +3,19 @@
 // `window.harnessEditor`). The native side decides how `post` travels, for example
 // webkit.messageHandlers.<name>.postMessage, and how commands arrive.
 
+import { EditorView } from "@codemirror/view";
 import { createDiffEditor, createEditor, type DiffEditorHandle, type EditorHandle, type LineRange } from "./editor";
 import type { ThemeInput } from "./theme";
 
 export type BridgeCommand =
-  | { type: "open"; contents: string; language?: string; theme?: ThemeInput; range?: LineRange; readOnly?: boolean }
+  | { type: "open"; contents: string; language?: string; theme?: ThemeInput; range?: LineRange; readOnly?: boolean; saved?: string }
   | { type: "diff"; original: string; modified: string; language?: string; theme?: ThemeInput }
   | { type: "theme"; theme: ThemeInput }
   | { type: "reveal"; range: LineRange }
   | { type: "setContents"; contents: string }
   | { type: "markSaved"; contents?: string }
   | { type: "focus" }
+  | { type: "scrollToCursor" }
   | { type: "getContents"; id?: string };
 
 export type BridgeEvent =
@@ -93,6 +95,10 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           break;
         case "focus":
           editor?.focus();
+          break;
+        case "scrollToCursor":
+          // The keyboard came up over the caret.
+          if (editor) editor.view.dispatch({ effects: EditorView.scrollIntoView(editor.view.state.selection.main.head, { y: "nearest", yMargin: 24 }) });
           break;
         case "getContents":
           post({ type: "contents", id: cmd.id, contents: editor?.getContents() ?? diff?.getContents() ?? "" });

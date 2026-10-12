@@ -3550,12 +3550,13 @@ the conventions, and ios/README.md the build and test commands.
   When that ticket isn't loaded, they use its key instead. A session that dispatched nothing has
   no scope, and a relative link from it plays the error haptic. `FileViewerScreen` loads `FileView` and,
   only when `git.repo && git.dirty`, `FileDiff`, and shows File and Diff tabs (the Diff tab counts
-  +added/−removed). Lines are fixed-height rows, so the viewer opens straight at the range. A long
-  file is highlighted a window at a time around what's on screen, and colored lines stay colored
-  as later windows land. A patch over the highlighter's 60 000-character limit isn't windowed: the
-  Diff tab shows it without syntax colors, still with its line tints. The Diff tab numbers each
-  line of the patch from its hunk headers (`patchRows`). Pull to refresh reloads both. The pure
-  parts are HarnessKit's `FileViewer`, `FileViewerRules` and `FileViewerLoader`.
+  +added/−removed). The file is CodeMirror 6 in a WKWebView (the `editor/` bundle, built by the
+  "Bundle editor" phase), opened at and marking the linked range with no selection; the Diff tab
+  is its merge view. The file is editable: Save, Cmd+S and Save on blur (Settings → General) write
+  it through the file write endpoints, last write wins. With Save on blur off, leaving a dirty
+  file asks first. A clean editor reloads from disk when the app returns to the foreground; a
+  dirty one keeps its edits. The pure parts are HarnessKit's `FileViewer`, `FileViewerRules`,
+  `FileViewerLoader`, `FileEditRules` and `FileEditorModel`.
 - **Syntax highlighting.** `ios/Tools/highlighter/highlight.ts` (the Shiki setup from the 1.x
   app: Shiki core, its JavaScript regex engine, 34 languages and 19 themes) is bundled into one
   script at build time (`ios/Tools/build-highlighter.ts`) and runs in JavaScriptCore

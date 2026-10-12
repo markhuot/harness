@@ -53,7 +53,7 @@ struct SettingsDriversSection: View {
     }
 }
 
-/// Max concurrent runs, when unused browser tabs are suspended, and the app-wide base branch. (The Anthropic API key is on the
+/// Max concurrent runs, when unused browser tabs are suspended, Save on blur for the file editor, and the app-wide base branch. (The Anthropic API key is on the
 /// anthropic-api driver's own screen.)
 struct SettingsGeneralSection: View {
     let settings: PublicSettings
@@ -89,6 +89,15 @@ struct SettingsGeneralSection: View {
                 .keyboardType(.numberPad)
                 .frame(maxWidth: 80)
                 .accessibilityLabel("Suspend unused browser tabs after")
+            }
+            SettingsRow(label: "Save on blur", hint: "Save an edited file when its editor loses focus, you leave the file, or the app goes to the background. Off, leaving asks first.") {
+                Toggle("Save on blur", isOn: Binding(
+                    get: { SettingsRules.saveOnBlur(settings.saveOnBlur) },
+                    set: { save(SettingsPatch(saveOnBlur: $0)) }
+                ))
+                .labelsHidden()
+                .tint(c.accent)
+                .accessibilityLabel("Save on blur")
             }
             SettingsRow(label: "Base branch", hint: "Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.") {
                 DraftField(value: settings.baseBranch ?? Branches.defaultBaseBranch, prompt: Branches.defaultBaseBranch, mono: true) { v in

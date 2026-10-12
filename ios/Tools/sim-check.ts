@@ -3991,12 +3991,69 @@ function interactionChains(s: Seeded): Chain[] {
           await shot(udid, "file-link-tap-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).join(" | ")}`);
         });
-        await Bun.sleep(1200);
-        await shot(udid, "file-link-tap-light");
         // Its folder is the ticket's worktree (main's commit): the file is there, clean, and it has no Diff tab.
         if (l.includes("Modified") || l.some((x) => x.startsWith("Diff"))) throw new Error("a clean file shows as modified");
-        if (!l.some((x) => x.startsWith(`export function greetingFor`))) throw new Error("the linked lines aren't on screen");
+        // The code is CodeMirror in a web view, which AXe can't see into: the editor's accessibility
+        // value is the text of the first linked line the page scrolled to and marked (the page
+        // starts after the screen does, so wait for it).
+        const marked = await until("the linked line marked in the editor", async () => {
+          const v = (await nodes(udid)).find((n) => n.AXUniqueId === "file-editor")?.AXValue;
+          return v ? v : null;
+        }, 10000).catch(() => "");
+        await Bun.sleep(600);
+        await shot(udid, "file-link-tap-light");
+        if (!marked.startsWith("export function greetingFor")) throw new Error(`the linked lines aren't marked in the editor: ${JSON.stringify(marked)}`);
         return `${GREETINGS_PATH}, ${range}`;
+      });
+    }),
+    chain("save-on-blur", ["watchers"], 40, async (udid) => {
+      await check("Settings → General has a Save on blur switch that saves to the service", async () => {
+        await goto(udid, "harness://settings", (l) => l.includes("Settings"));
+        // The theme pickers are horizontal strips that swallow a swipe starting on them: swipe from the page's headings.
+        const row = (l: string) => l === "Save on blur" || l.startsWith("Save on blur,");
+        for (let i = 0; i < 40; i++) {
+          const el = await findElement(udid, row);
+          if (el && el.frame.y > 140 && el.frame.y < 700) break;
+          await axe("swipe", "--start-x", "200", "--start-y", "520", "--end-x", "200", "--end-y", "170", "--duration", "0.6", "--udid", udid);
+          await Bun.sleep(350);
+        }
+        if (!(await findElement(udid, row))) throw new Error(`no Save on blur row; on screen: ${(await labels(udid)).join(" | ")}`);
+        await shot(udid, "save-on-blur-off-light");
+        const before = (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false;
+        // The row's text and its switch share the label: the switch is the one on the right.
+        const sw = (await nodes(udid)).filter((n) => n.AXLabel === "Save on blur").sort((a, b) => b.frame.x - a.frame.x)[0];
+        if (!sw) throw new Error("no Save on blur switch");
+        await axe("tap", "-x", String(Math.round(sw.frame.x + sw.frame.width / 2)), "-y", String(Math.round(sw.frame.y + sw.frame.height / 2)), "--udid", udid);
+        await Bun.sleep(1000);
+        await shot(udid, "save-on-blur-on-light");
+        const after = await until("the setting flipped on the service", async () => (((await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false) !== before ? true : null), 6000);
+        if (!after) throw new Error("the switch didn't change the setting");
+        await shot(udid, "save-on-blur-on-light");
+        return `${before} → ${!before}`;
+      });
+    }),
+    chain("file-edit", ["fileLink"], 25, async (udid) => {
+      await check("the file editor edits, shows the unsaved dot and writes the file with Save", async () => {
+        const dot = async () => (await labels(udid)).includes("Unsaved changes");
+        await goto(udid, `harness://file/${GREETINGS_PATH}?ticket=${k(s.fileLink)}`, (l) => l.includes(GREETINGS_PATH));
+        await until("the editor", async () => (await nodes(udid)).some((n) => n.AXUniqueId === "file-editor"), 10000);
+        // The page starts after the screen does: tap into it until a keystroke takes.
+        const typed = "EDITED_BY_SIM_CHECK";
+        await until("a keystroke in the editor marks the file unsaved", async () => {
+          if (await dot()) return true;
+          await axe("tap", "-x", "200", "-y", "500", "--udid", udid);
+          await axe("type", typed, "--udid", udid);
+          await Bun.sleep(600);
+          return dot();
+        }, 20000, 1000);
+        await shot(udid, "file-edit-dirty-light");
+        const wd = (await ticketOf(s.fileLink.key)).workdir!;
+        const onDisk = () => readFileSync(join(wd, GREETINGS_PATH), "utf8");
+        if (onDisk().includes(typed)) throw new Error("the edit reached the disk before Save");
+        await tapWhere(udid, "Save");
+        await until("the unsaved dot gone", async () => !(await dot()), 8000);
+        if (!onDisk().includes(typed)) throw new Error("Save didn't write the edit to the file");
+        return "typed, unsaved dot, Save wrote the file";
       });
     }),
   ];

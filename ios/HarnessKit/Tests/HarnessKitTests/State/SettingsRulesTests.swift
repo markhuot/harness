@@ -208,3 +208,12 @@ struct SettingsRulesTests {
         #expect(SettingsRules.projectPathCommit("  ", current: "/a") == nil)
     }
 }
+
+@Suite("Save on blur setting")
+struct SaveOnBlurRuleTests {
+    @Test func anOlderServiceReadsAsOff() {
+        #expect(SettingsRules.saveOnBlur(nil) == false)
+        #expect(SettingsRules.saveOnBlur(false) == false)
+        #expect(SettingsRules.saveOnBlur(true) == true)
+    }
+}
