@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// `widthFraction` is nil until the person drags the edge (until then 800pt, clamped, is used);
 /// the app binds it to the `ticketPanelWidth` pref to keep it across launches. Dragging the leading
-/// handle resizes it; flinging the top edge or the buttons' corner right docks it (it slides off the edge first, then
+/// handle resizes it; dragging the top edge or the buttons' corner right closes it, and holding there in the window's trailing 40% docks it (it slides off the edge first, then
 /// `onDock` runs); Escape on a hardware keyboard closes it. `docked` keeps it mounted (drafts,
 /// scroll, the nav path) but off the trailing edge, inert, while the docked cards stand in for it.
 struct TicketSidePanel<Content: View>: View {
@@ -34,6 +34,9 @@ struct TicketSidePanel<Content: View>: View {
     @State private var resizeStart: CGFloat?
     /// How far the title bar fling has pushed the panel toward the trailing edge.
     @State private var flingOffset: CGFloat = 0
+    /// Where the finger and the panel are mid-drag, for the hold-to-dock gesture's samples.
+    @State private var drag = PanelDrag()
+    @Environment(DockHold.self) private var hold
 
     var body: some View {
         GeometryReader { geo in
@@ -60,19 +63,20 @@ struct TicketSidePanel<Content: View>: View {
         content()
             .environment(\.ticketPanelTitleInset, Self.buttonSize * (canPopOut ? 3 : 2) + 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .top) { flingStrip(width: width) }
-            .overlay(alignment: .topTrailing) { buttons(width: width) }
+            .overlay(alignment: .top) { flingStrip(width: width, window: window) }
+            .overlay(alignment: .topTrailing) { buttons(width: width, window: window) }
         .background(c.bg)
         .clipShape(Self.shape)
         .shadow(color: .black.opacity(c.isDark ? 0.45 : 0.16), radius: 18, x: -4)
         .overlay(alignment: .leading) { resizeHandle(width: width, window: window) }
         .accessibilityElement(children: .contain)
+        .accessibilityAction(named: "Dock") { onDock() }
         .accessibilityIdentifier("ticket-panel")
     }
 
     // MARK: Buttons
 
-    private func buttons(width: CGFloat) -> some View {
+    private func buttons(width: CGFloat, window: CGFloat) -> some View {
         HStack(spacing: 0) {
             barButton("pip.enter", label: "Dock \(title)", id: "ticket-panel-dock", action: onDock)
             if canPopOut {
@@ -85,16 +89,16 @@ struct TicketSidePanel<Content: View>: View {
         .padding(.trailing, 8)
         .padding(.top, 4)
         .contentShape(.rect)
-        .gesture(fling(width: width))
+        .gesture(fling(width: width, window: window))
     }
 
     /// A thin strip along the panel's top edge that takes the fling. It's the hero's top padding,
     /// not its content, so the fling never fights horizontal scrolling or the title's taps.
-    private func flingStrip(width: CGFloat) -> some View {
+    private func flingStrip(width: CGFloat, window: CGFloat) -> some View {
         Color.clear
             .frame(height: Self.flingStripHeight)
             .contentShape(.rect)
-            .gesture(fling(width: width))
+            .gesture(fling(width: width, window: window))
             .accessibilityHidden(true)
     }
 
@@ -112,29 +116,52 @@ struct TicketSidePanel<Content: View>: View {
         .accessibilityIdentifier(id)
     }
 
-    /// A rightward drag from the top edge or the buttons' corner moves the panel with the finger. Let
-    /// go, the one rule the iPhone's sheet follows decides (SheetFlick): a fast fling carries it off
-    /// the edge and closes the ticket, a slow drag 60% of the panel's width or more carries it off
-    /// and docks it, and anything shorter springs back.
-    private func fling(width: CGFloat) -> some Gesture {
+    /// A rightward drag from the top edge or the buttons' corner moves the panel with the finger, like
+    /// the phone's sheet. Let go, a drag that moved at least `PanelRelease.minDistance` and was
+    /// headed for past the panel's halfway point closes the ticket, carrying the finger's momentum
+    /// into the slide; anything else springs back with that momentum. Speed and distance never dock:
+    /// docking is a hold in the trailing 40% of the window with the panel dragged clear of rest
+    /// (DockHold), which arms the ghost dock card, and a release then slides the panel to the card.
+    private func fling(width: CGFloat, window: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .global)
             .onChanged { value in
                 // Only toward the edge: the panel doesn't drag out past its resting place.
                 flingOffset = max(0, value.translation.width)
+                drag.x = value.location.x
+                drag.offset = flingOffset
+                drag.window = window
+                if !drag.active {
+                    drag.active = true
+                    hold.sample = { [drag] in drag.window > 0 ? (drag.x / drag.window, drag.offset) : nil }
+                    hold.touchDown()
+                }
+                hold.evaluate()
             }
             .onEnded { value in
-                let outcome = SheetFlick.outcome(velocity: value.velocity.width, distance: value.translation.width, travel: width)
-                switch outcome {
-                case .dismiss, .dock:
-                    withAnimation(.snappy(duration: 0.25)) {
-                        flingOffset = width + Self.shadowReach
+                drag.active = false
+                hold.ended()
+                let dock = hold.takeIntent()
+                let closes = PanelRelease.closes(translation: value.translation.width,
+                                                 predictedEnd: value.predictedEndTranslation.width, width: width)
+                let away = width + Self.shadowReach
+                let velocity = value.velocity.width
+                if dock || closes {
+                    withAnimation(Self.slide(velocity: velocity, distance: away - flingOffset)) {
+                        flingOffset = away
                     } completion: {
-                        if outcome == .dock { onDock() } else { onClose() }
+                        if dock { onDock() } else { onClose() }
                     }
-                case .restore:
-                    withAnimation(.spring(duration: 0.3, bounce: 0.2)) { flingOffset = 0 }
+                } else {
+                    withAnimation(Self.slide(velocity: velocity, distance: -flingOffset)) { flingOffset = 0 }
                 }
             }
+    }
+
+    /// A spring that starts at the finger's release speed (`velocity`, pt/s toward the trailing edge),
+    /// for a slide of `distance` points: SwiftUI takes the speed as a fraction of the distance.
+    static func slide(velocity: Double, distance: Double) -> Animation {
+        let ratio = abs(distance) < 1 ? 0 : velocity / distance
+        return .interpolatingSpring(Spring(duration: 0.4, bounce: 0.1), initialVelocity: ratio)
     }
 
     // MARK: Resize
@@ -189,6 +216,14 @@ struct TicketSidePanel<Content: View>: View {
     private static var shadowReach: CGFloat { 40 }
 }
 
+/// Where a drag on the panel is, read by DockHold's timer while the finger rests.
+final class PanelDrag {
+    var active = false
+    var x: CGFloat = 0
+    var offset: CGFloat = 0
+    var window: CGFloat = 0
+}
+
 extension AnyTransition {
     /// How the host inserts and removes `TicketSidePanel`: in from the trailing edge.
     static var ticketPanel: AnyTransition { .move(edge: .trailing) }
@@ -214,6 +249,7 @@ struct TicketPanelHost: View {
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @State private var closers = TicketPanelClosers()
     @State private var panelWidth: CGFloat = 0
+    @Environment(DockHold.self) private var hold
 
     var body: some View {
         let sheet = router.ticketSheet ?? router.dock
@@ -254,11 +290,25 @@ struct TicketPanelHost: View {
                     .ignoresSafeArea(.container, edges: .bottom)
                     .transition(.ticketPanel)
                 }
+                // The hold is armed: a ghost dock card takes the stack's bottom slot, the cards
+                // shift up a row, and nothing reserves room for it. Collapsed, it covers the one card.
+                let ghost = sheet != nil && !docked && hold.armed ? DockMetrics.cardMode(width: board.width) : nil
                 if !waiting.isEmpty {
+                    let shift: CGFloat = if case .cards? = ghost { DockedCardMetrics.height + DockedCardMetrics.spacing } else { 0 }
                     DockedCardStack(sheets: waiting, available: board)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(.trailing, besidePanel)
+                        .offset(y: -shift)
+                        .animation(.snappy, value: shift)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
+                if let sheet, let ghost, let width = Self.ghostWidth(ghost) {
+                    DockGhostCard(title: sheet.title, armed: true)
+                        .frame(width: width)
+                        .padding(DockedCardStack.margin)
+                        .padding(.trailing, besidePanel)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .transition(.opacity)
                 }
             }
             .onChange(of: DockedCardStack.height(count: waiting.count, available: board), initial: true) { _, h in
@@ -266,6 +316,7 @@ struct TicketPanelHost: View {
             }
         }
         .animation(.ticketPanel, value: router.ticketSheetState)
+        .animation(.snappy(duration: 0.2), value: hold.armed)
         .animation(.ticketPanel, value: waiting.map(\.id))
         .onChange(of: router.dockedSheets.map(\.id)) { _, ids in closers.keep(Set(ids)) }
         .onChange(of: docked) { _, docked in
@@ -274,6 +325,13 @@ struct TicketPanelHost: View {
         }
         .onChange(of: sheet?.id) { resignFirstResponder() }
         .onDisappear { dockInset?.cards = 0 }
+    }
+
+    private static func ghostWidth(_ mode: DockMetrics.CardMode) -> CGFloat? {
+        switch mode {
+        case let .cards(w), let .collapsed(w): w
+        case .hidden: nil
+        }
     }
 
     /// A ticket is the screen on top of `sheet`: its hero (or a pushed ticket's Back button) is level
@@ -345,5 +403,6 @@ struct TicketPanelHost: View {
                         onDock: {}, onPopOut: {}, onClose: {}) {
             List(0..<30) { Text("Row \($0)") }
         }
+        .environment(DockHold())
     }
 }

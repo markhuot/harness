@@ -97,9 +97,8 @@ private struct SceneChrome: ViewModifier {
     @State private var targets = ShortcutTargets()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.supportsMultipleWindows) private var multipleWindows
-    /// Bumped when the ticket sheet is swiped away with other tickets still docked, so the root
-    /// presents it again (docked) as a new sheet rather than keeping the one UIKit took down.
-    @State private var ticketSheetGeneration = 0
+    /// The hold-to-dock gesture on the ticket sheet (DockHold).
+    @State private var hold = DockHold()
 
     /// What the bar colors depend on: both appearances' text (BarAppearance).
     private var barColorKey: String {
@@ -134,6 +133,7 @@ private struct SceneChrome: ViewModifier {
                 BarAppearance.apply(light: Palette(app.resolvedTheme(systemDark: false)), dark: Palette(app.resolvedTheme(systemDark: true)))
             }
             .environment(router)
+            .environment(hold)
             // The desktop's window-wide shortcuts (⌘N, ⌘1, ⌘2, ⌘,, ⇧⌘], ⇧⌘[), for this window.
             .environment(\.shortcutTargets, targets)
             .hiddenShortcuts { WindowShortcuts(router: router, targets: targets) }
@@ -151,24 +151,26 @@ private struct SceneChrome: ViewModifier {
     /// The ticket sheet, presented or docked, when the root presents it as a system sheet: at
     /// compact width. At regular width it's the side panel inside DesktopShell (TicketPanelHost),
     /// so the root presents `sheet` and the cover as if there were none.
-    private var ticketSheet: TicketSheet? { sizeClass == .regular ? nil : router.ticketSheet ?? router.dock }
+    private var ticketSheet: TicketSheet? { sizeClass == .regular ? nil : router.ticketSheet }
 
-    /// What the root presents: the iPhone's ticket sheet while there is one, presented or docked
-    /// (TicketSheetHost then presents `sheet` and the cover over itself), else `sheet`. The ticket
-    /// sheet is one system sheet whichever tickets it holds: adding or switching tickets swaps its
-    /// content without presenting it again. Swiping it away, or UIKit dismissing it, closes the
-    /// top ticket (`dismissSheet()`); with others left, a new sheet comes up docked with the next.
-    /// A window widening to regular width takes the system sheet down without a dismissal, so the
-    /// panel carries on with it.
+    /// What the root presents: the iPhone's ticket sheet while one is presented (TicketSheetHost then
+    /// presents `sheet` and the cover over itself), else `sheet`. The sheet is a plain system sheet,
+    /// a view of the Router's state, and it is one whichever tickets it holds: adding or switching
+    /// tickets swaps its content without presenting it again, and a docked ticket is a card in the
+    /// window instead (DockedCardsOverlay). When the system takes the sheet down (a swipe away, the
+    /// escape gesture, UIKit dismissing it) the ticket closes (`sheetDismissedBySystem`), with one
+    /// exception: the release of an armed hold-to-dock docks it (DockHold). Programmatic dismissals
+    /// never call this setter. A window widening to regular width takes the system sheet down
+    /// without a dismissal, so the panel carries on with it.
     private var rootSheetBinding: Binding<RootSheet?> {
         Binding(get: {
-            if ticketSheet != nil { return .ticket(ticketSheetGeneration) }
+            if ticketSheet != nil { return .ticket }
             return sheetBinding.wrappedValue.map(RootSheet.route)
         }, set: { new in
             guard new == nil else { return }
             guard ticketSheet != nil else { router.sheet = nil; return }
-            router.dismissSheet()
-            if router.ticketSheetState != .gone { ticketSheetGeneration += 1 }
+            let dock = hold.takeIntent()
+            withAnimation(.snappy) { router.sheetDismissedBySystem(dock: dock) }
         })
     }
 
@@ -182,9 +184,9 @@ private struct SceneChrome: ViewModifier {
     }
 }
 
-/// The root's one sheet: the ticket sheet (by `ticketSheetGeneration`, not by ticket) or a SheetRoute.
+/// The root's one sheet: the ticket sheet (one, whichever ticket) or a SheetRoute.
 private enum RootSheet: Hashable, Identifiable {
-    case ticket(Int)
+    case ticket
     case route(SheetRoute)
 
     var id: Self { self }
@@ -208,8 +210,8 @@ struct MainTabs: View {
             } else {
                 // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
                 SectionStack()
-                    // The other docked tickets' cards, above the docked sheet (the top one's).
-                    .overlay { DockedCardsAbove() }
+                    // The docked tickets, as cards.
+                    .overlay { DockedCardsOverlay() }
                     .hiddenShortcuts {
                         Button("Toggle Sidebar") {
                             if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }
