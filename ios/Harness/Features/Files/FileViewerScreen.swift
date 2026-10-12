@@ -10,13 +10,16 @@ import UIKit
 /// FileEditRules and FileEditorModel; FileEditorSession ties them to the editors.
 struct FileViewerScreen: View {
     let params: FileRouteParams
+    /// The docked sheet this file is the root of (a file card), nil when it's pushed onto a stack.
+    /// Leaving a card closes it by id; leaving a pushed file pops it.
+    var cardID: Int?
 
     @Environment(\.palette) private var c
 
     var body: some View {
         let target = FileViewer.readFileParams(params)
         if let target, let root = target.root {
-            FileViewerContent(root: root, path: target.path, range: target.range)
+            FileViewerContent(root: root, path: target.path, range: target.range, cardID: cardID)
         } else {
             EmptyState(
                 icon: "fileText",
@@ -40,6 +43,7 @@ private struct FileViewerContent: View {
     let root: FileRoot
     let path: String
     let range: ClosedRange<Int>?
+    let cardID: Int?
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
@@ -105,11 +109,15 @@ private struct FileViewerContent: View {
         .navigationTitle(FileViewerRules.fileName(shownPath))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(guarded)
-        .interactiveDismissDisabled(guarded)
+        // Only the card on top: a dirty file parked behind another card mustn't stop that one's swipe down.
+        .interactiveDismissDisabled(guarded && front)
         .toolbar {
             if guarded {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { closingCard = false; askingToLeave = true } label: { Label("Back", systemImage: "chevron.left") }
+                    // A card has no screen to go back to: it closes, whatever presents it.
+                    Button { closingCard = false; askingToLeave = true } label: {
+                        if cardID != nil { Label("Close", systemImage: "xmark") } else { Label("Back", systemImage: "chevron.left") }
+                    }
                 }
             }
             ToolbarItem(placement: .principal) { title(shownPath) }
@@ -142,7 +150,8 @@ private struct FileViewerContent: View {
             if front {
                 // The panel's ✕ and Escape: a dirty file with Save on blur off asks first.
                 panelCloser?.take(onScreen) {
-                    if guarded { closingCard = true; askingToLeave = true } else { router.dismissSheet() }
+                    // Read when it's pressed: this closure outlives the body that made it.
+                    if (session?.model.dirty ?? false) && !saveOnBlur { closingCard = true; askingToLeave = true } else { closeCard() }
                 }
             } else {
                 panelCloser?.release(onScreen)
@@ -169,9 +178,16 @@ private struct FileViewerContent: View {
         }
     }
 
-    /// After Save or Discard: closes the card (the panel's ✕) or pops back a screen.
+    /// After Save or Discard: closes the card (by id, since the top card may have changed during a
+    /// save; the panel's ✕ on a pushed file closes the sheet it's in) or pops back a screen.
     private func leave() {
-        if closingCard { router.dismissSheet() } else { dismiss() }
+        let closing = closingCard
+        closingCard = false
+        if cardID != nil || closing { closeCard() } else { dismiss() }
+    }
+
+    private func closeCard() {
+        if let cardID { router.closeSheet(id: cardID) } else { router.dismissSheet() }
     }
 
     private var subtitle: String {

@@ -1925,7 +1925,59 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     if ((await count()) !== expected) throw new Error(`${await count()} docked after a second open, expected ${expected}`);
     return "no second card";
   });
+  await check("a dirty file card's Close asks, and Discard closes the card", async () => {
+    const dot = async () => (await labels(udid)).includes("Unsaved changes");
+    // The iPhone left the file docked at the bottom card: bring it up.
+    if (!ipad) {
+      await tapWhere(udid, fileCard);
+      await until("the editor", editorUp, 8000);
+      await Bun.sleep(1500);
+    }
+    let attempt = 0;
+    await until("a keystroke in the editor marks the file unsaved", async () => {
+      if (await dot()) return true;
+      // The file is one line, so only the editor's first rows take a tap: walk down from just under the info bar.
+      // Under the info bar's Save button, in the editor's own column (the iPad's is the panel).
+      const save = await findElement(udid, (l) => l === "Save");
+      const x = save ? Math.round(save.frame.x + 20) : 200;
+      const y = (save ? Math.round(save.frame.y + save.frame.height) : 160) + 30 + 30 * (attempt++ % 5);
+      await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
+      await axe("type", "DISCARD_ME", "--udid", udid);
+      await Bun.sleep(600);
+      return dot();
+    }, 20000, 1000);
+    await Bun.sleep(1500);
+    await shot(udid, "file-card-dirty-close", true);
+    if (ipad) {
+      // The panel's ✕ asks through the same dialog the card's Close does.
+      await tapWhere(udid, `Close ${DOCK_FILE}`);
+    } else {
+      // The toolbar's glass buttons aren't in the accessibility list: tap the leading one by position.
+      await axe("tap", "-x", "38", "-y", "100", "--udid", udid);
+    }
+    await until("the save dialog", async () => (await labels(udid)).includes("Discard changes"), 5000).catch(async (e) => {
+      await say("after Close");
+      await shot(udid, "file-card-close-failed", true);
+      throw e;
+    });
+    await tapWhere(udid, "Discard changes");
+    await until("the file card gone", async () => {
+      const l = await labels(udid);
+      return !l.some(fileCard) && !l.includes(`Close ${DOCK_FILE}`);
+    }, 8000);
+    return "Close → Discard closed the card";
+  });
   await check("a file card's ✕ closes only it", async () => {
+    // The dirty check closed the file with taps: the same link again needs the board in between to land.
+    moved(udid);
+    await goto(udid, BOARD);
+    await goto(udid, link);
+    await until("the editor", editorUp, 12000).catch(async (e) => {
+      await say("after reopening the closed file");
+      await shot(udid, "file-card-reopen-failed", true);
+      throw e;
+    });
+    if (!ipad) await dockSheet(udid);
     await tapWhere(udid, `Close ${DOCK_FILE}`);
     await until("only the ticket left", async () => {
       const l = await labels(udid);
