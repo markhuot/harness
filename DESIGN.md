@@ -3139,8 +3139,11 @@ Settings, project settings, or on the board route the pane workspace.
   layer over every pane, above plugin iframes and the browser canvas (which would otherwise
   swallow the drag). The layer is `no-drag` so the titlebar's window-drag regions don't take the
   drop. `zoneAt` picks the half of the pane under the pointer: the pane's diagonals cut it into
-  four triangles, ties go to left/right, and the centre goes to the right. The preview is the
-  dropped pane's box in the layout that would result (`dropPreview`), and drop runs `dropInStore`
+  four triangles, ties go to left/right, and the centre goes to the right. The preview (`dropPreview`) is
+  drawn on the pane under the pointer as it is on screen, with the dragged pane still in place:
+  the zone's side of the target, at the size the pane will have (half, 40% of the board, or the
+  dragged pane's own width or height in a reorder, clamped to its row or column). The layout only
+  reflows on drop, which runs `dropInStore`
   (`applyDrop`: `dropContent` for a ticket or tab, `movePane` for a pane, across the window's
   pop-outs). A ticket or torn-off tab that's already open moves with its pane and keeps its tab,
   and a pane over itself isn't a target. **Out of the window:** `dragProps`' shared `dragend`

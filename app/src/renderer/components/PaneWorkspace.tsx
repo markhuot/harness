@@ -10,8 +10,8 @@
 //
 // While a ticket or pane is being dragged (paneDrag.tsx), a drop layer covers the workspace, above
 // plugin iframes and the browser canvas that would otherwise swallow the drag. The half of the pane
-// under the pointer picks the drop (zoneAt); the preview shows where the dropped pane would land
-// (dropPreview), and drop applies it.
+// under the pointer picks the drop (zoneAt); the preview is a slice of that pane as it is on
+// screen, sized as the dropped pane will be (dropPreview); the layout reflows only when the drop applies.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from "react";
 import {

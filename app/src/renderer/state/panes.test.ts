@@ -1065,9 +1065,40 @@ describe("dropPreview", () => {
     expect(rr(dropPreview(three, { kind: "ticket", ticketKey: "A-9" }, "A-1", "left"))).toEqual([0.5, 0, 0.125, 1]);
   });
 
-  test("a moved pane's old space closes up first", () => {
-    // A-2 leaves (the board takes its quarter), then splits A-1's quarter.
-    expect(rr(dropPreview(three, { kind: "pane", leafId: "A-2" }, "A-1", "bottom"))).toEqual([0.75, 0.5, 0.25, 0.5]);
+  test("a moved pane previews on the target as it is on screen, not the reflowed layout", () => {
+    // A-2 splits A-1's on-screen quarter; its own old space hasn't closed up yet.
+    expect(rr(dropPreview(three, { kind: "pane", leafId: "A-2" }, "A-1", "bottom"))).toEqual([0.5, 0.5, 0.25, 0.5]);
+  });
+
+  test("reported case: [board, T1, T2, terminal], terminal onto T2's bottom", () => {
+    const four = st(row("r", [B, T("T1"), T("T2"), T("X")], [0.4, 0.2, 0.2, 0.2]));
+    expect(rr(dropPreview(four, { kind: "pane", leafId: "X" }, "T2", "bottom"))).toEqual([0.6, 0.5, 0.2, 0.5]);
+  });
+
+  test("a pane moved onto the board takes the 40% slice of the board's current box", () => {
+    expect(rr(dropPreview(three, { kind: "pane", leafId: "A-2" }, "B", "bottom"))).toEqual([0, 0.6, 0.5, 0.4]);
+  });
+
+  test("a reorder keeps the dragged pane's size, anchored at the target's edge", () => {
+    const uneven = st(row("r", [T("A"), T("B"), T("C")], [0.5, 0.25, 0.25]));
+    // C (25%) goes left of A (50%): fits inside A, anchored at A's left edge.
+    expect(rr(dropPreview(uneven, { kind: "pane", leafId: "C" }, "A", "left"))).toEqual([0, 0, 0.25, 1]);
+    // A (50%) goes right of B (25%): wider than B, ends at B's right edge, spilling over A.
+    expect(rr(dropPreview(uneven, { kind: "pane", leafId: "A" }, "B", "right"))).toEqual([0.25, 0, 0.5, 1]);
+  });
+
+  test("a reorder slice is clamped to the row", () => {
+    const wide = st(row("r", [T("A"), T("B"), T("C")], [0.25, 0.25, 0.5]));
+    // C (50%) right of A (25%): would start before the row's left edge, so it's pinned there.
+    expect(rr(dropPreview(wide, { kind: "pane", leafId: "C" }, "A", "right"))).toEqual([0, 0, 0.5, 1]);
+    // C left of B: slice starts at B's left edge (0.25) and runs 50%, ending at the row's edge.
+    expect(rr(dropPreview(wide, { kind: "pane", leafId: "C" }, "B", "left"))).toEqual([0.25, 0, 0.5, 1]);
+  });
+
+  test("a column reorder carries the dragged pane's height", () => {
+    const stack = st(col("c", [T("A"), T("B"), T("C")], [0.2, 0.2, 0.6]));
+    expect(rr(dropPreview(stack, { kind: "pane", leafId: "C" }, "A", "bottom"))).toEqual([0, 0, 1, 0.6]);
+    expect(rr(dropPreview(stack, { kind: "pane", leafId: "A" }, "C", "top"))).toEqual([0, 0.4, 1, 0.2]);
   });
 
   test("is null when the drop would do nothing", () => {

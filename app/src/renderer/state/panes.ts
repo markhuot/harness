@@ -1131,14 +1131,38 @@ export function applyDrop(state: PaneState, source: DragSource, targetLeafId: st
 }
 
 /**
- * Where the dropped pane would land (fractions of the workspace): its box in the layout after
- * `applyDrop`, so the preview matches the result exactly (the board keeping 60%, a moved pane's old
- * space closing up). Null when the drop would do nothing.
+ * Where the dropped pane would land (fractions of the workspace), drawn against the layout as it
+ * is on screen, with the dragged pane still in place: a slice of the target's current box on the
+ * `zone` side. An ordinary split takes `dock`'s share of the target (half, or the 40% a board
+ * yields). A reorder within the pane's own row or column keeps the pane's size, so the slice is
+ * the dragged pane's current extent along that axis, anchored at the target's edge and clamped to
+ * the row or column. The reflow only happens on drop. Null when the drop would do nothing.
  */
 export function dropPreview(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone, area?: PaneArea): Rect | null {
-  const next = applyDrop(state, source, targetLeafId, zone);
-  if (next === state) return null;
-  return layoutPanes(next, area).leaves.find((b) => b.leaf.id === next.focusedId)?.rect ?? null;
+  if (applyDrop(state, source, targetLeafId, zone) === state) return null;
+  const layout = layoutPanes(state, area);
+  const rectOf = (id: string) => layout.leaves.find((b) => b.leaf.id === id)?.rect;
+  const target = findLeaf(state.root, targetLeafId);
+  const t = rectOf(targetLeafId);
+  if (!target || !t) return null;
+  const horizontal = DIR_OF[zone] === "row";
+  const extent = (r: Rect) => (horizontal ? r.w : r.h);
+  let size = (target.content.kind === "board" ? 1 - BOARD_SHARE : 0.5) * extent(t);
+  let lo = horizontal ? t.x : t.y;
+  let hi = lo + extent(t);
+  const movingId = source.kind === "pane" ? source.leafId : leafShowing(state.root, sourceContent(state, source)!)?.id;
+  const from = movingId ? pathTo(state.root, movingId)?.at(-1) : undefined;
+  const to = pathTo(state.root, targetLeafId)?.at(-1);
+  if (movingId && from && to && from.split.id === to.split.id && from.split.dir === DIR_OF[zone]) {
+    size = extent(rectOf(movingId)!);
+    const inside = layout.leaves.filter((b) => pathTo(from.split, b.leaf.id)).map((b) => b.rect);
+    lo = Math.min(...inside.map((r) => (horizontal ? r.x : r.y)));
+    hi = Math.max(...inside.map((r) => (horizontal ? r.x + r.w : r.y + r.h)));
+  }
+  const start = AFTER[zone] ? (horizontal ? t.x + t.w : t.y + t.h) - size : horizontal ? t.x : t.y;
+  const at = Math.min(Math.max(start, lo), Math.max(lo, hi - size));
+  const len = Math.min(size, hi - lo);
+  return horizontal ? { x: at, y: t.y, w: len, h: t.h } : { x: t.x, y: at, w: t.w, h: len };
 }
 
 /**

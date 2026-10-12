@@ -101,6 +101,60 @@ try {
   // 4. Dragging the right pane between the board and the middle one keeps every pane's size.
   await setPanes(layout([0.25, 0.5, 0.25]));
   const start = await widths();
+  // 4a. While the grip is held over a pane, the preview sits on that pane as it is on screen and
+  // carries the size the dragged pane keeps (a reorder), not the reflowed layout.
+  const held = (id: string, fx: number, fy: number) => js<{ p: number[]; t: number[]; d: number[] } | null>(`(async () => {
+    const tick = () => new Promise(r => setTimeout(r, 60));
+    const box = (e) => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
+    const grip = document.querySelector('.pane[data-pane-id="c"] [data-testid=pane-grip]');
+    const tEl = document.querySelector('.pane[data-pane-id="${id}"]');
+    const [tl, tt, tw, th] = box(tEl);
+    const dragged = box(document.querySelector('.pane[data-pane-id="c"]'));
+    const dt = new DataTransfer();
+    grip.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    await tick();
+    const layer = document.querySelector("[data-testid=pane-drop-layer]");
+    const ev = (type) => new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: tl + tw * ${fx}, clientY: tt + th * ${fy} });
+    layer.dispatchEvent(ev("dragenter"));
+    layer.dispatchEvent(ev("dragover"));
+    await tick();
+    const pv = document.querySelector("[data-testid=pane-drop-preview]");
+    const out = pv ? { p: box(pv), t: [tl, tt, tw, th], d: dragged } : null;
+    grip.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: dt }));
+    await tick();
+    return out;
+  })()`);
+  // The overlay is inset a few pixels from the pane's edge, so compare within that margin.
+  const splitHold = await held("a", 0.5, 0.9);
+  check(
+    "holding a pane over another's bottom half previews that pane's on-screen bottom half",
+    !!splitHold && near(splitHold.p[0]!, splitHold.t[0]!, 16) && near(splitHold.p[2]!, splitHold.t[2]!, 16) && near(splitHold.p[3]!, splitHold.t[3]! / 2, 16) && near(splitHold.p[1]!, splitHold.t[1]! + splitHold.t[3]! / 2, 16),
+    JSON.stringify(splitHold),
+  );
+  const reorderHold = await held("a", 0.1, 0.5);
+  check(
+    "holding a pane over a sibling's left side previews the dragged pane's own width at the sibling's left edge",
+    !!reorderHold && near(reorderHold.p[2]!, reorderHold.d[2]!, 16) && near(reorderHold.p[0]!, reorderHold.t[0]!, 16),
+    JSON.stringify(reorderHold),
+  );
+  if (shots) {
+    // Hold the reorder preview for the screenshot.
+    await js(`(async () => {
+      const grip = document.querySelector('.pane[data-pane-id="c"] [data-testid=pane-grip]');
+      const t = document.querySelector('.pane[data-pane-id="a"]').getBoundingClientRect();
+      const dt = new DataTransfer();
+      window.__held = { grip, dt };
+      grip.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: dt }));
+      await new Promise(r => setTimeout(r, 60));
+      const layer = document.querySelector("[data-testid=pane-drop-layer]");
+      const ev = (type) => new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: t.left + t.width * 0.1, clientY: t.top + t.height * 0.5 });
+      layer.dispatchEvent(ev("dragenter")); layer.dispatchEvent(ev("dragover"));
+    })()`);
+    await Bun.sleep(200);
+    await screenshot(join(shots, "preview-reorder.png"));
+    await js(`window.__held.grip.dispatchEvent(new DragEvent("dragend", { bubbles: true, dataTransfer: window.__held.dt }))`);
+    await Bun.sleep(200);
+  }
   const moved = await js<boolean>(`(async () => {
     const tick = () => new Promise(r => setTimeout(r, 60));
     const grip = document.querySelector('.pane[data-pane-id="c"] [data-testid=pane-grip]');
