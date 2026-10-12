@@ -2207,7 +2207,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     const tabs = (await strip())!;
     const gap = tabs.frame.y - (t.frame.y + t.frame.height);
     if (Math.abs(tabs.frame.y - collapsedAt) > 2) throw new Error("the collapsed strip moved");
-    if (gap > 24 || tabs.frame.y < buttonsEnd) throw new Error(`collapsed, the tab strip starts ${Math.round(gap)}pt below the title row (title y=${Math.round(t.frame.y)}+${Math.round(t.frame.height)}, buttons end ${Math.round(buttonsEnd)}, strip y=${Math.round(tabs.frame.y)})`);
+    if (gap > 14 || tabs.frame.y < buttonsEnd) throw new Error(`collapsed, the tab strip starts ${Math.round(gap)}pt below the title row (title y=${Math.round(t.frame.y)}+${Math.round(t.frame.height)}, buttons end ${Math.round(buttonsEnd)}, strip y=${Math.round(tabs.frame.y)})`);
     await shootBoth(udid, "panel-collapsed");
     await appearance(udid, "light");
     return `strip ${Math.round(gap)}pt below the title row, ${Math.round(tabs.frame.y - buttonsEnd)}pt below the buttons (W ${W})`;
