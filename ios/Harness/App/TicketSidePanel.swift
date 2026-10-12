@@ -74,6 +74,10 @@ struct TicketSidePanel<Content: View>: View {
         // No bar of its own: the ticket's hero title starts at the top (clear of the buttons by
         // `ticketPanelTitleInset`), and the buttons float over its trailing corner.
         content()
+            // Dragged partly off the window, the panel's UIKit-backed stack would report the
+            // overhang as horizontal safe area and squeeze the content to the visible sliver. The
+            // panel is a fixed width and only slides, so it never reflows mid-drag.
+            .ignoresSafeArea(.container, edges: .horizontal)
             .environment(\.ticketPanelTitleInset, Self.buttonSize * (canPopOut ? 3 : 2) + 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .top) { flingStrip(width: width, window: window) }

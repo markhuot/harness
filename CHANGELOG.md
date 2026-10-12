@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPad, dragging the ticket panel toward the trailing edge no longer squeezes its content into the visible sliver: the panel keeps its width and just slides.
+
 ### Changed
 
 - On iPhone, swiping the ticket sheet away now always closes the ticket, however fast or far you swipe, with the system's own momentum and dismissal. To dock it, drag the sheet down and hold your finger in the bottom 40% of the screen for about half a second: a "Dock" card appears at the bottom with a haptic, and letting go docks the ticket and slides its card up. VoiceOver has a Dock action on the sheet instead. Docked tickets are cards over the board. Reopening a docked ticket restores its scroll position, composer draft and keyboard.
