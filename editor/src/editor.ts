@@ -1,0 +1,283 @@
+// A CodeMirror 6 editor and merge view with a framework-free handle. The Mac renderer imports this;
+// iOS loads the same code from a bundled web view through bridge.ts.
+
+import { Compartment, EditorState, StateEffect, StateField, type Extension, type Text } from "@codemirror/state";
+import { Decoration, EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { bracketMatching, indentOnInput } from "@codemirror/language";
+import { MergeView } from "@codemirror/merge";
+import { languageExtension, resolveLanguage } from "./language";
+import { applyTokens, editorTheme, highlighting, normalizeTheme, type EditorTheme, type ThemeInput, type TokenMap } from "./theme";
+
+/** A 1-based, inclusive line range. */
+export interface LineRange {
+  start: number;
+  end: number;
+}
+
+export interface EditorOptions {
+  contents: string;
+  /** A file name or extension ("a.ts", "ts") or a language name ("typescript"); unknown is plain text. */
+  language?: string;
+  theme?: ThemeInput;
+  /** Lines to reveal on open */
+  range?: LineRange;
+  readOnly?: boolean;
+}
+
+export interface EditorHandle {
+  setTheme(theme: ThemeInput): void;
+  reveal(range: LineRange): void;
+  getContents(): string;
+  /** Replaces the document and treats it as saved: a clean reload of what's on disk. */
+  setContents(contents: string): void;
+  isDirty(): boolean;
+  markSaved(): void;
+  focus(): void;
+  setReadOnly(readOnly: boolean): void;
+  onChange(fn: (contents: string) => void): () => void;
+  /** Fires when the dirty state flips, not on every edit. */
+  onDirty(fn: (dirty: boolean) => void): () => void;
+  /** Cmd/Ctrl+S inside the editor, with the contents to save. */
+  onSave(fn: (contents: string) => void): () => void;
+  onBlur(fn: () => void): () => void;
+  destroy(): void;
+  readonly view: EditorView;
+}
+
+function emitter<A extends unknown[]>() {
+  const fns = new Set<(...args: A) => void>();
+  return {
+    on(fn: (...args: A) => void) {
+      fns.add(fn);
+      return () => void fns.delete(fn);
+    },
+    emit(...args: A) {
+      for (const fn of [...fns]) fn(...args);
+    },
+  };
+}
+
+// --- reveal highlight -----------------------------------------------------------------------
+
+const setReveal = StateEffect.define<LineRange | null>();
+const lineMark = Decoration.line({ class: "cm-revealed-line" });
+
+function clampRange(doc: Text, range: LineRange): LineRange {
+  const start = Math.min(Math.max(1, Math.floor(range.start)), doc.lines);
+  const end = Math.min(Math.max(start, Math.floor(range.end)), doc.lines);
+  return { start, end };
+}
+
+/** Marks the revealed lines until the next edit. */
+const revealField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setReveal)) {
+        if (!e.value) return Decoration.none;
+        const { start, end } = clampRange(tr.state.doc, e.value);
+        const marks = [];
+        for (let n = start; n <= end; n++) marks.push(lineMark.range(tr.state.doc.line(n).from));
+        return Decoration.set(marks);
+      }
+    }
+    return tr.docChanged ? Decoration.none : deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+function revealIn(view: EditorView, range: LineRange) {
+  const { start, end } = clampRange(view.state.doc, range);
+  const first = view.state.doc.line(start);
+  const last = view.state.doc.line(end);
+  // An empty cursor at the start, never a selection the first keystroke would replace.
+  view.dispatch({
+    selection: { anchor: first.from },
+    effects: [
+      setReveal.of({ start, end }),
+      EditorView.scrollIntoView(first.from + Math.floor((last.to - first.from) / 2), { y: "center" }),
+    ],
+  });
+}
+
+// --- shared setup ---------------------------------------------------------------------------
+
+function baseExtensions(language: string | undefined, dark: boolean) {
+  const lang = new Compartment();
+  const theme = new Compartment();
+  const readOnly = new Compartment();
+  return {
+    lang,
+    theme,
+    readOnly,
+    extensions: [
+      lang.of(languageExtension(resolveLanguage(language))),
+      theme.of(editorTheme(dark)),
+      readOnly.of([]),
+      highlighting,
+    ] as Extension[],
+  };
+}
+
+const readOnlyExt = (on: boolean): Extension => (on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []);
+
+/** Keeps the token map on the editor's own element and the dark flag in the theme compartment. */
+function themeController(host: () => HTMLElement[], setDark: (dark: boolean) => void) {
+  let tokens: TokenMap | undefined;
+  return (input: ThemeInput | undefined) => {
+    const theme: EditorTheme = normalizeTheme(input);
+    for (const el of host()) applyTokens(el, theme.tokens, tokens);
+    tokens = theme.tokens;
+    setDark(theme.appearance === "dark");
+  };
+}
+
+// --- editor ---------------------------------------------------------------------------------
+
+export function createEditor(parent: HTMLElement, options: EditorOptions): EditorHandle {
+  const initial = normalizeTheme(options.theme);
+  const base = baseExtensions(options.language, initial.appearance === "dark");
+  let saved: Text = EditorState.create({ doc: options.contents }).doc;
+  let dirty = false;
+  /** True while setContents replaces the document, so a reload isn't reported as an edit. */
+  let quiet = false;
+  const change = emitter<[string]>();
+  const dirtyEv = emitter<[boolean]>();
+  const save = emitter<[string]>();
+  const blur = emitter<[]>();
+
+  const syncDirty = (view: EditorView) => {
+    const now = !view.state.doc.eq(saved);
+    if (now !== dirty) {
+      dirty = now;
+      dirtyEv.emit(dirty);
+    }
+  };
+
+  const view: EditorView = new EditorView({
+    parent,
+    state: EditorState.create({
+      doc: options.contents,
+      extensions: [
+        lineNumbers(),
+        history(),
+        drawSelection(),
+        indentOnInput(),
+        bracketMatching(),
+        highlightActiveLine(),
+        revealField,
+        ...base.extensions,
+        keymap.of([
+          {
+            key: "Mod-s",
+            preventDefault: true,
+            run: () => {
+              save.emit(view.state.doc.toString());
+              return true;
+            },
+          },
+          indentWithTab,
+          ...historyKeymap,
+          ...defaultKeymap,
+        ]),
+        EditorView.domEventHandlers({
+          blur: () => {
+            blur.emit();
+          },
+        }),
+        EditorView.updateListener.of((u) => {
+          if (!u.docChanged || quiet) return;
+          syncDirty(u.view);
+          change.emit(u.state.doc.toString());
+        }),
+      ],
+    }),
+  });
+  view.dispatch({ effects: base.readOnly.reconfigure(readOnlyExt(!!options.readOnly)) });
+
+  const apply = themeController(
+    () => [view.dom],
+    (dark) => view.dispatch({ effects: base.theme.reconfigure(editorTheme(dark)) }),
+  );
+  apply(initial);
+  if (options.range) revealIn(view, options.range);
+
+  return {
+    view,
+    setTheme: apply,
+    reveal: (range) => revealIn(view, range),
+    getContents: () => view.state.doc.toString(),
+    setContents(contents) {
+      quiet = true;
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: contents },
+        effects: setReveal.of(null),
+      });
+      quiet = false;
+      saved = view.state.doc;
+      syncDirty(view);
+    },
+    isDirty: () => dirty,
+    markSaved() {
+      saved = view.state.doc;
+      syncDirty(view);
+    },
+    focus: () => view.focus(),
+    setReadOnly: (on) => view.dispatch({ effects: base.readOnly.reconfigure(readOnlyExt(on)) }),
+    onChange: change.on,
+    onDirty: dirtyEv.on,
+    onSave: save.on,
+    onBlur: blur.on,
+    destroy: () => view.destroy(),
+  };
+}
+
+// --- diff -----------------------------------------------------------------------------------
+
+export interface DiffEditorOptions {
+  original: string;
+  modified: string;
+  language?: string;
+  theme?: ThemeInput;
+}
+
+export interface DiffEditorHandle {
+  setTheme(theme: ThemeInput): void;
+  getContents(): string;
+  getOriginal(): string;
+  destroy(): void;
+  readonly view: MergeView;
+}
+
+/** Side-by-side diff of two texts, read-only: the viewer for a file against another version. */
+export function createDiffEditor(parent: HTMLElement, options: DiffEditorOptions): DiffEditorHandle {
+  const initial = normalizeTheme(options.theme);
+  const sides = [baseExtensions(options.language, initial.appearance === "dark"), baseExtensions(options.language, initial.appearance === "dark")] as const;
+  const side = (i: 0 | 1, doc: string) => ({
+    doc,
+    extensions: [lineNumbers(), ...sides[i].extensions, readOnlyExt(true)],
+  });
+  const view = new MergeView({
+    parent,
+    a: side(0, options.original),
+    b: side(1, options.modified),
+    highlightChanges: true,
+    gutter: true,
+  });
+  const apply = themeController(
+    () => [view.dom],
+    (dark) => {
+      view.a.dispatch({ effects: sides[0].theme.reconfigure(editorTheme(dark)) });
+      view.b.dispatch({ effects: sides[1].theme.reconfigure(editorTheme(dark)) });
+    },
+  );
+  apply(initial);
+  return {
+    view,
+    setTheme: apply,
+    getContents: () => view.b.state.doc.toString(),
+    getOriginal: () => view.a.state.doc.toString(),
+    destroy: () => view.destroy(),
+  };
+}
