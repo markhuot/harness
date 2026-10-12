@@ -2718,14 +2718,17 @@ same folder `/tickets/:key/files` searches (worktree, else session cwd, else pro
 - **Writes** (`PUT /projects/:id/file`, `PUT /tickets/:key/file`, body `{path, contents}`, answer
   `FileWriteResult {path, size}`) save the editor's text. Each resolves its root with the helper
   its GET uses, so it writes the file that was shown, and takes the same paths (`resolveFile`,
-  `safeJoin`, no `.git`), plus a real-path check on the parent folder, since `safeJoin` lets a
-  missing target through. **Last write wins**: no hash, revision or 409 for a changed file, and
+  `safeJoin`, no `.git` in any letter case), plus a real-path check on the parent folder, since
+  `safeJoin` lets a missing target through; a symlink that resolves into `.git` is 400 too. **Last write wins**: no hash, revision or 409 for a changed file, and
   no activity entry. A symlinked file is written through to its target (inside the root). A
   missing file is created, but its folder must exist (404). `contents` must be a string without a
-  NUL (400) and at most 2 MiB (413, counted in bytes); a file on disk that is binary or too large
-  to have been shown is 409. What the editor's text can't carry is kept from the file on disk:
+  NUL (400) and at most 2 MiB (413, counted in the bytes that land on disk, after CRs and the BOM); a file
+  on disk that is binary, too large to have been shown, or not valid UTF-8 (saving would corrupt
+  it) is 409; a read-only file or filesystem is 403 and a full disk 507. What the editor's text can't carry is kept from the file on disk:
   its BOM, CRLF endings (bare LFs in the text become CRLF when most of the file's breaks were
-  CRLF), whether it ends in a newline, and its mode. The bytes go to a temp file in the same
+  CRLF; a mixed file goes to the majority), whether it ends in a newline (the editor can't add or
+  drop the final one), and its mode; hard links, xattrs and ACLs are lost. A created file
+  refreshes the path-search cache. The bytes go to a temp file in the same
   folder and are renamed over the file, so readers never see half a file.
   `Settings.saveOnBlur` (optional, default false) is the synced switch for saving when the editor
   loses focus; the service only stores it.

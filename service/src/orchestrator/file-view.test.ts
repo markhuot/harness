@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { parsePatchFiles } from "@pierre/diffs";
 import { tempHome } from "../testing/fakes";
 import { MAX_VIEW_BYTES, readFileDiff, readFileView, resolveFile, writeFileContents } from "./file-view";
+import { indexPaths } from "./files";
 import { git } from "./worktree";
 
 function tree(files: Record<string, string | Uint8Array>) {
@@ -290,5 +291,44 @@ describe("writeFileContents", () => {
     expect(await rejects(writeFileContents(root, "bin.dat", "text"))).toBe(409);
     expect(await rejects(writeFileContents(root, "big.txt", "text"))).toBe(409);
     expect([...read(root, "bin.dat")]).toEqual([1, 0, 2]);
+  });
+
+  test("refuses .git in any case, and a symlink into .git", async () => {
+    const root = tree({ ".git/config": "[core]\n", "a.txt": "x\n" });
+    symlinkSync(join(root, ".git", "config"), join(root, "cfg"));
+    expect(await rejects(writeFileContents(root, ".GIT/config", "evil\n"))).toBe(400);
+    expect(await rejects(writeFileContents(root, ".Git/hooks/pre-commit", "evil\n"))).toBe(400);
+    expect(await rejects(writeFileContents(root, "cfg", "evil\n"))).toBe(400);
+    expect(read(root, ".git/config").toString()).toBe("[core]\n");
+  });
+
+  test("answers 409 for a file that isn't valid UTF-8 rather than writing U+FFFD", async () => {
+    const root = tree({ "latin.txt": new Uint8Array([0x63, 0x61, 0x66, 0xe9, 0x0a]) });
+    expect(await rejects(writeFileContents(root, "latin.txt", "café\n"))).toBe(409);
+    expect([...read(root, "latin.txt")]).toEqual([0x63, 0x61, 0x66, 0xe9, 0x0a]);
+  });
+
+  test("caps the bytes that land on disk, after CRs and the BOM are added", async () => {
+    const line = "a\n";
+    const lines = line.repeat(MAX_VIEW_BYTES / 2 - 10); // under the cap as sent, over once CRLF'd
+    const root = tree({ "a.txt": "\uFEFFx\r\ny\r\n" });
+    expect(await rejects(writeFileContents(root, "a.txt", lines))).toBe(413);
+    expect(read(root, "a.txt").toString()).toBe("\uFEFFx\r\ny\r\n");
+  });
+
+  test("answers 403 for a read-only file and leaves it alone", async () => {
+    const root = tree({ "ro.txt": "keep\n" });
+    chmodSync(join(root, "ro.txt"), 0o444);
+    if (process.getuid?.() === 0) return; // root ignores the mode
+    expect(await rejects(writeFileContents(root, "ro.txt", "new\n"))).toBe(403);
+    expect(read(root, "ro.txt").toString()).toBe("keep\n");
+  });
+
+
+  test("a created file shows up in the path index at once", async () => {
+    const root = tree({ "a.txt": "x\n" });
+    expect((await indexPaths(root)).paths).not.toContain("new.txt");
+    await writeFileContents(root, "new.txt", "hi\n");
+    expect((await indexPaths(root)).paths).toContain("new.txt");
   });
 });

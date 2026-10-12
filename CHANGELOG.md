@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- The service can now save files the file viewer shows: `PUT /projects/:id/file` and `PUT /tickets/:key/file` take `{path, contents}` and replace the file, last write wins. The file keeps its BOM, CRLF line endings, trailing newline and mode, and the write is atomic. Paths stay inside the project or ticket folder, `.git` is refused, and binary, too-large (over 2 MiB) or NUL-containing text is rejected. Settings also gain a synced `saveOnBlur` switch (off by default) for editors to read, and the Swift and TypeScript clients can call both. The bearer token now also grants file writes. The Mac and iPhone editors that use this come in follow-up changes.
+- The service can now save files the file viewer shows: `PUT /projects/:id/file` and `PUT /tickets/:key/file` take `{path, contents}` and replace the file, last write wins. The file keeps its BOM, CRLF line endings, trailing newline and mode, and the write is atomic. Paths stay inside the project or ticket folder, `.git` is refused (in any letter case, or through a symlink), and binary, non-UTF-8, too-large (over 2 MiB, counted as saved) or NUL-containing files are rejected. A read-only file or a full disk answers with a clear 403 or 507, and a created file shows up in file search right away. Settings also gain a synced `saveOnBlur` switch (off by default) for editors to read, and the Swift and TypeScript clients can call both. The bearer token now also grants file writes. The Mac and iPhone editors that use this come in follow-up changes.
 
 ### Changed
 

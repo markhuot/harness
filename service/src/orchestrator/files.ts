@@ -60,6 +60,12 @@ export function indexPaths(root: string, opts: { now?: number; deep?: boolean } 
   return index;
 }
 
+/** Forget `root`'s cached path indexes, so a file just created shows up in search. */
+export function invalidatePaths(root: string) {
+  cache.delete(`std\0${root}`);
+  cache.delete(`deep\0${root}`);
+}
+
 export async function listPaths(root: string, now = Date.now(), opts: { deep?: boolean } = {}): Promise<string[]> {
   return (await indexPaths(root, { now, deep: opts.deep })).paths;
 }

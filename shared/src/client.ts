@@ -15,6 +15,7 @@ import type {
   FileSearchOptions,
   FileView,
   FileWriteResult,
+  WriteFileRequest,
   HarnessEvent,
   Health,
   HumanReviewBody,
@@ -168,7 +169,7 @@ export class HarnessClient {
   }
   /** Replace a project file's contents (last write wins). */
   writeProjectFile(id: string, path: string, contents: string) {
-    return this.request<FileWriteResult>("PUT", `/projects/${id}/file`, { path, contents });
+    return this.request<FileWriteResult>("PUT", `/projects/${id}/file`, { path, contents } satisfies WriteFileRequest);
   }
   /** A project file's uncommitted changes against HEAD (409 outside a git repository). */
   projectFileDiff(id: string, path: string) {
@@ -279,11 +280,11 @@ export class HarnessClient {
   ticketFile(key: string, path: string) {
     return this.request<FileView>("GET", `/tickets/${key}/file${query({ path })}`);
   }
-  /** That file's uncommitted changes against HEAD (409 outside a git repository). */
   /** Replace a file where the ticket works (last write wins). */
   writeTicketFile(key: string, path: string, contents: string) {
-    return this.request<FileWriteResult>("PUT", `/tickets/${key}/file`, { path, contents });
+    return this.request<FileWriteResult>("PUT", `/tickets/${key}/file`, { path, contents } satisfies WriteFileRequest);
   }
+  /** That file's uncommitted changes against HEAD (409 outside a git repository). */
   ticketFileDiff(key: string, path: string) {
     return this.request<FileDiff>("GET", `/tickets/${key}/file/diff${query({ path })}`);
   }

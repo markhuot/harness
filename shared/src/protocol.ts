@@ -1744,7 +1744,8 @@ export interface WriteFileRequest {
 
 /**
  * The answer to a file write: the saved path (relative to the root, "/"-separated) and the bytes
- * now on disk. The file keeps its BOM, line endings, trailing newline and mode; the last write
+ * now on disk. The file keeps its BOM, line endings (a mixed file is written in the majority one),
+ * trailing newline (the editor can't add or drop the final one) and mode; the last write
  * wins, with no revision check.
  */
 export interface FileWriteResult {

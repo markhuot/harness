@@ -1,13 +1,13 @@
 // The file viewer (DESIGN.md "File viewer"): one project or ticket file read from disk (gitignored
 // ones included), where it stands in git, and its uncommitted diff against HEAD.
 
-import { chmodSync, realpathSync, statSync, type Stats } from "node:fs";
-import { open, readFile, rename, unlink } from "node:fs/promises";
+import { chmodSync, constants as fsConstants, realpathSync, statSync, type Stats } from "node:fs";
+import { access, open, rename, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { FileDiff, FileGitState, FileView, FileWriteResult } from "@harness/shared";
 import { inside, safeJoin } from "../safe-path";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
-import { readHead } from "./files";
+import { invalidatePaths, readHead } from "./files";
 import { isGitRepo } from "./worktree";
 
 /** Largest file (either side of a diff, too) whose text is returned. */
@@ -35,7 +35,7 @@ export function resolveFile(root: string, path: string): { rel: string; abs: str
     if (inRoot === null) throw badRequest(`${path} is outside ${root}`);
     rel = inRoot;
   }
-  if (rel.split(/[\\/]+/).includes(".git")) throw badRequest("Files inside .git can't be viewed");
+  if (rel.split(/[\\/]+/).some((s) => s.toLowerCase() === ".git")) throw badRequest("Files inside .git can't be viewed");
   const abs = safeJoin(root, rel);
   if (!abs) throw badRequest(`${path} is outside ${root}`);
   const clean = relative(root, abs).split(sep).join("/");
@@ -68,17 +68,20 @@ export async function readFileView(root: string, path: string): Promise<FileView
 /**
  * Replace the file at `path` under `root` with `contents` (the viewer's editor saving): last write
  * wins, with no check against what's on disk. The file keeps what the editor's text can't carry:
- * its BOM, its line endings (CRLF when most of its breaks were), whether it ends in a newline,
- * and its mode. The bytes land in a temp file beside it and are renamed over it, so a reader
+ * its BOM, its line endings (CRLF when most of its breaks were; a mixed file is rewritten to the
+ * majority), whether it ends in a newline (the editor can't add or drop the final one), and its mode.
+ * Hard links, xattrs and ACLs aren't kept, since the file is replaced. The bytes land in a temp file beside it and are renamed over it, so a reader
  * never sees half a file. A missing file is created (its folder must exist). 400 for a path
  * outside `root` or `.git`, a folder, or text with a NUL; 413 over the 2 MiB cap; 409 when the
- * file on disk is binary or too large to have been shown.
+ * file on disk is binary, too large to have been shown, or not valid UTF-8; 403 for a read-only
+ * file or filesystem; 507 when the disk is full.
  */
 export async function writeFileContents(root: string, path: unknown, contents: unknown): Promise<FileWriteResult> {
   if (typeof path !== "string") throw badRequest("path is required");
   if (typeof contents !== "string") throw badRequest("contents must be a string");
   if (contents.includes("\0")) throw badRequest("contents has a NUL byte, so it isn't text");
-  if (Buffer.byteLength(contents) > MAX_VIEW_BYTES) throw new HarnessError(413, `contents is over ${MAX_VIEW_BYTES / 1024 / 1024} MiB`);
+  const tooBig = () => new HarnessError(413, `contents is over ${MAX_VIEW_BYTES / 1024 / 1024} MiB`);
+  if (Buffer.byteLength(contents) > MAX_VIEW_BYTES) throw tooBig();
   const { rel, abs } = resolveFile(root, path);
   const st = statFile(abs, rel);
   // Write through a symlink to its target (safeJoin kept that inside `root`) rather than replacing the link.
@@ -91,39 +94,75 @@ export async function writeFileContents(root: string, path: unknown, contents: u
     throw notFound(`No such folder for ${rel}`);
   }
   if (!inside(realParent, realRoot)) throw badRequest(`${path} is outside ${root}`);
+  const dest = join(realParent, basename(target));
+  // A symlink into .git (or .GIT on a case-insensitive disk) would let a save rewrite a hook or the config.
+  if (relative(realRoot, dest).split(sep).some((s) => s.toLowerCase() === ".git")) throw badRequest("Files inside .git can't be edited");
 
   let bytes: Uint8Array;
   if (st) {
-    const current = await readText(target, st.size);
-    if (current.binary || current.tooLarge || current.truncated) throw conflict(`${rel} is binary or too large to edit`);
-    bytes = encodeLike(contents, new Uint8Array(await readFile(target)));
+    if (st.size > MAX_VIEW_BYTES) throw conflict(`${rel} is binary or too large to edit`);
+    // One capped read feeds the checks and the line-ending/BOM match.
+    const old = await readHead(dest, MAX_VIEW_BYTES + 1);
+    if (old.length > MAX_VIEW_BYTES || old.subarray(0, SNIFF_BYTES).includes(0)) throw conflict(`${rel} is binary or too large to edit`);
+    let oldText: string;
+    try {
+      oldText = new TextDecoder("utf-8", { fatal: true }).decode(old);
+    } catch {
+      throw conflict(`${rel} isn't valid UTF-8, so saving would corrupt it`);
+    }
+    bytes = encodeLike(contents, old, oldText);
+    try {
+      await access(dest, fsConstants.W_OK);
+    } catch (e) {
+      throw fsError(e, rel);
+    }
   } else {
     bytes = new TextEncoder().encode(contents);
   }
+  // The cap is on what lands on disk: CRs and a BOM can grow what the client sent.
+  if (bytes.length > MAX_VIEW_BYTES) throw tooBig();
 
   const tmp = join(realParent, `.${basename(target)}.harness-${process.pid}-${Math.random().toString(36).slice(2, 10)}.tmp`);
   try {
     const f = await open(tmp, "wx", st ? st.mode & 0o7777 : 0o644);
     try {
       await f.writeFile(bytes);
+      await f.sync();
     } finally {
       await f.close();
     }
     // open()'s mode goes through the umask; the file's own mode must survive exactly.
     if (st) chmodSync(tmp, st.mode & 0o7777);
-    await rename(tmp, target);
+    await rename(tmp, dest);
   } catch (e) {
     await unlink(tmp).catch(() => {});
-    throw e;
+    throw fsError(e, rel);
   }
+  if (!st) invalidatePaths(root);
   return { path: rel, size: bytes.length };
 }
 
+/** A filesystem failure the user can act on as a HarnessError (403, 507, 409); anything else as it is. */
+function fsError(e: unknown, rel: string): unknown {
+  switch ((e as NodeJS.ErrnoException)?.code) {
+    case "EACCES":
+    case "EPERM":
+      return new HarnessError(403, `${rel} isn't writable`);
+    case "EROFS":
+      return new HarnessError(403, `${rel} is on a read-only filesystem`);
+    case "ENOSPC":
+      return new HarnessError(507, `No space left to save ${rel}`);
+    case "EEXIST":
+      return conflict(`${rel} changed while it was being saved`);
+    default:
+      return e;
+  }
+}
+
 /** `contents` as bytes, in `old`'s BOM, line endings and trailing-newline state (an empty `old` has none to keep). */
-function encodeLike(contents: string, old: Uint8Array): Uint8Array {
+function encodeLike(contents: string, old: Uint8Array, oldText: string): Uint8Array {
   let text = contents;
   if (old.length) {
-    const oldText = decode(old);
     const crlf = (oldText.match(/\r\n/g) ?? []).length;
     const lf = (oldText.match(/(?<!\r)\n/g) ?? []).length;
     const eol = crlf > lf ? "\r\n" : "\n";
