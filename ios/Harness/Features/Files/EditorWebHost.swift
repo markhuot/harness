@@ -50,7 +50,10 @@ final class EditorWebHost: NSObject {
         keyboardObserver = NotificationCenter.default.addObserver(
             forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.send(.scrollToCursor) }
+            MainActor.assumeIsolated {
+                // Only the editor on screen follows the keyboard (the hidden diff host has no window).
+                if let self, self.webView.window != nil { self.send(.scrollToCursor) }
+            }
         }
     }
 
@@ -81,10 +84,8 @@ final class EditorWebHost: NSObject {
         revealedLine = await evaluate("(document.querySelector('.cm-revealed-line') || {}).textContent || ''")
     }
 
-    func tearDown() {
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: Self.handlerName)
-        webView.stopLoading()
-    }
+    /// Takes the keyboard down, which makes the page lose focus and say `blur`.
+    func resignFocus() { webView.endEditing(true) }
 
     /// Run a script in the page and return its result as a string (DEBUG probes).
     func evaluate(_ script: String) async -> String? {

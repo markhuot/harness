@@ -113,4 +113,27 @@ import Testing
         m.opened("fresh")
         #expect(!m.dirty && m.latest == "fresh" && m.saveError == nil)
     }
+
+    @Test func theRevisionMovesWhenTheEditorTypesOrSaves() async {
+        let m = model(WriteClient())
+        let opened = m.revision
+        m.edited(contents: "two", dirty: true)
+        #expect(m.revision != opened)
+        let typed = m.revision
+        _ = await m.save()
+        #expect(m.revision != typed)
+        let saved = m.revision
+        m.opened("fresh")
+        #expect(m.revision != saved)
+    }
+
+    @Test func aFailedSaveLeavesTheRevisionAlone() async {
+        let client = WriteClient()
+        client.failure.withLock { $0 = HarnessAPIError(status: 500, message: "no") }
+        let m = model(client)
+        m.edited(contents: "two", dirty: true)
+        let before = m.revision
+        _ = await m.save()
+        #expect(m.revision == before)
+    }
 }

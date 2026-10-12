@@ -24,6 +24,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, the file editor is safer with your edits. A save keeps running if you switch apps right after tapping it, "Try again" after a file failed to load now gives you an editor you can save, a file that reloads while you save can't put old text back over your newer edits, a failed reload after a save leaves the editor on screen instead of an error, and leaving the file (or opening a link over it) saves through the same path as Save. Switching to the Diff tab puts the keyboard down.
 - On the Mac, dragging an open pane now previews the drop on the pane under the pointer, where it is on screen, instead of on the layout as if the dragged pane had already left. The box is the size the pane will have: half of the pane, 40% of the board, or, when you reorder a pane within its own row or column, the dragged pane's own width or height. For people working on Harness, `pane-resize-check` holds a drag and checks the preview's position and size.
 
 ## [app-20261012.0049](https://github.com/markhuot/harness/releases/tag/app-20261012.0049) - 2026-10-12

@@ -71,14 +71,14 @@ private struct FileViewerContent: View {
                     case .loading:
                         LoadingScreen()
                     case let .error(e):
-                        FileErrorView(copy: FileViewerRules.errorCopy(.file, e, path: path)) { Task { await loader.refresh() } }
+                        FileErrorView(copy: FileViewerRules.errorCopy(.file, e, path: path)) { Task { await session.retry() } }
                     case let .ok(v):
                         ZStack {
                             FileBody(view: v, host: session.fileHost)
                                 .opacity(shown == .file ? 1 : 0)
                                 .allowsHitTesting(shown == .file)
                             if hasDiff {
-                                FileDiffBody(path: v.path, diff: loader.diff, rows: loader.rows, host: session.diffHost) { await loader.refresh() }
+                                FileDiffBody(path: v.path, diff: loader.diff, rows: loader.rows, host: session.diffHost) { await session.retry() }
                                     .opacity(shown == .diff ? 1 : 0)
                                     .allowsHitTesting(shown == .diff)
                             }
@@ -126,6 +126,10 @@ private struct FileViewerContent: View {
                 background: UIColor(c.bg), saveOnBlur: { [store] in SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) })
             session = s
             await s.start()
+        }
+        .onChange(of: tab) { _, _ in
+            // The editor under the other tab loses focus: its blur saves (Save on blur) and the keyboard goes down.
+            session?.fileHost.resignFocus()
         }
         .onChange(of: c.theme.pluginInfo) { _, info in session?.setTheme(FileEditorTheme(info), background: UIColor(c.bg)) }
         .onChange(of: phase) { _, now in

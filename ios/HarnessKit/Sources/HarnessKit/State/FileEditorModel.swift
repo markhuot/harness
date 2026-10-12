@@ -16,6 +16,10 @@ public final class FileEditorModel {
     /// (the web view's process died) compares against it to stay dirty.
     public private(set) var saved: String?
 
+    /// Bumped whenever `latest` or `saved` changes, so a slow reload can tell the editor moved on
+    /// (typed, or saved) while it was out and drop its stale result.
+    public private(set) var revision = 0
+
     public let root: FileRoot
     public let path: String
     @ObservationIgnored private let client: any FileViewerClient
@@ -34,10 +38,12 @@ public final class FileEditorModel {
         saved = contents
         dirty = false
         saveError = nil
+        revision += 1
     }
 
     public func edited(contents: String, dirty: Bool) {
         latest = contents
+        revision += 1
         self.dirty = dirty
     }
 
@@ -62,7 +68,7 @@ public final class FileEditorModel {
                 }
                 return text
             } catch {
-                await MainActor.run { self.saveError = localizedErrorMessage(error) }
+                self.saveError = localizedErrorMessage(error)
                 return nil
             }
         }
@@ -77,6 +83,7 @@ public final class FileEditorModel {
         guard let written else { return nil }
         saveError = nil
         saved = written
+        revision += 1
         // Still dirty when the document moved on while the write was out.
         if let latest { dirty = latest != written }
         return written

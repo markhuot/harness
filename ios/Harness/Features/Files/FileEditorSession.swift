@@ -35,7 +35,13 @@ final class FileEditorSession {
         fileHost.webView.onSaveShortcut = { [weak self] in self?.saveNow() }
     }
 
-    func start() async {
+    func start() async { await load() }
+
+    /// "Try again" after a failed load: the web view is already ready, so nothing else would open
+    /// the file once it arrives.
+    func retry() async { await load() }
+
+    private func load() async {
         await loader.load()
         openFile()
         openDiff()
@@ -56,7 +62,15 @@ final class FileEditorSession {
 
     /// Opens the file editor on the loaded file, or on the unsaved text a reopened editor still owes.
     private func openFile() {
-        guard fileHost.ready, let view = loader.file.value, let contents = view.contents else { return }
+        guard fileHost.ready else { return }
+        guard let view = loader.file.value, let contents = view.contents else {
+            // The web view's process died while the last load is an error: reopen on the edits the
+            // model still holds.
+            if openedOnce, let latest = model.latest {
+                fileHost.send(.open(contents: latest, language: language, theme: theme, range: range, readOnly: false, saved: model.saved))
+            }
+            return
+        }
         let editable = FileEditRules.canEdit(view)
         if !openedOnce {
             openedOnce = true
@@ -77,7 +91,9 @@ final class FileEditorSession {
 
     private func fileEvent(_ event: FileEditorEvent) {
         switch event {
-        case let .change(contents, dirty): model.edited(contents: contents, dirty: dirty)
+        case let .change(contents, dirty):
+            discarded = false
+            model.edited(contents: contents, dirty: dirty)
         case let .dirty(dirty): model.dirtyChanged(dirty)
         case let .save(contents): saveNow(contents)
         case .blur: if FileEditRules.saveOnBlur(dirty: model.dirty, saveOnBlur: saveOnBlur()) { saveNow() }
@@ -96,10 +112,13 @@ final class FileEditorSession {
 
     @discardableResult
     func save(_ contents: String? = nil) async -> Bool {
+        // Keep running if the app goes to the background mid-write, so the edit isn't lost to a suspend.
+        let assertion = BackgroundAssertion("save-file")
+        defer { assertion.end() }
         guard let written = await model.save(contents) else { return false }
         fileHost.send(.markSaved(written))
         haptic(.success)
-        await loader.load()
+        await loader.load(keepingFileOnError: true)
         openDiff()
         return true
     }
@@ -114,7 +133,10 @@ final class FileEditorSession {
     /// The app came back: a clean editor reloads what's on disk (silently); a dirty one keeps its edits.
     func didForeground() async {
         guard FileEditRules.reloadOnForeground(dirty: model.dirty) else { return }
-        await loader.load()
+        // A save or an edit while the load was out makes what it read stale.
+        let revision = model.revision
+        await loader.load(keepingFileOnError: true)
+        guard model.revision == revision else { return }
         if let contents = loader.file.value?.contents, !model.dirty, contents != model.latest {
             model.opened(contents)
             fileHost.send(.setContents(contents))
@@ -128,15 +150,29 @@ final class FileEditorSession {
     func didLeave() {
         guard !discarded else { return }
         guard FileEditRules.leave(dirty: model.dirty, saveOnBlur: saveOnBlur()) != .none else { return }
-        let model = model
-        Task { await model.save() }
+        // Through save(), so the editor's saved baseline follows (this fires too when a view is
+        // pushed over the file, and the screen comes back).
+        Task { await save() }
     }
 
     /// "Discard changes" on the back button: leaving then drops the edits instead of saving them.
     func discard() { discarded = true }
+}
 
-    func tearDown() {
-        fileHost.tearDown()
-        diffHost.tearDown()
+/// A UIKit background-task assertion held for the length of one save.
+@MainActor
+private final class BackgroundAssertion {
+    private var id = UIBackgroundTaskIdentifier.invalid
+
+    init(_ name: String) {
+        id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+            MainActor.assumeIsolated { self?.end() }
+        }
+    }
+
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

@@ -130,6 +130,27 @@ import Testing
         #expect(!loader.refreshing)
     }
 
+    @Test func aFailedReloadBehindAnOpenEditorKeepsTheFile() async {
+        let client = FakeClient()
+        client.file(Self.view(dirty: true))
+        client.diff(FileDiff(path: "src/a.ts", patch: Self.patch))
+        let loader = FileViewerLoader(client: client, root: .ticket(key: "K-1"), path: "src/a.ts")
+        await loader.load()
+        let loaded = loader.file
+        client.fileFails(HarnessAPIError(status: 500, message: "down"))
+        await loader.load(keepingFileOnError: true)
+        #expect(loader.file == loaded)
+        #expect(loader.diff != nil && loader.text != nil)
+    }
+
+    @Test func aFirstLoadThatFailsStillShowsTheErrorWhenKeeping() async {
+        let client = FakeClient()
+        client.fileFails(HarnessAPIError(status: 500, message: "down"))
+        let loader = FileViewerLoader(client: client, root: .ticket(key: "K-1"), path: "src/a.ts")
+        await loader.load(keepingFileOnError: true)
+        #expect(loader.file == .error(FileLoadError(status: 500, message: "down")))
+    }
+
     @Test func aNetworkErrorHasNoStatus() async {
         let client = FakeClient()
         client.fileFails(URLError(.notConnectedToInternet))
